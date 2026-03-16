@@ -33,6 +33,8 @@ jobs:
           pip install -r requirements/requirements_dev.txt
           # tests/conftest.py imports numpy, so install it explicitly for the guard run.
           pip install numpy==1.26.4
+          # tests/test_utils.py imports scipy.signal for fixture utilities.
+          pip install scipy==1.15.3
 
       - name: Run normative CI guard tests
         run: |
