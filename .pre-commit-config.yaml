@@ -83,7 +83,7 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix=false]
       - id: ruff-format
-        # ruff-format als Black-Alternative (nur für zusätzliche Prüfungen)
+          # ruff-format als Black-Alternative (nur für zusätzliche Prüfungen)
 
   # ---------------------------------------------------------------------------
   # 5. Autoflake — Unnötige Imports und Variablen entfernen
@@ -180,12 +180,9 @@ repos:
     hooks:
       - id: yamllint
         args:
-          - --config-data=
-              {extends: default,
-               rules: {
-                 line-length: {max: 120},
-                 comments: {min-spaces-from-content: 1},
-                 document-start: disable}}
+          - >-
+            --config-data={extends: default, rules: {line-length: {max: 120},
+            comments: {min-spaces-from-content: 1}, document-start: disable}}
 
   # ---------------------------------------------------------------------------
   # 12. Prettier — JSON-Formatierung
@@ -220,4 +217,3 @@ repos:
         language: system
         pass_filenames: false
         files: ^backend/core/musical_goals/
-
