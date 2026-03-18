@@ -355,7 +355,7 @@ plugins/bs_roformer_plugin.py        → ✅ BS-RoFormer + Mel-RoFormer (SOTA)
 
 # Rauschunterdrückung & Dereverb
 plugins/deepfilternet_v3_ii_plugin.py → ✅ PRIMÄR NR (37 MB: enc+dec+erb_dec)
-plugins/sgmse_plugin.py              → ✅ Dereverb/Enhancement PRIMÄR (sgmse_plus.onnx, 120 MB) — SGMSE+ 2022
+plugins/sgmse_plugin.py              → ✅ Dereverb/Enhancement PRIMÄR (sgmse_plus.ts, 251 MB) — SGMSE+ 2022
 plugins/mp_senet_plugin.py           → ✅ Speech/Music Enhancement (mp_senet.onnx, 35 MB) — MP-SENet 2023
 plugins/wpe_plugin.py                → ✅ WPE Dereverb (rein DSP, kein Checkpoint)
 # VERBOTEN: dccrn_plugin (deprecated — ersetzt durch mp_senet_plugin §4.4)
@@ -373,7 +373,7 @@ plugins/banquet_vinyl_plugin.py      → ✅ Vinyl-spezifisch (Graph 1,4 MB + Da
 # Audio-Tagging & MOS
 plugins/beats_plugin.py              → ✅ Audio-Tagging PRIMÄR (beats_iter3.onnx, 90 MB) — +10.7 % mAP
 plugins/panns_plugin.py              → ✅ Audio-Tagging Fallback (81 KB ONNX)
-plugins/versa_plugin.py              → ✅ MOS-Bewertung PRIMÄR (versa_mos.onnx, 45 MB) — VERSA 2024
+plugins/versa_plugin.py              → ✅ MOS-Bewertung PRIMÄR (SingMOS-Checkpoint .pth im hub_cache) — VERSA 2024
 plugins/visqol_plugin.py             → ViSQOL v3 (PFLICHT: --audio Mode)
 
 # Pitch, Formanten, Stimme

@@ -1,28 +1,17 @@
-"""versa_plugin — VERSA: Versatile Evaluation of Speech and Audio (2024).
+"""versa_plugin — SingMOS Pro via VERSA Toolkit (2024).
 
-VERSA ist eine referenzfreie Qualitätsmetrik für Sprache UND Musik.
-Liefert kalibrierte MOS-Werte ∈ [1, 5] — besser als CDPAM für restaurierte
-Musikaufnahmen da auf gemischten Korpora (Speech + Music) trainiert.
+Primär:  SingMOS Pro (South-Twilight/SingMOS v1.1.1, via torch.hub)
+         Integration: VERSA / models/versa/versa/utterance_metrics/pseudo_mos.py
+         Eingabe: float32 mono @ 16 kHz; Ausgabe: MOS ∈ [1.0, 5.0]
+         Hub-Cache: models/versa/hub_cache/ (offline nach Installation)
+         Referenz: https://arxiv.org/abs/2510.01812
 
-Verbesserung gegenüber CDPAM:
-    - Explizite Musikunterstützung (nicht rein kontrastbasiert)
-    - Kalibrierte MOS-Werte (nicht auf relative Ähnlichkeit angewiesen)
-    - Robust bei stark restaurierten Aufnahmen (CDPAM paradoxe Scores vermieden)
+Fallback: PQS-DSP-Gammatone (Bark-Filterbank + Sigmoid-MOS-Mapping)
 
-Modell:
-    models/versa/versa_mos.onnx (~45 MB)
-    Input:  [batch, samples] float32 @ 16 kHz
-    Output: [batch, 1] float32 (MOS ∈ [1.0, 5.0])
-
-Fallback: PQS-DSP (frequency-weighted SNR → MOS-Kalibrierung)
-
-Referenz:
-    Shi et al. "VERSA: A Versatile Evaluation Toolkit for Speech and Audio"
-    arXiv 2406.05765 (2024)
-    https://github.com/shijt2020/VERSA
+VERBOTEN laut Spec §4.4: PESQ, DNSMOS, NISQA, STOI, CDPAM.
 
 Singleton-Pattern: get_versa_plugin() verwenden.
-CPU-Only: CPUExecutionProvider.
+CPU-Only.
 """
 
 from __future__ import annotations
@@ -38,9 +27,9 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).parent.parent
-_ONNX_PATH = _ROOT / "models" / "versa" / "versa_mos.onnx"
+_VERSA_PATH = _ROOT / "models" / "versa"
+_HUB_CACHE = str(_VERSA_PATH / "hub_cache")
 _MODEL_SR: int = 16_000
-_MAX_SAMPLES: int = 160_000  # 10 s @ 16 kHz
 
 _lock = threading.Lock()
 _instance: VersaPlugin | None = None
@@ -56,7 +45,7 @@ class VersaResult:
 
     Attributes:
         mos:          MOS-Wert ∈ [1.0, 5.0]
-        model_used:   "versa_onnx" | "pqs_dsp_fallback"
+        model_used:   "singmos_pro" | "pqs_dsp_fallback"
         confidence:   Modell-Konfidenz ∈ [0, 1]
         sub_scores:   Optionale Teil-Scores (Signal, Hintergrund, Gesamt)
     """
@@ -78,50 +67,117 @@ class VersaResult:
 # ---------------------------------------------------------------------------
 
 class VersaPlugin:
-    """VERSA Musik/Sprach-MOS-Metrik (ONNX, CPUExecutionProvider).
+    """SingMOS Pro via VERSA Toolkit — referenzfreier Musik-MOS.
 
-    Ersetzt CDPAM als primäre referenzfreie MOS-Metrik in Aurik 9.
+    Primär: SingMOS Pro (South-Twilight/SingMOS v1.1.1) über VERSA pseudo_mos.
     Fallback: PQS-Gammatone-DSP (§4.4 Spec).
 
     Verwendung NUR für Qualitätsbewertung — keine Modifikation des Audios.
     """
 
     def __init__(self) -> None:
-        self._session = None
+        self._predictor_dict: dict | None = None
+        self._predictor_fs: dict | None = None
+        self._pseudo_mos_metric = None
         self._model_loaded: bool = False
-        self._try_load()
+        self._load_attempted: bool = False
+        self._load_lock = threading.Lock()
+        # Lazy load: model is loaded on first score() call, NOT here.
+        # Eager loading of SingMOS Pro (wav2vec2-large 606 MB) would cause OOM
+        # when multiple plugins are imported simultaneously during test collection.
+
+    # Budget: wav2vec2-large (s3prl, ~600 MB) + SingMOS Pro checkpoint (~150 MB)
+    _BUDGET_GB: float = 0.80
 
     def _try_load(self) -> None:
-        """Lädt VERSA ONNX-Modell; PQS-DSP-Fallback bei Fehler."""
-        if not _ONNX_PATH.exists():
+        """Loads SingMOS Pro via VERSA pseudo_mos; PQS-DSP fallback on error.
+
+        Offline-Invariante: Lädt NUR wenn beide Checkpoint-Dateien lokal
+        vorhanden sind. Kein torch.hub-Download im Produktionsbetrieb.
+        Fehlende Weights → sofortiger PQS-DSP-Fallback (kein Netzwerkaufruf).
+        """
+        versa_pkg = _VERSA_PATH / "versa"
+        _pm_path = _VERSA_PATH / "versa" / "utterance_metrics" / "pseudo_mos.py"
+        if not versa_pkg.exists() or not _pm_path.exists():
+            logger.info("VERSA toolkit nicht gefunden (%s) — PQS-DSP-Fallback.", versa_pkg)
+            return
+
+        # Offline check: SingMOS Pro checkpoint must be locally cached.
+        # torch.hub caches the repo zip at hub_cache/<user>_SingMOS_<tag>/
+        # and downloads the .pth checkpoint to hub_cache/checkpoints/.
+        _hub_dir = _VERSA_PATH / "hub_cache"
+        _singmos_checkpoint = _hub_dir / "checkpoints" / "ft_wav2vec2_large_ll60k_mdf_p1_200epochs_all_192epochs.pth"
+        # s3prl caches wav2vec2-large at ~/.cache/s3prl/download/
+        import os  # noqa: PLC0415
+        _s3prl_cache = Path(os.path.expanduser("~/.cache/s3prl/download"))
+        _wav2vec2_cached = any(
+            f.name.endswith(".wav2vec_vox_new.pt") or "wav2vec_vox_new" in f.name
+            for f in _s3prl_cache.glob("*.wav2vec_vox_new.pt")
+        ) if _s3prl_cache.exists() else False
+
+        if not _singmos_checkpoint.exists():
             logger.info(
-                "VERSA ONNX nicht gefunden (%s) — PQS-DSP-Fallback aktiv. "
-                "Modell: https://github.com/shijt2020/VERSA",
-                _ONNX_PATH,
+                "SingMOS Pro Checkpoint nicht lokal gefunden (%s) — PQS-DSP-Fallback. "
+                "Für ML-Betrieb: models/versa/hub_cache/checkpoints/ befüllen "
+                "(ft_wav2vec2_large_ll60k_mdf_p1_200epochs_all_192epochs.pth).",
+                _singmos_checkpoint,
             )
             return
-        try:
-            import onnxruntime as ort  # noqa: PLC0415
-
-            try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
-                if not _try_alloc("VERSA", size_gb=0.05):
-                    logger.warning("VERSA: ML-Budget erschöpft — PEAQ-Fallback.")
-                    return
-            except Exception:
-                pass
-
-            opts = ort.SessionOptions()
-            opts.inter_op_num_threads = 2
-            self._session = ort.InferenceSession(
-                str(_ONNX_PATH),
-                sess_options=opts,
-                providers=["CPUExecutionProvider"],
+        if not _wav2vec2_cached:
+            logger.info(
+                "wav2vec2-large (s3prl) nicht lokal gecacht (~/.cache/s3prl/download/) "
+                "— PQS-DSP-Fallback. Für ML-Betrieb: s3prl Pre-Download ausführen."
             )
+            return
+
+        try:
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            if not _try_alloc("VersaSingMOS", size_gb=self._BUDGET_GB):
+                logger.warning("VERSA SingMOS Pro: ML-Budget erschöpft (%.2f GB) — PQS-Fallback.", self._BUDGET_GB)
+                return
+        except Exception:
+            pass
+
+        try:
+            import importlib.util  # noqa: PLC0415
+            import torch  # noqa: PLC0415
+
+            # Load pseudo_mos.py directly to bypass versa/__init__.py which imports
+            # pysptk (mcd_f0 dependency) that may not be installed on the target machine.
+            _pm_path = _VERSA_PATH / "versa" / "utterance_metrics" / "pseudo_mos.py"
+            _spec = importlib.util.spec_from_file_location("versa_pseudo_mos", str(_pm_path))
+            _pm_mod = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
+            _spec.loader.exec_module(_pm_mod)  # type: ignore[union-attr]
+            pseudo_mos_setup = _pm_mod.pseudo_mos_setup
+            pseudo_mos_metric = _pm_mod.pseudo_mos_metric
+
+            torch.hub.set_dir(_HUB_CACHE)
+            predictor_dict, predictor_fs = pseudo_mos_setup(
+                predictor_types=["singmos_pro"],
+                predictor_args={"singmos_pro": {"fs": _MODEL_SR}},
+                cache_dir=_HUB_CACHE,
+                use_gpu=False,
+            )
+            self._predictor_dict = predictor_dict
+            self._predictor_fs = predictor_fs
+            self._pseudo_mos_metric = pseudo_mos_metric
             self._model_loaded = True
-            logger.info("✅ VERSA ONNX geladen (%s, §4.4 — CDPAM-Nachfolger)", _ONNX_PATH.name)
+
+            # PLM lifecycle registration
+            from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+            def _unload_singmos() -> None:
+                global _instance
+                if _instance is not None:
+                    _instance._predictor_dict = None
+                    _instance._predictor_fs = None
+                    _instance._pseudo_mos_metric = None
+                    _instance._model_loaded = False
+
+            _reg_plm("VersaSingMOS", size_gb=self._BUDGET_GB, unload_fn=_unload_singmos)
+            logger.info("✅ VERSA SingMOS Pro geladen (§4.4 — Musik-MOS-Primär)")
         except Exception as exc:
-            logger.warning("VERSA ONNX nicht ladbar: %s — PQS-DSP-Fallback aktiv.", exc)
+            logger.warning("VERSA SingMOS Pro nicht ladbar: %s — PQS-DSP-Fallback.", exc)
 
     # ------------------------------------------------------------------
     # Public API
@@ -142,53 +198,46 @@ class VersaPlugin:
         mono = audio if audio.ndim == 1 else audio.mean(axis=-1)
         mono = np.clip(mono, -1.0, 1.0)
 
-        if self._session is not None:
-            return self._score_onnx(mono, sr)
+        # Lazy load: attempt once, then use whatever is available.
+        if not self._load_attempted:
+            with self._load_lock:
+                if not self._load_attempted:
+                    self._try_load()
+                    self._load_attempted = True
+
+        if self._model_loaded and self._predictor_dict is not None:
+            return self._score_singmos_pro(mono, sr)
         return self._score_pqs_dsp(mono, sr)
 
     # ------------------------------------------------------------------
-    # ONNX Inference
+    # SingMOS Pro Inference
     # ------------------------------------------------------------------
 
-    def _to_model_input(self, mono_16k: np.ndarray) -> np.ndarray:
-        """Kürzt/paddet auf max. 10 s @ 16 kHz. Returns [1, _MAX_SAMPLES]."""
-        if len(mono_16k) >= _MAX_SAMPLES:
-            mono_16k = mono_16k[:_MAX_SAMPLES]
-        else:
-            mono_16k = np.pad(mono_16k, (0, _MAX_SAMPLES - len(mono_16k)))
-        return mono_16k[np.newaxis].astype(np.float32)
+    def _score_singmos_pro(self, mono_48k: np.ndarray, sr: int) -> VersaResult:
+        """SingMOS Pro MOS inference via VERSA pseudo_mos_metric.
 
-    def _score_onnx(self, mono_48k: np.ndarray, sr: int) -> VersaResult:
-        """VERSA ONNX-Inferenz: Audio → MOS."""
-        assert self._session is not None
-        from math import gcd  # noqa: PLC0415
-        from scipy.signal import resample_poly  # noqa: PLC0415
-
+        Resamples 48 kHz → 16 kHz (Lanczos), calls SingMOS Pro model,
+        returns calibrated MOS ∈ [1.0, 5.0].
+        """
         try:
+            from math import gcd  # noqa: PLC0415
+            from scipy.signal import resample_poly  # noqa: PLC0415
+
             g = gcd(sr, _MODEL_SR)
             mono_16k = resample_poly(mono_48k, _MODEL_SR // g, sr // g).astype(np.float32)
             mono_16k = np.nan_to_num(mono_16k, nan=0.0, posinf=0.0, neginf=0.0)
             mono_16k = np.clip(mono_16k, -1.0, 1.0)
 
-            inp = self._to_model_input(mono_16k)
-            inp_name = self._session.get_inputs()[0].name
-            ort_out = self._session.run(None, {inp_name: inp})
-            mos_raw = float(np.asarray(ort_out[0]).squeeze())
-            mos = float(np.clip(mos_raw, 1.0, 5.0))
-
-            # Optionale Teil-Scores (falls Modell mehrere Outputs liefert)
-            sub_scores: dict[str, float] = {}
-            if len(ort_out) > 1:
-                sub_raw = np.asarray(ort_out[1]).flatten()
-                labels = ["signal", "background", "overall"]
-                for i, lbl in enumerate(labels):
-                    if i < len(sub_raw):
-                        sub_scores[lbl] = float(np.clip(sub_raw[i], 1.0, 5.0))
-
-            logger.debug("VERSA MOS: %.3f", mos)
-            return VersaResult(mos=mos, model_used="versa_onnx", confidence=0.93, sub_scores=sub_scores)
+            scores = self._pseudo_mos_metric(
+                mono_16k, _MODEL_SR, self._predictor_dict, self._predictor_fs
+            )
+            mos = float(np.clip(scores.get("singmos_pro", 3.0), 1.0, 5.0))
+            if not math.isfinite(mos):
+                mos = 3.0
+            logger.debug("SingMOS Pro MOS: %.3f", mos)
+            return VersaResult(mos=mos, model_used="singmos_pro", confidence=0.92)
         except Exception as exc:
-            logger.warning("VERSA ONNX-Inferenzfehler: %s — PQS-DSP-Fallback.", exc)
+            logger.warning("SingMOS Pro Inferenzfehler: %s — PQS-DSP-Fallback.", exc)
             return self._score_pqs_dsp(mono_48k, sr)
 
     # ------------------------------------------------------------------

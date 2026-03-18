@@ -22,7 +22,6 @@ import logging
 import math
 from pathlib import Path
 import threading
-from typing import Optional
 
 import numpy as np
 

@@ -140,7 +140,9 @@ class BigVGANv2Plugin:
             checkpoint = self.MODELS_DIR / "bigvgan_v2.pth"
             if checkpoint.exists():
                 # Generisches Laden — spezifisches Modell muss kompatibel sein
-                self._torch_gen = torch.load(str(checkpoint), map_location="cpu")  # nosec B614 — lokales Modell aus models/
+                self._torch_gen = torch.load(
+                    str(checkpoint), map_location="cpu"
+                )  # nosec B614 — lokales Modell aus models/
                 self._torch_gen.eval()
                 self._model_loaded = True
                 self._fallback_mode = "bigvgan_v2_torch"

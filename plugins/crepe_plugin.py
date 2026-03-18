@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # Modell-Pfad (relativ zur Projektwurzel)
 # ---------------------------------------------------------------------------
 _PROJECT_ROOT = Path(__file__).parent.parent
-_CREPE_ONNX_PATH = _PROJECT_ROOT / "models" / "crepe" / "crepe" / "crepe.onnx"
+_CREPE_ONNX_PATH = _PROJECT_ROOT / "models" / "crepe" / "crepe.onnx"
 
 # CREPE Frame-Parameter (trainiert bei 16 kHz)
 _CREPE_SR: int = 16_000
