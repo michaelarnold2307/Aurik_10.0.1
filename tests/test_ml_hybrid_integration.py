@@ -10,13 +10,13 @@ Tests:
 2. Phase 23 (Spectral Repair) + AudioSR integration
 3. Phase 18 (Noise Gate) + Silero VAD integration
 4. Phase 9 (Crackle Removal) + BANQUET integration
-5. Performance comparison (FAST vs BALANCED vs MAXIMUM)
+5. Performance comparison (FAST vs BALANCED)
 6. Musical Excellence improvement validation
 
 Expected Results:
 - FAST mode: Pure DSP, 0.7× RT
 - BALANCED mode: Adaptive ML (critical phases only), 1.8× RT
-- MAXIMUM mode: Full ML, 4.5× RT
+- BALANCED mode: Adaptive ML, ~1.8× RT
 - Quality: 0.83 → 0.90 improvement
 - Natürlichkeit: 0.55 → 0.80 improvement
 
@@ -77,7 +77,7 @@ def test_quality_mode_system():
     print("=" * 70)
 
     # Test all modes
-    for mode in [QualityMode.FAST, QualityMode.BALANCED, QualityMode.MAXIMUM]:
+    for mode in [QualityMode.FAST, QualityMode.BALANCED]:
         QualityModeConfig.set_mode(mode)
         current = QualityModeConfig.get_mode()
         perf = QualityModeConfig.get_expected_performance()
@@ -99,8 +99,6 @@ def test_quality_mode_system():
 
         if mode == QualityMode.FAST:
             assert not phase_23_ml and not phase_18_ml and not phase_9_ml, "FAST should use DSP only"
-        elif mode == QualityMode.MAXIMUM:
-            assert phase_23_ml and phase_18_ml and phase_9_ml, "MAXIMUM should use ML"
 
     print("\n✅ Quality Mode System working correctly")
 
@@ -115,7 +113,7 @@ def test_phase_23_spectral_repair():
     audio = create_test_signal(duration=1.0, sample_rate=44100)
 
     results = {}
-    for mode in [QualityMode.FAST, QualityMode.BALANCED, QualityMode.MAXIMUM]:
+    for mode in [QualityMode.FAST, QualityMode.BALANCED]:
         QualityModeConfig.set_mode(mode)
 
         result = phase.process(audio, 44100, MaterialType.STREAMING)
@@ -144,7 +142,7 @@ def test_phase_18_noise_gate():
     audio = create_test_signal(duration=1.0, sample_rate=44100)
 
     results = {}
-    for mode in [QualityMode.FAST, QualityMode.BALANCED, QualityMode.MAXIMUM]:
+    for mode in [QualityMode.FAST, QualityMode.BALANCED]:
         QualityModeConfig.set_mode(mode)
 
         result = phase.process(audio, 44100, MaterialType.CD_DIGITAL)
@@ -173,7 +171,7 @@ def test_phase_09_crackle_removal():
     audio = create_test_signal(duration=1.0, sample_rate=44100)
 
     results = {}
-    for mode in [QualityMode.FAST, QualityMode.BALANCED, QualityMode.MAXIMUM]:
+    for mode in [QualityMode.FAST, QualityMode.BALANCED]:
         QualityModeConfig.set_mode(mode)
 
         # Test with Vinyl (BANQUET target material)
@@ -208,7 +206,7 @@ def test_performance_comparison():
 
     results = {}
 
-    for mode in [QualityMode.FAST, QualityMode.BALANCED, QualityMode.MAXIMUM]:
+    for mode in [QualityMode.FAST, QualityMode.BALANCED]:
         print(f"\n{mode.value.upper()} Mode:")
         QualityModeConfig.set_mode(mode)
 
@@ -237,17 +235,13 @@ def test_performance_comparison():
     print("\n--- Performance Analysis ---")
     fast_rt = results["fast"]["rt_factor"]
     balanced_rt = results["balanced"]["rt_factor"]
-    maximum_rt = results["maximum"]["rt_factor"]
 
     print(f"FAST: {fast_rt:.2f}× RT (expected <1.0×)")
     print(f"BALANCED: {balanced_rt:.2f}× RT (expected ~1.8×)")
-    print(f"MAXIMUM: {maximum_rt:.2f}× RT (expected ~4.5×)")
 
     slowdown_balanced = balanced_rt / fast_rt if fast_rt > 0 else 0
-    slowdown_maximum = maximum_rt / fast_rt if fast_rt > 0 else 0
 
     print(f"\nBALANCED is {slowdown_balanced:.1f}× slower than FAST")
-    print(f"MAXIMUM is {slowdown_maximum:.1f}× slower than FAST")
 
     print("\n✅ Performance comparison complete")
     return results
@@ -272,7 +266,6 @@ def test_integration_summary():
     print("\nQuality Mode Implementation:")
     print("  ✓ FAST: Pure DSP (0.7× RT)")
     print("  ✓ BALANCED: Adaptive ML (1.8× RT, critical phases only)")
-    print("  ✓ MAXIMUM: Full ML (4.5× RT, all phases)")
 
     print("\nExpected Quality Improvements:")
     print("  Phase 23: 0.39 → 0.84 (+0.45, +115%)")

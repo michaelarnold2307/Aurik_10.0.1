@@ -28,13 +28,42 @@ class ArtifactDetectionPlugin:
     - CPU-only: Läuft immer auf der CPU (keine GPU-Anforderung)
     """
 
+    _BUDGET_NAME: str = "ArtifactDetection"
+    _BUDGET_SIZE_GB: float = 0.05  # ~30-50 MB TorchScript
+
     def __init__(self, model_path: str):
         # Pflicht: Ausschließlich CPU — keine CUDA/GPU (Section 9.5)
         self.device = "cpu"
-        self.model = self._load_model(model_path) if _TORCH_AVAILABLE else None
+        self.model = None
+        if _TORCH_AVAILABLE:
+            try:
+                from backend.core.ml_memory_budget import try_allocate  # noqa: PLC0415
+
+                if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
+                    logger.info("ArtifactDetection: ML-Budget erschöpft — DSP-Fallback.")
+                else:
+                    self.model = self._load_model(model_path)
+            except ImportError:
+                self.model = self._load_model(model_path)
         if self.model is not None:
             self.model.to(self.device)
             self.model.eval()
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                _self = self
+                _reg_plm(
+                    self._BUDGET_NAME,
+                    size_gb=self._BUDGET_SIZE_GB,
+                    unload_fn=lambda s=_self: setattr(s, "model", None),
+                )
+            except Exception:
+                pass
+        elif _TORCH_AVAILABLE:
+            try:
+                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                _release(self._BUDGET_NAME)
+            except Exception:
+                pass
 
     def _load_model(self, path: str):
         """TorchScript-Modell laden — nur wenn torch verfügbar."""

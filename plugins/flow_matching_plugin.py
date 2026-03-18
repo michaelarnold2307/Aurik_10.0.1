@@ -161,6 +161,13 @@ def _inpaint_diffwave_onnx(
         if gap_len > int(sr * 0.5):
             return None
 
+        try:
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
+            if not _try_alloc("DiffWave-FlowMatch", size_gb=0.01):
+                return None
+        except ImportError:
+            pass
         sess = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
         ctx_len = min(int(sr * 0.5), gap_start)
         ctx = audio[gap_start - ctx_len : gap_start].astype(np.float32)

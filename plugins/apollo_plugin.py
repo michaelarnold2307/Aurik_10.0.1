@@ -125,8 +125,20 @@ class ApolloPlugin:
         self._fallback_active: bool = False
         self._try_load_model()
 
+    _BUDGET_NAME: str = "Apollo"
+    _BUDGET_SIZE_GB: float = 0.15  # ~100-150 MB TorchScript
+
     def _try_load_model(self) -> None:
         """Lädt Apollo TorchScript-Modell; aktiviert DSP-Fallback bei Fehler."""
+        try:
+            from backend.core.ml_memory_budget import try_allocate, release as _release  # noqa: PLC0415
+
+            if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
+                logger.info("Apollo: ML-Budget erschöpft — DSP-Fallback aktiv.")
+                self._fallback_active = True
+                return
+        except ImportError:
+            pass  # Budget-Modul fehlt → load trotzdem versuchen
         try:
             import torch  # noqa: PLC0415
 
@@ -138,6 +150,11 @@ class ApolloPlugin:
                 self._torch_model.eval()
                 self._model_loaded = True
                 logger.info("🟡 Apollo TorchScript geladen: %s", model_path.name)
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    _reg_plm(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB, unload_fn=_unload_apollo)
+                except Exception:
+                    pass
             else:
                 logger.info(
                     "Apollo: TorchScript nicht gefunden (%s) — DSP-Fallback",
@@ -147,9 +164,19 @@ class ApolloPlugin:
         except ImportError:
             logger.debug("torch nicht verfügbar — Apollo DSP-Fallback aktiv")
             self._fallback_active = True
+            try:
+                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                _release(self._BUDGET_NAME)
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("Apollo Modell-Lade-Fehler: %s — DSP-Fallback", exc)
             self._fallback_active = True
+            try:
+                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                _release(self._BUDGET_NAME)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Öffentliche API
@@ -376,8 +403,19 @@ class ApolloPlugin:
 
 
 # ---------------------------------------------------------------------------
-# Singleton-Accessor
+# Singleton (Unload + Accessor)
 # ---------------------------------------------------------------------------
+
+
+def _unload_apollo() -> None:
+    """Entlädt das Apollo-Singleton aus dem RAM (PLM-Eviction-Callback)."""
+    global _instance
+    _instance = None  # type: ignore[assignment]
+    try:
+        import gc
+        gc.collect()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def get_apollo() -> ApolloPlugin:

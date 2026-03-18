@@ -39,11 +39,23 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
+
+def _auto_detect_budget() -> float:
+    """Derive ML budget from system RAM: total_ram / 3, capped at [4, 12] GB.
+
+    Ensures ~2/3 of RAM stays free for OS, Qt GUI, audio buffers, and numpy
+    intermediate arrays.  On 32 GB → 10 GB; on 16 GB → 5 GB; on 64 GB → 12 GB.
+    """
+    if _psutil is not None:
+        total_gb = _psutil.virtual_memory().total / (1024 ** 3)
+        budget = max(4.0, min(12.0, total_gb / 3.0))
+        return round(budget, 1)
+    return 10.0  # conservative default without psutil
+
+
 # Maximum total RAM allowed for ALL ML models combined.
-# On a 32 GB machine with only 2 GB swap: leave ≥18 GB free for OS + Qt + buffers.
-# 10 GB cap → AudioSR(7) + UTMOSv2(0.8) = 7.8 GB; MERT/CLAP fall back to DSP.
-# Adjust via set_budget() if needed.
-ML_MAX_GB: float = 10.0
+# Auto-detected from system RAM; override via set_budget() if needed.
+ML_MAX_GB: float = _auto_detect_budget()
 _SYSTEM_MEMORY_MARGIN: float = 1.35
 _MIN_FREE_MB_HARD: float = 1536.0
 

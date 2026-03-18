@@ -57,7 +57,8 @@ from backend.core.adaptive_core_scheduler import AdaptiveCoreScheduler
 
 # Import Aurik 9.0 Core Components
 from backend.core.defect_scanner import DefectScanner, DefectType, MaterialType
-from backend.core.performance_guard import PerformanceGuard, QualityMode
+from backend.core.musical_goals.adaptive_goal_resolver import resolve_adaptive_goal_thresholds as _resolve_adaptive_goal_thresholds_fn
+from backend.core.performance_guard import DeploymentMode, PerformanceGuard, QualityMode
 from backend.core.phase_skipping import PhaseSkipper
 from backend.core.phases.phase_interface import PhaseInterface
 
@@ -79,6 +80,17 @@ class RestorationConfig:
     enforce_3x_rt: bool = True
     enable_psychoacoustic_enhancement: bool = True
     global_plan: Optional[Any] = None  # MusikalischerGlobalplan.StilbewussterRestaurierungsplan (§Dach)
+    # P2-2: Deployment mode — PRODUCT = stable paths only, RESEARCH = experimental SOTA
+    deployment_mode: DeploymentMode = DeploymentMode.PRODUCT
+
+    def __post_init__(self) -> None:
+        """Normalize and validate critical runtime options."""
+        if not isinstance(self.mode, QualityMode):
+            self.mode = QualityMode.QUALITY
+        if not isinstance(self.deployment_mode, DeploymentMode):
+            self.deployment_mode = DeploymentMode.PRODUCT
+        if not isinstance(self.num_cores, int) or self.num_cores < 1:
+            self.num_cores = 1
 
 
 @dataclass
@@ -143,14 +155,17 @@ class UnifiedRestorerV3:
         else:
             self.performance_guard = None
             logger.info("Performance Guard disabled via config")
-            # Erzwinge QualityMode MAXIMUM für Studio 2026
+            # Erzwinge QualityMode BALANCED für Studio-Pipeline
             if hasattr(self.config, "studio_2026") and self.config.studio_2026:
-                self.config.mode = QualityMode.MAXIMUM
-                self.config.phase_skipping = False
+                self.config.mode = QualityMode.BALANCED
+                self.config.enable_phase_skipping = False
         # Lazy Phase Registry: Nur Metadaten, keine Instanzen
         self.phase_metadata: Dict[str, Dict] = self._discover_phase_metadata()
         self._phase_cache: Dict[str, PhaseInterface] = {}
         self._warnings: List[str] = []  # §M-2 Schritte_zur_Musikalischen_Exzellenz
+        self._quality_estimate_used_fallback: bool = False
+        self._quality_estimate_source: str = "unknown"
+        self._blocked_experimental_features: set[str] = set()
 
         # PhaseSkipper (optional, beschleunigt Pipeline um 20–40 %)
         if self.config.enable_phase_skipping:
@@ -167,6 +182,24 @@ class UnifiedRestorerV3:
             f"Cores={self.config.num_cores}, RT Limit={self.config.enforce_3x_rt}, "
             f"Phase Skipping={self.config.enable_phase_skipping}"
         )
+
+    def _is_research_mode(self) -> bool:
+        """Returns True only for explicit RESEARCH deployment mode."""
+        return getattr(self.config, "deployment_mode", DeploymentMode.PRODUCT) == DeploymentMode.RESEARCH
+
+    def _allow_experimental_feature(self, feature_name: str) -> bool:
+        """Blocks experimental features in PRODUCT mode and records the decision."""
+        if self._is_research_mode():
+            return True
+        if feature_name not in self._blocked_experimental_features:
+            self._blocked_experimental_features.add(feature_name)
+            _msg = (
+                f"Experimenteller Pfad '{feature_name}' im Produktmodus blockiert "
+                f"(deployment_mode=product)."
+            )
+            self._warnings.append(_msg)
+            logger.info(_msg)
+        return False
 
     def _discover_phase_metadata(self) -> Dict[str, Dict]:
         """Findet alle Phasenmodule und liest Metadaten (ohne Instanziierung)."""
@@ -248,8 +281,12 @@ class UnifiedRestorerV3:
             if progress_callback is not None:
                 try:
                     progress_callback(pct, phase, time.time() - start_time)
-                except Exception:
-                    pass
+                except Exception as _cb_exc:
+                    logger.debug(
+                        "Progress-Callback fehlgeschlagen (Ursache: %s). "
+                        "Lösung: Callback-Signatur prüfen (pct:int, phase:str, elapsed_s:float).",
+                        _cb_exc,
+                    )
 
         original_sample_rate = sample_rate
         target_sample_rate = 48000  # Standardisierung auf 48 kHz
@@ -260,8 +297,8 @@ class UnifiedRestorerV3:
             "balanced": QualityMode.BALANCED,
             "restoration": QualityMode.QUALITY,  # Restoration nutzt volle Quality-Pipeline
             "quality": QualityMode.QUALITY,
-            "maximum": QualityMode.MAXIMUM,
-            "studio_2026": QualityMode.MAXIMUM,
+            "maximum": QualityMode.BALANCED,
+            "studio_2026": QualityMode.BALANCED,
         }
         _mode_kwarg = kwargs.pop("mode", None)
         if _mode_kwarg is not None:
@@ -270,8 +307,13 @@ class UnifiedRestorerV3:
         if _mat_kwarg is not None and self.config.material_type is None:
             try:
                 self.config.material_type = MaterialType(str(_mat_kwarg))
-            except ValueError:
-                pass
+            except ValueError as _mat_exc:
+                logger.warning(
+                    "Ungültiger Material-Hinweis '%s' ignoriert (Ursache: %s). "
+                    "Lösung: gültige MaterialType-Werte verwenden.",
+                    _mat_kwarg,
+                    _mat_exc,
+                )
 
         # §Dach: MusikalischerGlobalplan — aus kwargs oder RestorationConfig laden
         _gp_kwarg = kwargs.pop("global_plan", None)
@@ -298,6 +340,9 @@ class UnifiedRestorerV3:
             or getattr(getattr(self.config, "mode", None), "value", "") == "studio_2026"
         )
         _goal_applicability_result = None
+        # Structured error accumulator — persists into RestorationResult.metadata["fail_reasons"]
+        # Each entry: {"component": str, "error_code": str, "exc_type": str, "exc_msg": str}
+        _fail_reasons: List[Dict[str, Any]] = []
 
         # Resample to 48 kHz if necessary
         if sample_rate != target_sample_rate:
@@ -325,6 +370,43 @@ class UnifiedRestorerV3:
             logger.debug("restore(): NaN/Inf nach Resampling bereinigt")
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.9, neginf=-0.9)
         audio = np.clip(audio, -1.0, 1.0)
+
+        # ── OOM-Guard: Audio-Buffer-Größe gegen RAM-Budget prüfen ────────────
+        # Spec §9: Audio-Buffer max. 4 GB.  Intermediate STFTs/copies multiplizieren
+        # den Bedarf ~5× → effektives Limit: ~800 MB Audio-Input bei 32 GB RAM.
+        _audio_bytes = audio.nbytes
+        _MAX_AUDIO_BUFFER_BYTES = 4 * 1024 ** 3  # 4 GB absolute Obergrenze (Spec §9)
+        if _audio_bytes > _MAX_AUDIO_BUFFER_BYTES:
+            raise MemoryError(
+                f"Audio-Buffer ({_audio_bytes / (1024**3):.1f} GB) überschreitet "
+                f"das erlaubte Maximum von {_MAX_AUDIO_BUFFER_BYTES / (1024**3):.0f} GB (Spec §9). "
+                f"Bitte eine kürzere Datei verwenden."
+            )
+        # Physischer RAM-Preflight: mind. 3 GB + 5× Audio-Puffer frei
+        try:
+            import psutil as _psutil_guard
+            _avail_mb = float(_psutil_guard.virtual_memory().available / (1024 * 1024))
+            _needed_mb = max(3072.0, (_audio_bytes * 5) / (1024 * 1024))
+            if _avail_mb < _needed_mb:
+                logger.warning(
+                    "OOM-Guard: Nur %.0f MB RAM frei, benötigt ~%.0f MB. "
+                    "Versuche Plugin-Eviction…",
+                    _avail_mb, _needed_mb,
+                )
+                try:
+                    from backend.core.plugin_lifecycle_manager import evict_stale_plugins
+                    evict_stale_plugins(required_mb=_needed_mb)
+                    gc.collect()
+                except Exception:
+                    pass
+                _avail_after = float(_psutil_guard.virtual_memory().available / (1024 * 1024))
+                if _avail_after < _needed_mb * 0.7:
+                    raise MemoryError(
+                        f"Nicht genügend RAM: {_avail_after:.0f} MB frei, "
+                        f"~{_needed_mb:.0f} MB benötigt. Bitte andere Anwendungen schließen."
+                    )
+        except ImportError:
+            pass  # psutil fehlt → Guard degradiert graceful
 
         _cb(5, "Resampling & Vorverarbeitung…")
         # Step 1a: Material-Erkennung via MediumClassifier (vor DefectScanner)
@@ -705,7 +787,7 @@ class UnifiedRestorerV3:
                 s.defect_type.value in {"dropouts", "tape_dropout", "dropout"} and s.severity >= 0.25
                 for s in defect_result.get_top_defects(10)
             )
-            if _has_dropout or self.config.mode == QualityMode.MAXIMUM:
+            if _has_dropout:
                 from backend.core.musical_structure_analyzer import analyze_musical_structure
 
                 _musical_structure = analyze_musical_structure(audio, sample_rate)
@@ -875,33 +957,44 @@ class UnifiedRestorerV3:
             restorability_score=_pmgg_restorability_score,  # §2.29 normativ
             applicable_goals=_applicable_goals,  # §2.32 normativ
         )
-        try:
-            from backend.core.ensemble_processor import process_ensemble
-
-            def _ep_restoration_fn(_a: np.ndarray, _sr: int, _strength: float) -> np.ndarray:
-                _res, _, _ = self._execute_pipeline(
-                    _a,
-                    _sr,
-                    material_type,
-                    defect_result,
-                    selected_phases,
-                    progress_callback=None,
-                    restorability_score=_pmgg_restorability_score,  # §2.29 normativ
-                    applicable_goals=_applicable_goals,  # §2.32 normativ
-                )
-                return _res
-
-            _mat_str = material_type.value if hasattr(material_type, "value") else str(material_type)
-            _ep_audio = process_ensemble(
-                audio,
-                sample_rate,
-                _mat_str,
-                restoration_fn=_ep_restoration_fn,
+        # OOM-Guard: EnsembleProcessor nur bei Dateien ≤ 2 Minuten aktivieren.
+        # 3× parallele Kopien des Audio-Arrays + 3× Pipeline-Intermediate → ~15× Audio-Bytes.
+        # Bei 5 min Stereo 48 kHz: 15 × 115 MB ≈ 1.7 GB zusätzlich → OOM-Risiko auf 32 GB.
+        _ensemble_max_samples = 2 * 60 * sample_rate  # 2 Minuten
+        _ensemble_safe = len(audio) <= _ensemble_max_samples
+        if not _ensemble_safe:
+            logger.info(
+                "🛡️ OOM-Guard: EnsembleProcessor übersprungen (Audio %.1f min > 2.0 min Limit)",
+                len(audio) / sample_rate / 60.0,
             )
-            restored_audio = _ep_audio
-            logger.info("🎛️ EnsembleProcessor: 3 Ketten (CONSERVATIVE/BALANCED/AGGRESSIVE), frame-voted")
-        except Exception as _ep_exc:
-            logger.debug("EnsembleProcessor nicht verfügbar, Fallback auf _execute_pipeline: %s", _ep_exc)
+        if _ensemble_safe:
+            try:
+                from backend.core.ensemble_processor import process_ensemble
+
+                def _ep_restoration_fn(_a: np.ndarray, _sr: int, _strength: float) -> np.ndarray:
+                    _res, _, _ = self._execute_pipeline(
+                        _a,
+                        _sr,
+                        material_type,
+                        defect_result,
+                        selected_phases,
+                        progress_callback=None,
+                        restorability_score=_pmgg_restorability_score,  # §2.29 normativ
+                        applicable_goals=_applicable_goals,  # §2.32 normativ
+                    )
+                    return _res
+
+                _mat_str = material_type.value if hasattr(material_type, "value") else str(material_type)
+                _ep_audio = process_ensemble(
+                    audio,
+                    sample_rate,
+                    _mat_str,
+                    restoration_fn=_ep_restoration_fn,
+                )
+                restored_audio = _ep_audio
+                logger.info("🎛️ EnsembleProcessor: 3 Ketten (CONSERVATIVE/BALANCED/AGGRESSIVE), frame-voted")
+            except Exception as _ep_exc:
+                logger.debug("EnsembleProcessor nicht verfügbar, Fallback auf _execute_pipeline: %s", _ep_exc)
 
         # Speicher-Hygiene: Pipeline-Modelle entladen sobald alle Phasen abgeschlossen.
         # AudioSR (7 GB), LAION-CLAP (2.2 GB) werden nur in der Phase-Pipeline benötigt.
@@ -983,6 +1076,8 @@ class UnifiedRestorerV3:
                     max_iterations=5,  # v9.15-B3: aligned with PMGG 5-retry strategy
                     excellence_mode=_fc_excellence,
                     material=material_type.value,
+                    use_pqs_in_loop=True,
+                    use_versa_in_loop=self.config.deployment_mode == DeploymentMode.RESEARCH,
                 )
                 # §2.34 GPP-WIRE: GoalPriorityProtocol als in-loop Phase-Callback verdrahten
                 try:
@@ -1058,7 +1153,7 @@ class UnifiedRestorerV3:
         # Position: nach StemRemixBalancer (Re-Mix liegt vor), vor LUFS-Normalisierung.
         # Referenz: restauriertes Original (original_audio_for_goals) — originalgetreues Profil.
         # Nur im Studio-2026-Modus aktiv; bei fehlendem Paket transparenter DSP-Fallback.
-        if _is_studio_26:
+        if _is_studio_26 and self._allow_experimental_feature("matchering_reference_mastering"):
             try:
                 from plugins.matchering_plugin import is_matchering_available as _mg_avail
                 from plugins.matchering_plugin import match_reference as _match_ref
@@ -1425,7 +1520,13 @@ class UnifiedRestorerV3:
                     _pqs_result.mcd_db,
                 )
         except Exception as _pqs_exc:
-            logger.debug("PerceptualQualityScorer nicht verfügbar: %s", _pqs_exc)
+            logger.warning("PerceptualQualityScorer nicht verfügbar (PQS_UNAVAILABLE): %s", _pqs_exc)
+            _fail_reasons.append({
+                "component": "PerceptualQualityScorer",
+                "error_code": "PQS_UNAVAILABLE",
+                "exc_type": type(_pqs_exc).__name__,
+                "exc_msg": str(_pqs_exc),
+            })
 
         # §2.31 AdaptiveGoalThresholds — Kontextadaptive Ziel-Schwellenwerte
         _adaptive_goals = None
@@ -1469,25 +1570,29 @@ class UnifiedRestorerV3:
 
             _mg_checker = MusicalGoalsChecker()
             _effective_goal_thresholds = dict(_mg_checker.thresholds)
-            # AdaptiveGoalThresholds (v8-kompatibel) nur dort anwenden, wo Schluessel vorhanden sind.
+            # AdaptiveGoalThresholds: robust über alle bekannten Payload-Formen aufloesen.
             if _adaptive_goals is not None:
                 try:
-                    _adaptive_thresholds_obj = _adaptive_goals[0] if isinstance(_adaptive_goals, tuple) else None
-                    if _adaptive_thresholds_obj is not None:
-                        for _goal_name in (
-                            "brillanz",
-                            "waerme",
-                            "natuerlichkeit",
-                            "authentizitaet",
-                            "emotionalitaet",
-                            "transparenz",
-                            "bass_kraft",
-                        ):
-                            _val = getattr(_adaptive_thresholds_obj, _goal_name, None)
-                            if _val is not None:
-                                _effective_goal_thresholds[_goal_name] = float(_val)
+                    _adaptive_values = self._resolve_adaptive_goal_thresholds(_adaptive_goals)
+                    for _goal_name, _val in _adaptive_values.items():
+                        if _goal_name in _effective_goal_thresholds:
+                            _effective_goal_thresholds[_goal_name] = float(_val)
                 except Exception as _agt_apply_exc:
                     logger.debug("AdaptiveGoalThresholds konnten nicht angewendet werden: %s", _agt_apply_exc)
+
+            # §2.31 Physical-Ceiling clamp: Zielschwellen dürfen physikalische Decke nicht überschreiten.
+            if _physical_ceiling is not None:
+                try:
+                    _ceiling_map = getattr(_physical_ceiling, "ceiling", None)
+                    if isinstance(_ceiling_map, dict):
+                        for _goal_name, _ceil_val in _ceiling_map.items():
+                            if _goal_name in _effective_goal_thresholds and math.isfinite(float(_ceil_val)):
+                                _effective_goal_thresholds[_goal_name] = min(
+                                    float(_effective_goal_thresholds[_goal_name]),
+                                    float(_ceil_val),
+                                )
+                except Exception as _ceil_exc:
+                    logger.debug("PhysicalCeiling clamp nicht verfügbar: %s", _ceil_exc)
 
             _applicable_goal_names = (
                 set(_goal_applicability_result.applicable)
@@ -1566,7 +1671,13 @@ class UnifiedRestorerV3:
                     _musical_excellence_score,
                 )
         except Exception as _mg_exc:
-            logger.debug("MusicalGoalsChecker nicht verfügbar: %s", _mg_exc)
+            logger.warning("MusicalGoalsChecker nicht verfügbar (MUSICAL_GOALS_UNAVAILABLE): %s", _mg_exc)
+            _fail_reasons.append({
+                "component": "MusicalGoalsChecker",
+                "error_code": "MUSICAL_GOALS_UNAVAILABLE",
+                "exc_type": type(_mg_exc).__name__,
+                "exc_msg": str(_mg_exc),
+            })
 
         # §2.34 GoalPriorityProtocol — Iterations-Abbruch-Entscheidung bei Ziel-Regression
         _goal_abort = None
@@ -1712,7 +1823,7 @@ class UnifiedRestorerV3:
             _is_vocos_studio = any(_kw in _vocos_mode_val for _kw in ("maximum", "studio", "aggressive"))
             # (4.3 − 1) / 4 = 0.825 ist die normalisierte PQS-MOS-Schwelle
             _vocos_mos_ok = (_pqs_mos_norm is None) or (_pqs_mos_norm < 0.825)
-            if _is_vocos_studio and _vocos_mos_ok:
+            if _is_vocos_studio and _vocos_mos_ok and self._allow_experimental_feature("vocos_finisher"):
                 import os as _vos
                 import sys as _vsys
 
@@ -1778,7 +1889,7 @@ class UnifiedRestorerV3:
                 sr=sample_rate,
                 compute_anchor=True,
             )
-            _mushra_threshold = 88.0 if self.config.mode == QualityMode.MAXIMUM else 80.0
+            _mushra_threshold = 80.0
             _mushra_pass = _mushra_result.passes_mushra_threshold(_mushra_threshold)
             logger.info(
                 "📊 MushraEvaluator: OQS=%.1f grade=%s anchor=%.1f (Schwelle=%.0f → %s)",
@@ -3397,6 +3508,12 @@ class UnifiedRestorerV3:
         # Build Result
         total_time = time.time() - start_time
         rt_factor = total_time / audio_duration
+        if self.config.enforce_3x_rt and rt_factor > 3.0:
+            logger.warning(
+                "3xRT-Limit überschritten: rt_factor=%.2f (Ursache: Pipeline-Laufzeit über Echtzeitbudget). "
+                "Lösung: Modus FAST/BALANCED nutzen oder adaptive Skips aktivieren.",
+                rt_factor,
+            )
 
         # Optional: Resample back to original sample rate
         # (Currently disabled - output is 48 kHz for consistency)
@@ -4318,6 +4435,16 @@ class UnifiedRestorerV3:
             quality_estimate=quality_estimate,
             warnings=perf_report.warnings if perf_report is not None else [],
             metadata={
+                "fail_reasons": list(_fail_reasons),
+                "quality_estimate": {
+                    "value": float(quality_estimate),
+                    "fallback_quality_estimate": bool(self._quality_estimate_used_fallback),
+                    "source": str(self._quality_estimate_source),
+                },
+                "deployment": {
+                    "mode": getattr(self.config.deployment_mode, "value", "product"),
+                    "blocked_experimental_features": sorted(self._blocked_experimental_features),
+                },
                 "defect_analysis": {
                     "material": material_type.value,
                     "analysis_time": defect_result.analysis_time_seconds,
@@ -4638,6 +4765,15 @@ class UnifiedRestorerV3:
                 if _goal_applicability_result is not None
                 else {}
             ),
+            goal_priority_log=(
+                list(_fc_chain_result.metadata.get("goal_priority_log", []))
+                if _fc_chain_result is not None
+                else []
+            ) + (
+                [f"Post-pipeline GPP: {_goal_abort.reason}"]
+                if _goal_abort is not None and _goal_abort.should_abort
+                else []
+            ),
             confidence=(float(_pipeline_confidence.confidence) if _pipeline_confidence is not None else 1.0),
         )
 
@@ -4691,6 +4827,7 @@ class UnifiedRestorerV3:
                 ("plugins.mert_plugin", "unload_mert", "MERT"),
                 ("plugins.crepe_plugin", "unload_crepe", "CREPE"),
                 ("plugins.fcpe_plugin", "unload_fcpe", "FCPE"),
+                ("plugins.basicpitch_plugin", "unload_basicpitch", "BasicPitch"),
             ]
             for _mod_name, _fn_name, _label in _unload_specs:
                 try:
@@ -4768,13 +4905,9 @@ class UnifiedRestorerV3:
           9. Tier 4    — Instrument-/Vokal-Enhancement (PANNs-gesteuert)
          10. Tier 5    — Dynamik & Mastering
          11. Tier 6    — Ausgang (Lautheit, Limiter, Format)
-
-        Im MAXIMUM-Modus (Studio 2026) werden niedrigere Schwellen und
-        zusätzliche Enhancement-Phasen aktiviert.
         """
         scores = defect_result.scores
         material = defect_result.material_type
-        is_max = self.config.mode == QualityMode.MAXIMUM
 
         def sev(defect_type, default=0.0):
             """Hilfsfunktion: Severity eines DefectType sicher auslesen."""
@@ -4811,12 +4944,6 @@ class UnifiedRestorerV3:
         drums_detected = panns("Drum", 0.50) or panns("Percussion", 0.50)
         piano_detected = panns("Piano", 0.60) or panns("Keyboard (musical)", 0.60)
 
-        # Im MAXIMUM-Modus alle Instrument-Phasen aktivieren wenn PANNs kein
-        # klares Signal liefert (konservative Annahme: Musik enthält alles)
-        if is_max and not panns_tags:
-            vocals_detected = guitar_detected = brass_detected = True
-            drums_detected = piano_detected = True
-
         selected: List[str] = []
 
         # ════════════════════════════════════════════════════════════════════
@@ -4832,7 +4959,7 @@ class UnifiedRestorerV3:
         # ════════════════════════════════════════════════════════════════════
 
         # Dropout / Lücken
-        if sev(DefectType.DROPOUTS) > (0.05 if is_max else 0.10):
+        if sev(DefectType.DROPOUTS) > 0.10:
             selected.append("phase_24_dropout_repair")
         # phase_55 (DiffWave ML-Inpainting) nur bei echten analogen Dropouts aktivieren —
         # digitale Materialien (MP3, Streaming, CD) erzeugen keine bandlückenbedingten Dropouts.
@@ -4845,14 +4972,14 @@ class UnifiedRestorerV3:
             MaterialType.WIRE_RECORDING,
             MaterialType.LACQUER_DISC,
         }
-        if sev(DefectType.DROPOUTS) > (0.20 if is_max else 0.30) and material in _ANALOG_MATERIALS_P55:
+        if sev(DefectType.DROPOUTS) > 0.30 and material in _ANALOG_MATERIALS_P55:
             selected.append("phase_55_diffusion_inpainting")  # ML-Inpainting nur für analoge Lücken
 
         # Clicks / Impulse (1. Pass)
-        if sev(DefectType.CLICKS) > (0.10 if is_max else 0.15):
+        if sev(DefectType.CLICKS) > 0.15:
             selected.append("phase_01_click_removal")
         # Clicks / Pops (2. Pass — tiefergehende AR-Residual-Methode)
-        if sev(DefectType.CLICKS) > (0.20 if is_max else 0.25):
+        if sev(DefectType.CLICKS) > 0.25:
             selected.append("phase_27_click_pop_removal")
 
         # Vinyl/Shellac/Lacquer: Oberflächenrausch-Profil VOR Crackle-Entfernung
@@ -4863,43 +4990,43 @@ class UnifiedRestorerV3:
             selected.append("phase_28_surface_noise_profiling")
 
         # Crackle (Vinyl/Shellac-typisch)
-        if sev(DefectType.CRACKLE) > (0.10 if is_max else 0.15):
+        if sev(DefectType.CRACKLE) > 0.15:
             selected.append("phase_09_crackle_removal")
 
         # Brumm 50/60 Hz
-        if sev(DefectType.HUM) > (0.08 if is_max else 0.10):
+        if sev(DefectType.HUM) > 0.10:
             selected.append("phase_02_hum_removal")
 
         # Breitbandrauschen
-        if sev(DefectType.HIGH_FREQ_NOISE) > (0.15 if is_max else 0.20):
+        if sev(DefectType.HIGH_FREQ_NOISE) > 0.20:
             selected.append("phase_03_denoise")
 
         # Tape-Hiss (spezifisches Profil-basiertes Verfahren)
         # Shellac: phase_03_denoise übernimmt das NR — phase_29 NICHT unconditional
         # aktivieren, da das Doppel-NR bei SNR≈6 dB das Signal vollständig zerstört.
         # REEL_TAPE: Profi-Spulenband mit identischem Hiss-Profil wie TAPE.
-        if sev(DefectType.HIGH_FREQ_NOISE) > (0.20 if is_max else 0.30) or material in [
+        if sev(DefectType.HIGH_FREQ_NOISE) > 0.30 or material in [
             MaterialType.TAPE,
             MaterialType.REEL_TAPE,
         ]:
             selected.append("phase_29_tape_hiss_reduction")
 
         # Noise-Gate für Stille-Segmente mit Rauschboden
-        if sev(DefectType.HIGH_FREQ_NOISE) > 0.25 or sev(DefectType.LOW_FREQ_RUMBLE) > 0.20 or is_max:
+        if sev(DefectType.HIGH_FREQ_NOISE) > 0.25 or sev(DefectType.LOW_FREQ_RUMBLE) > 0.20:
             selected.append("phase_18_noise_gate")
 
         # Wow/Flutter (Magnetband-Gleichlaufschwankungen)
-        if max(sev(DefectType.WOW), sev(DefectType.FLUTTER)) > (0.08 if is_max else 0.10):
+        if max(sev(DefectType.WOW), sev(DefectType.FLUTTER)) > 0.10:
             selected.append("phase_12_wow_flutter_fix")
 
         # Pitch-Drift (langsame Tonhöhenschwankung)
-        if sev(DefectType.PITCH_DRIFT) > (0.10 if is_max else 0.15):
+        if sev(DefectType.PITCH_DRIFT) > 0.15:
             selected.append("phase_31_speed_pitch_correction")
 
         # Phasen-/Azimuth-Fehler
-        if sev(DefectType.PHASE_ISSUES) > (0.08 if is_max else 0.10):
+        if sev(DefectType.PHASE_ISSUES) > 0.10:
             selected.append("phase_14_phase_correction")
-        if sev(DefectType.PHASE_ISSUES) > (0.15 if is_max else 0.20) and material in [
+        if sev(DefectType.PHASE_ISSUES) > 0.20 and material in [
             MaterialType.TAPE,
             MaterialType.REEL_TAPE,
             MaterialType.SHELLAC,
@@ -4907,62 +5034,60 @@ class UnifiedRestorerV3:
             selected.append("phase_25_azimuth_correction")
 
         # Nachhall-Reduktion
-        if sev(DefectType.REVERB_EXCESS) > (0.20 if is_max else 0.25):
+        if sev(DefectType.REVERB_EXCESS) > 0.25:
             selected.append("phase_20_reverb_reduction")
-        if sev(DefectType.REVERB_EXCESS) > (0.35 if is_max else 0.45):
+        if sev(DefectType.REVERB_EXCESS) > 0.45:
             selected.append("phase_49_advanced_dereverb")  # Tiefgehende Blind-RIR-Methode
 
         # Spektral-Reparatur (Clipping / Digital-Artefakte)
-        if sev(DefectType.CLIPPING) > (0.08 if is_max else 0.10) or sev(DefectType.DIGITAL_ARTIFACTS) > (
-            0.15 if is_max else 0.20
-        ):
+        if sev(DefectType.CLIPPING) > 0.10 or sev(DefectType.DIGITAL_ARTIFACTS) > 0.20:
             selected.append("phase_23_spectral_repair")
 
         # Print-Through (Magnetisches Übersprechen bei Bandaufnahmen — Vor-/Nachecho)
         # Physikalisch nur bei Bandmaterial möglich (§4.5 Adaptive Temporal Subtraction)
-        if sev(DefectType.PRINT_THROUGH) > (0.10 if is_max else 0.15) and material in [
+        if sev(DefectType.PRINT_THROUGH) > 0.15 and material in [
             MaterialType.TAPE,
             MaterialType.REEL_TAPE,
         ]:
             selected.append("phase_29_tape_hiss_reduction")  # Hiss-Profil-Subtraktion
             selected.append("phase_03_denoise")  # Breitband-Restecho-NR
-        if sev(DefectType.PRINT_THROUGH) > (0.25 if is_max else 0.35) and material in [
+        if sev(DefectType.PRINT_THROUGH) > 0.35 and material in [
             MaterialType.TAPE,
             MaterialType.REEL_TAPE,
         ]:
             selected.append("phase_23_spectral_repair")  # Schwere Vorecho-Tilgung
 
         # Quantisierungsrauschen (niedrige Bit-Tiefe / fehlerhaftes Resampling)
-        if sev(DefectType.QUANTIZATION_NOISE) > (0.10 if is_max else 0.15):
+        if sev(DefectType.QUANTIZATION_NOISE) > 0.15:
             selected.append("phase_03_denoise")
             selected.append("phase_23_spectral_repair")
-        if sev(DefectType.QUANTIZATION_NOISE) > (0.20 if is_max else 0.30):
+        if sev(DefectType.QUANTIZATION_NOISE) > 0.30:
             selected.append("phase_06_frequency_restoration")  # Treppen-Artefakte glätten
 
         # Jitter-Artefakte (D/A-Wandler-Zeitfehler — CD, DAT, Streaming)
-        if sev(DefectType.JITTER_ARTIFACTS) > (0.10 if is_max else 0.15):
+        if sev(DefectType.JITTER_ARTIFACTS) > 0.15:
             selected.append("phase_12_wow_flutter_fix")  # Zeitachsen-Trägeheit
             selected.append("phase_23_spectral_repair")  # Spektrale Jitter-Spuren
 
         # RIAA-Entzerrungsfehler (Shellac/früher Vinyl: AES/NAB/FFRR — §6.3, §7.2)
-        if sev(DefectType.RIAA_CURVE_ERROR) > (0.08 if is_max else 0.12):
+        if sev(DefectType.RIAA_CURVE_ERROR) > 0.12:
             selected.append("phase_04_eq_correction")  # Fehler-EQ korrigieren
             selected.append("phase_06_frequency_restoration")  # Spektralprofil wiederherstellen
-        if sev(DefectType.RIAA_CURVE_ERROR) > (0.20 if is_max else 0.30):
+        if sev(DefectType.RIAA_CURVE_ERROR) > 0.30:
             selected.append("phase_07_harmonic_restoration")  # Obertöne durch Entzerrungs-Kette verloren
 
         # Aliasing (AA-Filter-Artefakte bei Digitalisierung — §6.3, §7.2)
-        if sev(DefectType.ALIASING) > (0.10 if is_max else 0.15):
+        if sev(DefectType.ALIASING) > 0.15:
             selected.append("phase_03_denoise")  # Spiegelfrequenzen dämpfen
             selected.append("phase_23_spectral_repair")  # Spektrale Aliasing-Spuren beseitigen
-        if sev(DefectType.ALIASING) > (0.25 if is_max else 0.35):
+        if sev(DefectType.ALIASING) > 0.35:
             selected.append("phase_50_spectral_repair")  # Zweiter Spektral-Pass
 
         # Bias-Fehler (falscher Vormagnetisierungsstrom bei Bandaufnahme — §6.3, §7.2)
-        if sev(DefectType.BIAS_ERROR) > (0.08 if is_max else 0.12):
+        if sev(DefectType.BIAS_ERROR) > 0.12:
             selected.append("phase_04_eq_correction")  # HF-Rolloff/-Überhöhung kompensieren
             selected.append("phase_03_denoise")  # Bias-induziertes Rauschen reduzieren
-        if sev(DefectType.BIAS_ERROR) > (0.20 if is_max else 0.30):
+        if sev(DefectType.BIAS_ERROR) > 0.30:
             selected.append("phase_06_frequency_restoration")  # Frequenzgang-Verluste ausgleichen
             selected.append("phase_29_tape_hiss_reduction")  # Bias-erhöhtes Hintergrundrauschen
 
@@ -4973,9 +5098,8 @@ class UnifiedRestorerV3:
                 "phase_29_tape_hiss_reduction",  # Wachsoberflächenrauschen
                 "phase_03_denoise",  # Breitbandrauschen
                 "phase_06_frequency_restoration",  # HF ≤ 5 kHz rekonstruieren
+                "phase_07_harmonic_restoration",  # Obertöne ergänzen
             ]
-            if is_max:
-                selected.append("phase_07_harmonic_restoration")  # Obertöne ergänzen
 
         # WIRE_RECORDING (Drahtton 1940–1955): Jitter + frequenzselektive Einbrüche
         if material == MaterialType.WIRE_RECORDING:
@@ -5074,47 +5198,41 @@ class UnifiedRestorerV3:
         # ════════════════════════════════════════════════════════════════════
 
         # Bandbreitenerweiterung bei Verlusten
-        if sev(DefectType.BANDWIDTH_LOSS) > (0.15 if is_max else 0.20) or sev(DefectType.COMPRESSION_ARTIFACTS) > (
-            0.25 if is_max else 0.30
-        ):
+        if sev(DefectType.BANDWIDTH_LOSS) > 0.20 or sev(DefectType.COMPRESSION_ARTIFACTS) > 0.30:
             selected.append("phase_06_frequency_restoration")
 
         # Oberton-Restaurierung (tiefergehend)
-        if sev(DefectType.BANDWIDTH_LOSS) > (0.25 if is_max else 0.30) or is_max:
+        if sev(DefectType.BANDWIDTH_LOSS) > 0.30:
             selected.append("phase_07_harmonic_restoration")
 
         # Transienten-Schutz bei digitalen Artefakten
-        if sev(DefectType.DIGITAL_ARTIFACTS) > (0.20 if is_max else 0.25) or is_max:
+        if sev(DefectType.DIGITAL_ARTIFACTS) > 0.25:
             selected.append("phase_08_transient_preservation")
 
         # EQ-Korrektur für materialspezifische Frequenzgänge
         # Alle analogen Träger und DAT haben charakteristische Frequenzgangkurven
-        if (
-            material
-            in [
-                MaterialType.SHELLAC,
-                MaterialType.VINYL,
-                MaterialType.TAPE,
-                MaterialType.REEL_TAPE,
-                MaterialType.DAT,
-                MaterialType.MINIDISC,
-                MaterialType.WAX_CYLINDER,
-                MaterialType.WIRE_RECORDING,
-                MaterialType.LACQUER_DISC,
-            ]
-            or is_max
-        ):
+        if material in [
+            MaterialType.SHELLAC,
+            MaterialType.VINYL,
+            MaterialType.TAPE,
+            MaterialType.REEL_TAPE,
+            MaterialType.DAT,
+            MaterialType.MINIDISC,
+            MaterialType.WAX_CYLINDER,
+            MaterialType.WIRE_RECORDING,
+            MaterialType.LACQUER_DISC,
+        ]:
             selected.append("phase_04_eq_correction")
 
         # Dynamikbereich-Erweiterung bei über-Kompression
         if (
-            sev(DefectType.DYNAMIC_COMPRESSION_EXCESS) > (0.20 if is_max else 0.30)
+            sev(DefectType.DYNAMIC_COMPRESSION_EXCESS) > 0.30
             or sev(DefectType.COMPRESSION_ARTIFACTS) > 0.30
         ):
             selected.append("phase_26_dynamic_range_expansion")
 
         # Spektrale Gesamt-Reparatur (breiter zweiter Pass)
-        if sev(DefectType.DIGITAL_ARTIFACTS) > 0.20 or sev(DefectType.COMPRESSION_ARTIFACTS) > 0.20 or is_max:
+        if sev(DefectType.DIGITAL_ARTIFACTS) > 0.20 or sev(DefectType.COMPRESSION_ARTIFACTS) > 0.20:
             selected.append("phase_50_spectral_repair")
 
         # ════════════════════════════════════════════════════════════════════
@@ -5126,11 +5244,11 @@ class UnifiedRestorerV3:
             selected.append("phase_32_mono_to_stereo")  # Mono→Pseudo-Stereo
 
         # Stereo-Balance bei Imbalance
-        if sev(DefectType.STEREO_IMBALANCE) > (0.10 if is_max else 0.15):
+        if sev(DefectType.STEREO_IMBALANCE) > 0.15:
             selected.append("phase_15_stereo_balance")
 
         # Stereo-Breiten-Begrenzer bei extremer Imbalance
-        if sev(DefectType.STEREO_IMBALANCE) > (0.30 if is_max else 0.40):
+        if sev(DefectType.STEREO_IMBALANCE) > 0.40:
             selected.append("phase_33_stereo_width_limiter")
 
         # Mid/Side-Verarbeitung für Stereo-Quellen
@@ -5166,15 +5284,14 @@ class UnifiedRestorerV3:
         # Bass-Fundament (immer)
         selected.append("phase_37_bass_enhancement")
 
-        # Präsenz (2–6 kHz) — Studio 2026 oder bei Vokalinhalt
-        if is_max or vocals_detected:
+        # Präsenz (2–6 kHz) — bei Vokalinhalt
+        if vocals_detected:
             selected.append("phase_38_presence_boost")
 
-        # Air-Band Anhebung > 12 kHz — bei Bandbegrenzung oder Studio 2026
+        # Air-Band Anhebung > 12 kHz — bei Bandbegrenzung oder analogem Material
         # WAX_CYLINDER und LACQUER_DISC: HF-Rekonstruktion nach physikalischer Bandbegrenzung
         if (
-            is_max
-            or sev(DefectType.BANDWIDTH_LOSS) > 0.10
+            sev(DefectType.BANDWIDTH_LOSS) > 0.10
             or material
             in [
                 MaterialType.SHELLAC,
@@ -5186,14 +5303,10 @@ class UnifiedRestorerV3:
         ):
             selected.append("phase_39_air_band_enhancement")
 
-        # Tape-Sättigungs-Emulation (Studio 2026 + Tape/REEL-Material)
+        # Tape-Sättigungs-Emulation (Tape/REEL-Material — authentischer Charakter)
         # REEL_TAPE hat identischen Röhrensättigungs-Charakter wie TAPE
-        if is_max and material in [MaterialType.TAPE, MaterialType.REEL_TAPE, MaterialType.SHELLAC]:
+        if material in [MaterialType.TAPE, MaterialType.REEL_TAPE, MaterialType.SHELLAC]:
             selected.append("phase_22_tape_saturation")
-
-        # Harmonischer Exciter (Studio 2026)
-        if is_max:
-            selected.append("phase_21_exciter")
 
         # Transparente Dynamik (psychoakustisch, genre-adaptiv)
         if (
@@ -5207,20 +5320,19 @@ class UnifiedRestorerV3:
                 MaterialType.STREAMING,
             ]
             or sev(DefectType.DYNAMIC_COMPRESSION_EXCESS) > 0.20
-            or is_max
         ):
             selected.append("phase_54_transparent_dynamics")
 
-        # Multiband-Kompression (Studio 2026 oder nicht über-komprimiert)
-        if is_max or sev(DefectType.COMPRESSION_ARTIFACTS) < 0.40:
+        # Multiband-Kompression (wenn nicht über-komprimiert)
+        if sev(DefectType.COMPRESSION_ARTIFACTS) < 0.40:
             selected.append("phase_35_multiband_compression")
 
         # Transient-Shaper (nach Drums-Enhancement)
-        if drums_detected or is_max:
+        if drums_detected:
             selected.append("phase_36_transient_shaper")
 
         # Kompression & Limiting (wenn nicht bereits über-komprimiert)
-        if sev(DefectType.COMPRESSION_ARTIFACTS) < (0.60 if is_max else 0.50):
+        if sev(DefectType.COMPRESSION_ARTIFACTS) < 0.50:
             selected.append("phase_10_compression")
             selected.append("phase_11_limiting")
 
@@ -5583,15 +5695,30 @@ class UnifiedRestorerV3:
                                         f"Phase {_idx_ex + 1}/{_n_sel}: {_phase_label}",
                                         0.0,
                                     )
-                                except Exception:
-                                    pass
+                                except Exception as _cb_exc:
+                                    logger.debug(
+                                        "Progress-Update übersprungen in %s (Ursache: %s). "
+                                        "Lösung: Callback-Signatur prüfen.",
+                                        phase_id,
+                                        _cb_exc,
+                                    )
                             executed.append(phase_id)
                             logger.info(f"✅ {phase_id}: {result.execution_time_seconds:.2f}s (parallel)")
                         else:
-                            logger.error(f"❌ {phase_id} failed: {result.warnings}")
+                            logger.error(
+                                "Phase %s fehlgeschlagen (Ursache: %s). "
+                                "Lösung: Phase prüfen oder DSP-Fallback aktivieren.",
+                                phase_id,
+                                result.warnings,
+                            )
                             skipped.append(phase_id)
                     except Exception as e:
-                        logger.error(f"❌ {phase_id} exception: {e}")
+                        logger.error(
+                            "Phase %s mit Ausnahme abgebrochen (Ursache: %s). "
+                            "Lösung: Plugin-/Modellverfügbarkeit und Eingabedaten prüfen.",
+                            phase_id,
+                            e,
+                        )
                         skipped.append(phase_id)
                     if self.performance_guard:
                         self.performance_guard.end_phase(phase_id, phase_start)
@@ -5672,8 +5799,13 @@ class UnifiedRestorerV3:
                                         f"Phase {_idx_ex + 1}/{_n_sel}: {_phase_label}",
                                         0.0,
                                     )
-                                except Exception:
-                                    pass
+                                except Exception as _cb_exc:
+                                    logger.debug(
+                                        "Progress-Update übersprungen in %s (Ursache: %s). "
+                                        "Lösung: Callback-Signatur prüfen.",
+                                        phase_id,
+                                        _cb_exc,
+                                    )
                             executed.append(phase_id)
                             logger.info(
                                 f"✅ {phase_id}: PMGG action={_pmgg_entry.action} "
@@ -5718,8 +5850,13 @@ class UnifiedRestorerV3:
                                             f"Phase {_idx_ex + 1}/{_n_sel}: {_phase_label}",
                                             0.0,
                                         )
-                                    except Exception:
-                                        pass
+                                    except Exception as _cb_exc:
+                                        logger.debug(
+                                            "Progress-Update übersprungen in %s (Ursache: %s). "
+                                            "Lösung: Callback-Signatur prüfen.",
+                                            phase_id,
+                                            _cb_exc,
+                                        )
                                 executed.append(phase_id)
                                 logger.info(f"✅ {phase_id} (fallback): {result.execution_time_seconds:.2f}s")
                                 # §Punkt3 Regressionsprotokoll: RMS nach PMGG-Fallback-Phase
@@ -5757,8 +5894,13 @@ class UnifiedRestorerV3:
                                         f"Phase {_idx_ex + 1}/{_n_sel}: {_phase_label}",
                                         0.0,
                                     )
-                                except Exception:
-                                    pass
+                                except Exception as _cb_exc:
+                                    logger.debug(
+                                        "Progress-Update übersprungen in %s (Ursache: %s). "
+                                        "Lösung: Callback-Signatur prüfen.",
+                                        phase_id,
+                                        _cb_exc,
+                                    )
                             executed.append(phase_id)
                             logger.info(f"✅ {phase_id}: {result.execution_time_seconds:.2f}s")
                             # §Punkt3 Regressionsprotokoll: RMS nach direkter Phase
@@ -5772,6 +5914,9 @@ class UnifiedRestorerV3:
                     skipped.append(phase_id)
                 if self.performance_guard:
                     self.performance_guard.end_phase(phase_id, phase_start)
+                # OOM-Guard: periodisches GC alle 5 Phasen um Speicher-Akkumulation zu vermeiden
+                if len(executed) % 5 == 0:
+                    gc.collect()
                 # §2.16 TQC mid-pipeline: nach zeitmodifizierenden Phasen auf Kohärenzverlust prüfen
                 if _tqc_snap is not None and phase_id in executed:
                     _tqc_dur_s = (
@@ -5796,13 +5941,21 @@ class UnifiedRestorerV3:
                             logger.debug("TQC mid-pipeline nicht verfügbar: %s", _mtqc_exc)
                 # Memory-Hygiene: alle 5 Phasen Garbage Collector aufrufen,
                 # um Zwischenpuffer und abgeschlossene Phase-Objekte freizugeben.
-                if len(executed) % 5 == 0:
-                    gc.collect()
                 if self.performance_guard and self.performance_guard.check_early_exit(remaining):
                     logger.warning(f"⚠️ Early exit triggered, skipping {remaining} remaining phases")
                     skipped.extend(selected_phases[len(executed) :])
                     break
         return current_audio, executed, skipped
+
+    @staticmethod
+    def _resolve_adaptive_goal_thresholds(adaptive_goals_payload: Any) -> Dict[str, float]:
+        """Delegates to the standalone resolver module (P1-2 modularisation).
+
+        See ``backend.core.musical_goals.adaptive_goal_resolver`` for the
+        full implementation.  Kept as a @staticmethod here for backward
+        compatibility with call sites that reference UnifiedRestorerV3.
+        """
+        return _resolve_adaptive_goal_thresholds_fn(adaptive_goals_payload)
 
     def _estimate_quality(
         self,
@@ -5828,6 +5981,9 @@ class UnifiedRestorerV3:
         Returns:
             quality_estimate ∈ [0.0, 1.0]
         """
+        self._quality_estimate_used_fallback = True
+        self._quality_estimate_source = "defect_proxy"
+
         # Defekt-Severity: sicher klemmen
         defect_severity = float(defect_result.get_total_severity())
         defect_severity = max(0.0, min(1.0, defect_severity))
@@ -5843,6 +5999,8 @@ class UnifiedRestorerV3:
                 _mos = float(getattr(_pqs_result, "pqs_mos", getattr(_pqs_result, "mos", pqs_mos)))
                 if math.isfinite(_mos) and 1.0 <= _mos <= 5.0:
                     pqs_mos = _mos
+                    self._quality_estimate_used_fallback = False
+                    self._quality_estimate_source = "pqs_absolute"
             except Exception as _pqs_exc:
                 logger.debug("_estimate_quality: PQS-Import fehlgeschlagen, Fallback aktiv: %s", _pqs_exc)
 
@@ -5895,8 +6053,8 @@ def get_restorer(mode: str = "quality") -> "UnifiedRestorerV3":
                     "balanced": QualityMode.BALANCED,
                     "restoration": QualityMode.QUALITY,  # Restoration nutzt volle Quality-Pipeline
                     "quality": QualityMode.QUALITY,
-                    "maximum": QualityMode.MAXIMUM,
-                    "studio_2026": QualityMode.MAXIMUM,
+                    "maximum": QualityMode.BALANCED,
+                    "studio_2026": QualityMode.BALANCED,
                 }
                 qmode = _mode_map.get(mode.lower(), QualityMode.QUALITY)
                 config = RestorationConfig(mode=qmode)

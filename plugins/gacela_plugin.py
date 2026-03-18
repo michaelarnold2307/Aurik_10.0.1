@@ -160,8 +160,20 @@ class GacelaPlugin:
 
     # ── ML-Modell laden ──────────────────────────────────────────────────────
 
+    _BUDGET_NAME: str = "GACELA"
+    _BUDGET_SIZE_GB: float = 0.25  # ~200 MB PyTorch checkpoint
+
     def _try_load(self) -> None:
         """Lädt GACELA-Checkpoint; setzt _model_ready=True bei Erfolg."""
+        try:
+            from backend.core.ml_memory_budget import try_allocate, release as _release  # noqa: PLC0415
+
+            if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
+                logger.info("GACELA: ML-Budget erschöpft — DSP-Fallback aktiv.")
+                self._model_ready = False
+                return
+        except ImportError:
+            pass
         try:
             import torch  # noqa — optional dependency
 
@@ -211,6 +223,11 @@ class GacelaPlugin:
 
             self._model_ready = True
             logger.info("GACELA: ML-Modell bereit (MODEL_SR=%d Hz).", MODEL_SR)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                _reg_plm(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB, unload_fn=_unload_gacela)
+            except Exception:
+                pass
 
         except Exception as exc:
             logger.warning(
@@ -218,6 +235,11 @@ class GacelaPlugin:
                 exc,
             )
             self._model_ready = False
+            try:
+                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                _release(self._BUDGET_NAME)
+            except Exception:
+                pass
 
     # ── ML-Inpainting (primärer Pfad) ────────────────────────────────────────
 
@@ -391,6 +413,18 @@ class GacelaPlugin:
 
 
 # ── Singleton (Double-Checked Locking, Spec §3.2) ────────────────────────────
+
+
+def _unload_gacela() -> None:
+    """Entlädt das GACELA-Singleton aus dem RAM (PLM-Eviction-Callback)."""
+    global _inst
+    _inst = None  # type: ignore[assignment]
+    try:
+        import gc
+        gc.collect()
+    except Exception:  # noqa: BLE001
+        pass
+
 
 _lock = threading.Lock()
 _inst: GacelaPlugin | None = None
