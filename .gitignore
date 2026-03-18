@@ -132,3 +132,8 @@ AppDir/
 
 # Lokale Git-Backups
 .git.bak-*/
+
+# ── Generierte Scan-/Audit-Artefakte ─────────────────────────────────────────
+*.sarif
+test_output/
+.venv_sgmse_export/
