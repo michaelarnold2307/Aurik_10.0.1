@@ -134,9 +134,7 @@ class HybridDereverb:
 
             self.dccrn = get_sgmse_plus_plugin()
             self._sgmse_active = True
-            logger.info(
-                "✅ SGMSE+ geladen als Dereverb-Primärmodul (§4.4) — ResembleEnhance als Fallback bereit"
-            )
+            logger.info("✅ SGMSE+ geladen als Dereverb-Primärmodul (§4.4) — ResembleEnhance als Fallback bereit")
             return
         except ImportError as e:
             logger.debug("SGMSE+ import fehlgeschlagen (%s) — versuche ResembleEnhance Fallback 1", e)
@@ -298,8 +296,8 @@ class HybridDereverb:
                     result.audio if hasattr(result, "audio") else result,
                     dtype=np.float32,
                 )
-                metadata["model"] = "sgmse_plus_onnx"
-                metadata["model_used"] = getattr(result, "model_used", "sgmse_plus_onnx")
+                metadata["model"] = "sgmse_plus"
+                metadata["model_used"] = getattr(result, "model_used", "sgmse_plus_torchscript")
             else:
                 # §4.4 Fallback 1: ResembleEnhance
                 enhanced = self.dccrn.enhance(mono_in, sample_rate)

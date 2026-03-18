@@ -10,13 +10,13 @@ Verbesserung gegenüber WPE (2010):
     - Hallunterdrückung UND Rauschreduzierung in einem Schritt
 
 Modell:
-    models/sgmse_plus/sgmse_plus.onnx (~120 MB)
+    Primär:   models/sgmse_plus/sgmse_plus.ts (~251 MB, TorchScript)
     Input:  [1, 2, n_fft//2+1, T] float32 (Real + Imag getrennt)
     Output: [1, 2, n_fft//2+1, T] float32 (denoised Real + Imag)
     Sigma:  Rauschpegel ∈ [0.01, 1.0] als skalarer Input
 
 Fallback-Kaskade (§4.4):
-    1. SGMSE+ ONNX (dieser Plugin)
+    1. SGMSE+ TorchScript (dieser Plugin)
     2. WPE DSP (Nara-WPE, wpe_plugin.py)
 
 Backward-Kompatibilität:
@@ -45,12 +45,12 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).parent.parent
-_ONNX_PATH = _ROOT / "models" / "sgmse_plus" / "sgmse_plus.onnx"
+_TS_PATH = _ROOT / "models" / "sgmse_plus" / "sgmse_plus.ts"
 
 # Verarbeitungs-Konstanten (48 kHz)
 _SR: int = 48_000
-_N_FFT: int = 512       # 10.7 ms @ 48 kHz (typisch für SGMSE+)
-_HOP: int = 128         # 2.7 ms
+_N_FFT: int = 512  # 10.7 ms @ 48 kHz (typisch für SGMSE+)
+_HOP: int = 128  # 2.7 ms
 _WIN: int = 512
 
 _lock_plus = threading.Lock()
@@ -61,6 +61,7 @@ _instance_plus: SGMSEPlusPlugin | None = None
 # Result dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SgmseResult:
     """Ergebnis der SGMSE+ Enhancement-Inferenz.
@@ -68,7 +69,7 @@ class SgmseResult:
     Attributes:
         audio:      Bereinigtes / Dereverb-Audio, float32 ∈ [-1, 1]
         sr:         Sample-Rate (48000)
-        model_used: "sgmse_plus_onnx" | "wpe_dsp_fallback"
+        model_used: "sgmse_plus_torchscript" | "wpe_dsp_fallback"
         snr_improvement_db: Geschätzter SNR-Gewinn in dB
     """
 
@@ -86,8 +87,9 @@ class SgmseResult:
 # SGMSEPlusPlugin
 # ---------------------------------------------------------------------------
 
+
 class SGMSEPlusPlugin:
-    """SGMSE+ Score-Based Speech/Music Enhancement (ONNX + WPE-Fallback).
+    """SGMSE+ Score-Based Speech/Music Enhancement (TorchScript-primary).
 
     Verarbeitet kombinierte Rausch- und Hallunterdrückung via score-basierter
     generativer Inferenz oder fällt auf WPE DSP zurück (§4.4 Spec).
@@ -95,40 +97,36 @@ class SGMSEPlusPlugin:
 
     def __init__(self) -> None:
         self._session = None
+        self._ts_model = None
         self._model_loaded: bool = False
         self._try_load()
 
     def _try_load(self) -> None:
-        """Lädt SGMSE+ ONNX; WPE-Fallback wenn nicht verfügbar."""
-        if not _ONNX_PATH.exists():
-            logger.info(
-                "SGMSE+ ONNX nicht gefunden (%s) — WPE-DSP-Fallback aktiv. "
-                "Modell: https://github.com/sp-uhh/sgmse",
-                _ONNX_PATH,
-            )
-            return
+        """Lädt SGMSE+ TorchScript; sonst WPE-Fallback."""
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+        except Exception:
+            _try_alloc = None
 
+        if _TS_PATH.exists():
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
-                if not _try_alloc("SGMSE+", size_gb=0.12):
-                    logger.warning("SGMSE+: ML-Budget erschöpft — WPE-DSP-Fallback.")
-                    return
-            except Exception:
-                pass
+                import torch  # noqa: PLC0415
 
-            opts = ort.SessionOptions()
-            opts.inter_op_num_threads = 2
-            self._session = ort.InferenceSession(
-                str(_ONNX_PATH),
-                sess_options=opts,
-                providers=["CPUExecutionProvider"],
-            )
-            self._model_loaded = True
-            logger.info("✅ SGMSE+ ONNX geladen (%s, §4.4 — WPE-Nachfolger)", _ONNX_PATH.name)
-        except Exception as exc:
-            logger.warning("SGMSE+ ONNX nicht ladbar: %s — WPE-DSP-Fallback aktiv.", exc)
+                if _try_alloc is not None and not _try_alloc("SGMSE+", size_gb=0.12):
+                    logger.warning("SGMSE+: ML-Budget erschöpft — WPE-DSP-Fallback.")
+                else:
+                    self._ts_model = torch.jit.load(str(_TS_PATH), map_location="cpu")
+                    self._ts_model.eval()
+                    self._model_loaded = True
+                    logger.info("✅ SGMSE+ TorchScript geladen (%s)", _TS_PATH.name)
+                    return
+            except Exception as exc:
+                logger.warning("SGMSE+ TorchScript nicht ladbar: %s — WPE-DSP-Fallback aktiv.", exc)
+
+        logger.info(
+            "SGMSE+ Modell nicht verfügbar (TorchScript: %s) — WPE-DSP-Fallback aktiv.",
+            _TS_PATH,
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -137,7 +135,7 @@ class SGMSEPlusPlugin:
     def enhance(self, audio: np.ndarray, sr: int, sigma: float = 0.5) -> SgmseResult:
         """Kombinierte Rausch-/Hallunterdrückung via SGMSE+ oder WPE-Fallback.
 
-        Algorithm (ONNX-Pfad):
+        Algorithm (TorchScript-Pfad):
             1. STFT → Real/Imag [1, 2, F, T]
             2. SGMSE+ forward: score-basiertes Denoising bei Sigma σ
                (Ornstein–Uhlenbeck SDE: dx = -½βx dt + √β dW, t ∈ [0,1])
@@ -156,8 +154,8 @@ class SGMSEPlusPlugin:
         stereo = audio.ndim == 2 and audio.shape[1] == 2
 
         def process_channel(ch: np.ndarray) -> np.ndarray:
-            if self._session is not None:
-                return self._enhance_onnx(ch, sigma)
+            if self._ts_model is not None:
+                return self._enhance_torchscript(ch, sigma)
             return self._wpe_fallback(ch, sr)
 
         if stereo:
@@ -172,14 +170,14 @@ class SGMSEPlusPlugin:
         out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
         out = np.clip(out, -1.0, 1.0)
 
-        rms_in = float(np.sqrt(np.mean(audio ** 2))) + 1e-10
+        rms_in = float(np.sqrt(np.mean(audio**2))) + 1e-10
         rms_diff = float(np.sqrt(np.mean((out - audio) ** 2))) + 1e-10
         snr_imp = 20.0 * math.log10(rms_in / rms_diff) if rms_diff < rms_in else 0.0
 
         return SgmseResult(
             audio=out.astype(np.float32),
             sr=sr,
-            model_used="sgmse_plus_onnx" if self._session is not None else "wpe_dsp_fallback",
+            model_used=("sgmse_plus_torchscript" if self._ts_model is not None else "wpe_dsp_fallback"),
             snr_improvement_db=float(np.clip(snr_imp, 0.0, 30.0)),
         )
 
@@ -248,6 +246,34 @@ class SGMSEPlusPlugin:
             return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)
         except Exception as exc:
             logger.warning("SGMSE+ ONNX-Inferenzfehler: %s — WPE-Fallback.", exc)
+            return self._wpe_fallback(mono, _SR)
+
+    def _enhance_torchscript(self, mono: np.ndarray, sigma: float) -> np.ndarray:
+        """SGMSE+ TorchScript-Inferenz: score [B,2,F,T] aus STFT-Features."""
+        assert self._ts_model is not None
+        try:
+            import torch  # noqa: PLC0415
+
+            Z, n_orig = self._stft(mono)
+            x_t = np.stack([Z.real, Z.imag], axis=0)[np.newaxis].astype(np.float32)
+            y = x_t.copy()
+
+            with torch.no_grad():
+                xt_t = torch.from_numpy(x_t)
+                y_t = torch.from_numpy(y)
+                t_t = torch.tensor([float(sigma)], dtype=torch.float32)
+                out_t = self._ts_model(xt_t, y_t, t_t)
+
+            out_arr = np.asarray(out_t.detach().cpu().numpy(), dtype=np.float32)
+            out_real = out_arr[0, 0]
+            out_imag = out_arr[0, 1] if out_arr.shape[1] > 1 else np.zeros_like(out_real)
+
+            Z_enhanced = (out_real + 1j * out_imag).astype(np.complex64)
+            Z_enhanced = np.nan_to_num(Z_enhanced, nan=0.0, posinf=0.0, neginf=0.0)
+            result = self._istft(Z_enhanced, n_orig)
+            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)
+        except Exception as exc:
+            logger.warning("SGMSE+ TorchScript-Inferenzfehler: %s — WPE-Fallback.", exc)
             return self._wpe_fallback(mono, _SR)
 
     # ------------------------------------------------------------------

@@ -30,6 +30,8 @@ import os
 from pathlib import Path
 import threading
 
+_ROOT: Path = Path(__file__).parent.parent
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -117,7 +119,7 @@ class BigVGANv2Plugin:
         VERBOTEN: In Restoration-Modus (verändert Klangcharakter)
     """
 
-    MODELS_DIR: Path = Path.home() / ".aurik" / "models" / "bigvgan_v2"
+    MODELS_DIR: Path = _ROOT / "models" / "bigvgan"
     MEL_HOP: int = int(48000 * MEL_HOP_MS / 1000)  # 600 Samples @ 48000 Hz
     MEL_WIN: int = int(48000 * MEL_WIN_MS / 1000)  # 2400 Samples @ 48000 Hz
 
@@ -129,34 +131,8 @@ class BigVGANv2Plugin:
         self._try_load_model()
 
     def _try_load_model(self) -> None:
-        """Lädt BigVGAN-v2-Modell (ONNX bevorzugt, dann torch, dann Fallback)."""
-        # Versuch 1: ONNX
-        try:
-            import onnxruntime as ort  # noqa: PLC0415
-
-            model_path = self.MODELS_DIR / "bigvgan_v2_generator.onnx"
-            if model_path.exists():
-                try:
-                    from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
-                    if not _try_alloc("BigVGAN-v2", size_gb=0.06):
-                        logger.warning("BigVGAN-v2: ML-Budget erschöpft — HiFi-GAN-Fallback.")
-                        return
-                except Exception:
-                    pass
-
-                self._session = ort.InferenceSession(
-                    str(model_path),
-                    providers=["CPUExecutionProvider"],
-                )
-                self._model_loaded = True
-                logger.info("🟢 BigVGAN-v2: ONNX-Generator geladen (%s)", model_path)
-                return
-        except ImportError:
-            logger.debug("onnxruntime nicht verfügbar für BigVGAN-v2")
-        except Exception as exc:
-            logger.debug("BigVGAN-v2 ONNX nicht ladbar: %s", exc)
-
-        # Versuch 2: torch (CPU)
+        """Lädt BigVGAN-v2 aus PyTorch-Checkpoint, sonst Fallback."""
+        # Versuch 1: torch (CPU)
         try:
             import torch  # noqa: PLC0415
 
@@ -214,7 +190,7 @@ class BigVGANv2Plugin:
         assert sr == 48000, f"BigVGAN-v2: SR muss 48000 Hz sein, erhalten: {sr}"
         if mode == "restoration":
             raise ValueError(
-                "BigVGAN-v2 ist im Restoration-Modus deaktiviert " "(verändert Klangcharakter — nur Studio-2026!)"
+                "BigVGAN-v2 ist im Restoration-Modus deaktiviert (verändert Klangcharakter — nur Studio-2026!)"
             )
 
         audio_f32 = np.asarray(audio, dtype=np.float32)

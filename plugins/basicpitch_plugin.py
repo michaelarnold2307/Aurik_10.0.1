@@ -1,0 +1,362 @@
+"""basicpitch_plugin — Polyphonic pitch tracking (ONNX primary, DSP fallback).
+
+Primary model:
+    models/basicpitch/basicpitch.onnx
+
+Fallback:
+    Spectral peak tracker (STFT-based) for robust offline operation.
+
+The plugin returns polyphonic pitch estimates as a dense matrix:
+    pitches_hz[t, k] for frame t and voice slot k (0 means no pitch)
+
+Design goals:
+    - CPU-only, no network, no Docker.
+    - Thread-safe singleton with double-checked locking.
+    - Numerical robustness (NaN/Inf guards).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+import logging
+import math
+from pathlib import Path
+import threading
+from typing import Optional
+
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+_ROOT = Path(__file__).parent.parent
+_ONNX_PATH = _ROOT / "models" / "basicpitch" / "basicpitch.onnx"
+
+_MODEL_SR: int = 22_050
+_N_FFT: int = 4096
+_HOP: int = 512
+_WINDOW: int = 4096
+_DEFAULT_MAX_POLYPHONY: int = 6
+
+_instance: BasicPitchPlugin | None = None
+_lock = threading.Lock()
+
+
+@dataclass
+class BasicPitchResult:
+    """Polyphonic pitch-tracking result.
+
+    Attributes:
+        frame_times_s: Frame timestamps in seconds, shape [T].
+        pitches_hz:    Pitch matrix in Hz, shape [T, K]. Zero = unvoiced slot.
+        confidences:   Confidence matrix in [0, 1], shape [T, K].
+        model_used:    "basicpitch_onnx" | "dsp_spectral_peaks" | "dsp_failed"
+        details:       Additional metrics.
+    """
+
+    frame_times_s: np.ndarray
+    pitches_hz: np.ndarray
+    confidences: np.ndarray
+    model_used: str
+    details: dict[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.frame_times_s = np.nan_to_num(np.asarray(self.frame_times_s, dtype=np.float32))
+        self.pitches_hz = np.nan_to_num(np.asarray(self.pitches_hz, dtype=np.float32))
+        self.confidences = np.nan_to_num(np.asarray(self.confidences, dtype=np.float32))
+        self.pitches_hz = np.clip(self.pitches_hz, 0.0, 20_000.0)
+        self.confidences = np.clip(self.confidences, 0.0, 1.0)
+
+
+class BasicPitchPlugin:
+    """BasicPitch polyphonic estimator (ONNX) with DSP fallback.
+
+    Public API:
+        analyze(audio, sr, max_polyphony=6) -> BasicPitchResult
+    """
+
+    def __init__(self) -> None:
+        self._session = None
+        self._model_loaded: bool = False
+        self._load_model()
+
+    def _load_model(self) -> None:
+        if not _ONNX_PATH.exists():
+            logger.info("BasicPitch ONNX nicht gefunden (%s) — DSP-Fallback aktiv.", _ONNX_PATH)
+            return
+        try:
+            import onnxruntime as ort  # noqa: PLC0415
+
+            try:
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
+                if not _try_alloc("BasicPitch", size_gb=0.12):
+                    logger.warning("BasicPitch: ML-Budget erschöpft — DSP-Fallback aktiv.")
+                    return
+            except Exception:
+                pass
+
+            opts = ort.SessionOptions()
+            opts.intra_op_num_threads = 4
+            opts.inter_op_num_threads = 1
+            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            self._session = ort.InferenceSession(
+                str(_ONNX_PATH),
+                sess_options=opts,
+                providers=["CPUExecutionProvider"],
+            )
+            self._model_loaded = True
+            logger.info("🎼 BasicPitch ONNX geladen: %s", _ONNX_PATH.name)
+        except Exception as exc:
+            logger.warning("BasicPitch ONNX-Init fehlgeschlagen (%s) — DSP-Fallback.", exc)
+
+    def analyze(self, audio: np.ndarray, sr: int, max_polyphony: int = _DEFAULT_MAX_POLYPHONY) -> BasicPitchResult:
+        """Estimate polyphonic pitches.
+
+        Args:
+            audio: Mono or stereo PCM array.
+            sr: Sample rate in Hz.
+            max_polyphony: Number of output pitch slots per frame.
+
+        Returns:
+            BasicPitchResult
+        """
+        audio = np.asarray(audio, dtype=np.float32)
+        if audio.ndim > 1:
+            axis = 0 if audio.shape[0] <= 8 else -1
+            audio = np.mean(audio, axis=axis)
+        audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+        audio = np.clip(audio, -1.0, 1.0)
+
+        max_polyphony = int(max(1, min(12, max_polyphony)))
+
+        if self._session is not None:
+            try:
+                return self._analyze_onnx(audio, sr, max_polyphony)
+            except Exception as exc:
+                logger.debug("BasicPitch ONNX-Inferenz fehlgeschlagen (%s) — DSP-Fallback.", exc)
+
+        return self._analyze_dsp(audio, sr, max_polyphony)
+
+    def _analyze_onnx(self, audio: np.ndarray, sr: int, max_polyphony: int) -> BasicPitchResult:
+        """Run ONNX and decode top-K pitch bins per frame.
+
+        Decoder strategy is resilient to model variant differences:
+        - Finds a 2D/3D output tensor with pitch-like bins.
+        - Converts bin index to MIDI range [21, 108].
+        """
+        audio_m = _resample(audio, sr, _MODEL_SR)
+        inp = self._session.get_inputs()[0]
+        in_name = inp.name
+
+        # Normalize input layout to [B, T]
+        if audio_m.ndim == 1:
+            model_in = audio_m[np.newaxis, :]
+        else:
+            model_in = np.asarray(audio_m).reshape(1, -1)
+        model_in = model_in.astype(np.float32)
+
+        out_names = [o.name for o in self._session.get_outputs()]
+        out_vals = self._session.run(out_names, {in_name: model_in})
+
+        pitch_tensor = _select_pitch_tensor(out_vals)
+        if pitch_tensor is None:
+            raise RuntimeError("No pitch-like output tensor found")
+
+        # To [T, BINS]
+        logits = _to_time_bins(pitch_tensor)
+        probs = 1.0 / (1.0 + np.exp(-np.clip(logits, -30.0, 30.0)))
+        probs = np.nan_to_num(probs, nan=0.0, posinf=0.0, neginf=0.0)
+
+        T, bins = probs.shape
+        topk_idx = np.argpartition(probs, kth=max(0, bins - max_polyphony), axis=1)[:, -max_polyphony:]
+        topk_val = np.take_along_axis(probs, topk_idx, axis=1)
+
+        # Sort descending by confidence per frame
+        ord_idx = np.argsort(-topk_val, axis=1)
+        topk_idx = np.take_along_axis(topk_idx, ord_idx, axis=1)
+        topk_val = np.take_along_axis(topk_val, ord_idx, axis=1)
+
+        midi = _bins_to_midi(topk_idx, bins)
+        pitches_hz = _midi_to_hz(midi)
+        confidences = np.clip(topk_val, 0.0, 1.0).astype(np.float32)
+
+        frame_times_s = np.arange(T, dtype=np.float32) * (_HOP / _MODEL_SR)
+
+        return BasicPitchResult(
+            frame_times_s=frame_times_s,
+            pitches_hz=pitches_hz,
+            confidences=confidences,
+            model_used="basicpitch_onnx",
+            details={"n_frames": float(T), "n_bins": float(bins)},
+        )
+
+    def _analyze_dsp(self, audio: np.ndarray, sr: int, max_polyphony: int) -> BasicPitchResult:
+        """STFT peak-based polyphonic fallback."""
+        try:
+            import scipy.signal as sps  # noqa: PLC0415
+
+            if len(audio) < _WINDOW:
+                pad = _WINDOW - len(audio)
+                audio = np.pad(audio, (0, pad))
+
+            _, times, stft = sps.stft(
+                audio,
+                fs=sr,
+                nperseg=_WINDOW,
+                noverlap=_WINDOW - _HOP,
+                nfft=_N_FFT,
+                boundary=None,
+                padded=False,
+                window="hann",
+            )
+            mag = np.abs(stft).astype(np.float32)  # [F, T]
+            freqs = np.fft.rfftfreq(_N_FFT, d=1.0 / sr).astype(np.float32)
+
+            fmask = (freqs >= 55.0) & (freqs <= 2_000.0)
+            mag_b = mag[fmask, :]
+            freqs_b = freqs[fmask]
+
+            if mag_b.size == 0:
+                raise RuntimeError("No valid frequency bins in fallback")
+
+            T = mag_b.shape[1]
+            K = max_polyphony
+            pitches = np.zeros((T, K), dtype=np.float32)
+            conf = np.zeros((T, K), dtype=np.float32)
+
+            # Per-frame top-K spectral peaks
+            for t in range(T):
+                col = mag_b[:, t]
+                if np.all(col <= 1e-10):
+                    continue
+                k = min(K, len(col))
+                idx = np.argpartition(col, -k)[-k:]
+                vals = col[idx]
+                order = np.argsort(-vals)
+                idx = idx[order]
+                vals = vals[order]
+
+                pitches[t, :k] = freqs_b[idx]
+                vmax = float(np.max(vals)) if np.max(vals) > 0 else 1.0
+                conf[t, :k] = np.clip(vals / vmax, 0.0, 1.0)
+
+            return BasicPitchResult(
+                frame_times_s=times.astype(np.float32),
+                pitches_hz=pitches,
+                confidences=conf,
+                model_used="dsp_spectral_peaks",
+                details={"n_frames": float(T), "sr": float(sr)},
+            )
+        except Exception as exc:
+            logger.warning("BasicPitch DSP-Fallback fehlgeschlagen: %s", exc)
+            return BasicPitchResult(
+                frame_times_s=np.zeros(1, dtype=np.float32),
+                pitches_hz=np.zeros((1, max_polyphony), dtype=np.float32),
+                confidences=np.zeros((1, max_polyphony), dtype=np.float32),
+                model_used="dsp_failed",
+            )
+
+
+def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
+    if from_sr == to_sr:
+        return audio.astype(np.float32)
+    from scipy.signal import resample_poly  # noqa: PLC0415
+
+    g = math.gcd(from_sr, to_sr)
+    up = to_sr // g
+    down = from_sr // g
+    return resample_poly(audio.astype(np.float32), up, down).astype(np.float32)
+
+
+def _select_pitch_tensor(outputs: list[np.ndarray]) -> np.ndarray | None:
+    """Pick the most likely pitch tensor from ONNX outputs.
+
+    Priority:
+        1) 3D/2D tensor with last dim in [48, 1024]
+        2) Largest 2D tensor
+    """
+    candidates: list[np.ndarray] = []
+    for out in outputs:
+        arr = np.asarray(out)
+        if arr.ndim < 2:
+            continue
+        last = arr.shape[-1]
+        if 48 <= last <= 1024:
+            candidates.append(arr)
+    if candidates:
+        return max(candidates, key=lambda x: x.size)
+
+    twod = [np.asarray(o) for o in outputs if np.asarray(o).ndim >= 2]
+    if not twod:
+        return None
+    return max(twod, key=lambda x: x.size)
+
+
+def _to_time_bins(arr: np.ndarray) -> np.ndarray:
+    """Convert arbitrary 2D/3D output to [T, BINS]."""
+    a = np.asarray(arr)
+    if a.ndim == 2:
+        # [T, B] or [B, T]
+        if a.shape[0] <= 16 and a.shape[1] > a.shape[0]:
+            return a.astype(np.float32)
+        if a.shape[0] > a.shape[1]:
+            return a.astype(np.float32)
+        return a.T.astype(np.float32)
+    if a.ndim >= 3:
+        # Typical: [B, T, BINS] or [B, BINS, T]
+        b0 = a[0]
+        if b0.ndim == 2:
+            if b0.shape[0] >= b0.shape[1]:
+                return b0.astype(np.float32)
+            return b0.T.astype(np.float32)
+        # Fallback flattening
+        flat = b0.reshape(b0.shape[0], -1)
+        return flat.astype(np.float32)
+    return a.reshape(1, -1).astype(np.float32)
+
+
+def _bins_to_midi(bin_idx: np.ndarray, n_bins: int) -> np.ndarray:
+    """Map pitch bin index to MIDI range [21, 108]."""
+    # Linear mapping across the available bin range
+    midi_min, midi_max = 21.0, 108.0
+    return midi_min + (midi_max - midi_min) * (bin_idx.astype(np.float32) / max(1.0, float(n_bins - 1)))
+
+
+def _midi_to_hz(midi: np.ndarray) -> np.ndarray:
+    return (440.0 * (2.0 ** ((midi.astype(np.float32) - 69.0) / 12.0))).astype(np.float32)
+
+
+def get_basicpitch_plugin() -> BasicPitchPlugin:
+    """Thread-safe singleton accessor."""
+    global _instance
+    if _instance is None:
+        with _lock:
+            if _instance is None:
+                _instance = BasicPitchPlugin()
+    return _instance
+
+
+def unload_basicpitch() -> None:
+    """Unload BasicPitch resources and release ML budget slot."""
+    global _instance
+    with _lock:
+        if _instance is not None:
+            try:
+                _instance._session = None
+                _instance._model_loaded = False
+            except Exception:
+                pass
+            _instance = None
+    try:
+        from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
+        _release("BasicPitch")
+    except Exception:
+        pass
+
+
+def analyze_polyphonic_pitch(
+    audio: np.ndarray, sr: int, max_polyphony: int = _DEFAULT_MAX_POLYPHONY
+) -> BasicPitchResult:
+    """Convenience API for polyphonic pitch tracking."""
+    return get_basicpitch_plugin().analyze(audio, sr, max_polyphony=max_polyphony)
