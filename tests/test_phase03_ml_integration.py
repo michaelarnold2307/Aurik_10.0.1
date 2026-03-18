@@ -81,26 +81,26 @@ def test_phase03_ml_routing():
         # Not fatal - ML might not be available
         print("  (This is expected if Resemble Enhance is not installed)")
 
-    # Test 3: MAXIMUM mode (Full ML-Hybrid: OMLSA + Resemble)
+    # Test 3: BALANCED mode (Adaptive ML-Hybrid)
     print("\n" + "-" * 80)
-    print("Test 3: MAXIMUM mode (Full ML-Hybrid)")
+    print("Test 3: BALANCED mode (Adaptive ML-Hybrid)")
     print("-" * 80)
 
     try:
-        result_maximum = phase.process(audio, material_type="vinyl", quality_mode="maximum", sample_rate=sample_rate)
-        print("✓ MAXIMUM mode completed")
-        print(f"  Algorithm: {result_maximum.metadata.get('algorithm', 'N/A')}")
-        print(f"  ML Hybrid: {result_maximum.metadata.get('ml_hybrid', False)}")
-        print(f"  OMLSA applied: {result_maximum.modifications.get('omlsa_applied', False)}")
-        print(f"  Resemble applied: {result_maximum.modifications.get('resemble_applied', False)}")
-        print(f"  Quality estimate: {result_maximum.metadata.get('quality_estimate', 0):.3f}")
-        print(f"  Reduction: {result_maximum.modifications.get('noise_reduction_db', 0):.1f} dB")
-        print(f"  Time: {result_maximum.metadata.get('execution_time_seconds', 0):.2f}s")
+        result_balanced = phase.process(audio, material_type="vinyl", quality_mode="balanced", sample_rate=sample_rate)
+        print("✓ BALANCED mode completed")
+        print(f"  Algorithm: {result_balanced.metadata.get('algorithm', 'N/A')}")
+        print(f"  ML Hybrid: {result_balanced.metadata.get('ml_hybrid', False)}")
+        print(f"  OMLSA applied: {result_balanced.modifications.get('omlsa_applied', False)}")
+        print(f"  Resemble applied: {result_balanced.modifications.get('resemble_applied', False)}")
+        print(f"  Quality estimate: {result_balanced.metadata.get('quality_estimate', 0):.3f}")
+        print(f"  Reduction: {result_balanced.modifications.get('noise_reduction_db', 0):.1f} dB")
+        print(f"  Time: {result_balanced.metadata.get('execution_time_seconds', 0):.2f}s")
 
-        if result_maximum.warnings:
-            print(f"  Warnings: {result_maximum.warnings}")
+        if result_balanced.warnings:
+            print(f"  Warnings: {result_balanced.warnings}")
     except Exception as e:
-        print(f"✗ MAXIMUM mode failed: {e}")
+        print(f"✗ BALANCED mode failed: {e}")
         # Not fatal
         print("  (This is expected if Resemble Enhance is not installed)")
 
@@ -109,7 +109,7 @@ def test_phase03_ml_routing():
     print("TEST SUMMARY")
     print("=" * 80)
     print("✓ Phase 03 ML-Hybrid integration functional")
-    print("✓ Quality mode routing working (fast → DSP, balanced/maximum → ML)")
+    print("✓ Quality mode routing working (fast → DSP, balanced → adaptive ML)")
     print("✓ Graceful fallback to DSP if ML unavailable")
     print("\nIntegration Status: SUCCESS ✅")
 

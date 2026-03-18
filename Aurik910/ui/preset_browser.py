@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ..core.preset_manager import Preset, PresetCategory, PresetManager
+from ..i18n import t
 
 
 class PresetBrowserWidget(QWidget):
@@ -44,19 +45,22 @@ class PresetBrowserWidget(QWidget):
         self.setLayout(layout)
 
         # Title
-        title_label = QLabel("<b>Preset Browser</b>")
+        title_label = QLabel(f"<b>{t('legacy.preset.title')}</b>")
         title_label.setStyleSheet("color: #ffffff; font-size: 12px;")
         layout.addWidget(title_label)
 
         # Category filter
         filter_layout = QHBoxLayout()
 
-        filter_label = QLabel("Category:")
+        filter_label = QLabel(t("legacy.preset.category"))
         filter_label.setStyleSheet("color: #cccccc; font-size: 10px;")
         filter_layout.addWidget(filter_label)
 
         self.category_combo = QComboBox()
-        self.category_combo.addItems(["All", "Factory", "User", "Imported"])
+        self.category_combo.addItem(t("legacy.preset.category_all"), "all")
+        self.category_combo.addItem(t("legacy.preset.category_factory"), PresetCategory.FACTORY.value)
+        self.category_combo.addItem(t("legacy.preset.category_user"), PresetCategory.USER.value)
+        self.category_combo.addItem(t("legacy.preset.category_imported"), PresetCategory.IMPORTED.value)
         self.category_combo.currentTextChanged.connect(self.filter_presets)
         self.category_combo.setStyleSheet("""
             QComboBox {
@@ -108,7 +112,7 @@ class PresetBrowserWidget(QWidget):
         layout.addWidget(self.preset_list)
 
         # Preset details
-        details_group = QGroupBox("Details")
+        details_group = QGroupBox(t("legacy.preset.details"))
         details_layout = QVBoxLayout()
         details_group.setLayout(details_layout)
 
@@ -133,7 +137,7 @@ class PresetBrowserWidget(QWidget):
         button_layout = QVBoxLayout()
 
         # Apply button
-        self.btn_apply = QPushButton("✓ Apply Preset")
+        self.btn_apply = QPushButton(t("legacy.preset.apply"))
         self.btn_apply.clicked.connect(self.apply_preset)
         self.btn_apply.setEnabled(False)
         self.btn_apply.setStyleSheet("""
@@ -158,7 +162,7 @@ class PresetBrowserWidget(QWidget):
         # Management buttons
         mgmt_layout = QHBoxLayout()
 
-        self.btn_save = QPushButton("💾 Save Current")
+        self.btn_save = QPushButton(t("legacy.preset.save_current"))
         self.btn_save.clicked.connect(self.save_current_settings)
         self.btn_save.setStyleSheet("""
             QPushButton {
@@ -174,7 +178,7 @@ class PresetBrowserWidget(QWidget):
         """)
         mgmt_layout.addWidget(self.btn_save)
 
-        self.btn_delete = QPushButton("🗑 Delete")
+        self.btn_delete = QPushButton(t("legacy.preset.delete"))
         self.btn_delete.clicked.connect(self.delete_preset)
         self.btn_delete.setEnabled(False)
         self.btn_delete.setStyleSheet("""
@@ -200,7 +204,7 @@ class PresetBrowserWidget(QWidget):
         # Import/Export buttons
         import_export_layout = QHBoxLayout()
 
-        self.btn_import = QPushButton("📥 Import")
+        self.btn_import = QPushButton(t("legacy.preset.import"))
         self.btn_import.clicked.connect(self.import_preset)
         self.btn_import.setStyleSheet("""
             QPushButton {
@@ -216,7 +220,7 @@ class PresetBrowserWidget(QWidget):
         """)
         import_export_layout.addWidget(self.btn_import)
 
-        self.btn_export = QPushButton("📤 Export")
+        self.btn_export = QPushButton(t("legacy.preset.export"))
         self.btn_export.clicked.connect(self.export_preset)
         self.btn_export.setEnabled(False)
         self.btn_export.setStyleSheet("""
@@ -248,12 +252,12 @@ class PresetBrowserWidget(QWidget):
         """Refresh preset list"""
         self.preset_list.clear()
 
-        category_filter = self.category_combo.currentText()
+        category_filter = self.category_combo.currentData()
 
         for preset in self.preset_manager.get_all_presets():
             # Apply filter
-            if category_filter != "All":
-                if category_filter.lower() != preset.category.value:
+            if category_filter != "all":
+                if category_filter != preset.category.value:
                     continue
 
             # Add item
@@ -294,10 +298,10 @@ class PresetBrowserWidget(QWidget):
 <b>{self.current_preset.name}</b><br>
 <i>{self.current_preset.description}</i><br>
 <br>
-<b>Medium:</b> {self.current_preset.medium_type}<br>
-<b>Mode:</b> {self.current_preset.processing_mode}<br>
-<b>Category:</b> {self.current_preset.category.value.title()}<br>
-<b>Author:</b> {self.current_preset.author}
+<b>{t('legacy.preset.medium')}:</b> {self.current_preset.medium_type}<br>
+<b>{t('legacy.preset.mode')}:</b> {self.current_preset.processing_mode}<br>
+<b>{t('legacy.preset.category')}:</b> {self.current_preset.category.value.title()}<br>
+<b>{t('legacy.preset.author')}:</b> {self.current_preset.author}
             """
             self.details_text.setHtml(details)
 
@@ -323,7 +327,7 @@ class PresetBrowserWidget(QWidget):
 
     def save_current_settings(self):
         """Save current settings as new preset"""
-        name, ok = QInputDialog.getText(self, "Save Preset", "Enter preset name:")
+        name, ok = QInputDialog.getText(self, t("legacy.preset.save_title"), t("legacy.preset.enter_name"))
 
         if not ok or not name:
             return
@@ -331,12 +335,19 @@ class PresetBrowserWidget(QWidget):
         # Check if name exists
         if self.preset_manager.get_preset(name):
             reply = QMessageBox.question(
-                self, "Overwrite?", f"Preset '{name}' already exists. Overwrite?", QMessageBox.Yes | QMessageBox.No
+                self,
+                t("legacy.preset.overwrite_title"),
+                t("legacy.preset.overwrite_body", name=name),
+                QMessageBox.Yes | QMessageBox.No,
             )
             if reply != QMessageBox.Yes:
                 return
 
-        description, ok = QInputDialog.getText(self, "Preset Description", "Enter description (optional):")
+        description, ok = QInputDialog.getText(
+            self,
+            t("legacy.preset.description_title"),
+            t("legacy.preset.enter_description"),
+        )
 
         if not ok:
             pass
@@ -345,8 +356,8 @@ class PresetBrowserWidget(QWidget):
         # For now, just show success message
         QMessageBox.information(
             self,
-            "Not Implemented",
-            "This feature requires connection to main window settings.\n" "Will be implemented in integration.",
+            t("legacy.preset.not_implemented_title"),
+            t("legacy.preset.not_implemented_body"),
         )
 
     def delete_preset(self):
@@ -356,7 +367,10 @@ class PresetBrowserWidget(QWidget):
 
         # Confirm
         reply = QMessageBox.question(
-            self, "Delete Preset", f"Delete preset '{self.current_preset.name}'?", QMessageBox.Yes | QMessageBox.No
+            self,
+            t("legacy.preset.delete_title"),
+            t("legacy.preset.delete_body", name=self.current_preset.name),
+            QMessageBox.Yes | QMessageBox.No,
         )
 
         if reply != QMessageBox.Yes:
@@ -364,15 +378,18 @@ class PresetBrowserWidget(QWidget):
 
         # Delete
         if self.preset_manager.delete_preset(self.current_preset.name):
-            QMessageBox.information(self, "Deleted", "Preset deleted successfully.")
+            QMessageBox.information(self, t("legacy.preset.deleted_title"), t("legacy.preset.deleted_body"))
             self.refresh_preset_list()
         else:
-            QMessageBox.critical(self, "Error", "Failed to delete preset.")
+            QMessageBox.critical(self, t("legacy.common.error_title"), t("legacy.preset.delete_failed"))
 
     def import_preset(self):
         """Import preset from file"""
         filepath, _ = QFileDialog.getOpenFileName(
-            self, "Import Preset", str(Path.home()), "JSON Files (*.json);;All Files (*)"
+            self,
+            t("legacy.preset.import_title"),
+            str(Path.home()),
+            t("legacy.preset.json_filter"),
         )
 
         if not filepath:
@@ -380,10 +397,14 @@ class PresetBrowserWidget(QWidget):
 
         preset = self.preset_manager.import_preset(Path(filepath))
         if preset:
-            QMessageBox.information(self, "Imported", f"Preset '{preset.name}' imported successfully.")
+            QMessageBox.information(
+                self,
+                t("legacy.preset.imported_title"),
+                t("legacy.preset.imported_body", name=preset.name),
+            )
             self.refresh_preset_list()
         else:
-            QMessageBox.critical(self, "Error", "Failed to import preset.")
+            QMessageBox.critical(self, t("legacy.common.error_title"), t("legacy.preset.import_failed"))
 
     def export_preset(self):
         """Export selected preset"""
@@ -392,15 +413,15 @@ class PresetBrowserWidget(QWidget):
 
         filepath, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Preset",
+            t("legacy.preset.export_title"),
             str(Path.home() / f"{self.current_preset.name.replace(' ', '_')}.json"),
-            "JSON Files (*.json);;All Files (*)",
+            t("legacy.preset.json_filter"),
         )
 
         if not filepath:
             return
 
         if self.preset_manager.export_preset(self.current_preset.name, Path(filepath)):
-            QMessageBox.information(self, "Exported", "Preset exported successfully.")
+            QMessageBox.information(self, t("legacy.preset.exported_title"), t("legacy.preset.exported_body"))
         else:
-            QMessageBox.critical(self, "Error", "Failed to export preset.")
+            QMessageBox.critical(self, t("legacy.common.error_title"), t("legacy.preset.export_failed"))

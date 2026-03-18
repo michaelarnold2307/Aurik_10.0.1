@@ -201,7 +201,7 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         },
     ),
     # ------------------------------------------------------------------
-    # WOW_FLUTTER — Bandschwankung, Leierkassetten-Effekt
+    # WOW/FLUTTER — Bandschwankung, Leierkassetten-Effekt
     # ------------------------------------------------------------------
     DefectType.WOW: PhaseAssignment(
         defect_type=DefectType.WOW,
@@ -488,7 +488,7 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         description=(
             "Korrektur konstanter Tonhöhen-/Geschwindigkeitsfehler: "
             "Tape läuft zu schnell/langsam (z.B. 78rpm→77rpm, Tape-Stretch). "
-            "Unterschied zu WOW_FLUTTER: kein periodisches Modulationsmuster, "
+            "Unterschied zu WOW/FLUTTER: kein periodisches Modulationsmuster, "
             "sondern monotone Frequenzabweichung über die gesamte Aufnahme."
         ),
         config_delta={

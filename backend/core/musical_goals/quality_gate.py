@@ -2,7 +2,7 @@
 AURIK v8 Enhanced Quality Gates with Multi-Metric Validation
 =============================================================
 
-Pre/Post Validation mit Musical Goals + Perceptual Quality Metrics (NISQA, DNSMOS, ViSQOL, CDPAM).
+Pre/Post Validation mit Musical Goals + Perceptual Quality Metrics (ViSQOL, VERSA §4.4).
 
 Component 4.5: Quality Gates Pre/Post Validation (ENHANCED)
 Impact: +1.5 Punkte - Garantiert Musical Goals + Objective Quality + Auto-Reprocessing
@@ -14,7 +14,7 @@ HIPS Compliance:
 - Requirement 8: Normative Einkapselung (Unter ConductEnforcer-Kontrolle)
 
 New in v8.1 (Excellence Strategy #2):
-- Multi-Metric Validation: NISQA + DNSMOS + ViSQOL + CDPAM
+- Multi-Metric Validation: NISQA + DNSMOS + ViSQOL + VERSA (§4.4)
 - Automatic Reprocessing: Intelligente Fallback-Strategien bei Failures
 - Perceptual Quality Scores: Objective MOS prediction ohne Human Listening Tests
 - Configurable Weights: Flexible metric importance per mode
@@ -30,7 +30,7 @@ Metrics:
 - NISQA: Speech Quality MOS (1-5), trained on ITU-T P.808
 - DNSMOS: P.835 Speech Enhancement (SIG, BAK, OVRL scores)
 - ViSQOL: Virtual Speech Quality Objective Listener (MOS-LQO 1-5)
-- CDPAM: Cross-Domain Perceptual Audio Metrics
+- VERSA: Virtual Evaluation for Speech/Audio (§4.4 Nachfolger von CDPAM)
 - Musical Goals: 7 perceptual dimensions (Brillanz, Wärme, etc.)
 
 Quelle: Excellence Roadmap Strategy #2 - Perceptual Quality Gates
@@ -689,12 +689,12 @@ class MusicalGoalsQualityGate:
 
 @dataclass
 class PerceptualMetrics:
-    """Perceptual quality metrics: ViSQOL v3 (--audio mode) + CDPAM.
+    """Perceptual quality metrics: ViSQOL v3 (--audio mode) + VERSA (§4.4).
 
     Hinweis §4.4/§10.2: NISQA und DNSMOS sind für Musik-Qualitätsbewertung
     VERBOTEN (Sprach-Modelle). nisqa_mos/dnsmos_* sind als deaktivierte Compat-
     Felder (Wert 0.0) beibehalten, damit bestehende Aufrufer nicht brechen.
-    Aktive Metriken: visqol_mos_lqo (--audio mode), cdpam_score.
+    Aktive Metriken: visqol_mos_lqo (--audio mode), versa_score (VERSA MOS §4.4).
     """
 
     nisqa_mos: float = 0.0  # DEAKTIVIERT §10.2 — Sprach-Modell, nicht für Musik
@@ -702,7 +702,7 @@ class PerceptualMetrics:
     dnsmos_sig: float = 0.0  # DEAKTIVIERT §10.2 — Sprach-Modell, nicht für Musik
     dnsmos_bak: float = 0.0  # DEAKTIVIERT §10.2 — Sprach-Modell, nicht für Musik
     visqol_mos_lqo: float = 0.0  # 1-5 scale — ViSQOL v3 --audio mode (§4.4 erlaubt)
-    cdpam_score: float = 0.0  # 0-100 scale — Perceptual similarity Musik (§4.4 erlaubt)
+    versa_score: float = 0.0  # VERSA MOS [1,5] → [0,100] skaliert (§4.4, non-reference)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -745,23 +745,23 @@ class EnhancedQualityGate:
     Enhanced Quality Gate mit Multi-Metric Validation + Auto-Reprocessing.
 
     Excellence Strategy #2: Perceptual Quality Gates
-    - Combines Musical Goals (14 Dimensionen §1.2) + Perceptual Metrics (ViSQOL v3, CDPAM)
+    - Combines Musical Goals (14 Dimensionen §1.2) + Perceptual Metrics (ViSQOL v3, VERSA §4.4)
     - Weighted decision logic: configurable metric importance
     - Automatic reprocessing on failure with intelligent fallback strategies
     - Target: False Accept Rate <2% (from 15%)
 
     §4.4/§10.2: NISQA und DNSMOS sind VERBOTEN (Sprach-Modelle).
-    Erlaubte Metriken: PEAQ, FAD, CDPAM, PQS-MOS, ViSQOL v3 (--audio), Musical Goals.
+    Erlaubte Metriken: PEAQ, FAD, VERSA, PQS-MOS, ViSQOL v3 (--audio), Musical Goals.
 
     Attributes:
         musical_gate: Base Musical Goals quality gate
-        enable_perceptual_metrics: If True, use ViSQOL v3/CDPAM
+        enable_perceptual_metrics: If True, use ViSQOL v3/VERSA (§4.4)
         enable_auto_reprocessing: If True, attempt automatic reprocessing on failure
         metric_weights: Importance weights for each metric category
         nisqa_threshold: DEAKTIVIERT §10.2 (Compat-Feld, wird ignoriert)
         dnsmos_threshold: DEAKTIVIERT §10.2 (Compat-Feld, wird ignoriert)
         visqol_threshold: Minimum ViSQOL v3 MOS-LQO --audio mode (default: 3.0/5.0)
-        cdpam_threshold: Minimum CDPAM score — Musik-Wahrnehmungsähnlichkeit (default: 80/100)
+        versa_threshold: Minimum VERSA-Score (VERSA MOS [1,5]→[0,100]) — Musik-Wahrnehmungsähnlichkeit (default: 80/100)
     """
 
     def __init__(
@@ -783,13 +783,13 @@ class EnhancedQualityGate:
         Args:
             strict_mode: If True, any violation triggers rollback
             critical_threshold: Below this, violations are critical
-            enable_perceptual_metrics: Use NISQA/DNSMOS/ViSQOL/CDPAM
+            enable_perceptual_metrics: Use ViSQOL/VERSA (§4.4; NISQA/DNSMOS verboten §10.2)
             enable_auto_reprocessing: Attempt reprocessing on failure
             metric_weights: Importance weights (default: musical=0.50, perceptual=0.50)
             nisqa_threshold: NISQA MOS threshold (1-5)
             dnsmos_threshold: DNSMOS Overall threshold (1-5)
             visqol_threshold: ViSQOL MOS-LQO threshold (1-5)
-            cdpam_threshold: CDPAM score threshold (0-100)
+            cdpam_threshold: VERSA score threshold (0-100) — Compat-Name, intern versa_threshold
             conduct_enforcer: Optional ConductEnforcer instance
         """
         # Base Musical Goals gate
@@ -813,7 +813,7 @@ class EnhancedQualityGate:
         self.nisqa_threshold = nisqa_threshold  # Compat-only, nicht aktiv
         self.dnsmos_threshold = dnsmos_threshold  # Compat-only, nicht aktiv
         self.visqol_threshold = visqol_threshold  # ViSQOL v3 --audio mode (§4.4 erlaubt)
-        self.cdpam_threshold = cdpam_threshold  # §4.4: VERSA ersetzt CDPAM, Schwellwert bleibt 0-100-kompatibel
+        self.versa_threshold = cdpam_threshold  # §4.4: VERSA-Score-Schwellwert (0-100), Compat-Param heißt cdpam_threshold
 
         # Quality plugins (lazy loading)
         # _nisqa_plugin/_dnsmos_plugin: deaktiviert §10.2 (Sprach-Modelle)
@@ -883,12 +883,12 @@ class EnhancedQualityGate:
         self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None
     ) -> PerceptualMetrics | None:
         """
-        Measure perceptual quality metrics (NISQA, DNSMOS, ViSQOL, CDPAM).
+        Measure perceptual quality metrics (ViSQOL, VERSA §4.4).
 
         Args:
             audio: Audio to measure
             sr: Sample rate
-            reference: Reference audio (for ViSQOL, CDPAM - full-reference metrics)
+            reference: Reference audio (for ViSQOL full-reference; VERSA runs no-reference)
 
         Returns:
             PerceptualMetrics or None if plugins unavailable
@@ -935,7 +935,7 @@ class EnhancedQualityGate:
                         logger.warning(f"ViSQOL failed: {e}")
 
             # VERSA (non-reference MOS, §4.4 CDPAM-Nachfolger)
-            cdpam_score = 0.0
+            versa_score = 0.0
             versa = self._get_versa_plugin()
             if versa is not None:
                 try:
@@ -948,8 +948,8 @@ class EnhancedQualityGate:
                         audio_arr = audio_arr.mean(axis=1)
                     audio_arr = _np.nan_to_num(audio_arr, nan=0.0, posinf=0.0, neginf=0.0)
                     versa_result = versa.score(audio_arr, sr_v)
-                    # MOS [1,5] → [0,100] für PerceptualMetrics.cdpam_score
-                    cdpam_score = float(_np.clip((versa_result.mos - 1.0) / 4.0 * 100.0, 0.0, 100.0))
+                    # MOS [1,5] → [0,100] für PerceptualMetrics.versa_score
+                    versa_score = float(_np.clip((versa_result.mos - 1.0) / 4.0 * 100.0, 0.0, 100.0))
                 except Exception as e:
                     logger.warning(f"VERSA failed: {e}")
 
@@ -959,7 +959,7 @@ class EnhancedQualityGate:
                 dnsmos_sig=dnsmos_sig,
                 dnsmos_bak=dnsmos_bak,
                 visqol_mos_lqo=visqol_mos,
-                cdpam_score=cdpam_score,
+                versa_score=versa_score,
             )
 
         finally:
@@ -1048,7 +1048,7 @@ class EnhancedQualityGate:
                 # "nisqa" / "dnsmos" entfernt — verboten §4.4+§10.2 (Sprach-Metriken, Werte immer 0.0)
                 perceptual_improvements = {
                     "visqol": perceptual_achieved.visqol_mos_lqo - baseline_perceptual.visqol_mos_lqo,
-                    "cdpam": perceptual_achieved.cdpam_score - baseline_perceptual.cdpam_score,
+                    "versa": perceptual_achieved.versa_score - baseline_perceptual.versa_score,
                 }
 
                 # Identify degradations (negative improvements)
@@ -1096,7 +1096,7 @@ class EnhancedQualityGate:
             perceptual_avg = np.mean(
                 [
                     (perceptual.visqol_mos_lqo - 1.0) / 4.0,
-                    perceptual.cdpam_score / 100.0,  # 0-100 → 0-1
+                    perceptual.versa_score / 100.0,  # 0-100 → 0-1
                 ]
             )
         else:
@@ -1138,7 +1138,7 @@ class EnhancedQualityGate:
             if perceptual.visqol_mos_lqo < self.visqol_threshold:
                 perceptual_passed = False
 
-            if perceptual.cdpam_score < self.cdpam_threshold:
+            if perceptual.versa_score < self.versa_threshold:
                 perceptual_passed = False
 
         # Combined decision
@@ -1260,7 +1260,7 @@ class EnhancedQualityGate:
                         {
                             # "nisqa" / "dnsmos" entfernt — verboten §4.4+§10.2 (Sprach-Metriken)
                             "visqol": post.achieved_perceptual.visqol_mos_lqo,
-                            "cdpam": post.achieved_perceptual.cdpam_score,
+                            "versa": post.achieved_perceptual.versa_score,
                         }
                     )
 

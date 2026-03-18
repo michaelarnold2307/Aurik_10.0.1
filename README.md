@@ -2,7 +2,7 @@
 
 **Version:** 9.10.57 | **Status:** ✅ Produktionsbereit | **Stand:** März 2026
 
-![Tests](https://img.shields.io/badge/tests-7747%2B%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-7400%2B%20passing-brightgreen)
 ![Musical Goals](https://img.shields.io/badge/Musical%20Goals-14%2F14-brightgreen)
 ![Quality MOS](https://img.shields.io/badge/MOS-%E2%89%A54.5%20Weltklasse-brightgreen)
 ![Materials](https://img.shields.io/badge/Materialien-17%20Typen-blue)
@@ -114,7 +114,23 @@ und produziert das vollständige `AurikErgebnis` (17 Felder, `@dataclass`).
 
 ## 🚀 Quick Start
 
-### Installation
+### 🎵 Für Einsteiger — Aurik in 3 Schritten starten
+
+> **Kein Python, kein Terminal notwendig.** Aurik läuft direkt auf Ihrem Desktop.
+
+| Schritt | Aktion | Was passiert |
+|---------|--------|--------------|
+| **1** | **Datei öffnen** — Doppelklick auf `AURIK910.AppImage` (Linux) oder `AURIK910.exe` (Windows) | Das Programm startet. Alle KI-Modelle sind bereits enthalten — keine Internetverbindung nötig. |
+| **2** | **Aufnahme laden** — Klick auf **📂 Datei öffnen** oder die Audiodatei ins Fenster ziehen | Aurik erkennt automatisch den Tonträger (Vinyl, Kassette, Shellac …) und analysiert alle Defekte. |
+| **3** | **Restaurieren** — Klick auf **📀 Restoration** | Die restaurierte Datei wird im Ordner `output/` neben der Originaldatei gespeichert. |
+
+**Unterstützte Formate:** WAV, FLAC, MP3, AIFF, OGG, M4A, WMA, AAC — Mono & Stereo
+
+**Tastenkurzbefehle:** `A` = Original anhören, `B` = Restauriert anhören, `Leertaste` = Play/Pause
+
+---
+
+### Installation (Entwickler)
 
 ```bash
 # Clone Repository

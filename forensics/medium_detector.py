@@ -153,7 +153,7 @@ class MediumDetector:
     # ── Diagnostik-Schwellen (§6.7.1) ──────────────────────────────────
     SHELLAC_ROLLOFF_MAX_HZ: float = 4_500.0
     TAPE_ROLLOFF_MAX_HZ: float = 10_000.0
-    TAPE_WOW_FLUTTER_MIN: float = 0.4  # Hz std
+    TAPE_SPEED_VARIATION_MIN: float = 0.4  # Hz std
     TAPE_NOISE_FLOOR_MAX_DB: float = -36.0  # lauter = Bandrauschen
     HF_ENERGY_THRESHOLD_FRACTION: float = 0.001  # < 0.1 % → kein HF
     MP3_KERBMUSTER_THZ: float = 16_000.0  # typischer MP3-Rolloff
@@ -268,7 +268,7 @@ class MediumDetector:
             evidence.append(f"Sehr enge Bandbreite ({fp.rolloff_95_hz:.0f} Hz Rolloff) → Shellac/Wachswalze")
 
         # ── Kassetten-Magnetband (Tape) ───────────────────────────────────
-        elif fp.rolloff_95_hz < self.TAPE_ROLLOFF_MAX_HZ and fp.wow_flutter_index > self.TAPE_WOW_FLUTTER_MIN:
+        elif fp.rolloff_95_hz < self.TAPE_ROLLOFF_MAX_HZ and fp.wow_flutter_index > self.TAPE_SPEED_VARIATION_MIN:
             chain.append("tape")
             confidence_parts.append(0.75)
             evidence.append(

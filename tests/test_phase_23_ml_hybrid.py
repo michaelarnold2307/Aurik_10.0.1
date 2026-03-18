@@ -6,7 +6,7 @@ Test Phase 23 ML-Hybrid Integration
 Validiere die AudioSR Integration in Phase 23 (Spectral Repair).
 
 Tests:
-1. Quality Mode Switching (FAST/BALANCED/MAXIMUM)
+1. Quality Mode Switching (FAST/BALANCED)
 2. DSP Fallback bei ML-Fehler
 3. Defect Severity Routing
 4. Performance Comparison (DSP vs ML)
@@ -15,7 +15,7 @@ Tests:
 Expected Results:
 - FAST Mode: Pure DSP (0.7× RT)
 - BALANCED Mode: ML bei Severity > 0.6 (1.8× RT)
-- MAXIMUM Mode: Always ML (4.5× RT)
+- BALANCED Mode: Adaptive ML (ca. 1.8× RT)
 - Quality: 0.39 → 0.84 (+0.45 improvement)
 
 Author: Aurik 9.0 Development Team
@@ -80,7 +80,7 @@ def test_quality_modes():
 
     results = {}
 
-    for mode in [QualityMode.FAST, QualityMode.BALANCED, QualityMode.MAXIMUM]:
+    for mode in [QualityMode.FAST, QualityMode.BALANCED]:
         print(f"\n--- Testing Mode: {mode.value.upper()} ---")
         QualityModeConfig.set_mode(mode)
 
@@ -108,21 +108,21 @@ def test_quality_modes():
     # FAST should be fastest
     fast_rt = results["fast"]["rt_factor"]
     balanced_rt = results["balanced"]["rt_factor"]
-    maximum_rt = results["maximum"]["rt_factor"]
+    balanced_rt = results["balanced"]["rt_factor"]
 
     print(f"✓ FAST RT Factor: {fast_rt:.2f}× (expected <1.0×)")
     print(f"✓ BALANCED RT Factor: {balanced_rt:.2f}× (expected ~1.8×)")
-    print(f"✓ MAXIMUM RT Factor: {maximum_rt:.2f}× (expected ~4.5×)")
+    print(f"✓ BALANCED RT Factor: {balanced_rt:.2f}× (expected ~1.8×)")
 
     # Quality should improve with higher modes
     fast_quality = results["fast"]["defect_reduction"]
-    maximum_quality = results["maximum"]["defect_reduction"]
+    balanced_quality = results["balanced"]["defect_reduction"]
 
-    if maximum_quality > fast_quality:
-        print(f"✅ Quality improves: FAST {fast_quality:.1f}% → MAXIMUM {maximum_quality:.1f}%")
+    if balanced_quality >= fast_quality:
+        print(f"✅ Quality stable/improves: FAST {fast_quality:.1f}% → BALANCED {balanced_quality:.1f}%")
     else:
         print(
-            f"⚠️  Quality not improved (may need real AudioSR): FAST {fast_quality:.1f}% vs MAXIMUM {maximum_quality:.1f}%"
+            f"⚠️  Quality not improved (may need real AudioSR): FAST {fast_quality:.1f}% vs BALANCED {balanced_quality:.1f}%"
         )
 
     return results
@@ -178,7 +178,7 @@ def test_dsp_fallback():
     print("TEST 3: DSP Fallback on ML Error")
     print("=" * 70)
 
-    QualityModeConfig.set_mode(QualityMode.MAXIMUM)
+    QualityModeConfig.set_mode(QualityMode.BALANCED)
     phase = SpectralRepair()
     audio = create_test_audio(duration=0.5, sample_rate=44100)
 
@@ -215,9 +215,9 @@ def test_performance_comparison():
     print(f"  RT Factor: {result_dsp.metadata.get('rt_factor', 0):.2f}×")
     print(f"  Defect Reduction: {result_dsp.metadata.get('defect_reduction_percent', 0):.1f}%")
 
-    # Test ML
-    print("\n--- ML Mode (MAXIMUM) ---")
-    QualityModeConfig.set_mode(QualityMode.MAXIMUM)
+    # Test adaptive ML
+    print("\n--- Adaptive Mode (BALANCED) ---")
+    QualityModeConfig.set_mode(QualityMode.BALANCED)
     start = time.time()
     result_ml = phase.process(audio, 44100, MaterialType.CD_DIGITAL)
     time_ml = time.time() - start

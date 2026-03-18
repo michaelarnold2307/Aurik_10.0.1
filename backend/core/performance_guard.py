@@ -42,7 +42,22 @@ class QualityMode(Enum):
     FAST = "fast"  # ~1.5× RT, 87% Quality
     BALANCED = "balanced"  # ~2.4× RT, 92% Quality (DEFAULT)
     QUALITY = "quality"  # ~9× RT, 95% Quality (kein 3× RT Limit!)
-    MAXIMUM = "maximum"  # Studio 2026: kein RT-Limit, alle Enhancement-Phasen aktiv
+
+
+class DeploymentMode(Enum):
+    """Deployment-Modus für Aurik (P2-2 Produkt-/Forschungstrennung).
+
+    PRODUCT:  Nur freigegebene, stabile Pfade — planbares Verhalten für Endnutzer.
+              Experimentelle Phasen und SOTA-Experimente sind deaktiviert.
+              Default für alle Produktions-Releases.
+
+    RESEARCH: Alle experimentellen und SOTA-Phasen aktiviert (feature-flagged).
+              Nur für interne Entwicklung und Benchmark-Forschung.
+              Kein Release-Risiko, da explizit opt-in.
+    """
+
+    PRODUCT = "product"    # stable paths only — default
+    RESEARCH = "research"  # experimental SOTA features enabled
 
 
 @dataclass
@@ -84,24 +99,24 @@ class PerformanceReport:
 
 class PerformanceGuard:
     """
-    Überwacht und enforced 5× Real-Time Performance-Limit.
+    Überwacht und enforced 3× Real-Time Performance-Limit.
 
     Garantiert:
-    - Max 5× RT für Balanced Mode
+    - Max 3× RT für Balanced Mode
     - Adaptive Phase-Skipping wenn nötig
     - Detailed Performance-Logging
     """
 
     # Performance Limits (RT Factors)
-    LIMIT_3X_RT = 5.0  # Hard Limit für Balanced Mode
+    LIMIT_3X_RT = 3.0  # Hard Limit für Balanced Mode
     LIMIT_FAST = 1.5  # Target für Fast Mode
-    LIMIT_BALANCED = 5.0  # Budget für Balanced Mode — maximal RT×5 (User-Spec)
+    LIMIT_BALANCED = 3.0  # Budget für Balanced Mode — maximal RT×3
 
     # Warnschwellen
-    WARNING_THRESHOLD_OPTIMAL = 3.0  # < 3× RT = optimal
-    WARNING_THRESHOLD_GOOD = 4.0
-    WARNING_THRESHOLD_ACCEPTABLE = 4.5
-    WARNING_THRESHOLD_CRITICAL = 5.0
+    WARNING_THRESHOLD_OPTIMAL = 2.0
+    WARNING_THRESHOLD_GOOD = 2.5
+    WARNING_THRESHOLD_ACCEPTABLE = 2.9
+    WARNING_THRESHOLD_CRITICAL = 3.0
 
     # Phase Priorities (höher = wichtiger für Quality)
     # ── Musikalische Exzellenz — Priorität 1 (§MusEx-P1) ────────────────────
@@ -154,7 +169,7 @@ class PerformanceGuard:
     )
 
     # Hard Budget: maximaler RT-Faktor für Musikalische Exzellenz-Betrieb
-    RT3_EXCELLENCE_BUDGET: float = 5.0
+    RT3_EXCELLENCE_BUDGET: float = 3.0
 
     def __init__(
         self, mode: QualityMode = QualityMode.QUALITY, enforce_limit: bool = True, enable_adaptive_skipping: bool = True
@@ -176,7 +191,6 @@ class PerformanceGuard:
             QualityMode.FAST: self.LIMIT_FAST,
             QualityMode.BALANCED: self.LIMIT_BALANCED,
             QualityMode.QUALITY: 15.0,  # Kein Limit
-            QualityMode.MAXIMUM: 999.0,  # Studio 2026: absolut kein RT-Limit
         }[mode]
 
         # Tracking State

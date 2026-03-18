@@ -72,14 +72,14 @@ def test_audio_degraded(test_audio_mono):
 def mock_perceptual_metrics():
     """Mock perceptual metrics (good quality)."""
     # nisqa_mos / dnsmos_ovrl / dnsmos_sig / dnsmos_bak entfernt — verboten §4.4+§10.2 (Sprach-Metriken)
-    return PerceptualMetrics(visqol_mos_lqo=3.9, cdpam_score=85.0)
+    return PerceptualMetrics(visqol_mos_lqo=3.9, versa_score=85.0)
 
 
 @pytest.fixture
 def mock_perceptual_metrics_poor():
     """Mock perceptual metrics (poor quality)."""
     # nisqa_mos / dnsmos_ovrl / dnsmos_sig / dnsmos_bak entfernt — verboten §4.4+§10.2 (Sprach-Metriken)
-    return PerceptualMetrics(visqol_mos_lqo=2.3, cdpam_score=55.0)
+    return PerceptualMetrics(visqol_mos_lqo=2.3, versa_score=55.0)
 
 
 @pytest.fixture
@@ -313,7 +313,7 @@ class TestEnhancedQualityGate:
         assert gate.metric_weights["perceptual_quality"] == 0.50
         # nisqa_threshold / dnsmos_threshold entfernt — verboten §4.4+§10.2 (Sprach-Metriken)
         assert gate.visqol_threshold == 3.0
-        assert gate.cdpam_threshold == 80.0
+        assert gate.versa_threshold == 80.0
 
     def test_weighted_quality_score_calculation(self, mock_musical_goals_good, mock_perceptual_metrics):
         """Test weighted quality score calculation."""
@@ -421,7 +421,7 @@ class TestEnhancedQualityGate:
         assert pre_check.baseline_musical_goals == mock_musical_goals_good
         assert pre_check.baseline_perceptual is not None
         # nisqa_mos entfernt — verboten §4.4+§10.2; cdpam_score als §4.4-konforme Ersatzprüfung
-        assert pre_check.baseline_perceptual.cdpam_score == 85.0
+        assert pre_check.baseline_perceptual.versa_score == 85.0
 
     @patch.object(EnhancedQualityGate, "_measure_perceptual_metrics")
     @patch("backend.core.musical_goals.quality_gate.MusicalGoalsQualityGate")

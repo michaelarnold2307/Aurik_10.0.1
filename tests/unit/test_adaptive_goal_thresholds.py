@@ -402,3 +402,98 @@ class TestConvenienceFunction:
         thresholds, cfg, quality = result
         assert isinstance(thresholds, AdaptiveGoalThresholds)
         assert isinstance(cfg, dict)
+
+
+# ---------------------------------------------------------------------------
+# P1-2: Tests für das extrahierte Standalone-Modul adaptive_goal_resolver
+# ---------------------------------------------------------------------------
+import pytest
+import types as _types
+
+from backend.core.musical_goals.adaptive_goal_resolver import (
+    GOAL_ALIASES,
+    resolve_adaptive_goal_thresholds,
+)
+
+
+class TestAdaptiveGoalResolverModule:
+    """Tests für backend.core.musical_goals.adaptive_goal_resolver (P1-2)."""
+
+    def test_33_all_14_aliases_defined(self):
+        """GOAL_ALIASES muss alle 14 kanonischen Zielschlüssel enthalten."""
+        assert len(GOAL_ALIASES) == 14
+        expected = {
+            "bass_kraft", "brillanz", "waerme", "natuerlichkeit",
+            "authentizitaet", "emotionalitaet", "transparenz", "groove",
+            "spatial_depth", "timbre_authentizitaet", "tonal_center",
+            "micro_dynamics", "separation_fidelity", "artikulation",
+        }
+        assert set(GOAL_ALIASES.keys()) == expected
+
+    def test_34_resolves_from_dict_canonical_keys(self):
+        """Kanonische Keys in einem flat dict werden korrekt aufgelöst."""
+        payload = {"brillanz": 0.82, "waerme": 0.78, "bass_kraft": 0.77}
+        result = resolve_adaptive_goal_thresholds(payload)
+        assert result["brillanz"] == pytest.approx(0.82)
+        assert result["waerme"] == pytest.approx(0.78)
+        assert result["bass_kraft"] == pytest.approx(0.77)
+
+    def test_35_resolves_bass_kraft_alias(self):
+        """Legacy-Alias 'bass-kraft' wird auf 'bass_kraft' normiert."""
+        payload = {"bass-kraft": 0.71}
+        result = resolve_adaptive_goal_thresholds(payload)
+        assert "bass_kraft" in result
+        assert result["bass_kraft"] == pytest.approx(0.71)
+        assert "bass-kraft" not in result
+
+    def test_36_resolves_from_object_attributes(self):
+        """Direkte Objekt-Attribute werden korrekt ausgelesen."""
+        obj = _types.SimpleNamespace(
+            brillanz=0.84, waerme=0.80, natuerlichkeit=0.91,
+            authentizitaet=0.88, emotionalitaet=0.87, transparenz=0.89,
+            bass_kraft=0.85,
+        )
+        result = resolve_adaptive_goal_thresholds(obj)
+        assert result["brillanz"] == pytest.approx(0.84)
+        assert result["bass_kraft"] == pytest.approx(0.85)
+
+    def test_37_resolves_from_thresholds_attribute_dict(self):
+        """Objekt mit .thresholds dict wird korrekt aufgelöst."""
+        obj = _types.SimpleNamespace(thresholds={
+            "groove": 0.62, "spatial_depth": 0.63, "tonal_center": 0.95,
+        })
+        result = resolve_adaptive_goal_thresholds(obj)
+        assert result["groove"] == pytest.approx(0.62)
+        assert result["spatial_depth"] == pytest.approx(0.63)
+        assert result["tonal_center"] == pytest.approx(0.95)
+
+    def test_38_resolves_from_tuple_payload(self):
+        """Tupel-Payload (wie get_adaptive_goals_and_config-Rückgabe) aller Teile."""
+        obj1 = _types.SimpleNamespace(brillanz=0.83)
+        obj2 = _types.SimpleNamespace(thresholds={"groove": 0.60})
+        result = resolve_adaptive_goal_thresholds((obj1, obj2, None))
+        assert result["brillanz"] == pytest.approx(0.83)
+        assert result["groove"] == pytest.approx(0.60)
+
+    def test_39_ignores_nan_and_inf_values(self):
+        """NaN / Inf Werte werden ignoriert, kein Eintrag im Ergebnis."""
+        import math
+        payload = {"brillanz": float("nan"), "waerme": float("inf"), "groove": 0.60}
+        result = resolve_adaptive_goal_thresholds(payload)
+        assert "brillanz" not in result
+        assert "waerme" not in result
+        assert result["groove"] == pytest.approx(0.60)
+
+    def test_40_empty_payload_returns_empty_dict(self):
+        """Kein auflösbarer Payload liefert leeres Dict (kein Exception)."""
+        assert resolve_adaptive_goal_thresholds(None) == {}
+        assert resolve_adaptive_goal_thresholds({}) == {}
+        assert resolve_adaptive_goal_thresholds((None, None)) == {}
+
+    def test_41_uv3_static_method_delegates_to_module(self):
+        """UnifiedRestorerV3._resolve_adaptive_goal_thresholds delegiert korrekt."""
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+        payload = {"brillanz": 0.85, "waerme": 0.80}
+        via_uv3 = UnifiedRestorerV3._resolve_adaptive_goal_thresholds(payload)
+        via_module = resolve_adaptive_goal_thresholds(payload)
+        assert via_uv3 == via_module

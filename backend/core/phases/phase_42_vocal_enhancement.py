@@ -205,10 +205,17 @@ class VocalEnhancement(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply vocal enhancement to audio.
+        Apply vocal enhancement to audio — with stem-based processing when separation succeeds.
+
+        Stem-Pipeline (§1.4 StemRemixBalancer, §2.8 Vocal-Kette):
+            1. Try bs_roformer → vocals stem, instrument residual
+            2. Fallback: demucs_v4 separate_vocals()
+            3. Enhance only the vocal stem (DSP chain below)
+            4. StemRemixBalancer.balance_remix() → LUFS-korrekter Re-Mix
+            5. Fallback: full-audio DSP enhancement (kein Stem-Sep verfügbar)
 
         Args:
-            audio: Input audio (mono or stereo)
+            audio: Input audio (mono or stereo, 48 000 Hz)
             sample_rate: Sample rate in Hz
             material: Material type for adaptive processing
 
@@ -238,13 +245,41 @@ class VocalEnhancement(PhaseInterface):
                 warnings=["No vocal content detected - enhancement skipped"],
             )
 
-        # Process each channel
-        if is_stereo:
-            enhanced_left = self._enhance_channel(audio[:, 0], sample_rate, config)
-            enhanced_right = self._enhance_channel(audio[:, 1], sample_rate, config)
-            enhanced_audio = np.column_stack((enhanced_left, enhanced_right))
+        # ── Stem-based vocal enhancement (§1.4 StemRemixBalancer, §2.8) ──────
+        stem_result = self._try_stem_separation(audio, sample_rate)
+        stem_model_used = "none"
+
+        if stem_result is not None:
+            vocals_stem, instr_stem, vocal_weight, stem_model_used = stem_result
+            logger.debug("Phase42: Stem-Sep via %s — verarbeite Vocal-Stem", stem_model_used)
+
+            # Enhance only the vocal stem
+            if vocals_stem.ndim == 2:
+                enh_left = self._enhance_channel(vocals_stem[:, 0], sample_rate, config)
+                enh_right = self._enhance_channel(vocals_stem[:, 1], sample_rate, config)
+                enhanced_vocals = np.column_stack((enh_left, enh_right))
+            else:
+                enhanced_vocals = self._enhance_channel(vocals_stem, sample_rate, config)
+
+            # StemRemixBalancer: LUFS-korrekter Re-Mix (§1.4 Spec)
+            try:
+                from backend.core.stem_remix_balancer import StemRemixBalancer  # noqa: PLC0415
+                enhanced_audio = StemRemixBalancer().balance_remix(
+                    enhanced_vocals, instr_stem, audio, sample_rate, float(vocal_weight)
+                )
+            except Exception as _remix_err:
+                logger.debug("StemRemixBalancer fehlgeschlagen — Direkt-Mix: %s", _remix_err)
+                n = min(enhanced_vocals.shape[0], instr_stem.shape[0])
+                enhanced_audio = (enhanced_vocals[:n] + instr_stem[:n]) * 0.5
         else:
-            enhanced_audio = self._enhance_channel(audio, sample_rate, config)
+            # Fallback: process full audio without stem separation
+            logger.debug("Phase42: Kein Stem-Sep — Vollbild-Verarbeitung")
+            if is_stereo:
+                enhanced_left = self._enhance_channel(audio[:, 0], sample_rate, config)
+                enhanced_right = self._enhance_channel(audio[:, 1], sample_rate, config)
+                enhanced_audio = np.column_stack((enhanced_left, enhanced_right))
+            else:
+                enhanced_audio = self._enhance_channel(audio, sample_rate, config)
 
         execution_time = time.time() - start_time
         rt_factor = execution_time / (len(audio) / sample_rate)
@@ -263,9 +298,60 @@ class VocalEnhancement(PhaseInterface):
                 "compression_ratio": float(config["compression_ratio"]),
                 "rt_factor": float(rt_factor),
                 "vocal_ai_linked": VOCAL_AI_AVAILABLE,
+                "stem_separation_model": stem_model_used,
             },
             warnings=[] if rt_factor < 0.35 else [f"Performance sub-optimal: {rt_factor:.2f}× realtime"],
         )
+
+    def _try_stem_separation(
+        self, audio: np.ndarray, sr: int
+    ) -> "tuple[np.ndarray, np.ndarray, float, str] | None":
+        """Vocal/Instrument stem separation cascade: bs_roformer → demucs_v4 → None.
+
+        Returns (vocals, instruments, vocal_weight, model_name) or None on total failure.
+        Both stems match the input shape (mono [n] or stereo [n, 2]).
+        """
+        # Convert for mono-based models; keep original shape for result
+        audio_mono = audio.mean(axis=1).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
+
+        # ── 1: BSRoFormer (MelBandRoformer, falls Modell verfügbar) ──────────
+        try:
+            from plugins.bs_roformer_plugin import get_bs_roformer  # noqa: PLC0415
+            roformer = get_bs_roformer()
+            sep = roformer.separate(audio_mono, sr, stems=["vocals"])
+            if sep is not None and "vocals" in sep.stems:
+                voc_mono = np.asarray(sep.stems["vocals"], dtype=np.float32)
+                n = min(len(audio_mono), len(voc_mono))
+                inst_mono = np.clip(audio_mono[:n] - voc_mono[:n], -1.0, 1.0)
+                if audio.ndim == 2:
+                    vocals_out = np.column_stack([voc_mono[:n], voc_mono[:n]])
+                    instr_out = np.column_stack([inst_mono, inst_mono])
+                else:
+                    vocals_out = voc_mono[:n]
+                    instr_out = inst_mono
+                confidence = float(getattr(sep, "confidence", 0.5))
+                logger.debug("Phase42 Stem-Sep: bs_roformer confidence=%.2f model=%s", confidence, sep.model_used)
+                return vocals_out, instr_out, confidence, sep.model_used
+        except Exception as exc:
+            logger.debug("Phase42 bs_roformer fehlgeschlagen: %s", exc)
+
+        # ── 2: DemucsV4 fallback ──────────────────────────────────────────────
+        try:
+            from plugins.demucs_v4_plugin import DemucsV4Plugin  # noqa: PLC0415
+            demucs = DemucsV4Plugin()
+            voc_mono, inst_mono = demucs.separate_vocals(audio_mono, sr)
+            n = min(len(audio_mono), len(voc_mono), len(inst_mono))
+            if audio.ndim == 2:
+                vocals_out = np.column_stack([voc_mono[:n], voc_mono[:n]])
+                instr_out = np.column_stack([inst_mono[:n], inst_mono[:n]])
+            else:
+                vocals_out = voc_mono[:n]
+                instr_out = inst_mono[:n]
+            return vocals_out, instr_out, 0.5, "demucs_v4"
+        except Exception as exc:
+            logger.debug("Phase42 demucs_v4 fehlgeschlagen: %s", exc)
+
+        return None
 
     def _detect_vocals(self, audio: np.ndarray, sample_rate: int) -> bool:
         """Simple vocal detection based on formant energy."""

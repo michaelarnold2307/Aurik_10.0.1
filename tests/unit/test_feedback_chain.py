@@ -7,6 +7,7 @@ Spec §2.16: Iterative Qualitätsschleife mit konservativer Konvergenz.
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 import numpy as np
 import pytest
 
@@ -352,3 +353,45 @@ class TestFeedbackChainCeiling:
         result = fc.run(audio, _identity_fn, ceiling=safe_ceiling)
         # Darf nicht ceiling_reached sein, da MOS noch nicht nahe genug
         assert result.ceiling_reached is False
+
+
+# ---------------------------------------------------------------------------
+# Klasse 8: P1-1 Perzeptiver Primärpfad (VERSA/PQS) + markierter Fallback
+# ---------------------------------------------------------------------------
+
+
+class TestFeedbackChainPerceptualLoopScoring:
+    def test_36_pqs_loop_marks_pqs_as_score_source(self):
+        fc = FeedbackChain(max_iterations=1, use_pqs_in_loop=True)
+        fc._pqs_score_fn = lambda audio, sr: SimpleNamespace(mos=4.2)
+
+        result = fc.run(_sine(), _identity_fn)
+
+        assert result.metadata["score_source"] == "pqs_absolute"
+        assert result.metadata["score_fallback_used"] is False
+        assert "pqs_absolute" in result.metadata["score_sources_seen"]
+
+    def test_37_pqs_failure_marks_heuristic_fallback(self):
+        fc = FeedbackChain(max_iterations=1, use_pqs_in_loop=True)
+
+        def _raise_pqs(audio: np.ndarray, sr: int) -> object:
+            raise RuntimeError("pqs unavailable")
+
+        fc._pqs_score_fn = _raise_pqs
+
+        result = fc.run(_sine(), _identity_fn)
+
+        assert result.metadata["score_source"] == "heuristic_rms"
+        assert result.metadata["score_fallback_used"] is True
+        assert "heuristic_rms" in result.metadata["score_sources_seen"]
+
+    def test_38_versa_is_preferred_over_pqs_when_both_enabled(self):
+        fc = FeedbackChain(max_iterations=1, use_pqs_in_loop=True, use_versa_in_loop=True)
+        fc._versa_score_fn = lambda audio, sr: SimpleNamespace(mos=4.7, model_used="versa-test")
+        fc._pqs_score_fn = lambda audio, sr: SimpleNamespace(mos=4.1)
+
+        result = fc.run(_sine(), _identity_fn)
+
+        assert result.metadata["score_source"] == "versa"
+        assert result.metadata["score_fallback_used"] is False
+        assert result.overall_score == pytest.approx(4.7)

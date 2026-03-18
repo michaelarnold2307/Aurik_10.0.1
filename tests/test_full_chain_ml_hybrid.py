@@ -246,13 +246,13 @@ class TestFullChainMLHybrid:
         assert result.rt_factor <= 20.0, f"FAST mode should be ≤20.0× RT, got {result.rt_factor:.2f}×"
         assert result.quality_estimate >= 0.65, f"FAST mode quality too low: {result.quality_estimate:.3f}"
 
-    def test_04_maximum_mode_quality(self):
+    def test_04_quality_mode_quality(self):
         """Test QUALITY mode (full ML processing)"""
         print("\n" + "=" * 80)
         print("TEST 4: QUALITY Mode (Full ML Processing)")
         print("=" * 80)
 
-        # Load audio (shorter duration for MAXIMUM mode)
+        # Load audio (shorter duration for quality mode)
         audio, sr = self._load_audio(self.test_files["vinyl_classical"], max_duration=5.0)
         print(f"\n✓ Audio loaded: {audio.shape} @ {sr} Hz")
 
@@ -276,7 +276,7 @@ class TestFullChainMLHybrid:
         print("-" * 80)
 
         # Save best quality output
-        output_file = self.test_dir / "vinyl_maximum_output.wav"
+        output_file = self.test_dir / "vinyl_quality_output.wav"
         sf.write(output_file, result.audio, sr)
 
         # Assertions

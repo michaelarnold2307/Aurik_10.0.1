@@ -99,27 +99,27 @@ def test_phase12_ml_routing():
         # Not fatal - ML might not be available
         print("  (This is expected if CREPE is not installed)")
 
-    # Test 3: MAXIMUM mode (Full ML-Hybrid: YIN + CREPE)
+    # Test 3: BALANCED mode (Adaptive ML-Hybrid)
     print("\n" + "-" * 80)
-    print("Test 3: MAXIMUM mode (Full ML-Hybrid)")
+    print("Test 3: BALANCED mode (Adaptive ML-Hybrid)")
     print("-" * 80)
 
     try:
-        result_maximum = phase.process(audio_mono, sample_rate, material=MaterialType.VINYL, quality_mode="maximum")
-        print("✓ MAXIMUM mode completed")
-        print(f"  Algorithm: {result_maximum.metadata.get('algorithm', 'N/A')}")
-        print(f"  ML Hybrid: {result_maximum.metadata.get('ml_hybrid', False)}")
-        print(f"  YIN applied: {result_maximum.metadata.get('yin_applied', False)}")
-        print(f"  CREPE applied: {result_maximum.metadata.get('crepe_applied', False)}")
-        print(f"  Wow/Flutter detected: {result_maximum.metrics.get('wow_flutter_detected', False)}")
-        print(f"  Max deviation: {result_maximum.metrics.get('max_deviation_percent', 0):.3f}%")
-        print(f"  Mean confidence: {result_maximum.metrics.get('mean_confidence', 0):.3f}")
-        print(f"  Time: {result_maximum.execution_time_seconds:.2f}s")
+        result_balanced = phase.process(audio_mono, sample_rate, material=MaterialType.VINYL, quality_mode="balanced")
+        print("✓ BALANCED mode completed")
+        print(f"  Algorithm: {result_balanced.metadata.get('algorithm', 'N/A')}")
+        print(f"  ML Hybrid: {result_balanced.metadata.get('ml_hybrid', False)}")
+        print(f"  YIN applied: {result_balanced.metadata.get('yin_applied', False)}")
+        print(f"  CREPE applied: {result_balanced.metadata.get('crepe_applied', False)}")
+        print(f"  Wow/Flutter detected: {result_balanced.metrics.get('wow_flutter_detected', False)}")
+        print(f"  Max deviation: {result_balanced.metrics.get('max_deviation_percent', 0):.3f}%")
+        print(f"  Mean confidence: {result_balanced.metrics.get('mean_confidence', 0):.3f}")
+        print(f"  Time: {result_balanced.execution_time_seconds:.2f}s")
 
-        if result_maximum.warnings:
-            print(f"  Warnings: {result_maximum.warnings}")
+        if result_balanced.warnings:
+            print(f"  Warnings: {result_balanced.warnings}")
     except Exception as e:
-        print(f"✗ MAXIMUM mode failed: {e}")
+        print(f"✗ BALANCED mode failed: {e}")
         # Not fatal
         print("  (This is expected if CREPE is not installed)")
 
@@ -128,7 +128,7 @@ def test_phase12_ml_routing():
     print("TEST SUMMARY")
     print("=" * 80)
     print("✓ Phase 12 ML-Hybrid integration functional")
-    print("✓ Quality mode routing working (fast → YIN, balanced/maximum → ML)")
+    print("✓ Quality mode routing working (fast → YIN, balanced → adaptive ML)")
     print("✓ Graceful fallback to YIN if ML unavailable")
     print("\nIntegration Status: SUCCESS ✅")
 

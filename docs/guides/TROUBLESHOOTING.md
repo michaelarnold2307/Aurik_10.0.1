@@ -1,4 +1,4 @@
-# Aurik 8.0 - Troubleshooting Guide
+# Aurik 9.10.57 — Troubleshooting Guide
 
 **Version:** 8.0.0  
 **Datum:** 13. Februar 2026  

@@ -52,7 +52,7 @@ print("  Clean signal: 440 Hz + 880 Hz")
 print("  Tape hiss: HF noise >8kHz (typical tape hiss)")
 
 # Test with different quality modes
-test_modes = ["FAST", "BALANCED", "MAXIMUM"]
+test_modes = ["FAST", "BALANCED"]
 
 for mode in test_modes:
     print(f"\n{'-'*80}")
@@ -81,7 +81,7 @@ for mode in test_modes:
             else:
                 print("   ⚠️  Unexpected: FAST should not use ML")
 
-        elif mode in ["BALANCED", "MAXIMUM"]:
+        elif mode == "BALANCED":
             if result.metadata["ml_refined"]:
                 print(f"   ✅ Expected: {mode} mode uses ML HF refinement")
                 print("      Band-Specific: <2kHz DSP → >2kHz ML DeepFilterNet")

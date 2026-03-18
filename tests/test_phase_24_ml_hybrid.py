@@ -41,7 +41,7 @@ medium_pos = int(1.5 * sr)
 medium_len = int(0.050 * sr)  # 50ms
 audio[medium_pos : medium_pos + medium_len] = 0
 
-# Long dropout (>100ms) - should use ML AudioSR in BALANCED/MAXIMUM
+# Long dropout (>100ms) - should use ML AudioSR in BALANCED
 long_pos = int(2.0 * sr)
 long_len = int(0.150 * sr)  # 150ms
 audio[long_pos : long_pos + long_len] = 0
@@ -51,10 +51,10 @@ print(f"  Duration: {duration}s @ {sr} Hz")
 print("  Dropouts:")
 print("    - Short: 15ms (DSP linear expected)")
 print("    - Medium: 50ms (DSP spectral expected)")
-print("    - Long: 150ms (ML AudioSR expected in BALANCED/MAXIMUM)")
+print("    - Long: 150ms (ML AudioSR expected in BALANCED)")
 
 # Test with different quality modes
-test_modes = ["FAST", "BALANCED", "MAXIMUM"]
+test_modes = ["FAST", "BALANCED"]
 
 for mode in test_modes:
     print(f"\n{'-'*80}")
@@ -83,7 +83,7 @@ for mode in test_modes:
             else:
                 print("   ⚠️  Unexpected: FAST should not use ML")
 
-        elif mode in ["BALANCED", "MAXIMUM"]:
+        elif mode == "BALANCED":
             if result.modifications["ml_repaired"] > 0:
                 print(f"   ✅ Expected: {mode} mode uses ML for long dropouts")
                 print("      Routing: Long dropout (150ms) → AudioSR")

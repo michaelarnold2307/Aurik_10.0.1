@@ -72,7 +72,8 @@ class DefectType(Enum):
     BUZZ = "buzz"  # Harmonic buzz
     DISTORTION = "distortion"  # Clipping, overdrive, THD
     DROPOUT = "dropout"  # Tape/digital dropouts
-    WOW_FLUTTER = "wow_flutter"  # Speed variations
+    WOW = "wow"  # Speed variation (< 0.5 Hz)
+    FLUTTER = "flutter"  # Speed variation (0.5-200 Hz)
     AZIMUTH_ERROR = "azimuth_error"  # Tape misalignment
     PHASE_ISSUES = "phase_issues"  # Phase cancellation
     DC_OFFSET = "dc_offset"  # DC bias
@@ -217,8 +218,18 @@ class UnifiedDefectDetector:
             audio_mono, return_locations
         )
 
-        defects[DefectType.WOW_FLUTTER], severity[DefectType.WOW_FLUTTER], locations[DefectType.WOW_FLUTTER] = (
-            self._detect_wow_flutter(audio_mono, return_locations)
+        wow_conf, wow_sev, wow_locs, flutter_conf, flutter_sev, flutter_locs = self._detect_wow_flutter(
+            audio_mono, return_locations
+        )
+        defects[DefectType.WOW], severity[DefectType.WOW], locations[DefectType.WOW] = (
+            wow_conf,
+            wow_sev,
+            wow_locs,
+        )
+        defects[DefectType.FLUTTER], severity[DefectType.FLUTTER], locations[DefectType.FLUTTER] = (
+            flutter_conf,
+            flutter_sev,
+            flutter_locs,
         )
 
         defects[DefectType.CLIPPING], severity[DefectType.CLIPPING], locations[DefectType.CLIPPING] = (
@@ -462,7 +473,7 @@ class UnifiedDefectDetector:
 
         return confidence, severity, locations
 
-    def _detect_wow_flutter(self, audio: np.ndarray, return_locs: bool) -> tuple[float, float, list]:
+    def _detect_wow_flutter(self, audio: np.ndarray, return_locs: bool) -> tuple[float, float, list, float, float, list]:
         """Eigenentwicklung: Wow & flutter (pitch/speed variations) detection."""
         from scipy import signal
 
@@ -488,7 +499,7 @@ class UnifiedDefectDetector:
                     pitches.append(freq)
 
         if len(pitches) < 2:
-            return 0.0, 0.0, []
+            return 0.0, 0.0, [], 0.0, 0.0, []
 
         # Wow & flutter = pitch instability
         pitch_std = np.std(pitches)
@@ -501,10 +512,17 @@ class UnifiedDefectDetector:
         confidence = min(1.0, modulation / 5)  # >5% = very noticeable
         severity = min(1.0, modulation / 10)
 
+        # Keep split semantics for legacy detector path: same estimate is reported
+        # to both WOW and FLUTTER when no dedicated band split is available.
+        wow_conf = confidence
+        wow_sev = severity
+        flutter_conf = confidence
+        flutter_sev = severity
+
         # Continuous effect
         locations = [(0, len(audio) / self.sr)] if return_locs and confidence > 0.3 else []
 
-        return confidence, severity, locations
+        return wow_conf, wow_sev, locations, flutter_conf, flutter_sev, locations
 
     def _detect_clipping(self, audio: np.ndarray, return_locs: bool) -> tuple[float, float, list]:
         """Clipping detection (hard limiting)."""
@@ -539,7 +557,8 @@ class UnifiedDefectDetector:
             DefectType.HUM: 0.10,
             DefectType.DISTORTION: 0.20,
             DefectType.DROPOUT: 0.15,
-            DefectType.WOW_FLUTTER: 0.10,
+            DefectType.WOW: 0.05,
+            DefectType.FLUTTER: 0.05,
             DefectType.CLIPPING: 0.20,
         }
 
@@ -560,7 +579,7 @@ class UnifiedDefectDetector:
         # Vinyl: clicks, crackle, wow/flutter
         vinyl_score = (
             defects.get(DefectType.CLICKS, 0) * 0.4
-            + defects.get(DefectType.WOW_FLUTTER, 0) * 0.3
+            + (defects.get(DefectType.WOW, 0) + defects.get(DefectType.FLUTTER, 0)) * 0.15
             + defects.get(DefectType.CRACKLE, 0) * 0.3
         )
 
@@ -568,7 +587,7 @@ class UnifiedDefectDetector:
         tape_score = (
             defects.get(DefectType.HISS, 0) * 0.4
             + defects.get(DefectType.DROPOUT, 0) * 0.4
-            + defects.get(DefectType.WOW_FLUTTER, 0) * 0.2
+            + (defects.get(DefectType.WOW, 0) + defects.get(DefectType.FLUTTER, 0)) * 0.1
         )
 
         # Digital: clipping, compression artifacts

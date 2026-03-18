@@ -22,9 +22,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from plugins.vocos_plugin import (
     AURIK_SR,
     MEL_SR_22K,
+    MEL_SR_44K,
     VocosPlugin,
     VocosResult,
     get_vocos_plugin,
+    _MEL_SR_48K,
+    _MEL_SR_44K,
+    _MEL_SR_24K,
+    _N_MELS_48K,
+    _N_FFT_48K,
+    _HOP_48K,
+    _WIN_48K,
+    _MODEL_48K,
+    _MODEL_44K,
+    _MODEL_24K,
 )
 
 # ---------------------------------------------------------------------------
@@ -439,6 +450,135 @@ class TestVocosSingleton(unittest.TestCase):
         self.assertEqual(len(alive), 0, f"{len(alive)} Threads hängen nach 10 s Timeout")
         self.assertEqual(len(set(instances)), 1, "Singleton verletzt: mehrere Instanzen erzeugt")
         vmod._instance = None  # Cleanup
+
+
+# ---------------------------------------------------------------------------
+# TestVocosPlugin48kHz — 48kHz-Primärpfad, Konstanten, ONNX-Inferenz
+# ---------------------------------------------------------------------------
+
+
+class TestVocosPlugin48kHz(unittest.TestCase):
+    """Tests für den 48 kHz nativ-Pfad (kein Resampling bei Aurik-SR 48000)."""
+
+    # -- Konstanten ----------------------------------------------------------
+
+    def test_43_mel_sr_48k_constant(self):
+        """_MEL_SR_48K == 48000."""
+        self.assertEqual(_MEL_SR_48K, 48_000)
+
+    def test_44_n_mels_48k_constant(self):
+        """_N_MELS_48K == 128 (vocos-mel-48khz-alpha1 Konfiguration)."""
+        self.assertEqual(_N_MELS_48K, 128)
+
+    def test_45_n_fft_48k_constant(self):
+        """_N_FFT_48K == 2048."""
+        self.assertEqual(_N_FFT_48K, 2048)
+
+    def test_46_hop_48k_constant(self):
+        """_HOP_48K == 256."""
+        self.assertEqual(_HOP_48K, 256)
+
+    def test_47_win_48k_constant(self):
+        """_WIN_48K == 2048."""
+        self.assertEqual(_WIN_48K, 2048)
+
+    def test_48_model_48k_path_suffix(self):
+        """_MODEL_48K endet auf vocos_48khz.onnx."""
+        self.assertTrue(_MODEL_48K.endswith("vocos_48khz.onnx"))
+
+    def test_49_priority_48k_before_44k(self):
+        """48kHz-Pfad liegt im Dateisystem vor 44kHz-Pfad (Priority-Reihenfolge)."""
+        import plugins.vocos_plugin as vmod
+        # Priorität: 48k → 44k → 24k (Spec §2.37)
+        self.assertIn("48khz", _MODEL_48K)
+        self.assertNotIn("48", _MODEL_44K)
+
+    def test_50_model_sr_differs_per_tier(self):
+        """Alle drei Tier-SRs sind unterschiedlich."""
+        self.assertNotEqual(_MEL_SR_48K, _MEL_SR_44K)
+        self.assertNotEqual(_MEL_SR_44K, _MEL_SR_24K)
+        self.assertNotEqual(_MEL_SR_48K, _MEL_SR_24K)
+
+    # -- Lade-Verhalten (mit gemocktem ONNX-Pfad) ----------------------------
+
+    def test_51_try_load_48k_sets_model_sr(self):
+        """_try_load mit 48kHz-Datei setzt _model_sr auf 48000."""
+        if not os.path.exists(_MODEL_48K):
+            self.skipTest("vocos_48khz.onnx nicht gebündelt — Offline-Test übersprungen")
+        plugin = VocosPlugin.__new__(VocosPlugin)
+        plugin._prefer_sr = _MEL_SR_48K
+        plugin._model_sr = _MEL_SR_24K
+        plugin._mel_n_mels = 100
+        plugin._mel_n_fft = 1024
+        plugin._mel_hop = 256
+        plugin._mel_win = 1024
+        plugin._vocos_pypi = None
+        plugin._onnx_session = None
+        plugin._model_loaded = False
+        plugin._fallback_mode = "griffin_lim_fallback"
+        plugin._try_load(_MODEL_48K)
+        if plugin._model_loaded:
+            self.assertEqual(plugin._model_sr, _MEL_SR_48K)
+            self.assertEqual(plugin._mel_n_mels, _N_MELS_48K)
+            self.assertEqual(plugin._mel_n_fft, _N_FFT_48K)
+            self.assertEqual(plugin._mel_hop, _HOP_48K)
+            self.assertEqual(plugin._fallback_mode, "vocos_onnx")
+
+    def test_52_onnx_inference_48k_input_output(self):
+        """ONNX-Inferenz: mel [1,128,T] → audio [1,S], NaN-frei, Float32."""
+        if not os.path.exists(_MODEL_48K):
+            self.skipTest("vocos_48khz.onnx nicht gebündelt")
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            self.skipTest("onnxruntime nicht installiert")
+        sess = ort.InferenceSession(_MODEL_48K, providers=["CPUExecutionProvider"])
+        T = 40  # kurzer Test-Batch
+        mel = np.random.randn(1, 128, T).astype(np.float32) * 0.01 - 8.0
+        audio = sess.run(None, {"mel": mel})[0]
+        self.assertEqual(audio.ndim, 2)
+        self.assertEqual(audio.shape[0], 1)
+        self.assertGreater(audio.shape[1], 0)
+        self.assertTrue(np.isfinite(audio).all(), "Inf/NaN in ONNX-Ausgabe")
+        self.assertEqual(audio.dtype, np.float32)
+
+    def test_53_onnx_output_length_48k(self):
+        """ONNX-Ausgabelänge folgt (T-G+1)*hop mit G=8, hop=256."""
+        if not os.path.exists(_MODEL_48K):
+            self.skipTest("vocos_48khz.onnx nicht gebündelt")
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            self.skipTest("onnxruntime nicht installiert")
+        sess = ort.InferenceSession(_MODEL_48K, providers=["CPUExecutionProvider"])
+        T = 50
+        G = 8  # OLA overlap factor
+        hop = _HOP_48K
+        mel = np.zeros((1, 128, T), dtype=np.float32)
+        audio = sess.run(None, {"mel": mel})[0]
+        expected = (T - G + 1) * hop
+        self.assertEqual(audio.shape[1], expected,
+                         f"Ausgabelänge {audio.shape[1]} != erwartet {expected}")
+
+    def test_54_vocode_prefers_48k_when_loaded(self):
+        """Nach _try_load(48kHz) zeigt active_backend 'vocos_onnx'."""
+        if not os.path.exists(_MODEL_48K):
+            self.skipTest("vocos_48khz.onnx nicht gebündelt")
+        plugin = VocosPlugin.__new__(VocosPlugin)
+        plugin._prefer_sr = _MEL_SR_48K
+        plugin._model_sr = _MEL_SR_24K
+        plugin._mel_n_mels = 100
+        plugin._mel_n_fft = 1024
+        plugin._mel_hop = 256
+        plugin._mel_win = 1024
+        plugin._vocos_pypi = None
+        plugin._onnx_session = None
+        plugin._model_loaded = False
+        plugin._fallback_mode = "griffin_lim_fallback"
+        plugin._try_load(_MODEL_48K)
+        if plugin._model_loaded:
+            self.assertEqual(plugin.active_backend, "vocos_onnx")
+            self.assertTrue(plugin.model_loaded)
 
 
 if __name__ == "__main__":

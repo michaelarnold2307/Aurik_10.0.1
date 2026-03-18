@@ -7,7 +7,7 @@ den besten wählen basierend auf objektiven Metriken.
 
 Architecture:
 1. ProcessingVariant - Beschreibt eine Processing-Strategie mit Parametern
-2. ObjectiveScorer - Bewertet Resultate via CDPAM, DNSMOS, Musical Goals
+2. ObjectiveScorer - Bewertet Resultate via VERSA, DNSMOS, Musical Goals
 3. MultiPassEngine - Führt Audio durch mehrere Varianten, wählt beste
 4. ConfidenceCalculator - Berechnet Confidence basierend auf variance
 
@@ -294,15 +294,15 @@ class ObjectiveScore:
     Objektive Quality Scores für ein verarbeitetes Audio.
 
     Kombiniert:
-    - CDPAM (Perceptual Similarity, <0.3 = sehr ähnlich zu Reference)
+    - VERSA (non-reference MOS, 1.0–5.0 Skala, §4.4)
     - DNSMOS (Speech Quality, 3.5-5.0 = sehr gut)
     - Musical Goals (0.0-1.0, >0.7 = excellent)
     - Signal Stats (SNR, THD, etc.)
     """
 
     # === Perceptual Metrics ===
-    cdpam_score: float = 0.0
-    """CDPAM Score (0.0-1.0, lower=better, <0.3=excellent)."""
+    versa_score: float = 0.0
+    """VERSA Score (normiert 0.0-1.0, höher=besser, §4.4)."""
 
     dnsmos_score: float = 0.0
     """DNSMOS P.835 (1.0-5.0, higher=better, >3.5=good)."""
@@ -329,8 +329,8 @@ class ObjectiveScore:
     iaqs_active: bool = False
     """True wenn IAQS tatsächlich berechnet (nicht Default-Wert)."""
 
-    cdpam_active: bool = False
-    """True wenn CDPAM tatsächlich berechnet (nicht Default-Wert)."""
+    versa_active: bool = False
+    """True wenn VERSA tatsächlich berechnet (nicht Default-Wert)."""
 
     dnsmos_active: bool = False
     """True wenn DNSMOS tatsächlich berechnet (nicht Default-Wert)."""
@@ -359,7 +359,7 @@ class ObjectiveScore:
             f"ObjectiveScore(variant='{self.variant_name}', "
             f"composite={self.composite_score:.3f}, "
             f"confidence={self.confidence:.2f}, "
-            f"CDPAM={self.cdpam_score:.3f}, "
+            f"VERSA={self.versa_score:.3f}, "
             f"DNSMOS={self.dnsmos_score:.2f}, "
             f"MG_avg={self.musical_goals_avg:.2f}, "
             f"SNR={self.snr_db:.1f}dB)"
@@ -371,33 +371,33 @@ class ObjectiveScorer:
     Bewertet Audio via objektive Metriken.
 
     Integriert:
-    - CDPAM Plugin (wenn availableund Reference vorhanden)
+    - VERSA Plugin (wenn verfügbar, §4.4)
     - DNSMOS Plugin (wenn available)
     - Musical Goals Checker
     - Enhanced Metrics (SNR, THD, etc.)
     """
 
-    def __init__(self, enable_cdpam: bool = True, enable_dnsmos: bool = False, enable_musical_goals: bool = True):
+    def __init__(self, enable_versa: bool = True, enable_dnsmos: bool = False, enable_musical_goals: bool = True):
         """
         Initialize ObjectiveScorer.
 
         Args:
-            enable_cdpam: Enable CDPAM scoring (requires reference)
+            enable_versa: Enable VERSA scoring (wenn Plugin verfügbar)
             enable_dnsmos: PERMANENT FALSE — DNSMOS P.835 ist auf Sprachkorpus trainiert
                            (16 kHz DNS-Challenge) und ist VERBOTEN als Musik-Metrik (§10.2).
                            Parameter bleibt aus Rückwärtskompatibilität erhalten, ist aber wirkungslos.
             enable_musical_goals: Enable Musical Goals scoring
         """
-        self.enable_cdpam = enable_cdpam
+        self.enable_versa = enable_versa
         self.enable_dnsmos = enable_dnsmos
         self.enable_musical_goals = enable_musical_goals
 
         # Try to import plugins (may fail if not installed)
-        # §4.4: VERSA 2024 ersetzt CDPAM als non-reference MOS-Metrik
+        # §4.4: VERSA 2024 ist primäre non-reference MOS-Metrik
         self.versa_plugin = None
         self.dnsmos_plugin = None
 
-        if enable_cdpam:
+        if enable_versa:
             try:
                 from plugins.versa_plugin import get_versa_plugin  # noqa: PLC0415
 
@@ -424,7 +424,7 @@ class ObjectiveScorer:
             audio: Processed audio array
             sample_rate: Sample rate
             variant_name: Name der Variante
-            reference_audio: Optional reference für CDPAM
+            reference_audio: Nicht genutzt (VERSA ist non-reference
             processing_time_sec: Processing time
 
         Returns:
@@ -432,8 +432,8 @@ class ObjectiveScorer:
         """
         score = ObjectiveScore(variant_name=variant_name, processing_time_sec=processing_time_sec)
 
-        # === 1. VERSA: non-reference MOS (§4.4 CDPAM-Nachfolger) ===
-        if self.enable_cdpam and self.versa_plugin is not None:
+        # === 1. VERSA: non-reference MOS (§4.4 VERSA §4.4) ===
+        if self.enable_versa and self.versa_plugin is not None:
             try:
                 import numpy as _np  # noqa: PLC0415
 
@@ -442,13 +442,13 @@ class ObjectiveScorer:
                     proc_arr = proc_arr.mean(axis=1)
                 proc_arr = _np.nan_to_num(proc_arr, nan=0.0, posinf=0.0, neginf=0.0)
                 versa_result = self.versa_plugin.score(proc_arr, sample_rate)
-                # MOS [1,5] → [0,1] skaliert (Feld heißt weiterhin cdpam_score für Compat)
-                score.cdpam_score = float(_np.clip((versa_result.mos - 1.0) / 4.0, 0.0, 1.0))
-                score.cdpam_active = True
+                # MOS [1,5] → [0,1] skaliert → versa_score (§4.4)
+                score.versa_score = float(_np.clip((versa_result.mos - 1.0) / 4.0, 0.0, 1.0))
+                score.versa_active = True
 
             except Exception as e:
                 logger.warning(f"VERSA scoring failed: {e}")
-                score.cdpam_score = 0.5  # Neutral default, cdpam_active bleibt False
+                score.versa_score = 0.5  # Neutral default, versa_active bleibt False
 
         # §10.2: DNSMOS-Berechnung deaktiviert — Sprach-Metrik verboten für Musikrestaurierung.
         # score.dnsmos_active bleibt False; score.dnsmos_score bleibt 0.0.
@@ -532,11 +532,11 @@ class ObjectiveScorer:
         - IAQS-Gesamt (immer): 35%
         - Musical Goals Average: 25%
         - DNSMOS (normalized, wenn aktiv): 20% — sonst 0%
-        - CDPAM (inverted, wenn aktiv): 10% — sonst 0%
+        - VERSA (normiert, wenn aktiv): 10% — sonst 0%
         - SNR (normalized): 7%
         - THD (inverted, normalized): 3%
 
-        Wenn DNSMOS/CDPAM deaktiviert: ihr Gewicht wird
+        Wenn DNSMOS/VERSA deaktiviert: ihr Gewicht wird
         anteilig auf IAQS und Musical Goals umverteilt,
         damit die Summe immer 100% ergibt.
 
@@ -548,15 +548,15 @@ class ObjectiveScorer:
         base_snr = 0.07
         base_thd = 0.03
         # §10.2: pool_dnsmos entfernt — DNSMOS P.835 verboten als Musik-Qualitätsmetrik
-        # Das ehemals 20%-Gewicht wird vollständig auf CDPAM-Pool (10%) und freie
+        # Das ehemals 20%-Gewicht wird vollständig auf VERSA-Pool (10%) und freie
         # Umverteilung (restliche 10%) aufgeteilt, damit die Summe 100% ergibt.
-        pool_cdpam = 0.30  # erhöht von 0.10 auf 0.30 (kompensiert entfallenes DNSMOS-Gewicht)
+        pool_versa = 0.30  # erhöht von 0.10 auf 0.30 (kompensiert entfallenes DNSMOS-Gewicht)
         pool_iaqs = base_iaqs  # Umverteilungspool wenn IAQS nicht aktiv
 
         # Nicht genutzte Pools umverteilen
         freed = 0.0
-        if not score.cdpam_active:
-            freed += pool_cdpam
+        if not score.versa_active:
+            freed += pool_versa
         if not score.iaqs_active:
             freed += pool_iaqs
 
@@ -577,10 +577,10 @@ class ObjectiveScorer:
 
         # §10.2: DNSMOS-Block entfernt — Sprach-Metrik verboten für Musikrestaurierung
 
-        # CDPAM (0.0-1.0, lower=better → invert) — nur wenn aktiv
-        if score.cdpam_active:
-            cdpam_norm = 1.0 - min(score.cdpam_score, 1.0)
-            composite += pool_cdpam * cdpam_norm
+        # VERSA (normiert 0.0–1.0, invert) — nur wenn aktiv
+        if score.versa_active:
+            versa_norm = 1.0 - min(score.versa_score, 1.0)
+            composite += pool_versa * versa_norm
 
         # SNR (typ. 10-40 dB → 0.0-1.0) — Gewicht inkl. umverteilter Anteile
         snr_norm = min(max((score.snr_db - 10.0) / 30.0, 0.0), 1.0)
@@ -698,7 +698,7 @@ class MultiPassEngine:
             audio: Input audio array
             sample_rate: Sample rate
             variants: Liste von ProcessingVarianten zu testen
-            reference_audio: Optional reference für CDPAM scoring
+            reference_audio: Nicht genutzt (VERSA ist non-reference scoring
             process_func: Custom processing function (audio, config) -> processed_audio
                          Falls None, wird UnifiedRestorerV3 verwendet
 

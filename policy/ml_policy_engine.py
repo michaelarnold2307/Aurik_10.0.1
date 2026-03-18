@@ -370,11 +370,11 @@ class MLModelPolicyEngine:
             goal: Pitch detection-Ziel
 
         Returns:
-            Plugin-Name: 'crepe' (monophonic pitch tracking)
+            Plugin-Name: 'fcpe' (monophonic pitch tracking, primary)
         """
         model_size = goal.get("model_size", "large")
-        self.logger.info(f"Pitch Detection → CREPE ({model_size} model)")
-        return "crepe"
+        self.logger.info(f"Pitch Detection → FCPE ({model_size} model, CREPE/RMVPE fallback)")
+        return "fcpe"
 
     def select_medium_specific_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
         """
@@ -505,16 +505,6 @@ class MLModelPolicyEngine:
         """
         self.logger.info("Super-Resolution → AudioSR (Diffusion-basiert, 48kHz)")
         return "audiosr"
-
-    def select_mastering_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:  # noqa: F811
-        """
-        Wählt bestes Mastering-Modell.
-
-        Returns:
-            'matchering' - Aktuell nur ein SOTA-Modell verfügbar
-        """
-        self.logger.info("Mastering → Matchering 2.0")
-        return "matchering"
 
     def select_quality_metrics(self, context: Dict[str, Any], goal: Dict[str, Any]) -> list:
         """

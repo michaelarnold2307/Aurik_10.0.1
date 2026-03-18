@@ -4,7 +4,9 @@
 > kontextbewusstes Musik- und Gesangs-Restaurations-, Reparatur- und
 > Rekonstruktions-Denkersystem.* Stand: März 2026 — Version **9.10.57**
 >
-> Aktuelle Testzahl: **7747+** (alle grün)
+> Aktuelle Testzahl: **~7750+ Pytest-IDs** (inkl. parametrisierter Tests; `def test_`-Funktionen ≈ 7252; alle grün)
+>
+> Stand: 18. März 2026 — Vocos 48 kHz nativ bevorzugt (§2.37); laion_clap ONNX-Format; Hybrid-Release-Mode RELEASE_MUST.
 >
 > **§2.36 `LyricsGuidedEnhancement`** ist ab Version **9.10.x Pflicht** (bisher v10.0-Label entfernt).
 
@@ -29,7 +31,36 @@ Die vollständige normative Spezifikation ist in 8 Spec-Dateien aufgeteilt:
 
 ---
 
-## Projektgrenzen (bindend, keine Ausnahmen)
+## Normative Priorisierung (P1-1 MUST/TARGET-Split)
+
+Diese Datei verwendet ab sofort zwei Verbindlichkeitsstufen:
+
+- `[RELEASE_MUST]`: Harte Release-Bedingung. CI-Gates dürfen bei Verstoß **nicht** skippen.
+- `[TARGET_2026]`: Strategisches Zielniveau für 2026, darf als Roadmap laufen, blockiert Release nur wenn separat als Gate definiert.
+
+Standardregel für diese Datei:
+
+- Aussagen mit "Pflicht", "bindend", "keine Ausnahmen", "verboten" sind `[RELEASE_MUST]`.
+- Aussagen mit "Studio 2026", "Weltklasse", "Leadership" sind `[TARGET_2026]`, sofern nicht zusätzlich als Pflicht-Gate markiert.
+
+Gate-zuordnung (aktuell implementierte CI-Guards):
+
+| Bereich | Einstufung | Test-ID / Gate |
+|---|---|---|
+| Docker-/Offline-Produktionspfade | `[RELEASE_MUST]` | `tests/normative/test_no_docker_in_production_paths.py` |
+| Wettbewerber-Gate (nicht skippbar) | `[RELEASE_MUST]` | `tests/normative/test_competitive_ci_gate.py` |
+| Performance-Budget-Konfigurationsinvarianten | `[RELEASE_MUST]` | `tests/normative/test_performance_budget_ci_gate.py` |
+| 14-Goal-Adaptive-Anbindung in UV3 | `[RELEASE_MUST]` | `tests/unit/test_unified_restorer_v3.py` (`test_44`/`test_45`) |
+| Structured Fail Reasons in `RestorationResult.metadata` | `[RELEASE_MUST]` | `tests/unit/test_unified_restorer_v3.py` (`test_46`-`test_51`) |
+| Memory-Budget `try_allocate()` für alle ML-Plugins | `[RELEASE_MUST]` | `ml_memory_budget.try_allocate()` aus `backend/core/ml_memory_budget.py` vor jedem Modell-Laden — **nicht** `PluginLifecycleManager.try_allocate()` (existiert nicht!) — alle 5 bisher untracked plugins seit 2026-03-17 vollständig implementiert |
+| Heavy-Tests isoliert (ML/slow kein Standard-Run) | `[RELEASE_MUST]` | `conftest.py` auto-markiert `ml/slow`; Freigabe nur mit `--run-heavy-tests` |
+| AMRB-Seeding-Invariante (deterministisch, MD5) | `[RELEASE_MUST]` | `benchmarks/musical_restoration_benchmark.py` `item_seed` via `_sid_offset(sid)` (MD5-basiert, kein `hash(sid)`) |
+| Hybrid-Release-Mode (release_mode + all_runtime_ready) | `[RELEASE_MUST]` | `tests/normative/test_hybrid_release_mode.py` — 14 Tests; prüft `release_mode` (primary\|fallback\|blocked) + Fallback-Kaskaden |
+| OQS ≥ 88 / Weltklasse-Ziele | `[TARGET_2026]` | Roadmap/Benchmark-Ziel, kein harter Release-Blocker |
+
+---
+
+## [RELEASE_MUST] Projektgrenzen (bindend, keine Ausnahmen)
 
 - **Reine Desktop-App** für Linux (AppImage) und Windows 10/11 (.exe)
 - **Kein Cloud, kein Server, kein Docker, kein `pip install`** für Endnutzer
@@ -40,7 +71,7 @@ Die vollständige normative Spezifikation ist in 8 Spec-Dateien aufgeteilt:
 
 ---
 
-## 14 Musical Goals (Pflicht-Schwellwerte)
+## [RELEASE_MUST] 14 Musical Goals (Pflicht-Schwellwerte)
 
 | Ziel | Klasse | Min. | Studio 2026 |
 |---|---|---|---|
@@ -85,7 +116,7 @@ assert all(scores[g] >= t for g, t in checker.thresholds.items()), scores
 
 ---
 
-## Qualitätsmessung & Metriken-System (§8.1 — PFLICHT)
+## [RELEASE_MUST] Qualitätsmessung & Metriken-System (§8.1 — PFLICHT)
 
 ### PQS-Metriken (`core/perceptual_quality_scorer.py`)
 
@@ -93,10 +124,12 @@ Copilot prüft **alle vier PQS-Metriken** — nie nur MOS allein:
 
 | Metrik | Hard-Fail-Minimum | Weltklasse-Ziel |
 |---|---|---|
-| PQS MOS | ≥ 3.8 (generell) / ≥ 4.5 (Studio 2026) | ≥ 4.5 |
+| PQS MOS | ≥ 3.8 (generell) / ≥ 4.5 (Studio 2026, nur `cd_digital`/`dat`/`mp3_high`/`aac`) | ≥ 4.5 (nur digitale Quellen, sonst §6.2 material-adaptiv) |
 | PQS NSIM | ≥ 0.70 | ≥ 0.90 |
 | MCD (dB) | ≤ 8.0 | ≤ 3.0 |
 | Spectral Coherence | ≥ 0.60 | ≥ 0.85 |
+
+> **Material-Kontext (zwingend beachten):** MOS ≥ 4.5 gilt **NUR** für digitale Hochqualitäts-Quellen (`cd_digital`, `dat`, `mp3_high`, `aac`). Für alle anderen Materialien gelten die material-spezifischen Erwartungen aus §6.2 (z. B. Shellac ≥ 3.8, Vinyl ≥ 4.0, Tape ≥ 4.2). Jede MOS-Assertion muss das Material kennen — `assert mos >= 4.5` ohne Materialkontext ist ein Programmierfehler.
 
 ### Normative `quality_estimate`-Formel
 
@@ -108,7 +141,7 @@ quality_estimate = max(0.0, min(1.0, quality_estimate))
 # E2E-Pflicht: result.quality_estimate >= 0.55 nach erfolgreicher Restaurierung
 ```
 
-### OQS-Stufentabelle — Implementierungs-Gate (§8.1.1)
+### [RELEASE_MUST] OQS-Stufentabelle — Implementierungs-Gate (§8.1.1)
 
 > OQS = `core/mushra_evaluator.py` (algorithmische PEAQ-Approximation — **kein** ITU-R-MUSHRA).
 > In externen Berichten stets „OQS (algorithmisch)" schreiben.
@@ -119,9 +152,9 @@ quality_estimate = max(0.0, min(1.0, quality_estimate))
 | Good (B) | ≥ 80 | **Pflicht für jede neue Phase / Plugin** |
 | Fair (C) | ≥ 60 | — |
 
-**Studio-2026-Ziel**: OQS ≥ 88. Eine neue Phase/Plugin darf nur eingecheckt werden, wenn sie OQS ≥ 80 auf mindestens einem AMRB-Szenario erreicht.
+**[TARGET_2026] Studio-2026-Ziel**: OQS ≥ 88. Eine neue Phase/Plugin darf nur eingecheckt werden, wenn sie OQS ≥ 80 auf mindestens einem AMRB-Szenario erreicht.
 
-### AMRB v1.0 — Aurik Musical Restoration Benchmark (§8.1.2)
+### [RELEASE_MUST] AMRB v1.0 — Aurik Musical Restoration Benchmark (§8.1.2)
 
 | Szenario | Defekt | Pflicht-Score |
 |---|---|---|
@@ -136,7 +169,7 @@ quality_estimate = max(0.0, min(1.0, quality_estimate))
 | AMRB-09-DROPOUT | Tape-Dropout 50–200 ms | OQS ≥ 80 |
 | AMRB-10-COMPOSITE | Kombinierte Degradierung | OQS ≥ 80 |
 
-**Leadership-Schwelle**: Gesamt-Score ≥ **84.0** UND ≥ 8/10 Szenarien bestanden.
+**[TARGET_2026] Leadership-Schwelle**: Gesamt-Score ≥ **84.0** UND ≥ 8/10 Szenarien bestanden.
 
 ```python
 from benchmarks.musical_restoration_benchmark import run_benchmark, BenchmarkConfig
@@ -144,7 +177,15 @@ report = run_benchmark(config)
 assert report.passes_os_leadership_threshold(), f"Score: {report.overall_score}"
 ```
 
-**Kompetitiver Benchmark**: Aurik ≥ iZotope RX 11 in ≥ 7/10 AMRB-Szenarien.
+**[RELEASE_MUST] Kompetitiver Benchmark**: Aurik ≥ iZotope RX 11 in ≥ 7/10 AMRB-Szenarien.
+
+> **Competitive-Gate-Baseline**: Ziel-Key `iZotope RX 11 (commercial)` (Baseline OQS 71.0 auf AMRB).
+> RX 10-Key bleibt als Legacy-Alias im `amrb_baselines`-Set.
+> Nightly runs: `n_items ≥ 5` für statistische Robustheit.
+
+**[RELEASE_MUST] AMRB-Seeding-Invariante**: Jedes AMRB-Item erhält einen deterministischen Seed via
+`_sid_offset(sid)` (MD5-basierter Offset) — **kein** `hash(sid)` (prozessabhängige Hash-Randomization ohne `PYTHONHASHSEED`).
+ Reproduzierbarkeit Pflicht: selbe SID liefert stets identes synthetisches Testsignal.
 
 ---
 
@@ -185,7 +226,11 @@ TDP (HPSS-Trennung)  ← NACH DCOffsetPreRemoval (IIR-Hochpass 5 Hz vor jeder FF
 → GoalApplicabilityFilter              ← inapplicable Goals deaktivieren (§2.32)
 → AdaptiveGoalThresholds               ← Schwellwerte skalieren (§2.31)
 → DefectScanner (29 DefectType-Werte)  ← inkl. WOW/FLUTTER getrennt (IEC 60386) + AZIMUTH_ERROR
-→ CausalDefectReasoner (14 Kausal-Ursachen)
+→ CausalDefectReasoner (14 Kausal-Ursachen):
+    tape_dropout | tape_hiss | vinyl_crackle | vinyl_warp
+    electrical_hum | head_misalignment | dc_offset | digital_clip
+    soft_saturation | head_wear | print_through
+    riaa_curve_error | aliasing | bias_error
 → UncertaintyQuantifier
 → GPParameterOptimizer.propose_pareto() [MOO, 14 Objectives]
     Loss-Funktion (bindend): Mel-Spectral Loss + Multi-Scale STFT Loss (3 Auflösungen)
@@ -332,6 +377,7 @@ PRIORITY_MAP = {
     "spatial_depth":         5,   # best-effort
 }
 ABORT_PRIORITY_THRESHOLD: int = 2  # Priority 1+2 verschlechtert → Iteration abbrechen
+REGRESSION_EPSILON: float = 0.001  # Mindest-Δ für signifikante Verschlechterung
 
 # In FeedbackChain.run():
 gpp = GoalPriorityProtocol()
@@ -350,6 +396,7 @@ conflict_result = gpp.resolve_conflict(goal_a, goal_b, delta_a, delta_b)
 | Anwendungsfall | Primär (Plugin) | Fallback 1 | DSP-Fallback | Verboten |
 |---|---|---|---|---|
 | Breitrauschen | DeepFilterNet v3.II ONNX (`deepfilternet_v3_ii_plugin`, 3 Sessions) | — | OMLSA/IMCRA | ~~Wiener 1984~~ |
+| Vinyl-Crackle-Entfernung | BANQUET ONNX (`banquet_vinyl_plugin`) | — | Spektral-Decrackler DSP | — |
 | Stem-Separation Gesang | MelBandRoformer ONNX (`bs_roformer_plugin`, 860 MB) | HTDemucs ONNX (`htdemucs_plugin`) → MDX23C Kim_Vocal_2 ONNX | HPSS + NMF-β | — |
 | Stem-Separation Instrumental | HTDemucs ONNX (`htdemucs_plugin`) | MDX23C Kim_Inst ONNX (`mdx23c_plugin`) → UVR MDX-Net Ensemble (`uvr_mdxnet_plugin`, 4 ONNX) | HPSS DSP | — |
 | Dropout (< 50 ms) | NMF-β + Sinusoidal | Consistent Wiener | Consistent Wiener | ~~Yule-Walker~~ |
@@ -358,19 +405,32 @@ conflict_result = gpp.resolve_conflict(goal_a, goal_b, delta_a, delta_b)
 | Bandbreiten-Erweiterung | AudioSR ONNX (`audiosr_plugin`, 5,9 GB, lazy) | Sinusoidal + Stochastic Modeling | EraAuthenticPerceptualCompletion DSP | ~~Harmonics-EQ~~ |
 | Codec-Artefakte | Apollo TorchScript (`apollo_plugin`) | Resemble-Enhance ONNX (`resemble_enhance_plugin`) | Spectral Repair DSP | ~~EQ-Anhebung~~ |
 | Reference Mastering (Studio 2026) | Matchering 2.0.6 (`matchering_plugin`) | Mid/Side STFT-Matching DSP | — | — |
-| Pitch-Tracking | RMVPE ONNX (`rmvpe_plugin`) | CREPE ONNX (`crepe_plugin`) → FCPE ONNX (`fcpe_plugin`) | PESTO → pYIN | ~~YIN~~ |
-> **PESTO** (Riou et al. ISMIR 2023): Chromagramm-basiertes Pitch-Tracking, 40× schneller als pYIN bei vergleichbarer Genauigkeit. Als letzter DSP-Fallback einsetzbar (`dsp/pesto_pitch.py`). VERBOTEN als Primär-Tracker (RMVPE-Genauigkeit überlegen).
+| Pitch-Tracking | FCPE ONNX (`fcpe_plugin`) | CREPE ONNX (`crepe_plugin`) → RMVPE ONNX (`rmvpe_plugin`, nur wenn stabil verifiziert) | PESTO → pYIN | ~~YIN~~ |
+> **PESTO** (Riou et al. ISMIR 2023): Chromagramm-basiertes Pitch-Tracking, 40× schneller als pYIN bei vergleichbarer Genauigkeit. Als letzter DSP-Fallback einsetzbar (`dsp/pesto_pitch.py`). VERBOTEN als Primär-Tracker (FCPE-/RMVPE-Genauigkeit überlegen).
 | **Polyphoner Pitch** | BasicPitch ONNX (`basicpitch_plugin`) | Spektrale Peak-Verfolgung | Spektrale Peak-Verfolgung | ~~CREPE mono für Polyphonie~~ |
 | Phasen-Rekonstruktion | PGHI | Griffin-Lim+ ≥ 32 It. | Griffin-Lim+ ≥ 32 It. | ~~ISTFT direkt~~ |
-| Vocoder (MOS < 4.3) | Vocos 44.1 kHz ONNX (`vocos_plugin`) | BigVGAN v2 (`bigvgan_v2_plugin`) | HiFi-GAN | ~~Griffin-Lim~~ |
+| Vocoder (MOS < 4.3) | Vocos ONNX (`vocos_plugin`) — **48 kHz nativ** bevorzugt (`models/vocos_48khz/vocos_48khz.onnx`, kein Resampling), sonst 44.1 kHz (`vocos_mel_spec_44khz.onnx`), sonst 24 kHz (`vocos_mel_spec_24khz.onnx`, Release-Bundle) | BigVGAN v2 (`bigvgan_v2_plugin`) | HiFi-GAN | ~~Griffin-Lim~~ |
 | Audio-Klassifikation / Tagging | BEATs iter3 ONNX (`beats_plugin`) | PANNs ONNX (`panns_plugin`) | Spectral Features | — |
-| Vocal Enhancement / Dereverb | SGMSE+ ONNX (`sgmse_plugin`) | Resemble-Enhance ONNX (`resemble_enhance_plugin`) | WPE DSP | — |
+| Vocal Enhancement / Dereverb | SGMSE+ ONNX (`sgmse_plugin`) | SGMSE+ TorchScript (`models/sgmse_plus/sgmse_plus.ts`) → Resemble-Enhance ONNX (`resemble_enhance_plugin`) | WPE DSP | — |
 | MOS-Bewertung Musik | VERSA ONNX (`versa_plugin`) → SingMOS (Gesang, PANNs Vocals ≥ 0.5) → PQS-Gammatone | PEAQ | PEAQ | ~~PESQ/DNSMOS/NISQA/CDPAM~~ |
 | **MOS mit Referenz** | ViSQOL v3 (`--audio` PFLICHT) | PQS-DSP | PQS-DSP | ~~ViSQOL --speech~~ |
 | Formant-Tracking | **DeepFormants CNN** ONNX (`deepformants_plugin`, ML-Primär) + `SingersFormantEnhancer` (2,5–3,5 kHz) | `FormantSystem` (LPC Ord. **30–40 bei 48 kHz-SR**, F1–F5; alternativ: Downsampling 16 kHz → Ord. 16 → Upsampling) | Bell-EQ @ 1,5 kHz | ~~LPC < 16~~ / ~~pYIN als Formant-Schätzer~~ |
 | De-Essing / Sibilanten | Gender-adaptiv + `_estimate_breathiness()` Guard | Split-Band-Envelope | Split-Band-Envelope | ~~fester `strength_cap` ohne Breathiness-Check~~ |
+| Sprach-/Voice-Activity-Detection | Silero VAD ONNX (`silero_plugin`, ≈1 MB) | Energie-Schwellwert | Energie-Schwellwert | ~~harte Stille-Detektion~~ |
+| MOS-Verifikation Gesang | UTMOS ONNX (`utmos_plugin`, ≥18 MB) → SingMOS | VERSA → PQS-Gammatone | PQS-Gammatone | ~~PESQ/NISQA~~ |
+| Semantisches Retrieval / Tagging (Zero-Shot) | LAION-CLAP ONNX (`laion_clap_plugin`) | BEATs → PANNs | Spectral Features | — |
+| GAN-Inpainting (Lücken ≥ 200 ms, Backup) | gacela TorchScript (`gacela_plugin`, ≈200 MB) | CQTdiff+ → DiffWave | NMF-β + Sinusoidal | — |
 **ABSOLUT VERBOTEN** als Musikmetrik: `PESQ`, `DNSMOS`, `NISQA`, `STOI`, `ViSQOL --speech`, `CDPAM` (ersetzt durch VERSA §4.4)
 **ABSOLUT VERBOTEN** als Enhancement-Plugin: ~~`dccrn_plugin`~~, ~~`fullsubnet_plus_plugin`~~ (ersetzt durch `mp_senet_plugin` §4.4)
+
+### [RELEASE_MUST] Hybrid-Release-Mode für Kernmodelle (März 2026)
+
+- Kernbetrieb darf im Release auf **Primary-or-Fallback** laufen, wenn Primärartefakte export-technisch blockiert sind und Runtime-Readiness `all_runtime_ready=true` bleibt.
+- Für `sgmse_plus` ist die zulässige Kaskade: `sgmse_plus.ts` → `wpe_dsp_fallback` (kein ONNX-Export-Zwang).
+- Für `versa` ist bis zur Primärbereitstellung `pqs_dsp_fallback` zulässig.
+- Für `flow_matching` ist bis zur Primärbereitstellung `cqtdiff_or_diffwave_fallback` zulässig.
+- Statusskripte müssen `release_mode` (`primary|fallback|blocked`) ausgeben und in JSON mitführen.
+- Quarantänisierte Crash-Kandidaten (z. B. RMVPE) dürfen nicht als Primärpfad registriert werden.
 
 Vollständige Matrix: `.github/specs/04_dsp_standards.md`
 
@@ -483,7 +543,7 @@ def classify_clipping(audio: np.ndarray, sr: int) -> ClippingType:
 ```
 1. GenderDetector.detect() → VoiceCharacteristics (F₀, Formanten, Breathiness)
 2. SGMSE+ (Dereverb/Denoising) VOR VocalAIEnhancement
-3. RMVPE → CREPE → FCPE → pYIN (Pitch-Tracking Kaskade)
+3. FCPE → CREPE → RMVPE (nur wenn stabil verifiziert) → pYIN (Pitch-Tracking Kaskade)
 4. FormantTracker (LPC Ord. **30–40 bei 48 kHz-SR**, F1–F5) — Invariante: Pearson(F1_before, F1_after) ≥ 0.95
    (Faustregel: Ord. ≈ SR[kHz] × 2 + 4 = 100; Kompromiss 30–40 ausreichend für F1–F5.
     Alternativ: Downsampling auf 16 kHz vor LPC-Analyse → Ord. 16 korrekt → Upsampling nach Analyse.)
@@ -605,12 +665,16 @@ enhanced, report = self.breath_intelligence.process(audio, sr)
 □ GrooveMetric: DTW ≤ 8 ms RMS (kein Timing-Flattening)
 □ SOFT_SATURATION: wird nicht als CLIPPING detektiert
 □ DSP-Fallback für jeden optionalen ML-Import (try/except ImportError)
-□ models/manifest.json: sha256 + bundled_path + fallback bei neuen Modellen
+□ `ml_memory_budget.try_allocate(name, size_gb)` aus `backend/core/ml_memory_budget` vor jedem ML-Modell-Laden — Budget-Überschreitung → `return None` + DSP-Fallback (KEIN `plm.try_allocate()` — existiert nicht)
+□ `ml_memory_budget.release(name)` in allen Fehler-Paths nach fehlgeschlagenem Load
+□ `PluginLifecycleManager.register(name, size_gb, unload_fn)` unmittelbar nach erfolgreichem Modell-Laden (LRU-Tracking)
+□ models/manifest.json: sha256 + bundled_path + size_gb + fallback bei neuen Modellen
+□ Tests als `ml` / `slow` markieren wenn Timeout ≥ 30 s oder Heavy-ML — blockiert nicht Standard-Suite
 □ OQS ≥ 80 auf mindestens einem AMRB-Szenario nachweisbar
 □ quality_estimate ≥ 0.55 im E2E-Test (result.quality_estimate-Assertion)
 □ goal_applicability in RestorationResult gespeichert (GoalApplicabilityFilter-Ergebnis)
 □ CHANGELOG.md Eintrag
-□ Alle bestehenden Tests weiterhin grün (aktuell 7747+)
+□ Alle bestehenden Tests weiterhin grün (aktuell ~7750+ Pytest-IDs)
 ```
 
 ---
@@ -641,6 +705,144 @@ enhanced, report = self.breath_intelligence.process(audio, sr)
 - Alle ONNX-Sessions: `providers=["CPUExecutionProvider"]`
 - Torch-Modelle: `model.to("cpu")`; `torch.set_num_threads(os.cpu_count())`
 - MERT (3,9 GB) / AudioSR (5,9 GB): nur Lazy-Load bei Bedarf
+
+### [RELEASE_MUST] PerformanceGuard — 3×-Echtzeit-Limit (Hardened 2026-03-17)
+
+```python
+# Bindend für alle Modi — pipeline_budget_seconds = audio_duration_s × limit_factor:
+LIMIT_BALANCED: float = 3.0   # 3× Echtzeit  ← härteste Grenze (Standard-Modus)
+LIMIT_QUALITY:  float = 5.0   # 5× Echtzeit
+LIMIT_MAXIMUM:  float = 8.0   # 8× Echtzeit
+
+# RT3_EXCELLENCE_BUDGET = 3.0  (Benchmark-Gate-Referenz)
+# Überschreitung → laufende Phase abbrechen + DSP-Fallback aktivieren; kein Silence-Padding
+# Zeitmessung: time.perf_counter() um jeden ONNX-Call und jede Phase-Ausführung
+```
+
+### [RELEASE_MUST] `ml_memory_budget` — Zentrale OOM-Schutzschicht (Schicht 1)
+
+`backend/core/ml_memory_budget.py` ist die **primäre** OOM-Präventionsschicht. Jeder ML-Modell-Lader ruft `try_allocate()` auf, BEVOR ein `InferenceSession`/`torch.load()` ausgeführt wird.
+
+```python
+from backend.core.ml_memory_budget import try_allocate, release as _ml_release
+
+# Auto-Budget auf 32 GB System: max(4.0, min(12.0, 32/3)) = 10.7 GB → auf 12 GB gekappt
+# Auf 16 GB System: 5.3 GB | Auf 64 GB System: 12 GB (Cap-Grenze)
+# Budget-Status abrufen:
+from backend.core.ml_memory_budget import get_status
+logger.debug("ML-Budget: %s", get_status())
+
+# Budget zur Laufzeit überschreiben (AppImage-Start oder Test-Setup):
+from backend.core.ml_memory_budget import set_budget
+set_budget(8.0)   # z.B. für 16-GB-Systeme
+```
+
+**Zusammenspiel beider Schichten (normativ):**
+`try_allocate()` prüft zuerst logisches Budget, dann physisches RAM via `_preflight_system_memory()`.
+Wenn physisches RAM knapp ist, ruft `_preflight_system_memory()` intern `evict_stale_plugins()` vom PLM auf.
+Nur wenn danach noch genügend RAM frei ist, wird das Budget reserviert.
+Dadurch koordinieren Schicht 1 + Schicht 2 automatisch — kein manuelles Evict-Triggern nötig.
+
+> **Warnung `psutil`-Ausfall**: Fehlt `psutil`, sind physische RAM-Checks in BEIDEN Schichten deaktiviert
+> (`_ram_percent()` → 0.0 / `_available_memory_mb()` → `float("inf")`). Das logische Budget bleibt aktiv,
+> aber der physische Schutz fällt weg. `psutil` MUSS im AppImage gebündelt sein.
+
+### §2.37 CPU-Aware Pipeline Scheduling (Ryzen 7 / 32 GB RAM) [TARGET_2026]
+
+```python
+import os, torch, onnxruntime as ort
+
+# Ryzen 7 (8C/16T Hyperthreading) — optimale Thread-Konfiguration:
+N_CORES = os.cpu_count()            # 16 logische Threads (Ryzen 7 5700X/5800X etc.)
+torch.set_num_threads(N_CORES)      # alle Kerne für PyTorch IntraOp
+torch.set_num_interop_threads(4)    # InterOp-Parallelität (ONNX+Torch gleichzeitig)
+
+# ONNX-Runtime SessionOptions (Pflicht für alle neuen ONNX-Sessions):
+def make_session_options() -> ort.SessionOptions:
+    opts = ort.SessionOptions()
+    opts.intra_op_num_threads = N_CORES       # Intra-Operator-Parallelität
+    opts.inter_op_num_threads = 4             # Inter-Operator-Parallelität
+    opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    return opts
+
+# AVX2-freundliche FFT-Größen (Ryzen 7 L2-Cache 512 kB/Kern, L3 32 MB gesamt):
+# MRSA sub_bass win=65536 → 512 kB Complex-Buffer (float32) → passt in L3
+# Bei Speicherdruck (< 2 GB frei): win=32768, hop=8192 als Fallback
+# VERBOTEN: win > 131072 ohne vorherige PLM-Speicherfreigabe
+
+# Umgebungsvariablen (vor Prozessstart via AppImage-Launcher setzen):
+# OMP_NUM_THREADS=16  OPENBLAS_NUM_THREADS=16  MKL_NUM_THREADS=16
+
+# Tier-2–4 Parallelisierung (EraClassifier + GermanSchlagerClassifier + MediumClassifier):
+# ThreadPoolExecutor(max_workers=3) — ONNX gibt GIL frei → echte Parallelität auf Ryzen 7
+# Merge: np.mean() NUR bei gleicher Frequenzzone (nie Cross-Kanal)
+```
+
+**RAM-Budget-Tabelle (32 GB System, Aurik-Prozess gesamt ≤ 24 GB):**
+
+| Kategorie | Budget |
+|---|---|
+| Audio-Buffer (4× 60 min @ 48 kHz float32, stereo) | ≤ 4,4 GB |
+| ONNX-Kern-Plugins aktiv gleichzeitig | ≤ 6 GB |
+| Große Lazy-Plugins (MERT 3,9 GB, AudioSR 5,9 GB) | je nur bei Bedarf |
+| PyTorch-Modelle (HTDemucs 0,5 GB, MelBandRoformer 0,9 GB etc.) | ≤ 4 GB |
+| ONNX-Runtime-Session-Overhead (je Session ≈ 50–200 MB) | ≤ 2 GB |
+| System-Reserve | ≥ 8 GB |
+
+**Zweischichtiges OOM-Schutzsystem (beide Schichten Pflicht):**
+
+| Schicht | Modul | Zweck |
+|---|---|---|
+| **Logisch** | `backend/core/ml_memory_budget.py` | Zentrale Budget-Obergrenze (Auto-Detect: RAM/3, Cap [4–12 GB]); blockiert Load wenn Budget erschöpft |
+| **Physisch** | `backend/core/plugin_lifecycle_manager.py` | LRU-Eviction bei >82% RAM; Monitoring-Thread alle 10s; entlädt LRU-Plugins |
+
+> **`psutil`-Pflicht**: Ohne `psutil` ist der physische RAM-Schutz beider Schichten deaktiviert. `psutil` muss im AppImage gebündelt sein.
+
+```python
+# -----------------------------------------------------------------------
+# SCHICHT 1: Logisches Budget-Gate — VOR jedem ML-Modell-Laden (PFLICHT)
+# -----------------------------------------------------------------------
+from backend.core.ml_memory_budget import try_allocate, release as _ml_release
+
+# KORREKT: aus ml_memory_budget importieren
+if not try_allocate("MeinPlugin", size_gb=0.10):
+    logger.warning("ML-Budget erschöpft — DSP-Fallback aktiv.")
+    return None   # DSP-Fallback aktivieren
+
+try:
+    session = ort.InferenceSession(model_path, sess_options=make_session_options(),
+                                   providers=["CPUExecutionProvider"])
+except Exception:
+    _ml_release("MeinPlugin")   # Budget zurückgeben bei Ladefehler
+    raise
+
+# -----------------------------------------------------------------------
+# SCHICHT 2: PLM-Registrierung — für LRU-Tracking nach erfolgreichem Load
+# -----------------------------------------------------------------------
+from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager
+
+plm = get_plugin_lifecycle_manager()
+plm.register("MeinPlugin", size_gb=0.10, unload_fn=lambda: session.__del__())
+
+# VERBOTEN: plm.try_allocate() — Methode existiert nicht! → AttributeError
+# VERBOTEN: try_allocate() überspringen und direkt ort.InferenceSession() aufrufen
+
+# PLM-Konfiguration (Invarianten):
+# RAM-Trigger: 82 % Systemauslastung → LRU-Eviction bis < 70 % oder min. 1,5 GB frei
+# Monitoring-Thread alle 10 s; set_active(name, True) schützt Plugin vor Eviction
+# ml_memory_budget Auto-Budget: RAM/3, Cap [4–12 GB] → auf 32 GB ≈ 10,7 GB (Cap: 12 GB)
+```
+
+**Vormals untracked — ✅ RESOLVED 2026-03-17 (alle Plugins haben `try_allocate` + `register`):**
+
+| Plugin | Modell | Größe | Status |
+|---|---|---|---|
+| `apollo_plugin` | `apollo_model.pt` (TorchScript) | ≈ 0,08 GB | ✅ `try_allocate` + `register_plugin` |
+| `artifact_detection_plugin` | Custom TorchScript | ≈ 0,04 GB | ✅ `try_allocate` + `register_plugin` |
+| `cqtdiff_plus_plugin` | `score_network.pt` | ≈ 0,06 GB | ✅ `try_allocate` + `register_plugin` |
+| `flow_matching_plugin` | Flow-Matching ONNX | ≈ 0,50 GB | ✅ Orchestrator — delegiert an Sub-Plugins |
+| `gacela_plugin` | GAN-Checkpoint `01_400000.pt` | ≈ 0,20 GB | ✅ `try_allocate` + `register_plugin` |
 
 ---
 
@@ -959,8 +1161,6 @@ Nach `_open_file` starten 4 nicht-blockierende Daemon-Threads in Reihe:
 
 ---
 
----
-
 ## §2.36 LyricsGuidedEnhancement (ab 9.10.x — PFLICHT)
 
 ```python
@@ -988,7 +1188,9 @@ COLOR_MAP = {
 ```
 
 **Ablauf:** Transkription (Whisper-Tiny → Wort-Timestamps)
-→ Phonem-Alignment **[Pflicht]**: `wav2vec2_forced_alignment` ONNX (125 MB, CPUExecutionProvider)
+→ Phonem-Alignment **[Pflicht]**: `wav2vec2_forced_alignment` ONNX
+     Modell: `models/wav2vec2/wav2vec2_forced_alignment.onnx` (125 MB, CPUExecutionProvider)
+     Latenz-Budget: ≤ 8 s pro Minute Audio (Ryzen 7 @ 16 Threads)
      Fallback: Energie-Schwellwert-Segmentierung (DSP) + Phonem-Prior aus Whisper-Token-IDs
 → Timeline-Segmentierung nach Phonemklassen (vowel_stressed / fricative / plosive / silence)
 → ContentAwareProcessor hebt pro Phonemklasse die Gate-Toleranz an (SALIENCY_BOOST).
@@ -997,32 +1199,59 @@ betonte Silben besonders geschützt — die häufigste Ursache für "verwaschene
 
 ---
 
-## ML-Plugin-Status (verifiziert, April 2026)
+## ML-Plugin-Status (verifiziert, März 2026)
 
 | Plugin | Modell | Format | Status | Aufgabe |
 |---|---|---|---|---|
 | `apollo_plugin` | `models/apollo/apollo_model.pt` | TorchScript | ✅ ML aktiv | Codec-Artefakt-Entfernung |
 | `bs_roformer_plugin` | `models/melbandroformer/melbandroformer_optimized.onnx` | ONNX (860 MB) | ✅ ML aktiv | Stem-Separation Gesang (Primär); **Modell-SR 44,1 kHz**: 48k→44,1k→48k Resampling (Lanczos-4, SNR-Budget ≈ −0,8 dB) — bei Bedarf 48k-natives Modell bevorzugen |
-| `mdx23c_plugin` | `models/mdx23c/Kim_Vocal_2.onnx` + `Kim_Inst.onnx` | ONNX | ✅ ML aktiv | Stem-Separation (Fallback zu MelBandRoformer) |
+| `mdx23c_plugin` | `models/kim_vocal_2/kim_vocal_2.onnx` + `models/kim_inst/` | ONNX | ✅ ML aktiv | Stem-Separation (Fallback zu MelBandRoformer) |
 | `uvr_mdxnet_plugin` | `models/uvr_mdx_net/uvr_mdx_net_inst_hq_{1..4}.onnx` | ONNX (4 Modelle) | ✅ ML aktiv | Instrumental-Separation Ensemble |
-| `deepfilternet_v3_ii_plugin` | `models/deepfilternet/` (enc+dec+erb_dec) | ONNX (3 Sessions) | ✅ ML aktiv | Breitrauschen-Reduktion (energy_bias_db=−6.0) |
-| `rmvpe_plugin` | `models/rmvpe/rmvpe.onnx` (26 MB) | ONNX | ✅ ML aktiv | **Pitch-Tracking (Primär)** — RMVPE 2023 |
-| `crepe_plugin` | `models/crepe/` | ONNX | ✅ ML aktiv | Pitch-Tracking (Fallback zu RMVPE) |
-| `fcpe_plugin` | `models/fcpe/` | ONNX | ✅ ML aktiv | Pitch-Tracking (Fallback zu CREPE) |
+| `deepfilternet_v3_ii_plugin` | `models/deepfilternet_v3_ii/` (enc+dec+erb_dec) | ONNX (3 Sessions) | ✅ ML aktiv | Breitrauschen-Reduktion (energy_bias_db=−6.0) |
+| `fcpe_plugin` | `models/fcpe/` | ONNX | ✅ ML aktiv | **Pitch-Tracking (Primär)** — FCPE |
+| `crepe_plugin` | `models/crepe/` | ONNX | ✅ ML aktiv | Pitch-Tracking (Fallback zu FCPE) |
+| `rmvpe_plugin` | `models/rmvpe/rmvpe.onnx` (26 MB) | ONNX | ✅ ML aktiv | Pitch-Tracking (Fallback/Backup; nur bei stabil verifiziertem Modell) |
 | `beats_plugin` | `models/beats/beats_iter3.onnx` (90 MB) | ONNX | ✅ ML aktiv | **Audio-Tagging (Primär)** — BEATs 2023, +10.7% mAP |
 | `panns_plugin` | `models/panns/` | ONNX | ✅ ML aktiv | Audio-Tagging (Fallback zu BEATs) |
 | `resemble_enhance_plugin` | `models/resemble_enhance/model.onnx` | ONNX (722 MB) | ✅ ML aktiv | Vocal Enhancement (via `hybrid_ml_denoiser`) |
-| `sgmse_plugin` | `models/sgmse_plus/sgmse_plus.onnx` (≈120 MB) | ONNX | ✅ ML aktiv | **Dereverb/Enhancement (Primär)** — SGMSE+ 2022 |
+| `sgmse_plugin` | `models/sgmse_plus/sgmse_plus.ts` (≈251 MB) | TorchScript | ✅ ML aktiv | **Dereverb/Enhancement (Primär)** — SGMSE+ 2022; Runtime: TorchScript → WPE |
 | `mp_senet_plugin` | `models/mp_senet/mp_senet.onnx` (≈35 MB) | ONNX | ✅ ML aktiv | **Speech/Music Enhancement** — MP-SENet 2023 |
-| `versa_plugin` | `models/versa/versa_mos.onnx` (≈45 MB) | ONNX | ✅ ML aktiv | **MOS (ohne Referenz)** — VERSA 2024 |
-| `vocos_plugin` | `models/vocos/vocos_mel_spec_44khz.onnx` | ONNX | ✅ ML aktiv | **Vocoder 44.1 kHz (Primär)** |
-| `bigvgan_v2_plugin` | `~/.aurik/models/bigvgan_v2/` | ONNX/PT | ✅ ML aktiv | Vocoder (Stufe 1.5, Fallback zu Vocos) |
-| `cqtdiff_plus_plugin` | `models/cqtdiff_plus/` | ONNX/PT | ✅ ML aktiv | Dropout-Inpainting ≥ 50 ms |
+| `versa_plugin` | `models/versa/hub_cache/checkpoints/ft_wav2vec2_large_ll60k_mdf_p1_200epochs_all_192epochs.pth` | PyTorch Checkpoint | ✅ ML aktiv | **MOS (ohne Referenz)** — VERSA 2024 |
+| `vocos_plugin` | `models/vocos_48khz/vocos_48khz.onnx` (48 kHz nativ, kein Resampling, bevorzugt); `models/vocos/vocos_mel_spec_44khz.onnx` (44,1 kHz, Fallback); `models/vocos/vocos_mel_spec_24khz.onnx` (52 MB, Release-Bundle) | ONNX | ✅ ML aktiv | **Vocoder (Primär)** — 48 kHz nativ (kein Resampling) → 44,1 kHz → 24 kHz Release-Fallback |
+| `bigvgan_v2_plugin` | `models/bigvgan/bigvgan_v2.pth` | PyTorch (.pth) | ✅ ML aktiv | Vocoder (Stufe 1.5, Fallback zu Vocos) |
+| `cqtdiff_plus_plugin` | `models/cqtdiff/score_network.pt` (66 MB) | TorchScript | ✅ ML aktiv | Dropout-Inpainting ≥ 50 ms |
 | `flow_matching_plugin` | `models/flow_matching/` | ONNX/PT | ✅ ML aktiv | **Generatives Inpainting (Primär)** — Flow Matching SOTA |
 | `audiosr_plugin` | `models/audiosr/` (5,9 GB, lazy) | ONNX/PT | ✅ ML aktiv | **Bandbreiten-Erweiterung** — AudioSR (lazy load) |
-| `htdemucs_plugin` | `models/htdemucs/htdemucs_ft.onnx` (320 MB) | ONNX | ✅ ML aktiv | **Stem-Separation Instrumental (Primär)** — HTDemucs 2023, MUSDB18 SOTA; Fallback 1 für Gesang hinter MelBandRoformer |
-| `dac_plugin` | `models/dac/dac_44khz.onnx` (≈80 MB) | ONNX | ✅ ML aktiv | **Neuronale Zwischen-Repräsentation** — Descript Audio Codec 2023; Inpainting-Konditionierung bei Dropout ≥ 50 ms |
+| `htdemucs_plugin` | `models/demucs/htdemucs_6s.onnx` | ONNX | ✅ ML aktiv | **Stem-Separation Instrumental (Primär)** — HTDemucs 2023, MUSDB18 SOTA; Fallback 1 für Gesang hinter MelBandRoformer |
+| `dac_plugin` | `models/dac/encoder_model.onnx` (≈87 MB) + `models/dac/decoder_model.onnx` (≈208 MB) | ONNX (2-Stage) | ✅ ML aktiv | **Neuronale Zwischen-Repräsentation** — Descript Audio Codec 2023; Inpainting-Konditionierung bei Dropout ≥†50 ms |
+| `lyrics_transcriber_plugin` | `models/whisper/whisper_tiny.onnx` (39 MB) + `models/wav2vec2/wav2vec2_forced_alignment.onnx` (125 MB) | ONNX (2 Modelle) | ✅ ML aktiv | **Lyrics-Transkription + Phonem-Alignment** — Whisper-Tiny + wav2vec2 CTC (§2.36); Latenz ≤ 8 s/min Audio |
+| `silero_plugin` | `models/silero/silero_en_v5.onnx` (≈1 MB) | ONNX | ✅ ML aktiv | **Voice Activity Detection** — Silero VAD v4; Stille-Detektion für NR-Gate und Phase-Skip |
+| `utmos_plugin` | `models/utmosv2/fold0_s42_best_model.pth` (≥18 MB) | PyTorch (.pth) | ✅ ML aktiv | **MOS-Verifikation Gesang** — UTMOS 2022; ergänzt VERSA bei PANNs Vocals ≥ 0.5 |
+| `laion_clap_plugin` | `models/clap/audio_encoder.onnx` (Primär); `models/clap/music_audioset_epoch_15_esc_90.14.pt` (PyTorch-Fallback) | ONNX + PyTorch (.pt) | ✅ ML aktiv | **Semantisches Audio-Retrieval / Zero-Shot Tagging** — LAION-CLAP 2023; Genre- und Klassen-Klassifikation |
+| `gacela_plugin` | `models/gacela/model/01_400000.pt` (≈200 MB) | PyTorch Checkpoint | ✅ ML aktiv | **GAN-Inpainting** — Lücken ≥ 200 ms (Backup zu Flow Matching); `try_allocate(size_gb=0.20)` Pflicht |
+| `banquet_vinyl_plugin` | `models/banquet/banquet_vinyl_final.onnx` | ONNX | ✅ ML aktiv | **Vinyl-Crackle-Entfernung ML-Primär (phase_09)** — BANQUET; Fallback: DSP-Decrackler |
+| `diffwave_plugin` | `models/diffwave/` (ONNX nicht gebündelt) | ONNX | ⚠ DSP-Fallback aktiv (ONNX fehlt) | **Dropout-Inpainting Fallback (phase_55)** — DiffWave; hinter Flow Matching → CQTdiff+ |
 | `matchering_plugin` | `matchering==2.0.6` (Python-Paket) | — | ✅ aktiv | Reference Mastering (Studio 2026) |
+
+
+### Zusätzliche gebündelte Modell-Verzeichnisse (nicht als Plugin in obiger Tabelle)
+
+| Verzeichnis | Größe | Genutzt von | Zweck |
+|---|---|---|---|
+| `models/audioldm2` | 1.330 MB | `audioldm2_plugin.py` | Audio-Generierung (AudioLDM2) |
+| `models/bs_roformer` | 317 MB | `bs_roformer_plugin.py` | BS-RoFormer Original-Checkpoints |
+| `models/era_classifier` | < 1 MB | `era_classifier.py` (§2.14) | Ära-Klassifikation (`era_anchors.npy`) |
+| `models/hifi_gan` | 4 MB | `hifigan_plugin.py` | HiFi-GAN Vocoder (DSP-Fallback hinter Vocos) |
+| `models/kim_vocal_1` | 64 MB | `mdx23c_plugin.py` | MDX23C Kim_Vocal_1 (Fallback) |
+| `models/madmom` | 4 MB | `semantic_goals.py` | Beat/Downbeat-Tracking für GrooveMetric |
+| `models/matchering2.0` | 3 MB | `matchering_plugin.py` | Matchering 2.0.6 Konfiguration |
+| `models/mdx23c` | 1.114 MB | `mdx23c_plugin.py` | MDX23C Quellcode + Inference-Logik |
+| `models/mert` | 116 MB | `mert_plugin.py` | MERT ONNX (schnelle Variante) |
+| `models/mert-95m` | 4.866 MB | `mert_plugin.py` | MERT-v1-95M (Lizenz-Fallback, Apache 2.0) |
+| `models/mert-v1-330m` | 5.010 MB | `mert_plugin.py` | MERT-v1-330M (Primär, 3,9 GB lazy) |
+| `models/mert_instrument_detector` | 5.010 MB | `semantic_goals.py` | MERT-basierter Instrument-Detektor |
+| `models/nara_wpe` | 2 MB | `wpe_plugin.py` | nara_wpe Python-Bibliothek (WPE Tier-1) |
+| `models/wav2vec2-base` | 360 MB | `utmos_plugin.py` | wav2vec2-base SSL-Encoder für UTMOS |
 
 **Preprocessing-Details MelBandRoformer** (`bs_roformer_plugin._separate_onnx`):
 - Modell-SR: 44 100 Hz, n_fft=7914, hop=441, 60 Mel-Bänder, feat_dim=384

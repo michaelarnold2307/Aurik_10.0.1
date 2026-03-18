@@ -28,10 +28,11 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 import soundfile as sf
-from backend.api.bridge import get_restorer_classes
+from backend.api.bridge import get_aurik_denker_class
 
 from ..core.preset_manager import Preset, PresetManager
 from ..core.queue_manager import QueueManager, QueueStatus
+from ..i18n import t
 from .audio_player import AudioPlayer
 from .preset_browser import PresetBrowserWidget
 from .queue_widget import QueueWidget
@@ -54,7 +55,9 @@ class ProcessingThread(QThread):
     def run(self):
         """Process audio in background"""
         try:
-            _, UnifiedRestorerV3 = get_restorer_classes()
+            AurikDenkerClass = get_aurik_denker_class()
+            if AurikDenkerClass is None:
+                raise RuntimeError("AurikDenker backend class unavailable")
 
             self.progress.emit(10)
 
@@ -62,22 +65,22 @@ class ProcessingThread(QThread):
             audio, sr = sf.read(self.input_file)
             self.progress.emit(20)
 
-            # Create restorer
-            restorer = UnifiedRestorerV3()
+            # Canonical entrypoint: restore through AurikDenker.
+            restorer = AurikDenkerClass()
             self.progress.emit(30)
 
             # Process
-            result = restorer.restore(audio, sample_rate=sr)
+            result = restorer.denke(audio, sr, mode="quality")
             self.progress.emit(80)
 
             # Save
             sf.write(self.output_file, result.audio, sr)
             self.progress.emit(100)
 
-            self.finished.emit(f"Processed: {Path(self.input_file).name}")
+            self.finished.emit(t("legacy.main.processed_file", file=Path(self.input_file).name))
 
         except Exception as e:
-            self.error.emit(f"Error: {str(e)}")
+            self.error.emit(t("legacy.main.processing_error_detail", error=str(e)))
 
 
 class BatchProcessingThread(QThread):
@@ -96,7 +99,14 @@ class BatchProcessingThread(QThread):
 
     def run(self):
         """Process all items in queue"""
-        _, UnifiedRestorerV3 = get_restorer_classes()
+        AurikDenkerClass = get_aurik_denker_class()
+        if AurikDenkerClass is None:
+            for item in [i for i in self.queue_manager.items if i.status == QueueStatus.PENDING]:
+                msg = "AurikDenker backend class unavailable"
+                self.queue_manager.update_item_status(item.id, QueueStatus.FAILED, 0, msg)
+                self.item_error.emit(item.id, msg)
+            self.all_finished.emit()
+            return
 
         while not self._stop_requested:
             # Get next item
@@ -114,13 +124,13 @@ class BatchProcessingThread(QThread):
                 self.item_progress.emit(item.id, 20)
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 20)
 
-                # Create restorer
-                restorer = UnifiedRestorerV3()
+                # Canonical entrypoint: restore through AurikDenker.
+                restorer = AurikDenkerClass()
                 self.item_progress.emit(item.id, 30)
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 30)
 
                 # Process
-                result = restorer.restore(audio, sample_rate=sr)
+                result = restorer.denke(audio, sr, mode="quality")
                 self.item_progress.emit(item.id, 80)
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 80)
 
@@ -159,7 +169,7 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         """Initialize user interface"""
-        self.setWindowTitle("AURIK Professional - Audio Restoration")
+        self.setWindowTitle(t("legacy.main.window_title"))
         self.setGeometry(100, 100, 1600, 900)
 
         # Central widget
@@ -193,7 +203,7 @@ class MainWindow(QMainWindow):
         # Status bar
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
-        self.statusBar.showMessage("Ready")
+        self.statusBar.showMessage(t("status.ready"))
 
         # Progress bar in status bar
         self.progress_bar = QProgressBar()
@@ -208,11 +218,11 @@ class MainWindow(QMainWindow):
         panel.setLayout(layout)
 
         # Title
-        title = QLabel("<h2>🎚️ AURIK Professional</h2>")
+        title = QLabel(t("legacy.main.brand_title_html"))
         layout.addWidget(title)
 
         # File list
-        file_group = QGroupBox("Audio Files")
+        file_group = QGroupBox(t("legacy.main.audio_files"))
         file_layout = QVBoxLayout()
         file_group.setLayout(file_layout)
 
@@ -222,9 +232,9 @@ class MainWindow(QMainWindow):
 
         # File buttons
         btn_layout = QHBoxLayout()
-        btn_add = QPushButton("Add Files")
+        btn_add = QPushButton(t("legacy.main.add_files"))
         btn_add.clicked.connect(self.add_files)
-        btn_clear = QPushButton("Clear")
+        btn_clear = QPushButton(t("legacy.main.clear"))
         btn_clear.clicked.connect(self.file_list.clear)
         btn_layout.addWidget(btn_add)
         btn_layout.addWidget(btn_clear)
@@ -233,38 +243,40 @@ class MainWindow(QMainWindow):
         layout.addWidget(file_group)
 
         # Medium selection
-        medium_group = QGroupBox("Medium Type")
+        medium_group = QGroupBox(t("legacy.main.medium_type"))
         medium_layout = QVBoxLayout()
         medium_group.setLayout(medium_layout)
 
         self.medium_combo = QComboBox()
-        self.medium_combo.addItems(["Vinyl", "Cassette Tape", "DAT", "CD", "MP3", "Shellac 78rpm", "Wire Recording"])
+        self.medium_combo.addItem(t("legacy.medium.vinyl"), "VINYL")
+        self.medium_combo.addItem(t("legacy.medium.cassette"), "CASSETTE")
+        self.medium_combo.addItem(t("legacy.medium.dat"), "DAT")
+        self.medium_combo.addItem(t("legacy.medium.cd"), "CD")
+        self.medium_combo.addItem(t("legacy.medium.mp3"), "MP3")
+        self.medium_combo.addItem(t("legacy.medium.shellac"), "SHELLAC")
+        self.medium_combo.addItem(t("legacy.medium.wire"), "WIRE")
         medium_layout.addWidget(self.medium_combo)
 
         layout.addWidget(medium_group)
 
         # Processing mode
-        mode_group = QGroupBox("Processing Mode")
+        mode_group = QGroupBox(t("legacy.main.processing_mode"))
         mode_layout = QVBoxLayout()
         mode_group.setLayout(mode_layout)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(
-            [
-                "Gentle (Preserve Character)",
-                "Balanced (Recommended)",
-                "Aggressive (Maximum Cleanup)",
-                "Archive (Maximum Preservation)",
-                "Mastering (Subtle Enhancement)",
-            ]
-        )
+        self.mode_combo.addItem(t("legacy.mode.gentle"), "GENTLE")
+        self.mode_combo.addItem(t("legacy.mode.balanced"), "BALANCED")
+        self.mode_combo.addItem(t("legacy.mode.aggressive"), "AGGRESSIVE")
+        self.mode_combo.addItem(t("legacy.mode.archive"), "ARCHIVE")
+        self.mode_combo.addItem(t("legacy.mode.mastering"), "MASTERING")
         self.mode_combo.setCurrentIndex(1)  # Balanced
         mode_layout.addWidget(self.mode_combo)
 
         layout.addWidget(mode_group)
 
         # Process button
-        self.btn_process = QPushButton("▶ Process Now")
+        self.btn_process = QPushButton(t("legacy.main.process_now"))
         self.btn_process.setStyleSheet("""
             QPushButton {
                 background-color: #0078d4;
@@ -287,7 +299,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.btn_process)
 
         # Add to Queue button
-        self.btn_add_queue = QPushButton("➕ Add to Queue")
+        self.btn_add_queue = QPushButton(t("legacy.main.add_to_queue"))
         self.btn_add_queue.setStyleSheet("""
             QPushButton {
                 background-color: #00aa00;
@@ -310,7 +322,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.btn_add_queue)
 
         # Preset browser
-        preset_group = QGroupBox("Presets")
+        preset_group = QGroupBox(t("legacy.main.presets"))
         preset_layout = QVBoxLayout()
         preset_group.setLayout(preset_layout)
 
@@ -362,7 +374,7 @@ class MainWindow(QMainWindow):
         self.waveform_widget = WaveformWidget()
         waveform_layout.addWidget(self.waveform_widget)
 
-        tabs.addTab(waveform_tab, "📊 Waveform")
+        tabs.addTab(waveform_tab, t("legacy.main.tab_waveform"))
 
         # Preview tab
         preview_tab = QWidget()
@@ -372,27 +384,27 @@ class MainWindow(QMainWindow):
         self.audio_player = AudioPlayer()
         preview_layout.addWidget(self.audio_player)
 
-        tabs.addTab(preview_tab, "🎧 Preview")
+        tabs.addTab(preview_tab, t("legacy.main.tab_preview"))
 
         layout.addWidget(tabs)
 
         # Musical Goals
-        goals_group = QGroupBox("Musical Goals")
+        goals_group = QGroupBox(t("legacy.main.musical_goals"))
         goals_layout = QVBoxLayout()
         goals_group.setLayout(goals_layout)
 
         self.goal_sliders = {}
         goals = [
-            ("Brillanz (Brilliance)", 0.87),
-            ("Wärme (Warmth)", 0.82),
-            ("Natürlichkeit (Naturalness)", 0.85),
-            ("Authentizität (Authenticity)", 0.88),
-            ("Emotionalität (Emotion)", 0.83),
-            ("Transparenz (Clarity)", 0.89),
-            ("Bass-Kraft (Bass Power)", 0.75),
+            (t("legacy.main.goal.brillanz"), "brillanz", 0.87),
+            (t("legacy.main.goal.waerme"), "waerme", 0.82),
+            (t("legacy.main.goal.natuerlichkeit"), "natuerlichkeit", 0.85),
+            (t("legacy.main.goal.authentizitaet"), "authentizitaet", 0.88),
+            (t("legacy.main.goal.emotionalitaet"), "emotionalitaet", 0.83),
+            (t("legacy.main.goal.transparenz"), "transparenz", 0.89),
+            (t("legacy.main.goal.bass_kraft"), "bass_kraft", 0.75),
         ]
 
-        for goal_name, default_val in goals:
+        for goal_name, goal_key, default_val in goals:
             slider_layout = QHBoxLayout()
             label = QLabel(goal_name)
             label.setMinimumWidth(200)
@@ -409,22 +421,29 @@ class MainWindow(QMainWindow):
             slider_layout.addWidget(value_label)
 
             goals_layout.addLayout(slider_layout)
-            self.goal_sliders[goal_name.split()[0]] = slider
+            self.goal_sliders[goal_key] = slider
 
         layout.addWidget(goals_group)
 
         # Phase 2.3 Enhancement
-        enhancement_group = QGroupBox("Instrumental Enhancement (Phase 2.3)")
+        enhancement_group = QGroupBox(t("legacy.main.instrumental_enhancement"))
         enhancement_layout = QVBoxLayout()
         enhancement_group.setLayout(enhancement_layout)
 
         enhance_grid = QHBoxLayout()
 
         self.enhancement_checks = {}
-        enhancements = ["Bass", "Drums", "Guitar", "Piano", "Brass", "Spatial"]
+        enhancements = [
+            ("Bass", "legacy.main.enhancement_bass"),
+            ("Drums", "legacy.main.enhancement_drums"),
+            ("Guitar", "legacy.main.enhancement_guitar"),
+            ("Piano", "legacy.main.enhancement_piano"),
+            ("Brass", "legacy.main.enhancement_brass"),
+            ("Spatial", "legacy.main.enhancement_spatial"),
+        ]
 
-        for enhancement in enhancements:
-            checkbox = QCheckBox(enhancement)
+        for enhancement, text_key in enhancements:
+            checkbox = QCheckBox(t(text_key))
             enhance_grid.addWidget(checkbox)
             self.enhancement_checks[enhancement] = checkbox
 
@@ -438,7 +457,10 @@ class MainWindow(QMainWindow):
     def add_files(self):
         """Add audio files to process"""
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Select Audio Files", "", "Audio Files (*.wav *.mp3 *.flac *.aiff);;All Files (*)"
+            self,
+            t("legacy.main.select_audio_files"),
+            "",
+            t("legacy.main.audio_files_filter"),
         )
 
         for file in files:
@@ -478,9 +500,9 @@ class MainWindow(QMainWindow):
                 }
             """)
             self.progress_bar.setValue(0)
-            self.progress_bar.setFormat("<b>Lade Datei...</b> %p%")
+            self.progress_bar.setFormat(t("legacy.main.loading_file_progress"))
             self.progress_bar.show()
-            self.statusBar.showMessage("Lade Datei...")
+            self.statusBar.showMessage(t("legacy.main.loading_file"))
 
             # Fortschritts-Signal verbinden
             self.waveform_widget.progress.connect(self.update_progress)
@@ -494,28 +516,36 @@ class MainWindow(QMainWindow):
             self.progress_bar.setValue(100)
             QApplication.processEvents()
             self.progress_bar.hide()
-            self.statusBar.showMessage("Bereit")
+            self.statusBar.showMessage(t("status.ready"))
 
             if not success_waveform or not success_player:
-                QMessageBox.warning(self, "Error", f"Failed to load audio file: {self.current_file}")
+                QMessageBox.warning(
+                    self,
+                    t("legacy.common.error_title"),
+                    t("legacy.main.failed_load_audio", file=self.current_file),
+                )
 
             # Fortschritts-Signal trennen, um Mehrfachverbindungen zu vermeiden
             self.waveform_widget.progress.disconnect(self.update_progress)
 
         except Exception as e:
             self.progress_bar.hide()
-            self.statusBar.showMessage("Fehler beim Laden der Wellenform")
-            QMessageBox.critical(self, "Error", f"Error loading waveform:\n{str(e)}")
+            self.statusBar.showMessage(t("legacy.main.waveform_load_error_status"))
+            QMessageBox.critical(
+                self,
+                t("legacy.common.error_title"),
+                t("legacy.main.waveform_load_error", error=str(e)),
+            )
 
     def process_audio(self):
         """Process selected audio files"""
         if self.processing_thread and self.processing_thread.isRunning():
-            QMessageBox.warning(self, "Processing", "Already processing a file!")
+            QMessageBox.warning(self, t("dialog.processing_running_title"), t("legacy.main.already_processing"))
             return
 
         items = self.file_list.selectedItems()
         if not items:
-            QMessageBox.warning(self, "No Selection", "Please select a file to process")
+            QMessageBox.warning(self, t("legacy.main.no_selection_title"), t("legacy.main.no_selection_body"))
             return
 
         input_file = items[0].text()
@@ -523,9 +553,9 @@ class MainWindow(QMainWindow):
         # Get output file
         output_file, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Processed Audio",
+            t("legacy.main.save_processed_audio"),
             str(Path(input_file).stem) + "_restored.wav",
-            "WAV Files (*.wav);;All Files (*)",
+            t("legacy.main.wav_filter"),
         )
 
         if not output_file:
@@ -533,26 +563,18 @@ class MainWindow(QMainWindow):
 
         # Get settings
         medium_map = {
-            "Vinyl": "VINYL",
-            "Cassette Tape": "CASSETTE_TAPE",
+            "VINYL": "VINYL",
+            "CASSETTE": "CASSETTE_TAPE",
             "DAT": "DAT",
             "CD": "CD",
             "MP3": "MP3",
-            "Shellac 78rpm": "SHELLAC_78RPM",
-            "Wire Recording": "WIRE_RECORDING",
-        }
-
-        mode_map = {
-            "Gentle (Preserve Character)": "GENTLE",
-            "Balanced (Recommended)": "BALANCED",
-            "Aggressive (Maximum Cleanup)": "AGGRESSIVE",
-            "Archive (Maximum Preservation)": "ARCHIVE",
-            "Mastering (Subtle Enhancement)": "MASTERING",
+            "SHELLAC": "SHELLAC_78RPM",
+            "WIRE": "WIRE_RECORDING",
         }
 
         settings = {
-            "medium_type": medium_map[self.medium_combo.currentText()],
-            "processing_mode": mode_map[self.mode_combo.currentText()],
+            "medium_type": medium_map[self.medium_combo.currentData()],
+            "processing_mode": self.mode_combo.currentData(),
         }
 
         # Start processing
@@ -564,7 +586,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.show()
         self.progress_bar.setValue(0)
         self.btn_process.setEnabled(False)
-        self.statusBar.showMessage("Processing...")
+        self.statusBar.showMessage(t("status.restoring", percent=0))
 
         self.processing_thread.start()
 
@@ -576,15 +598,15 @@ class MainWindow(QMainWindow):
         """Handle processing completion"""
         self.progress_bar.hide()
         self.btn_process.setEnabled(True)
-        self.statusBar.showMessage("Ready")
-        QMessageBox.information(self, "Success", message)
+        self.statusBar.showMessage(t("status.ready"))
+        QMessageBox.information(self, t("legacy.common.success_title"), message)
 
     def on_processing_error(self, error_message):
         """Handle processing error"""
         self.progress_bar.hide()
         self.btn_process.setEnabled(True)
-        self.statusBar.showMessage("Error")
-        QMessageBox.critical(self, "Processing Error", error_message)
+        self.statusBar.showMessage(t("legacy.common.error_short"))
+        QMessageBox.critical(self, t("dialog.processing_error_title"), error_message)
 
     def create_queue_panel(self):
         """Create queue management panel"""
@@ -612,7 +634,7 @@ class MainWindow(QMainWindow):
             files = [item.text() for item in selected_items]
 
         if not files:
-            QMessageBox.warning(self, "No Files", "No files selected to add to queue.")
+            QMessageBox.warning(self, t("dialog.no_files_title"), t("legacy.main.no_files_for_queue"))
             return
 
         # Get current settings
@@ -622,30 +644,22 @@ class MainWindow(QMainWindow):
         ProcessingMode = get_processing_mode_enum()
 
         medium_map = {
-            "Vinyl": MediumType.VINYL,
-            "Cassette Tape": MediumType.CASSETTE,
+            "VINYL": MediumType.VINYL,
+            "CASSETTE": MediumType.CASSETTE,
             "DAT": MediumType.DAT,
             "CD": MediumType.CD,
             "MP3": MediumType.MP3,
-            "Shellac 78rpm": MediumType.SHELLAC,
-            "Wire Recording": MediumType.WIRE,
-        }
-
-        mode_map = {
-            "Gentle (Preserve Character)": ProcessingMode.GENTLE,
-            "Balanced (Recommended)": ProcessingMode.BALANCED,
-            "Aggressive (Maximum Cleanup)": ProcessingMode.AGGRESSIVE,
-            "Archive (Maximum Preservation)": ProcessingMode.ARCHIVE,
-            "Mastering (Subtle Enhancement)": ProcessingMode.MASTERING,
+            "SHELLAC": MediumType.SHELLAC,
+            "WIRE": MediumType.WIRE,
         }
 
         settings = {
-            "medium_type": medium_map[self.medium_combo.currentText()],
-            "processing_mode": mode_map[self.mode_combo.currentText()],
+            "medium_type": medium_map[self.medium_combo.currentData()],
+            "processing_mode": getattr(ProcessingMode, self.mode_combo.currentData()),
         }
 
         # Choose output directory
-        output_dir = QFileDialog.getExistingDirectory(self, "Select Output Directory", str(Path.home()))
+        output_dir = QFileDialog.getExistingDirectory(self, t("legacy.main.select_output_dir"), str(Path.home()))
 
         if not output_dir:
             return
@@ -661,17 +675,17 @@ class MainWindow(QMainWindow):
             self.queue_widget.add_item(item)
             added_count += 1
 
-        self.statusBar.showMessage(f"Added {added_count} file(s) to queue", 3000)
+        self.statusBar.showMessage(t("legacy.main.added_to_queue", count=added_count), 3000)
 
     def process_queue(self):
         """Start batch processing of queue"""
         if self.batch_thread and self.batch_thread.isRunning():
-            QMessageBox.warning(self, "Processing", "Queue is already being processed!")
+            QMessageBox.warning(self, t("dialog.processing_running_title"), t("legacy.main.queue_already_processing"))
             return
 
         stats = self.queue_manager.get_queue_stats()
         if stats["pending"] == 0:
-            QMessageBox.information(self, "Queue Empty", "No pending items in queue.")
+            QMessageBox.information(self, t("legacy.main.queue_empty_title"), t("dialog.no_pending_body"))
             return
 
         # Start batch processing
@@ -682,7 +696,7 @@ class MainWindow(QMainWindow):
         self.batch_thread.item_error.connect(self.on_queue_item_error)
         self.batch_thread.all_finished.connect(self.on_queue_all_finished)
 
-        self.statusBar.showMessage("Processing queue...")
+        self.statusBar.showMessage(t("legacy.main.processing_queue"))
         self.batch_thread.start()
 
     def on_queue_item_started(self, item_id):
@@ -690,7 +704,7 @@ class MainWindow(QMainWindow):
         self.queue_widget.update_item(item_id, status=QueueStatus.PROCESSING)
         item = self.queue_manager.get_item_by_id(item_id)
         if item:
-            self.statusBar.showMessage(f"Processing: {Path(item.input_file).name}")
+            self.statusBar.showMessage(t("legacy.main.processing_item", file=Path(item.input_file).name))
 
     def on_queue_item_progress(self, item_id, progress):
         """Handle queue item progress"""
@@ -708,27 +722,30 @@ class MainWindow(QMainWindow):
     def on_queue_all_finished(self):
         """Handle queue completion"""
         stats = self.queue_manager.get_queue_stats()
-        self.statusBar.showMessage(f"Queue complete: {stats['completed']} succeeded, {stats['failed']} failed", 5000)
+        self.statusBar.showMessage(
+            t("legacy.main.queue_complete_status", completed=stats["completed"], failed=stats["failed"]),
+            5000,
+        )
 
         QMessageBox.information(
             self,
-            "Queue Complete",
-            f"Batch processing complete!\n\n" f"✅ Completed: {stats['completed']}\n" f"❌ Failed: {stats['failed']}",
+            t("legacy.main.queue_complete_title"),
+            t("legacy.main.queue_complete_body", completed=stats["completed"], failed=stats["failed"]),
         )
 
     def clear_queue(self):
         """Clear completed items from queue"""
         self.queue_manager.clear_queue(clear_completed=False)
         self.queue_widget.refresh_display()
-        self.statusBar.showMessage("Cleared completed items", 2000)
+        self.statusBar.showMessage(t("legacy.main.cleared_completed"), 2000)
 
     def remove_queue_item(self, item_id):
         """Remove item from queue"""
         if self.queue_manager.remove_item(item_id):
             self.queue_widget.remove_item(item_id)
-            self.statusBar.showMessage("Removed item from queue", 2000)
+            self.statusBar.showMessage(t("legacy.main.removed_from_queue"), 2000)
         else:
-            QMessageBox.warning(self, "Cannot Remove", "Cannot remove item that is currently processing.")
+            QMessageBox.warning(self, t("legacy.main.cannot_remove_title"), t("legacy.main.cannot_remove_body"))
 
     def apply_preset(self, preset: Preset):
         """Apply preset to UI settings"""
@@ -759,9 +776,11 @@ class MainWindow(QMainWindow):
                 checkbox.setChecked(preset.enhancements[enhancement_name])
 
         # Show message
-        self.statusBar.showMessage(f"Applied preset: {preset.name}", 3000)
+        self.statusBar.showMessage(t("legacy.main.applied_preset", name=preset.name), 3000)
         QMessageBox.information(
-            self, "Preset Applied", f"Preset '{preset.name}' has been applied.\n\n{preset.description}"
+            self,
+            t("legacy.main.preset_applied_title"),
+            t("legacy.main.preset_applied_body", name=preset.name, description=preset.description),
         )
 
     def apply_dark_theme(self):

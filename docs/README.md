@@ -1,6 +1,6 @@
 # Aurik 9 — Intelligentes Musik-Restaurierungssystem
 
-**Version:** 9.10.51 | **Status:** ✅ Produktionsbereit — Weltführend
+**Version:** 9.10.57 | **Status:** ✅ Produktionsbereit — Weltführend
 
 **Datum:** März 2026
 
@@ -26,33 +26,33 @@
 - **[KI-Agent Integration Guide](KI-AGENT-INTEGRATION-GUIDE.md)** — Regeln für KI-Agenten **(Pflicht!)**
 - **[KI-Programmierrichtlinien](../.github/copilot-instructions.md)** — Bindende Systemregeln **(Pflicht!)**
 - **[Python API Reference](api/PYTHON_API.md)** — API-Dokumentation
-- **[Architecture Overview](architecture/ARCHITECTURE.md)** — Systemarchitektur (5 Schichten)
+- **[Architecture Overview](architecture/ARCHITECTURE.md)** — Systemarchitektur (4 Schichten)
 - **[Phases Overview](architecture/PHASES_OVERVIEW.md)** — 56-Phasen-Pipeline
 - **[Contributing Guide](development/CONTRIBUTING.md)** — Beitrag leisten
-- **[Testing Guide](development/TESTING.md)** — Teststrategie (6312 Tests)
+- **[Testing Guide](development/TESTING.md)** — Teststrategie (7.747+ Tests)
 
 ### Status & Fortschritt
-- **[Project Status Report](PROJECT_STATUS.md)** — Aktueller Entwicklungsstand v9.10.51
-- **[Roadmap](aurik9_roadmap.md)** — Zukunftspläne (v10.0+)
+- **[Project Status Report](PROJECT_STATUS.md)** — Aktueller Entwicklungsstand v9.10.57
+- **[Roadmap](aurik9_roadmap.md)** — Zukunftspläne (Studio 2026+)
 
 📚 **[Vollständiger Dokumentations-Index](INDEX.md)**
 
 ---
 
-## 🎯 Aurik 9.10.51 — Highlights
+## 🎯 Aurik 9.10.57 — Highlights
 
 ### ✅ Produktionsbereit (März 2026)
 
 **Kennzahlen:**
-- ✅ **6.312 Tests** — alle grün ✅
+- ✅ **7.747+ Tests** — alle grün ✅
 - ✅ **14 Musical Goals** — alle psychoakustisch geprüft
 - ✅ **56 Phasen** (Phase 01–56, Defect-First)
-- ✅ **15 auto-erkannte Materialtypen**
-- ✅ **27 DefectTypes** erkannt und behandelt
+- ✅ **17 auto-erkannte Materialtypen**
+- ✅ **30 DefectTypes** erkannt und behandelt
 - ✅ **CPU-only** (Desktop-Hardware, kein GPU erforderlich)
 - ✅ **100 % offline** nach Installation (keine Cloud)
 
-**Schlüssel-Module (v9.10.51):**
+**Schlüssel-Module (v9.10.57):**
 
 1. **14 Musical Goals** — Brillanz, Wärme, Natürlichkeit, Authentizität, Emotionalität, Transparenz, Bass-Kraft, Groove, Raumtiefe, Timbre-Authentizität, Tonales Zentrum, Mikro-Dynamik, Separation-Treue, Artikulation
 2. **Transient Decoupled Processing (TDP)** — Transienten separat durch Pipeline führen; GrooveMetric +0.03–0.06

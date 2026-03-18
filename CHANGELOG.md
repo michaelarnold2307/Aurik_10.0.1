@@ -1,5 +1,27 @@
 # Aurik 9 — Changelog
 
+## Version 9.10.58 — Vocos 48 kHz nativ: Zero-Resampling-Vocoder (Mär 2026)
+
+### Zusammenfassung
+
+- **Vocos 48 kHz ONNX**: `scripts/export_vocos_48khz_onnx.py` → `models/vocos_48khz/vocos_48khz.onnx` (157 MB, SHA256 verifiziert). Aurik arbeitet nativ bei 48 kHz — mit diesem Modell entfällt das bisherige 48k→44.1k→48k-Resampling komplett (~0,8 dB SNR-Budget gespart).
+- **`vocos_plugin.py`**: 3-Tier-Kaskade: 48 kHz nativ (bevorzugt) → 44.1 kHz → 24 kHz (Release-Bundle). SR-Erkennung korrigiert (`"48"` vor `"44"` geprüft). PLM-Registrierung nach erfolgreichem Load ergänzt. `_compute_mel()` nimmt jetzt modellspezifische `n_fft`/`hop`-Parameter (bisher immer 24kHz-Defaults).
+- **`copilot-instructions.md`**: SOTA-Tabelle Vocoder + ML-Plugin-Status auf 48kHz-Primär aktualisiert. utmos/laion_clap Format-Spalte korrigiert (`.pth`/`.pt`). Datum März 2026. Doppeltes `---` entfernt. Testzahl `~7750+`.
+- **`models/manifest.json`**: Eintrag `vocos_48khz` mit SHA256 + size_gb + fallback auf `vocos_mel_24khz` eingefügt. Duplikat-Eintrag entfernt (28 Einträge).
+- **`tests/unit/test_v99_vocos_plugin.py`**: 12 neue 48kHz-spezifische Tests (43–54): Konstanten-Checks (`_MEL_SR_48K`, `_N_MELS_48K`, `_N_FFT_48K`, `_HOP_48K`, `_WIN_48K`), Pfad-Priorität, `_try_load`-SR-Routing, ONNX-Inferenz-Shape + NaN-Guard, OLA-Ausgabelänge `(T−G+1)×hop`. Gesamt: 54 Tests (alle grün mit `--run-heavy-tests`).
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+| --- | --- |
+| `plugins/vocos_plugin.py` | 3-Tier 48k→44k→24k; SR-Erkennung bugfix; PLM-Register; `_compute_mel` n_fft/hop-Params |
+| `models/vocos_48khz/vocos_48khz.onnx` | Neu — Export via `export_vocos_48khz_onnx.py` (157 MB, ONNX opset 18) |
+| `models/manifest.json` | Eintrag `vocos_48khz` mit SHA256; Duplikat bereinigt |
+| `tests/unit/test_v99_vocos_plugin.py` | Tests 43–54: 48kHz Konstanten, Pfad, Inferenz, OLA-Länge |
+| `.github/copilot-instructions.md` | Vocos 48kHz Top-Tier; utmos/laion Format; Datum; Testzahl; doppeltes `---` |
+
+---
+
 ## Version 9.10.57 — Compliance-Round-2: THD-Clipping, LGE-Pipeline, Vintage-Guards, bridge-Export (Mär 2026)
 
 ### Zusammenfassung

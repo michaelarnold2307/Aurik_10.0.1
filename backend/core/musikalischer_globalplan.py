@@ -38,7 +38,7 @@ SINGLETON-PATTERN (§3.x)
 Thread-sichere Instanziierung via Double-Checked Locking.
 
 Author: Aurik Development Team
-Version: 9.10.47
+Version: 9.10.57
 """
 
 from __future__ import annotations

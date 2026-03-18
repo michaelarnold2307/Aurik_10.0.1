@@ -8,12 +8,12 @@ Tests the ML-Hybrid Speed/Pitch Correction with YIN + CREPE.
 Test Scenarios:
 1. FAST mode: YIN DSP only
 2. BALANCED mode: Adaptive (YIN → CREPE if confidence <0.7)
-3. MAXIMUM mode: Hybrid (YIN + CREPE combined)
+3. BALANCED mode: Adaptive (YIN + optional CREPE)
 
 Expected Behavior:
 - FAST: Pure DSP, ~0.5× RT
 - BALANCED: Adaptive ML, ~1.0× RT (skip CREPE if YIN confident)
-- MAXIMUM: Full ML, ~2-3× RT (always YIN + CREPE)
+- BALANCED: Adaptive ML, ~1.5-2× RT (YIN + optional CREPE)
 """
 
 from pathlib import Path
@@ -128,11 +128,11 @@ def test_phase_31_mode(phase, audio, sr, mode: str):
                 "yin_fallback",
             ], f"BALANCED mode should use adaptive strategy, got {strategy}"
             # CREPE may or may not be applied depending on YIN confidence
-        elif mode == "maximum":
-            assert strategy == "hybrid", f"MAXIMUM mode should use hybrid strategy, got {strategy}"
-            # Both YIN and CREPE should be applied
-            assert yin_applied, "MAXIMUM mode should apply YIN"
-            # Note: CREPE might not be applied if plugin unavailable (graceful fallback)
+        elif mode == "balanced":
+            assert strategy in ["adaptive", "yin_fallback"], (
+                f"BALANCED mode should use adaptive strategy, got {strategy}"
+            )
+            assert yin_applied, "BALANCED mode should apply YIN"
 
         print(f"✅ {mode.upper()} Mode Test: PASSED")
         return True
@@ -164,7 +164,7 @@ def main():
 
     # Test all modes
     results = {}
-    for mode in ["fast", "balanced", "maximum"]:
+    for mode in ["fast", "balanced"]:
         results[mode] = test_phase_31_mode(phase, audio, sr, mode)
 
     # Summary

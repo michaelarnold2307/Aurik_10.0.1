@@ -3,11 +3,16 @@ forensics/detector.py
 Multi-Layer Forensik-Engine
 """
 
+import logging
+
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from backend.core.forensics.signatures import MEDIA_SIGNATURES, MediaType
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -320,7 +325,7 @@ class MediaForensicsEngine:
                     )
                 )
         except Exception:
-            pass
+            logger.debug("ForensicsEngine: dynamics analysis failed", exc_info=True)
         return evidence
 
     def _analyze_stereo(self, audio, sr):
@@ -357,7 +362,7 @@ class MediaForensicsEngine:
                     )
                 )
         except Exception:
-            pass
+            logger.debug("ForensicsEngine: stereo analysis failed", exc_info=True)
         return evidence
 
     def _analyze_codecs(self, audio, sr):
@@ -385,7 +390,7 @@ class MediaForensicsEngine:
                     )
                 )
         except Exception:
-            pass
+            logger.debug("ForensicsEngine: codec analysis failed", exc_info=True)
         return evidence
 
     def _analyze_analog_specific(self, audio, sr):
@@ -397,7 +402,8 @@ class MediaForensicsEngine:
             from scipy.signal import hilbert
 
             analytic = hilbert(y[: min(len(y), sr * 5)])
-            inst_phase = np.unwrap(np.angle(analytic))
+            analytic_c = np.asarray(analytic, dtype=np.complex128)
+            inst_phase = np.unwrap(np.asarray(np.angle(analytic_c), dtype=np.float64))
             inst_freq = np.diff(inst_phase) / (2.0 * np.pi / sr)
             flutter_std = float(np.std(inst_freq[:sr]))
             if flutter_std > 2.0:
@@ -429,12 +435,12 @@ class MediaForensicsEngine:
                     )
                 )
         except Exception:
-            pass
+            logger.debug("ForensicsEngine: analog-specific analysis failed", exc_info=True)
         return evidence
 
     def _generate_hypotheses(self) -> list:
         # SOTA: Evidenz-basiertes Voting
-        votes = {}
+        votes: dict[MediaType, float] = {}
         for ev in self.evidence:
             for m in ev.supports_media:
                 votes[m] = votes.get(m, 0) + ev.confidence
@@ -442,7 +448,7 @@ class MediaForensicsEngine:
                 votes[m] = votes.get(m, 0) - ev.confidence
         if not votes:
             return [MediaHypothesis(media_type=MediaType.UNKNOWN, confidence=0.0, evidence=[])]
-        best_media = max(votes, key=votes.get)
+        best_media = max(votes, key=lambda k: votes[k])
         conf = min(1.0, max(0.0, votes[best_media] / (len(self.evidence) or 1)))
         return [MediaHypothesis(media_type=best_media, confidence=conf, evidence=self.evidence)]
 

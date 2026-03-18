@@ -1,15 +1,15 @@
-# Aurik 9 — Spec-Änderungshistorie (v9.7.0 → v9.10.51)
+# Aurik 9 — Spec-Änderungshistorie (v9.7.0 → v9.10.57)
 
 > Diese Datei enthält die vollständige Changelog-Historie der
 > `copilot-instructions.md`-Spezifikation sowie Code-Releases. Sie wird nicht zur
 > Pipeline-Laufzeit gelesen — sie dient der Nachvollziehbarkeit
 > von Architekturentscheidungen für Entwickler und KI-Agenten.
 >
-> Stand: März 2026 — Aurik 9.10.51
+> Stand: März 2026 — Aurik 9.10.57
 
 ---
 
-## v9.10.51 (14. März 2026) — §SR-Invariante lückenlos
+## v9.10.57 (14. März 2026) — §SR-Invariante lückenlos
 
 - `backend/core/genre_classifier.py`: `GermanSchlagerClassifier.classify()` — `assert sr == 48000`
 - `backend/core/feedback_chain.py`: `FeedbackChain.run()` — `assert _sr == 48000`

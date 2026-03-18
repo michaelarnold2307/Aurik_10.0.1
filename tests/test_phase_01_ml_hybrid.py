@@ -51,7 +51,7 @@ print(f"  Severe clicks: {severe_click_count} (expected to use ML if available)"
 print(f"  Normal clicks: {normal_click_count} (expected to use DSP)")
 
 # Test with different quality modes
-test_modes = ["FAST", "BALANCED", "MAXIMUM"]
+test_modes = ["FAST", "BALANCED"]
 
 for mode in test_modes:
     print(f"\n{'-'*80}")
@@ -83,7 +83,7 @@ for mode in test_modes:
             else:
                 print("   ⚠️  Unexpected: FAST should not use ML")
 
-        elif mode in ["BALANCED", "MAXIMUM"]:
+        elif mode == "BALANCED":
             if result.modifications["ml_repaired"] > 0:
                 print(f"   ✅ Expected: {mode} mode uses ML for severe clicks")
             else:

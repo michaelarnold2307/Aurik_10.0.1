@@ -158,7 +158,7 @@ class PANNsPlugin:
             )
         except Exception as exc:
             logger.warning(
-                "PANNs ONNX nicht verfügbar — Instrument-Gate inaktiv " "(MAXIMUM-Modus: alle Phasen aktiv): %s",
+                "PANNs ONNX nicht verfügbar — Instrument-Gate inaktiv (alle Phasen sind aktiv): %s",
                 exc,
             )
             self._session = None

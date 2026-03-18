@@ -104,26 +104,26 @@ def test_phase20_ml_routing():
         # Not fatal - ML might not be available
         print("  (This is expected if DCCRN is not installed)")
 
-    # Test 3: MAXIMUM mode (Full ML-Hybrid: DSP + DCCRN)
+    # Test 3: BALANCED mode (Adaptive ML-Hybrid)
     print("\n" + "-" * 80)
-    print("Test 3: MAXIMUM mode (Full ML-Hybrid)")
+    print("Test 3: BALANCED mode (Adaptive ML-Hybrid)")
     print("-" * 80)
 
     try:
-        result_maximum = phase.process(reverbed_audio, sample_rate, material=MaterialType.VINYL, quality_mode="maximum")
-        print("✓ MAXIMUM mode completed")
-        print(f"  Algorithm: {result_maximum.metadata.get('algorithm', 'N/A')}")
-        print(f"  ML Hybrid: {result_maximum.metadata.get('ml_hybrid', False)}")
-        print(f"  DSP applied: {result_maximum.metrics.get('dsp_applied', False)}")
-        print(f"  DCCRN applied: {result_maximum.metrics.get('dccrn_applied', False)}")
-        print(f"  Reverb estimate: {result_maximum.metrics.get('reverb_estimate', 0):.3f}")
-        print(f"  RMS Change: {result_maximum.metrics.get('rms_change_db', 0):.2f} dB")
-        print(f"  Time: {result_maximum.execution_time_seconds:.2f}s")
+        result_balanced = phase.process(reverbed_audio, sample_rate, material=MaterialType.VINYL, quality_mode="balanced")
+        print("✓ BALANCED mode completed")
+        print(f"  Algorithm: {result_balanced.metadata.get('algorithm', 'N/A')}")
+        print(f"  ML Hybrid: {result_balanced.metadata.get('ml_hybrid', False)}")
+        print(f"  DSP applied: {result_balanced.metrics.get('dsp_applied', False)}")
+        print(f"  DCCRN applied: {result_balanced.metrics.get('dccrn_applied', False)}")
+        print(f"  Reverb estimate: {result_balanced.metrics.get('reverb_estimate', 0):.3f}")
+        print(f"  RMS Change: {result_balanced.metrics.get('rms_change_db', 0):.2f} dB")
+        print(f"  Time: {result_balanced.execution_time_seconds:.2f}s")
 
-        if result_maximum.warnings:
-            print(f"  Warnings: {result_maximum.warnings}")
+        if result_balanced.warnings:
+            print(f"  Warnings: {result_balanced.warnings}")
     except Exception as e:
-        print(f"✗ MAXIMUM mode failed: {e}")
+        print(f"✗ BALANCED mode failed: {e}")
         # Not fatal
         print("  (This is expected if DCCRN is not installed)")
 
@@ -132,7 +132,7 @@ def test_phase20_ml_routing():
     print("TEST SUMMARY")
     print("=" * 80)
     print("✓ Phase 20 ML-Hybrid integration functional")
-    print("✓ Quality mode routing working (fast → DSP, balanced/maximum → ML)")
+    print("✓ Quality mode routing working (fast → DSP, balanced → adaptive ML)")
     print("✓ Graceful fallback to DSP if ML unavailable")
     print("\nIntegration Status: SUCCESS ✅")
 

@@ -227,8 +227,12 @@ class AurikDenker:
                 try:
                     elapsed = time.perf_counter() - t_start
                     progress_callback(pct, msg, elapsed)
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as cb_exc:  # noqa: BLE001
+                    logger.debug(
+                        "AurikDenker: Progress-Callback fehlgeschlagen (Ursache: %s). "
+                        "Lösung: Callback-Signatur (pct, msg, elapsed_s) prüfen.",
+                        cb_exc,
+                    )
         warnings: list[str] = []
         phases_executed: list[str] = []
         stage_notes: dict[str, str] = {}
@@ -251,8 +255,12 @@ class AurikDenker:
                     if strat_denker.check(phases_remaining=0).should_exit_early:
                         logger.info("AurikDenker: StrategieDenker signalisiert Budget-Abbruch")
                         return False
-                except Exception:
-                    pass  # defensiv: lieber fortfahren als abstürzen
+                except Exception as budget_exc:
+                    logger.debug(
+                        "AurikDenker: StrategieDenker-Budgetcheck fehlgeschlagen (Ursache: %s). "
+                        "Lösung: Budget-Status aus StrategieDenker prüfen.",
+                        budget_exc,
+                    )
             return True
 
         # ── Stufe 1: Tonträger-Erkennung ─────────────────────────────────────
@@ -425,11 +433,9 @@ class AurikDenker:
                         _rek_result_box.append(rek)
                         # 4c: RestaurierDenker (UV3-Vollpipeline) auf vorgereinigtem Material
                         # Scaled inner progress: UV3 0–100 → AurikDenker 18–80
+                        _inner_cb: Any | None = None
                         if progress_callback is not None:
-                            def _inner_cb(pct: int, msg: str, elapsed: float = 0.0) -> None:
-                                _emit(18 + int(pct * 0.62), msg)
-                        else:
-                            _inner_cb = None
+                            _inner_cb = lambda pct, msg, elapsed=0.0: _emit(18 + int(pct * 0.62), msg)
                         _result_box.append(
                             get_restaurier_denker().restauriere(
                                 _work_audio, sr,
@@ -630,8 +636,15 @@ class AurikDenker:
 
         # ── Abschluss: RT-Faktor berechnen ───────────────────────────────────
         elapsed = time.perf_counter() - t_start
-        rt_factor = elapsed / max(audio_duration_s, 1e-6)
-        rt_factor = min(rt_factor, _3X_RT_LIMIT)  # Spec §9.5: niemals > 3.0
+        _rt_raw = elapsed / max(audio_duration_s, 1e-6)
+        if _rt_raw > _3X_RT_LIMIT:
+            logger.warning(
+                "AurikDenker: 3×RT-Limit überschritten (roh=%.2f×, gecappt=%.2f×). "
+                "Lösung: FAST/BALANCED nutzen oder adaptive Skips erhöhen.",
+                _rt_raw,
+                _3X_RT_LIMIT,
+            )
+        rt_factor = min(_rt_raw, _3X_RT_LIMIT)  # Spec §9.5: niemals > 3.0
 
         # Qualitätsschätzung: Priorität VERSA MOS → excellence_score → DSP-basiert
         if _versa_mos > 0.0:

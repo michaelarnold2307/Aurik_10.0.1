@@ -1,8 +1,8 @@
-# DefectScanner Specification - Aurik 9.10.51
+# DefectScanner Specification - Aurik 9.10.57
 
-**Version:** 9.10.51  
+**Version:** 9.10.57  
 **Stand:** März 2026  
-**Status:** ✅ Production-Ready (6312+ Tests grün)  
+**Status:** ✅ Production-Ready (7.747+ Tests grün)  
 **Location:** `core/defect_scanner.py` (~2500 lines)
 
 ---
@@ -29,11 +29,11 @@ The **DefectScanner** is the entry point for Aurik 9’s **Defect-First** restor
 │                  │                                           │
 │                  v                                           │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │  27 Defect Detectors (parallel analysis)              │  │
+│  │  30 Defect Detectors (parallel analysis)              │  │
 │  │  - clicks                - rumble                      │  │
 │  │  - crackle               - high_freq_noise             │  │
 │  │  - hum                   - compression_artifacts       │  │
-│  │  - wow_flutter           - phase_issues                │  │
+│  │  - wow                   - flutter                     │  │
 │  │  - stereo_imbalance      - dropouts                    │  │
 │  │  - digital_artifacts                                   │  │
 │  └───────────────┬───────────────────────────────────────┘  │
@@ -54,14 +54,15 @@ The **DefectScanner** is the entry point for Aurik 9’s **Defect-First** restor
 
 ## 3. Defect Types
 
-### 3.1 Enum Definition (27 DefectTypes, Stand v9.10.46)
+### 3.1 Enum Definition (30 DefectTypes, Stand v9.10.57)
 ```python
 class DefectType(Enum):
     # Analoge Kerndefekte
     CLICKS = "clicks"                          # Impuls-Artefakte
     CRACKLE = "crackle"                        # Vinyl-Crackle
     HUM = "hum"                                # 50/60 Hz Brumm
-    WOW_FLUTTER = "wow_flutter"                # Pitch-Instabilität
+    WOW = "wow"                                # Pitch-Instabilität < 0.5 Hz (IEC 60386)
+    FLUTTER = "flutter"                        # Pitch-Instabilität 0.5–200 Hz (IEC 60386)
     STEREO_IMBALANCE = "stereo_imbalance"      # L/R-Differenz
     DIGITAL_ARTIFACTS = "digital_artifacts"    # Aliasing, Quantisierung
     LOW_FREQ_RUMBLE = "low_freq_rumble"        # Tieffrequenzrumpeln (<100 Hz)

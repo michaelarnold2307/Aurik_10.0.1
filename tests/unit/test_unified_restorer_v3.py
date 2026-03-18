@@ -27,7 +27,7 @@ from backend.core.unified_restorer_v3 import (
     get_restorer,
 )
 from backend.core.defect_scanner import DefectType, MaterialType
-from backend.core.performance_guard import QualityMode
+from backend.core.performance_guard import DeploymentMode, QualityMode
 
 SR = 48000
 
@@ -117,6 +117,10 @@ class TestRestorationConfig:
         assert "mode" in f_names
         assert "num_cores" in f_names
 
+    def test_09_deployment_mode_default_product(self):
+        cfg = RestorationConfig()
+        assert cfg.deployment_mode == DeploymentMode.PRODUCT
+
 
 # ---------------------------------------------------------------------------
 # Klasse 2: RestorationResult
@@ -138,6 +142,34 @@ class TestRestorationResult:
         audio = _sine(secs=1.0)
         result = _make_restoration_result(audio)
         assert 0.0 <= result.quality_estimate <= 1.0
+
+
+class TestDeploymentModePolicy:
+    def test_52_product_mode_blocks_experimental_feature(self):
+        restorer = UnifiedRestorerV3(RestorationConfig(deployment_mode=DeploymentMode.PRODUCT))
+
+        allowed = restorer._allow_experimental_feature("vocos_finisher")
+
+        assert allowed is False
+        assert "vocos_finisher" in restorer._blocked_experimental_features
+        assert any("vocos_finisher" in warning for warning in restorer._warnings)
+
+    def test_53_research_mode_allows_experimental_feature(self):
+        restorer = UnifiedRestorerV3(RestorationConfig(deployment_mode=DeploymentMode.RESEARCH))
+
+        allowed = restorer._allow_experimental_feature("vocos_finisher")
+
+        assert allowed is True
+        assert "vocos_finisher" not in restorer._blocked_experimental_features
+
+    def test_54_product_mode_deduplicates_blocked_feature_warning(self):
+        restorer = UnifiedRestorerV3(RestorationConfig(deployment_mode=DeploymentMode.PRODUCT))
+
+        restorer._allow_experimental_feature("matchering_reference_mastering")
+        restorer._allow_experimental_feature("matchering_reference_mastering")
+
+        assert sorted(restorer._blocked_experimental_features) == ["matchering_reference_mastering"]
+        assert sum("matchering_reference_mastering" in warning for warning in restorer._warnings) == 1
 
     def test_12_phases_executed_is_list(self):
         audio = _sine(secs=1.0)
@@ -414,3 +446,141 @@ class TestPhaseRegressionLog:
             assert math.isfinite(delta), (
                 f"phase_regression_log['{phase_id}'] = {delta} ist nicht finite"
             )
+
+
+# ---------------------------------------------------------------------------
+# Klasse 10: Adaptive Threshold Mapping (14 Goals)
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptiveGoalThresholdResolution:
+    def test_44_resolve_from_object_payload(self):
+        payload = types.SimpleNamespace(
+            brillanz=0.71,
+            waerme=0.72,
+            natuerlichkeit=0.73,
+            authentizitaet=0.74,
+            emotionalitaet=0.75,
+            transparenz=0.76,
+            bass_kraft=0.77,
+        )
+
+        resolved = UnifiedRestorerV3._resolve_adaptive_goal_thresholds((payload, {}, None))
+        assert resolved["brillanz"] == pytest.approx(0.71)
+        assert resolved["waerme"] == pytest.approx(0.72)
+        assert resolved["natuerlichkeit"] == pytest.approx(0.73)
+        assert resolved["authentizitaet"] == pytest.approx(0.74)
+        assert resolved["emotionalitaet"] == pytest.approx(0.75)
+        assert resolved["transparenz"] == pytest.approx(0.76)
+        assert resolved["bass_kraft"] == pytest.approx(0.77)
+
+    def test_45_resolve_from_thresholds_dict_and_aliases(self):
+        payload = types.SimpleNamespace(
+            thresholds={
+                "bass-kraft": 0.61,
+                "groove": 0.62,
+                "spatial_depth": 0.63,
+                "timbre_authentizitaet": 0.64,
+                "tonal_center": 0.65,
+                "micro_dynamics": 0.66,
+                "separation_fidelity": 0.67,
+                "artikulation": 0.68,
+            }
+        )
+
+        resolved = UnifiedRestorerV3._resolve_adaptive_goal_thresholds((None, payload, None))
+        assert resolved["bass_kraft"] == pytest.approx(0.61)
+        assert resolved["groove"] == pytest.approx(0.62)
+        assert resolved["spatial_depth"] == pytest.approx(0.63)
+        assert resolved["timbre_authentizitaet"] == pytest.approx(0.64)
+        assert resolved["tonal_center"] == pytest.approx(0.65)
+        assert resolved["micro_dynamics"] == pytest.approx(0.66)
+        assert resolved["separation_fidelity"] == pytest.approx(0.67)
+        assert resolved["artikulation"] == pytest.approx(0.68)
+
+
+class TestFailReasonsMetadata:
+    """P0-2: RestorationResult.metadata['fail_reasons'] — structured error codes."""
+
+    def _make_minimal_result(self, fail_reasons=None):
+        """Build a RestorationResult with controlled fail_reasons in metadata."""
+        import numpy as np
+        from backend.core.unified_restorer_v3 import RestorationResult, RestorationConfig
+        from backend.core.defect_scanner import MaterialType, DefectType
+
+        return RestorationResult(
+            audio=np.zeros(4800, dtype=np.float32),
+            config=RestorationConfig(),
+            material_type=MaterialType.UNKNOWN,
+            defect_scores={},
+            phases_executed=[],
+            phases_skipped=[],
+            total_time_seconds=0.1,
+            rt_factor=0.1,
+            quality_estimate=0.60,
+            warnings=[],
+            metadata={"fail_reasons": fail_reasons or []},
+        )
+
+    def test_46_fail_reasons_field_present_in_metadata(self):
+        """metadata['fail_reasons'] must always be a list."""
+        result = self._make_minimal_result()
+        assert "fail_reasons" in result.metadata
+        assert isinstance(result.metadata["fail_reasons"], list)
+
+    def test_47_fail_reasons_empty_on_success(self):
+        """On success no fail_reasons entries expected."""
+        result = self._make_minimal_result(fail_reasons=[])
+        assert result.metadata["fail_reasons"] == []
+
+    def test_48_fail_reasons_pqs_unavailable_structure(self):
+        """PQS_UNAVAILABLE entry must have all required keys."""
+        entry = {
+            "component": "PerceptualQualityScorer",
+            "error_code": "PQS_UNAVAILABLE",
+            "exc_type": "ImportError",
+            "exc_msg": "No module named 'perceptual_quality_scorer'",
+        }
+        result = self._make_minimal_result(fail_reasons=[entry])
+        reasons = result.metadata["fail_reasons"]
+        assert len(reasons) == 1
+        r = reasons[0]
+        assert r["component"] == "PerceptualQualityScorer"
+        assert r["error_code"] == "PQS_UNAVAILABLE"
+        assert "exc_type" in r
+        assert "exc_msg" in r
+
+    def test_49_fail_reasons_musical_goals_unavailable_structure(self):
+        """MUSICAL_GOALS_UNAVAILABLE entry must have all required keys."""
+        entry = {
+            "component": "MusicalGoalsChecker",
+            "error_code": "MUSICAL_GOALS_UNAVAILABLE",
+            "exc_type": "RuntimeError",
+            "exc_msg": "librosa not available",
+        }
+        result = self._make_minimal_result(fail_reasons=[entry])
+        reasons = result.metadata["fail_reasons"]
+        assert reasons[0]["error_code"] == "MUSICAL_GOALS_UNAVAILABLE"
+        assert reasons[0]["component"] == "MusicalGoalsChecker"
+
+    def test_50_fail_reasons_is_list_not_mutable_default(self):
+        """Two separate RestorationResult instances must not share the same fail_reasons list."""
+        result_a = self._make_minimal_result(fail_reasons=[{"component": "X", "error_code": "Y", "exc_type": "E", "exc_msg": "m"}])
+        result_b = self._make_minimal_result(fail_reasons=[])
+        # Modifying b must not affect a
+        result_b.metadata["fail_reasons"].append({"component": "Z", "error_code": "W", "exc_type": "T", "exc_msg": "n"})
+        assert len(result_a.metadata["fail_reasons"]) == 1
+
+    def test_51_error_codes_are_known_strings(self):
+        """Only pre-defined error codes must appear (guard against typos)."""
+        KNOWN_CODES = {
+            "PQS_UNAVAILABLE",
+            "MUSICAL_GOALS_UNAVAILABLE",
+        }
+        entries = [
+            {"component": "PerceptualQualityScorer", "error_code": "PQS_UNAVAILABLE", "exc_type": "E", "exc_msg": ""},
+            {"component": "MusicalGoalsChecker", "error_code": "MUSICAL_GOALS_UNAVAILABLE", "exc_type": "E", "exc_msg": ""},
+        ]
+        result = self._make_minimal_result(fail_reasons=entries)
+        for r in result.metadata["fail_reasons"]:
+            assert r["error_code"] in KNOWN_CODES, f"Unknown error_code: {r['error_code']}"

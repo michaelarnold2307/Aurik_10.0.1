@@ -52,6 +52,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+import hashlib
 import json
 import logging
 import math
@@ -59,6 +60,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
+# Current Aurik version — bump on each release so reports are version-pinned.
+_AURIK_VERSION: str = "9.10.57"
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +86,15 @@ AMRB_BASELINES: dict[str, dict[str, float]] = {
         "pqs_mos": 3.2,
         "goal_natuerlichkeit": 0.65,
     },
+    # Normative comparator for 2026 gate (RX 11).
+    # Current proxy values remain aligned with historical RX10 baseline until
+    # external RX11 calibration data is integrated in CI artifacts.
+    "iZotope RX 11 (commercial)": {
+        "mushra_overall": 71.0,
+        "pqs_mos": 3.9,
+        "goal_natuerlichkeit": 0.80,
+    },
+    # Legacy alias kept for backward compatibility in old reports/tests.
     "iZotope RX 10 (commercial)": {
         "mushra_overall": 71.0,
         "pqs_mos": 3.9,
@@ -277,6 +290,10 @@ class BenchmarkConfig:
     report_path: Path | None = None
     system_name: str = "Aurik 9.9"
     verbose: bool = True
+    # P2-1: reproducibility — fixed seed for deterministic stimulus generation
+    run_seed: int = 42
+    # P2-1: version pinning for audit trail
+    aurik_version: str = _AURIK_VERSION
 
 
 @dataclass
@@ -302,6 +319,8 @@ class ScenarioResult:
     goal_scores: dict[str, float]
     passed: bool
     items: list[dict[str, float]] = field(default_factory=list)
+    # P2-1: "synthetic" (internally generated) vs. "external" (real dataset)
+    scenario_type: str = "synthetic"
 
     PASS_THRESHOLD: float = 80.0  # MUSHRA ≥ 80 = "Good"
 
@@ -333,6 +352,10 @@ class BenchmarkReport:
     timestamp_iso: str
     amrb_version: str = "1.0"
     baselines: dict[str, dict[str, float]] = field(default_factory=lambda: AMRB_BASELINES)
+    # P2-1: audit fields
+    run_seed: int = 42
+    aurik_version: str = _AURIK_VERSION
+    report_sha256: str = ""  # computed after serialisation; empty until _sign() called
 
     def passes_os_leadership_threshold(self) -> bool:
         """Prüft ob das System OS-Führerschaft-Niveau erreicht.
@@ -342,12 +365,20 @@ class BenchmarkReport:
         return self.overall_score >= 84.0 and self.n_passed >= 8
 
     def as_dict(self) -> dict:
-        """Serialisierungsformat für JSON-Export."""
+        """Serialisation format for JSON export (excludes report_sha256 for signing)."""
+        def _to_native(v):
+            """Convert numpy scalars to native Python types for JSON serialization."""
+            if hasattr(v, 'item'):
+                return v.item()
+            return v
+
         return {
             "amrb_version": self.amrb_version,
+            "aurik_version": self.aurik_version,
+            "run_seed": self.run_seed,
             "system_name": self.system_name,
             "timestamp": self.timestamp_iso,
-            "overall_score": self.overall_score,
+            "overall_score": _to_native(self.overall_score),
             "n_scenarios": self.n_scenarios,
             "n_passed": self.n_passed,
             "best_scenario": self.best_scenario,
@@ -356,16 +387,30 @@ class BenchmarkReport:
             "scenarios": {
                 sid: {
                     "description": r.description,
-                    "mushra_mean": r.mushra_mean,
-                    "mushra_std": r.mushra_std,
-                    "pqs_mos_mean": r.pqs_mos_mean,
+                    "scenario_type": r.scenario_type,
+                    "mushra_mean": _to_native(r.mushra_mean),
+                    "mushra_std": _to_native(r.mushra_std),
+                    "pqs_mos_mean": _to_native(r.pqs_mos_mean),
                     "passed": r.passed,
-                    "goal_scores": r.goal_scores,
+                    "goal_scores": {k: _to_native(v) for k, v in r.goal_scores.items()},
                 }
                 for sid, r in self.scenario_results.items()
             },
             "baselines": self.baselines,
         }
+
+    def sign(self) -> None:
+        """Compute SHA-256 over the report payload and store in report_sha256.
+
+        The hash covers all fields returned by as_dict() **except** ``timestamp``
+        (which changes per run) so that the hash is deterministic and reproducible
+        given identical run_seed, aurik_version, and restoration_fn behaviour.
+        Call once after the benchmark run before persisting.
+        """
+        payload_dict = self.as_dict()
+        payload_dict.pop("timestamp", None)  # exclude wall-clock time for reproducibility
+        payload = json.dumps(payload_dict, sort_keys=True, ensure_ascii=False)
+        self.report_sha256 = hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -438,7 +483,10 @@ class MusicalRestorationBenchmark:
             worst_scenario=worst_sid,
             scenario_results=scenario_results,
             timestamp_iso=timestamp,
+            run_seed=self.config.run_seed,
+            aurik_version=self.config.aurik_version,
         )
+        report.sign()  # P2-1: compute SHA-256 for audit-trail
 
         if self.config.report_path:
             self._save_report(report)
@@ -464,13 +512,22 @@ class MusicalRestorationBenchmark:
         n = self.config.n_items_per_scenario
         dur = self.config.duration_s
 
+        # P2-1: seed numpy global RNG so degradation functions (np.random.randn,
+        # np.random.randint) produce identical results given the same run_seed.
+        # Use MD5 of sid bytes for a stable (non-PYTHONHASHSEED-dependent) offset.
+        import hashlib as _hl
+        _sid_offset = int(_hl.md5(sid.encode()).hexdigest()[:8], 16)
+        np.random.seed((self.config.run_seed + _sid_offset) % (2 ** 31))
+
         mushra_scores: list[float] = []
         pqs_scores: list[float] = []
         goal_sum: dict[str, float] = {}
         items: list[dict[str, float]] = []
 
         for i in range(n):
-            ref = self._generate_test_signal(sr, dur, seed=i * 100 + hash(sid) % 100)
+            # P2-1: incorporate run_seed so results are fully reproducible
+            item_seed = self.config.run_seed + i * 100 + (_sid_offset % 1000)
+            ref = self._generate_test_signal(sr, dur, seed=item_seed)
 
             try:
                 degraded = degrade_fn(ref, sr)
@@ -539,6 +596,7 @@ class MusicalRestorationBenchmark:
             goal_scores=goal_means,
             passed=mushra_mean >= ScenarioResult.PASS_THRESHOLD,
             items=items,
+            scenario_type="synthetic",  # P2-1: all AMRB v1.0 scenarios use synthetic stimuli
         )
 
     # ------------------------------------------------------------------
@@ -625,15 +683,17 @@ class MusicalRestorationBenchmark:
         return np.clip(signal, -1.0, 1.0)
 
     def _save_report(self, report: BenchmarkReport) -> None:
-        """Speichert den JSON-Bericht."""
+        """Speichert den JSON-Bericht inklusive SHA-256-Signatur."""
         path = self.config.report_path
         if path is None:
             return
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        signed_dict = report.as_dict()
+        signed_dict["report_sha256"] = report.report_sha256
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(report.as_dict(), f, indent=2, ensure_ascii=False)
-        logger.info("📄 AMRB-Bericht gespeichert: %s", path)
+            json.dump(signed_dict, f, indent=2, ensure_ascii=False)
+        logger.info("📄 AMRB-Bericht gespeichert: %s (sha256=%s…)", path, report.report_sha256[:12])
 
     @staticmethod
     def print_report(report: BenchmarkReport) -> None:

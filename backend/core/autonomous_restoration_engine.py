@@ -698,7 +698,7 @@ class AutonomousRestorationEngine:
             (best_audio, best_variant_name, {variant_name: score})
         """
         scorer = ObjectiveScorer(
-            enable_cdpam=False,  # Keine Referenz verfügbar in Zero-Intervention-Modus
+            enable_versa=False,  # Kein Referenz-Audio im Zero-Intervention-Modus
             enable_dnsmos=False,  # Deaktiviert für Varianten-Selektion (zu langsam: ~14s/Variant)
             enable_musical_goals=True,
         )

@@ -76,7 +76,6 @@ class DefectType(Enum):
     CRACKLE = "crackle"
     HUM = "hum"
     WOW = "wow"     # Tonhöhenschwankung < 0.5 Hz (IEC 60386 — Motorexzentrizität, Plattenteller-Gleichlaufschwankung)
-    WOW_FLUTTER = "wow"  # Backward-compatible alias: legacy combined defect now maps to WOW/Flutter phase path
     FLUTTER = "flutter"  # Tonhöhenschwankung 0.5–200 Hz (IEC 60386 — mechanische Vibration, Führungsrolle, Bandantrieb)
     STEREO_IMBALANCE = "stereo_imbalance"
     DIGITAL_ARTIFACTS = "digital_artifacts"
@@ -1926,19 +1925,19 @@ class DefectScanner:
         )
 
     def _detect_pitch_drift(self, audio: np.ndarray) -> DefectScore:
-        """Erkennt konstanten Pitch-Drift / Geschwindigkeitsfehler (≠ WOW_FLUTTER).
+        """Erkennt konstanten Pitch-Drift / Geschwindigkeitsfehler (≠ WOW/FLUTTER).
 
-        Unterschied zu WOW_FLUTTER:
-          - WOW_FLUTTER: *periodische* Tonhöhenschwankung (< 10 Hz Modulation)
+        Unterschied zu WOW/FLUTTER:
+          - WOW/FLUTTER: *periodische* Tonhöhenschwankung (< 10 Hz Modulation)
           - PITCH_DRIFT: *monotoner / konstanter* Geschwindigkeitsfehler
             (z.B. Tape spielt 1–3% zu langsam oder zu schnell)
 
-        Methodik:
-          - Teilt Audio in Langzeit-Segmente (z.B. 10 s)
-          - Schätzt die dominante Grundfrequenz via Autokorrelation
-          - Vergleicht Grundfrequenz zwischen frühem und spätem Segment
-          - Großer monotoner Drift → hohe Severity; periodisches → WOW_FLUTTER zuständig
-        """
+                Methodik:
+                    - Teilt Audio in Langzeit-Segmente (z.B. 10 s)
+                    - Schätzt die dominante Grundfrequenz via Autokorrelation
+                    - Vergleicht Grundfrequenz zwischen frühem und spätem Segment
+                    - Großer monotoner Drift → hohe Severity; periodisches → WOW/FLUTTER zuständig
+                """
         min_len = int(5 * self.sample_rate)  # Mindestens 5 Sekunden für sinnvolle Analyse
         if len(audio) < min_len:
             return DefectScore(DefectType.PITCH_DRIFT, 0.0, 0.3)
@@ -1988,7 +1987,7 @@ class DefectScanner:
         drift_cents = 1200 * np.log2(max(f_late, f_early) / min(f_late, f_early))
 
         # Severity: 10 Cent Drift = 0.1, 100 Cent (1 Halbton) = 1.0
-        # WOW_FLUTTER wird für periodische Schwankungen verantwortlich sein;
+        # WOW/FLUTTER ist für periodische Schwankungen verantwortlich;
         # hier nur monotoner Trend über lange Dauer.
         threshold_factor = self.thresholds.get(DefectType.PITCH_DRIFT, 0.6)
         severity = min(1.0, (drift_cents / 50.0) / threshold_factor)

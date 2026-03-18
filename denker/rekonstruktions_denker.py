@@ -234,8 +234,12 @@ class RekonstruktionsDenker:
         phases: list[str] = []
         try:
             phases = list(getattr(raw, "phases_applied", []) or [])
-        except Exception:
-            pass
+        except Exception as phase_exc:
+            logger.debug(
+                "RekonstruktionsDenker: phases_applied nicht lesbar (Ursache: %s). "
+                "Lösung: GapReconstructor-Rückgabeformat prüfen.",
+                phase_exc,
+            )
         if not phases and repaired > 0:
             phases = ["phase_24_dropout_repair", "phase_55_diffusion_inpainting"]
 

@@ -79,7 +79,7 @@ def _select_phases_for(material: MaterialType, defect_type: DefectType, mode: Qu
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("mode", [QualityMode.QUALITY, QualityMode.MAXIMUM])
+@pytest.mark.parametrize("mode", [QualityMode.QUALITY, QualityMode.BALANCED])
 @pytest.mark.parametrize("material", list(MaterialType))
 @pytest.mark.parametrize("defect_type", list(DefectType))
 def test_every_switching_state_produces_targeted_phases(
@@ -125,7 +125,7 @@ class TestPrintThrough:
         assert isinstance(phases, list)  # kein Absturz
 
     def test_no_nan_in_phases(self):
-        phases = _select_phases_for(MaterialType.TAPE, DefectType.PRINT_THROUGH, QualityMode.MAXIMUM)
+        phases = _select_phases_for(MaterialType.TAPE, DefectType.PRINT_THROUGH, QualityMode.BALANCED)
         assert all(isinstance(p, str) for p in phases)
 
 
@@ -137,8 +137,8 @@ class TestQuantizationNoise:
         assert "phase_03_denoise" in phases
         assert "phase_23_spectral_repair" in phases
 
-    def test_maximum_mode_activates_denoise_and_spectral(self):
-        phases = _select_phases_for(MaterialType.MP3_LOW, DefectType.QUANTIZATION_NOISE, QualityMode.MAXIMUM)
+    def test_balanced_mode_activates_denoise_and_spectral(self):
+        phases = _select_phases_for(MaterialType.MP3_LOW, DefectType.QUANTIZATION_NOISE, QualityMode.BALANCED)
         assert "phase_03_denoise" in phases
         assert "phase_23_spectral_repair" in phases
 
@@ -183,8 +183,8 @@ class TestWaxCylinder:
         phases = _select_phases_for(MaterialType.WAX_CYLINDER, DefectType.BANDWIDTH_LOSS, QualityMode.QUALITY)
         assert "phase_06_frequency_restoration" in phases
 
-    def test_wax_cylinder_maximum_adds_harmonic_restoration(self):
-        phases = _select_phases_for(MaterialType.WAX_CYLINDER, DefectType.CLICKS, QualityMode.MAXIMUM)
+    def test_wax_cylinder_always_includes_harmonic_restoration(self):
+        phases = _select_phases_for(MaterialType.WAX_CYLINDER, DefectType.CLICKS, QualityMode.BALANCED)
         assert "phase_07_harmonic_restoration" in phases
 
     def test_wax_cylinder_all_defects_have_phases(self):
@@ -259,8 +259,8 @@ class TestReelTapeGaps:
         phases = _select_phases_for(MaterialType.REEL_TAPE, DefectType.BANDWIDTH_LOSS, QualityMode.QUALITY)
         assert "phase_39_air_band_enhancement" in phases
 
-    def test_reel_tape_maximum_activates_tape_saturation(self):
-        phases = _select_phases_for(MaterialType.REEL_TAPE, DefectType.CLICKS, QualityMode.MAXIMUM)
+    def test_reel_tape_activates_tape_saturation(self):
+        phases = _select_phases_for(MaterialType.REEL_TAPE, DefectType.CLICKS, QualityMode.BALANCED)
         assert "phase_22_tape_saturation" in phases
 
     def test_reel_tape_activates_eq_correction(self):
@@ -298,7 +298,7 @@ class TestRobustness:
 
     def test_all_combinations_no_exception(self):
         """630 Kombinationen — kein einziger Exception."""
-        for mode in [QualityMode.QUALITY, QualityMode.MAXIMUM]:
+        for mode in [QualityMode.QUALITY, QualityMode.BALANCED]:
             for mat in MaterialType:
                 for dt in DefectType:
                     try:
@@ -325,7 +325,7 @@ class TestRobustness:
         """Keine doppelten Phasen in einer Auswahl (Deduplizierung)."""
         # WAX_CYLINDER kann mehrfach dieselbe Phase triggern (z.B. phase_03_denoise)
         for mat in MaterialType:
-            phases = _select_phases_for(mat, DefectType.HIGH_FREQ_NOISE, QualityMode.MAXIMUM)
+            phases = _select_phases_for(mat, DefectType.HIGH_FREQ_NOISE, QualityMode.BALANCED)
             assert len(phases) == len(set(phases)), f"Doppelte Phasen bei {mat.name}: {phases}"
 
     def test_tier_0_always_present(self):
@@ -339,7 +339,7 @@ class TestRobustness:
     def test_tier_6_always_present(self):
         """Tier-6 Export-Pflichtphasen sind immer enthalten."""
         for mat in list(MaterialType)[:5]:  # Stichprobe
-            phases = _select_phases_for(mat, DefectType.CLICKS, QualityMode.MAXIMUM)
+            phases = _select_phases_for(mat, DefectType.CLICKS, QualityMode.BALANCED)
             phase_set = set(phases)
             for p in TIER_6_PHASES:
                 assert p in phase_set, f"Tier-6 Phase {p} fehlt bei {mat.name}"
@@ -356,7 +356,7 @@ def test_coverage_summary():
     covered = 0
     gaps = []
 
-    for mode in [QualityMode.QUALITY, QualityMode.MAXIMUM]:
+    for mode in [QualityMode.QUALITY, QualityMode.BALANCED]:
         for mat in MaterialType:
             for dt in DefectType:
                 total += 1
@@ -398,9 +398,9 @@ class TestRiaaCurveError:
         phases = _select_phases_for(MaterialType.VINYL, DefectType.RIAA_CURVE_ERROR, QualityMode.QUALITY)
         assert "phase_04_eq_correction" in phases
 
-    def test_maximum_mode_adds_harmonic_restoration(self):
-        """Im MAXIMUM-Modus zusätzlich Oberton-Rekonstruktion (durch Entzerrungs-Kette verloren)."""
-        phases = _select_phases_for(MaterialType.SHELLAC, DefectType.RIAA_CURVE_ERROR, QualityMode.MAXIMUM)
+    def test_balanced_mode_adds_harmonic_restoration(self):
+        """Im BALANCED-Modus Oberton-Rekonstruktion bei hoher Severity (durch Entzerrungs-Kette verloren)."""
+        phases = _select_phases_for(MaterialType.SHELLAC, DefectType.RIAA_CURVE_ERROR, QualityMode.BALANCED)
         assert "phase_07_harmonic_restoration" in phases
 
     def test_all_materials_produce_targeted_phases(self):
@@ -410,7 +410,7 @@ class TestRiaaCurveError:
             assert len(targeted) >= 1, f"RIAA_CURVE_ERROR × {mat.name} → keine Phasen"
 
     def test_no_nan_phases(self):
-        phases = _select_phases_for(MaterialType.SHELLAC, DefectType.RIAA_CURVE_ERROR, QualityMode.MAXIMUM)
+        phases = _select_phases_for(MaterialType.SHELLAC, DefectType.RIAA_CURVE_ERROR, QualityMode.BALANCED)
         assert all(isinstance(p, str) and len(p) > 0 for p in phases)
 
 
@@ -428,9 +428,9 @@ class TestAliasing:
         assert "phase_03_denoise" in phases
         assert "phase_23_spectral_repair" in phases
 
-    def test_maximum_mode_adds_spectral_repair_second_pass(self):
-        """Schweres Aliasing im MAXIMUM-Modus → phase_50_spectral_repair (zweiter Pass)."""
-        phases = _select_phases_for(MaterialType.MP3_LOW, DefectType.ALIASING, QualityMode.MAXIMUM)
+    def test_balanced_mode_adds_spectral_repair_second_pass(self):
+        """Schweres Aliasing im BALANCED-Modus → phase_50_spectral_repair (zweiter Pass)."""
+        phases = _select_phases_for(MaterialType.MP3_LOW, DefectType.ALIASING, QualityMode.BALANCED)
         assert "phase_50_spectral_repair" in phases
 
     def test_all_materials_produce_targeted_phases(self):
@@ -440,7 +440,7 @@ class TestAliasing:
             assert len(targeted) >= 1, f"ALIASING × {mat.name} → keine Phasen"
 
     def test_no_nan_phases(self):
-        phases = _select_phases_for(MaterialType.DAT, DefectType.ALIASING, QualityMode.MAXIMUM)
+        phases = _select_phases_for(MaterialType.DAT, DefectType.ALIASING, QualityMode.BALANCED)
         assert all(isinstance(p, str) and len(p) > 0 for p in phases)
 
 
@@ -457,9 +457,9 @@ class TestBiasError:
         phases = _select_phases_for(MaterialType.REEL_TAPE, DefectType.BIAS_ERROR, QualityMode.QUALITY)
         assert "phase_04_eq_correction" in phases
 
-    def test_maximum_mode_adds_freq_and_hiss_reduction(self):
-        """Starker Bias-Fehler im MAXIMUM-Modus → phase_06 + phase_29."""
-        phases = _select_phases_for(MaterialType.TAPE, DefectType.BIAS_ERROR, QualityMode.MAXIMUM)
+    def test_balanced_mode_adds_freq_and_hiss_reduction(self):
+        """Starker Bias-Fehler im BALANCED-Modus → phase_06 + phase_29."""
+        phases = _select_phases_for(MaterialType.TAPE, DefectType.BIAS_ERROR, QualityMode.BALANCED)
         assert "phase_06_frequency_restoration" in phases
         assert "phase_29_tape_hiss_reduction" in phases
 
@@ -470,5 +470,5 @@ class TestBiasError:
             assert len(targeted) >= 1, f"BIAS_ERROR × {mat.name} → keine Phasen"
 
     def test_no_nan_phases(self):
-        phases = _select_phases_for(MaterialType.REEL_TAPE, DefectType.BIAS_ERROR, QualityMode.MAXIMUM)
+        phases = _select_phases_for(MaterialType.REEL_TAPE, DefectType.BIAS_ERROR, QualityMode.BALANCED)
         assert all(isinstance(p, str) and len(p) > 0 for p in phases)

@@ -46,7 +46,7 @@ class MOSResult:
     Attribute:
         mos:          MOS-Score ∈ [1.0, 5.0] (Mean Opinion Score)
         confidence:   Konfidenz der Schätzung ∈ [0, 1]
-        model_used:   "utmos" | "cdpam_fallback" | "pqs_dsp_fallback"
+        model_used:   "utmos" | "pqs_dsp_fallback" | "pqs_dsp_fallback"
         grade:        Qualitäts-Stufe: "Excellent"|"Good"|"Fair"|"Poor"|"Bad"
         music_aware:  True wenn Modell auf Musik-Daten evaluiert wurde
         details:      Zusätzliche Metriken (spectral_flatness, harmonicity usw.)

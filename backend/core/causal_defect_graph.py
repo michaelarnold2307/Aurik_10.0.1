@@ -9,8 +9,8 @@ Kernthese: Viele scheinbare Defekte sind Symptome tiefer liegender Ursachen.
 Aurik repariert in kausaler Reihenfolge — kein anderes Programm tut das.
 
 Bekannte kausale Ketten:
-  WOW_FLUTTER     → BANDWIDTH_LOSS   (Kammfilter täuscht HF-Verlust vor)
-  WOW_FLUTTER     → PITCH_DRIFT      (Motorinstabilität → Tonhöhenschwankung)
+    WOW             → BANDWIDTH_LOSS   (Kammfilter täuscht HF-Verlust vor)
+    FLUTTER         → PITCH_DRIFT      (Motorinstabilität → Tonhöhenschwankung)
   DROPOUTS        → CLICKS           (Dropout-Flanken erzeugen Impuls-Artefakte)
   CRACKLE         → CLICKS           (Starke Crackling-Bursts erzeugen Click-Transienten)
   CRACKLE         → HIGH_FREQ_NOISE  (Oberflächen-Crackle erhöht breitbandigen HF-Rauschboden)

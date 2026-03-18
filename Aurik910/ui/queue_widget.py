@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ..core.queue_manager import QueueItem, QueueManager, QueueStatus
+from ..i18n import t
 
 
 class QueueItemWidget(QWidget):
@@ -40,7 +41,7 @@ class QueueItemWidget(QWidget):
         # Status + Progress
         status_layout = QHBoxLayout()
 
-        self.label_status = QLabel(self.item.status.value.upper())
+        self.label_status = QLabel(t(f"legacy.queue.status.{self.item.status.value}"))
         self.update_status_color()
         status_layout.addWidget(self.label_status)
 
@@ -66,7 +67,7 @@ class QueueItemWidget(QWidget):
 
         # Error message
         if self.item.error_message:
-            self.label_error = QLabel(f"Error: {self.item.error_message}")
+            self.label_error = QLabel(t("legacy.queue.error_prefix", error=self.item.error_message))
             self.label_error.setStyleSheet("color: #ff4444; font-size: 9px;")
             self.label_error.setWordWrap(True)
             layout.addWidget(self.label_error)
@@ -90,7 +91,7 @@ class QueueItemWidget(QWidget):
     def update_status(self, status: QueueStatus):
         """Update status display"""
         self.item.status = status
-        self.label_status.setText(status.value.upper())
+        self.label_status.setText(t(f"legacy.queue.status.{status.value}"))
         self.update_status_color()
 
 
@@ -116,7 +117,7 @@ class QueueWidget(QWidget):
         # Title + Stats
         title_layout = QHBoxLayout()
 
-        title_label = QLabel("<b>Processing Queue</b>")
+        title_label = QLabel(f"<b>{t('legacy.queue.title')}</b>")
         title_label.setStyleSheet("color: #ffffff; font-size: 12px;")
         title_layout.addWidget(title_label)
 
@@ -148,7 +149,7 @@ class QueueWidget(QWidget):
         # Overall progress
         progress_layout = QHBoxLayout()
 
-        progress_label = QLabel("Overall Progress:")
+        progress_label = QLabel(t("legacy.queue.overall_progress"))
         progress_label.setStyleSheet("color: #cccccc; font-size: 10px;")
         progress_layout.addWidget(progress_label)
 
@@ -174,7 +175,7 @@ class QueueWidget(QWidget):
         # Buttons
         button_layout = QHBoxLayout()
 
-        self.btn_process = QPushButton("▶ Process Queue")
+        self.btn_process = QPushButton(t("legacy.queue.process_button"))
         self.btn_process.clicked.connect(self.on_process_clicked)
         self.btn_process.setStyleSheet("""
             QPushButton {
@@ -194,7 +195,7 @@ class QueueWidget(QWidget):
         """)
         button_layout.addWidget(self.btn_process)
 
-        self.btn_remove = QPushButton("✕ Remove Selected")
+        self.btn_remove = QPushButton(t("legacy.queue.remove_button"))
         self.btn_remove.clicked.connect(self.on_remove_clicked)
         self.btn_remove.setStyleSheet("""
             QPushButton {
@@ -213,7 +214,7 @@ class QueueWidget(QWidget):
         """)
         button_layout.addWidget(self.btn_remove)
 
-        self.btn_clear = QPushButton("Clear Completed")
+        self.btn_clear = QPushButton(t("legacy.queue.clear_button"))
         self.btn_clear.clicked.connect(self.on_clear_clicked)
         self.btn_clear.setStyleSheet("""
             QPushButton {
@@ -288,10 +289,13 @@ class QueueWidget(QWidget):
 
         # Update stats
         self.stats_label.setText(
-            f"Total: {stats['total']} | "
-            f"Pending: {stats['pending']} | "
-            f"Completed: {stats['completed']} | "
-            f"Failed: {stats['failed']}"
+            t(
+                "legacy.queue.stats",
+                total=stats["total"],
+                pending=stats["pending"],
+                completed=stats["completed"],
+                failed=stats["failed"],
+            )
         )
 
         # Update overall progress

@@ -1,4 +1,4 @@
-# Aurik 9.10.51 — Benutzerhandbuch
+# Aurik 9.10.57 — Benutzerhandbuch
 
 **Intelligentes Musik-Restaurierungs-, Reparatur- und Rekonstruktionssystem**
 

@@ -1,19 +1,19 @@
 
 # 📚 Aurik 9.x.x — Projektdokumentation
 
-Offizielle Dokumentation von **Aurik 9.10.51** — dem weltweit ersten intelligenten,
+Offizielle Dokumentation von **Aurik 9.10.57** — dem weltweit ersten intelligenten,
 kontextbewussten Musik- und Gesangs-Restaurierungs-, Reparatur- und
 Rekonstruktions-Denkersystem. Alle Inhalte sind an die KI-Programmierrichtlinien
 (`.github/copilot-instructions.md`) ausgerichtet.
 
-**Version:** 9.10.51 | **Phasen:** 56 | **Tests:** 6312 | **Materialien:** 15 | **Musical Goals:** 14
+**Version:** 9.10.57 | **Phasen:** 56 | **Tests:** 7.747+ | **Materialien:** 17 | **Musical Goals:** 14 | **DefectTypes:** 29
 
 ---
 
 ## 📖 Quick Navigation
 
 ### Für Anwender
-- **[Installation Guide](guides/INSTALLATION.md)** – Systemvoraussetzungen & Installation
+- **[Installation Guide](guides/INSTALLATION.md)** – Systemvoraussetzungen & Installation (Linux / Windows)
 - **[User Guide](guides/USER_GUIDE.md)** – Vollständiges Benutzerhandbuch
 - **[Configuration Guide](guides/CONFIGURATION.md)** – Modi (Restoration / Studio 2026) & Parameter
 - **[Troubleshooting Guide](guides/TROUBLESHOOTING.md)** – Problemlösung & FAQ
@@ -23,19 +23,17 @@ Rekonstruktions-Denkersystem. Alle Inhalte sind an die KI-Programmierrichtlinien
 - **[KI-Agent Integration Guide](KI-AGENT-INTEGRATION-GUIDE.md)** – Regeln für KI-Agenten **(Pflicht!)**
 - **[KI-Programmierrichtlinien](../.github/copilot-instructions.md)** – Bindende Systemregeln **(Pflicht!)**
 - **[Python API Reference](api/PYTHON_API.md)** – API-Dokumentation
-- **[Architecture Overview](architecture/ARCHITECTURE.md)** – Systemarchitektur
-- **[Phases Overview](architecture/PHASES_OVERVIEW.md)** – 56-Phasen-Pipeline
+- **[Architecture Overview](architecture/ARCHITECTURE.md)** – Systemarchitektur (4 Schichten)
+- **[Phases Overview](architecture/PHASES_OVERVIEW.md)** – 56-Phasen-Pipeline (Defect-First)
 - **[Pipeline Flow](architecture/PIPELINE_FLOW_ANALYSIS.md)** – Ablauf & Datenfluss
 - **[Contributing Guide](development/CONTRIBUTING.md)** – Beitrag leisten
-- **[Testing Guide](development/TESTING.md)** – Teststrategie & Best Practices (6312 Tests)
+- **[Testing Guide](development/TESTING.md)** – Teststrategie & Best Practices (7.747+ Tests)
+- **[Performance Guard Spec](PERFORMANCE_GUARD_SPEC.md)** – 3×-Echtzeit-Budgetregeln
 
 ### Status & Fortschritt
-- **[Project Status Report](PROJECT_STATUS.md)** – Aktueller Entwicklungsstand v9.10.51
+- **[Project Status Report](PROJECT_STATUS.md)** – Aktueller Entwicklungsstand v9.10.57
 - **[Musical Excellence Analysis](musical_excellence_next_steps.md)** – Qualitätsanalyse & Roadmap
-- **[Roadmap](aurik9_roadmap.md)** – Zukunftspläne (v10.0+)
-
----
-
+- **[Roadmap](aurik9_roadmap.md)** – Zukunftspläne (Studio 2026+)
 
 ---
 
@@ -44,14 +42,16 @@ Rekonstruktions-Denkersystem. Alle Inhalte sind an die KI-Programmierrichtlinien
 ```
 docs/
 ├── guides/                     # Anwender-Guides
-│   ├── INSTALLATION.md        # Installation (Linux & Windows 10/11)
+│   ├── INSTALLATION.md        # Installation (Linux AppImage & Windows 10/11)
 │   ├── CONFIGURATION.md       # Modi (Restoration / Studio 2026), Parameter
 │   ├── TROUBLESHOOTING.md     # Problemlösung & FAQ
 │   ├── USER_GUIDE.md          # Vollständiges Benutzerhandbuch
-│   └── QUICKSTART_SUPPORT.md  # Schnelleinstieg
+│   ├── QUICKSTART_SUPPORT.md  # Schnelleinstieg
+│   ├── LOCAL_APP_DEPLOYMENT.md # Desktop-Deployment
+│   └── PHONEME_PROCESSING_GUIDE.md  # §2.36 LyricsGuidedEnhancement
 │
 ├── architecture/               # Architektur-Dokumentation
-│   ├── ARCHITECTURE.md        # Systemarchitektur (5 Schichten)
+│   ├── ARCHITECTURE.md        # Systemarchitektur (4 Schichten)
 │   ├── PHASES_OVERVIEW.md     # 56-Phasen-Pipeline (Defect-First)
 │   └── PIPELINE_FLOW_ANALYSIS.md
 │
@@ -63,46 +63,51 @@ docs/
 │   └── phase_completion/      # Phasenabschlussberichte
 │
 ├── development/                # Entwickler-Dokumentation
-│   ├── CONTRIBUTING.md
-│   ├── TESTING.md             # Teststrategie (6312 Tests)
-│   └── PROCESSING_LOGGER_SPECIFICATION.md
+│   ├── CONTRIBUTING.md        # Beitrag leisten
+│   ├── TESTING.md             # Teststrategie (7.747+ Tests)
+│   ├── TESTING_BEST_PRACTICES.md
+│   ├── DECISION_NO_VST3_PLUGIN.md  # Architektur-Entscheidung
+│   └── Packaging_Documentation.md  # AppImage / Windows-Build
 │
-├── archive/                    # Historische Dokumentation
+├── archive/                    # Historische Dokumente (26 Dateien, nicht mehr aktiv)
+│   └── README.md              # Archiv-Index
 │
 ├── INDEX.md                    # ⭐ Diese Datei
+├── README.md                   # Kurzübersicht → verweist auf INDEX.md
 ├── KI-AGENT-INTEGRATION-GUIDE.md  # ⚠️ Pflichtlektüre für KI-Agenten
-├── PROJECT_STATUS.md          # Aktueller Projektstand v9.10.51
-├── DEFECT_SCANNER_SPEC.md     # 27 DefectTypes, 15 MaterialTypes
-└── VOCAL_AI_ENHANCEMENT.md    # VoiceGender-System, Formanten
-```
-│   ├── old_roadmaps/          # Previous roadmaps (archived)
-│   ├── old_summaries/         # Previous summaries (archived)
-│   ├── old_status/            # Previous status docs (archived)
-│   └── obsolete/              # Obsolete documentation
-│
-├── 00_normative/              # Legacy: Normative documents
-├── 01_architecture/           # Legacy: Old architecture docs
-├── 02_processing/             # Legacy: Old processing docs
-└── 03_ui_spec/                # Legacy: Old UI specs
+├── PROJECT_STATUS.md          # Aktueller Projektstand v9.10.57
+├── AURIK_9.x.x_ARCHITEKTUR.md # Kognitive Pipeline-Übersicht (Detail)
+├── DEFECT_SCANNER_SPEC.md     # 29 DefectTypes, 17 MaterialTypes
+├── VOCAL_AI_ENHANCEMENT.md    # Vocal-Pipeline §2.8 (Formanten, Breathiness)
+├── PERFORMANCE_GUARD_SPEC.md  # 3×-Echtzeit-Budget [RELEASE_MUST]
+├── RESOURCE_AWARE_FALLBACK.md # PLM / RAM-Budget
+├── UNIFIED_RESTORER_V3_SPEC.md # UV3-Spezifikation
+├── MODULAR_PHASES_API.md      # Phasen-API
+├── COMPREHENSIVE_METRICS.md   # PQS-Metriken & OQS
+├── CI_CD.md                   # CI/CD-Pipeline
+├── aurik9_roadmap.md          # Roadmap
+├── musical_excellence_next_steps.md  # Qualitätsziele 2026
+├── natural_sound_improvement_analysis.md
+└── tier2_ml_hybrid_analysis.md
 ```
 
 ---
 
 ## 🧠 Normkonformität & KI-Richtlinien
 
-Alle Module, Phasen, DSP/ML-Komponenten und Metriken sind normkonform dokumentiert.
-
 **Bindende Regeln:** `.github/copilot-instructions.md`
 
-Schlußssselbindungen (Auszug):
-- Interne SR: immer **48 000 Hz** — vor und nach jedem DSP-Schritt, jeder ML-Inferenz, jeder Metrik
+Schlüsselbindungen (Auszug):
+- Interne SR: immer **48 000 Hz** — vor und nach jedem DSP-Schritt
 - **CPU-only**: keine GPU/CUDA — `providers=["CPUExecutionProvider"]`
-- **7 Musical Goals**: nach jeder Restaurierung zu prüfen, Regression = Feature ungültig
-- **55 Phasen** (Phase 01–55) — nur echte Dateinamen in `core/phases/`
-- **12 Materialien** — auto-erkannt durch `DefectScanner`
-- **21 DefectTypes** — vollständiger Defektkatalog in `core/defect_scanner.py`
-- **Anti-Parallelwelten**: vor jeder Implementierung bestehende Module prüfen
-- **Desktop-only**: keine Cloud-, Server- oder Netzwerk-Abhängigkeiten
+- **14 Musical Goals**: nach jeder Restaurierung zu prüfen, Regression = Feature ungültig
+- **56 Phasen** (Phase 01–56, Defect-First) in `backend/core/phases/`
+- **17 MaterialTypes** — auto-erkannt durch `MediumClassifier`
+- **29 DefectTypes** — vollständiger Defektkatalog in `core/defect_scanner.py`
+- **Desktop-only (Linux AppImage + Windows 10/11)**: keine Cloud, kein Docker, kein pip für Endnutzer
+- **§2.36 LyricsGuidedEnhancement**: Whisper-Tiny ONNX + wav2vec2 Forced Alignment
+- **try_allocate() Pflicht** vor jedem ML-Modell-Laden (PluginLifecycleManager)
+- **AMRB-Benchmark**: Aurik ≥ iZotope RX 11 in ≥ 7/10 Szenarien [RELEASE_MUST]
 
 ---
 

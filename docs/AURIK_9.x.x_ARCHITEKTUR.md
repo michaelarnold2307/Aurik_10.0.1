@@ -1,8 +1,8 @@
-# Aurik 9.10.51 — Implementierte Architektur
+# Aurik 9.10.57 — Implementierte Architektur
 
 **Stand:** März 2026  
-**Version:** 9.10.51  
-**Status:** ✅ Produktionsbereit — 6312 Tests grün
+**Version:** 9.10.57  
+**Status:** ✅ Produktionsbereit — 7.747+ Tests grün
 
 ---
 
@@ -19,8 +19,8 @@ TransientDecoupledProcessing (TDP)           ← Schritt 0: Trennung
   -> RestorabilityEstimator                   ← < 5 s Vor-Assessment
   -> EraClassifier (1890–2025)                ← Dekaden-Prior
   -> GermanSchlagerClassifier                 ← Zero-Shot Genre
-  -> MediumClassifier (15 Materialien)        ← Träger-Erkennung
-  -> DefectScanner (27 DefectTypes)           ← Defekt-Erkennung
+  -> MediumClassifier (17 Materialien)        ← Träger-Erkennung
+  -> DefectScanner (30 DefectTypes)           ← Defekt-Erkennung
   -> CausalDefectReasoner (14 Kausal-Ursachen)← Ursachen-Inferenz
   -> UncertaintyQuantifier                    ← Konfidenz
   -> GPParameterOptimizer (MOO-Pareto)        ← Parameter-Vorschlag
@@ -80,7 +80,7 @@ assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 
 ---
 
-## Wichtige neue Module (v9.9–v9.10.51)
+## Wichtige neue Module (v9.9–v9.10.57)
 
 | Modul | Zweck | Position in Pipeline |
 |---|---|---|
@@ -133,4 +133,4 @@ Frontend kommuniziert ausschließlich über API-Schicht oder Qt-Signals/Slots.
 
 ---
 
-*Aurik 9.10.51 — März 2026*
+*Aurik 9.10.57 — März 2026*

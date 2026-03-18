@@ -1,8 +1,12 @@
-# Aurik 9.10.51 - Installation Guide
+# Aurik 9.10.57 — Installation Guide
 
-**Version:** 9.10.51  
+**Version:** 9.10.57  
 **Datum:** März 2026  
-**Status:** ✅ Production Ready (6312+ Tests grün)
+**Status:** ✅ Production Ready (7.747+ Tests grün)
+
+> **Hinweis**: Aurik 9.x.x ist eine **Desktop-App** für **Linux** (AppImage) und **Windows 10/11** (.exe).
+> Es wird kein Python, kein Terminal und keine Internetverbindung benötigt.
+> macOS wird **nicht** unterstützt.
 
 ---
 
@@ -25,7 +29,7 @@
 
 | Komponente | Minimum | Empfohlen |
 |------------|---------|-----------|
-| **OS** | Linux, Windows 10/11 | Linux (Ubuntu 22.04+) |
+| **OS** | Linux (Ubuntu 20.04+) oder Windows 10/11 | Linux Ubuntu 22.04+ |
 | **Python** | 3.10+ | 3.10 |
 | **RAM** | 8 GB | 16 GB+ |
 | **CPU** | 4 Cores (2.5 GHz) | 8+ Cores (3.5 GHz) |
@@ -43,8 +47,9 @@
 
 **System-Bibliotheken** (manuell installieren):
 - **Linux:** `libsndfile1`, `ffmpeg`
-- **macOS:** `libsndfile`, `ffmpeg` (via Homebrew)
 - **Windows:** Keine zusätzlichen Bibliotheken erforderlich
+
+> **macOS wird nicht unterstützt.** Aurik 9 ist ausschließlich für Linux und Windows 10/11 konzipiert.
 
 ---
 
@@ -53,6 +58,9 @@
 ### 1. Basis-Installation
 
 #### Schritt 1: Repository klonen
+
+> **Hinweis**: Diese Schritte sind für die **Entwickler-Installation** (Source-Code).
+> Endanwender starten einfach das AppImage (Linux) bzw. .exe (Windows).
 
 ```bash
 # Clone Repository
@@ -67,7 +75,7 @@ cd Aurik_Standalone
 # Virtual Environment erstellen
 python3.11 -m venv .venv_aurik
 
-# Aktivieren
+# Aktivieren (Linux)
 source .venv_aurik/bin/activate
 ```
 
@@ -140,44 +148,16 @@ python -c "from core.unified_restorer_v2 import UnifiedRestorerV2; print('✅ Au
 
 ---
 
-### 2. GPU-Support (Optional)
+### 2. GPU-Support
 
-#### Warum GPU?
-
-**Performance-Gewinn:**
-- **CPU:** 3-5x Echtzeit (3min Audio → 10-15min Processing)
-- **GPU:** 0.5-1x Echtzeit (3min Audio → 2-3min Processing)
-
-**Empfohlene GPUs:**
-- NVIDIA RTX 3090 (24 GB VRAM) - Beste Wahl
-- NVIDIA RTX 4090 (24 GB VRAM) - Maximum Performance
-- NVIDIA A100 (40/80 GB VRAM) - Professional
-- NVIDIA V100 (16/32 GB VRAM) - Server
-
-#### Schritt 1: NVIDIA Driver installieren
-
-**Linux:**
-```bash
-# Check current driver
-nvidia-smi
-
-# Install NVIDIA Driver (if not installed)
-sudo ubuntu-drivers autoinstall
-sudo reboot
-```
-
-**Windows:**
-- Download NVIDIA Driver von https://www.nvidia.com/drivers
-- Game Ready Driver oder Studio Driver installieren
-
-#### Schritt 2: CUDA Toolkit installieren
-
-**CUDA 12.8 (empfohlen):**
-
-**Linux:**
-```bash
-# Add NVIDIA package repositories
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+> **Aurik 9 ist CPU-only** — GPU/CUDA wird nicht unterstützt und ist nicht geplant.
+> Alle ONNX-Sessions laufen mit `providers=["CPUExecutionProvider"]`.
+> Torch-Modelle werden mit `model.to("cpu")` ausgeführt.
+>
+> Leistungserwartung auf Ryzen 7 (8C/16T, 32 GB RAM):
+> - Standard-Modus (Balanced): 3× Echtzeit-Budget
+> - Quality-Modus: 5× Echtzeit-Budget
+> - Maximum-Modus: 8× Echtzeit-Budget
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
 

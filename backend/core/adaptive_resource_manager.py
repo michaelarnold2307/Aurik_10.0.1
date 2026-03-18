@@ -115,8 +115,8 @@ class AdaptiveResourceManager:
                     n_evicted = evict_stale_plugins()
                     if n_evicted > 0:
                         logger.info("ARM: RAM %.1f%% > %d%% threshold — evicted %d plugin(s)", memory_usage, self.memory_threshold, n_evicted)
-                except Exception:
-                    pass
+                except Exception as evict_exc:
+                    logger.debug("ARM: eviction check failed: %s", evict_exc)
                 _gc.collect()
 
             # Interruptible sleep — stoppt sofort bei stop_monitoring()

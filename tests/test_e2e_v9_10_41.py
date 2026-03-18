@@ -2,7 +2,7 @@
 E2E-Test für Aurik 9.10.41 — Kanonischer End-to-End-Test.
 
 Testet die vollständige Restaurierungs-Pipeline mit UnifiedRestorerV3
-für beide Modi: QUALITY (Restoration) und MAXIMUM (Studio 2026).
+für beide Modi: QUALITY (Restoration) und BALANCED (Studio 2026).
 
 Anforderungen:
     pytest.mark.e2e
@@ -531,18 +531,18 @@ class TestE2ERestorationQuality:
 
 @pytest.mark.e2e
 @pytest.mark.timeout(600)
-class TestE2EStudio2026Maximum:
-    """MAXIMUM-Modus — entspricht Studio 2026 der Spec."""
+class TestE2EStudio2026Balanced:
+    """BALANCED-Modus (Studio 2026) — Quality-Ziele der Spec §1.4."""
 
-    def test_01_studio_maximum_mode(self) -> None:
-        """Vollständige Restaurierung im MAXIMUM-Modus (Studio 2026)."""
+    def test_01_studio_balanced_mode(self) -> None:
+        """Vollständige Restaurierung im BALANCED-Modus (Studio 2026)."""
         from backend.core.performance_guard import QualityMode  # type: ignore
         from backend.core.unified_restorer_v3 import RestorationConfig, UnifiedRestorerV3  # type: ignore
 
         audio, sr = _load_audio_clip(_AUDIO_FILE)  # 15 s-Clip: CI-Timeout vermeiden
 
         config = RestorationConfig(
-            mode=QualityMode.MAXIMUM,
+            mode=QualityMode.BALANCED,
             enable_performance_guard=False,  # kein RT-Limit im Studio-Modus
             enable_phase_gate=True,
         )
@@ -584,29 +584,24 @@ class TestE2EStudio2026Maximum:
         assert out_path.exists(), f"WAV-Ausgabe nicht gefunden: {out_path}"
 
         print(
-            f"\n[MAXIMUM] rt_factor={result.rt_factor:.2f}x  "
+            f"\n[BALANCED/Studio2026] rt_factor={result.rt_factor:.2f}x  "
             f"quality_estimate={result.quality_estimate:.3f}  "
             f"Phasen ausgeführt={len(result.phases_executed)}  "
             f"Zeit={elapsed:.1f}s  material={result.material_type.value}"
         )
 
-    def test_02_quality_estimate_nicht_schlechter(self) -> None:
-        """MAXIMUM-Modus darf nicht schlechter als QUALITY-Modus sein."""
+    def test_02_quality_estimate_mindest_schwelle(self) -> None:
+        """BALANCED-Modus muss quality_estimate ≥ 0.55 erreichen (E2E-Pflicht Spec §8.1)."""
         from backend.core.performance_guard import QualityMode  # type: ignore
         from backend.core.unified_restorer_v3 import RestorationConfig, UnifiedRestorerV3  # type: ignore
 
         audio, sr = _load_audio_clip(_AUDIO_FILE)  # 15 s-Clip: CI-Timeout vermeiden
 
-        config_q = RestorationConfig(mode=QualityMode.QUALITY)
-        config_m = RestorationConfig(mode=QualityMode.MAXIMUM, enable_performance_guard=False)
+        config = RestorationConfig(mode=QualityMode.BALANCED, enable_performance_guard=False)
+        result = UnifiedRestorerV3(config=config).restore(audio, sample_rate=sr)
 
-        result_q = UnifiedRestorerV3(config=config_q).restore(audio, sample_rate=sr)
-        result_m = UnifiedRestorerV3(config=config_m).restore(audio, sample_rate=sr)
-
-        # MAXIMUM-Modus soll mindestens gleich gut sein (Toleranz: 0.05)
-        assert result_m.quality_estimate >= result_q.quality_estimate - 0.05, (
-            f"MAXIMUM ({result_m.quality_estimate:.3f}) wesentlich schlechter als "
-            f"QUALITY ({result_q.quality_estimate:.3f})"
+        assert result.quality_estimate >= 0.55, (
+            f"BALANCED quality_estimate {result.quality_estimate:.3f} < 0.55 (E2E-Pflicht Spec §8.1)"
         )
 
 
@@ -727,7 +722,7 @@ class TestE2ESystemInfo:
         assert hasattr(QualityMode, "FAST")
         assert hasattr(QualityMode, "BALANCED")
         assert hasattr(QualityMode, "QUALITY")
-        assert hasattr(QualityMode, "MAXIMUM")
+        assert sorted(member.name for member in QualityMode) == ["BALANCED", "FAST", "QUALITY"]
 
     def test_04_musical_goals_checker_importierbar(self) -> None:
         """MusicalGoalsChecker muss importierbar und instanziierbar sein."""

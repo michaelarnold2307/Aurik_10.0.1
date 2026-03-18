@@ -17,7 +17,7 @@ Dieses Dokument liefert **praktische Ergänzungen** zu den Richtlinien.
 ### Die 5 absoluten Regeln (Kurzfassung)
 
 1. **Anti-Parallelwelten**: Vor jeder Implementierung bestehende Module in `core/`, `plugins/`, `dsp/` prüfen
-2. **7 Musical Goals**: Nach jeder Restaurierung über `MusicalGoalsChecker.measure_all()` prüfen — Regression macht das Feature ungültig
+2. **14 Musical Goals**: Nach jeder Restaurierung über `MusicalGoalsChecker.measure_all()` prüfen — Regression macht das Feature ungültig
 3. **48 kHz überall**: `assert sample_rate == 48000` in jeder Phase und jedem Plugin
 4. **CPU-only**: Kein CUDA/ROCm — `providers=["CPUExecutionProvider"]`, `model.to("cpu")`
 5. **NaN/Inf verboten**: `np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)` nach jeder numerischen Operation
@@ -31,12 +31,12 @@ Dieses Dokument liefert **praktische Ergänzungen** zu den Richtlinien.
 | Modul | Datei | Funktion |
 |---|---|---|
 | `PerceptualEmbedder` | `core/perceptual_embedder.py` | 256-dim L2-normalisierter Einbettungsraum |
-| `CausalDefectReasoner` | `core/causal_defect_reasoner.py` | Bayesianische Kausalinferenz, 21 DefectTypes |
+| `CausalDefectReasoner` | `core/causal_defect_reasoner.py` | Bayesianische Kausalinferenz, 14 Kausal-Ursachen |
 | `GPParameterOptimizer` | `core/gp_parameter_optimizer.py` | RBF-GP + UCB, lernt dauerhaft pro Material |
 | `PerceptualQualityScorer` | `core/perceptual_quality_scorer.py` | Gammatone-NSIM + MCD + LUFS + MOS |
-| `MusicalGoalsChecker` | `backend/core/musical_goals/musical_goals_metrics.py` | 7 Ziele, `measure_all(audio, sr)` |
-| `DefectScanner` | `core/defect_scanner.py` | 24 DefectTypes, 17 MaterialTypes |
-| `UnifiedRestorerV3` | `core/unified_restorer_v3.py` | 55-Phasen-Pipeline-Orchestrator |
+| `MusicalGoalsChecker` | `backend/core/musical_goals/musical_goals_metrics.py` | 14 Ziele, `measure_all(audio, sr)` |
+| `DefectScanner` | `core/defect_scanner.py` | 30 DefectTypes, 17 MaterialTypes |
+| `UnifiedRestorerV3` | `core/unified_restorer_v3.py` | 56-Phasen-Pipeline-Orchestrator |
 | `VocalAIEnhancement` | `core/vocal_ai_enhancement.py` | `VoiceGender` (MALE/FEMALE/CHILD/ANDROGYNOUS) |
 | `ExcellenceOptimizer` | `core/excellence_optimizer.py` | `optimize_for_excellence()` |
 | `FeedbackChain` | `core/feedback_chain.py` | Iterative PQS-Schleife, max. 5 Iterationen |
@@ -48,7 +48,7 @@ Eingang (beliebige SR, mono/stereo)
     │
     ▼ auf 48 kHz resampeln (Lanczos-4)
     │
-    ▼ [DefectScanner.scan()] → DefectAnalysisResult (24 DefectTypes, 17 MaterialTypes)
+    ▼ [DefectScanner.scan()] → DefectAnalysisResult (30 DefectTypes, 17 MaterialTypes)
     │
     ▼ [CausalDefectReasoner.reason_about_defects()] → RestorationPlan
     │   .primary_cause, .recommended_phases, .phase_parameters, .reasoning
@@ -59,7 +59,7 @@ Eingang (beliebige SR, mono/stereo)
     │
     ▼ [PerceptualEmbedder.embed_audio()] → AudioEmbedding (256-dim, L2-normalisiert)
     │
-    ▼ Phase 01–55 ausführen (core/phases/phase_NN_*.py)
+    ▼ Phase 01–56 ausführen (core/phases/phase_NN_*.py)
     │
     ▼ [FeedbackChain.run()] → iteriert bis MOS konvergiert (|ΔMOS| < 0.02)
     │
@@ -68,7 +68,7 @@ Eingang (beliebige SR, mono/stereo)
     ▼ [ExcellenceOptimizer.optimize_for_excellence()] → ExcellenceResult
     │
     ▼ [MusicalGoalsChecker.measure_all(audio, sr)] → Dict[str, float]
-    │   PFLICHT: alle 7 Ziele ≥ Schwellwert → Fehler = Rollback auf best_result
+    │   PFLICHT: alle 14 Ziele ≥ Schwellwert → Fehler = Rollback auf best_result
     │
     ▼ [GPParameterOptimizer.update()] → persistiert Lernerfolg
     │
@@ -136,9 +136,9 @@ ls core/*.py | grep -i "mein_bereich"
 
 ---
 
-## 🗂️ Phasen-System (56 Phasen, Namenskonvention)
+## 🗂️ Phasen-System (56 Phasen, Phase 01–56)
 
-Alle Phasen liegen in `core/phases/phase_NN_<beschreibung>.py`.
+Alle Phasen liegen in `core/phases/phase_NN_<beschreibung>.py` (backend/core/phases/).
 
 **Neue Phase erstellen — Pflicht:**
 1. Datei: `core/phases/phase_NN_<beschreibung>.py`
@@ -171,16 +171,18 @@ tape · reel_tape · vinyl · shellac · wax_cylinder · wire_recording · lacqu
 dat · cd_digital · mp3_low · mp3_high · aac · minidisc · streaming · unknown
 ```
 
-**24 DefectTypes (vollständig):**
+**30 DefectTypes (vollständig, Stand v9.10.57):**
 ```
-CLICKS · CRACKLE · HUM · WOW_FLUTTER · LOW_FREQ_RUMBLE · DROPOUTS
-CLIPPING · SOFT_SATURATION · DC_OFFSET · BANDWIDTH_LOSS · HIGH_FREQ_NOISE
-STEREO_IMBALANCE · PHASE_ISSUES · PITCH_DRIFT · TRANSIENT_SMEARING
-REVERB_EXCESS · PRINT_THROUGH
-DIGITAL_ARTIFACTS · COMPRESSION_ARTIFACTS · PRE_ECHO
-QUANTIZATION_NOISE · JITTER_ARTIFACTS · DYNAMIC_COMPRESSION_EXCESS
-HEAD_WEAR
+CLICKS · CRACKLE · HUM · WOW · FLUTTER · LOW_FREQ_RUMBLE · DROPOUTS
+STEREO_IMBALANCE · PHASE_ISSUES · DIGITAL_ARTIFACTS
+COMPRESSION_ARTIFACTS · HIGH_FREQ_NOISE
+CLIPPING · SOFT_SATURATION · DC_OFFSET · BANDWIDTH_LOSS · PITCH_DRIFT
+REVERB_EXCESS · PRINT_THROUGH · QUANTIZATION_NOISE
+JITTER_ARTIFACTS · DYNAMIC_COMPRESSION_EXCESS
+HEAD_WEAR · AZIMUTH_ERROR · TRANSIENT_SMEARING · PRE_ECHO
+RIAA_CURVE_ERROR · ALIASING · BIAS_ERROR · SIBILANCE
 ```
+⚠️ **WOW** und **FLUTTER** sind seit v9.10.x getrennte Defekttypen (IEC 60386-konform, nicht mehr WOW_FLUTTER).
 
 > **Kritisch:** `SOFT_SATURATION` = Tube-/Tape-Sättigung → **BEWAHREN**, nie reparieren!  
 > `CLIPPING` = Harte Amplitudenbegrenzung → **REPARIEREN** (phase_23). Diskriminierung via `classify_clipping()` (§6.3).
@@ -434,10 +436,10 @@ Jede neue DSP-Funktion MUSS auf mindestens einem dieser Prinzipien basieren:
 □ np.clip(audio, -1.0, 1.0) vor jedem Ausgabe-Audio
 □ Kein print() — nur logger.*()
 □ Keine hardcodierten Pfade — pathlib.Path.home() / ".aurik" / ...
-□ Alle bestehenden 6312+ Tests weiterhin grün
+□ Alle bestehenden 7.747+ Tests weiterhin grün
 ```
 
 ---
 
-*KI-Agent Integration Guide — Aurik 9.10.51 — März 2026*
+*KI-Agent Integration Guide — Aurik 9.10.57 — März 2026*
 *Bindend für: GitHub Copilot, Claude, GPT-Instanzen*

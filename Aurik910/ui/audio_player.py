@@ -19,7 +19,9 @@ from PyQt5.QtWidgets import (
 )
 import numpy as np
 import soundfile as sf
-from backend.api.bridge import get_restorer_classes
+from backend.api.bridge import get_aurik_denker_class
+
+from ..i18n import t
 
 # Optional sounddevice import (requires PortAudio)
 try:
@@ -49,7 +51,9 @@ class AudioPreviewThread(QThread):
         """Process preview audio"""
         try:
             import numpy as np
-            _, UnifiedRestorerV3 = get_restorer_classes()
+            AurikDenkerClass = get_aurik_denker_class()
+            if AurikDenkerClass is None:
+                raise RuntimeError("AurikDenker backend class unavailable")
 
             self.progress.emit(10)
 
@@ -57,8 +61,8 @@ class AudioPreviewThread(QThread):
             audio, sr = sf.read(self.input_file)
             self.progress.emit(30)
 
-            # Create restorer (V3 — keine V2-spezifischen Kwargs)
-            restorer = UnifiedRestorerV3()
+            # Canonical entrypoint: preview processing through AurikDenker.
+            restorer = AurikDenkerClass()
             self.progress.emit(50)
 
             # Process (first 30 seconds for preview)
@@ -73,7 +77,7 @@ class AudioPreviewThread(QThread):
                 audio_preview = np.mean(audio_preview, axis=1)
             audio_preview = audio_preview.astype(np.float32)
 
-            result = restorer.restore(audio_preview, sr)
+            result = restorer.denke(audio_preview, sr, mode="quality")
             self.progress.emit(90)
 
             # V3 gibt RestorationResult zurück — .audio enthält das Audio-Array
@@ -109,12 +113,12 @@ class AudioPlayer(QWidget):
         self.setLayout(layout)
 
         # Title
-        title_label = QLabel("<b>Audio Preview</b>")
-        title_label.setStyleSheet("color: #ffffff; font-size: 12px;")
-        layout.addWidget(title_label)
+        self.title_label = QLabel()
+        self.title_label.setStyleSheet("color: #ffffff; font-size: 12px;")
+        layout.addWidget(self.title_label)
 
         # Status label
-        self.status_label = QLabel("Load an audio file to preview")
+        self.status_label = QLabel()
         self.status_label.setStyleSheet("color: #888888; font-size: 10px;")
         self.status_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.status_label)
@@ -141,13 +145,12 @@ class AudioPlayer(QWidget):
         # Mode selector
         mode_layout = QHBoxLayout()
 
-        mode_label = QLabel("Mode:")
-        mode_label.setStyleSheet("color: #cccccc; font-size: 10px;")
-        mode_layout.addWidget(mode_label)
+        self.mode_label = QLabel()
+        self.mode_label.setStyleSheet("color: #cccccc; font-size: 10px;")
+        mode_layout.addWidget(self.mode_label)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Before (Original)", "After (Processed)", "A/B Split"])
-        self.mode_combo.currentTextChanged.connect(self.on_mode_changed)
+        self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
         self.mode_combo.setEnabled(False)
         self.mode_combo.setStyleSheet("""
             QComboBox {
@@ -203,7 +206,7 @@ class AudioPlayer(QWidget):
         # Playback controls
         controls_layout = QHBoxLayout()
 
-        self.btn_play = QPushButton("▶ Play")
+        self.btn_play = QPushButton()
         self.btn_play.clicked.connect(self.toggle_play)
         self.btn_play.setEnabled(False)
         self.btn_play.setStyleSheet("""
@@ -225,7 +228,7 @@ class AudioPlayer(QWidget):
         """)
         controls_layout.addWidget(self.btn_play)
 
-        self.btn_stop = QPushButton("■ Stop")
+        self.btn_stop = QPushButton()
         self.btn_stop.clicked.connect(self.stop)
         self.btn_stop.setEnabled(False)
         self.btn_stop.setStyleSheet("""
@@ -284,7 +287,7 @@ class AudioPlayer(QWidget):
         layout.addLayout(volume_layout)
 
         # Generate Preview button
-        self.btn_generate = QPushButton("🔄 Generate Preview")
+        self.btn_generate = QPushButton()
         self.btn_generate.clicked.connect(self.generate_preview)
         self.btn_generate.setEnabled(False)
         self.btn_generate.setStyleSheet("""
@@ -305,6 +308,27 @@ class AudioPlayer(QWidget):
             }
         """)
         layout.addWidget(self.btn_generate)
+        self._apply_i18n_texts()
+
+    def _apply_i18n_texts(self):
+        """Apply translated labels and button texts."""
+        self.title_label.setText(f"<b>{t('legacy.audio.title')}</b>")
+        if self.audio_before is None:
+            self.status_label.setText(t("legacy.audio.load_to_preview"))
+
+        self.mode_label.setText(t("legacy.audio.mode_label"))
+        self.mode_combo.blockSignals(True)
+        current = self.mode_combo.currentIndex()
+        self.mode_combo.clear()
+        self.mode_combo.addItem(t("legacy.audio.mode_before"), "before")
+        self.mode_combo.addItem(t("legacy.audio.mode_after"), "after")
+        self.mode_combo.addItem(t("legacy.audio.mode_split"), "split")
+        self.mode_combo.setCurrentIndex(max(0, current))
+        self.mode_combo.blockSignals(False)
+
+        self.btn_play.setText(t("legacy.audio.pause_button") if self.is_playing else t("legacy.audio.play_button"))
+        self.btn_stop.setText(t("legacy.audio.stop_button"))
+        self.btn_generate.setText(t("legacy.audio.generate_preview"))
 
     def load_audio(self, filepath: str) -> bool:
         """Load audio file for preview"""
@@ -320,7 +344,7 @@ class AudioPlayer(QWidget):
             # Update UI
             duration = len(audio) / sr
             self.time_total.setText(self.format_time(duration))
-            self.status_label.setText(f"Loaded: {Path(filepath).name}")
+            self.status_label.setText(t("legacy.audio.loaded", file=Path(filepath).name))
 
             self.btn_play.setEnabled(True)
             self.btn_generate.setEnabled(True)
@@ -331,7 +355,7 @@ class AudioPlayer(QWidget):
             return True
 
         except Exception as e:
-            self.status_label.setText(f"Error: {str(e)}")
+            self.status_label.setText(t("legacy.audio.load_error", error=str(e)))
             return False
 
     def generate_preview(self):
@@ -340,13 +364,13 @@ class AudioPlayer(QWidget):
             return
 
         # This will be connected to get settings from main window
-        self.status_label.setText("Generating preview... (not yet connected to settings)")
+        self.status_label.setText(t("legacy.audio.generating_preview"))
 
         # For now, just duplicate the audio as a placeholder
         # In real implementation, this will call preview_thread with settings
         self.audio_after = self.audio_before.copy()
         self.mode_combo.setEnabled(True)
-        self.status_label.setText("Preview ready (placeholder - no processing)")
+        self.status_label.setText(t("legacy.audio.preview_ready"))
 
     def toggle_play(self):
         """Toggle play/pause"""
@@ -358,7 +382,7 @@ class AudioPlayer(QWidget):
     def play(self):
         """Start playback"""
         if not SOUNDDEVICE_AVAILABLE:
-            self.status_label.setText("⚠️ Audio playback unavailable (PortAudio not installed)")
+            self.status_label.setText(t("legacy.audio.playback_unavailable"))
             return
 
         if self.audio_before is None:
@@ -386,12 +410,12 @@ class AudioPlayer(QWidget):
             self.stream.start()
 
             self.is_playing = True
-            self.btn_play.setText("⏸ Pause")
+            self.btn_play.setText(t("legacy.audio.pause_button"))
             self.btn_stop.setEnabled(True)
             self.play_timer.start(100)  # Update every 100ms
 
         except Exception as e:
-            self.status_label.setText(f"Playback error: {str(e)}")
+            self.status_label.setText(t("legacy.audio.playback_error", error=str(e)))
 
     def pause(self):
         """Pause playback"""
@@ -401,7 +425,7 @@ class AudioPlayer(QWidget):
             self.stream = None
 
         self.is_playing = False
-        self.btn_play.setText("▶ Play")
+        self.btn_play.setText(t("legacy.audio.play_button"))
         self.play_timer.stop()
 
     def stop(self):
@@ -446,14 +470,10 @@ class AudioPlayer(QWidget):
                 current_time = (position / 1000.0) * duration
                 self.time_current.setText(self.format_time(current_time))
 
-    def on_mode_changed(self, mode_text):
+    def on_mode_changed(self, index):
         """Handle mode change"""
-        if mode_text == "Before (Original)":
-            self.current_mode = "before"
-        elif mode_text == "After (Processed)":
-            self.current_mode = "after"
-        else:
-            self.current_mode = "split"
+        mode = self.mode_combo.itemData(index)
+        self.current_mode = mode if mode in {"before", "after", "split"} else "before"
 
         # Restart playback if playing
         if self.is_playing:

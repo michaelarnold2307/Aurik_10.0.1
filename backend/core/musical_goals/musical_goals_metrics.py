@@ -140,7 +140,7 @@ def _get_versa():
 
 
 # Backward-Compat-Alias
-_get_cdpam = _get_versa
+# CDPAM verboten (§4.4) — direkt _get_versa verwenden
 
 
 @dataclass
@@ -609,7 +609,7 @@ class AuthentizitaetMetric:
             # ---------- VERSA: perceptuelle Qualität (ML-basiert, §4.4) ----------
             # VERSA 2024 ersetzt CDPAM als referenzfrei MOS-Metrik.
             # Für Authentizität: MOS des verarbeiteten Audios als Qualitäts-Prior.
-            cdpam_similarity: float = fingerprint_match  # Fallback-Prior = Chroma
+            versa_similarity: float = fingerprint_match  # Fallback-Prior = Chroma
             try:
                 versa = _get_versa()
                 if versa is not None:
@@ -618,18 +618,18 @@ class AuthentizitaetMetric:
                     res = versa.score(audio, sr)
                     # MOS [1,5] → Similarity [0,1]
                     mos_norm = float(_np.clip((res.mos - 1.0) / 4.0, 0.0, 1.0))
-                    cdpam_similarity = mos_norm
+                    versa_similarity = mos_norm
                     logger.debug(
                         "Authentizität-VERSA [%s]: MOS=%.3f → sim=%.4f",
                         res.model_used,
                         res.mos,
-                        cdpam_similarity,
+                        versa_similarity,
                     )
             except Exception:  # noqa: BLE001
                 pass
 
             # Final score: VERSA 40 %, Chroma 35 %, Formant 25 %
-            score = 0.40 * cdpam_similarity + 0.35 * fingerprint_match + 0.25 * formant_stability
+            score = 0.40 * versa_similarity + 0.35 * fingerprint_match + 0.25 * formant_stability
         else:
             # Heuristic score without reference
             # Use spectral consistency as proxy

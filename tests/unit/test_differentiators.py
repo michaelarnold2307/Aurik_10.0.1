@@ -175,7 +175,7 @@ class TestCausalDefectGraph:
             assert d.defect_type.value in explanation
 
     def test_wow_flutter_causes_bandwidth_loss(self):
-        """WOW → BANDWIDTH_LOSS: WOW muss zuerst repariert werden (WOW_FLUTTER aufgeteilt in WOW + FLUTTER)."""
+        """WOW → BANDWIDTH_LOSS: WOW muss zuerst repariert werden (getrennte WOW/FLUTTER-Semantik)."""
         graph = CausalDefectGraph()
         defects = [
             _make_score(DefectType.WOW, 0.7),

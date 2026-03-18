@@ -216,6 +216,17 @@ def get_cleanup_after_file_fn():
     return cleanup_after_file
 
 
+def get_stem_remix_balancer_fn():
+    """Gibt ``StemRemixBalancer.balance_remix``-Funktion zurück (lazy import, §1.4).
+
+    Signatur: ``balance_remix(vocals, instruments, original, sr, vocal_weight) -> np.ndarray``
+    Verwendet ITU-R BS.1770-5 K-gewichtete LUFS-Messung für Gain-Korrektur.
+    LUFS-Differenz nach Re-Mix ≤ 0.3 LU gegenüber Original (§1.4 Spec).
+    """
+    from backend.core.stem_remix_balancer import StemRemixBalancer  # type: ignore[import]
+    return StemRemixBalancer().balance_remix
+
+
 def get_clipping_classifier():
     """Gibt ``ClippingClassifier``-Singleton zurück (lazy import, §6.3).
 

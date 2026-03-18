@@ -1,4 +1,4 @@
-# Aurik 9.10.51 Roadmap – Stand März 2026
+# Aurik 9.10.57 Roadmap – Stand März 2026
 
 > **Aurik 9 ist das weltweit erste intelligente, kontextbewusste Musik- und Gesangs-Restaurierungs-, Reparatur- und Rekonstruktions-System. Die Musikalische Exzellenz-Phase (v9.9.0–v9.10.46) ist vollständig abgeschlossen.**
 
@@ -21,7 +21,7 @@
 | v9.10.48 | Infrastruktur: SBOM, GP-Backup, i18n-Tests, Export-Roundtrip (3 neue Test-Module) | 6312 |
 | v9.10.49 | Performance: SHA256-Cache, parallele Eingangs-Analyse, PMGG-Sample-Dauer, Warmup-Thread | 6312 |
 | v9.10.50 | §Dach MusikalischerGlobalplan: 13 Ära-Profile, 7 Genre-Modifikatoren, 17 Phase-Adjustments | 6312 |
-| v9.10.51 | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | 6312 |
+| v9.10.57 | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | 7.747+ |
 
 ---
 

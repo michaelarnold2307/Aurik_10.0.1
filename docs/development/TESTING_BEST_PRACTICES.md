@@ -1,7 +1,7 @@
-# Aurik 8.0 - Testing Best Practices
+# Aurik 9.10.57 — Testing Best Practices
 
-**Version:** 1.0  
-**Datum:** 14. Februar 2026  
+**Version:** 9.10.57  
+**Datum:** März 2026  
 **Status:** ✅ Production Ready
 
 ---
@@ -22,7 +22,7 @@
 
 ## Übersicht
 
-Aurik 8.0 Tests müssen die **7 Musical Goals** und das **Adaptive Thresholds System** berücksichtigen, um produktive und musikalisch sinnvolle Tests zu gewährleisten.
+Aurik 9 Tests müssen die **14 Musical Goals** und das **Adaptive Thresholds System** berücksichtigen, um produktive und musikalisch sinnvolle Tests zu gewährleisten.
 
 ### Kernprinzipien
 
@@ -35,22 +35,31 @@ Aurik 8.0 Tests müssen die **7 Musical Goals** und das **Adaptive Thresholds Sy
 
 ## Musical Goals Testing
 
-### Die 7 Musical Goals
+### Die 14 Musical Goals (Stand v9.10.x)
 
-1. **Brillanz** (HF Clarity 8-20 kHz) - Threshold: 0.85
-2. **Wärme** (Mid-Range 200-2000 Hz) - Threshold: 0.80
-3. **Natürlichkeit** (Gesamtklang) - Threshold: 0.85
-4. **Authentizität** (Voice Identity) - Threshold: 0.88
-5. **Emotionalität** (Dynamics & Expression) - Threshold: 0.87
-6. **Transparenz** (Clarity & Separation) - Threshold: 0.89
-7. **Bass-Kraft** (20-250 Hz) - Threshold: 0.85
+1. **Brillanz** (HF Clarity 8–20 kHz) — Threshold: 0.85
+2. **Wärme** (Mid-Range 200–2000 Hz) — Threshold: 0.80
+3. **Natürlichkeit** (Gesamtklang) — Threshold: 0.90 **(Stufe 1 — Rollback)**
+4. **Authentizität** (Klangidentität) — Threshold: 0.88 **(Stufe 1 — Rollback)**
+5. **Emotionalität** (Dynamics & Expression) — Threshold: 0.87
+6. **Transparenz** (Clarity & Separation) — Threshold: 0.89
+7. **Bass-Kraft** (20–250 Hz, inkl. Virtual Pitch) — Threshold: 0.85
+8. **Groove** (DTW ≤ 8 ms RMS) — Threshold: 0.88
+9. **Raumtiefe** (IACC Blauert 1997) — Threshold: 0.75
+10. **Timbre-Authentizität** (MFCC-Pearson ≥ 0.95) — Threshold: 0.87
+11. **Tonales Zentrum** (Chroma-Korrelation ≥ 0.95) — Threshold: 0.95
+12. **Mikro-Dynamik** (LUFS-Profil Pearson ≥ 0.92) — Threshold: 0.92
+13. **Separation-Treue** (SDR ≥ 8 dB) — Threshold: 0.82
+14. **Artikulation** (Transient-Shape-Korrelation ≥ 0.90) — Threshold: 0.85
+
+> **Adaptive Thresholds**: Schwellwerte werden vor jeder Restaurierung material- und restorability-adaptiv skaliert (§2.31). Statische Schwellwerte allein sind verboten.
 
 ### Beispiel: Musical Goals Test
 
 ```python
 @pytest.mark.integration
 def test_restore_musical_goals():
-    """Test: Restoration preserves all 7 Musical Goals"""
+    """Test: Restoration preserves all 14 Musical Goals"""
     # Generate test audio
     sr = 48000
     audio = generate_harmonic_test_signal(sr, duration=3.0)
@@ -246,7 +255,7 @@ def generate_extreme_degraded_audio(sr=48000, duration=3.0):
 
 ### Übersicht
 
-Aurik 8.0 verfügt über ein **geschlechts- und alters-spezifisches Vocal Enhancement System** mit **individueller Sibilanten-Beseitigung** (De-Essing).
+Aurik 9 verfügt über ein **geschlechts- und alters-spezifisches Vocal Enhancement System** mit **individueller Sibilanten-Beseitigung** (De-Essing).
 
 **Location:** `dsp/aurik_deesser_pro/music_vocal_pipeline.py`
 
@@ -492,7 +501,7 @@ def generate_degraded_vocal_signal(sr=48000, duration=3.0, gender="female"):
 @pytest.mark.vocal_enhancement
 def test_e2e_vocal_enhancement_all_musical_goals():
     """
-    Test: E2E Vocal Enhancement validates ALL 7 Musical Goals
+    Test: E2E Vocal Enhancement validates ALL 14 Musical Goals
     
     Validates: Brillanz, Wärme, Natürlichkeit, Authentizität,
                Emotionalität, Transparenz, Bass-Kraft
@@ -549,7 +558,7 @@ def test_e2e_vocal_enhancement_cross_gender_consistency():
 
 ### Übersicht
 
-Aurik 8.0 unterstützt **30+ analoge und digitale Tonträger** mit **Medium-spezifischen Musical Goals Thresholds** und **Forensischer Analyse**.
+Aurik 9 unterstützt **30+ analoge und digitale Tonträger** mit **Medium-spezifischen Musical Goals Thresholds** und **Forensischer Analyse**.
 
 **Locations:**
 - `forensics/unified_analyzer.py` - ML-basierte Forensic Analysis
@@ -567,9 +576,9 @@ Aurik 8.0 unterstützt **30+ analoge und digitale Tonträger** mit **Medium-spez
 7. **BROADCAST** (1920-heute): AM, FM, DAB
 8. **TELEPHONE** (1900-heute): PSTN, GSM, VoIP
 
-### ⚠️ Aurik 8.0 Scope: Mono/Stereo Only
+### ⚠️ Aurik 9 Scope: Mono/Stereo Only
 
-**WICHTIG:** Aurik 8.0 unterstützt ausschließlich **Mono- und Stereo-Formate** für **Processing**.
+**WICHTIG:** Aurik 9 unterstützt ausschließlich **Mono- und Stereo-Formate** für **Processing**.
 
 **❌ NICHT UNTERSTÜTZT (Processing):**
 - **Surround/Multichannel:** 5.1, 7.1, Quadraphonic Surround
@@ -705,7 +714,7 @@ def test_medium_specific_thresholds():
 - 🚫 360 Reality Audio
 - 🚫 Spatial Audio
 
-**REASON:** Aurik 8.0 ist ausschließlich für Mono/Stereo optimiert.
+**REASON:** Aurik 9 ist ausschließlich für Mono/Stereo optimiert.
 
 ---
 
@@ -720,7 +729,7 @@ def test_medium_specific_thresholds():
 @pytest.mark.slow           # Langsame Tests (> 30s)
 @pytest.mark.ml             # Benötigt ML-Modelle
 
-# AURIK 8.0 Neue Marker (empfohlen)
+# AURIK 9 Neue Marker (empfohlen)
 @pytest.mark.musical_goals         # Tests für Musical Goals
 @pytest.mark.adaptive_thresholds   # Tests für Adaptive Thresholds
 @pytest.mark.material_quality      # Tests für Material Quality Assessment
@@ -739,7 +748,7 @@ markers =
     e2e: End-to-End-Tests
     slow: Langsame Tests (> 30s)
     ml: Tests die ML-Modelle laden
-    musical_goals: Tests für 7 Musical Goals
+    musical_goals: Tests für 14 Musical Goals
     adaptive_thresholds: Tests für Adaptive Threshold System
     material_quality: Tests für Material Quality Assessment
     vocal_enhancement: Tests für Vocal Enhancement

@@ -46,6 +46,8 @@ class FeedbackChain:
         excellence_mode: bool = False,
         material: str = "auto",
         use_mert: bool = False,
+        use_pqs_in_loop: bool = False,
+        use_versa_in_loop: bool = False,
         max_retries: Optional[int] = None,
     ) -> None:
         # Legacy-Kompatibilitaet: max_retries entspricht max_iterations.
@@ -57,7 +59,28 @@ class FeedbackChain:
         self.excellence_mode = bool(excellence_mode)
         self.material = str(material)
         self.use_mert = bool(use_mert)
+        self.use_pqs_in_loop = bool(use_pqs_in_loop)
+        self.use_versa_in_loop = bool(use_versa_in_loop)
         self.goal_priority_callback: Optional[Callable[[np.ndarray, np.ndarray], tuple[bool, str]]] = None
+        self._pqs_score_fn: Optional[Callable[[np.ndarray, int], object]] = None
+        self._versa_score_fn: Optional[Callable[[np.ndarray, int], object]] = None
+        self._last_score_source: str = "heuristic_rms"
+        if self.use_pqs_in_loop:
+            try:
+                from backend.core.perceptual_quality_scorer import score_audio_absolute
+
+                self._pqs_score_fn = score_audio_absolute
+            except Exception as exc:
+                logger.debug("FeedbackChain: PQS scorer unavailable, heuristic fallback active: %s", exc)
+        if self.use_versa_in_loop:
+            try:
+                from plugins.versa_plugin import get_versa_plugin
+
+                _versa_plugin = get_versa_plugin()
+                if _versa_plugin is not None:
+                    self._versa_score_fn = _versa_plugin.score
+            except Exception as exc:
+                logger.debug("FeedbackChain: VERSA scorer unavailable, fallback active: %s", exc)
         # target_score: explizit gesetzt oder aus excellence_mode abgeleitet
         excellence_target = EXCELLENCE_TARGET_SCORE if excellence_mode else DEFAULT_TARGET_SCORE
         if target_score is not None:
@@ -71,6 +94,33 @@ class FeedbackChain:
         mono = arr.mean(axis=0) if arr.ndim == 2 else arr
         rms = float(np.sqrt(np.mean(mono.astype(np.float64) ** 2) + 1e-12))
         return float(np.clip(1.0 + 4.0 * (1.0 - np.exp(-8.0 * rms)), 1.0, 5.0))
+
+    def _compute_iteration_score(self, audio: np.ndarray, sr: int) -> float:
+        """Computes loop score with PQS-first strategy and heuristic fallback.
+
+        Primary: VERSA mos (if enabled) or PerceptualQualityScorer.score_audio_absolute(...).
+        Fallback: legacy RMS heuristic from compute_perceptual_score().
+        """
+        if self._versa_score_fn is not None:
+            try:
+                versa = self._versa_score_fn(audio, sr)
+                versa_mos = float(getattr(versa, "mos", np.nan))
+                if np.isfinite(versa_mos):
+                    self._last_score_source = "versa"
+                    return float(np.clip(versa_mos, 1.0, 5.0))
+            except Exception as exc:
+                logger.debug("FeedbackChain: VERSA loop score failed, trying PQS fallback: %s", exc)
+        if self._pqs_score_fn is not None:
+            try:
+                pqs = self._pqs_score_fn(audio, sr)
+                pqs_mos = float(getattr(pqs, "pqs_mos", getattr(pqs, "mos", np.nan)))
+                if np.isfinite(pqs_mos):
+                    self._last_score_source = "pqs_absolute"
+                    return float(np.clip(pqs_mos, 1.0, 5.0))
+            except Exception as exc:
+                logger.debug("FeedbackChain: PQS loop score failed, fallback active: %s", exc)
+        self._last_score_source = "heuristic_rms"
+        return self.compute_perceptual_score(audio)
 
     def run(
         self,
@@ -96,8 +146,12 @@ class FeedbackChain:
                 for _pid, _fn, _kw in phases_or_fn:
                     try:
                         out = _fn(out, _sr2, **_kw) if _kw else _fn(out, _sr2)
-                    except Exception:
-                        pass
+                    except Exception as phase_exc:
+                        logger.debug(
+                            "FeedbackChain: phase callable failed (%s): %s",
+                            _pid,
+                            phase_exc,
+                        )
                 return out
 
             improve_fn: Callable[[np.ndarray, int], np.ndarray] = _combined_fn
@@ -108,8 +162,9 @@ class FeedbackChain:
 
         current = np.nan_to_num(np.asarray(audio, dtype=np.float32))
         best = current.copy()
-        best_mos = self.compute_perceptual_score(best)
+        best_mos = self._compute_iteration_score(best, _sr)
         history = [best_mos]
+        _score_sources = [self._last_score_source]
         _ceiling_reached = False
 
         # §2.34 GoalPriorityProtocol — Stufe-1/2-Regression löst sofortigen Rollback aus
@@ -117,8 +172,8 @@ class FeedbackChain:
         try:
             from backend.core.goal_priority_protocol import GoalPriorityProtocol
             _gpp = GoalPriorityProtocol()
-        except Exception:
-            pass
+        except Exception as gpp_exc:
+            logger.debug("FeedbackChain: GoalPriorityProtocol unavailable: %s", gpp_exc)
 
         _prev_goals: dict[str, float] = {}
         _goal_priority_log: list[str] = []
@@ -128,8 +183,9 @@ class FeedbackChain:
         for i in range(1, self.max_iterations + 1):
             candidate = improve_fn(current, _sr)
             candidate = np.clip(np.nan_to_num(np.asarray(candidate, dtype=np.float32)), -1.0, 1.0)
-            mos = self.compute_perceptual_score(candidate)
+            mos = self._compute_iteration_score(candidate, _sr)
             history.append(mos)
+            _score_sources.append(self._last_score_source)
             _phase_executions.append({"iteration": i, "mos": float(mos)})
 
             # Optionaler externer Priority-Callback (z.B. aus UnifiedRestorerV3).
@@ -164,8 +220,8 @@ class FeedbackChain:
                     from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
                     _checker = MusicalGoalsChecker()
                     _prev_goals = _checker.measure_all(candidate, _sr)
-                except Exception:
-                    pass
+                except Exception as mg_exc:
+                    logger.debug("FeedbackChain: initial musical-goals read failed: %s", mg_exc)
 
             if mos > best_mos:
                 best_mos = mos
@@ -200,6 +256,12 @@ class FeedbackChain:
             metadata={
                 "best_mos": best_mos,
                 "goal_priority_log": _goal_priority_log,
+                "score_source": _score_sources[-1] if _score_sources else self._last_score_source,
+                "score_sources_seen": list(dict.fromkeys(_score_sources)),
+                "score_fallback_used": bool(
+                    (self.use_pqs_in_loop or self.use_versa_in_loop)
+                    and any(src == "heuristic_rms" for src in _score_sources)
+                ),
             },
             phase_executions=_phase_executions,
             overall_score=float(best_mos),

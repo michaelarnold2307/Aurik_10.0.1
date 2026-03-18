@@ -121,6 +121,8 @@ class LyricsAligner:
         # Add more languages as needed
     }
 
+    LEGACY_ENABLE_ENV = "AURIK_ENABLE_LEGACY_LYRICS"
+
     def __init__(
         self,
         use_whisper: bool = True,
@@ -142,6 +144,21 @@ class LyricsAligner:
         self.use_mfa = use_mfa
         self.whisper_model = whisper_model
         self.language = language
+        self._legacy_enabled = os.getenv(self.LEGACY_ENABLE_ENV, "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+        # Production policy: legacy lyrics stack is opt-in for dev/research only.
+        if not self._legacy_enabled:
+            self.use_whisper = False
+            self.use_mfa = False
+            logger.info(
+                "Lyrics Aligner: legacy path disabled by policy (set %s=1 for dev only)",
+                self.LEGACY_ENABLE_ENV,
+            )
 
         self._whisper_available = False
         self._mfa_available = False
@@ -151,6 +168,9 @@ class LyricsAligner:
 
     def _initialize(self) -> None:
         """Initialize ASR and alignment systems."""
+        if not self._legacy_enabled:
+            return
+
         if self.use_whisper:
             self._check_whisper_availability()
 
@@ -158,26 +178,17 @@ class LyricsAligner:
             self._check_mfa_availability()
 
     def _check_whisper_availability(self) -> None:
-        """Check if Whisper Docker container is available."""
-        try:
-            import subprocess
-
-            result = subprocess.run(
-                ["docker", "images", "-q", "aurik_standalone/models/whisper:latest"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.stdout.strip():
-                self._whisper_available = True
-                logger.info("✅ Lyrics Aligner: Whisper Docker available")
-            else:
-                logger.warning("⚠️ Lyrics Aligner: Whisper Docker not found")
-        except Exception as e:
-            logger.warning(f"Whisper check failed: {e}")
+        """Disable Docker-based Whisper path for production policy compliance."""
+        self._whisper_available = False
+        logger.info("Lyrics Aligner: Docker-based Whisper path disabled by policy")
 
     def _check_mfa_availability(self) -> None:
         """Check if MFA is available and which models are installed."""
+        if not self._legacy_enabled:
+            self._mfa_available = False
+            logger.info("Lyrics Aligner: MFA path disabled by policy")
+            return
+
         try:
             import subprocess
 
@@ -279,98 +290,12 @@ class LyricsAligner:
 
     def _whisper_transcribe(self, audio: npt.NDArray[np.float32], sr: int) -> tuple[str, str, list[dict]]:
         """Transcribe audio with Whisper."""
-        if self._whisper_available:
-            try:
-                return self._whisper_docker_inference(audio, sr)
-            except Exception as e:
-                logger.warning(f"Whisper Docker inference failed: {e}. Using fallback.")
-                return self._fallback_transcribe(audio, sr)
-        else:
-            return self._fallback_transcribe(audio, sr)
+        return self._fallback_transcribe(audio, sr)
 
     def _whisper_docker_inference(self, audio: npt.NDArray[np.float32], sr: int) -> tuple[str, str, list[dict]]:
-        """Run Whisper inference via Docker container."""
-        import json
-        import subprocess
-        import tempfile
-
-        import soundfile as sf
-
-        logger.info("Running Whisper Docker inference...")
-
-        # Create temporary files
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as audio_file:
-            audio_path = audio_file.name
-            # Resample to 16kHz if needed (Whisper expects 16kHz)
-            if sr != 16000:
-                from scipy import signal as sp_signal
-
-                audio_16k = sp_signal.resample(audio, int(len(audio) * 16000 / sr))
-                sf.write(audio_path, audio_16k, 16000)
-            else:
-                sf.write(audio_path, audio, sr)
-
-        try:
-            # Run Whisper Docker container
-            # Expected container: aurik_standalone/models/whisper:latest
-            # Input: audio file
-            # Output: JSON with transcript, language, word_segments
-
-            cmd = [
-                "docker",
-                "run",
-                "--rm",
-                "-v",
-                f"{audio_path}:/input.wav:ro",
-                "aurik_standalone/models/whisper:latest",
-                "--model",
-                self.whisper_model,
-                "--language",
-                self.language or "auto",
-                "--word_timestamps",
-                "true",
-                "--output_format",
-                "json",
-                "/input.wav",
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # 5 minutes timeout
-
-            if result.returncode != 0:
-                raise RuntimeError(f"Whisper Docker failed: {result.stderr}")
-
-            # Parse JSON output
-            output = json.loads(result.stdout)
-
-            transcript = output.get("text", "")
-            language = output.get("language", "unknown")
-            segments = output.get("segments", [])
-
-            # Convert to word segments
-            word_segments = []
-            for seg in segments:
-                for word_info in seg.get("words", []):
-                    word_segments.append(
-                        {
-                            "word": word_info.get("word", "").strip(),
-                            "start": word_info.get("start", 0.0),
-                            "end": word_info.get("end", 0.0),
-                            "confidence": word_info.get("probability", 0.8),
-                        }
-                    )
-
-            logger.info(f"✅ Whisper transcribed: {len(word_segments)} words, language={language}")
-
-            return transcript, language, word_segments
-
-        finally:
-            # Cleanup temp file
-            import os
-
-            try:
-                os.unlink(audio_path)
-            except Exception:
-                pass
+        """Legacy method retained for API compatibility; Docker execution is disabled."""
+        del audio, sr
+        raise RuntimeError("Docker-based Whisper inference is disabled by policy")
 
     def _fallback_transcribe(self, audio: npt.NDArray[np.float32], sr: int) -> tuple[str, str, list[dict]]:
         """Fallback transcription (simple voice activity detection)."""

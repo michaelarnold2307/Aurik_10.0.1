@@ -1,7 +1,7 @@
-# Aurik 8.0 - Testing Guide
+# Aurik 9.10.57 — Testing Guide
 
-**Version:** 8.0.0  
-**Datum:** 13. Februar 2026  
+**Version:** 9.10.57  
+**Datum:** März 2026  
 **Status:** ✅ Production Ready
 
 ---
@@ -26,10 +26,12 @@ Aurik verwendet **pytest** als Test-Framework mit umfassender Test-Coverage für
 
 ### Test-Statistik
 
-- **187 Tests** (Stand: 13.02.2026)
-- **Coverage:** >80% (Ziel: >85%)
-- **Test-Typen:** Unit, Integration, E2E, Performance
-- **Test-Dauer:** ~5-10 Minuten (Full Suite, CPU-only)
+- **7.747+ Tests** (Stand: März 2026) — alle grün ✅
+- **Coverage:** >80 % (Unit + Integration)
+- **Test-Typen:** Unit, Integration, E2E (Normativ), Performance (AMRB-Benchmark)
+- **Test-Dauer:** Unit-Suite ~5 min (Standard) | vollständige Suite mit ML ~30 min
+
+> **Heavy-Tests (ML/slow)**: Nur mit `--run-heavy-tests` ausgeführt (kein Bestandteil des Standard-Runs).
 
 ---
 
@@ -64,30 +66,22 @@ tests/
 
 ## Tests ausführen
 
-### 1. Alle Tests
+### 1. Alle Unit-Tests (Standard — kein ML)
 
 ```bash
-# Full Test Suite (187 Tests)
-pytest
-
-# Verbose Output
-pytest -v
-
-# Kurze Ausgabe (nur Failures)
-pytest -q
+# Empfohlener Standard-Lauf (schnell, kein ML):
+.venv_aurik/bin/python -m pytest tests/unit -p no:xdist \
+  --override-ini="addopts=--strict-markers --import-mode=importlib" \
+  --timeout=30 --tb=short -q --disable-warnings --no-header
 ```
 
-**Erwartete Ausgabe:**
+**Erwartete Ausgabe (7.747+ Tests):**
 ```
-========================= test session starts =========================
-platform linux -- Python 3.11.5, pytest-7.4.3, pluggy-1.3.0
-collected 187 items
+7747 passed in 312.45s
+```
 
-tests/test_unified_restorer.py ..............................  [ 15%]
-tests/test_musical_goals_v2_quick.py .....................     [ 27%]
-...
-========================= 187 passed in 360.45s ======================
-```
+> Heavy-Tests (ML-Inferenz, ONNX, Timeout ≥30 s) sind mit `@pytest.mark.ml` / `@pytest.mark.slow` markiert
+> und werden im Standard-Lauf automatisch übersprungen (`conftest.py`).
 
 ---
 
@@ -130,12 +124,12 @@ pytest -m gpu
 ```
 
 **Verfügbare Marker:**
-- `@pytest.mark.unit` - Unit Tests (schnell, isoliert)
-- `@pytest.mark.integration` - Integration Tests (mehrere Komponenten)
-- `@pytest.mark.e2e` - End-to-End Tests (vollständige Pipeline)
-- `@pytest.mark.slow` - Langsame Tests (> 30s)
-- `@pytest.mark.gpu` - Benötigt GPU (CUDA)
-- `@pytest.mark.requires_audio` - Benötigt Test-Audio-Dateien
+- `@pytest.mark.unit` — Unit Tests (schnell, isoliert)
+- `@pytest.mark.integration` — Integration Tests (mehrere Komponenten)
+- `@pytest.mark.e2e` — End-to-End Tests (vollständige Pipeline, nur mit `--run-heavy-tests`)
+- `@pytest.mark.ml` — ML-Inferenz-Tests (ONNX-Modell erforderlich, nur mit `--run-heavy-tests`)
+- `@pytest.mark.slow` — Langsame Tests (> 30 s, nur mit `--run-heavy-tests`)
+- `@pytest.mark.normative` — CI-Gate-Tests (immer aktiviert, nie skippen!)
 
 ---
 

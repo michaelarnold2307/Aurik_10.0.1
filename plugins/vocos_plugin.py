@@ -1,11 +1,13 @@
 """Aurik 9 — Vocos Neural Vocoder Plugin
 
 PRIMÄRER Vocoder: Vocos 0.1.0 (Siuzdak 2023, MIT)
-ONNX-Modell: models/vocos/vocos_mel_spec_24khz.onnx (lokal gebündelt, 52 MB)
-Fallback-Kaskade (§4.4 SOTA-Matrix):
-  1. Vocos ONNX  (vocos_mel_spec_24khz.onnx)            — primär
-  2. HiFi-GAN     (hifigan_plugin.HifiGanPlugin)          — neuronaler Fallback
-  3. Griffin-Lim+ ≥ 32 Iterationen (DSP-Letzfall)        — nur wenn beide Modelle fehlen
+Modell-Kaskade (§4.4 SOTA-Matrix, 3-Tier):
+  1. Vocos ONNX 48 kHz nativ (models/vocos_48khz/vocos_48khz.onnx) — kein Resampling!
+  2. Vocos ONNX 44.1 kHz     (vocos_mel_spec_44khz.onnx, volles Spektrum bis 22 kHz)
+  3. Vocos ONNX 24 kHz       (vocos_mel_spec_24khz.onnx, 52 MB Release-Bundle)
+  4. BigVGAN v2  (bigvgan_v2_plugin)                — neuronaler Fallback Stufe 1.5
+  5. HiFi-GAN    (hifigan_plugin.HifiGanPlugin)     — neuronaler Fallback
+  6. Griffin-Lim+ ≥ 32 Iterationen (DSP-Letzfall)  — nur wenn alle Modelle fehlen
 
 CPU-Only: CPUExecutionProvider — kein CUDA.
 Out-of-the-Box: Kein Download beim ersten Start.
@@ -31,23 +33,29 @@ MEL_SR_44K: int = 44_100  # Vocos 44 kHz Variante
 AURIK_SR: int = 48_000  # Standard-Aurik-Arbeits-SR
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# 44.1 kHz-Modell bevorzugen (volles Spektrum bis 22 kHz); Fallback auf 24 kHz
+# Priority: 48 kHz nativ (kein Resampling) → 44.1 kHz (volles Spektrum) → 24 kHz (Release-Bundle)
+_MODEL_48K = os.path.join(_ROOT, "models", "vocos_48khz", "vocos_48khz.onnx")
 _MODEL_44K = os.path.join(_ROOT, "models", "vocos", "vocos_mel_spec_44khz.onnx")
 _MODEL_24K = os.path.join(_ROOT, "models", "vocos", "vocos_mel_spec_24khz.onnx")
 _MODEL = _MODEL_44K  # für Rückwärtskompatibilität (bevorzugte Auflösung)
 # Mel-Parameter je Modell-SR
+_MEL_SR_48K = 48_000
 _MEL_SR_44K = 44_100
 _MEL_SR_24K = 24_000
 _MEL_SR = _MEL_SR_24K  # Standardwert (wird zur Laufzeit angepasst)
+_N_MELS_48K = 128
 _N_MELS_44K = 128
 _N_MELS_24K = 100
 _N_MELS = _N_MELS_24K
+_N_FFT_48K = 2048
 _N_FFT_44K = 2048
 _N_FFT_24K = 1024
 _N_FFT = _N_FFT_24K
+_HOP_48K = 256
 _HOP_44K = 512
 _HOP_24K = 256
 _HOP = _HOP_24K
+_WIN_48K = 2048
 _WIN_44K = 2048
 _WIN_24K = 1024
 _WIN = _WIN_24K
@@ -88,16 +96,19 @@ class VocosResult:
 class VocosPlugin:
     """Vocos Neural Vocoder — Aurik 9 Implementierung.
 
-    Fallback-Kaskade (§4.4 SOTA-Matrix):
-        1. Vocos ONNX  — vocos_mel_spec_24khz.onnx (CPUExecutionProvider)
-        2. HiFi-GAN    — hifigan_plugin.HifiGanPlugin.reconstruct() (CPUExecutionProvider)
-        3. Griffin-Lim+ ≥ 32 It. — DSP-Letzfall (nur wenn beide Modelle fehlen)
+    Modell-Kaskade (§4.4 SOTA-Matrix, 3-Tier):
+        1. Vocos ONNX 48 kHz nativ — vocos_48khz/vocos_48khz.onnx (kein Resampling!)
+        2. Vocos ONNX 44.1 kHz     — vocos_mel_spec_44khz.onnx (CPUExecutionProvider)
+        3. Vocos ONNX 24 kHz       — vocos_mel_spec_24khz.onnx (Release-Bundle)
+        4. BigVGAN v2  — bigvgan_v2_plugin.BigVGANv2Plugin (Stufe 1.5)
+        5. HiFi-GAN    — hifigan_plugin.HifiGanPlugin.reconstruct() (CPUExecutionProvider)
+        6. Griffin-Lim+ ≥ 32 It. — DSP-Letzfall (nur wenn alle Modelle fehlen)
 
     Singleton-Pattern: get_vocos_plugin() verwenden.
     """
 
     def __init__(self, model_path: str | None = None) -> None:
-        self._prefer_sr: int = _MEL_SR_44K  # 44.1 kHz bevorzugt
+        self._prefer_sr: int = _MEL_SR_48K  # 48 kHz nativ bevorzugt (kein Resampling)
         self._model_sr: int = _MEL_SR_24K
         self._mel_n_mels: int = _N_MELS_24K
         self._mel_n_fft: int = _N_FFT_24K
@@ -110,13 +121,15 @@ class VocosPlugin:
         if model_path:
             self._try_load(model_path)
         else:
-            # 44.1 kHz zuerst, dann 24 kHz
-            if os.path.exists(_MODEL_44K):
+            # 48 kHz nativ zuerst (kein Resampling), dann 44.1 kHz, dann 24 kHz
+            if os.path.exists(_MODEL_48K):
+                self._try_load(_MODEL_48K)
+            elif os.path.exists(_MODEL_44K):
                 self._try_load(_MODEL_44K)
             elif os.path.exists(_MODEL_24K):
                 self._try_load(_MODEL_24K)
             else:
-                logger.warning("Vocos ONNX fehlt (44 kHz + 24 kHz) — Griffin-Lim-Fallback.")
+                logger.warning("Vocos ONNX fehlt (48 kHz + 44 kHz + 24 kHz) — Griffin-Lim-Fallback.")
 
     def _try_load(self, path: str) -> None:
         """Versucht ONNX-Modell zu laden; setzt Fallback bei Fehler."""
@@ -141,8 +154,16 @@ class VocosPlugin:
             self._onnx_session = ort.InferenceSession(path, sess_options=opts, providers=["CPUExecutionProvider"])
             self._model_loaded = True
             self._fallback_mode = "vocos_onnx"
-            # Mel-Parameter je Modell-SR anpassen
-            if "44" in os.path.basename(path):
+            # Mel-Parameter je Modell-SR anpassen (48 kHz zuerst prüfen!)
+            bname = os.path.basename(path)
+            if "48" in bname:
+                self._model_sr = _MEL_SR_48K
+                self._mel_n_mels = _N_MELS_48K
+                self._mel_n_fft = _N_FFT_48K
+                self._mel_hop = _HOP_48K
+                self._mel_win = _WIN_48K
+                logger.info("Vocos 48 kHz ONNX geladen (nativ, kein Resampling): %s", path)
+            elif "44" in bname:
                 self._model_sr = _MEL_SR_44K
                 self._mel_n_mels = _N_MELS_44K
                 self._mel_n_fft = _N_FFT_44K
@@ -156,6 +177,24 @@ class VocosPlugin:
                 self._mel_hop = _HOP_24K
                 self._mel_win = _WIN_24K
                 logger.info("Vocos 24 kHz ONNX geladen: %s", path)
+            # ── PLM-Registrierung (LRU-Tracking, §5.1 OOM-Schutz) ─────────────────
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager  # noqa: PLC0415
+                _self_ref = self
+
+                def _vocos_unload() -> None:
+                    _self_ref._onnx_session = None
+                    _self_ref._model_loaded = False
+                    _self_ref._fallback_mode = "griffin_lim_fallback"
+                    try:
+                        from backend.core.ml_memory_budget import release as _ml_release  # noqa: PLC0415
+                        _ml_release("Vocos")
+                    except ImportError:
+                        pass
+
+                get_plugin_lifecycle_manager().register("Vocos", size_gb=0.12, unload_fn=_vocos_unload)
+            except ImportError:
+                pass
         except Exception as exc:
             logger.warning("Vocos ONNX Fehler: %s — Griffin-Lim-Fallback.", exc)
             if _allocated:
@@ -233,15 +272,22 @@ class VocosPlugin:
         return np.clip(fb, 0.0, None).astype(np.float32)
 
     @staticmethod
-    def _compute_mel(audio: np.ndarray, sr: int, n_mels: int = 80) -> np.ndarray:
+    def _compute_mel(
+        audio: np.ndarray,
+        sr: int,
+        n_mels: int = 80,
+        n_fft: int = _N_FFT_24K,
+        hop: int = _HOP_24K,
+    ) -> np.ndarray:
         """Berechnet Mel-Spektrogramm [n_mels, T], float32, finite.
 
         Formel: M = log(max(FB @ |STFT|^2, 1e-8))
+        n_fft und hop müssen zum geladenen Modell passen (24k/44k/48k).
         """
         audio = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         n = len(audio)
-        nperseg = min(_WIN, n) if n >= 2 else 2
-        noverlap = max(0, nperseg - _HOP)
+        nperseg = min(n_fft, n) if n >= 2 else 2
+        noverlap = max(0, nperseg - hop)
         try:
             _, _, Z = stft(audio, fs=sr, nperseg=nperseg, noverlap=noverlap, window="hann")
         except ValueError:
@@ -289,11 +335,12 @@ class VocosPlugin:
         model_sr = self._model_sr
         n_mels = self._mel_n_mels
         try:
-            # 1. Resample auf Modell-SR (44.1 kHz oder 24 kHz je nach geladenem Modell)
+            # 1. Resample auf Modell-SR (bei 48 kHz nativem Modell kein Resampling nötig)
             audio_model = self._resample(audio, sr, model_sr)
 
-            # 2. Mel-Spektrogramm berechnen [n_mels, T] → [1, n_mels, T]
-            mel = self._compute_mel(audio_model, model_sr, n_mels)
+            # 2. Mel-Spektrogramm berechnen [n_mels, T] → [1, n_mels, T] (modellspezifisches n_fft/hop)
+            mel = self._compute_mel(audio_model, model_sr, n_mels,
+                                    n_fft=self._mel_n_fft, hop=self._mel_hop)
             mel_input = mel[np.newaxis].astype(np.float32)  # [1, n_mels, T]
 
             # 3. ONNX-Inferenz (CPUExecutionProvider — §9.5)

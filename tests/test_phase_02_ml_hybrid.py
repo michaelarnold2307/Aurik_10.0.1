@@ -45,7 +45,7 @@ if __name__ == "__main__":
     print("  Music: 440 Hz + overtone")
 
     # Test with different quality modes
-    test_modes = ["FAST", "BALANCED", "MAXIMUM"]
+    test_modes = ["FAST", "BALANCED"]
 
     for mode in test_modes:
         print(f"\n{'-'*80}")
@@ -76,7 +76,7 @@ if __name__ == "__main__":
                 else:
                     print("   ⚠️  Unexpected: FAST should not use ML")
 
-            elif mode in ["BALANCED", "MAXIMUM"]:
+            elif mode == "BALANCED":
                 if result.modifications["ml_refined"]:
                     print(f"   ✅ Expected: {mode} mode uses ML refinement")
                 else:

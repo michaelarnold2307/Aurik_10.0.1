@@ -67,6 +67,8 @@ import os
 import sys as _sys
 import warnings as _warnings
 
+import pytest
+
 # Muss VOR dem ersten numpy-Import gesetzt werden.
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -208,3 +210,99 @@ def pytest_runtest_teardown(item, nextitem) -> None:  # noqa: ANN001
         _gc.collect()
     elif _VSCODE_TEST_COUNTER % _VSCODE_GC_INTERVAL == 0:
         _gc.collect()
+
+
+collect_ignore.extend(
+    [
+        # Standalone stress script: not suitable for default pytest runs.
+        "tests/memory_leak_test.py",
+    ]
+)
+
+
+_HEAVY_TEST_PATH_HINTS: tuple[str, ...] = (
+    "test_memory_leaks_v3.py",
+    "test_full_chain_ml_hybrid.py",
+    "test_e2e_v9_10_41.py",
+    "test_tier1_integration.py",
+    "test_phase_skipping_integration.py",
+    "test_phase_selection_complete.py",
+    "test_ml_hybrid_integration.py",
+    "test_panns_integration.py",
+    "test_v99_sota_plugins.py",
+    "test_v99_plugins_extended.py",
+    "test_v99_vocos_plugin.py",
+)
+
+
+def pytest_addoption(parser) -> None:  # noqa: ANN001
+    """Add explicit switch to run heavy tests on demand.
+
+    Default behaviour is crash-safe: heavy tests are skipped unless requested.
+    """
+    parser.addoption(
+        "--run-heavy-tests",
+        action="store_true",
+        default=False,
+        help="Run heavy ML/stress tests that are skipped by default for system stability.",
+    )
+
+
+def _is_heavy_test_item(item) -> bool:  # noqa: ANN001
+    """Heuristic for tests that can trigger OOM/host instability.
+
+    Criteria:
+      1) Known heavy file paths.
+      2) Explicit long timeout markers (>= 300 s).
+      3) e2e marker.
+    """
+    path = str(getattr(item, "fspath", "")).replace("\\", "/").lower()
+    if any(hint in path for hint in _HEAVY_TEST_PATH_HINTS):
+        return True
+
+    timeout_marker = item.get_closest_marker("timeout")
+    if timeout_marker and timeout_marker.args:
+        try:
+            timeout_s = float(timeout_marker.args[0])
+            if timeout_s >= 300.0:
+                return True
+        except (TypeError, ValueError):
+            pass
+
+    return item.get_closest_marker("e2e") is not None
+
+
+def pytest_collection_modifyitems(config, items) -> None:  # noqa: ANN001
+    """Classify heavy tests and skip them unless explicitly enabled.
+
+    This prevents hard machine crashes in default/local selective test runs.
+    """
+    run_heavy = bool(config.getoption("--run-heavy-tests"))
+    skip_reason = (
+        "Heavy ML/stress test is skipped by default for host stability. "
+        "Use --run-heavy-tests to execute it intentionally."
+    )
+
+    for item in items:
+        if not _is_heavy_test_item(item):
+            continue
+
+        # Ensure heavy tests are visibly classified for marker-based selection.
+        item.add_marker(pytest.mark.ml)
+        item.add_marker(pytest.mark.slow)
+
+        if not run_heavy:
+            item.add_marker(pytest.mark.skip(reason=skip_reason))
+
+
+def pytest_ignore_collect(collection_path, config):  # noqa: ANN001
+    """Prevent collection/import of heavy test modules unless explicitly enabled.
+
+    This hook is intentionally early to avoid side effects from module-level imports
+    in heavy test files during collection.
+    """
+    if bool(config.getoption("--run-heavy-tests")):
+        return False
+
+    path = str(collection_path).replace("\\", "/").lower()
+    return any(hint in path for hint in _HEAVY_TEST_PATH_HINTS)

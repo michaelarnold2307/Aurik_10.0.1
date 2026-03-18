@@ -10,6 +10,8 @@ from matplotlib.figure import Figure
 import numpy as np
 import soundfile as sf
 
+from ..i18n import t
+
 
 class WaveformCanvas(FigureCanvasQTAgg):
     """Matplotlib canvas for waveform display"""
@@ -31,8 +33,8 @@ class WaveformCanvas(FigureCanvasQTAgg):
         self.axes.spines["right"].set_color("#444444")
 
         # Labels
-        self.axes.set_xlabel("Time (s)", color="#cccccc", fontsize=9)
-        self.axes.set_ylabel("Amplitude", color="#cccccc", fontsize=9)
+        self.axes.set_xlabel(t("legacy.waveform.time"), color="#cccccc", fontsize=9)
+        self.axes.set_ylabel(t("legacy.waveform.amplitude"), color="#cccccc", fontsize=9)
         self.axes.grid(True, color="#333333", linestyle="--", linewidth=0.5, alpha=0.3)
 
         self.fig.tight_layout()
@@ -41,7 +43,7 @@ class WaveformCanvas(FigureCanvasQTAgg):
         self.audio = None
         self.sr = None
 
-    def plot_waveform(self, audio, sr, title="Audio Waveform"):
+    def plot_waveform(self, audio, sr, title=None):
         """
         Plot audio waveform
 
@@ -99,8 +101,10 @@ class WaveformCanvas(FigureCanvasQTAgg):
         # Configure axes
         self.axes.set_xlim(0, len(audio) / sr)
         self.axes.set_ylim(-1.1, 1.1)
-        self.axes.set_xlabel("Time (s)", color="#cccccc", fontsize=9)
-        self.axes.set_ylabel("Amplitude", color="#cccccc", fontsize=9)
+        self.axes.set_xlabel(t("legacy.waveform.time"), color="#cccccc", fontsize=9)
+        self.axes.set_ylabel(t("legacy.waveform.amplitude"), color="#cccccc", fontsize=9)
+        if title is None:
+            title = t("legacy.waveform.audio_waveform")
         self.axes.set_title(title, color="#ffffff", fontsize=11, fontweight="bold", pad=10)
         self.axes.grid(True, color="#333333", linestyle="--", linewidth=0.5, alpha=0.3)
 
@@ -113,7 +117,7 @@ class WaveformCanvas(FigureCanvasQTAgg):
         self.fig.tight_layout()
         self.draw()
 
-    def plot_spectrogram(self, audio, sr, title="Spectrogram"):
+    def plot_spectrogram(self, audio, sr, title=None):
         """
         Plot spectrogram
 
@@ -139,8 +143,10 @@ class WaveformCanvas(FigureCanvasQTAgg):
         self.axes.specgram(audio_mono, Fs=sr, cmap="viridis", scale="dB", mode="magnitude")
 
         # Configure
-        self.axes.set_xlabel("Time (s)", color="#cccccc", fontsize=9)
-        self.axes.set_ylabel("Frequency (Hz)", color="#cccccc", fontsize=9)
+        self.axes.set_xlabel(t("legacy.waveform.time"), color="#cccccc", fontsize=9)
+        self.axes.set_ylabel(t("legacy.waveform.frequency"), color="#cccccc", fontsize=9)
+        if title is None:
+            title = t("legacy.waveform.spectrogram")
         self.axes.set_title(title, color="#ffffff", fontsize=11, fontweight="bold", pad=10)
 
         # Style
@@ -158,7 +164,7 @@ class WaveformCanvas(FigureCanvasQTAgg):
         self.axes.text(
             0.5,
             0.5,
-            "Load an audio file to see waveform",
+            t("legacy.waveform.load_to_see"),
             horizontalalignment="center",
             verticalalignment="center",
             transform=self.axes.transAxes,
@@ -224,7 +230,7 @@ class MatplotlibWaveformWidget(QWidget):
         # View buttons
         btn_layout = QHBoxLayout()
 
-        self.btn_waveform = QPushButton("Waveform")
+        self.btn_waveform = QPushButton(t("legacy.waveform.waveform_button"))
         self.btn_waveform.clicked.connect(self.show_waveform)
         self.btn_waveform.setStyleSheet("""
             QPushButton {
@@ -239,7 +245,7 @@ class MatplotlibWaveformWidget(QWidget):
             }
         """)
 
-        self.btn_spectrogram = QPushButton("Spectrogram")
+        self.btn_spectrogram = QPushButton(t("legacy.waveform.spectrogram_button"))
         self.btn_spectrogram.clicked.connect(self.show_spectrogram)
         self.btn_spectrogram.setStyleSheet("""
             QPushButton {
@@ -273,7 +279,7 @@ class MatplotlibWaveformWidget(QWidget):
             self.progress.emit(40)
             # Simulierte Schrittweite für große Dateien (optional sleep für Demo)
             # import time; time.sleep(0.1)
-            self.canvas.plot_waveform(audio, sr, title=f"Waveform: {filepath.split('/')[-1]}")
+            self.canvas.plot_waveform(audio, sr, title=t("legacy.waveform.waveform_file", file=filepath.split('/')[-1]))
             self.progress.emit(70)
             # Noch ein Schritt für "Player laden" (wird im MainWindow gemacht)
             self.progress.emit(90)
@@ -289,7 +295,7 @@ class MatplotlibWaveformWidget(QWidget):
     def show_waveform(self):
         """Show waveform view"""
         if self.canvas.audio is not None:
-            self.canvas.plot_waveform(self.canvas.audio, self.canvas.sr, title="Audio Waveform")
+            self.canvas.plot_waveform(self.canvas.audio, self.canvas.sr, title=t("legacy.waveform.audio_waveform"))
 
             # Update button styles
             self.btn_waveform.setStyleSheet("""
@@ -320,7 +326,7 @@ class MatplotlibWaveformWidget(QWidget):
     def show_spectrogram(self):
         """Show spectrogram view"""
         if self.canvas.audio is not None:
-            self.canvas.plot_spectrogram(self.canvas.audio, self.canvas.sr, title="Spectrogram")
+            self.canvas.plot_spectrogram(self.canvas.audio, self.canvas.sr, title=t("legacy.waveform.spectrogram"))
 
             # Update button styles
             self.btn_waveform.setStyleSheet("""

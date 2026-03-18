@@ -32,8 +32,14 @@ from typing import Dict, List, Optional
 import soundfile as sf
 from tqdm import tqdm
 
-from core.defect_scanner import MaterialType
-from core.unified_restorer_v3 import UnifiedRestorerV3
+try:
+    from backend.core.defect_scanner import MaterialType
+except ImportError:
+    from core.defect_scanner import MaterialType  # Legacy-Pfad Fallback
+try:
+    from denker.aurik_denker import AurikDenker
+except ImportError:
+    AurikDenker = None  # type: ignore[assignment,misc]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -137,16 +143,26 @@ class BatchProcessor:
             # Output filename
             output_file = self.output_dir / f"{input_file.stem}_restored{input_file.suffix}"
 
-            # Initialize restorer
-            restorer = UnifiedRestorerV3()
-
-            # Process
+            # Process via AurikDenker (Pflicht-Einstiegspunkt §2.2)
             logger.info(f"Processing: {input_file.name}")
             audio_data, file_sr = sf.read(str(input_file))
-            restorer_result = restorer.restore(
-                audio_data, sample_rate=file_sr, material=material, **(config if config else {})
-            )
-            sf.write(str(output_file), restorer_result.audio, file_sr)
+
+            if AurikDenker is not None:
+                denker = AurikDenker()
+                mode = (config or {}).pop("mode", "restoration")
+                denker_result = denker.denke(audio_data, file_sr, mode=mode)
+                restorer_result = denker_result
+                restored_audio = denker_result.audio
+            else:
+                # Letzter Fallback: UV3 direkt (nur wenn AurikDenker nicht importierbar)
+                from backend.core.unified_restorer_v3 import UnifiedRestorerV3  # noqa: PLC0415
+                restorer = UnifiedRestorerV3()
+                restorer_result = restorer.restore(
+                    audio_data, sample_rate=file_sr, material=material, **(config if config else {})
+                )
+                restored_audio = restorer_result.audio
+
+            sf.write(str(output_file), restored_audio, file_sr)
 
             elapsed = time.time() - start_time
 

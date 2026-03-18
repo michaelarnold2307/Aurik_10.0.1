@@ -36,7 +36,7 @@ _root_logger.addHandler(_ch)
 # ──────────────────────────────────────────────────────────────────────────────
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from Aurik910.ui.modern_window import ModernMainWindow
 
@@ -51,9 +51,14 @@ def _warmup_models_background() -> None:
     import importlib
 
     for _mod, _accessor in (
-        ("plugins.panns_plugin", "get_panns_plugin"),
-        ("plugins.crepe_plugin", "get_crepe_plugin"),
-        ("plugins.deepfilternet_v3_ii_plugin", "get_deepfilternet"),
+        # Tier-1 Primär-Plugins (§9.7.4 — Pflicht-Vorwärmen)
+        ("plugins.rmvpe_plugin", "get_rmvpe_plugin"),          # Pitch-Tracking (Primär)
+        ("plugins.beats_plugin", "get_beats_plugin"),          # Audio-Tagging (Primär)
+        ("plugins.sgmse_plugin", "get_sgmse_plugin"),          # Dereverb/Denoising (Primär)
+        ("plugins.silero_plugin", "get_silero_vad"),           # VAD (Primär, ~1 MB, ultraschnell)
+        ("plugins.deepfilternet_v3_ii_plugin", "get_deepfilternet"),  # Breitrauschen
+        ("plugins.panns_plugin", "get_panns_plugin"),          # Audio-Tagging (Fallback zu BEATs)
+        ("plugins.crepe_plugin", "get_crepe_plugin"),          # Pitch-Tracking (Fallback zu RMVPE)
     ):
         try:
             m = importlib.import_module(_mod)
@@ -62,6 +67,29 @@ def _warmup_models_background() -> None:
                 fn()
         except Exception:
             pass  # Lazy-Load uebernimmt bei Bedarf
+
+
+def _run_startup_model_check(app: QApplication) -> None:
+    """Prüft ML-Modelle vor dem Fensteraufbau — zeigt deutschen Dialog bei Problemen.
+
+    Nicht-blockierend bei fehlenden optionalen Modellen.
+    Warnung bei fehlenden Primär-Modellen (DSP-Fallback aktiv).
+    """
+    try:
+        from backend.core.startup_model_check import get_startup_check_result  # type: ignore[import]
+        result = get_startup_check_result()
+        if not result.all_ok and result.user_message_de:
+            icon = QMessageBox.Icon.Critical if result.is_critical else QMessageBox.Icon.Warning
+            box = QMessageBox()
+            box.setWindowTitle("AURIK — " + result.user_title_de)
+            box.setText(result.user_message_de)
+            box.setIcon(icon)
+            box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            box.setDefaultButton(QMessageBox.StandardButton.Ok)
+            box.exec_()
+    except Exception as exc:
+        # Startup-Check darf niemals den App-Start blockieren
+        logger.warning("Startup-Modell-Check fehlgeschlagen (non-fatal): %s", exc)
 
 
 def main():
@@ -73,7 +101,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("AURIK Professional")
     app.setOrganizationName("AURIK")
-    app.setApplicationVersion("9.10.51")
+    app.setApplicationVersion("9.10.57")
 
     # Set dark theme style
     app.setStyle("Fusion")
@@ -91,6 +119,7 @@ def main():
     )
 
     # Create and show main window
+    _run_startup_model_check(app)
     window = ModernMainWindow()
     window.show()
 

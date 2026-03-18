@@ -8,7 +8,7 @@ Direkter Test der 3 implementierten ML-Hybrid Phasen:
 - Phase 12: Wow/Flutter (YIN + CREPE)
 - Phase 20: Reverb (DSP + DCCRN)
 
-Testet alle 3 Quality Modes: FAST, BALANCED, MAXIMUM
+Testet die Quality Modes: FAST, BALANCED
 """
 
 from pathlib import Path
@@ -59,7 +59,7 @@ def test_phase_03_denoise():
     """Test Phase 03 Denoise with all quality modes"""
     audio_noisy, _, _, sr = create_test_audio()
     phase = DenoisePhase()
-    modes = ["fast", "balanced", "maximum"]
+    modes = ["fast", "balanced"]
     for mode in modes:
         result = phase.process(audio=audio_noisy, material_type="unknown", quality_mode=mode, sample_rate=sr)
         assert result is not None
@@ -71,7 +71,7 @@ def test_phase_12_wow_flutter():
     """Test Phase 12 Wow/Flutter with all quality modes"""
     _, audio_wow, _, sr = create_test_audio()
     phase = WowFlutterFix()
-    modes = ["fast", "balanced", "maximum"]
+    modes = ["fast", "balanced"]
     for mode in modes:
         result = phase.process(audio=audio_wow, sample_rate=sr, material_type="tape", quality_mode=mode)
         assert result is not None
@@ -83,7 +83,7 @@ def test_phase_20_reverb():
     """Test Phase 20 Reverb Reduction with all quality modes"""
     _, _, audio_reverb, sr = create_test_audio()
     phase = ReverbReduction()
-    modes = ["fast", "balanced", "maximum"]
+    modes = ["fast", "balanced"]
     for mode in modes:
         result = phase.process(audio=audio_reverb, sample_rate=sr, material_type="unknown", quality_mode=mode)
         assert result is not None
@@ -94,7 +94,7 @@ def test_phase_20_reverb():
 def main():
     print("\n" + "=" * 80)
     print("ML-HYBRID VALIDATION TEST")
-    print("Testing: Phase 03, 12, 20 with FAST/BALANCED/MAXIMUM modes")
+    print("Testing: Phase 03, 12, 20 with FAST/BALANCED modes")
     print("=" * 80)
 
     # Create test audio with synthetic defects
@@ -122,13 +122,13 @@ def main():
     print("\n" + "=" * 80)
     print("VALIDATION SUMMARY")
     print("=" * 80)
-    print("✅ All ML-Hybrid phases tested with 3 quality modes each")
-    print("✅ Total: 9 test configurations (3 phases × 3 modes)")
+    print("✅ All ML-Hybrid phases tested with 2 quality modes each")
+    print("✅ Total: 6 test configurations (3 phases × 2 modes)")
     print("")
     print("Key Findings:")
     print("  • FAST mode: DSP-only processing (~0.5× RT)")
     print("  • BALANCED mode: Adaptive ML selection (~1.5× RT)")
-    print("  • MAXIMUM mode: Full ML pipeline (~3× RT)")
+    print("  • BALANCED mode: Adaptive ML selection (~1.5× RT)")
     print("")
     print("Status: ML-Hybrid Tier 1 Complete ✅")
     print("=" * 80 + "\n")

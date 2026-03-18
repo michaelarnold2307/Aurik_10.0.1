@@ -19,6 +19,11 @@
 #   → NICHT direkt in dieser Datei, da pip sonst die CUDA-Variante zieht.
 # ============================================================================
 
+# --- Build/Packaging-Abhängigkeiten (pkg_resources-Kompatibilität) ---
+# setuptools ≥ 81.x entfernt pkg_resources; librosa/intervals.py importiert pkg_resources.
+# Constraint Pflicht bis librosa pkg_resources-Abhängigkeit entfernt hat.
+setuptools>=60,<81
+
 # --- Backend-Hilfsbibliotheken ---
 requests==2.32.5
 pyyaml==6.0.3
@@ -52,6 +57,17 @@ deepfilternet==0.5.6
 
 # --- Torchmetrics (kompatibel mit torch 2.2.2) ---
 torchmetrics==1.8.2
+
+# --- MOS-Metriken: SingMOS Pro via VERSA (versa_plugin) ---
+# s3prl stellt den wav2vec2-SSL-Backbone für SingMOS Pro bereit.
+# Modell-Cache: ~/.cache/s3prl/ (606 MB wav2vec2-large, Erstinstallation)
+# WICHTIG: s3prl install zieht librosa<=0.10 / TTS-Abhängigkeiten → NACH s3prl
+# sofort `pip install librosa==0.11.0 --force-reinstall` ausführen.
+s3prl==0.4.18
+
+# ZWINGEND nach s3prl: librosa 0.11.0 wiederherstellen (s3prl downgradet auf 0.10)
+# s3prl zieht via descript-audiotools / torchlibrosa librosa 0.10.0 → CQT-Segfault
+librosa==0.11.0
 
 # --- Scientific Computing ---
 numba==0.63.1

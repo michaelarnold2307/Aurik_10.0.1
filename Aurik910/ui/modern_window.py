@@ -637,7 +637,7 @@ class BatchProcessingThread(QThread):
                 # Map GUI modes to Denker modes (§2.2 Spec)
                 mode = item.settings.get("mode", "RESTORATION")
                 if mode == "STUDIO_2026":
-                    ui_mode = "MAXIMUM"
+                    ui_mode = "BALANCED"
                     _aurik_mode = "studio2026"
                 else:  # RESTORATION
                     ui_mode = "QUALITY"
@@ -924,7 +924,7 @@ class WaveformWidget(QWidget):
                 painter.drawText(
                     self.rect().adjusted(0, -20, 0, 0),
                     Qt.AlignmentFlag.AlignCenter,
-                    "📂  Datei wird geladen …",
+                    t("ui.waveform_loading_title"),
                 )
                 painter.setPen(QColor(180, 160, 80))
                 font_small = QFont("Segoe UI", 10)
@@ -932,7 +932,7 @@ class WaveformWidget(QWidget):
                 painter.drawText(
                     self.rect().adjusted(0, 32, 0, 0),
                     Qt.AlignmentFlag.AlignCenter,
-                    "Bitte warten – Audio und Defektanalyse werden vorbereitet",
+                    t("ui.waveform_loading_sub"),
                 )
                 return
 
@@ -949,7 +949,7 @@ class WaveformWidget(QWidget):
             painter.drawText(
                 self.rect().adjusted(0, -30, 0, 0),
                 Qt.AlignmentFlag.AlignCenter,
-                "🎵  Musikdatei hierher ziehen",
+                t("ui.waveform_drop_title"),
             )
             # Subtext
             painter.setPen(QColor(130, 150, 180))
@@ -958,7 +958,7 @@ class WaveformWidget(QWidget):
             painter.drawText(
                 self.rect().adjusted(0, 38, 0, 0),
                 Qt.AlignmentFlag.AlignCenter,
-                "oder oben auf  📂 Audio-Datei öffnen  klicken",
+                t("ui.waveform_drop_sub"),
             )
             # Formate
             painter.setPen(QColor(90, 110, 140))
@@ -967,7 +967,7 @@ class WaveformWidget(QWidget):
             painter.drawText(
                 self.rect().adjusted(0, 72, 0, 0),
                 Qt.AlignmentFlag.AlignCenter,
-                "MP3 · WAV · FLAC · AAC · OGG · AIFF · WMA",
+                t("ui.waveform_formats"),
             )
             return
 
@@ -1745,15 +1745,15 @@ class ResourceStatusWidget(QWidget):
         layout.setContentsMargins(15, 15, 15, 15)
 
         # Header
-        header = QLabel("⚙️ System-Ressourcen & Verarbeitungs-Modus")
+        header = QLabel(t("ui.resource_header"))
         header.setStyleSheet("color: #667eea; font-size: 12pt; font-weight: bold;")
         layout.addWidget(header)
 
         # Status labels
-        self.label_cpu = QLabel("🖥️  CPU-Auslastung:      [0.0%]")
-        self.label_memory = QLabel("💾 Speicher-Auslastung: [0.0%]")
-        self.label_mode = QLabel("🎯 Verarbeitungs-Modus:  [BALANCED]")
-        self.label_ml_status = QLabel("🤖 ML-Plugins:           [DSP-Modus]")
+        self.label_cpu = QLabel(t("ui.resource_cpu", value=0.0))
+        self.label_memory = QLabel(t("ui.resource_memory", value=0.0))
+        self.label_mode = QLabel(t("ui.resource_mode", mode="BALANCED"))
+        self.label_ml_status = QLabel(t("ui.resource_ml", value=t("ui.resource_dsp_mode")))
 
         for label in [self.label_cpu, self.label_memory, self.label_mode, self.label_ml_status]:
             label.setStyleSheet("color: #AAB8C6; font-family: 'Courier New'; font-size: 10pt;")
@@ -1787,23 +1787,23 @@ class ResourceStatusWidget(QWidget):
         cpu_color = "#00FF7F" if self.cpu_usage < 70 else ("#FFD700" if self.cpu_usage < 90 else "#FF4444")
         mem_color = "#00FF7F" if self.memory_usage < 70 else ("#FFD700" if self.memory_usage < 90 else "#FF4444")
 
-        self.label_cpu.setText(f"🖥️  CPU-Auslastung:      [{self.cpu_usage:.1f}%]")
+        self.label_cpu.setText(t("ui.resource_cpu", value=self.cpu_usage))
         self.label_cpu.setStyleSheet(f"color: {cpu_color}; font-family: 'Courier New'; font-size: 10pt;")
 
-        self.label_memory.setText(f"💾 Speicher-Auslastung: [{self.memory_usage:.1f}%]")
+        self.label_memory.setText(t("ui.resource_memory", value=self.memory_usage))
         self.label_memory.setStyleSheet(f"color: {mem_color}; font-family: 'Courier New'; font-size: 10pt;")
 
         mode_icon = "⚡" if self.quality_mode == "FAST" else ("⚖️" if self.quality_mode == "BALANCED" else "💎")
-        self.label_mode.setText(f"🎯 Verarbeitungs-Modus:  [{mode_icon} {self.quality_mode}]")
+        self.label_mode.setText(t("ui.resource_mode", mode=f"{mode_icon} {self.quality_mode}"))
 
         if self.ml_mode_active and self.active_ml_plugins:
             plugins_str = ", ".join(self.active_ml_plugins[:2])  # Show first 2
             if len(self.active_ml_plugins) > 2:
                 plugins_str += f" +{len(self.active_ml_plugins)-2}"
-            self.label_ml_status.setText(f"🤖 ML-Plugins:           [{plugins_str}]")
+            self.label_ml_status.setText(t("ui.resource_ml", value=plugins_str))
             self.label_ml_status.setStyleSheet("color: #00FF7F; font-family: 'Courier New'; font-size: 10pt;")
         else:
-            self.label_ml_status.setText("🤖 ML-Plugins:           [DSP-Modus]")
+            self.label_ml_status.setText(t("ui.resource_ml", value=t("ui.resource_dsp_mode")))
             self.label_ml_status.setStyleSheet("color: #AAB8C6; font-family: 'Courier New'; font-size: 10pt;")
 
 
@@ -1847,21 +1847,22 @@ class DefectCounterWidget(QWidget):
         layout.setSpacing(8)
 
         # Header
-        header = QLabel("⚠️ Erkannte Defekte & Korrekturen")
+        header = QLabel(t("ui.defects_header"))
         header.setStyleSheet("color: #FFA500; font-size: 12pt; font-weight: bold;")
         layout.addWidget(header)
 
         # Counter labels
-        self.label_clicks = QLabel("⚡ Knackser:             [0] 🔍 ERKENNE")
-        self.label_crackle = QLabel("🧻 Knistern:             [0] 🔍 ERKENNE")
-        self.label_pops = QLabel("💥 Pops:                 [0] 🔍 ERKENNE")
-        self.label_clipping = QLabel("🔊 Übersteuerung:        [0] 🔍 ERKENNE")
-        self.label_hum = QLabel("🔌 Brummen:              [0.00Hz] 🔍 ERKENNE")
-        self.label_noise = QLabel("🌀 Rauschen:             [0.00dB] 🔍 ERKENNE")
-        self.label_sibilance = QLabel("🎤 Sibilanzen:           [0] 🔍 ERKENNE")
-        self.label_dropout = QLabel("📍 Aussetzer:            [0] 🔍 ERKENNE")
-        self.label_wow = QLabel("🎚️ Wow (<0.5 Hz):        [0.00%] 🔍 ERKENNE")
-        self.label_flutter = QLabel("🎚️ Flutter (0.5–200 Hz): [0.00%] 🔍 ERKENNE")
+        _st = t("ui.defect_status_detect")
+        self.label_clicks = QLabel(t("ui.defect_clicks", value=0, status=_st))
+        self.label_crackle = QLabel(t("ui.defect_crackle", value=0, status=_st))
+        self.label_pops = QLabel(t("ui.defect_pops", value=0, status=_st))
+        self.label_clipping = QLabel(t("ui.defect_clipping", value=0, status=_st))
+        self.label_hum = QLabel(t("ui.defect_hum", value=0.0, status=_st))
+        self.label_noise = QLabel(t("ui.defect_noise", value=0.0, status=_st))
+        self.label_sibilance = QLabel(t("ui.defect_sibilance", value=0, status=_st))
+        self.label_dropout = QLabel(t("ui.defect_dropout", value=0, status=_st))
+        self.label_wow = QLabel(t("ui.defect_wow", value=0.0, status=_st))
+        self.label_flutter = QLabel(t("ui.defect_flutter", value=0.0, status=_st))
 
         for label in [
             self.label_clicks,
@@ -1990,29 +1991,29 @@ class DefectCounterWidget(QWidget):
 
         # Determine status icon and color based on phase
         if self.phase == "detecting":
-            status_icon = "🔍 ERKENNE"
+            status_icon = t("ui.defect_status_detect")
             status_color = "#88AAFF"
         elif self.phase == "correcting":
-            status_icon = "⚙️ BEARBEITE"
+            status_icon = t("ui.defect_status_correct")
             status_color = "#FFA500"
         elif self.phase == "completed":
-            status_icon = "✓ BEREINIGT"
+            status_icon = t("ui.defect_status_done")
             status_color = "#4CAF50"
         else:
-            status_icon = "🔍 ERKENNE"
+            status_icon = t("ui.defect_status_detect")
             status_color = "#88AAFF"
 
         # Update labels
-        self.label_clicks.setText(f"⚡ Knackser:             [{self.defects['clicks']:,}] {status_icon}")
-        self.label_crackle.setText(f"🧻 Knistern:             [{self.defects['crackle']:,}] {status_icon}")
-        self.label_pops.setText(f"💥 Pops:                 [{self.defects['pops']:,}] {status_icon}")
-        self.label_clipping.setText(f"🔊 Übersteuerung:        [{self.defects['clipping']:,}] {status_icon}")
-        self.label_hum.setText(f"🔌 Brummen:              [{self.defects['hum']:.2f}Hz] {status_icon}")
-        self.label_noise.setText(f"🌀 Rauschen:             [-{self.defects['noise_level']:.2f}dB] {status_icon}")
-        self.label_sibilance.setText(f"🎤 Sibilanzen:           [{self.defects['sibilance']:,}] {status_icon}")
-        self.label_dropout.setText(f"📍 Aussetzer:            [{self.defects['dropout']:,}] {status_icon}")
-        self.label_wow.setText(f"🎚️ Wow (<0.5 Hz):        [{self.defects['wow']:.2f}%] {status_icon}")
-        self.label_flutter.setText(f"🎚️ Flutter (0.5–200 Hz): [{self.defects['flutter']:.2f}%] {status_icon}")
+        self.label_clicks.setText(t("ui.defect_clicks", value=f"{self.defects['clicks']:,}", status=status_icon))
+        self.label_crackle.setText(t("ui.defect_crackle", value=f"{self.defects['crackle']:,}", status=status_icon))
+        self.label_pops.setText(t("ui.defect_pops", value=f"{self.defects['pops']:,}", status=status_icon))
+        self.label_clipping.setText(t("ui.defect_clipping", value=f"{self.defects['clipping']:,}", status=status_icon))
+        self.label_hum.setText(t("ui.defect_hum", value=self.defects['hum'], status=status_icon))
+        self.label_noise.setText(t("ui.defect_noise", value=self.defects['noise_level'], status=status_icon))
+        self.label_sibilance.setText(t("ui.defect_sibilance", value=f"{self.defects['sibilance']:,}", status=status_icon))
+        self.label_dropout.setText(t("ui.defect_dropout", value=f"{self.defects['dropout']:,}", status=status_icon))
+        self.label_wow.setText(t("ui.defect_wow", value=self.defects['wow'], status=status_icon))
+        self.label_flutter.setText(t("ui.defect_flutter", value=self.defects['flutter'], status=status_icon))
 
         # Update color based on phase
         for label in [
@@ -2069,7 +2070,7 @@ class ModernTitleBar(QWidget):
         layout.addWidget(icon_label)
 
         # App Title
-        self.title_label = QLabel("Aurik 9.10.51 für meinen lieben Freund Dieter Schönemann")
+        self.title_label = QLabel(t("ui.app_title"))
         self.title_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         self.title_label.setStyleSheet("color: #FFFFFF;")
         layout.addWidget(self.title_label)
@@ -2604,7 +2605,7 @@ class ExportConfigDialog(QDialog):
 
     def __init__(self, source_path: str, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("💾  Exporteinstellungen")
+        self.setWindowTitle(t("ui.export_cfg_title"))
         self.setMinimumWidth(560)
         self.setModal(True)
         self._source_path = source_path
@@ -2697,11 +2698,11 @@ class ExportConfigDialog(QDialog):
         layout.setContentsMargins(28, 24, 28, 22)
 
         # Titel
-        title = QLabel("💾  Exportdatei festlegen")
+        title = QLabel(t("ui.export_cfg_pick_file"))
         title.setStyleSheet("font-size: 14pt; font-weight: bold; color: #FFFFFF; margin-bottom: 4px;")
         layout.addWidget(title)
 
-        sub = QLabel(f"Quelldatei: {src.name}")
+        sub = QLabel(t("ui.export_cfg_source", name=src.name))
         sub.setStyleSheet("color: #90A4AE; font-size: 9pt;")
         layout.addWidget(sub)
 
@@ -2721,21 +2722,52 @@ class ExportConfigDialog(QDialog):
         self._dir_edit.setMinimumWidth(320)
         dir_btn = QPushButton("📂")
         dir_btn.setFixedWidth(38)
-        dir_btn.setToolTip("Speicherordner wählen")
+        dir_btn.setToolTip(t("ui.export_cfg_choose_folder"))
         dir_btn.clicked.connect(self._browse_dir)
         dir_row.addWidget(self._dir_edit)
         dir_row.addWidget(dir_btn)
-        form.addRow("Speicherort:", dir_row)
+        form.addRow(t("ui.export_cfg_storage"), dir_row)
 
         # Dateiname
         self._name_edit = QLineEdit(default_name)
-        form.addRow("Dateiname:", self._name_edit)
+        form.addRow(t("ui.export_cfg_filename"), self._name_edit)
 
         # Format
         self._fmt_combo = QComboBox()
-        for label, _, _ in self.FORMATS:
+        _fmt_tooltips = [
+            "Beste Wahl für Archive und Weitergabe. Verlustfreie Kompression, "
+            "24-Bit-Auflösung — volle Dynamik, kompaktes Format. Empfohlen für restaurierte Aufnahmen.",
+            "Universell kompatibel, verlustfrei. Größere Dateien als FLAC, "
+            "aber von JEDER Audiosoftware lesbar. Ideal für weitere Bearbeitung in DAWs.",
+            "CD-Standard (44,1 kHz / 16 Bit). Geringere Dateigröße als WAV 24-Bit, "
+            "kompatibel mit CD-Brennern. Etwas weniger Dynamikumfang als 24-Bit.",
+            "Apple-Format, verlustfrei. Technisch gleichwertig zu WAV 24-Bit, "
+            "bevorzugt in macOS/iOS-Workflows und Logic Pro.",
+            "Höchste MP3-Qualität. Kompakt, universell kompatibel. "
+            "Für Aufnahmen bis 1970er empfohlen wenn Speicher begrenzt — kaum hörbarer Qualitätsverlust.",
+            "Guter MP3-Kompromiss. Für Podcasts, Demos oder Online-Sharing. "
+            "Kleiner als 320 kbps, leichter Qualitätsverlust bei kritischem Hören.",
+            "Kompakter MP3 für einfaches Streaming. Hörbarer Qualitätsverlust bei hochwertigen "
+            "Restaurierungen — nur wenn Dateigröße entscheidend ist.",
+            "Variable Bitrate, höchste MP3-Qualität (≈245 kbps Durchschnitt). "
+            "Weniger Speicher als CBR 320 kbps bei vergleichbarer Qualität. Nicht alle Player unterstützen VBR.",
+            "Variable Bitrate, guter Kompromiss (≈190 kbps). "
+            "Für Alltagsgebrauch ausreichend. Deutlicher Qualitätsverlust im Hochtonbereich.",
+            "Offenes Verlustformat, qualitativ besser als MP3 bei gleicher Bitrate. "
+            "Ideal für Streaming-Plattformen und Open-Source-Workflows.",
+        ]
+        for (label, _, _), tooltip in zip(self.FORMATS, _fmt_tooltips):
             self._fmt_combo.addItem(label)
-        form.addRow("Format:", self._fmt_combo)
+            self._fmt_combo.setItemData(
+                self._fmt_combo.count() - 1,
+                tooltip,
+                Qt.ItemDataRole.ToolTipRole,
+            )
+        self._fmt_combo.setToolTip(
+            "Wählen Sie das Ausgabeformat. Für Archivierung: FLAC 24-Bit. "
+            "Für Weitergabe: MP3 320 kbps oder höher. Fahren Sie über einen Eintrag für mehr Details."
+        )
+        form.addRow(t("ui.export_cfg_format"), self._fmt_combo)
 
         layout.addLayout(form)
 
@@ -2762,7 +2794,7 @@ class ExportConfigDialog(QDialog):
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        self._btn_cancel = QPushButton("Abbrechen")
+        self._btn_cancel = QPushButton(t("ui.export_cfg_cancel"))
         self._btn_cancel.setFixedWidth(120)
         self._btn_cancel.setStyleSheet(
             "background: rgba(255,255,255,0.09); color: #AAAAAA;"
@@ -2770,7 +2802,7 @@ class ExportConfigDialog(QDialog):
         )
         self._btn_cancel.clicked.connect(self.reject)
 
-        self._btn_ok = QPushButton("✅  Weiter zur Defektanalyse")
+        self._btn_ok = QPushButton(t("ui.export_cfg_continue"))
         self._btn_ok.setFixedWidth(220)
         self._btn_ok.setDefault(True)
         self._btn_ok.clicked.connect(self.accept)
@@ -2782,7 +2814,7 @@ class ExportConfigDialog(QDialog):
 
     def _browse_dir(self):
         d = QFileDialog.getExistingDirectory(
-            self, "Speicherort wählen", self._dir_edit.text()
+            self, t("ui.export_cfg_choose_storage"), self._dir_edit.text()
         )
         if d:
             self._dir_edit.setText(d)
@@ -2792,7 +2824,7 @@ class ExportConfigDialog(QDialog):
         ext = self.FORMATS[idx][2]
         name = (self._name_edit.text().strip() or "output") + ext
         full = str(Path(self._dir_edit.text().strip() or ".") / name)
-        self._preview_lbl.setText(f"➡️  Ausgabedatei: {full}")
+        self._preview_lbl.setText(t("ui.export_cfg_output", path=full))
 
     def get_config(self) -> dict:
         """Gibt gewählte Einstellungen zurück."""
@@ -2866,6 +2898,46 @@ class ModernMainWindow(QMainWindow):
                 target=_warmup_models_background, daemon=True, name="AurikWarmup"
             ).start(),
         )
+        # §11.4 Bridge-Fallback: Sichtbare Fehlermeldung wenn Backend nicht geladen
+        if not _BRIDGE_AVAILABLE:
+            QTimer.singleShot(300, self._show_bridge_unavailable_warning)
+
+    def _show_bridge_unavailable_warning(self) -> None:
+        """Zeigt eine deutliche Fehlermeldung wenn das Aurik-Backend nicht geladen werden konnte.
+
+        Wird via QTimer 300 ms nach Fensterstart aufgerufen — sichert, dass das Fenster
+        vollständig gerendert ist bevor der Dialog erscheint (§11.4 Bridge-Fallback).
+        """
+        from PyQt5.QtWidgets import QMessageBox  # noqa: PLC0415
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Critical)
+        msg.setWindowTitle("Aurik — Backend nicht geladen")
+        msg.setText(
+            "<b>⚠ Aurik-Kernmodul konnte nicht geladen werden.</b>"
+        )
+        msg.setInformativeText(
+            "Das Audio-Restaurierungs-Backend ist nicht verfügbar.\n\n"
+            "Mögliche Ursachen:\n"
+            "  • Fehlende Python-Abhängigkeiten (numpy, scipy, onnxruntime …)\n"
+            "  • Falsche Python-Umgebung oder fehlerhafte Installation\n"
+            "  • Unterbrochener Download der ML-Modelle\n\n"
+            "Lösungsvorschlag: Prüfen Sie die Logdatei auf Details:\n"
+            "  logs/aurik_backend.log\n\n"
+            "Die Benutzeroberfläche ist im eingeschränkten Modus geöffnet —\n"
+            "Restaurierung und Analyse sind nicht möglich."
+        )
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
+        # Statusanzeige auch im Hauptfenster setzen
+        if hasattr(self, "detected_medium_label"):
+            self.detected_medium_label.setText(
+                "⚠ Backend nicht verfügbar — Installation prüfen (logs/aurik_backend.log)"
+            )
+            self.detected_medium_label.setStyleSheet(
+                "color: #EF9A9A; font-size: 8pt; padding: 5px 8px;"
+                "background: rgba(183, 28, 28, 0.18);"
+                "border-radius: 8px; border: 1px solid rgba(183, 28, 28, 0.45);"
+            )
 
     def _toggle_lyrics_overlay(self) -> None:
         """L-Shortcut: Lyrics-Timeline-Overlay ein-/ausblenden (§11.4 / §2.36 Spec 08).
@@ -2885,18 +2957,18 @@ class ModernMainWindow(QMainWindow):
                 self.waveform_widget._lyrics_transcription = None
                 self.waveform_widget.update()
             if hasattr(self, "status_text"):
-                self.status_text.setText("🎵 Lyrics-Timeline-Overlay ausgeblendet")
+                self.status_text.setText(t("status.lyrics_overlay_hidden"))
             return
 
         # Overlay einblenden: Transkription im Hintergrund starten
         if self._orig_audio is None:
             if hasattr(self, "status_text"):
-                self.status_text.setText("🎵 Lyrics-Timeline: Bitte zuerst eine Audiodatei laden.")
+                self.status_text.setText(t("status.lyrics_load_file_first"))
             self._lyrics_overlay_visible = False
             return
 
         if hasattr(self, "status_text"):
-            self.status_text.setText("🎵 Lyrics-Timeline-Overlay: Transkription läuft …")
+            self.status_text.setText(t("status.lyrics_transcribing"))
 
         _audio_ref = self._orig_audio
         _sr_ref = self._orig_sr
@@ -2927,7 +2999,7 @@ class ModernMainWindow(QMainWindow):
 
                 def _err():
                     if hasattr(_self, "status_text"):
-                        _self.status_text.setText("🎵 Lyrics-Timeline: Transkription nicht verfügbar.")
+                        _self.status_text.setText(t("status.lyrics_unavailable"))
                     _self._lyrics_overlay_visible = False
 
                 _self._dispatch_to_gui(_err)
@@ -2978,8 +3050,8 @@ class ModernMainWindow(QMainWindow):
     def _create_left_panel(self) -> QWidget:
         """Schmales linkes Panel (220 px):
         [Audio-Datei öffnen]
-        Aufnahme:          ▸ detected_medium_label
-        erkannte Tonträger: ▸ restorability_banner
+        Erkannter Tonträger: ▸ detected_medium_label   (Carrier-Name + Konfidenz)
+        Restaurierbarkeit:   ▸ restorability_banner     (Score 0–100 + MOS-Erwartung)
         erkannte Defekte:  ▸ defect_summary_label
         Musikalische Ziele: ▸ radar_widget + quality_score_label
         """
@@ -3070,7 +3142,7 @@ class ModernMainWindow(QMainWindow):
         _dh_row = QHBoxLayout(_defect_header)
         _dh_row.setContentsMargins(0, 0, 0, 0)
         _dh_row.setSpacing(4)
-        _dh_title_lbl = QLabel("erkannte Defekte:")
+        _dh_title_lbl = QLabel(t("ui.defects_detected_title"))
         _dh_title_lbl.setStyleSheet("color: #7080A0; font-size: 8pt; background: transparent;")
         _dh_row.addWidget(_dh_title_lbl)
         _dh_row.addStretch()
@@ -3581,8 +3653,11 @@ class ModernMainWindow(QMainWindow):
             try:
                 if _sd is not None:
                     _sd.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("A/B playback toggle stop failed: %s", exc)
+                if hasattr(self, "status_text"):
+                    self.status_text.setStyleSheet("color: #EF5350; font-size: 10pt;")
+                    self.status_text.setText("⚠ Wiedergabe konnte nicht gestoppt werden.")
             return
         if self._orig_audio is not None:
             self._play_audio(self._orig_audio, self._orig_sr)
@@ -3601,8 +3676,8 @@ class ModernMainWindow(QMainWindow):
         self._set_magic_buttons_enabled(True)
         if hasattr(self, "_heartbeat_timer") and self._heartbeat_timer.isActive():
             self._heartbeat_timer.stop()
-        self.title_bar.set_status("Verarbeitung abgebrochen", "#FF5252")
-        self.status_text.setText("⏹ Verarbeitung wurde abgebrochen.")
+        self.title_bar.set_status(t("status.cancelled"), "#FF5252")
+        self.status_text.setText(t("status.processing_cancelled"))
 
     def _copy_last_output_to_clipboard(self):
         """Ctrl+Z: Letzten Export-Pfad in die Zwischenablage kopieren."""
@@ -3615,9 +3690,9 @@ class ModernMainWindow(QMainWindow):
             _clipboard = QApplication.clipboard()
             if _clipboard is not None:
                 _clipboard.setText(str(last_output))
-            self.status_text.setText(f"📋 Pfad kopiert: {Path(last_output).name}")
+            self.status_text.setText(t("status.path_copied", file=Path(last_output).name))
         else:
-            self.status_text.setText("⚠️ Noch kein Export-Pfad vorhanden.")
+            self.status_text.setText(t("status.no_export_path"))
 
     def _update_mode_info(self):
         """Update mode description based on selection"""
@@ -3664,7 +3739,7 @@ class ModernMainWindow(QMainWindow):
                     border-radius: 12px;
                     border: 3px dashed rgba(76, 175, 80, 1.0);
                 """)
-                self.detected_medium_label.setText("🎵  Datei loslassen, um sie zu laden …")
+                self.detected_medium_label.setText(t("status.drop_release_to_load"))
                 # Waveform-Bereich ebenfalls hervorheben
                 if hasattr(self, "waveform_widget"):
                     self.waveform_widget.setStyleSheet("border: 3px dashed rgba(76,175,80,0.85); border-radius: 12px;")
@@ -3708,7 +3783,7 @@ class ModernMainWindow(QMainWindow):
             self.waveform_widget._lyrics_transcription = None
 
         # Sofortiges visuelles Feedback im Haupt-Thread (BEVOR der Hintergrundthread startet)
-        self.status_text.setText(f"📂  Wird geladen: {Path(file_path).name} …")
+        self.status_text.setText(t("status.loading_file", file=Path(file_path).name))
         self.status_text.setStyleSheet("color: #FFC107; font-size: 10pt;")
         if hasattr(self, "waveform_widget"):
             self.waveform_widget.is_loading = True
@@ -3756,12 +3831,12 @@ class ModernMainWindow(QMainWindow):
             # Spec §11.4: warning() + detected_medium_label (nicht critical/status_text)
             QMessageBox.warning(
                 self,
-                "Datei ungültig",
-                f"Diese Datei kann nicht geladen werden:\n\n{_user_msg}",
+                t("dialog.invalid_file_title"),
+                t("dialog.invalid_file_body", error=_user_msg),
             )
             if hasattr(self, "detected_medium_label"):
                 self.detected_medium_label.setText(
-                    f"⚠️ Ungültige Datei: {Path(file_path).name}"
+                    t("status.invalid_file", file=Path(file_path).name)
                 )
             return
 
@@ -3884,7 +3959,7 @@ class ModernMainWindow(QMainWindow):
                         self.progress_bar.setVisible(False)
                     if hasattr(self, "detected_medium_label"):
                         self.detected_medium_label.setText(
-                            f"⚠️ Datei konnte nicht geladen werden: {Path(file_path).name}\n{_msg}"
+                            t("status.load_failed_with_reason", file=Path(file_path).name, error=_msg)
                         )
                         self.detected_medium_label.setStyleSheet("""
                             color: #FF5252; font-size: 11pt; padding: 12px;
@@ -3894,10 +3969,8 @@ class ModernMainWindow(QMainWindow):
                     from PyQt5.QtWidgets import QMessageBox
                     QMessageBox.warning(
                         self,
-                        "Import fehlgeschlagen",
-                        f"Die Datei »{Path(file_path).name}« konnte nicht geladen werden.\n\n"
-                        f"Unterstützte Formate: WAV, FLAC, OGG, AIFF, MP3, M4A, WMA, AAC\n\n"
-                        f"Details: {_msg[:300]}",
+                        t("dialog.import_failed_title"),
+                        t("dialog.import_failed_body", file=Path(file_path).name, error=_msg[:300]),
                     )
 
                 QTimer.singleShot(0, _err)
@@ -3913,7 +3986,7 @@ class ModernMainWindow(QMainWindow):
             _sr_ref = int(sr)
             # Carrier-Ergebnis: Platzhalter → wird asynchron nachgefüllt
             self._dispatch_to_gui(
-                lambda: self._on_file_loaded(_audio_ref, _sr_ref, file_path, "Wird analysiert …", 0)
+                lambda: self._on_file_loaded(_audio_ref, _sr_ref, file_path, t("status.analyzing_wait"), 0)
             )
 
             # Carrier-Forensics läuft NACH dem GUI-Update in separatem Thread
@@ -4041,7 +4114,7 @@ class ModernMainWindow(QMainWindow):
         # Fortschrittsbalken: 100 % sichtbar anzeigen
         if hasattr(self, "progress_bar"):
             self.progress_bar.setValue(10000)
-            self.progress_bar.setFormat("✅  Import abgeschlossen")
+            self.progress_bar.setFormat(t("status.import_done"))
 
         # Export-Dialog mit kurzem Delay öffnen, damit 100 % kurz gerendert wird
         def _open_export_dialog(
@@ -4056,7 +4129,7 @@ class ModernMainWindow(QMainWindow):
                     self.progress_bar.setVisible(False)
                     self.progress_bar.setValue(0)
                 if hasattr(self, "status_text"):
-                    self.status_text.setText("❌  Import abgebrochen.")
+                    self.status_text.setText(t("status.import_cancelled"))
                 return
             self._export_config = _dlg.get_config()
             if hasattr(self, "progress_bar"):
@@ -4183,7 +4256,7 @@ class ModernMainWindow(QMainWindow):
                 # ── Ende Ära/Genre-Hintergrund ────────────────────────────
 
             except Exception:
-                self.detected_medium_label.setText("Wird analysiert …")
+                self.detected_medium_label.setText(t("status.analyzing_wait"))
                 self.detected_medium_label.setStyleSheet("""
                     color: #88AAFF; font-size: 11pt; padding: 12px;
                     background: rgba(102, 126, 234, 0.15);
@@ -4277,7 +4350,7 @@ class ModernMainWindow(QMainWindow):
             # Sofortiges Feedback im Haupt-Thread → Nutzer sieht direkt, dass
             # die Analyse läuft (kein leeres Label bis der Thread fertig ist).
             if hasattr(self, "defect_summary_label"):
-                self.defect_summary_label.setText("🔄\u2002 Schäden werden analysiert \u2026")
+                self.defect_summary_label.setText(t("status.defects_summary_analyzing"))
                 self.defect_summary_label.setStyleSheet("""
                     color: #90A4AE; font-size: 10pt; padding: 12px;
                     background: rgba(144, 164, 174, 0.10);
@@ -4285,7 +4358,7 @@ class ModernMainWindow(QMainWindow):
                 """)
             # Live-Zähler-Label beim Scan-Start sichtbar schalten
             if hasattr(self, "defect_count_live_label"):
-                self.defect_count_live_label.setText("🔍 Analysiere…")
+                self.defect_count_live_label.setText(t("status.analyzing_short"))
                 self.defect_count_live_label.setStyleSheet(
                     "color: #90A4AE; font-size: 8pt; background: transparent; padding: 0 2px;"
                 )
@@ -4295,10 +4368,10 @@ class ModernMainWindow(QMainWindow):
             if hasattr(self, "progress_bar"):
                 self.progress_bar.setRange(0, 10000)
                 self.progress_bar.setValue(0)
-                self.progress_bar.setFormat("🔍  Schäden werden analysiert: %p %")
+                self.progress_bar.setFormat(t("status.defects_progress"))
                 self.progress_bar.setVisible(True)
             if hasattr(self, "status_text"):
-                self.status_text.setText("🔍  Schäden werden analysiert …")
+                self.status_text.setText(t("status.defects_analyzing"))
                 self.status_text.setStyleSheet("color: #FFC107; font-size: 10pt;")
 
             # audio_mono wird nur gelesen – kein .copy() (OOM-Schutz)
@@ -4342,7 +4415,7 @@ class ModernMainWindow(QMainWindow):
                 def _apply():
                     # Spec §11.4: Label beim Scan-Start (Datei-Öffnen-Pfad) sichtbar schalten
                     if hasattr(_self, "defect_count_live_label"):
-                        _self.defect_count_live_label.setText("🔍 Analysiere…")
+                        _self.defect_count_live_label.setText(t("status.analyzing_short"))
                         _self.defect_count_live_label.setVisible(True)
                     if hasattr(_self, "_update_defects"):
                         _self._update_defects(defects)
@@ -4354,7 +4427,7 @@ class ModernMainWindow(QMainWindow):
                         if hasattr(_self, "progress_bar"):
                             _self.progress_bar.setRange(0, 10000)
                             _self.progress_bar.setValue(10000)
-                            _self.progress_bar.setFormat("✅  Schadensanalyse abgeschlossen")
+                            _self.progress_bar.setFormat(t("status.defect_scan_done"))
 
                             def _reset_progress_if_idle():
                                 if _self.batch_thread and _self.batch_thread.isRunning():
@@ -4364,7 +4437,7 @@ class ModernMainWindow(QMainWindow):
 
                             QTimer.singleShot(1500, _reset_progress_if_idle)
                         if hasattr(_self, "status_text"):
-                            _self.status_text.setText("✅  Bereit zur Restaurierung")
+                            _self.status_text.setText(t("status.ready_to_restore"))
                             _self.status_text.setStyleSheet("color: #4CAF50; font-size: 10pt;")
                         # ✔️ Defektanalyse fertig → Magic Buttons aktivieren
                         _self._set_magic_buttons_enabled(True)
@@ -4387,31 +4460,29 @@ class ModernMainWindow(QMainWindow):
                 self.progress_bar.setRange(0, 10000)
                 self.progress_bar.setValue(0)
                 self.progress_bar.setVisible(False)
-            self.detected_medium_label.setText(f"⚠️ Ladefehler: {str(e)[:80]}")
+            self.detected_medium_label.setText(t("status.load_error_short", error=str(e)[:80]))
             self.detected_medium_label.setStyleSheet("""
                 color: #FF5252; font-size: 11pt; padding: 12px;
                 background: rgba(255, 82, 82, 0.15);
                 border-radius: 8px; border: 2px solid rgba(255, 82, 82, 0.3);
             """)
-        self.title_bar.set_status("Datei geladen", "#4CAF50")
-        self.status_text.setText(
-            f"✅ Geladen: {Path(file_path).name}  –  " f"🔍 Defekte werden analysiert … Buttons erscheinen gleich."
-        )
+        self.title_bar.set_status(t("status.file_loaded"), "#4CAF50")
+        self.status_text.setText(t("status.loaded_and_analyzing", file=Path(file_path).name))
         # ── Ende _on_file_loaded ───────────────────────────────────────────
 
     def _play_audio(self, audio: np.ndarray, sr: int):
         """Audiodaten asynchron über sounddevice abspielen."""
         if not _SD_AVAILABLE:
             QMessageBox.information(
-                self, "Player", "Für die Vorschau bitte 'sounddevice' installieren:\n  pip install sounddevice"
+                self, t("dialog.player_title"), t("dialog.player_body")
             )
             return
         # Laufende Wiedergabe stoppen
         try:
             if _sd is not None:
                 _sd.stop()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("A/B playback stop failed: %s", exc)
 
         def _play():
             try:
@@ -4421,8 +4492,20 @@ class ModernMainWindow(QMainWindow):
                 if _sd is not None:
                     _sd.play(data, samplerate=sr)
                     _sd.wait()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("A/B playback failed: %s", exc)
+
+                def _notify_playback_error() -> None:
+                    err = str(exc)[:140]
+                    if hasattr(self, "status_text"):
+                        self.status_text.setStyleSheet("color: #EF5350; font-size: 10pt;")
+                        self.status_text.setText(
+                            f"⚠ Wiedergabe fehlgeschlagen: {err}. Hinweis: Audio-Ausgabegerät prüfen."
+                        )
+                    if hasattr(self, "title_bar"):
+                        self.title_bar.set_status("Wiedergabe-Fehler", "#EF5350")
+
+                self._dispatch_to_gui(_notify_playback_error)
 
         self._play_thread = threading.Thread(target=_play, daemon=True)
         self._play_thread.start()
@@ -4437,7 +4520,7 @@ class ModernMainWindow(QMainWindow):
     def _open_file(self):
         """Öffnet den Datei-Dialog und delegiert an _load_file."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Audio-Datei öffnen", "", "Audio Files (*.wav *.mp3 *.flac *.ogg *.aiff *.m4a);;All Files (*)"
+            self, t("ui.open_audio_file"), "", t("ui.audio_filter")
         )
         if file_path:
             self._load_file(file_path)
@@ -4446,16 +4529,16 @@ class ModernMainWindow(QMainWindow):
         """Batch import multiple files"""
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
-            "Mehrere Dateien auswählen",
+            t("ui.open_multiple_files"),
             "",
-            "Audio Files (*.wav *.mp3 *.flac *.ogg *.aiff *.m4a *.wma);;All Files (*)",
+            t("ui.audio_filter_batch"),
         )
         for path in file_paths:
             self._add_to_queue(path)
 
         if file_paths:
-            self.title_bar.set_status(f"{len(file_paths)} Dateien geladen", "#4CAF50")
-            self.status_text.setText(f"Batch-Import: {len(file_paths)} Dateien")
+            self.title_bar.set_status(t("status.files_loaded", count=len(file_paths)), "#4CAF50")
+            self.status_text.setText(t("status.batch_import_files", count=len(file_paths)))
 
     def _album_import(self):
         """Ganzen Ordner / Album rekursiv importieren.
@@ -4464,7 +4547,7 @@ class ModernMainWindow(QMainWindow):
         sonst eigenes rglob als Fallback.
         """
         folder = QFileDialog.getExistingDirectory(
-            self, "Album-Ordner auswählen (alle Unterordner werden eingeschlossen)", "", QFileDialog.Option.ShowDirsOnly
+            self, t("ui.album_select_dir"), "", QFileDialog.Option.ShowDirsOnly
         )
         if not folder:
             return
@@ -4488,9 +4571,8 @@ class ModernMainWindow(QMainWindow):
         if not found:
             QMessageBox.information(
                 self,
-                "Album-Import",
-                f"Im Ordner '{folder_path.name}' wurden keine Audiodateien gefunden.\n"
-                "Unterstützt: wav, mp3, flac, ogg, aiff, m4a, wma",
+                t("dialog.album_import_title"),
+                t("dialog.album_import_no_files", folder=folder_path.name),
             )
             return
 
@@ -4503,10 +4585,8 @@ class ModernMainWindow(QMainWindow):
 
         reply = QMessageBox.question(
             self,
-            "Album importieren",
-            f"Gefunden: {len(found)} Audiodatei(en)\n"
-            f"Unterordner: {subdir_info or '–'}\n\n"
-            "Alle Dateien zur Verarbeitungs-Queue hinzufügen?",
+            t("ui.album_import_confirm_title"),
+            t("ui.album_import_confirm_body", count=len(found), subdirs=subdir_info or "–"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
@@ -4515,16 +4595,16 @@ class ModernMainWindow(QMainWindow):
 
         # Modus abfragen
         mode_dialog = QDialog(self)
-        mode_dialog.setWindowTitle("Verarbeitungsmodus für Album")
+        mode_dialog.setWindowTitle(t("ui.album_mode_title"))
         mode_dialog.setMinimumWidth(380)
         d_layout = QVBoxLayout(mode_dialog)
         d_layout.setSpacing(15)
-        d_layout.addWidget(QLabel("<b>Welchen Modus für alle Album-Tracks verwenden?</b>"))
+        d_layout.addWidget(QLabel(t("ui.album_mode_question")))
 
         btn_group = QButtonGroup(mode_dialog)
-        rb_rest = QRadioButton("💿  Restoration – original-getreu, behutsam")
+        rb_rest = QRadioButton(t("ui.album_mode_restoration"))
         rb_rest.setChecked(True)
-        rb_studio = QRadioButton("🎯  Studio 2026 – moderner Highend-Klang")
+        rb_studio = QRadioButton(t("ui.album_mode_studio"))
         btn_group.addButton(rb_rest)
         btn_group.addButton(rb_studio)
         d_layout.addWidget(rb_rest)
@@ -4551,8 +4631,10 @@ class ModernMainWindow(QMainWindow):
             except Exception:
                 pass
 
-        self.title_bar.set_status(f"{added} Tracks aus Album geladen", "#4CAF50")
-        self.status_text.setText(f"📀 Album '{folder_path.name}': {added} Dateien in Queue – Magic Button drücken!")
+        self.title_bar.set_status(t("status.album_tracks_loaded", count=added), "#4CAF50")
+        self.status_text.setText(
+            t("status.album_import_ready", album=folder_path.name, count=added)
+        )
 
     def _add_to_queue(self, file_path):
         """Add file to processing queue with RESTORATION mode (batch-import Pfad).
@@ -4635,16 +4717,16 @@ class ModernMainWindow(QMainWindow):
         """Start audio processing"""
         queue_len = self.queue_list.count() if hasattr(self, "queue_list") else self.batch_queue.get_stats()["pending"]
         if queue_len == 0:
-            QMessageBox.warning(self, "Keine Dateien", "Bitte fügen Sie zuerst Dateien zur Queue hinzu.")
+            QMessageBox.warning(self, t("dialog.no_files_title"), t("dialog.no_files_body"))
             return
 
         if self.batch_thread and self.batch_thread.isRunning():
-            QMessageBox.warning(self, "Verarbeitung läuft", "Verarbeitung läuft bereits!")
+            QMessageBox.warning(self, t("dialog.processing_running_title"), t("dialog.processing_running_body"))
             return
 
         stats = self.batch_queue.get_stats()
         if stats["pending"] == 0:
-            QMessageBox.information(self, "Keine ausstehenden Dateien", "Alle Dateien wurden bereits verarbeitet.")
+            QMessageBox.information(self, t("dialog.no_pending_title"), t("dialog.no_pending_body"))
             return
 
         # Disable process button and Magic Buttons during processing
@@ -4656,10 +4738,10 @@ class ModernMainWindow(QMainWindow):
             self.btn_magic_studio.setEnabled(False)
 
         # Update status
-        self.title_bar.set_status("Verarbeitung läuft...", "#FFA500")
+        self.title_bar.set_status(t("status.processing_running"), "#FFA500")
         self.status_text.setStyleSheet("color: #88AAFF; font-size: 10pt; background: transparent;")
         _n_pend = stats["pending"]
-        self.status_text.setText(f"Verarbeite {'1 Datei' if _n_pend == 1 else str(_n_pend) + ' Dateien'} …")
+        self.status_text.setText(t("status.processing_files", count=_n_pend))
 
         # Heartbeat-Timer starten
         self._heartbeat_dots = 0
@@ -4694,11 +4776,8 @@ class ModernMainWindow(QMainWindow):
             if _avail_gb < 6.0:
                 QMessageBox.critical(
                     self,
-                    "Zu wenig Arbeitsspeicher",
-                    f"Es stehen nur {_avail_gb:.1f} GB freier RAM zur Verfügung.\n\n"
-                    "Aurik benötigt mindestens 6 GB freien RAM für die Restaurierung.\n\n"
-                    "Bitte schließen Sie andere Programme (Browser, VS Code …) und "
-                    "versuchen Sie es erneut.",
+                    t("dialog.low_ram_title"),
+                    t("dialog.low_ram_body", avail=f"{_avail_gb:.1f}"),
                 )
                 self._set_magic_buttons_enabled(True)
                 self.progress_bar.setVisible(False)
@@ -4739,7 +4818,7 @@ class ModernMainWindow(QMainWindow):
             self._heartbeat_timer.stop()
         self._set_magic_buttons_enabled(True)
         self.progress_bar.setVisible(False)
-        self.title_bar.set_status("Zeitüberschreitung", "#FF5252")
+        self.title_bar.set_status(t("dialog.timeout_title"), "#FF5252")
         _msg = (
             "⏰ Die Verarbeitung hat das Zeitlimit überschritten und wurde abgebrochen.\n"
             "Ursache: Ein Verarbeitungsschritt hat nicht reagiert (möglicher ONNX-Deadlock).\n"
@@ -4747,12 +4826,11 @@ class ModernMainWindow(QMainWindow):
         )
         if hasattr(self, "detected_medium_label"):
             self.detected_medium_label.setText(_msg)
-        self.status_text.setText("⏰ Zeitüberschreitung — Verarbeitung abgebrochen.")
+        self.status_text.setText(t("dialog.timeout_title") + " — " + t("status.cancelled"))
         QMessageBox.warning(
             self,
-            "Zeitüberschreitung",
-            "Die Verarbeitung hat das Zeitlimit überschritten und wurde abgebrochen.\n\n"
-            "Bitte starten Sie Aurik neu und versuchen Sie es erneut.",
+            t("dialog.timeout_title"),
+            t("dialog.timeout_body"),
         )
 
     def _tick_heartbeat(self):
@@ -4764,7 +4842,7 @@ class ModernMainWindow(QMainWindow):
         self._heartbeat_dots = (self._heartbeat_dots + 1) % 4
         spinners = ["◐", "◓", "◑", "◒"]
         spin = spinners[self._heartbeat_dots]
-        self.title_bar.set_status(f"Verarbeitung läuft  {spin}", "#FFA500")
+        self.title_bar.set_status(t("status.processing_running_spinner", spin=spin), "#FFA500")
 
         # Progress-Bar über Queue-Status pollen — unabhängig von Signals.
         if self.batch_thread and self.batch_thread.isRunning():
@@ -4785,7 +4863,7 @@ class ModernMainWindow(QMainWindow):
         """Handle item processing start"""
         item = self.batch_queue.get_item(item_id)
         if item:
-            self.status_text.setText(f"Verarbeite: {Path(item.input_file).name}")
+            self.status_text.setText(t("status.processing_item", file=Path(item.input_file).name))
 
     def _on_item_progress(self, item_id, progress):
         """Handle item progress update"""
@@ -4823,6 +4901,15 @@ class ModernMainWindow(QMainWindow):
                         list_item.setText(f"✅ {Path(item.input_file).name}")
                     break
 
+        # Export-Bestätigung: Ausgabepfad kurz in status_text anzeigen (5 s Auto-Clear)
+        item = self.batch_queue.get_item(item_id)
+        if item and item.output_file and hasattr(self, "status_text"):
+            _out_name = Path(item.output_file).name
+            self.status_text.setStyleSheet("color: #66BB6A; font-size: 10pt;")
+            self.status_text.setText(f"✅ Gespeichert: {_out_name}")
+            QTimer.singleShot(5000, lambda: self.status_text.setText("") if
+                              self.status_text.text().startswith("✅ Gespeichert") else None)
+
         self._update_stats()
 
     def _on_item_finished_with_result(self, item_id, restoration_result):
@@ -4834,7 +4921,7 @@ class ModernMainWindow(QMainWindow):
     def _on_item_error(self, item_id, error_msg):
         """Handle item error — zeigt deutsche Fehlermeldung im UI (Spec §11.4)."""
         item = self.batch_queue.get_item(item_id)
-        file_name = Path(item.input_file).name if item else "Datei unbekannt"
+        file_name = Path(item.input_file).name if item else t("status.unknown_file")
 
         # Update list item
         if hasattr(self, "queue_list"):
@@ -4848,13 +4935,11 @@ class ModernMainWindow(QMainWindow):
         # Bewusst NICHT in detected_medium_label: der erkannte Tonträger bleibt sichtbar.
         # Fehlermeldung erscheint im defect_summary_label (hat Wordwrap + ausreichend Platz)
         # und als Kurztext in status_text.
-        _cause = str(error_msg)[:200] if error_msg else "Unbekannter Fehler"
+        _cause = str(error_msg)[:200] if error_msg else t("status.unknown_error")
         _file_label = f"\u201e{file_name}\u201c"
         if hasattr(self, "defect_summary_label"):
             self.defect_summary_label.setText(
-                f"❌  Fehler bei {_file_label}:\n"
-                f"Ursache: {_cause}\n"
-                f"\u2192 Prüfen Sie das Protokoll oder versuchen Sie eine andere Datei."
+                t("status.processing_error_detail", file=_file_label, cause=_cause)
             )
             self.defect_summary_label.setStyleSheet("""
                 color: #EF5350; font-size: 9pt; padding: 12px;
@@ -4863,7 +4948,7 @@ class ModernMainWindow(QMainWindow):
             """)
         if hasattr(self, "status_text"):
             self.status_text.setStyleSheet("color: #EF5350; font-size: 10pt;")
-            self.status_text.setText(f"❌  Verarbeitungsfehler – {file_name}")
+            self.status_text.setText(t("status.processing_error_short", file=file_name))
         logger.warning("Item-Fehler %s: %s", item_id, error_msg)
 
         self._update_stats()
@@ -4897,28 +4982,26 @@ class ModernMainWindow(QMainWindow):
         if hasattr(self, "btn_process"):
             self.btn_process.setEnabled(True)
 
-        n_ok   = stats["completed"]
+        n_ok = stats["completed"]
         n_fail = stats["failed"]
-        _n_ok_str   = "1 Datei" if n_ok   == 1 else f"{n_ok} Dateien"
-        _n_fail_str = "1 Datei" if n_fail == 1 else f"{n_fail} Dateien"
 
         if n_fail == 0:
-            self.title_bar.set_status("Abgeschlossen", "#4CAF50")
+            self.title_bar.set_status(t("status.completed"), "#4CAF50")
             self.status_text.setStyleSheet("color: #66BB6A; font-size: 10pt;")
             self.status_text.setText(
-                f"✅  {_n_ok_str} erfolgreich restauriert – ▶ Anhören oder 💾 Speichern"
+                t("status.completed_success_summary", count=n_ok)
             )
             # defect_summary_label NICHT überschreiben: Defektliste bleibt sichtbar
         else:
-            self.title_bar.set_status("Abgeschlossen mit Fehlern", "#FFA500")
+            self.title_bar.set_status(t("status.completed_with_errors"), "#FFA500")
             self.status_text.setStyleSheet("color: #FFA500; font-size: 10pt;")
             if n_ok > 0:
                 self.status_text.setText(
-                    f"⚠️  {_n_ok_str} restauriert, {_n_fail_str} fehlgeschlagen – Protokoll prüfen"
+                    t("status.completed_mixed_summary", ok=n_ok, failed=n_fail)
                 )
             else:
                 self.status_text.setText(
-                    f"❌  {_n_fail_str} konnten nicht verarbeitet werden – Protokoll prüfen"
+                    t("status.completed_failed_summary", failed=n_fail)
                 )
 
     def _stop_playback(self):
@@ -5414,21 +5497,21 @@ class ModernMainWindow(QMainWindow):
                 n = len(active)
                 if n > 0:
                     self.defect_count_live_label.setText(
-                        f"⚠ {n} Defekt{'e' if n != 1 else ''}"
+                        t("status.defect_count", count=n, suffix=("e" if n != 1 else ""))
                     )
                     self.defect_count_live_label.setStyleSheet(
                         "color: #FFA040; font-size: 8pt; background: transparent;"
                         " font-weight: bold; padding: 0 2px;"
                     )
                 else:
-                    self.defect_count_live_label.setText("✅ Sauber")
+                    self.defect_count_live_label.setText(t("status.clean_short"))
                     self.defect_count_live_label.setStyleSheet(
                         "color: #66BB6A; font-size: 8pt; background: transparent;"
                         " font-weight: bold; padding: 0 2px;"
                     )
                 self.defect_count_live_label.setVisible(True)
             if not active:
-                self.defect_summary_label.setText("✅  Keine Schäden erkannt – gute Aufnahmequalität")
+                self.defect_summary_label.setText(t("status.no_defects_detected"))
                 self.defect_summary_label.setStyleSheet("""
                     color: #66BB6A; font-size: 10pt; padding: 12px;
                     background: rgba(76, 175, 80, 0.12);
@@ -5492,8 +5575,7 @@ class ModernMainWindow(QMainWindow):
                 self.progress_bar.setVisible(False)
             if hasattr(self, "status_text") and hasattr(self, "current_file_path") and self.current_file_path:
                 self.status_text.setText(
-                    f"✅ Analyse abgeschlossen: {Path(self.current_file_path).name}  –  "
-                    f"Jetzt einen der Buttons drücken!"
+                    t("status.analysis_done_prompt", file=Path(self.current_file_path).name)
                 )
 
     def _update_phase(self, phase_text):
@@ -5547,7 +5629,7 @@ class ModernMainWindow(QMainWindow):
         """Clear processing queue"""
         if self.batch_thread and self.batch_thread.isRunning():
             QMessageBox.warning(
-                self, "Verarbeitung läuft", "Queue kann nicht geleert werden während Verarbeitung läuft."
+                self, t("dialog.processing_running_title"), t("dialog.queue_busy_body")
             )
             return
 
@@ -5569,7 +5651,7 @@ class ModernMainWindow(QMainWindow):
                 i += 1
 
         self.progress_bar.setValue(0)
-        self.status_text.setText("Queue geleert")
+        self.status_text.setText(t("status.queue_cleared"))
         self._update_stats()
 
     def _export_all(self):
@@ -5578,27 +5660,26 @@ class ModernMainWindow(QMainWindow):
         if stats["completed"] == 0:
             QMessageBox.information(
                 self,
-                "Keine verarbeiteten Dateien",
-                "Es wurden noch keine Dateien verarbeitet.\n" "Bitte zuerst eine Datei restaurieren, dann exportieren.",
+                t("dialog.no_processed_title"),
+                t("dialog.no_processed_body"),
             )
             return
 
         # ── Export-Dialog ────────────────────────────────────────────────
         dlg = QDialog(self)
-        dlg.setWindowTitle("💾 Export-Einstellungen")
+        dlg.setWindowTitle(t("ui.export_dialog_title"))
         dlg.setMinimumWidth(420)
         dlg_layout = QVBoxLayout(dlg)
         dlg_layout.setSpacing(18)
 
         dlg_layout.addWidget(
             QLabel(
-                f"<b>{stats['completed']} Datei(en) werden exportiert.</b><br>"
-                "<small>Wählen Sie Format und Qualität:</small>"
+                t("ui.export_dialog_intro", count=stats["completed"])
             )
         )
 
         # Format-Auswahl
-        fmt_group_label = QLabel("Ausgabe-Format:")
+        fmt_group_label = QLabel(t("ui.export_format"))
         fmt_group_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         dlg_layout.addWidget(fmt_group_label)
 
@@ -5621,7 +5702,7 @@ class ModernMainWindow(QMainWindow):
             dlg_layout.addWidget(rb)
 
         # Normalisierung
-        chk_normalize = QCheckBox("Audio auf −0.1 dBFS normalisieren (True-Peak-sicher)")
+        chk_normalize = QCheckBox(t("ui.export_normalize"))
         chk_normalize.setChecked(True)
         dlg_layout.addWidget(chk_normalize)
 
@@ -5629,7 +5710,7 @@ class ModernMainWindow(QMainWindow):
         buttons.setStandardButtons(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         _ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
         if _ok_btn is not None:
-            _ok_btn.setText("Zielordner wählen →")
+            _ok_btn.setText(t("ui.export_pick_folder"))
         buttons.accepted.connect(dlg.accept)
         buttons.rejected.connect(dlg.reject)
         dlg_layout.addWidget(buttons)
@@ -5653,16 +5734,18 @@ class ModernMainWindow(QMainWindow):
             bit_depth = 16
 
         # Zielordner wählen
-        output_dir = QFileDialog.getExistingDirectory(self, "Zielordner für Export wählen")
+        output_dir = QFileDialog.getExistingDirectory(self, t("ui.export_choose_dir"))
         if not output_dir:
             return
 
         # ── Exportieren ──────────────────────────────────────────────────
         def _do_export():
+            exporter_init_error = None
             try:
                 _AudioExporter = _bridge_get_audio_exporter_class()
                 exporter = _AudioExporter() if _AudioExporter is not None else None
-            except Exception:
+            except Exception as ex:
+                exporter_init_error = ex
                 exporter = None  # Fallback: shutil.copy
 
             exported = 0
@@ -5696,12 +5779,32 @@ class ModernMainWindow(QMainWindow):
 
             def _update():
                 fmt_nice = real_ext.upper().lstrip(".") + f" {bit_depth}-bit"
-                msg = f"✅ {exported} Datei(en) als {fmt_nice} nach\n{output_dir}\nexportiert."
+                msg = t("dialog.export_done_body", exported=exported, fmt=fmt_nice, output_dir=output_dir)
+
+                if exporter is None and exporter_init_error is not None:
+                    msg += (
+                        "\n\n⚠ Erweiterter Exporter nicht verfügbar. "
+                        "Es wurde ein einfacher Datei-Fallback verwendet."
+                    )
+
                 if errors:
-                    msg += f"\n\n⚠️ {len(errors)} Fehler:\n" + "\n".join(errors[:5])
-                self.status_text.setText(f"Export: {exported} Datei(en) → {real_ext.upper()}")
+                    msg += "\n\n" + t("dialog.export_done_errors", count=len(errors)) + "\n" + "\n".join(errors[:5])
+                    msg += (
+                        "\n\nHinweis: Bitte Schreibrechte im Zielordner prüfen "
+                        "und offene Dateien im Zielprogramm schließen."
+                    )
+
+                if exported == 0 and errors:
+                    self.status_text.setStyleSheet("color: #EF5350; font-size: 10pt;")
+                    self.status_text.setText("⚠ Export fehlgeschlagen")
+                    self.title_bar.set_status("Export fehlgeschlagen", "#EF5350")
+                    QMessageBox.warning(self, "Export fehlgeschlagen", msg)
+                    return
+
+                self.status_text.setStyleSheet("color: #4CAF50; font-size: 10pt;")
+                self.status_text.setText(t("status.export_summary", count=exported, ext=real_ext.upper()))
                 self.title_bar.set_status(t("status.export_finished"), "#4CAF50")
-                QMessageBox.information(self, "Export abgeschlossen", msg)
+                QMessageBox.information(self, t("status.export_finished"), msg)
 
             QTimer.singleShot(0, _update)
 
@@ -5736,8 +5839,8 @@ class ModernMainWindow(QMainWindow):
 
         layout.addWidget(QLabel(f"<b>{t('settings.default_mode_batch_album')}</b>"))
         mode_bg = QButtonGroup(dlg)
-        rb_rest = QRadioButton("💿  Restoration — original-getreu")
-        rb_stu = QRadioButton("🎯  Studio 2026 — moderner Highend-Klang")
+        rb_rest = QRadioButton(t("ui.settings_mode_restoration"))
+        rb_stu = QRadioButton(t("ui.settings_mode_studio"))
         rb_rest.setChecked(getattr(self, "_default_mode", "RESTORATION") == "RESTORATION")
         rb_stu.setChecked(getattr(self, "_default_mode", "RESTORATION") == "STUDIO_2026")
         mode_bg.addButton(rb_rest)
@@ -5775,6 +5878,8 @@ class ModernMainWindow(QMainWindow):
         """Refresh visible UI texts after language changes."""
         if hasattr(self, "btn_import"):
             self.btn_import.setText(t("action.open_file"))
+        if hasattr(self, "title_bar") and hasattr(self.title_bar, "title_label"):
+            self.title_bar.title_label.setText(t("ui.app_title"))
         if hasattr(self, "btn_play_original"):
             self.btn_play_original.setText(f"▶  {t('action.listen_original')}")
         if hasattr(self, "btn_play_restored"):
@@ -5806,6 +5911,11 @@ class ModernMainWindow(QMainWindow):
             "Bereit für Verarbeitung", "Ready for processing"
         }:
             self.status_text.setText(t("status.ready"))
+
+        if hasattr(self, "findChildren"):
+            for _lbl in self.findChildren(QLabel):
+                if _lbl.text() in {"erkannte Defekte:", "detected defects:"}:
+                    _lbl.setText(t("ui.defects_detected_title"))
 
         self._update_stats()
 

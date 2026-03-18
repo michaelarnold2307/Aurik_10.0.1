@@ -1,24 +1,24 @@
-# 📊 Aurik 9.10.51 — Project Status Report
+# 📊 Aurik 9.10.57 — Project Status Report
 
 **Datum:** März 2026  
-**Version:** 9.10.51  
+**Version:** 9.10.57  
 **Status:** ✅ Produktionsbereit — Weltführendes Musik-Restaurierungssystem
 
 ---
 
 ## Executive Summary
 
-**Aurik 9.10.51 ist das weltweit erste denkende Musik-Restaurierungssystem.**
+**Aurik 9.10.57 ist das weltweit erste denkende Musik-Restaurierungssystem.**
 
 | Kennzahl | Wert |
 |---|---|
-| Tests | **6312** — alle grün ✅ |
+| Tests | **7.747+** — alle grün ✅ |
 | Phasen | **56** (Phase 01–56, Defect-First) |
-| Materialien | **15** auto-erkannte Typen (inkl. wax_cylinder, wire_recording, lacquer_disc) |
+| Materialien | **17** auto-erkannte Typen (inkl. wax_cylinder, wire_recording, lacquer_disc, quadrophony, ambisonic) |
 | Musical Goals | **14** psychoakustisch fundierte Ziele |
 | PQS MOS | **>= 4.0** (Minimum) / **>= 4.5** (Weltklasse) |
-| DefectTypes | **27** erkennbare Defektarten (inkl. RIAA_CURVE_ERROR, ALIASING, BIAS_ERROR) |
-| Hardware | CPU-only, Desktop (Linux & Windows 10/11) |
+| DefectTypes | **30** erkennbare Defektarten (inkl. WOW/FLUTTER getrennt, AZIMUTH_ERROR, SIBILANCE) |
+| Hardware | CPU-only, Desktop (Linux AppImage & Windows 10/11) |
 | Netzwerk | Keine Cloud, keine Serverabhängigkeiten — 100 % offline |
 
 ---
@@ -33,7 +33,7 @@
 | `PerceptualQualityScorer` | `core/perceptual_quality_scorer.py` | ✅ |
 | `MusicalGoalsChecker` (14 Ziele) | `backend/core/musical_goals/musical_goals_metrics.py` | ✅ |
 | `MediumClassifier` | `core/medium_classifier.py` | ✅ |
-| `DefectScanner` (27 DefectTypes) | `core/defect_scanner.py` | ✅ |
+| `DefectScanner` (30 DefectTypes) | `core/defect_scanner.py` | ✅ |
 | `VocalAIEnhancement` | `core/vocal_ai_enhancement.py` | ✅ |
 | `ExcellenceOptimizer` | `core/excellence_optimizer.py` | ✅ |
 | `FeedbackChain` | `core/feedback_chain.py` | ✅ |
@@ -118,7 +118,7 @@ TransientDecoupledProcessing (TDP)
 
 ---
 
-## 📦 15 Materialien
+## 📦 17 Materialien
 
 | Material | Prioritäts-Phasen | PQS MOS |
 |---|---|---|
@@ -177,7 +177,7 @@ ConsonantEnhancement: Frikative-SNR >= +3 dB · HF-Anhebung <= +6 dB · Crossfad
 | v9.10.48 | Infrastruktur: SBOM, GP-Backup, i18n-Tests, Export-Roundtrip | 6312 Tests |
 | v9.10.49 | Performance: SHA256-Cache, parallele Eingangs-Analyse, PMGG-Sample-Dauer, Warmup-Thread | 6312 Tests |
 | v9.10.50 | §Dach: MusikalischerGlobalplan, 13 Ära-Profile, Genre-Modifikatoren, 17 Phase-Adjustments | 6312 Tests |
-| v9.10.51 | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | 6312 Tests |
+| v9.10.57 | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | 7.747+ Tests |
 
 ### 🔜 Geplant
 
@@ -245,4 +245,4 @@ Dithering: POW-r Typ 3 bei 24->16-bit; Fallback: TPDF
 
 ---
 
-*Aurik 9.10.51 — März 2026*
+*Aurik 9.10.57 — März 2026*

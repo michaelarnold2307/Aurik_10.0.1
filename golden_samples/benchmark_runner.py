@@ -260,7 +260,7 @@ class GoldenSampleBenchmarkRunner:
                     "nisqa": post_check.achieved_perceptual.nisqa_mos,
                     "dnsmos": post_check.achieved_perceptual.dnsmos_ovrl,
                     "visqol": post_check.achieved_perceptual.visqol_mos_lqo,
-                    "cdpam": post_check.achieved_perceptual.cdpam_score
+                    "cdpam": post_check.achieved_perceptual.versa_score
                 }
 
         return BenchmarkResult(

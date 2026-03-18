@@ -23,9 +23,12 @@ from backend.core.performance_guard import QualityMode
 from backend.core.defect_scanner import DefectScanner
 from backend.core.unified_restorer_v3 import RestorationConfig, UnifiedRestorerV3
 
+# This module is intentionally heavy and should not run in default local cycles.
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
+
 # Check if memory_profiler is available
 try:
-    pass
+    import memory_profiler  # noqa: F401
 
     MEMORY_PROFILING_AVAILABLE = True
 except ImportError:

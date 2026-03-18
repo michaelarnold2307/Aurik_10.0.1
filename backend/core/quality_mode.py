@@ -7,7 +7,6 @@ Zentrale Steuerung für DSP vs ML-Hybrid Modi.
 Modes:
 - FAST: Pure DSP (0.7× RT, Score 0.83)
 - BALANCED: Adaptive Hybrid (1.8× RT, Score ~0.90)
-- MAXIMUM: Pure ML (4.5× RT, Score ~0.92)
 
 Author: Aurik 9.0 Development Team
 Date: 15. Februar 2026
@@ -25,7 +24,6 @@ class QualityMode(Enum):
 
     FAST = "fast"  # Pure DSP only
     BALANCED = "balanced"  # Adaptive Hybrid (Default)
-    MAXIMUM = "maximum"  # Pure ML where available
 
     @classmethod
     def from_string(cls, mode_str: str) -> "QualityMode":
@@ -33,10 +31,10 @@ class QualityMode(Enum):
         mode_map = {
             "fast": cls.FAST,
             "balanced": cls.BALANCED,
-            "maximum": cls.MAXIMUM,
+            "maximum": cls.BALANCED,
             "dsp": cls.FAST,
             "hybrid": cls.BALANCED,
-            "ml": cls.MAXIMUM,
+            "ml": cls.BALANCED,
         }
         return mode_map.get(mode_str.lower(), cls.BALANCED)
 
@@ -77,9 +75,6 @@ class QualityModeConfig:
         if mode == QualityMode.FAST:
             return False  # Always DSP
 
-        elif mode == QualityMode.MAXIMUM:
-            return True  # Always ML if available
-
         else:  # BALANCED
             # Adaptive: Use ML for severe defects
             return defect_severity > 0.6
@@ -99,12 +94,6 @@ class QualityModeConfig:
                 "expected_score": 0.90,
                 "natuerlichkeit": 0.80,
                 "description": "Adaptive Hybrid - Balance zwischen Speed & Quality",
-            },
-            QualityMode.MAXIMUM: {
-                "realtime_factor": 4.5,
-                "expected_score": 0.92,
-                "natuerlichkeit": 0.85,
-                "description": "Pure ML - Höchste Qualität",
             },
         }
         return performance[cls._current_mode]
@@ -193,8 +182,6 @@ def is_phase_ml_enabled(phase_number: int) -> bool:
 
     if mode == QualityMode.FAST:
         return False
-    elif mode == QualityMode.MAXIMUM:
-        return check_ml_available(config["ml_model"])
     else:  # BALANCED
         # Only critical phases in balanced mode
         return config.get("critical", False) and check_ml_available(config["ml_model"])
