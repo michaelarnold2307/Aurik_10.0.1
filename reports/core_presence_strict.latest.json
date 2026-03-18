@@ -1,0 +1,48 @@
+{
+  "mode": "runtime_readiness",
+  "all_runtime_ready": true,
+  "missing_runtime_components": [],
+  "components": [
+    {
+      "name": "fcpe",
+      "primary": true,
+      "fallback": true,
+      "runtime_ready": true,
+      "release_mode": "primary",
+      "resolved_by": "primary"
+    },
+    {
+      "name": "sgmse_plus",
+      "primary": true,
+      "fallback": true,
+      "source_checkpoint": true,
+      "runtime_ready": true,
+      "release_mode": "primary",
+      "resolved_by": "torchscript_primary"
+    },
+    {
+      "name": "versa",
+      "primary": true,
+      "fallback": true,
+      "runtime_ready": true,
+      "release_mode": "primary",
+      "resolved_by": "primary"
+    },
+    {
+      "name": "flow_matching",
+      "primary": false,
+      "fallback": true,
+      "runtime_ready": true,
+      "release_mode": "fallback",
+      "resolved_by": "cqtdiff_or_diffwave_fallback"
+    },
+    {
+      "name": "gacela",
+      "primary": true,
+      "fallback": true,
+      "runtime_ready": true,
+      "release_mode": "primary",
+      "resolved_by": "primary"
+    }
+  ]
+}
