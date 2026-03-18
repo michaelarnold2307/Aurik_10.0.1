@@ -9,18 +9,32 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Frontend  (frontend/)   PyQt5 · Frameless · Dark Theme     │
+│  Desktop-UI  (Aurik910/)   PyQt5 · ModernMainWindow          │
 ├─────────────────────────────────────────────────────────────┤
-│  CLI        aurik_cli.py  Kommandozeilen-Adapter            │
+│  Frontend-Bridge  backend/api/bridge.py  Lazy-Imports        │
 ├─────────────────────────────────────────────────────────────┤
-│  API-Schicht  backend/api/rest/   FastAPI · REST + Progress │
+│  Orchestrator  denker/aurik_denker.py  8 Stufen (kanonisch)  │
 ├─────────────────────────────────────────────────────────────┤
 │  Backend-Core  backend/core/ · plugins/ · dsp/  DSP + ML   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Verbot:** Frontend darf `backend/core/`, `dsp/` oder `plugins/` **nicht** direkt importieren.
-Kommunikation nur über `backend/api/` oder Qt-Signals/Slots.
+**Verbot:** UI-Module unter `Aurik910/` dürfen `backend/core/`, `dsp/` oder `plugins/` **nicht** direkt importieren.
+Kommunikation nur über `backend/api/bridge.py` und Qt-Signals/Slots.
+
+### §11.1 Kanonischer Verarbeitungseinstieg (PFLICHT)
+
+- UI/Batches müssen über `get_aurik_denker_class()` aus der Bridge gehen.
+- Aufrufkette: `Aurik910/ui/*` → `backend/api/bridge.py` → `denker/aurik_denker.py` → Core.
+- Direkte UI-Aufrufe von `UnifiedRestorerV3.restore(...)` sind nicht zulässig.
+
+```python
+from backend.api.bridge import get_aurik_denker_class
+
+AurikDenkerClass = get_aurik_denker_class()
+denker = AurikDenkerClass()
+result = denker.denke(audio, sr, mode="quality")
+```
 
 ---
 
@@ -179,7 +193,7 @@ _cache = {}                      # ohne Lock → threading.Lock() Pflicht
 
 ### Architektur
 
-- Kein direkter `frontend/`-Import in Core-Modulen
+- Kein direkter `Aurik910/`-Import in Core-Modulen
 - Keine hardcodierten Pfade → stets `pathlib.Path.home() / ".aurik" / ...`
 - Kein `from module import *`
 - Keine sync-Datei-I/O in Hot-Paths (GP-Gedächtnis nur am Anfang/Ende)

@@ -35,7 +35,10 @@ STOI     # Sprachverständlichkeit 150–5000 Hz
 ViSQOL --speech (Default) # Musikspektren systematisch falsch bewertet
 ```
 
-Erlaubte Musikmetriken: **PEAQ, FAD, CDPAM, PQS-MOS, ViSQOL v3 (`--audio` Mode), Musical Goals**
+Erlaubte Musikmetriken: **PEAQ, FAD, PQS-MOS, ViSQOL v3 (`--audio` Mode), Musical Goals**
+
+> **CDPAM** ist als Musik-Metrik verboten (Sprachkorpus-Training, kein Vollband-Musik-Bezug).
+> Ersatz: VERSA ONNX (`versa_plugin`) für blinde MOS-Bewertung. Aurik restauriert Musik und Gesang — keine Sprachmetriken.
 
 ---
 

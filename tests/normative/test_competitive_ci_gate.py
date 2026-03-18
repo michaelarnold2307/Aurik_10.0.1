@@ -1,11 +1,11 @@
-"""Competitive CI-Gate — Aurik muss iZotope RX 10 in der Mehrheit der Szenarien schlagen.
+"""Competitive CI-Gate — Aurik muss iZotope RX 11 in der Mehrheit der Szenarien schlagen.
 
 Spec §8.2 Punkt 11 (copilot-instructions.md):
-    Aurik ≥ iZotope RX 10 in ≥ 7/10 AMRB-Szenarien (elektrisch messbar).
+    Aurik ≥ iZotope RX 11 in ≥ 7/10 AMRB-Szenarien (elektrisch messbar).
     Messung via MUSHRA-Score aus run_benchmark() — KEINE Speech-Metriken (PESQ, STOI etc.).
 
 Hinweis: Ein direkter iZotope-Aufruf ist im CI nicht möglich. Als Proxy dient der
-AMRB-Baseline-MUSHRA von iZotope RX 10 (71.0) aus AMRB_BASELINES. Aurik muss diesen
+AMRB-Baseline-MUSHRA von iZotope RX 11 (71.0) aus AMRB_BASELINES. Aurik muss diesen
 Wert in ≥ 7 von 10 Szenarien übertreffen.
 
 VERBOTENE METRIKEN (spec §3.1, §4.4):
@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Referenz-Baselines (AMRB_BASELINES §8.1)
 # ---------------------------------------------------------------------------
-_IZOTOPE_MUSHRA: float = AMRB_BASELINES["iZotope RX 10 (commercial)"]["mushra_overall"]  # 71.0
-_IZOTOPE_PQS_MOS: float = AMRB_BASELINES["iZotope RX 10 (commercial)"]["pqs_mos"]  # 3.9
+_IZOTOPE_MUSHRA: float = AMRB_BASELINES["iZotope RX 11 (commercial)"]["mushra_overall"]  # 71.0
+_IZOTOPE_PQS_MOS: float = AMRB_BASELINES["iZotope RX 11 (commercial)"]["pqs_mos"]  # 3.9
 _AURIK_STUDIO_MUSHRA: float = AMRB_BASELINES["Aurik 9.9 (Studio 2026 Mode)"]["mushra_overall"]  # 88.0
 _AURIK_RESTORE_MUSHRA: float = AMRB_BASELINES["Aurik 9.9 (Restoration Mode)"]["mushra_overall"]  # 84.0
 _MIN_SCENARIOS_TO_WIN: int = 7  # §8.2 Punkt 11: ≥ 7/10 Szenarien
@@ -81,7 +81,7 @@ def _run_competitive(n_items: int = 1, verbose: bool = False) -> BenchmarkReport
 @pytest.mark.competitive
 @pytest.mark.timeout(600)
 def test_aurik_beats_izotope_in_majority_of_scenarios() -> None:
-    """Aurik MUSHRA muss iZotope RX 10 Baseline (71.0) in ≥ 7/10 Szenarien übertreffen.
+    """Aurik MUSHRA muss iZotope RX 11 Baseline (71.0) in ≥ 7/10 Szenarien übertreffen.
 
     §8.2 Punkt 11: Pflicht-Benchmark für Weltmarktführer-Anspruch.
     VERBOTEN: PESQ, STOI, SI-SDR, VISQOL — ausschließlich MUSHRA (OQS) als Maßstab.
@@ -97,8 +97,8 @@ def test_aurik_beats_izotope_in_majority_of_scenarios() -> None:
 
     assert scenarios_won >= _MIN_SCENARIOS_TO_WIN, (
         f"\nCompetitive-Gate NICHT BESTANDEN:\n"
-        f"  Szenarien > iZotope RX 10 : {scenarios_won}/10  (Ziel: ≥ {_MIN_SCENARIOS_TO_WIN})\n"
-        f"  iZotope RX 10 Baseline    : MUSHRA {_IZOTOPE_MUSHRA:.1f}\n"
+        f"  Szenarien > iZotope RX 11 : {scenarios_won}/10  (Ziel: ≥ {_MIN_SCENARIOS_TO_WIN})\n"
+        f"  iZotope RX 11 Baseline    : MUSHRA {_IZOTOPE_MUSHRA:.1f}\n"
         f"  Aurik Gesamt-Score        : {report.overall_score:.1f}/100\n"
         f"  Schwächstes Szenario      : {report.worst_scenario}\n"
         f"\n"
@@ -115,7 +115,7 @@ def test_aurik_overall_score_above_izotope_overall() -> None:
     margin = report.overall_score - _IZOTOPE_MUSHRA
     assert report.overall_score > _IZOTOPE_MUSHRA, (
         f"Aurik Gesamt-Score ({report.overall_score:.1f}) liegt NICHT über "
-        f"iZotope RX 10 Baseline ({_IZOTOPE_MUSHRA:.1f}). "
+        f"iZotope RX 11 Baseline ({_IZOTOPE_MUSHRA:.1f}). "
         f"Differenz: {margin:+.1f} Punkte."
     )
     logger.info(
@@ -140,11 +140,14 @@ def test_aurik_pqs_mos_above_izotope_baseline() -> None:
     ]
 
     if not all_pqs:
-        pytest.skip("Keine PQS-MOS-Daten im BenchmarkReport — Szenario überspringen.")
+        pytest.fail(
+            "Keine PQS-MOS-Daten im BenchmarkReport — PQS-MOS ist eine Pflicht-Metrik"
+            " (spec §8.1). BenchmarkReport.scenario_results muss pqs_mos_mean befüllen."
+        )
 
     mean_pqs = float(np.mean(all_pqs))
     assert mean_pqs > _IZOTOPE_PQS_MOS, (
-        f"Aurik PQS-MOS ({mean_pqs:.2f}) liegt nicht über iZotope RX 10 Baseline "
+        f"Aurik PQS-MOS ({mean_pqs:.2f}) liegt nicht über iZotope RX 11 Baseline "
         f"({_IZOTOPE_PQS_MOS:.1f}). Metriken: MUSHRA/PQS-MOS zulässig. "
         f"PESQ/STOI sind verboten (§4.4)."
     )
@@ -165,7 +168,11 @@ def test_competitive_no_forbidden_metrics_used() -> None:
     try:
         suite = importlib.import_module(module_name)
     except ImportError:
-        pytest.skip(f"{module_name} nicht importierbar — Modul-Prüfung übersprungen.")
+        pytest.fail(
+            f"{module_name} nicht importierbar —"
+            " benchmarks/competitive/benchmark_suite.py muss vorhanden und"
+            " importierbar sein (spec §4.4: FORBIDDEN_METRICS-Pflicht)."
+        )
 
     # Prüfe, ob FORBIDDEN_METRICS-Konstante existiert
     assert hasattr(suite, "FORBIDDEN_METRICS"), (

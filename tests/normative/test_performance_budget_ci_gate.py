@@ -1,0 +1,58 @@
+"""Normative CI gate for performance budget invariants.
+
+This test module enforces stable, machine-checkable constraints for
+performance budget configuration without running long ML-heavy pipelines.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from backend.core.performance_guard import PerformanceGuard, QualityMode
+from backend.core.unified_restorer_v3 import RestorationConfig
+
+
+@pytest.mark.normative
+@pytest.mark.timeout(10)
+def test_performance_guard_budget_constants_are_within_policy_bounds() -> None:
+    """Performance constants must stay within release policy bounds."""
+    assert PerformanceGuard.LIMIT_FAST <= 1.5
+    assert PerformanceGuard.LIMIT_BALANCED <= 3.0
+    assert PerformanceGuard.LIMIT_3X_RT <= 3.0
+    assert PerformanceGuard.RT3_EXCELLENCE_BUDGET <= 3.0
+
+
+@pytest.mark.normative
+@pytest.mark.timeout(10)
+def test_performance_guard_target_mapping_is_consistent() -> None:
+    """Target RT mapping per quality mode must remain deterministic."""
+    fast_guard = PerformanceGuard(mode=QualityMode.FAST, enforce_limit=True, enable_adaptive_skipping=True)
+    balanced_guard = PerformanceGuard(mode=QualityMode.BALANCED, enforce_limit=True, enable_adaptive_skipping=True)
+    quality_guard = PerformanceGuard(mode=QualityMode.QUALITY, enforce_limit=True, enable_adaptive_skipping=True)
+
+    assert fast_guard.target_rt_factor <= 1.5
+    assert balanced_guard.target_rt_factor <= 3.0
+    assert quality_guard.target_rt_factor >= balanced_guard.target_rt_factor
+
+
+@pytest.mark.normative
+@pytest.mark.timeout(10)
+def test_musical_excellence_phases_are_never_skippable_by_priority() -> None:
+    """All musical excellence phases must keep priority 9+ (effectively non-skippable)."""
+    priorities = PerformanceGuard.PHASE_PRIORITIES
+
+    missing = [p for p in PerformanceGuard.MUSICAL_EXCELLENCE_PHASES if p not in priorities]
+    assert not missing, f"Missing musical excellence priorities: {missing}"
+
+    downgraded = [p for p in PerformanceGuard.MUSICAL_EXCELLENCE_PHASES if priorities[p] < 9]
+    assert not downgraded, f"Musical excellence phases downgraded below priority 9: {downgraded}"
+
+
+@pytest.mark.normative
+@pytest.mark.timeout(10)
+def test_restoration_config_defaults_keep_rt_enforcement_enabled() -> None:
+    """Default config must enforce runtime budget protections."""
+    cfg = RestorationConfig()
+    assert cfg.enable_performance_guard is True
+    assert cfg.enforce_3x_rt is True
+    assert cfg.enable_adaptive_skipping is True

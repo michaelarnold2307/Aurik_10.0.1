@@ -2,7 +2,7 @@
 
 Spec §8.1 (copilot-instructions.md):
     AMRB-Gesamt-Score ≥ 84.0 UND ≥ 8/10 Szenarien bestanden.
-    Baselines: iZotope RX 10 ≈ 71.0, Aurik 9.9 Restoration ≈ 84.0.
+    Baselines: iZotope RX 11 ≈ 71.0, Aurik 9.9 Restoration ≈ 84.0.
 
 Laufzeit:  ~60–180 s (n_items_per_scenario=1, synthetische Signale intern erzeugt).
 Ausführung: pytest tests/normative/test_amrb_ci_gate.py -m amrb --timeout=600 -v
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Referenzwerte aus AMRB_BASELINES (§8.1, AMRB v1.0)
 # ---------------------------------------------------------------------------
 _UNPROCESSED_MUSHRA: float = AMRB_BASELINES["Unbearbeitet (degradiert)"]["mushra_overall"]  # 32.0
-_IZOTOPE_MUSHRA: float = AMRB_BASELINES["iZotope RX 10 (commercial)"]["mushra_overall"]  # 71.0
+_IZOTOPE_MUSHRA: float = AMRB_BASELINES["iZotope RX 11 (commercial)"]["mushra_overall"]  # 71.0
 _AURIK_TARGET: float = 84.0  # OS-Führerschaft-Schwelle (§8.1)
 _SCENARIOS_REQUIRED: int = 8  # von 10 Szenarien müssen bestanden sein
 
@@ -92,7 +92,7 @@ def test_amrb_os_leadership_threshold() -> None:
         f"  Bestanden    : {report.n_passed}/10          (Ziel: ≥ {_SCENARIOS_REQUIRED})\n"
         f"  Schwächstes  : {report.worst_scenario}\n"
         f"\n"
-        f"  Referenz iZotope RX 10 : {_IZOTOPE_MUSHRA:.1f}\n"
+        f"  Referenz iZotope RX 11 : {_IZOTOPE_MUSHRA:.1f}\n"
         f"  Referenz Unbearbeitet  : {_UNPROCESSED_MUSHRA:.1f}\n"
         f"\n"
         f"Maßnahme: Restaurierungslogik für Szenario '{report.worst_scenario}' prüfen.\n"
@@ -103,11 +103,11 @@ def test_amrb_os_leadership_threshold() -> None:
 @pytest.mark.amrb
 @pytest.mark.timeout(600)
 def test_amrb_score_exceeds_izotope_baseline() -> None:
-    """Aurik-Score muss über iZotope RX 10 Baseline (71.0) liegen (§8.2 Punkt 11)."""
+    """Aurik-Score muss über iZotope RX 11 Baseline (71.0) liegen (§8.2 Punkt 11)."""
     report = _run_amrb(n_items=1)
 
     assert report.overall_score > _IZOTOPE_MUSHRA, (
-        f"Aurik ({report.overall_score:.1f}) liegt UNTER iZotope RX 10 Baseline "
+        f"Aurik ({report.overall_score:.1f}) liegt UNTER iZotope RX 11 Baseline "
         f"({_IZOTOPE_MUSHRA:.1f}). Kein Weltmarktführer-Anspruch."
     )
 
