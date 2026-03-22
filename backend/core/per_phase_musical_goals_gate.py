@@ -678,11 +678,32 @@ class PerPhaseMusicalGoalsGate:
         strength: float,
         phase_kwargs: dict[str, Any] | None = None,
     ) -> np.ndarray:
-        """Führt Phase aus; gibt bei Fehler das Original zurück."""
+        """Führt Phase aus mit Wet/Dry-Modulation; gibt bei Fehler das Original zurück.
+
+        CRITICAL FIX (v9.10.64): Ruft phase.process() statt phase() auf.
+        PhaseInterface definiert kein __call__; der vorherige Code erzeugte
+        TypeError, das still gefangen wurde — ALLE Phasen waren No-Ops.
+
+        Wet/Dry-Modulation (§MusikalischeHarmonisierung):
+        strength < 1.0 → audio_out = audio + strength × (processed - audio)
+        Psychoakustisch korrekt: Sanftere Verarbeitung bei niedriger Stärke,
+        statt binär „alles oder nichts".
+        Timing-modifizierende Phasen (wow/flutter, speed) sind von Wet/Dry
+        ausgenommen (Phasen-Artefakte bei Crossfade zeitversetzter Signale).
+        """
         if phase_kwargs is None:
             phase_kwargs = {}
+        # Timing-modifizierende Phasen: kein Wet/Dry (Phasen-Artefakte)
+        _TIMING_PHASES = frozenset({
+            "phase_12_wow_flutter_fix",
+            "phase_31_speed_pitch_correction",
+        })
         try:
-            result = phase(audio, strength=strength, **phase_kwargs)
+            # Strength als Kwarg übergeben, damit Phasen ihn OPTIONAL nutzen können
+            kw = dict(phase_kwargs)
+            kw["strength"] = strength
+            # CRITICAL: phase.process() statt phase() — PhaseInterface hat kein __call__
+            result = phase.process(audio, **kw)
             if hasattr(result, "audio"):
                 out = result.audio
             elif hasattr(result, "processed_audio"):
@@ -700,7 +721,19 @@ class PerPhaseMusicalGoalsGate:
 
             # Länge sicherstellen
             if len(out) != len(audio):
-                out = out[:len(audio)] if len(out) > len(audio) else np.pad(out, (0, len(audio) - len(out)))
+                out = out[: len(audio)] if len(out) > len(audio) else np.pad(out, (0, len(audio) - len(out)))
+
+            # Wet/Dry-Modulation: strength < 1.0 → blende zwischen Original und Verarbeitet
+            if 0.0 < strength < 1.0:
+                phase_id = ""
+                try:
+                    meta = phase.get_metadata()
+                    phase_id = getattr(meta, "phase_id", "")
+                except Exception:
+                    pass
+                if phase_id not in _TIMING_PHASES:
+                    out = (audio + strength * (out - audio)).astype(np.float32)
+                    out = np.clip(out, -1.0, 1.0)
 
             return out
         except Exception as exc:

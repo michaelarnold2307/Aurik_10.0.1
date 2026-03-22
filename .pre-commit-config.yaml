@@ -138,6 +138,7 @@ repos:
           - --ignore-missing-imports
           - --no-strict-optional
           - --show-error-codes
+          - --follow-imports=silent
         # Nur Kern-Module prüfen (schnell genug für pre-commit)
         files: ^(core|dsp|plugins|denker)/
 

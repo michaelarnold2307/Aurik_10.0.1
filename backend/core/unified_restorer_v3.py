@@ -496,10 +496,15 @@ class UnifiedRestorerV3:
             )
             return RestorationResult(
                 audio=np.clip(np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0),
-                sample_rate=sample_rate,
-                quality_estimate=0.5,
+                config=self.config,
+                material_type=MaterialType.UNKNOWN,
                 defect_scores={},
                 phases_executed=[],
+                phases_skipped=[],
+                total_time_seconds=0.0,
+                rt_factor=0.0,
+                quality_estimate=0.5,
+                warnings=["signal_too_short"],
                 metadata={
                     "skip_reason": "signal_too_short",
                     "audio_samples": _audio_size_check,
@@ -1038,7 +1043,9 @@ class UnifiedRestorerV3:
             _mat_for_anchor = _classified_material.value if _classified_material is not None else "unknown"
             _genre_for_anchor = _schlager_result.genre_label if _schlager_result is not None else "unknown"
             _reference_anchor = synthesize_reference_anchor(
-                audio, sample_rate, _era_for_anchor, _genre_for_anchor, _mat_for_anchor
+                era_decade=_era_for_anchor if _era_for_anchor is not None else 1970,
+                genre_label=_genre_for_anchor,
+                material=_mat_for_anchor,
             )
             logger.info(
                 "🎯 ReferenceAnchorSynthesizer: Anker generiert (era=%s genre=%s material=%s)",
@@ -1166,7 +1173,6 @@ class UnifiedRestorerV3:
                     pass
             _pareto_proposals = _gp_opt_pre.propose_pareto(
                 material=_gp_material_key_pre,
-                embedding=_original_embedding.vector if _original_embedding is not None else None,
                 era_warmstart=_era_ws_pre,
             )
             logger.info(
@@ -4410,8 +4416,10 @@ class UnifiedRestorerV3:
         _mco_result: dict | None = None
         try:
             from backend.core.module_coordinator import create_coordinator as _cc31
+            from backend.core.processing_context import ProcessingContext as _PCtx31
+            from backend.core.module_communication import ModuleCommunicationBus as _MCBus31
 
-            _mco31 = _cc31()
+            _mco31 = _cc31(context=_PCtx31(session_id="probe"), bus=_MCBus31())
             _mco_result = {
                 "coordinator_type": type(_mco31).__name__,
                 "available": True,
@@ -4709,7 +4717,7 @@ class UnifiedRestorerV3:
         try:
             from backend.core.musical_goals.feedback_loop import MusicalGoalsFeedbackLoop as _MGFL37c
 
-            _MGFL37c()
+            _MGFL37c(monitor=None, adjust_callback=lambda _: None)
             _mg_feedback_result = {"class": "MusicalGoalsFeedbackLoop", "active": True}
             logger.debug("🔁 MusicalGoalsFeedbackLoop: initialisiert")
         except Exception as _e37c:
@@ -4729,7 +4737,7 @@ class UnifiedRestorerV3:
         try:
             from backend.core.musical_goals.goal_optimizer import MusicalGoalsOptimizer as _MGO37e
 
-            _MGO37e()
+            _MGO37e(monitor=None)
             _goal_optimizer_result = {"class": "MusicalGoalsOptimizer", "active": True}
             logger.debug("🚀 MusicalGoalsOptimizer: initialisiert")
         except Exception as _e37e:
@@ -6707,8 +6715,39 @@ class UnifiedRestorerV3:
         t0 = time.perf_counter()
         mem0 = memory_usage(-1, interval=0.01, timeout=1) if MEMORY_PROFILING_AVAILABLE else [0]
 
+        # §MusikalischeHarmonisierung: Defekt-Severity-Wet/Dry für non-PMGG-Pfade
+        # Berechne Severity-Faktor VOR Phasenausführung (benötigt Original-Audio für Mix)
+        _sev_wet_dry: float = 1.0
+        _TIMING_PHASES_WD = frozenset({
+            "phase_12_wow_flutter_fix",
+            "phase_31_speed_pitch_correction",
+        })
+        _defect_scores_wd = kwargs.get("defect_scores")
+        if _defect_scores_wd and phase_metadata.phase_id not in _TIMING_PHASES_WD:
+            try:
+                from backend.core.defect_phase_mapper import get_phase_defect_severity
+
+                _sev_wet_dry = get_phase_defect_severity(phase_metadata.phase_id, _defect_scores_wd)
+            except Exception:
+                _sev_wet_dry = 1.0
+
         # Call phase.process() method (not phase() itself!)
+        _audio_before_phase = audio if _sev_wet_dry < 1.0 else None
         result = phase.process(audio, **kwargs)
+
+        # §MusikalischeHarmonisierung: Wet/Dry basierend auf Defekt-Severity
+        if _sev_wet_dry < 1.0 and _audio_before_phase is not None and hasattr(result, "audio"):
+            _pa = result.audio
+            if isinstance(_pa, np.ndarray) and _pa.shape == _audio_before_phase.shape:
+                result.audio = np.clip(
+                    (_audio_before_phase + _sev_wet_dry * (_pa - _audio_before_phase)).astype(np.float32),
+                    -1.0, 1.0,
+                )
+                logger.debug(
+                    "🎵 DefectSeverity Wet/Dry %s: factor=%.2f",
+                    phase_metadata.phase_id,
+                    _sev_wet_dry,
+                )
 
         t1 = time.perf_counter()
         mem1 = memory_usage(-1, interval=0.01, timeout=1) if MEMORY_PROFILING_AVAILABLE else [0]
@@ -6974,6 +7013,30 @@ class UnifiedRestorerV3:
                     if _pmgg_gate is not None:
                         # §2.29 PMGG: Musical-Goal-geschützte Phasenausführung
                         try:
+                            # §MusikalischeHarmonisierung: Defekt-Severity-Faktor moduliert Stärke
+                            # Phasen arbeiten proportional zur gemessenen Defekt-Schwere,
+                            # nicht mit festen Material-Defaults.
+                            _mat_strength = (
+                                material_initial_strengths.get(phase_id, 1.0)
+                                if material_initial_strengths
+                                else 1.0
+                            )
+                            try:
+                                from backend.core.defect_phase_mapper import get_phase_defect_severity
+
+                                _sev_factor = get_phase_defect_severity(phase_id, defect_result.scores)
+                                _combined_strength = _mat_strength * _sev_factor
+                                if _sev_factor < 1.0:
+                                    logger.debug(
+                                        "🎵 DefectSeverity %s: initial_strength %.2f × sev_factor %.2f = %.2f",
+                                        phase_id,
+                                        _mat_strength,
+                                        _sev_factor,
+                                        _combined_strength,
+                                    )
+                            except Exception:
+                                _combined_strength = _mat_strength
+
                             _pmgg_audio_out, _pmgg_scores_curr, _pmgg_entry = _pmgg_gate.wrap_phase(
                                 phase,
                                 current_audio,
@@ -6988,11 +7051,7 @@ class UnifiedRestorerV3:
                                 },
                                 restorability_score=_pmgg_restorability_score,  # §2.29 normativ
                                 applicable_goals=applicable_goals,  # §2.32 normativ
-                                initial_strength=(  # §2.31 material-adaptive Initialstärke
-                                    material_initial_strengths.get(phase_id, 1.0)
-                                    if material_initial_strengths
-                                    else 1.0
-                                ),
+                                initial_strength=_combined_strength,  # §2.31 + §Harmonisierung
                             )
                             _pmgg_log_entries.append(_pmgg_entry)
                             # §3.1 NaN-Guard: revert to pre-phase audio if NaN produced

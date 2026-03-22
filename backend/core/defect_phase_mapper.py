@@ -52,6 +52,7 @@ Date: 2026-02-17
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 
 from backend.core.defect_scanner import DefectType
@@ -1115,3 +1116,82 @@ class DefectPhaseMapper:
             f"  Primary : {', '.join(a.primary_phases)}\n"
             f"  Secondary: {', '.join(a.secondary_phases)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Reverse Phase Map — phase_id → [DefectType] (§MusikalischeHarmonisierung)
+# ---------------------------------------------------------------------------
+_REVERSE_PHASE_MAP: dict[str, list[DefectType]] | None = None
+_REVERSE_LOCK = threading.Lock()
+
+
+def _build_reverse_phase_map() -> dict[str, list[DefectType]]:
+    """Builds reverse mapping: phase_id → [DefectType] from _PHASE_MAP.
+
+    Only primary_phases are mapped (these are the phases designed to FIX
+    the defect). Secondary phases are support roles and should not be
+    severity-scaled.
+    """
+    reverse: dict[str, list[DefectType]] = {}
+    for defect_type, assignment in _PHASE_MAP.items():
+        for phase_id in assignment.primary_phases:
+            reverse.setdefault(phase_id, []).append(defect_type)
+    return reverse
+
+
+def get_reverse_phase_map() -> dict[str, list[DefectType]]:
+    """Thread-safe accessor for the reverse phase map (cached).
+
+    Returns:
+        Dict mapping phase_id → list of DefectTypes this phase primarily targets.
+        Enhancement phases (not in _PHASE_MAP as primary) are absent.
+    """
+    global _REVERSE_PHASE_MAP
+    if _REVERSE_PHASE_MAP is None:
+        with _REVERSE_LOCK:
+            if _REVERSE_PHASE_MAP is None:
+                _REVERSE_PHASE_MAP = _build_reverse_phase_map()
+    return _REVERSE_PHASE_MAP
+
+
+def get_phase_defect_severity(phase_id: str, defect_scores: dict) -> float:
+    """Returns a severity factor ∈ [_MIN_SEVERITY_FLOOR, 1.0] for a given phase.
+
+    For defect-repair phases (present in reverse map): the factor scales
+    proportionally to the maximum measured severity among all DefectTypes
+    this phase primarily targets. This ensures:
+      - Phases process proportionally to actual defect intensity
+      - Low severity → gentle processing (psychoacoustic preservation)
+      - High severity → full processing
+
+    For enhancement phases (NOT in reverse map): returns 1.0 (no modulation).
+
+    Args:
+        phase_id:      Full phase ID (e.g. 'phase_03_denoise')
+        defect_scores: dict[DefectType, DefectScore] from DefectScanner
+
+    Returns:
+        Severity factor ∈ [0.15, 1.0].
+        0.15 = minimal (defect barely present, gentle processing).
+        1.0  = full severity or enhancement phase (no reduction).
+    """
+    rmap = get_reverse_phase_map()
+    target_defects = rmap.get(phase_id)
+    if not target_defects:
+        return 1.0  # Enhancement phase — no modulation
+
+    max_severity = 0.0
+    found_any = False
+    for dt in target_defects:
+        score = defect_scores.get(dt)
+        if score is not None:
+            found_any = True
+            sev = getattr(score, "severity", 0.0)
+            max_severity = max(max_severity, float(sev))
+
+    if not found_any:
+        return 1.0  # None of the targeted DefectTypes were scanned — don't penalize
+
+    # Floor at 0.15: even low-severity defects need minimum processing.
+    # The phase was selected for a reason — never fully bypass.
+    return max(0.15, min(1.0, max_severity))
