@@ -707,13 +707,17 @@ class EdgeCaseHandler:
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0)
 
+        # Adaptive n_fft: never larger than signal length (guard for very short segments)
+        _n_fft_ech = min(2048, max(64, int(2 ** np.floor(np.log2(max(len(audio), 64))))))
+        _hop_ech = min(512, _n_fft_ech // 4)
+
         # Compute power spectrum
-        stft = librosa.stft(audio, n_fft=2048, hop_length=512)
+        stft = librosa.stft(audio, n_fft=_n_fft_ech, hop_length=_hop_ech)
         magnitude = np.abs(stft)
         power = magnitude**2
 
         # Frequency bins
-        freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=_n_fft_ech)
 
         # Define bands
         bass_mask = (freqs >= 20) & (freqs <= 250)
@@ -748,11 +752,11 @@ class EdgeCaseHandler:
         if not has_high_freq:
             missing_bands.append("treble (2000+ Hz)")
 
-        # Spectral features
-        spectral_centroids = librosa.feature.spectral_centroid(y=audio, sr=sr)[0]
+        # Spectral features — use same adaptive n_fft as STFT above
+        spectral_centroids = librosa.feature.spectral_centroid(y=audio, sr=sr, n_fft=_n_fft_ech)[0]
         spectral_centroid = np.mean(spectral_centroids)
 
-        spectral_bandwidths = librosa.feature.spectral_bandwidth(y=audio, sr=sr)[0]
+        spectral_bandwidths = librosa.feature.spectral_bandwidth(y=audio, sr=sr, n_fft=_n_fft_ech)[0]
         spectral_bandwidth = np.mean(spectral_bandwidths)
 
         return SpectrumProfile(

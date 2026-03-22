@@ -269,7 +269,9 @@ def _is_heavy_test_item(item) -> bool:  # noqa: ANN001
         except (TypeError, ValueError):
             pass
 
-    return item.get_closest_marker("e2e") is not None
+    return item.get_closest_marker("e2e") is not None or \
+        item.get_closest_marker("slow") is not None or \
+        item.get_closest_marker("ml") is not None
 
 
 def pytest_collection_modifyitems(config, items) -> None:  # noqa: ANN001

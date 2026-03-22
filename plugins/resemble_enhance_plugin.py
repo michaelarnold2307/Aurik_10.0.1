@@ -34,12 +34,13 @@ class ResembleEnhancePlugin:
             return
         # ML-Budget-Guard: Resemble-Enhance model.onnx ~722 MB
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc, release as _rel  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _rel, try_allocate as _try_alloc  # noqa: PLC0415
+
             if not _try_alloc("ResembleEnhance", size_gb=0.72):
                 logger.warning("Resemble-Enhance: ML-Budget erschöpft — DSP-Fallback.")
                 return
         except Exception:
-            _rel = None
+            pass
         try:
             import onnxruntime as ort
 
@@ -47,10 +48,17 @@ class ResembleEnhancePlugin:
             opts.inter_op_num_threads = 2
             self._session = ort.InferenceSession(path, sess_options=opts, providers=["CPUExecutionProvider"])
             logger.info("Resemble-Enhance ONNX geladen: %s", path)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm("ResembleEnhance", size_gb=0.72, unload_fn=lambda s=self: setattr(s, "_session", None))
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("Resemble-Enhance Ladefehler: %s — DSP-Fallback.", exc)
             try:
                 from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
                 _release("ResembleEnhance")
             except Exception:
                 pass

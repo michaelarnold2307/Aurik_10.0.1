@@ -599,6 +599,7 @@ class MusikalischerGlobalplanDienst:
         hint_genre: Optional[str] = None,
         hint_decade: Optional[int] = None,
         use_ml_classifiers: bool = True,
+        chain_info: Optional[dict] = None,
     ) -> StilbewussterRestaurierungsplan:
         """Erstellt den musikalischen Globalplan für ein Audiostück.
 
@@ -614,6 +615,9 @@ class MusikalischerGlobalplanDienst:
                                  wenn die ML-Klassifikatoren bereits an anderer
                                  Stelle in der Pipeline laufen (Anti-Parallelwelten,
                                  §Pflicht-Workflow), um Doppelausführung zu vermeiden.
+            chain_info:          Optionaler Ketten-Dict aus TontraegerketteDenker
+                                 (z. B. {"chain": ["tape", "mp3_low"], "primary": "tape"}).
+                                 Wird für kettenadaptive NR-Caps verwendet.
 
         Returns:
             StilbewussterRestaurierungsplan bereit für Pipeline-Integration.
@@ -758,6 +762,58 @@ class MusikalischerGlobalplanDienst:
 
         # Clip alle Werte auf valide Bereiche
         nr_aggressiveness = float(np.clip(nr_aggressiveness, 0.1, 1.0))
+
+        # Material-aware NR cap (§6.2): digitale/codec-komprimierte Quellen haben kein
+        # Breitrauschen — Codec-Artefakte werden von Apollo/Resemble-Enhance behandelt,
+        # NICHT von DeepFilterNet. Hohe NR-Stärke auf MP3/AAC zerhackt Musikinhalte
+        # (Musical Noise / "Kratzen"). Deckeln auf ein minimales Schutzniveau.
+        _DIGITAL_NR_CAP: dict[str, float] = {
+            "mp3_low":    0.20,   # schwere Codec-Kompression → Apollo primär, NR minimal
+            "mp3_high":   0.25,   # mittlere Kompression
+            "aac":        0.25,
+            "cd_digital": 0.30,   # nur echter Clipping-Schutz, kein Breitrauschen
+            "dat":        0.30,
+        }
+
+        chain_materials: set[str] = set()
+        if isinstance(chain_info, dict):
+            _chain_raw = chain_info.get("chain")
+            if isinstance(_chain_raw, list):
+                chain_materials = {str(x).strip().lower() for x in _chain_raw if x is not None}
+            for _k in ("primary", "secondary", "tertiary"):
+                _v = chain_info.get(_k)
+                if isinstance(_v, str) and _v.strip():
+                    chain_materials.add(_v.strip().lower())
+
+        is_digital_chain = bool(
+            (material in _DIGITAL_NR_CAP)
+            or any(m in _DIGITAL_NR_CAP for m in chain_materials)
+        )
+
+        _nr_cap = _DIGITAL_NR_CAP.get(material)
+        if _nr_cap is None:
+            for _m in ("mp3_low", "mp3_high", "aac", "cd_digital", "dat"):
+                if _m in chain_materials:
+                    _nr_cap = _DIGITAL_NR_CAP[_m]
+                    reasoning.append(
+                        f"NR-Cap aus Tonträgerkette übernommen: '{material}' + '{_m}'"
+                    )
+                    break
+
+        if _nr_cap is None and material in {"tape", "kassette", "cassette", "reel_tape"} and decade >= 1970:
+            _nr_cap = 0.25
+            reasoning.append(
+                "NR-Cap für digitalisierte Bandquelle aktiviert "
+                f"(Material='{material}', Ära={decade}er)"
+            )
+
+        if _nr_cap is not None and nr_aggressiveness > _nr_cap:
+            reasoning.append(
+                f"NR von {nr_aggressiveness:.2f} → {_nr_cap:.2f} begrenzt "
+                f"(digitale Quelle '{material}': Codec-Artefakte via Apollo, kein Breitrauschen)"
+            )
+            nr_aggressiveness = _nr_cap
+
         warmth_target = float(np.clip(warmth_target, 0.0, 1.0))
         presence_target = float(np.clip(presence_target, 0.0, 1.0))
         stereo_target = float(np.clip(stereo_target, 0.0, 1.0))
@@ -781,10 +837,21 @@ class MusikalischerGlobalplanDienst:
         phase_adjustments["phase_02_hum_removal"] = {"aggressiveness": hum_strength}
 
         # Phase 03: Denoise — Kernentscheidung: NR-Aggressivität
+        # target_snr_db: für digitale Quellen ohne echtes Rauschen kleiner ansetzen,
+        # damit DeepFilterNet nicht ins Musiksignal übergreift.
+        _target_snr = 20.0 if is_digital_chain else (30.0 if decade < 1950 else 50.0)
         phase_adjustments["phase_03_denoise"] = {
             "aggressiveness": nr_aggressiveness,
             "preserve_grain": 1.0 if preserve_grain else 0.0,
-            "target_snr_db": 30.0 if decade < 1950 else 50.0,
+            "target_snr_db": _target_snr,
+        }
+
+        # Phase 23: Spectral Repair (Clipping) — für Codec-Quellen stark begrenzen.
+        # MP3/AAC-Quellen haben keine echten Clipping-Flat-Tops — phase_23 würde
+        # Codec-Kerbmuster als Clipping misinterpretieren und zusätzliche Artefakte erzeugen.
+        _spectral_repair_strength = 0.30 if is_digital_chain else 1.0
+        phase_adjustments["phase_23_spectral_repair"] = {
+            "strength": _spectral_repair_strength,
         }
 
         # Phase 04: EQ Correction — HF-Deckel aus Ära-Profil
@@ -947,9 +1014,11 @@ def erstelle_globalplan(
     hint_genre: Optional[str] = None,
     hint_decade: Optional[int] = None,
     use_ml_classifiers: bool = True,
+    chain_info: Optional[dict] = None,
 ) -> StilbewussterRestaurierungsplan:
     """Convenience-Funktion: erstellt den Globalplan via Singleton-Dienst."""
     return get_musikalischer_globalplan_dienst().erstelle_plan(
         audio, sr, material=material, hint_genre=hint_genre, hint_decade=hint_decade,
         use_ml_classifiers=use_ml_classifiers,
+        chain_info=chain_info,
     )

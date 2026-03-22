@@ -614,7 +614,7 @@ post_row2 = [
         "400ms LUFS-Profil · Savitzky-Golay · ±3.0LU · True-Peak nach Morphing",
         "post",
     ),
-    (0.615, 0.360, 0.175, 0.040, "Vocos 24kHz ONNX", "52MB · wenn PQS-MOS<4.3\nHiFi-GAN 3.6MB → PGHI-iSTFT", "post"),
+    (0.615, 0.360, 0.175, 0.040, "Vocos 48kHz ONNX", "nativ 48kHz · wenn PQS-MOS<4.3\nHiFi-GAN 3.6MB → PGHI-iSTFT", "post"),
     (
         0.800,
         0.360,
@@ -653,7 +653,7 @@ plugin_row2 = [
     (0.015, 0.250, 0.120, 0.030, "DiffWave", "552KB · Dropout-Inpaint", "plugin"),
     (0.145, 0.250, 0.120, 0.030, "PANNs CNN14", "81KB · Audio-Tagging", "plugin"),
     (0.275, 0.250, 0.120, 0.030, "WpePlugin", "3-Tier WPE · DSP only", "plugin"),
-    (0.405, 0.250, 0.120, 0.030, "Vocos 24kHz", "52MB · Vocoder", "plugin"),
+    (0.405, 0.250, 0.120, 0.030, "Vocos 48kHz", "nativ 48kHz · Vocoder", "plugin"),
     (0.535, 0.250, 0.137, 0.030, "MERT", "Music Understanding\n3.9GB lazy-load", "plugin"),
 ]
 for bx, by, bw, bh, bl, bs, bk in plugin_row2:

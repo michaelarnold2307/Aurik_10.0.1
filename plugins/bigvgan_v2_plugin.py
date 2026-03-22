@@ -130,8 +130,21 @@ class BigVGANv2Plugin:
         self._fallback_mode: str = "pghi_istft"
         self._try_load_model()
 
+    _BUDGET_NAME: str = "bigvgan_v2"
+    _BUDGET_SIZE_GB: float = 0.40  # BigVGAN-v2 checkpoint ~200-400 MB
+
     def _try_load_model(self) -> None:
         """Lädt BigVGAN-v2 aus PyTorch-Checkpoint, sonst Fallback."""
+        # [RELEASE_MUST] memory budget guard before torch.load (§2.37 Checkliste)
+        try:
+            from backend.core.ml_memory_budget import release as _release, try_allocate  # noqa: PLC0415
+
+            if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
+                logger.info("BigVGAN-v2: ML-Budget erschöpft — PGHI-ISTFT Fallback aktiv.")
+                self._fallback_mode = "pghi_istft"
+                return
+        except ImportError:
+            pass  # budget module absent → attempt load anyway
         # Versuch 1: torch (CPU)
         try:
             import torch  # noqa: PLC0415
@@ -140,18 +153,32 @@ class BigVGANv2Plugin:
             checkpoint = self.MODELS_DIR / "bigvgan_v2.pth"
             if checkpoint.exists():
                 # Generisches Laden — spezifisches Modell muss kompatibel sein
-                self._torch_gen = torch.load(
-                    str(checkpoint), map_location="cpu"
-                )  # nosec B614 — lokales Modell aus models/
+                self._torch_gen = torch.load(str(checkpoint), map_location="cpu")  # nosec B614 — lokales Modell aus models/
                 self._torch_gen.eval()
                 self._model_loaded = True
                 self._fallback_mode = "bigvgan_v2_torch"
                 logger.info("🟢 BigVGAN-v2: torch-Modell geladen (CPU, %s)", checkpoint)
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                    _reg_plm(
+                        self._BUDGET_NAME,
+                        size_gb=self._BUDGET_SIZE_GB,
+                        unload_fn=lambda: setattr(self, "_torch_gen", None),
+                    )
+                except Exception:
+                    pass
                 return
         except ImportError:
             logger.debug("torch nicht verfügbar für BigVGAN-v2")
         except Exception as exc:
             logger.debug("BigVGAN-v2 torch nicht ladbar: %s", exc)
+            try:
+                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
+                _release(self._BUDGET_NAME)
+            except Exception:
+                pass
 
         # Kein Modell gefunden
         logger.info(

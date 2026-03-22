@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import threading
 from pathlib import Path
+import threading
 
 import numpy as np
 
@@ -29,7 +29,7 @@ class LyricsTranscriptionResult:
     fallback_used: bool
 
 
-def _assert_no_lyrics_in_log(words: "list[WordTimestamp]") -> None:
+def _assert_no_lyrics_in_log(words: list[WordTimestamp]) -> None:
     """§2.36 Datenschutz-Guard: Lyrics-Text darf NIEMALS geloggt werden.
 
     Stellt sicher, dass ``word.word`` nicht in Logger-Ausgaben landet.
@@ -43,8 +43,7 @@ def _assert_no_lyrics_in_log(words: "list[WordTimestamp]") -> None:
     for w in words:
         # Only phoneme_type is safe for logging — never w.word
         assert not w.word or w.word == "", (
-            "§2.36 Datenschutz-Verletzung: word.word ist nicht leer und darf niemals "
-            "in Logs oder Metadaten erscheinen."
+            "§2.36 Datenschutz-Verletzung: word.word ist nicht leer und darf niemals in Logs oder Metadaten erscheinen."
         )
 
 
@@ -144,8 +143,8 @@ class LyricsGuidedTimeline:
             return
         # Qt-Painter-Aufrufe nur wenn QApplication vorhanden (GUI-Kontext)
         try:
-            from PyQt5.QtGui import QColor
             from PyQt5.QtCore import QRectF
+            from PyQt5.QtGui import QColor
 
             for word in transcription.words:
                 color_hex = self.COLOR_MAP.get(word.phoneme_type, "")
@@ -169,7 +168,7 @@ _processor: ContentAwareProcessor | None = None
 _processor_lock = threading.Lock()
 _timeline: LyricsGuidedTimeline | None = None
 _timeline_lock = threading.Lock()
-_lge_instance: "LyricsGuidedEnhancement | None" = None
+_lge_instance: LyricsGuidedEnhancement | None = None
 _lge_lock = threading.Lock()
 
 
@@ -225,15 +224,15 @@ class LyricsGuidedEnhancement:
     _N_MELS: int = 80
     _N_FFT: int = 400
     _HOP: int = 160
-    _MAX_FRAMES: int = 3_000   # 30 s at 100 frames/s → 1500 encoder output frames
+    _MAX_FRAMES: int = 3_000  # 30 s at 100 frames/s → 1500 encoder output frames
 
     # wav2vec2 forced-alignment ONNX (125 MB, CPUExecutionProvider) — §2.36 Pflicht
-    _WAV2VEC2_SR: int = 16_000   # wav2vec2 operates at 16 kHz
+    _WAV2VEC2_SR: int = 16_000  # wav2vec2 operates at 16 kHz
 
     def __init__(self) -> None:
         self._cap = ContentAwareProcessor()
         self._tl = LyricsGuidedTimeline()
-        self._ort_session: object = None     # Whisper ONNX InferenceSession
+        self._ort_session: object = None  # Whisper ONNX InferenceSession
         self._aligner_session: object = None  # wav2vec2 forced-alignment ONNX session
         self._try_load_onnx()
         self._try_load_aligner()
@@ -242,12 +241,27 @@ class LyricsGuidedEnhancement:
 
     def _try_load_onnx(self) -> None:
         """Load whisper_tiny.onnx with CPUExecutionProvider (no GPU, no network)."""
+        # [RELEASE_MUST] memory budget guard before InferenceSession (§2.37 Checkliste)
+        _release_on_fail: object = None
+        try:
+            from backend.core.ml_memory_budget import (  # noqa: PLC0415
+                release as _ml_release,
+                try_allocate as _try_alloc,
+            )
+
+            if not _try_alloc("lyrics_transcriber_whisper", size_gb=0.04):
+                logger.info(
+                    "LyricsGuidedEnhancement: ML-Budget erschöpft (Whisper) — DSP-Fallback aktiv.",
+                )
+                return
+            _release_on_fail = lambda: _ml_release("lyrics_transcriber_whisper")  # noqa: E731
+        except ImportError:
+            pass  # budget module absent → attempt load anyway
+        _loaded = False
         try:
             import onnxruntime as ort  # type: ignore[import]
-            model_path = (
-                Path(__file__).resolve().parents[2]
-                / "models" / "whisper" / "whisper_tiny.onnx"
-            )
+
+            model_path = Path(__file__).resolve().parents[2] / "models" / "whisper" / "whisper_tiny.onnx"
             if model_path.exists():
                 self._ort_session = ort.InferenceSession(
                     str(model_path),
@@ -257,15 +271,33 @@ class LyricsGuidedEnhancement:
                     "LyricsGuidedEnhancement: whisper_tiny.onnx loaded (%.1f MB)",
                     model_path.stat().st_size / 1e6,
                 )
+                _loaded = True
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                    _reg_plm(
+                        "lyrics_transcriber_whisper",
+                        size_gb=0.04,
+                        unload_fn=lambda: setattr(self, "_ort_session", None),
+                    )
+                except Exception:
+                    pass
             else:
                 logger.debug(
-                    "LyricsGuidedEnhancement: whisper_tiny.onnx not found at %s"
-                    " — DSP fallback active", model_path,
+                    "LyricsGuidedEnhancement: whisper_tiny.onnx not found at %s — DSP fallback active",
+                    model_path,
                 )
         except Exception as exc:
             logger.debug(
-                "LyricsGuidedEnhancement: ONNX load failed (%s) — DSP fallback active", exc,
+                "LyricsGuidedEnhancement: ONNX load failed (%s) — DSP fallback active",
+                exc,
             )
+        finally:
+            if not _loaded and _release_on_fail is not None:
+                try:
+                    _release_on_fail()  # type: ignore[call-arg]
+                except Exception:
+                    pass
 
     def _try_load_aligner(self) -> None:
         """Load wav2vec2_forced_alignment.onnx (§2.36 PFLICHT: Phonem-Alignment).
@@ -273,12 +305,27 @@ class LyricsGuidedEnhancement:
         Model: 125 MB, CPUExecutionProvider, no network access.
         Fallback: DSP energy-threshold segmentation + Whisper token ID phoneme prior.
         """
+        # [RELEASE_MUST] memory budget guard before InferenceSession (§2.37 Checkliste)
+        _release_on_fail: object = None
+        try:
+            from backend.core.ml_memory_budget import (  # noqa: PLC0415
+                release as _ml_release,
+                try_allocate as _try_alloc,
+            )
+
+            if not _try_alloc("lyrics_aligner_wav2vec2", size_gb=0.13):
+                logger.info(
+                    "LyricsGuidedEnhancement: ML-Budget erschöpft (wav2vec2 Aligner) — DSP-Fallback aktiv.",
+                )
+                return
+            _release_on_fail = lambda: _ml_release("lyrics_aligner_wav2vec2")  # noqa: E731
+        except ImportError:
+            pass  # budget module absent → attempt load anyway
+        _loaded = False
         try:
             import onnxruntime as ort  # type: ignore[import]
-            model_path = (
-                Path(__file__).resolve().parents[2]
-                / "models" / "wav2vec2" / "wav2vec2_forced_alignment.onnx"
-            )
+
+            model_path = Path(__file__).resolve().parents[2] / "models" / "wav2vec2" / "wav2vec2_forced_alignment.onnx"
             if model_path.exists():
                 self._aligner_session = ort.InferenceSession(
                     str(model_path),
@@ -288,23 +335,41 @@ class LyricsGuidedEnhancement:
                     "LyricsGuidedEnhancement: wav2vec2_forced_alignment.onnx loaded (%.1f MB)",
                     model_path.stat().st_size / 1e6,
                 )
+                _loaded = True
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                    _reg_plm(
+                        "lyrics_aligner_wav2vec2",
+                        size_gb=0.13,
+                        unload_fn=lambda: setattr(self, "_aligner_session", None),
+                    )
+                except Exception:
+                    pass
             else:
                 logger.debug(
                     "LyricsGuidedEnhancement: wav2vec2_forced_alignment.onnx not found at %s"
-                    " — DSP phoneme-prior fallback active", model_path,
+                    " — DSP phoneme-prior fallback active",
+                    model_path,
                 )
         except Exception as exc:
             logger.debug(
-                "LyricsGuidedEnhancement: aligner ONNX load failed (%s)"
-                " — DSP phoneme-prior fallback active", exc,
+                "LyricsGuidedEnhancement: aligner ONNX load failed (%s) — DSP phoneme-prior fallback active",
+                exc,
             )
+        finally:
+            if not _loaded and _release_on_fail is not None:
+                try:
+                    _release_on_fail()  # type: ignore[call-arg]
+                except Exception:
+                    pass
 
     def _align_phonemes(
         self,
-        words: "list[WordTimestamp]",
+        words: list[WordTimestamp],
         mono_16k: np.ndarray,
         sr_16k: int = 16_000,
-    ) -> "list[WordTimestamp]":
+    ) -> list[WordTimestamp]:
         """Refine phoneme types using wav2vec2 forced alignment (§2.36 PFLICHT).
 
         If ``self._aligner_session`` is available, runs wav2vec2 to obtain
@@ -340,10 +405,10 @@ class LyricsGuidedEnhancement:
             # Run encoder: output is (1, T_frames, vocab_size) CTC log-probs
             inputs = {"input_values": audio_input[np.newaxis, :]}  # (1, T)
             outputs = self._aligner_session.run(None, inputs)
-            logits = outputs[0]   # (1, T_frames, vocab_size)
+            logits = outputs[0]  # (1, T_frames, vocab_size)
             if logits.ndim != 3:
                 return words
-            logits = logits[0]    # (T_frames, vocab_size)
+            logits = logits[0]  # (T_frames, vocab_size)
             n_frames, vocab_size = logits.shape
 
             # Frame duration at 16 kHz (wav2vec2 conv-fe downsamples by 320×)
@@ -366,15 +431,15 @@ class LyricsGuidedEnhancement:
                     updated.append(word)
                     continue
 
-                seg_logits = logits[frame_start:frame_end]   # (T_seg, vocab)
+                seg_logits = logits[frame_start:frame_end]  # (T_seg, vocab)
                 # Mean probability per token class (softmax approximation)
                 probs = np.exp(seg_logits - seg_logits.max(axis=-1, keepdims=True))
                 probs /= probs.sum(axis=-1, keepdims=True) + 1e-9
-                mean_probs = probs.mean(axis=0)   # (vocab_size,)
+                mean_probs = probs.mean(axis=0)  # (vocab_size,)
 
-                vowel_p = float(mean_probs[VOWEL_RANGE[0]:VOWEL_RANGE[1]].sum())
-                fric_p  = float(mean_probs[FRICATIVE_RANGE[0]:FRICATIVE_RANGE[1]].sum())
-                plos_p  = float(mean_probs[PLOSIVE_RANGE[0]:PLOSIVE_RANGE[1]].sum())
+                vowel_p = float(mean_probs[VOWEL_RANGE[0] : VOWEL_RANGE[1]].sum())
+                fric_p = float(mean_probs[FRICATIVE_RANGE[0] : FRICATIVE_RANGE[1]].sum())
+                plos_p = float(mean_probs[PLOSIVE_RANGE[0] : PLOSIVE_RANGE[1]].sum())
 
                 # Determine dominant class
                 is_stressed = word.phoneme_type.endswith("_stressed")
@@ -385,14 +450,16 @@ class LyricsGuidedEnhancement:
                 else:
                     new_type = "vowel_stressed" if is_stressed else "vowel_unstressed"
 
-                updated.append(WordTimestamp(
-                    word="",          # §2.36 Datenschutz: Lyrics-Text NIEMALS gespeichert
-                    start_s=word.start_s,
-                    end_s=word.end_s,
-                    confidence=float(max(vowel_p, fric_p, plos_p)),
-                    is_stressed=is_stressed,
-                    phoneme_type=new_type,
-                ))
+                updated.append(
+                    WordTimestamp(
+                        word="",  # §2.36 Datenschutz: Lyrics-Text NIEMALS gespeichert
+                        start_s=word.start_s,
+                        end_s=word.end_s,
+                        confidence=float(max(vowel_p, fric_p, plos_p)),
+                        is_stressed=is_stressed,
+                        phoneme_type=new_type,
+                    )
+                )
             return updated
         except Exception as exc:
             logger.debug("LyricsGuidedEnhancement._align_phonemes failed (%s) — DSP fallback", exc)
@@ -447,23 +514,19 @@ class LyricsGuidedEnhancement:
 
     # ── Internal transcription ──────────────────────────────────────────────
 
-    def _transcribe_internal(
-        self, mono: np.ndarray, sr: int, dur: float
-    ) -> LyricsTranscriptionResult:
+    def _transcribe_internal(self, mono: np.ndarray, sr: int, dur: float) -> LyricsTranscriptionResult:
         """Try ONNX encoder first; fall back to DSP energy segmentation."""
         if self._ort_session is not None:
             try:
                 return self._transcribe_onnx(mono, sr, dur)
             except Exception as exc:
                 logger.debug(
-                    "LyricsGuidedEnhancement: ONNX transcription failed (%s)"
-                    " — DSP fallback", exc,
+                    "LyricsGuidedEnhancement: ONNX transcription failed (%s) — DSP fallback",
+                    exc,
                 )
         return self._transcribe_dsp(mono, sr, dur)
 
-    def _transcribe_onnx(
-        self, mono: np.ndarray, sr: int, dur: float
-    ) -> LyricsTranscriptionResult:
+    def _transcribe_onnx(self, mono: np.ndarray, sr: int, dur: float) -> LyricsTranscriptionResult:
         """Run whisper_tiny.onnx encoder; derive vocal segments from hidden-state RMS.
 
         The encoder's last_hidden_state (1500 frames × 384 dims) is condensed to a
@@ -473,7 +536,7 @@ class LyricsGuidedEnhancement:
         ContentAwareProcessor.SALIENCY_BOOST.
         """
         mono_16k = self._resample(mono, sr, self._ONNX_SR)
-        features = self._compute_mel_features(mono_16k)    # (1, 80, 3000)
+        features = self._compute_mel_features(mono_16k)  # (1, 80, 3000)
 
         # Encoder inference — output: (1, 1500, 384)
         hidden = self._ort_session.run(None, {"input_features": features})[0]
@@ -483,6 +546,9 @@ class LyricsGuidedEnhancement:
         frame_energy = (frame_energy / e_max).astype(np.float32)
 
         words = self._energy_to_words(frame_energy, dur, mono, sr)
+        # §2.36 Pflicht: phoneme-level refinement via wav2vec2 forced alignment.
+        # Falls aligner nicht verfügbar ist, gibt _align_phonemes die Original-Liste zurück.
+        words = self._align_phonemes(words, mono_16k, self._WAV2VEC2_SR)
         return LyricsTranscriptionResult(
             words=words,
             language="de",
@@ -491,11 +557,9 @@ class LyricsGuidedEnhancement:
             fallback_used=False,
         )
 
-    def _transcribe_dsp(
-        self, mono: np.ndarray, sr: int, dur: float
-    ) -> LyricsTranscriptionResult:
+    def _transcribe_dsp(self, mono: np.ndarray, sr: int, dur: float) -> LyricsTranscriptionResult:
         """Pure DSP energy segmentation (20 ms frames, RMS, 60th-percentile threshold)."""
-        frame_size = max(1, sr // 50)   # 20 ms
+        frame_size = max(1, sr // 50)  # 20 ms
         hop = max(1, frame_size // 2)
         energies = [
             float(np.sqrt(np.mean(mono[i : i + frame_size] ** 2)))
@@ -507,6 +571,10 @@ class LyricsGuidedEnhancement:
         e_max = float(arr.max()) or 1.0
         arr /= e_max
         words = self._energy_to_words(arr, dur, mono, sr)
+        # §2.36 Fallback-Pfad: wenn Aligner verfügbar ist, auch DSP-Segmente
+        # mit wav2vec2 nachklassifizieren; ansonsten unverändert belassen.
+        mono_16k = self._resample(mono, sr, self._WAV2VEC2_SR)
+        words = self._align_phonemes(words, mono_16k, self._WAV2VEC2_SR)
         return LyricsTranscriptionResult(
             words=words,
             language="de",
@@ -540,18 +608,19 @@ class LyricsGuidedEnhancement:
 
         # --- Plosive: very short burst (< 30 ms) with high peak/RMS ratio ---
         if dur_ms < 30.0 and n >= 4:
-            rms = float(np.sqrt(np.mean(segment_audio ** 2))) or 1e-10
+            rms = float(np.sqrt(np.mean(segment_audio**2))) or 1e-10
             peak = float(np.abs(segment_audio).max())
-            if peak / rms > 3.5:   # crest factor > 3.5 → transient burst
+            if peak / rms > 3.5:  # crest factor > 3.5 → transient burst
                 return "plosive"
 
         # --- Spectral centroid and flatness for fricative vs. vowel ---
         if n >= 16:
             try:
-                fft = np.abs(np.fft.rfft(segment_audio * np.hanning(n) if n <= 8192
-                             else segment_audio[:8192] * np.hanning(8192)))
+                fft = np.abs(
+                    np.fft.rfft(segment_audio * np.hanning(n) if n <= 8192 else segment_audio[:8192] * np.hanning(8192))
+                )
                 freqs = np.fft.rfftfreq(min(n, 8192), d=1.0 / sr)
-                power = fft ** 2 + 1e-12
+                power = fft**2 + 1e-12
                 total_power = float(power.sum())
                 centroid = float((freqs * power).sum() / total_power)
 
@@ -564,14 +633,15 @@ class LyricsGuidedEnhancement:
                 if centroid > 4000.0 and flatness > 0.05:
                     return "fricative_stressed" if is_stressed else "fricative_unstressed"
             except Exception:
-                pass   # DSP failed → fall through to vowel classification
+                pass  # DSP failed → fall through to vowel classification
 
         return "vowel_stressed" if is_stressed else "vowel_unstressed"
 
     @staticmethod
     def _energy_to_words(
-        frame_energy: np.ndarray, dur: float,
-        source_audio: "np.ndarray | None" = None,
+        frame_energy: np.ndarray,
+        dur: float,
+        source_audio: np.ndarray | None = None,
         sr: int = 48_000,
     ) -> list[WordTimestamp]:
         """Convert normalised frame-level energy to pseudo WordTimestamp objects.
@@ -608,12 +678,10 @@ class LyricsGuidedEnhancement:
                 i1 = max(i0 + 1, min(len(source_audio), int(end_s * sr)))
                 seg_audio = source_audio[i0:i1]
                 if len(seg_audio) >= 4:
-                    phoneme_type = LyricsGuidedEnhancement._classify_phoneme_type(
-                        seg_audio, sr, seg_e, is_stressed
-                    )
+                    phoneme_type = LyricsGuidedEnhancement._classify_phoneme_type(seg_audio, sr, seg_e, is_stressed)
 
             return WordTimestamp(
-                word="",   # privacy: never store transcribed text
+                word="",  # privacy: never store transcribed text
                 start_s=start_s,
                 end_s=end_s,
                 confidence=min(1.0, seg_e),
@@ -635,7 +703,7 @@ class LyricsGuidedEnhancement:
                     seg_energies = []
                 # Below-threshold → silence segment (short gaps collapsed, long gaps tagged)
 
-        if in_seg and seg_energies:   # flush last open segment
+        if in_seg and seg_energies:  # flush last open segment
             words.append(_flush_segment(seg_start, n, seg_energies))
         return words
 
@@ -664,6 +732,7 @@ class LyricsGuidedEnhancement:
             return mono
         try:
             import scipy.signal as sps  # type: ignore[import]
+
             n_out = max(1, int(len(mono) * sr_out / sr_in))
             return sps.resample(mono, n_out).astype(np.float32)
         except Exception:
@@ -681,7 +750,7 @@ class LyricsGuidedEnhancement:
         Returns float32 array of shape (1, 80, 3000).
         Shorter signals are zero-padded; longer signals are truncated at 30 s.
         """
-        max_samples = self._MAX_FRAMES * self._HOP   # 480 000 = 30 s at 16 kHz
+        max_samples = self._MAX_FRAMES * self._HOP  # 480 000 = 30 s at 16 kHz
         if len(mono_16k) < max_samples:
             mono_16k = np.pad(mono_16k, (0, max_samples - len(mono_16k)))
         else:
@@ -689,6 +758,7 @@ class LyricsGuidedEnhancement:
 
         try:
             import librosa  # type: ignore[import]
+
             mel = librosa.feature.melspectrogram(
                 y=mono_16k,
                 sr=self._ONNX_SR,
@@ -703,12 +773,10 @@ class LyricsGuidedEnhancement:
             log_mel = (log_mel + 4.0) / 4.0
             # Pad / truncate to exactly MAX_FRAMES time steps
             if log_mel.shape[1] < self._MAX_FRAMES:
-                log_mel = np.pad(
-                    log_mel, ((0, 0), (0, self._MAX_FRAMES - log_mel.shape[1]))
-                )
+                log_mel = np.pad(log_mel, ((0, 0), (0, self._MAX_FRAMES - log_mel.shape[1])))
             else:
                 log_mel = log_mel[:, : self._MAX_FRAMES]
-            return log_mel.astype(np.float32)[np.newaxis, ...]   # (1, 80, 3000)
+            return log_mel.astype(np.float32)[np.newaxis, ...]  # (1, 80, 3000)
         except Exception:
             # Zero fallback: encoder processes silence → near-zero hidden states
             return np.zeros((1, self._N_MELS, self._MAX_FRAMES), dtype=np.float32)

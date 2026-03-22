@@ -158,7 +158,7 @@ class DefektDenker:
                 return
             # --- DefectScanner ---
             try:
-                from core.defect_scanner import DefectScanner
+                from backend.core.defect_scanner import DefectScanner
 
                 self._scanner = DefectScanner()
                 logger.info("DefektDenker: DefectScanner geladen.")
@@ -167,7 +167,7 @@ class DefektDenker:
 
             # --- CausalDefectReasoner ---
             try:
-                from core.causal_defect_reasoner import CausalDefectReasoner
+                from backend.core.causal_defect_reasoner import CausalDefectReasoner
 
                 self._reasoner = CausalDefectReasoner()
                 logger.info("DefektDenker: CausalDefectReasoner geladen.")

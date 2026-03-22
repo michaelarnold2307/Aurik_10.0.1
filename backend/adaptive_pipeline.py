@@ -105,8 +105,8 @@ class SileroPlugin(_PluginStub):
     pass  # type: ignore[no-redef]
 
 
-class VampNetPlugin(_PluginStub):
-    pass  # type: ignore[no-redef]
+# VampNetPlugin: VERBOTEN (kein stabiler ONNX-Export, kein gebündeltes Plugin) — §4.4
+# Stub entfernt; flow_matching_plugin ist der Nachfolger für generatives Inpainting.
 
 
 class BSRoFormerPlugin(_PluginStub):
@@ -217,11 +217,6 @@ try:
     from plugins.silero_plugin import SileroPlugin  # type: ignore[no-redef]  # noqa: F811
 except Exception as _e:
     _log.warning("SileroPlugin nicht verfügbar: %s", _e)
-
-try:
-    from plugins.vampnet_plugin import VampNetPlugin  # type: ignore[no-redef]  # noqa: F811
-except Exception as _e:
-    _log.warning("VampNetPlugin nicht verfügbar: %s", _e)
 
 try:
     from plugins.bs_roformer_plugin import BSRoFormerPlugin  # type: ignore[no-redef]  # noqa: F811
@@ -385,7 +380,7 @@ class AdaptiveProcessingPipeline:
             "matchering",
             "panns",
             "silero",
-            "vampnet",
+            # vampnet: VERBOTEN — §4.4 (kein stabiler ONNX-Export)
             "diffwave",
             "hifigan",
             "sota_universal_enhancer",
@@ -1804,9 +1799,9 @@ class AdaptiveProcessingPipelineV2:
         self.matchering = MatcheringPlugin()
         self.panns = PANNSPlugin()
         self.silero = SileroPlugin()
-        self.vampnet = VampNetPlugin()
+        # self.vampnet: entfernt — VERBOTEN §4.4; Nachfolger: flow_matching_plugin
 
-        self.logger.info("AdaptiveProcessingPipelineV2 initialized with 28 Docker-based ML plugins")
+        self.logger.info("AdaptiveProcessingPipelineV2 initialized with 27 Docker-based ML plugins")
 
     def run_with_job_tracking(
         self, input_audio_path: str, output_audio_path: str, user_id: str = None

@@ -53,6 +53,7 @@ class PitchDetectionStrategy(Enum):
     CREPE_ONLY = "crepe_only"  # Pure ML CNN
     HYBRID = "hybrid"  # pYIN → CREPE-Verfeinerung
     ADAPTIVE = "adaptive"  # Auto-Auswahl nach Konfidenz
+    POLYPHONIC = "polyphonic"  # Multi-F0 consensus (Capstan-kompetitiv, §2.12)
     # Backward-Alias (deprecated)
     YIN_ONLY = "pyin_only"  # Alias → PYIN_ONLY
 
@@ -87,6 +88,207 @@ class WowFlutterResult:
     def yin_applied(self) -> bool:
         """Backward-Alias für pyin_applied."""
         return self.pyin_applied
+
+
+class PolyphonicSpeedCurveEstimator:
+    """Polyphonic consensus speed curve estimator (Capstan-competitive, §2.12).
+
+    Tracks all simultaneous tonal voices in the mix via BasicPitch (multi-F0 ONNX)
+    and derives a robust speed-deviation curve through confidence-weighted median
+    consensus across all K voices per frame.
+
+    Advantages over mono pYIN:
+    - Percussion/noise confusing a single-voice tracker cannot dominate the result.
+    - Multiple voices vote on the speed curve — outliers are suppressed.
+    - Works even when individual voices drop out; others continue tracking.
+
+    Algorithm (Klapuri 2003; Salamon & Gómez 2012 MELODIA; Plangent consensus):
+    1. BasicPitch[T, K] → K simultaneous pitch tracks (K ≤ 6).
+    2. Per track k: global reference pitch via robust median over all voiced frames.
+    3. Per frame t, voiced slot k: deviation_cents[t,k] = 1200·log₂(hz/ref_hz[k]).
+    4. Per frame t: confidence-weighted median of voiced deviations → speed_curve[t].
+       Requires ≥ 2 simultaneously voiced slots; otherwise marked as NaN.
+    5. Gap-fill: linear interpolation ≤ 1 s; zero-fill for longer gaps.
+    6. Savitzky-Golay smoothing: SG(51, 3) for smoothed speed curve.
+    7. Output: virtual pitch trajectory (REF_HZ · 2^(speed_cents/1200)) compatible
+       with the existing phase_12 _separate_wow_flutter / _calculate_stretch_factors
+       pipeline without any further changes to downstream code.
+
+    Fallback chain:
+    - BasicPitch ONNX unavailable / fails → pYIN DSP (via WowFlutterFix).
+    """
+
+    _REF_HZ: float = 440.0          # Canonical reference for virtual pitch output
+    _MIN_VOICES: int = 2            # Minimum simultaneous voices for consensus
+    _SG_WINDOW: int = 51            # Savitzky-Golay window (≈ 0.5 s at 10 ms hop)
+    _SG_POLY: int = 3               # Savitzky-Golay polynomial order
+    _MIN_HZ: float = 20.0           # Below this: treat slot as unvoiced
+    _MIN_CONF: float = 0.20         # Minimum per-slot confidence to include in consensus
+
+    def __init__(self) -> None:
+        self._bp = None
+        self._init_basicpitch()
+
+    def _init_basicpitch(self) -> None:
+        try:
+            from plugins.basicpitch_plugin import get_basicpitch_plugin  # noqa: PLC0415
+
+            self._bp = get_basicpitch_plugin()
+            logger.info(
+                "PolyphonicSpeedCurveEstimator: BasicPitch geladen (model_loaded=%s)",
+                getattr(self._bp, "_model_loaded", False),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("BasicPitch nicht verfügbar (%s) — pYIN-Fallback aktiv", exc)
+            self._bp = None
+
+    def estimate(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
+        """Estimate a speed-deviation curve from polyphonic content.
+
+        Returns a virtual pitch trajectory and confidence array that are
+        drop-in compatible with phase_12's _separate_wow_flutter /
+        _calculate_stretch_factors pipeline.
+
+        virtual_pitch[t] = REF_HZ · 2^(speed_deviation_cents[t] / 1200)
+        where speed_deviation_cents is the zero-centred consensus curve.
+
+        Returns:
+            (virtual_pitch, confidence): shape [T], dtype float32.
+        """
+        if self._bp is None or not getattr(self._bp, "_model_loaded", False):
+            return self._pyin_fallback(audio, sr)
+        try:
+            return self._estimate_polyphonic(audio, sr)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "PolyphonicSpeedCurveEstimator._estimate_polyphonic fehlgeschlagen (%s) — pYIN-Fallback",
+                exc,
+            )
+            return self._pyin_fallback(audio, sr)
+
+    def _estimate_polyphonic(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
+        """Core polyphonic consensus estimation."""
+        import math as _math  # noqa: PLC0415
+
+        from scipy.signal import savgol_filter  # noqa: PLC0415
+
+        mono = np.mean(audio, axis=1).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
+        result = self._bp.analyze(mono, sr, max_polyphony=6)
+        pitches_hz: np.ndarray = result.pitches_hz    # [T, K]
+        confidences: np.ndarray = result.confidences  # [T, K]
+
+        T, K = pitches_hz.shape
+        if T < 4:
+            return self._pyin_fallback(audio, sr)
+
+        # Step 2: per-voice global reference pitch (robust median)
+        ref_hz = np.zeros(K, dtype=np.float32)
+        for k in range(K):
+            voiced = pitches_hz[:, k]
+            voiced = voiced[voiced > self._MIN_HZ]
+            if len(voiced) >= 4:
+                ref_hz[k] = float(np.median(voiced))
+
+        # Step 3: per-frame per-voice deviation in cents
+        deviation_cents = np.zeros((T, K), dtype=np.float32)
+        voiced_mask = np.zeros((T, K), dtype=bool)
+        for k in range(K):
+            if ref_hz[k] < self._MIN_HZ:
+                continue
+            hz = pitches_hz[:, k]
+            valid = (hz > self._MIN_HZ) & (confidences[:, k] > self._MIN_CONF)
+            voiced_mask[:, k] = valid
+            with np.errstate(divide="ignore", invalid="ignore"):
+                ratio = np.where(valid, hz / ref_hz[k], 1.0)
+                ratio = np.clip(ratio, 1e-6, 1e6)
+                deviation_cents[:, k] = np.where(valid, 1200.0 * np.log2(ratio), 0.0)
+
+        # Step 4: confidence-weighted median per frame
+        speed_curve = np.full(T, np.nan, dtype=np.float32)
+        consensus_conf = np.zeros(T, dtype=np.float32)
+        for t in range(T):
+            active = np.where(voiced_mask[t])[0]
+            if len(active) >= self._MIN_VOICES:
+                devs = deviation_cents[t, active]
+                wgts = confidences[t, active]
+                wgts = wgts / (wgts.sum() + 1e-10)
+                speed_curve[t] = self._weighted_median(devs, wgts)
+                consensus_conf[t] = 1.0
+
+        # Step 5: fill NaN gaps
+        nan_mask = np.isnan(speed_curve)
+        if nan_mask.any():
+            speed_curve = self._fill_gaps(speed_curve, result.frame_times_s)
+
+        # Step 6: Savitzky-Golay smoothing
+        sg_win = self._SG_WINDOW
+        if len(speed_curve) > sg_win:
+            speed_curve = savgol_filter(speed_curve, sg_win, self._SG_POLY).astype(np.float32)
+
+        speed_curve = np.nan_to_num(speed_curve, nan=0.0).astype(np.float32)
+
+        # Step 7: virtual pitch trajectory (phase_12 pipeline compatible)
+        virtual_pitch = (self._REF_HZ * np.power(2.0, speed_curve / 1200.0)).astype(np.float32)
+        virtual_pitch = np.clip(virtual_pitch, self._MIN_HZ, 4000.0)
+
+        final_conf = np.where(consensus_conf > 0.0, 0.85, 0.30).astype(np.float32)
+        final_conf[nan_mask] *= 0.5
+
+        logger.info(
+            "PolyphonicSpeedCurveEstimator: T=%d frames, K=%d voices, "
+            "consensus=%d/%d frames, speed_range=[%.2f, %.2f] cents",
+            T, K, int(np.sum(~nan_mask)), T,
+            float(np.min(speed_curve)), float(np.max(speed_curve)),
+        )
+        return virtual_pitch, final_conf
+
+    @staticmethod
+    def _weighted_median(values: np.ndarray, weights: np.ndarray) -> float:
+        """Confidence-weighted median (1D robust estimator)."""
+        if len(values) == 0:
+            return 0.0
+        if len(values) == 1:
+            return float(values[0])
+        idx = np.argsort(values)
+        vals_s = values[idx]
+        wgts_s = weights[idx]
+        cum = np.cumsum(wgts_s)
+        total = cum[-1]
+        if total < 1e-10:
+            return float(np.mean(values))
+        mid = np.searchsorted(cum, 0.5 * total)
+        return float(vals_s[min(mid, len(vals_s) - 1)])
+
+    @staticmethod
+    def _fill_gaps(speed_curve: np.ndarray, frame_times_s: np.ndarray) -> np.ndarray:
+        """Fill NaN gaps: linear interpolation ≤ 1 s, zero-fill for longer spans."""
+        frame_step = float(frame_times_s[1] - frame_times_s[0]) if len(frame_times_s) > 1 else 0.01
+        max_interp = int(1.0 / max(frame_step, 1e-4))
+        result = speed_curve.copy()
+        T = len(result)
+        i = 0
+        while i < T:
+            if np.isnan(result[i]):
+                j = i
+                while j < T and np.isnan(result[j]):
+                    j += 1
+                v_before = result[i - 1] if i > 0 else 0.0
+                v_after = result[j] if j < T else 0.0
+                if j - i <= max_interp:
+                    result[i:j] = np.linspace(v_before, v_after, j - i)
+                else:
+                    result[i:j] = 0.0
+                i = j
+            else:
+                i += 1
+        return result
+
+    def _pyin_fallback(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
+        """pYIN DSP fallback via WowFlutterFix._estimate_pitch_pyin."""
+        from backend.core.phases.phase_12_wow_flutter_fix import WowFlutterFix  # noqa: PLC0415
+
+        mono = np.mean(audio, axis=1).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
+        return WowFlutterFix()._estimate_pitch_pyin(mono, sr)
 
 
 class HybridWowFlutter:

@@ -47,8 +47,8 @@ _DEEPFORMANTS_ONNX = _ROOT / "models" / "deepformants" / "deepformants.onnx"
 # DeepFormants Eingangs-SR: 16 kHz; intern resampled von 48 kHz
 _DEEPFORMANTS_SR: int = 16_000
 _DEEPFORMANTS_N_MELS: int = 128
-_DEEPFORMANTS_N_FFT: int = 512   # 32 ms @ 16 kHz
-_DEEPFORMANTS_HOP: int = 160     # 10 ms @ 16 kHz
+_DEEPFORMANTS_N_FFT: int = 512  # 32 ms @ 16 kHz
+_DEEPFORMANTS_HOP: int = 160  # 10 ms @ 16 kHz
 
 # ---------------------------------------------------------------------------
 # Konstanten
@@ -147,6 +147,7 @@ class FormantTracker:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("DeepFormants", size_gb=0.05):
                     logger.warning("DeepFormants: ML-Budget erschöpft — LPC-Fallback.")
                     return
@@ -162,8 +163,25 @@ class FormantTracker:
             )
             self._deepformants_loaded = True
             logger.info("✅ DeepFormants ONNX geladen — §4.4 primärer Formant-Tracker.")
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "DeepFormants",
+                    size_gb=0.05,
+                    unload_fn=lambda s=self: (
+                        setattr(s, "_deepformants_session", None) or setattr(s, "_deepformants_loaded", False)
+                    ),
+                )
+            except Exception:
+                pass
         except Exception as exc:
             logger.debug("DeepFormants ONNX nicht ladbar: %s — LPC-Burg-Fallback.", exc)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("DeepFormants")
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Public API
@@ -250,8 +268,8 @@ class FormantTracker:
             # Manuelle Dreiecks-Filterbank als Notfallpfad
             mel_basis = self._build_mel_basis(_DEEPFORMANTS_SR, _DEEPFORMANTS_N_FFT, _DEEPFORMANTS_N_MELS)
 
-        mel_spec = mel_basis @ mag              # [128, T]
-        log_mel = np.log1p(mel_spec * 1e4)      # Log-Skalierung
+        mel_spec = mel_basis @ mag  # [128, T]
+        log_mel = np.log1p(mel_spec * 1e4)  # Log-Skalierung
         log_mel = np.nan_to_num(log_mel, nan=0.0, posinf=0.0, neginf=0.0)
 
         # ONNX-Inferenz: [1, 128, T] → [1, 4, T]

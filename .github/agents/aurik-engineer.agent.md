@@ -43,9 +43,9 @@ Du kennst die **copilot-instructions.md** vollständig auswendig und setzt sie *
 ### DSP & Algorithmen
 - **NR**: OMLSA/IMCRA (Cohen 2002/2003) + MMSE-LSA; G_floor via HarmonicPreservationGuard  
 - **Inpainting kurz** (<50 ms): NMF-β-Divergenz (Févotte 2011) + Sinusoidal Modeling + PGHI  
-- **Inpainting lang** (≥50 ms): CQTdiff+ → VampNet → DiffWave (Kaskade) + PGHI  
+- **Inpainting lang** (≥50 ms): CQTdiff+ → DiffWave (Kaskade) + PGHI  
 - **Codec-Artefakte**: Apollo (Zhang 2024) primär, Resemble-Enhance als Fallback  
-- **Pitch**: CREPE (full, CPU) primär, pYIN als DSP-Fallback — niemals YIN  
+- **Pitch**: FCPE (ONNX) primär → CREPE (full, CPU) → pYIN als DSP-Fallback — niemals YIN  
 - **Phasenrekonstruktion**: PGHI zwingend nach jeder Spektral-Modifikation  
 - **Vocoder**: Vocos 0.2.0 (24 kHz ONNX) primär, HiFi-GAN → PGHI-ISTFT als Kaskade  
 - **Masking**: ISO 11172-3 Simultane + Temporale Maskierung als OMLSA-Gain-Modifier  
@@ -89,13 +89,14 @@ def process(self, audio: np.ndarray, sr: int, *, mode: str = "restoration") -> M
 ### Modell-Prioritäten (lokale Bundles, kein Download)
 | Aufgabe | Primär | DSP-Fallback |
 |---|---|---|
-| Stem-Separation | MDX23C Kim_Vocal_2/Kim_Inst (64 MB je) | NMF-β |
+| Stem-Separation Vocals | MelBandRoformer (`bs_roformer_plugin`, 860 MB ONNX) | HPSS + NMF-β |
+| Stem-Separation Instrumental | HTDemucs-6s (`htdemucs_plugin`) | NMF-β |
 | Breitrauschen | DeepFilterNet v3.II (37 MB, 3 ONNX) | OMLSA/IMCRA |
-| Codec-Artefakte | Apollo (65 MB ONNX) | Resemble-Enhance (41 MB) |
-| Pitch f₀ | CREPE full (85 MB ONNX) | pYIN (librosa) |
-| Audio-Tagging | PANNs CNN14 (81 KB ONNX) | DSP-Fingerprint |
-| Vocoder | Vocos 24 kHz (52 MB ONNX) | HiFi-GAN (3,6 MB) |
-| MOS-Schätzung | CDPAM (102 MB) | PQS-Gammatone-DSP |
+| Codec-Artefakte | Apollo (`apollo_plugin`, TorchScript) | Resemble-Enhance (722 MB ONNX) |
+| Pitch f₀ | FCPE (`fcpe_plugin`, ONNX) → CREPE full (85 MB ONNX) | PESTO → pYIN |
+| Audio-Tagging | BEATs iter3 (`beats_plugin`, 90 MB ONNX) | PANNs CNN14 (81 KB ONNX) |
+| Vocoder | Vocos 48 kHz nativ (`vocos_plugin`) → 44,1 kHz → 24 kHz | HiFi-GAN (3,6 MB) |
+| MOS-Schätzung | VERSA (`versa_plugin`) → SingMOS (Gesang) | PQS-Gammatone-DSP |
 
 ## Workflow bei jeder Aufgabe
 

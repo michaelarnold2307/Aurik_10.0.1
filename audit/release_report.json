@@ -1,39 +1,464 @@
 {
-  "timestamp": "2026-02-17T00:00:00",
-  "version": "9.0.1",
+  "timestamp": "2026-03-19T22:07:36.714900",
   "compliance_ok": true,
-  "changes": [
-    "Frontend vereinheitlicht: Alle modernen GUI-Komponenten in frontend/ui/ konsolidiert",
-    "Legacy/Altlasten entfernt: aurik_90/ui/ und veraltete Dokumentation bereinigt",
-    "Alle Startskripte und Tests auf neue GUI-Struktur umgestellt",
-    "Codebasis vollständig lint- und style-konform (flake8, black, isort)",
-    "Release-Branch release/aurik-9.0 erstellt, CHANGELOG.md aktualisiert"
-  ],
+  "release_ready": false,
+  "score": 6.0,
+  "score_max": 10.0,
+  "changes": [],
   "audit_summary": [
     {
-      "step": "quality_gate_check",
-      "input_file": "audio_examples/test_5sec.wav",
-      "output_file": "out_test_5sec.wav",
-      "policy": "standard",
-      "mode": "restoration",
-      "optimization": "none",
-      "genre": "rock",
-      "user_score": 5.0,
-      "quality_gate_passed": true
+      "timestamp": "2026-02-22T16:29:17.837441",
+      "vocal_quality_check": {
+        "authentizität": false,
+        "klarheit": false,
+        "expressivität": false,
+        "emotionalität": false,
+        "transparenz": false
+      },
+      "scores": {
+        "f0_median": -1.0,
+        "f0_mean": -1.0,
+        "f0_std": -1.0,
+        "chroma_mean": 0.0,
+        "chroma_std": 0.0,
+        "key_chroma_cqt_mean": 0.0,
+        "tempo_bpm": 0.0,
+        "beat_count": 0,
+        "mfcc_mean": -56.568542494923804,
+        "mfcc_std": 246.57656011875906,
+        "Speech": 0.01704201102256775,
+        "Female singing": 0.002673417329788208,
+        "Male singing": 0.0007531940937042236,
+        "Child singing": 0.00036656856536865234,
+        "Choir": 0.00018474459648132324,
+        "Sibilant": 0.0017202496528625488,
+        "Music": 0.0004477202892303467,
+        "Noise": 1.963973045349121e-05,
+        "Silence": 0.0005939900875091553,
+        "rms": 0.0,
+        "zcr": 0.0,
+        "spectral_centroid": 0.0,
+        "spectral_rolloff": 0.0,
+        "spectral_flatness": 0.9999999999999997,
+        "spectral_contrast": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "crest_factor": 0.0,
+        "lufs": -100.691,
+        "quality_gates": {
+          "lufs": false
+        },
+        "click_density": 0.0,
+        "click_count": 0,
+        "crackle_density": 0.0,
+        "clipping_percentage": 0.0,
+        "is_clipped": false,
+        "dropout_regions": [],
+        "dropout_count": 0,
+        "wow_score": 0.0,
+        "flutter_score": 0.0,
+        "hum_score": 0.0,
+        "user_score": 5.0,
+        "user_comment": "Sehr musikalisch",
+        "media_characteristics": {
+          "vocal": true,
+          "chain": true,
+          "music": true,
+          "creative_dsp_chain": [
+            "HarmonicExciter",
+            "StereoWidener"
+          ]
+        },
+        "vocal_scores": {
+          "authentizität": 0.89,
+          "klarheit": 0.91,
+          "expressivität": 0.88
+        },
+        "feedback_data": {
+          "expert": "Sehr natürlich",
+          "user": "Klang exzellent"
+        }
+      }
     },
     {
-      "step": "quality_gate_check",
-      "input_file": "test_e2e_input.wav",
-      "output_file": "test_e2e_output_balanced_jazz.wav",
-      "policy": "standard",
-      "mode": null,
-      "optimization": "balanced",
-      "genre": "jazz",
-      "user_score": 5.0,
-      "quality_gate_passed": true
+      "timestamp": "2026-02-22T16:29:17.855378",
+      "features": {
+        "f0_median": -1.0,
+        "f0_mean": -1.0,
+        "f0_std": -1.0,
+        "chroma_mean": 0.0,
+        "chroma_std": 0.0,
+        "key_chroma_cqt_mean": 0.0,
+        "tempo_bpm": 0.0,
+        "beat_count": 0,
+        "mfcc_mean": -56.568542494923804,
+        "mfcc_std": 246.57656011875906,
+        "Speech": 0.01704201102256775,
+        "Female singing": 0.002673417329788208,
+        "Male singing": 0.0007531940937042236,
+        "Child singing": 0.00036656856536865234,
+        "Choir": 0.00018474459648132324,
+        "Sibilant": 0.0017202496528625488,
+        "Music": 0.0004477202892303467,
+        "Noise": 1.963973045349121e-05,
+        "Silence": 0.0005939900875091553,
+        "rms": 0.0,
+        "zcr": 0.0,
+        "spectral_centroid": 0.0,
+        "spectral_rolloff": 0.0,
+        "spectral_flatness": 0.9999999999999997,
+        "spectral_contrast": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "crest_factor": 0.0,
+        "lufs": -100.691,
+        "quality_gates": {
+          "lufs": false
+        },
+        "click_density": 0.0,
+        "click_count": 0,
+        "crackle_density": 0.0,
+        "clipping_percentage": 0.0,
+        "is_clipped": false,
+        "dropout_regions": [],
+        "dropout_count": 0,
+        "wow_score": 0.0,
+        "flutter_score": 0.0,
+        "hum_score": 0.0,
+        "user_score": 5.0,
+        "user_comment": "Sehr musikalisch",
+        "media_characteristics": {
+          "vocal": true,
+          "chain": true,
+          "music": true,
+          "creative_dsp_chain": [
+            "HarmonicExciter",
+            "StereoWidener"
+          ]
+        },
+        "vocal_scores": {
+          "authentizität": 0.89,
+          "klarheit": 0.91,
+          "expressivität": 0.88
+        },
+        "feedback_data": {
+          "expert": "Sehr natürlich",
+          "user": "Klang exzellent"
+        }
+      },
+      "dsp_chain": [
+        "WowFlutterRemover",
+        "ZeroCrossingRate",
+        "SpectralCentroid",
+        "SpectralRolloff",
+        "RMSEnergy",
+        "Limiter",
+        "StereoWidener",
+        "HarmonicExciter",
+        "TransientShaper",
+        "DynamicRangeExpander",
+        "SpectralGate",
+        "SotaDenoiser",
+        "CustomCompressor",
+        "SpectralSubtractor",
+        "MultibandCompressor",
+        "MultibandExpander",
+        "MultibandGate",
+        "MultibandLimiter",
+        "LinearPhaseHighpass",
+        "Oversampler",
+        "SampleRateConverter",
+        "Dither",
+        "EnvelopeMatcher"
+      ],
+      "quality_results": {
+        "error": "Input vector should be 1-D."
+      },
+      "klang_aesthetik": {},
+      "feedback_result": {
+        "status": "feedback_optimizer_not_available"
+      },
+      "regression_result": {
+        "status": "regression_monitor_not_available"
+      },
+      "release_result": {
+        "status": "release_check_not_available"
+      },
+      "user_feedback_result": {
+        "Verbesserungspotenzial": [
+          ""
+        ]
+      },
+      "chain_authenticity": {
+        "chain_mismatch": true,
+        "authentic": false
+      },
+      "vocal_quality": {
+        "authentizität": false,
+        "klarheit": false,
+        "expressivität": false,
+        "emotionalität": false,
+        "transparenz": false
+      },
+      "detected_media": "unbekannt ('MediaForensicsEngine' object has no attribute 'detect')"
+    },
+    {
+      "timestamp": "2026-02-22T16:29:20.941913",
+      "chain_check": {
+        "chain_mismatch": true,
+        "authentic": false
+      },
+      "dsp_chain": [
+        "WowFlutterRemover",
+        "ZeroCrossingRate",
+        "SpectralCentroid",
+        "SpectralRolloff",
+        "RMSEnergy",
+        "Limiter",
+        "StereoWidener",
+        "HarmonicExciter",
+        "TransientShaper",
+        "DynamicRangeExpander",
+        "SpectralGate",
+        "SotaDenoiser",
+        "CustomCompressor",
+        "SpectralSubtractor",
+        "MultibandCompressor",
+        "MultibandExpander",
+        "MultibandGate",
+        "MultibandLimiter",
+        "LinearPhaseHighpass",
+        "Oversampler",
+        "SampleRateConverter",
+        "Dither",
+        "EnvelopeMatcher"
+      ],
+      "media_history": {
+        "original_chain": [
+          "Limiter",
+          "StereoWidener"
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-02-22T16:29:20.960741",
+      "vocal_quality_check": {
+        "authentizität": false,
+        "klarheit": false,
+        "expressivität": false,
+        "emotionalität": false,
+        "transparenz": false
+      },
+      "scores": {
+        "f0_median": -1.0,
+        "f0_mean": -1.0,
+        "f0_std": -1.0,
+        "chroma_mean": 0.0,
+        "chroma_std": 0.0,
+        "key_chroma_cqt_mean": 0.0,
+        "tempo_bpm": 0.0,
+        "beat_count": 0,
+        "mfcc_mean": -56.568542494923804,
+        "mfcc_std": 246.57656011875906,
+        "Speech": 0.01704201102256775,
+        "Female singing": 0.002673417329788208,
+        "Male singing": 0.0007531940937042236,
+        "Child singing": 0.00036656856536865234,
+        "Choir": 0.00018474459648132324,
+        "Sibilant": 0.0017202496528625488,
+        "Music": 0.0004477202892303467,
+        "Noise": 1.963973045349121e-05,
+        "Silence": 0.0005939900875091553,
+        "rms": 0.0,
+        "zcr": 0.0,
+        "spectral_centroid": 0.0,
+        "spectral_rolloff": 0.0,
+        "spectral_flatness": 0.9999999999999997,
+        "spectral_contrast": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "crest_factor": 0.0,
+        "lufs": -100.691,
+        "quality_gates": {
+          "lufs": false
+        },
+        "click_density": 0.0,
+        "click_count": 0,
+        "crackle_density": 0.0,
+        "clipping_percentage": 0.0,
+        "is_clipped": false,
+        "dropout_regions": [],
+        "dropout_count": 0,
+        "wow_score": 0.0,
+        "flutter_score": 0.0,
+        "hum_score": 0.0,
+        "user_score": 5.0,
+        "user_comment": "Sehr musikalisch",
+        "media_characteristics": {
+          "vocal": true,
+          "chain": true,
+          "music": true,
+          "creative_dsp_chain": [
+            "HarmonicExciter",
+            "StereoWidener"
+          ]
+        },
+        "vocal_scores": {
+          "authentizität": 0.89,
+          "klarheit": 0.91,
+          "expressivität": 0.88
+        },
+        "feedback_data": {
+          "expert": "Sehr natürlich",
+          "user": "Klang exzellent"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-02-22T16:29:20.979796",
+      "features": {
+        "f0_median": -1.0,
+        "f0_mean": -1.0,
+        "f0_std": -1.0,
+        "chroma_mean": 0.0,
+        "chroma_std": 0.0,
+        "key_chroma_cqt_mean": 0.0,
+        "tempo_bpm": 0.0,
+        "beat_count": 0,
+        "mfcc_mean": -56.568542494923804,
+        "mfcc_std": 246.57656011875906,
+        "Speech": 0.01704201102256775,
+        "Female singing": 0.002673417329788208,
+        "Male singing": 0.0007531940937042236,
+        "Child singing": 0.00036656856536865234,
+        "Choir": 0.00018474459648132324,
+        "Sibilant": 0.0017202496528625488,
+        "Music": 0.0004477202892303467,
+        "Noise": 1.963973045349121e-05,
+        "Silence": 0.0005939900875091553,
+        "rms": 0.0,
+        "zcr": 0.0,
+        "spectral_centroid": 0.0,
+        "spectral_rolloff": 0.0,
+        "spectral_flatness": 0.9999999999999997,
+        "spectral_contrast": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "crest_factor": 0.0,
+        "lufs": -100.691,
+        "quality_gates": {
+          "lufs": false
+        },
+        "click_density": 0.0,
+        "click_count": 0,
+        "crackle_density": 0.0,
+        "clipping_percentage": 0.0,
+        "is_clipped": false,
+        "dropout_regions": [],
+        "dropout_count": 0,
+        "wow_score": 0.0,
+        "flutter_score": 0.0,
+        "hum_score": 0.0,
+        "user_score": 5.0,
+        "user_comment": "Sehr musikalisch",
+        "media_characteristics": {
+          "vocal": true,
+          "chain": true,
+          "music": true,
+          "creative_dsp_chain": [
+            "HarmonicExciter",
+            "StereoWidener"
+          ]
+        },
+        "vocal_scores": {
+          "authentizität": 0.89,
+          "klarheit": 0.91,
+          "expressivität": 0.88
+        },
+        "feedback_data": {
+          "expert": "Sehr natürlich",
+          "user": "Klang exzellent"
+        }
+      },
+      "dsp_chain": [
+        "WowFlutterRemover",
+        "ZeroCrossingRate",
+        "SpectralCentroid",
+        "SpectralRolloff",
+        "RMSEnergy",
+        "Limiter",
+        "StereoWidener",
+        "HarmonicExciter",
+        "TransientShaper",
+        "DynamicRangeExpander",
+        "SpectralGate",
+        "SotaDenoiser",
+        "CustomCompressor",
+        "SpectralSubtractor",
+        "MultibandCompressor",
+        "MultibandExpander",
+        "MultibandGate",
+        "MultibandLimiter",
+        "LinearPhaseHighpass",
+        "Oversampler",
+        "SampleRateConverter",
+        "Dither",
+        "EnvelopeMatcher"
+      ],
+      "quality_results": {
+        "error": "Input vector should be 1-D."
+      },
+      "klang_aesthetik": {},
+      "feedback_result": {
+        "status": "feedback_optimizer_not_available"
+      },
+      "regression_result": {
+        "status": "regression_monitor_not_available"
+      },
+      "release_result": {
+        "status": "release_check_not_available"
+      },
+      "user_feedback_result": {
+        "Verbesserungspotenzial": [
+          ""
+        ]
+      },
+      "chain_authenticity": {
+        "chain_mismatch": true,
+        "authentic": false
+      },
+      "vocal_quality": {
+        "authentizität": false,
+        "klarheit": false,
+        "expressivität": false,
+        "emotionalität": false,
+        "transparenz": false
+      },
+      "detected_media": "unbekannt ('MediaForensicsEngine' object has no attribute 'detect')"
     }
   ],
-  "documentation_status": "100%: Hauptdokumente und Guides aktualisiert, Altlasten entfernt (siehe FINALISIERUNG_FORTSCHRITT.md)",
-  "code_status": "100%: Frontend vereinheitlicht, Altlasten entfernt, alle Quality Gates bestanden",
-  "test_status": "100%: Teststruktur und Quality Gates erfolgreich, weitere ML/DSP-Tests folgen"
+  "gate_stats": {
+    "total": 0,
+    "passed": 0
+  }
 }

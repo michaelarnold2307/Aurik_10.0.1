@@ -221,3 +221,81 @@ class TestStrategieDenkerPlane:
                 assert isinstance(v, dict)
         except Exception:
             pass
+
+
+# ─── §7.6 Defekt-adaptive Chunk-Größe (Spec §7.6) ──────────────────────────────────
+
+
+class TestAdaptiveChunkSize:
+    """Spec §7.6: Chunk-Größe muss defektdichte-adaptiv sein."""
+
+    def _chunk(self, dur_s: float, severity: float) -> float:
+        from denker.strategie_denker import _adaptive_chunk
+
+        return _adaptive_chunk(dur_s, defect_severity=severity)
+
+    def test_21_high_severity_gives_small_chunks(self):
+        """§7.6: defect_severity >= 0.6 → 5 s Chunks (Feingranular)."""
+        chunk = self._chunk(120.0, severity=0.7)
+        assert chunk == pytest.approx(5.0, rel=1e-6), f"Expected 5.0 s, got {chunk}"
+
+    def test_22_moderate_severity_gives_medium_chunks(self):
+        """§7.6: defect_severity >= 0.3 → 15 s Chunks."""
+        chunk = self._chunk(120.0, severity=0.4)
+        assert chunk == pytest.approx(15.0, rel=1e-6), f"Expected 15.0 s, got {chunk}"
+
+    def test_23_low_severity_gives_large_chunks(self):
+        """§7.6: defect_severity < 0.3 → 60 s Chunks (clean material)."""
+        chunk = self._chunk(120.0, severity=0.1)
+        assert chunk == pytest.approx(60.0, rel=1e-6), f"Expected 60.0 s, got {chunk}"
+
+    def test_24_short_file_not_chunked(self):
+        """Dateien <= 2 s werden nicht unterteilt."""
+        chunk = self._chunk(1.5, severity=0.9)
+        assert chunk == pytest.approx(1.5, rel=1e-6)
+
+    def test_25_chunk_never_exceeds_file_length(self):
+        """Chunk-Größe darf nie größer als die Audio-Dauer sein."""
+        for dur in (3.0, 10.0, 30.0, 60.0, 300.0):
+            for sev in (0.0, 0.3, 0.6, 1.0):
+                chunk = self._chunk(dur, severity=sev)
+                assert chunk <= dur, f"chunk={chunk} > dur={dur} bei sev={sev}"
+
+    def test_26_chunk_min_2s(self):
+        """Chunk-Größe Minimum 2 s (außer Dateien < 2 s)."""
+        chunk = self._chunk(120.0, severity=0.99)
+        assert chunk >= 2.0
+
+    def test_27_strategie_plan_includes_defect_severity(self):
+        """StrategieDenker.plan() nimmt defect_severity an und schreibt es in den Plan."""
+        import numpy as np
+
+        from denker.strategie_denker import StrategieDenker
+
+        audio = np.zeros(int(SR * 120), dtype=np.float32)
+        denker = StrategieDenker()
+        plan = denker.plan(audio, SR, defect_severity=0.7)
+        assert hasattr(plan, "defect_severity")
+        assert plan.defect_severity == pytest.approx(0.7, rel=1e-6)
+
+    def test_28_strategie_plan_chunk_reflects_severity(self):
+        """StrategieDenker.plan() mit severity=0.7 ergibt 5 s Chunk."""
+        import numpy as np
+
+        from denker.strategie_denker import StrategieDenker
+
+        audio = np.zeros(int(SR * 120), dtype=np.float32)
+        plan = StrategieDenker().plan(audio, SR, defect_severity=0.7)
+        assert plan.recommended_chunk_s == pytest.approx(5.0, rel=1e-6), (
+            f"Expected 5.0 s chunk for severity=0.7, got {plan.recommended_chunk_s}"
+        )
+
+    def test_29_boundary_exactly_06_is_fine_grained(self):
+        """Überprüft Grenzwert severity=0.6 fällt in 5-s-Bucket."""
+        chunk = self._chunk(300.0, severity=0.6)
+        assert chunk == pytest.approx(5.0, rel=1e-6)
+
+    def test_30_boundary_exactly_03_is_medium(self):
+        """Überprüft Grenzwert severity=0.3 fällt in 15-s-Bucket."""
+        chunk = self._chunk(300.0, severity=0.3)
+        assert chunk == pytest.approx(15.0, rel=1e-6)

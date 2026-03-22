@@ -66,6 +66,12 @@ class RestaurierErgebnis:
     confidence: float = 1.0
     """Gesamtkonfidenz der Restaurierung ∈ [0, 1]."""
 
+    winning_variant: str | None = None
+    """Beste ARE-Variante (oder None bei UV3-Fallback)."""
+
+    rollback_triggered: bool = False
+    """War ARE-Rollback ausgelöst?"""
+
     metadata: dict[str, Any] = field(default_factory=dict)
     """Zusätzliche Pipeline-Metadaten."""
 
@@ -149,6 +155,10 @@ class _AREAdapter:
         if rollback:
             self.confidence = min(self.confidence, 0.5)
 
+        # ARE-Variante und Rollback-Flag
+        self.winning_variant: str | None = getattr(are_result, "winning_variant", None)
+        self.rollback_triggered: bool = rollback
+
         # Gesamtzeit
         self.total_time_seconds: float = t
 
@@ -230,11 +240,17 @@ class RestaurierDenker:
                     adapter.quality_estimate,
                     adapter.rt_factor,
                 )
-                # A-1: V3 Post-Pass additiv auf ARE-Output — nur wenn RT-Budget erlaubt
+                # A-1: V3 Post-Pass additiv auf ARE-Output — nur wenn:
+                # 1. RT-Budget nicht überschritten (< 70 % des 5×-Limits für Quality)
+                # 2. V3 bereits instanziiert (warm!) — kein Cold-Start-Loading
+                #    Begründung: UV3 Initialisierung dauert 20–60s bei kalten Modellen.
+                #    Cold-Start-Loading würde das gesamte RT-Budget sprengen.
+                #    Warmup (warmup_models_background) soll V3 vorladen.
                 _are_elapsed = time.perf_counter() - _t0_are
                 _are_rt = _are_elapsed / max(_audio_dur_s, 1e-6)
-                if _are_rt < _3X_RT_LIMIT * _V3_POSTPASS_BUDGET_FRACTION:
-                    _v3 = self._get_restorer(mode=mode)
+                _v3_warm = mode in self._restorers and self._restorers[mode] is not None
+                if _are_rt < _3X_RT_LIMIT * _V3_POSTPASS_BUDGET_FRACTION and _v3_warm:
+                    _v3 = self._restorers[mode]  # never triggers cold-load
                     if _v3 is not None:
                         try:
                             _v3_raw = _v3.restore(adapter.audio, sample_rate=sr)
@@ -309,7 +325,7 @@ class RestaurierDenker:
     def _build_restorer(self, mode: str) -> Any:
         """Baut UnifiedRestorerV3 mit zwingend enforce_3x_rt=True."""
         try:
-            from core.unified_restorer_v3 import (
+            from backend.core.unified_restorer_v3 import (
                 QualityMode,
                 RestorationConfig,
                 UnifiedRestorerV3,
@@ -410,6 +426,8 @@ class RestaurierDenker:
             warnings=list(raw.warnings or []),
             material=detected_material or "unknown",
             confidence=float(raw.confidence) if math.isfinite(raw.confidence) else 1.0,
+            winning_variant=getattr(raw, "winning_variant", None),
+            rollback_triggered=bool(getattr(raw, "rollback_triggered", False)),
             metadata={
                 "total_time_seconds": float(raw.total_time_seconds or 0.0),
             },

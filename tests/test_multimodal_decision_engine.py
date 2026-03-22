@@ -1,6 +1,6 @@
 import unittest
 
-from multimodal_decision_engine import MultimodalDecisionEngine
+from backend.core.multimodal_decision_engine import MultimodalDecisionEngine
 
 
 class TestMultimodalDecisionEngine(unittest.TestCase):

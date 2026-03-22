@@ -1,7 +1,7 @@
 import time
 import unittest
 
-from realtime_feedback_bus import RealtimeFeedbackBus
+from backend.core.realtime_feedback_bus import RealtimeFeedbackBus
 
 
 class TestRealtimeFeedbackBus(unittest.TestCase):

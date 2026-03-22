@@ -163,12 +163,14 @@ class TestEnhancementSelection:
 class TestQualityAssessmentSelection:
     """Test quality assessment model selection (§4.4 Spec: nur musik-geeignete Metriken)."""
 
-    def test_always_includes_cdpam(self, policy_engine):
-        """CDPAM ist immer dabei — musik-spezifische Wahrnehmungsmetrik (§4.4)."""
+    def test_always_includes_versa(self, policy_engine):
+        """VERSA 2024 ist immer dabei — primäre musik-spezifische MOS ohne Referenz (§4.4).
+        CDPAM ist VERBOTEN (§4.4/§10.2): ersetzt durch VERSA."""
         context = {}
         goal = {}
         models = policy_engine.select_quality_assessment_model(context, goal)
-        assert "cdpam" in models
+        assert "versa" in models
+        assert "cdpam" not in models  # CDPAM ist ABSOLUT VERBOTEN
 
     def test_never_includes_dnsmos(self, policy_engine):
         """DNSMOS ist für Musik VERBOTEN (§4.4/§10.2): trainiert auf Sprachkorpora."""
@@ -199,13 +201,16 @@ class TestQualityAssessmentSelection:
         assert "visqol" in models
 
     def test_full_assessment_uses_music_metrics(self, policy_engine):
-        """Vollständige Bewertung: CDPAM + ViSQOL + PEAQ + FAD — keine Sprachmetriken (§4.4)."""
+        """Vollständige Bewertung: VERSA + ViSQOL + PEAQ — keine Sprachmetriken (§4.4).
+        CDPAM/FAD sind VERBOTEN bzw. durch musik-geeignete Metriken ersetzt."""
         context = {}
         goal = {"assessment_type": "full", "has_reference": True}
         models = policy_engine.select_quality_assessment_model(context, goal)
-        expected = {"cdpam", "visqol", "peaq", "fad"}
-        assert set(models) == expected
+        assert "versa" in models
+        assert "visqol" in models
+        assert "peaq" in models
         # Verbotene Metriken dürfen nicht enthalten sein
+        assert "cdpam" not in models  # ABSOLUT VERBOTEN
         assert "dnsmos" not in models
         assert "nisqa" not in models
         assert "pesq" not in models
@@ -246,23 +251,23 @@ class TestSpecializedModels:
         model = policy_engine.select_mastering_model(context, goal)
         assert model == "matchering"
 
-    def test_pitch_detection_selects_crepe(self, policy_engine):
-        """Pitch detection should select CREPE."""
+    def test_pitch_detection_selects_fcpe(self, policy_engine):
+        """Pitch detection muss FCPE selektieren — §4.4 Primär-Tracker (CREPE ist Fallback1)."""
         context = {}
         goal = {}
         model = policy_engine.select_pitch_detection_model(context, goal)
-        assert model == "crepe"
+        assert model == "fcpe"
 
 
 class TestGenerativeModels:
     """Test generative model selection."""
 
-    def test_music_generation_selects_vampnet(self, policy_engine):
-        """Music generation should select VampNet."""
+    def test_music_generation_selects_flow_matching(self, policy_engine):
+        """Music generation should select flow_matching (generative inpainting, §4.4)."""
         context = {}
         goal = {"generation_type": "music"}
         model = policy_engine.select_generative_model(context, goal)
-        assert model == "vampnet"
+        assert model == "flow_matching"
 
     def test_text_to_audio_selects_audioldm2(self, policy_engine):
         """Text-to-audio should select AudioLDM2."""
@@ -412,9 +417,10 @@ def test_full_workflow_integration():
     # Verify vinyl-specific model selected
     assert denoise == "banquet"
 
-    # Verify music-appropriate quality assessment (§4.4/§10.2: DNSMOS/NISQA/PESQ verboten)
-    assert "cdpam" in quality  # Musik-Wahrnehmungsmetrik (primär)
+    # Verify music-appropriate quality assessment (§4.4/§10.2: CDPAM/DNSMOS/NISQA/PESQ verboten)
+    assert "versa" in quality  # VERSA 2024 — primäre MOS-Metrik (ersetzt CDPAM)
     assert "visqol" in quality  # ViSQOL v3 (--audio Mode) mit Referenz
+    assert "cdpam" not in quality  # VERBOTEN: ersetzt durch VERSA
     assert "dnsmos" not in quality  # VERBOTEN: Sprachkorpus
     assert "nisqa" not in quality  # VERBOTEN: Sprachqualitäts-CNN
     assert "pesq" not in quality  # VERBOTEN: Telefonband

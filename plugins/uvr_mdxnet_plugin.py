@@ -48,6 +48,7 @@ class UVRMDXNetPlugin:
             # ML-Budget-Guard: 4 UVR-MDX-Net-Modelle zusammen ~1.2 GB
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("UVR_MDXNet", size_gb=1.20):
                     logger.warning("UVR MDX-Net: ML-Budget erschöpft — DSP-Fallback.")
                     return
@@ -66,13 +67,22 @@ class UVRMDXNetPlugin:
                 logger.warning("Keine UVR-Modelle in: %s — DSP-Fallback.", d)
                 try:
                     from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
                     _release("UVR_MDXNet")
+                except Exception:
+                    pass
+            else:
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                    _reg_plm("UVR_MDXNet", size_gb=1.20, unload_fn=lambda s=self: setattr(s, "_sessions", []))
                 except Exception:
                     pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("UVR ONNX-Ladefehler: %s — DSP-Fallback.", exc)
             try:
                 from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
                 _release("UVR_MDXNet")
             except Exception:
                 pass

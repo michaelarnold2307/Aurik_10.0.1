@@ -28,12 +28,13 @@ Invarianten (§3.1, §3.2, §3.7 Aurik-Spec):
     - providers=["CPUExecutionProvider"] — kein GPU (§9.5 Aurik-Spec)
     - Alle öffentlichen Methoden vollständig typisiert (PEP 484)
 """
+
 from __future__ import annotations
 
 import logging
 import math
-import threading
 from pathlib import Path
+import threading
 
 import numpy as np
 
@@ -49,7 +50,7 @@ _FCPE_ONNX_PATH = _PROJECT_ROOT / "models" / "fcpe" / "fcpe.onnx"
 _FCPE_SR: int = 16_000
 _FCPE_N_FFT: int = 1024
 _FCPE_WIN: int = 1024
-_FCPE_HOP: int = 160          # 10 ms @ 16 kHz
+_FCPE_HOP: int = 160  # 10 ms @ 16 kHz
 _FCPE_N_MELS: int = 128
 _FCPE_FMIN: float = 0.0
 _FCPE_FMAX: float = 8000.0
@@ -77,9 +78,13 @@ def _get_mel_basis() -> np.ndarray:
             if _MEL_BASIS is None:
                 try:
                     from librosa.filters import mel as librosa_mel  # noqa: PLC0415
+
                     _MEL_BASIS = librosa_mel(
-                        sr=_FCPE_SR, n_fft=_FCPE_N_FFT,
-                        n_mels=_FCPE_N_MELS, fmin=_FCPE_FMIN, fmax=_FCPE_FMAX,
+                        sr=_FCPE_SR,
+                        n_fft=_FCPE_N_FFT,
+                        n_mels=_FCPE_N_MELS,
+                        fmin=_FCPE_FMIN,
+                        fmax=_FCPE_FMAX,
                     ).astype(np.float32)
                 except Exception:  # noqa: BLE001
                     # Fallback: einfache Dreiecksfilterbänke
@@ -114,7 +119,7 @@ def _compute_mel(audio_16k: np.ndarray) -> np.ndarray:
         padded=False,
     )
     # Magnitude: (n_fft//2+1, T)
-    mag = np.sqrt(stft.real ** 2 + stft.imag ** 2 + 1e-9).astype(np.float32)
+    mag = np.sqrt(stft.real**2 + stft.imag**2 + 1e-9).astype(np.float32)
 
     # Mel-Filterbank: (128, T)
     mel_basis = _get_mel_basis()
@@ -140,18 +145,19 @@ def _local_argmax_decode(salience: np.ndarray, threshold: float = _VOICED_THRESH
     """
     T, C = salience.shape
     # Maximale Salience und Peak-Index pro Frame
-    voiced_prob = salience.max(axis=-1).astype(np.float32)    # (T,)
-    max_idx = salience.argmax(axis=-1)                          # (T,) int
+    voiced_prob = salience.max(axis=-1).astype(np.float32)  # (T,)
+    max_idx = salience.argmax(axis=-1)  # (T,) int
 
     # 9 Bins um den Peak (±4): local weighted average
     local_idx = np.clip(
         max_idx[:, None] + np.arange(-4, 5, dtype=np.int32)[None, :],
-        0, C - 1,
+        0,
+        C - 1,
     )  # (T, 9)
 
-    ci_l = _CENT_TABLE[local_idx]              # (T, 9) cent-Werte
+    ci_l = _CENT_TABLE[local_idx]  # (T, 9) cent-Werte
     y_l = salience[np.arange(T)[:, None], local_idx]  # (T, 9) Salience
-    y_sum = y_l.sum(axis=-1)                   # (T,)
+    y_sum = y_l.sum(axis=-1)  # (T,)
 
     cents = np.where(
         y_sum > 1e-12,
@@ -195,6 +201,7 @@ class FcpePlugin:
             if _FCPE_ONNX_PATH.exists():
                 try:
                     from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                     if not _try_alloc("FCPE", size_gb=0.07):
                         logger.warning("FCPE: ML-Budget erschöpft — CREPE-Fallback.")
                         return
@@ -211,6 +218,12 @@ class FcpePlugin:
                     providers=["CPUExecutionProvider"],
                 )
                 logger.info("🎵 FCPE ONNX geladen: %s", _FCPE_ONNX_PATH.name)
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                    _reg_plm("FCPE", size_gb=0.07, unload_fn=lambda s=self: setattr(s, "_session", None))
+                except Exception:
+                    pass
                 return
             logger.debug(
                 "FCPE ONNX nicht gefunden (%s) — CREPE ONNX-Fallback aktiv",
@@ -270,15 +283,13 @@ class FcpePlugin:
             # 1) Resample auf 16 kHz
             if sr != _FCPE_SR:
                 gcd = math.gcd(sr, _FCPE_SR)
-                audio_16k = sps.resample_poly(
-                    audio, _FCPE_SR // gcd, sr // gcd
-                ).astype(np.float32)
+                audio_16k = sps.resample_poly(audio, _FCPE_SR // gcd, sr // gcd).astype(np.float32)
             else:
                 audio_16k = audio.astype(np.float32)
             audio_16k = np.clip(np.nan_to_num(audio_16k), -1.0, 1.0)
 
             # 2) Log-Mel-Spektrogramm: (T, 128)
-            mel = _compute_mel(audio_16k)   # (T, 128)
+            mel = _compute_mel(audio_16k)  # (T, 128)
             n_frames = mel.shape[0]
 
             # 3) ONNX-Inferenz: mel (1, T, 128) → salience (1, T, 360)
@@ -307,9 +318,7 @@ class FcpePlugin:
                 model_used="fcpe_onnx",
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "FCPE-ONNX-Inferenz fehlgeschlagen (%s) — CREPE/pYIN Fallback", exc
-            )
+            logger.warning("FCPE-ONNX-Inferenz fehlgeschlagen (%s) — CREPE/pYIN Fallback", exc)
             if self._crepe_delegate is not None:
                 return self._crepe_delegate.analyze(audio, sr)
             return self._analyze_pyin(audio, sr)
@@ -320,7 +329,10 @@ class FcpePlugin:
             import librosa  # noqa: PLC0415
 
             seg = audio[: min(len(audio), int(sr * 30.0))]
-            f0, _, voiced_probs = librosa.pyin(seg, fmin=20.0, fmax=2_000.0, sr=sr)
+            # fmin must be > sr / frame_length (default 2048). At 48 kHz: min ≈ 23.449 Hz.
+            # librosa.note_to_hz('C1') ≈ 32.7 Hz is safe for all common sample rates.
+            _fmin_safe = float(librosa.note_to_hz("C1"))
+            f0, _, voiced_probs = librosa.pyin(seg, fmin=_fmin_safe, fmax=2_000.0, sr=sr)
             f0 = np.nan_to_num(f0.astype(np.float32))
             voiced_probs = np.nan_to_num(voiced_probs.astype(np.float32))
             times_s = (np.arange(len(f0)) * 512 / sr).astype(np.float32)

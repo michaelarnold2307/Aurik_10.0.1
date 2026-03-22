@@ -129,6 +129,7 @@ class BeatsPlugin:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("BEATs", size_gb=0.09):
                     logger.warning("BEATs: ML-Budget erschöpft — PANNs-Fallback.")
                     return
@@ -144,8 +145,23 @@ class BeatsPlugin:
             )
             self._model_loaded = True
             logger.info("✅ BEATs ONNX geladen (%s, §4.4 Spec — PANNs-Nachfolger)", self._ONNX_PATH.name)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "BEATs",
+                    size_gb=0.09,
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                )
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("BEATs ONNX nicht ladbar: %s — PANNs-Fallback aktiv.", exc)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("BEATs")
+            except Exception:
+                pass
 
     def _to_model_input(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """Resampelt Audio auf 16 kHz, kürzt/paddet auf max. 10 s.
@@ -153,6 +169,7 @@ class BeatsPlugin:
         Returns: [1, _MODEL_SAMPLES] float32
         """
         from math import gcd  # noqa: PLC0415
+
         from scipy.signal import resample_poly  # noqa: PLC0415
 
         audio = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -221,7 +238,11 @@ class BeatsPlugin:
             ort_out = self._session.run(None, {inp_name: inp})
             scores = np.asarray(ort_out[0], dtype=np.float32).squeeze()  # [527]
             # Embeddings (zweiter Output wenn vorhanden)
-            embeddings = np.asarray(ort_out[1], dtype=np.float32).squeeze() if len(ort_out) > 1 else np.zeros(768, dtype=np.float32)
+            embeddings = (
+                np.asarray(ort_out[1], dtype=np.float32).squeeze()
+                if len(ort_out) > 1
+                else np.zeros(768, dtype=np.float32)
+            )
             scores = np.nan_to_num(scores, nan=0.0, posinf=0.0, neginf=0.0)
             scores = np.clip(scores, 0.0, 1.0)
 
@@ -264,7 +285,7 @@ class BeatsPlugin:
             if n < 2:
                 return BeatsResult(tags={}, embeddings=np.zeros(768, dtype=np.float32), model_used="spectral_dsp")
             # Grob-Spektrum
-            spec = np.abs(np.fft.rfft(mono[:min(n, 65536)]))
+            spec = np.abs(np.fft.rfft(mono[: min(n, 65536)]))
             freqs = np.linspace(0, sr / 2, len(spec))
             energy = lambda lo, hi: float(np.mean(spec[(freqs >= lo) & (freqs < hi)] ** 2) + 1e-12)  # noqa
             total = energy(20, sr / 2) + 1e-12
@@ -275,7 +296,9 @@ class BeatsPlugin:
                 "Drum": float(np.clip(energy(60, 200) / total * 3, 0, 1)),
             }
             top = sorted(tags.items(), key=lambda x: x[1], reverse=True)[:top_k]
-            return BeatsResult(tags=tags, embeddings=np.zeros(768, dtype=np.float32), model_used="spectral_dsp", top_k=top)
+            return BeatsResult(
+                tags=tags, embeddings=np.zeros(768, dtype=np.float32), model_used="spectral_dsp", top_k=top
+            )
         except Exception as exc:
             logger.error("Spectral DSP Fallback fehlgeschlagen: %s", exc)
             return BeatsResult(tags={}, embeddings=np.zeros(768, dtype=np.float32), model_used="error")

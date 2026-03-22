@@ -4,14 +4,14 @@ import os
 
 import pytest
 
-PHASES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../core/phases"))
+PHASES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../backend/core/phases"))
 PHASE_PATTERN = os.path.join(PHASES_DIR, "phase_*.py")
 
 # Liste aller Phasenmodule (ohne __init__.py, Hilfsdateien und Interface)
 phase_files = [
     f for f in glob.glob(PHASE_PATTERN) if not f.endswith("__init__.py") and not f.endswith("phase_interface.py")
 ]
-phase_names = [os.path.splitext(os.path.basename(f))[0] for f in phase_files]
+phase_names = sorted([os.path.splitext(os.path.basename(f))[0] for f in phase_files])
 
 
 @pytest.mark.parametrize("phase_name", phase_names)
@@ -19,7 +19,7 @@ def test_phase_import_and_metadata(phase_name):
     """
     Normativer Basistest: Jedes Phasenmodul lässt sich importieren und liefert Metadaten.
     """
-    module = importlib.import_module(f"core.phases.{phase_name}")
+    module = importlib.import_module(f"backend.core.phases.{phase_name}")
     # Suche nach einer PhaseInterface-Instanz oder Klasse
     phase_class = None
     for attr in dir(module):

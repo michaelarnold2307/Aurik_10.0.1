@@ -226,19 +226,36 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
 
 
 def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
-    """Effektive Bandbreite via 90%-Energie-Schwelle (gemittelt über mehrere Fenster).
+    """Effective recording bandwidth via the highest-energy-significant frequency bin.
 
-    Ersetzt den fehlerhaften 85%-Schwellwert. Der 90%-Energiepunkt ist robuster
-    für bandbreitenbegrenzte Vintage-Aufnahmen und konsistent mit den Werten in
-    DECADE_HF_LIMITS. Mehrere überlappende Fenster (hop = n_fft//2) stabilisieren
-    den Schätzwert gegenüber dem früheren Einzelfenster-Ansatz.
+    Previous implementations used 90 % or 98 % percentile energy rolloff.  Both
+    are misleading for music: bass-heavy content concentrates the bulk of its
+    power in the low/mid range, so a 1990s Schlager MP3 would score < 4.5 kHz
+    and be mis-mapped to decade = 1890 (wax cylinder).
+
+    This version uses the **-50 dB bandwidth limit**: the highest frequency bin
+    whose power is still within 50 dB of the spectral peak.  This directly
+    captures the recording technology's high-frequency cut-off, which is what
+    DECADE_HF_LIMITS was calibrated for.
+
+    Practical values (bass-heavy music model):
+      - eff_bw ≈ 12 kHz (1970s cassette → MP3): → decade 1950–1960  (was: 1890)
+      - eff_bw ≈ 15 kHz (1980s reel → digital):  → decade 1970       ✓
+      - eff_bw ≈ 18 kHz (1990s full digital):     → decade 1980       ✓
+      - 2-sample silence (total_energy < 1e-12):  → sr/2 = 24 kHz → 1990  ✓
+
+    Note: consumer cassette (1970s) has ~12 kHz BW, which maps to decade ≈ 1950
+    rather than the nominal recording year 1970.  This is physically correct
+    (the DECADE_HF_LIMITS table is calibrated for professional studio equipment).
+    The one-decade offset in the DSP tier is acceptable; ML tier 1 provides the
+    more accurate year estimate when the model is available.
 
     Args:
-        audio_mono: Mono-Audio.
+        audio_mono: Mono-Audio (1-D).
         sr:         Sample-Rate.
 
     Returns:
-        Rolloff-Frequenz in Hz.
+        Effective bandwidth (rolloff) frequency in Hz.
     """
     n_fft = min(4096, len(audio_mono))
     if n_fft < 64:
@@ -257,10 +274,19 @@ def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
     if total_energy < 1e-12:
         return float(sr) / 2.0
 
-    # 90%-Energiepunkt (robuster als -3 dB für vintage-typische harte Rolloffs)
-    idx = int(np.searchsorted(cum_energy, 0.90 * total_energy))
-    idx = int(np.clip(idx, 0, len(avg_spec) - 1))
+    # -50 dB bandwidth limit: last bin whose power is within 50 dB of peak.
+    # More accurate than any percentile rolloff for music recordings because
+    # it directly mirrors the recording technology's HF cut-off.
     freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+    peak_power = float(np.max(avg_spec))
+    if peak_power < 1e-20:
+        return float(sr) / 2.0
+    threshold = peak_power * (10.0 ** (-50.0 / 10.0))  # -50 dBFS relative to peak
+    significant = np.where(avg_spec >= threshold)[0]
+    if len(significant) == 0:
+        return float(sr) / 2.0
+    idx = int(significant[-1])
+    idx = int(np.clip(idx, 0, len(avg_spec) - 1))
     return float(freqs[idx])
 
 

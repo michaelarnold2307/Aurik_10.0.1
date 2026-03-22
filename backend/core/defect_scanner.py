@@ -1429,6 +1429,18 @@ class DefectScanner:
             metadata={"flutter_energy_ratio": flutter_ratio, "frame_rate_hz": float(frame_rate)},
         )
 
+    def _detect_wow_flutter(self, audio: np.ndarray) -> DefectScore:
+        """Combined WOW+FLUTTER score — max of both sub-detectors.
+
+        Convenience wrapper combining _detect_wow and _detect_flutter into a
+        single DefectScore (worst-case severity) for legacy callers.
+        """
+        wow = self._detect_wow(audio if audio.ndim == 1 else audio.mean(axis=1 if audio.shape[1] > audio.shape[0] else 0))
+        flutter = self._detect_flutter(audio if audio.ndim == 1 else audio.mean(axis=1 if audio.shape[1] > audio.shape[0] else 0))
+        if wow.severity >= flutter.severity:
+            return wow
+        return flutter
+
     def _detect_azimuth_error(self, audio: np.ndarray) -> DefectScore:
         """Detect AZIMUTH_ERROR: playback-head tilt causing HF L/R phase slope > 20°/kHz.
 

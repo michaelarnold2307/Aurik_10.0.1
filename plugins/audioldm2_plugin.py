@@ -57,6 +57,7 @@ class AudioLDM2Plugin:
         # Globaler ML-Budget-Guard: ~1.3 GB für AudioLDM2 ONNX.
         try:
             from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
             if not _try_alloc("AudioLDM2", 1.3):
                 logger.warning("AudioLDM2: ML-Budget erschöpft — Modell nicht geladen.")
                 return
@@ -83,11 +84,26 @@ class AudioLDM2Plugin:
                     path.name,
                     self._input_names,
                 )
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                    _reg_plm(
+                        "AudioLDM2",
+                        size_gb=1.3,
+                        unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_ok", False),
+                    )
+                except Exception:
+                    pass
                 return
             except Exception as exc:
                 logger.debug("AudioLDM2 Ladefehler (%s): %s", path.name, exc)
 
         logger.warning("AudioLDM2: Kein ONNX-Modell gefunden — generiere Platzhalterton.")
+        try:
+            from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+            _rel("AudioLDM2")
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     def generate_array(

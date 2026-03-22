@@ -79,23 +79,26 @@ def hz_to_mel(f_hz: float) -> float:
 
 | Anwendungsfall | Primär (SOTA) | DSP-Fallback (Post-2018) | VERBOTEN |
 |---|---|---|---|
-| Breitrauschen | ML: **DeepFilterNet v3.II** | OMLSA/IMCRA | ~~Wiener 1984~~ |
+| Breitrauschen (Gesang/Vokal) | ML: **DeepFilterNet v3.II** (DNS4-Speech; geeignet weil Gesang sprachnähnlich) | OMLSA/IMCRA | ~~Wiener 1984~~ |
+| Breitrauschen (rein instrumental, PANNs Vocals < 0.4) | DSP: **OMLSA/IMCRA** (kein Speech-Prior, musik-neutral) | DeepFilterNet v3.II + energy_bias=−6 dB | ~~Wiener 1984~~ |
 | Nicht-stationäres Rauschen | ML: **DeepFilterNet v3.II** | MMSE-LSA + IMCRA | ~~Spectral Subtraction~~ |
 | Diffuses Raumrauschen / Dereverb | ML: **SGMSE+** (ONNX) | WPE (nara_wpe) → NumPy-WPE → OMLSA | ~~einfacher Bandpass~~ |
-| Stem-Separation | ML: **MDX23C** (Kim_Vocal_2/Kim_Inst) | NMF-β | — |
+| Stem-Separation Vocals | ML: **MelBandRoformer** (`bs_roformer_plugin`, 860 MB ONNX) | NMF-β | — |
+| Stem-Separation Instrumental | ML: **HTDemucs-6s** (`htdemucs_plugin`) | NMF-β | — |
 | Bandbreiten-Erweiterung | ML: **AudioSR** | Sinusoidal + Stoch. Modeling | ~~Harmonics-EQ~~ |
 | Dropout < 50 ms | DSP: **NMF-β + Sinusoidal** | Consistent Wiener | ~~Yule-Walker AR~~ |
-| Dropout 50–999 ms | ML: **CQTdiff+** → VampNet → DiffWave | NMF-β + Sinusoidal | ~~einfaches AR~~ |
+| Dropout 50–999 ms | ML: **CQTdiff+** → DiffWave | Spectral Interpolation | ~~einfaches AR~~ |
 | Codec-Artefakte | ML: **Apollo** (Band-Sequence Mamba) | Spectral Repair + PGHI | ~~EQ-Anhebung~~ |
-| Pitch-Tracking (mono/Gesang) | ML: **RMVPE** → CREPE → FCPE | pYIN | ~~YIN~~ |
+| Pitch-Tracking (mono/Gesang) | ML: **FCPE** → CREPE → RMVPE (nur wenn stabil verifiziert) | PESTO → pYIN | ~~YIN~~ |
 | Polyphoner Pitch | ML: **BasicPitch** | Spektrale Peak-Verfolgung | ~~CREPE mono~~ |
 | Instrument-Resonanz | DSP: **DDSP** (Eigenimpl.) | Sinusoidal + Stoch. | ~~fixe Formant-EQ~~ |
 | Formanten F1–F4 | ML: **DeepFormants CNN** (ONNX) | LPC (Burg, Ordnung **30–40 bei 48 kHz-SR**, alternativ: Downsampling auf 16 kHz → LPC Ord. 16 → Upsampling) | ~~LPC < 12~~ |
-| Neuronale Synthese | ML: **Vocos 44.1 kHz** ONNX → BigVGAN v2 → HiFi-GAN | PGHI-ISTFT | ~~Griffin-Lim~~ |
+| Neuronale Synthese | ML: **Vocos 48 kHz nativ** ONNX → 44,1 kHz → BigVGAN v2 → HiFi-GAN | PGHI-ISTFT | ~~Griffin-Lim~~ |
 | Generatives Inpainting | ML: **Flow Matching** | CQTdiff+ → DiffWave → NMF-β | ~~DDPM 1000 Schritte~~ |
 | Audio-Tagging | ML: **BEATs** (iter3) → PANNs CNN14 | DSP Spectral Fingerprint | — |
-| MOS (ohne Referenz) | ML: **VERSA** → SingMOS (Gesang) | PQS-Gammatone-DSP | ~~PESQ/DNSMOS/CDPAM~~ |
-| Speech/Music Enhancement | ML: **MP-SENet 2023** ONNX | SGMSE+ ONNX | OMLSA DSP | ~~DCCRN/FullSubNet+~~ |
+| MOS (ohne Referenz) | ML: **VERSA** → SingMOS (Gesang, PANNs Vocals ≥ 0.5) | PQS-Gammatone-DSP | ~~PESQ/DNSMOS/CDPAM~~ |
+| MOS-Verifikation Gesang | ML: **UTMOS** (`utmos_plugin`, ≥18 MB PyTorch) → SingMOS | VERSA → PQS-Gammatone | ~~PESQ/NISQA~~ |
+| Speech/Music Enhancement | ML: **MP-SENet 2023** ONNX | SGMSE+ ONNX → OMLSA DSP | ~~DCCRN/FullSubNet+~~ |
 | MOS (mit Referenz) | ML: **ViSQOL v3** (**`--audio` PFLICHT**) | PQS-DSP | ~~--speech Mode~~ |
 | Phasen-Rekonstruktion | DSP: **PGHI** | Griffin-Lim ≥ 32 Iter. | ~~Direkte ISTFT~~ |
 | Decrackle | DSP: **RBME + iterative Konsistenz** | Sparse Bayes | ~~Medianfilter~~ |
@@ -111,9 +114,35 @@ def hz_to_mel(f_hz: float) -> float:
 Pflicht: OMLSA (Cohen & Berdugo 2002) + IMCRA-Variante (Cohen 2003)
 Gain-Glättung: MMSE-LSA
 G_floor: 0.85 an HPG-protected_bins, 0.10 sonst
-DeepFilterNet v3.II Musik-Konfiguration:
-    energy_bias = −6.0 dB (reduziert aggressive NR in Harmonik-Regionen)
-    G_floor via HarmonicPreservationGuard
+
+Stem-bewusstes NR-Routing (PANNs-konditioniert, nach TDP-Trennung):
+
+  A) Perkussiver Stem (TDP audio_percussive):
+     → KEIN NR, KEIN DeepFilterNet — nur phase_01 + phase_27 (Klick/Pop)
+     Begründung: Transienten-Angriffe werden durch NR-Latenz vernichtet
+
+  B) Harmonischer Stem MIT Gesang (PANNs Vocals ≥ 0.4):
+     PRIMÄR: DeepFilterNet v3.II (DNS4-Speech-Training hier geeignet —
+              Gesang ist strukturell sprachnähnlich: F0-Harmonics, Formanten)
+     Musik-Konfiguration:
+         energy_bias = −6.0 dB (reduziert aggressive NR in Harmonik-Regionen)
+         G_floor via HarmonicPreservationGuard (0.85 an Partial-Bins)
+     FALLBACK: OMLSA/IMCRA + MMSE-LSA
+
+  C) Harmonischer Stem REIN INSTRUMENTAL (PANNs Vocals < 0.4):
+     PRIMÄR: OMLSA/IMCRA (kein Speech-Prior — müsik-neutral, adaptiv)
+     Begründung: DeepFilterNet würde harmonische Obertonstrukturen
+                  (Streicher, Bläser, Chords) nach DNS4-Sprachprior
+                  systematisch als Rauschen fehlbewerten
+     SEKUNDÄR: DeepFilterNet v3.II mit vergrößertem energy_bias = −9.0 dB
+               (nur wenn OMLSA SNR-Schätzung unsicher: IMCRA-SNR < 5 dB)
+
+Kritische Architekturnotiz (Stand März 2026):
+    Es existiert kein öffentlich verfügbares, auf Musikdaten trainiertes
+    neuronales Denoise-Modell in DeepFilterNet-Qualitätsstufe.
+    OMLSA/IMCRA ist daher für rein instrumentales Material de-facto co-primär,
+    nicht nur Fallback. Diese Einschätzung ist bis zum Erscheinen eines
+    musik-spezifischen ML-Denoiser-Modells verbindlich.
 ```
 
 ### Inpainting (Phase 24, 55)
@@ -122,8 +151,9 @@ Kurze Lücken < 50 ms: NMF mit β-Divergenz (β=1, Itakura-Saito) + PGHI
 Lange Lücken 50–999 ms: CQTdiff+ (Moliner & Välimäki, ICASSP 2023)
     - CQT-Domänen-Diffusion konditioniert auf Phrasen-Kontext ±30 s
     - PGHI für phasenkonsistente Rücktransformation
-    Fallback: FlowAudio → CQTdiff+ → VampNet → DiffWave → NMF-β
+    Fallback: CQTdiff+ → DiffWave → NMF-β
 VERBOTEN: VoiceFixer v2 (Sprach-only, VCTK-Korpus)
+VERBOTEN: VampNet (kein gebündeltes Plugin, kein stabiler ONNX-Export)
 ```
 
 ### Codec-Artefakte (Phase 23, 50)
@@ -178,10 +208,11 @@ VERBOTEN: Griffin-Lim als Endschritt in Studio-2026
 
 ### Pit-Korrektur (Phase 12, 31)
 ```
-Primär: pYIN (Mauch & Dixon 2014) + DTW
+Primär: FCPE → CREPE → RMVPE (nur wenn stabil verifiziert) + DTW
 Bei Gesang (PANNs Vocals ≥ 0.4):
     PSOLA (Moulines & Charpentier 1990) — formanterhaltend bei Transposition > ±2 Halbton
     Phase-Vocoder: nur für perkussive / nicht-vokale Segmente (HPSS-detektiert)
+DSP-Fallback: PESTO (Riou et al. ISMIR 2023) → pYIN (Mauch & Dixon 2014)
 ```
 
 ### Phasen-Rekonstruktion (nach JEDER Spektral-Modifikation)

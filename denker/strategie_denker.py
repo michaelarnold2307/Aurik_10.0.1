@@ -55,7 +55,10 @@ class StrategiePlan:
     """True = Nicht-kritische Phasen werden übersprungen wenn Budget knapp."""
 
     recommended_chunk_s: float = 60.0
-    """Empfohlene Chunk-Größe für adaptive Verarbeitung."""
+    """Empfohlene Chunk-Größe für adaptive Verarbeitung (§7.6, defekt-adaptiv)."""
+
+    defect_severity: float = 0.0
+    """Defekt-Schwere aus DefektDenker ∈ [0, 1]; steuert Chunk-Größe nach §7.6."""
 
     budget_note: str = ""
     """Hinweis auf Budget-Engpässe (Deutsch, laienverständlich)."""
@@ -185,12 +188,15 @@ class StrategieDenker:
     def _parse_mode(mode_str: str) -> Any:
         """Convert mode string to QualityMode enum value if available."""
         try:
-            from core.unified_restorer_v3 import QualityMode
-
+            from backend.core.unified_restorer_v3 import QualityMode
             mapping = {
-                "quality": QualityMode.QUALITY,
-                "balanced": QualityMode.BALANCED,
-                "speed": QualityMode.SPEED,
+                "fast":       QualityMode.FAST,
+                "balanced":   QualityMode.BALANCED,
+                "quality":    QualityMode.QUALITY,
+                "restoration": QualityMode.QUALITY,
+                "maximum":    QualityMode.MAXIMUM,
+                "studio_2026": QualityMode.MAXIMUM,
+                # "speed" existiert nicht im QualityMode-Enum → FAST als Fallback
             }
             return mapping.get(mode_str.lower(), QualityMode.QUALITY)
         except Exception:  # noqa: BLE001
@@ -207,6 +213,7 @@ class StrategieDenker:
         *,
         mode: str = "quality",
         enforce_3x_rt: bool = True,
+        defect_severity: float = 0.0,
     ) -> StrategiePlan:
         """Erstellt den Verarbeitungs-Strategieplan.
 
@@ -231,7 +238,9 @@ class StrategieDenker:
         self._ensure_guard(mode=mode, enforce=enforce_3x_rt)
 
         max_proc = _3X_RT_LIMIT * audio_dur
-        chunk_s = _adaptive_chunk(audio_dur)
+        _sev = float(defect_severity) if math.isfinite(float(defect_severity)) else 0.0
+        _sev = max(0.0, min(1.0, _sev))
+        chunk_s = _adaptive_chunk(audio_dur, defect_severity=_sev)
 
         note = ""
         if audio_dur > 300:
@@ -249,6 +258,7 @@ class StrategieDenker:
             enforce_limit=enforce_3x_rt,
             enable_adaptive_skipping=True,
             recommended_chunk_s=chunk_s,
+            defect_severity=_sev,
             budget_note=note,
         )
         self._current_plan = plan
@@ -353,18 +363,29 @@ def _safe_duration(audio: np.ndarray, sr: int) -> float:
     return dur if math.isfinite(dur) and dur > 0 else 0.001
 
 
-def _adaptive_chunk(audio_dur_s: float) -> float:
-    """Determine recommended chunk size per §9.5 (defect-density adaptive).
+def _adaptive_chunk(audio_dur_s: float, defect_severity: float = 0.0) -> float:
+    """Determine recommended chunk size per §7.6 (defect-density adaptive).
 
-    For StrategieDenker we use audio duration as the primary proxy because
-    defect density is not known at strategy-planning time. The actual
-    per-segment defect density refines this later.
+    Spec §7.6:
+        defect_severity >= 0.6  →  5 s   (fine-grained, high-defect material)
+        defect_severity >= 0.3  → 15 s   (moderate defects)
+        default                 → 60 s   (clean material — large context chunks)
+        silence segment caps at 120 s    (not observable here — caller handles)
+    Minimum: 2 s | Maximum: min(120 s, audio_dur_s)
     """
-    if audio_dur_s <= 60:
-        return audio_dur_s  # Process whole file at once
-    if audio_dur_s <= 300:
-        return 60.0
-    return 120.0  # Long files: 120 s chunks (silence-rich)
+    if audio_dur_s <= 2.0:
+        return audio_dur_s  # Too short to subdivide
+    if defect_severity >= 0.6:
+        chunk = 5.0    # §7.6: Feingranular bei hohem Defektniveau
+    elif defect_severity >= 0.3:
+        chunk = 15.0   # §7.6: Mittel bei moderatem Defektniveau
+    elif audio_dur_s > 300:
+        chunk = 120.0  # Long clean files: 120 s for context coherence
+    elif audio_dur_s > 60:
+        chunk = 60.0
+    else:
+        return audio_dur_s  # Short clean files: process as whole
+    return float(min(max(chunk, 2.0), audio_dur_s))
 
 
 # ---------------------------------------------------------------------------

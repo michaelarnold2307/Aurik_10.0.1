@@ -395,6 +395,12 @@ python benchmarks/musical_restoration_benchmark.py
 
 # Kompetitiver Benchmark (vs. iZotope RX 11)
 python scripts/competitive_benchmark.py
+
+# Competitive CI-Gate (schneller CI-Run)
+pytest tests/normative/test_competitive_ci_gate.py -m competitive --timeout=600 -v
+
+# Competitive Nightly (Spec-robust: n_items ≥ 5 pro Szenario)
+AURIK_NIGHTLY_ITEMS=5 pytest tests/normative/test_competitive_ci_gate.py -m competitive --timeout=600 -v
 ```
 
 ---

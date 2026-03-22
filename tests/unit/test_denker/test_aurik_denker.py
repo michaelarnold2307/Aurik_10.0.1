@@ -9,6 +9,7 @@ np.random.seed(42) für Reproduzierbarkeit.
 from __future__ import annotations
 
 import math
+import sys
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
@@ -66,7 +67,7 @@ def _make_strategie_mock() -> MagicMock:
     return s
 
 
-def _make_exzellenz_mock(audio: np.ndarray) -> MagicMock:
+def _make_exzellenz_mock(audio: np.ndarray, versa_mos: float = 0.0) -> MagicMock:
     e = MagicMock()
     e.audio = audio
     e.excellence_score = 0.82
@@ -75,6 +76,7 @@ def _make_exzellenz_mock(audio: np.ndarray) -> MagicMock:
     e.goals_total = 14
     e.processing_note = "Exzellenz optimiert"
     e.warnings = []
+    e.versa_mos = versa_mos  # M-8b: VERSA-Cache-Interface
     return e
 
 
@@ -82,7 +84,7 @@ def _make_exzellenz_mock(audio: np.ndarray) -> MagicMock:
 
 
 class TestAurikErgebnis:
-    def _make(self, chain_info=None) -> "AurikErgebnis":
+    def _make(self, chain_info=None) -> AurikErgebnis:
         from denker.aurik_denker import AurikErgebnis
 
         return AurikErgebnis(
@@ -208,6 +210,12 @@ class TestAurikDenkerStage1b:
         defekt_m = _make_defekt_mock()
         strat_m = _make_strategie_mock()
         exz_m = _make_exzellenz_mock(audio)
+        exz_denker_m = MagicMock()
+        exz_denker_m.optimiere.return_value = exz_m
+
+        versa_result_m = MagicMock()
+        versa_result_m.mos = 4.2
+        versa_result_m.model_used = "mock_versa"
 
         kette = kette_mock or _make_kette_mock()
 
@@ -247,7 +255,8 @@ class TestAurikDenkerStage1b:
             patch("denker.aurik_denker.get_restaurier_denker", MagicMock(return_value=rest_m)),
             patch("denker.aurik_denker.get_reparatur_denker", MagicMock(return_value=rep_m)),
             patch("denker.aurik_denker.get_rekonstruktions_denker", MagicMock(return_value=rek_m)),
-            patch("denker.aurik_denker.get_exzellenz_denker", MagicMock(return_value=exz_m)),
+            patch("denker.aurik_denker.get_exzellenz_denker", MagicMock(return_value=exz_denker_m)),
+            patch("plugins.versa_plugin.score_mos", MagicMock(return_value=versa_result_m)),
         ):
             try:
                 result = denker.denke(audio, SR)
@@ -273,6 +282,10 @@ class TestAurikDenkerStage1b:
     def test_16_stage_notes_has_kette_key_on_success(self):
         audio = _sine()
         kette_m = _make_kette_mock("tape→mp3_low")
+        exz_m16 = _make_exzellenz_mock(audio)
+        exz_denker_m16 = MagicMock()
+        exz_denker_m16.optimiere.return_value = exz_m16
+        versa_result_m16 = MagicMock(mos=4.2, model_used="mock_versa")
         strat_m16 = MagicMock()
         strat_m16.check.return_value = MagicMock(should_exit_early=False)
         rest_m16 = MagicMock()
@@ -298,7 +311,8 @@ class TestAurikDenkerStage1b:
             patch("denker.aurik_denker.get_restaurier_denker", MagicMock(return_value=rest_m16)),
             patch("denker.aurik_denker.get_reparatur_denker", MagicMock(return_value=rep_m16)),
             patch("denker.aurik_denker.get_rekonstruktions_denker", MagicMock(return_value=rek_m16)),
-            patch("denker.aurik_denker.get_exzellenz_denker", MagicMock(return_value=_make_exzellenz_mock(audio))),
+            patch("denker.aurik_denker.get_exzellenz_denker", MagicMock(return_value=exz_denker_m16)),
+            patch("plugins.versa_plugin.score_mos", MagicMock(return_value=versa_result_m16)),
         ):
             from denker.aurik_denker import AurikDenker
 
@@ -312,6 +326,8 @@ class TestAurikDenkerStage1b:
     def test_17_no_crash_on_all_stages_failing(self):
         """AurikDenker stürzt nicht ab, auch wenn alle Unterphasen scheitern."""
         audio = _sine()
+        mock_versa_module = MagicMock()
+        mock_versa_module.score_mos = MagicMock(side_effect=RuntimeError("mock"))
         with (
             patch("denker.aurik_denker.get_tontraeger_denker", side_effect=ImportError("mock")),
             patch("denker.aurik_denker.get_tontraegerkette_denker", side_effect=ImportError("mock")),
@@ -321,6 +337,7 @@ class TestAurikDenkerStage1b:
             patch("denker.aurik_denker.get_reparatur_denker", side_effect=ImportError("mock")),
             patch("denker.aurik_denker.get_rekonstruktions_denker", side_effect=ImportError("mock")),
             patch("denker.aurik_denker.get_exzellenz_denker", side_effect=ImportError("mock")),
+            patch.dict(sys.modules, {"plugins.versa_plugin": mock_versa_module}),
         ):
             from denker.aurik_denker import AurikDenker
 
@@ -423,6 +440,10 @@ def _full_mock_ctx(audio: np.ndarray) -> Any:
 
     exz_result = _make_exzellenz_mock(audio)
 
+    versa_result = MagicMock()
+    versa_result.mos = 4.2
+    versa_result.model_used = "mock_versa"
+
     return (
         patch(
             "denker.aurik_denker.get_tontraeger_denker",
@@ -450,6 +471,7 @@ def _full_mock_ctx(audio: np.ndarray) -> Any:
             "denker.aurik_denker.get_exzellenz_denker",
             MagicMock(return_value=MagicMock(optimiere=MagicMock(return_value=exz_result))),
         ),
+        patch("plugins.versa_plugin.score_mos", MagicMock(return_value=versa_result)),
     )
 
 
@@ -458,7 +480,7 @@ def _run_fully_mocked(audio: np.ndarray) -> Any:
     from denker.aurik_denker import AurikDenker
 
     patches = _full_mock_ctx(audio)
-    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8]:
         return AurikDenker().denke(audio, SR)
 
 
@@ -543,7 +565,7 @@ class TestAurikDenkerVollMock:
         from denker.aurik_denker import AurikErgebnis
 
         patches = _full_mock_ctx(audio)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8]:
             from denker.aurik_denker import AurikDenker
 
             result = AurikDenker().denke(audio, SR)
@@ -588,6 +610,7 @@ class TestAurikDenkerVollMock:
         rek_result.total_repaired_ms = 0.0
 
         exz_result = _make_exzellenz_mock(audio)
+        versa_result = MagicMock(mos=4.2, model_used="mock_versa")
 
         with (
             patch(
@@ -616,6 +639,7 @@ class TestAurikDenkerVollMock:
                 "denker.aurik_denker.get_exzellenz_denker",
                 MagicMock(return_value=MagicMock(optimiere=MagicMock(return_value=exz_result))),
             ),
+            patch("plugins.versa_plugin.score_mos", MagicMock(return_value=versa_result)),
         ):
             result = AurikDenker().denke(audio, SR)
         assert isinstance(result, AurikErgebnis)
@@ -644,3 +668,198 @@ class TestAurikDenkerVollMock:
         ):
             assert hasattr(m, fname), f"Wrapper {fname} fehlt in denker.aurik_denker"
             assert callable(getattr(m, fname)), f"{fname} ist nicht aufrufbar"
+
+
+# ─── §8.1 Spec-konforme quality_estimate-Formel in AurikDenker ───────────────
+
+
+class TestAurikDenkerQualityEstimateFormula:
+    """Normative Tests: AurikDenker.quality_estimate folgt Spec §8.1.
+
+    Formel: quality_estimate = 0.40*(1-defect_severity) + 0.60*(pqs_mos-1)/4
+    VERBOTEN: quality_estimate * 1.15 als fixer Bonus-Faktor.
+    """
+
+    def _run_with_versa(self, severity: float, mos: float) -> Any:
+        """Führt AurikDenker mit kontrollierten Defekt-Schwere und VERSA MOS aus."""
+        audio = _sine(1.0)
+        defekt_m = _make_defekt_mock()
+        defekt_m.overall_severity = severity
+
+        exz_m = _make_exzellenz_mock(audio, versa_mos=0.0)  # kein gecachter MOS
+
+        strat_result = MagicMock()
+        strat_result.quality_mode = "quality"
+        strat_result.max_processing_s = 30.0
+        strat_m = MagicMock()
+        strat_m.plan.return_value = strat_result
+        strat_m.starte_timer.return_value = None
+        strat_m.check.return_value = MagicMock(should_exit_early=False)
+
+        rest_result = MagicMock()
+        rest_result.audio = audio.copy()
+        rest_result.phases_executed = []
+        rest_result.warnings = []
+        rest_result.quality_estimate = 0.75
+        rest_result.rt_factor = 0.2
+        rest_result.confidence = 0.9
+        rest_result.rollback_triggered = False
+        rest_result.winning_variant = None
+        rest_result.musical_goals = {}
+        rest_result.goals_passed = 0
+
+        kette_m = _make_kette_mock()
+        toni_m = _make_toni_mock("tape")
+        versa_result = MagicMock(mos=mos, model_used="test_versa")
+
+        rep_result = MagicMock()
+        rep_result.audio = audio.copy()
+        rep_result.warnings = []
+        rep_result.clicks_removed = False
+        rep_result.hum_removed = False
+        rep_result.clipping_repaired = False
+
+        rek_result = MagicMock()
+        rek_result.audio = audio.copy()
+        rek_result.warnings = []
+        rek_result.gaps_found = 0
+        rek_result.gaps_repaired = 0
+        rek_result.total_repaired_ms = 0.0
+
+        with (
+            patch("denker.aurik_denker.get_tontraeger_denker",
+                  MagicMock(return_value=MagicMock(erkenne=MagicMock(return_value=toni_m)))),
+            patch("denker.aurik_denker.get_tontraegerkette_denker",
+                  MagicMock(return_value=MagicMock(analysiere=MagicMock(return_value=kette_m)))),
+            patch("denker.aurik_denker.get_defekt_denker",
+                  MagicMock(return_value=MagicMock(analysiere=MagicMock(return_value=defekt_m)))),
+            patch("denker.aurik_denker.get_strategie_denker", MagicMock(return_value=strat_m)),
+            patch("denker.aurik_denker.get_restaurier_denker",
+                  MagicMock(return_value=MagicMock(restauriere=MagicMock(return_value=rest_result)))),
+            patch("denker.aurik_denker.get_reparatur_denker",
+                  MagicMock(return_value=MagicMock(repariere=MagicMock(return_value=rep_result)))),
+            patch("denker.aurik_denker.get_rekonstruktions_denker",
+                  MagicMock(return_value=MagicMock(rekonstruiere=MagicMock(return_value=rek_result)))),
+            patch("denker.aurik_denker.get_exzellenz_denker",
+                  MagicMock(return_value=MagicMock(optimiere=MagicMock(return_value=exz_m)))),
+            patch("plugins.versa_plugin.score_mos", MagicMock(return_value=versa_result)),
+        ):
+            from denker.aurik_denker import AurikDenker
+            return AurikDenker().denke(audio, SR)
+
+    def test_37_formula_spec_81_with_versa(self):
+        """Spec §8.1: quality_estimate = 0.40*(1-sev) + 0.60*(mos-1)/4."""
+        sev, mos = 0.4, 3.5
+        result = self._run_with_versa(sev, mos)
+        expected = 0.40 * (1.0 - sev) + 0.60 * (mos - 1.0) / 4.0
+        assert abs(result.quality_estimate - expected) < 0.02, (
+            f"quality_estimate={result.quality_estimate:.4f}, "
+            f"erwartet {expected:.4f} (\u00a78.1-Formel: sev={sev}, mos={mos})"
+        )
+
+    def test_38_formula_perfect_signal(self):
+        """sev=0, mos=5 \u2192 quality_estimate \u2248 1.0."""
+        result = self._run_with_versa(0.0, 5.0)
+        assert result.quality_estimate >= 0.95, (
+            f"Perfektes Signal ergibt quality_estimate={result.quality_estimate:.4f}, erwartet \u2265 0.95"
+        )
+
+    def test_39_formula_fully_defective(self):
+        """sev=1.0, mos=1.0 \u2192 quality_estimate \u2248 0.0."""
+        result = self._run_with_versa(1.0, 1.0)
+        assert result.quality_estimate < 0.10, (
+            f"Voll defektes Signal ergibt quality_estimate={result.quality_estimate:.4f}, erwartet < 0.10"
+        )
+
+    def test_40_no_1_15_bonus_factor(self):
+        """Regression: Kein 1.15-Bonus-Faktor in quality_estimate (Spec VERBOTEN)."""
+        sev, mos = 0.3, 4.0
+        result = self._run_with_versa(sev, mos)
+        expected = 0.40 * (1.0 - sev) + 0.60 * (mos - 1.0) / 4.0
+        with_bonus = expected * 1.15
+        assert abs(result.quality_estimate - with_bonus) > 0.01, (
+            f"quality_estimate={result.quality_estimate:.4f} \u00e4hnelt zu sehr "
+            f"dem verbotenen 1.15-Bonus-Ergebnis {with_bonus:.4f}"
+        )
+        assert abs(result.quality_estimate - expected) < 0.03, (
+            f"quality_estimate={result.quality_estimate:.4f} weicht von Spec-Formel "
+            f"{expected:.4f} ab"
+        )
+
+    def test_41_versa_cache_from_exzellenz_skips_own_versa(self):
+        """M-8b: Wenn ExzellenzDenker versa_mos liefert, darf AurikDenker kein eigenes VERSA laufen."""
+        audio = _sine(1.0)
+        exz_m = _make_exzellenz_mock(audio, versa_mos=4.1)  # ExzellenzDenker liefert VERSA
+
+        strat_result = MagicMock()
+        strat_result.quality_mode = "quality"
+        strat_result.max_processing_s = 30.0
+        strat_m = MagicMock()
+        strat_m.plan.return_value = strat_result
+        strat_m.starte_timer.return_value = None
+        strat_m.check.return_value = MagicMock(should_exit_early=False)
+
+        rest_result = MagicMock()
+        rest_result.audio = audio.copy()
+        rest_result.phases_executed = []
+        rest_result.warnings = []
+        rest_result.quality_estimate = 0.75
+        rest_result.rt_factor = 0.2
+        rest_result.confidence = 0.9
+        rest_result.rollback_triggered = False
+        rest_result.winning_variant = None
+        rest_result.musical_goals = {}
+        rest_result.goals_passed = 0
+
+        kette_m = _make_kette_mock()
+        toni_m = _make_toni_mock()
+        defekt_m = _make_defekt_mock()
+
+        rep_m = MagicMock()
+        rep_m.audio = audio.copy()
+        rep_m.warnings = []
+        rep_m.clicks_removed = False
+        rep_m.hum_removed = False
+        rep_m.clipping_repaired = False
+
+        rek_m = MagicMock()
+        rek_m.audio = audio.copy()
+        rek_m.warnings = []
+        rek_m.gaps_found = 0
+        rek_m.gaps_repaired = 0
+        rek_m.total_repaired_ms = 0.0
+
+        versa_spy = MagicMock(return_value=MagicMock(mos=3.0, model_used="spy"))
+
+        with (
+            patch("denker.aurik_denker.get_tontraeger_denker",
+                  MagicMock(return_value=MagicMock(erkenne=MagicMock(return_value=toni_m)))),
+            patch("denker.aurik_denker.get_tontraegerkette_denker",
+                  MagicMock(return_value=MagicMock(analysiere=MagicMock(return_value=kette_m)))),
+            patch("denker.aurik_denker.get_defekt_denker",
+                  MagicMock(return_value=MagicMock(analysiere=MagicMock(return_value=defekt_m)))),
+            patch("denker.aurik_denker.get_strategie_denker", MagicMock(return_value=strat_m)),
+            patch("denker.aurik_denker.get_restaurier_denker",
+                  MagicMock(return_value=MagicMock(restauriere=MagicMock(return_value=rest_result)))),
+            patch("denker.aurik_denker.get_reparatur_denker",
+                  MagicMock(return_value=MagicMock(repariere=MagicMock(return_value=rep_m)))),
+            patch("denker.aurik_denker.get_rekonstruktions_denker",
+                  MagicMock(return_value=MagicMock(rekonstruiere=MagicMock(return_value=rek_m)))),
+            patch("denker.aurik_denker.get_exzellenz_denker",
+                  MagicMock(return_value=MagicMock(optimiere=MagicMock(return_value=exz_m)))),
+            patch("plugins.versa_plugin.score_mos", versa_spy),
+        ):
+            from denker.aurik_denker import AurikDenker
+            result = AurikDenker().denke(audio, SR)
+
+        # ExzellenzDenker lieferte versa_mos=4.1 \u2192 AurikDenker Stage 8
+        # soll KEIN eigenes score_mos() aufgerufen haben
+        assert not versa_spy.called, (
+            f"score_mos() wurde {versa_spy.call_count}x aufgerufen, obwohl "
+            "ExzellenzDenker schon versa_mos=4.1 lieferte (M-8b-Verletzung)"
+        )
+        # quality_estimate soll ExzellenzDenker-VERSA (4.1) verwenden, nicht 3.0
+        assert result.quality_estimate > 0.5, (
+            f"quality_estimate={result.quality_estimate:.3f} zu niedrig — "
+            "VERSA MOS=4.1 aus ExzellenzDenker sollte h\u00f6here Qualit\u00e4t ergeben"
+        )

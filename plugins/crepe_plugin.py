@@ -136,6 +136,7 @@ class CrepePlugin:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("CREPE", size_gb=0.10):
                     logger.warning("CREPE: ML-Budget erschöpft — pYIN-Fallback.")
                     return
@@ -156,6 +157,16 @@ class CrepePlugin:
                 "🎵 CREPE ONNX geladen: %s",
                 _CREPE_ONNX_PATH.name,
             )
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "CREPE",
+                    size_gb=0.10,
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_used", "pyin"),
+                )
+            except Exception:
+                pass
         except Exception as exc:  # noqa: BLE001
             logger.debug("CREPE-ONNX nicht verfügbar (%s) — pYIN-Fallback aktiv", exc)
 
@@ -302,7 +313,8 @@ class CrepePlugin:
             seg_len = min(len(audio), int(sr * 30.0))
             seg = audio[:seg_len]
 
-            f0, _, voiced_probs = librosa.pyin(seg, fmin=20.0, fmax=2_000.0, sr=sr)
+            _fmin_safe = float(librosa.note_to_hz("C1"))  # ≈32.7 Hz — safe for all sample rates (fmin > sr/frame_length)
+            f0, _, voiced_probs = librosa.pyin(seg, fmin=_fmin_safe, fmax=2_000.0, sr=sr)
             f0 = np.nan_to_num(f0.astype(np.float32))
             voiced_probs = np.nan_to_num(voiced_probs.astype(np.float32))
             n_frames = len(f0)

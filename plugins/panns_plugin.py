@@ -142,6 +142,7 @@ class PANNsPlugin:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("PANNs", size_gb=0.66):
                     logger.warning("PANNs: ML-Budget erschöpft — Spektral-Fallback.")
                     return
@@ -156,12 +157,23 @@ class PANNsPlugin:
                 "✅ PANNs CNN14 ONNX geladen (%s, §4.4 Spec)",
                 self._ONNX_PATH.name,
             )
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm("PANNs", size_gb=0.66, unload_fn=lambda s=self: setattr(s, "_session", None))
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning(
                 "PANNs ONNX nicht verfügbar — Instrument-Gate inaktiv (alle Phasen sind aktiv): %s",
                 exc,
             )
             self._session = None
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("PANNs")
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Audio-Aufbereitung
@@ -274,7 +286,7 @@ class PANNsPlugin:
                 result[tag] = max(0.0, min(1.0, val if math.isfinite(val) else 0.0))
 
             logger.debug(
-                "PANNs-Tags: Vocals=%.2f Speech=%.2f Guitar=%.2f " "Drum=%.2f Piano=%.2f Brass=%.2f Accordion=%.2f",
+                "PANNs-Tags: Vocals=%.2f Speech=%.2f Guitar=%.2f Drum=%.2f Piano=%.2f Brass=%.2f Accordion=%.2f",
                 result.get("Singing voice", 0.0),
                 result.get("Speech", 0.0),
                 result.get("Guitar", 0.0),

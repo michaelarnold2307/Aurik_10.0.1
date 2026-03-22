@@ -8,16 +8,18 @@
 
 | Aufgabe | PRIMÄR | FALLBACK | VERBOTEN |
 |---|---|---|---|
-| Noise Reduction | DeepFilterNet v3.II | OMLSA+IMCRA | DTLN, RNNoise |
-| Stem Separation | MDX23C Kim_Vocal_2 / Kim_Inst | Demucs v4 | OpenUnmix |
-| Audio Super-Resolution | BS-RoFormer / Mel-RoFormer | — | SEGAN |
+| Noise Reduction (Vocals/Gesang) | DeepFilterNet v3.II | OMLSA+IMCRA | DTLN, RNNoise |
+| Noise Reduction (rein instrumental) | OMLSA/IMCRA (kein Speech-Prior) | DeepFilterNet v3.II (energy_bias=−9 dB) | DTLN, RNNoise |
+| Stem Separation Vocals | MelBandRoformer (`bs_roformer_plugin`) | HTDemucs-6s, NMF-β | OpenUnmix |
+| Stem Separation Instrumental | HTDemucs-6s (`htdemucs_plugin`) | MDX23C Kim_Inst, NMF-β | OpenUnmix |
+| Audio Super-Resolution | AudioSR | Sinusoidal + Stoch. Modeling | SEGAN |
 | Codec Artefakte | Apollo | Resemble-Enhance | MetricGAN+ |
-| Pitch Estimation | CREPE | pYIN | SWIPE, YIN |
-| Vocoding | Vocos 24 kHz | HiFi-GAN V2 | WaveNet RT |
-| Inpainting | FlowMatching | DiffWave | einfache Interpolation |
-| Audio Tagging | PANNs CNN14 | — | — |
-| MOS-Schätzung | CDPAM | PQS-MOS (eigen) | DNSMOS, NISQA |
-| Dereverb | WPE (nara_wpe) | NumPy-WPE | SGMSE+ |
+| Pitch Estimation | FCPE | CREPE → PESTO → pYIN | SWIPE, YIN |
+| Vocoding | Vocos 48 kHz nativ | Vocos 44,1 kHz → BigVGAN v2 → HiFi-GAN | WaveNet RT |
+| Inpainting generativ | Flow Matching | CQTdiff+ → DiffWave | einfache Interpolation |
+| Audio Tagging | BEATs iter3 | PANNs CNN14 | — |
+| MOS-Schätzung Musik | VERSA | SingMOS (Gesang) → PQS-MOS (eigen) | DNSMOS, NISQA, CDPAM, PESQ |
+| Dereverb | SGMSE+ (`sgmse_plugin`, TorchScript) | WPE (nara_wpe) → NumPy-WPE → OMLSA | einfacher Bandpass |
 | Lyrics-Transcription | Whisper-Tiny ONNX | energy_segmentation_dsp | — |
 
 ## Verbotene Modelle & Begründungen
@@ -51,16 +53,20 @@
 | Modell | Version | Eingebunden seit |
 |---|---|---|
 | DeepFilterNet | v3.II | Aurik 9.0 |
-| MDX23C | Kim_Vocal_2 / Kim_Inst | Aurik 9.0 |
-| BS-RoFormer | latest | Aurik 9.0 |
-| Apollo | v1 | Aurik 9.0 |
-| CREPE | full | Aurik 9.0 |
-| Vocos | 24kHz | Aurik 9.0 |
-| PANNs | CNN14 | Aurik 9.0 |
-| CDPAM | v1 | Aurik 9.0 |
-| WPE | nara_wpe | Aurik 9.10.43 |
-| Whisper-Tiny | ONNX | Aurik 9.10.46b (v10.0) |
-| HiFi-GAN | V2 | Aurik 9.0 (Fallback) |
-| DiffWave | — | Aurik 9.0 (Fallback) |
-| Resemble-Enhance | — | Aurik 9.0 (Fallback) |
-| Demucs | v4 | Aurik 9.0 (Fallback) |
+| MelBandRoformer | 860 MB ONNX | Aurik 9.10.x |
+| HTDemucs | 6s ONNX | Aurik 9.10.x |
+| MDX23C | Kim_Vocal_2 / Kim_Inst | Aurik 9.0 (Fallback) |
+| Apollo | v1 TorchScript | Aurik 9.0 |
+| FCPE | ONNX | Aurik 9.10.x |
+| CREPE | full ONNX | Aurik 9.0 (Fallback) |
+| Vocos | 48 kHz nativ ONNX | Aurik 9.10.x |
+| BEATs | iter3 ONNX 90 MB | Aurik 9.10.x |
+| PANNs | CNN14 ONNX | Aurik 9.0 (Fallback) |
+| VERSA | PyTorch Checkpoint | Aurik 9.10.x |
+| SGMSE+ | TorchScript 251 MB | Aurik 9.10.x |
+| WPE | nara_wpe | Aurik 9.10.43 (Fallback) |
+| Flow Matching | ONNX/PT | Aurik 9.10.x |
+| Whisper-Tiny | ONNX 39 MB | Aurik 9.10.46b |
+| HiFi-GAN | V2 ONNX | Aurik 9.0 (Fallback) |
+| DiffWave | ONNX | Aurik 9.0 (Fallback) |
+| Resemble-Enhance | ONNX 722 MB | Aurik 9.0 (Fallback) |

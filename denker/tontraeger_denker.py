@@ -173,7 +173,21 @@ class TontraegerDenker:
             return self._fallback_result()
 
         try:
-            raw: dict[str, Any] = detector.detect(audio, sr)
+            raw_result = detector.detect(audio, sr)
+            # MediumDetectionResult (dataclass) → dict für _struktur()
+            if isinstance(raw_result, dict):
+                raw: dict[str, Any] = raw_result
+            elif hasattr(raw_result, "as_dict"):
+                raw = raw_result.as_dict()
+                # Normalize field names: as_dict() uses "primary_material", _struktur() uses "material_type"
+                if "material_type" not in raw and "primary_material" in raw:
+                    raw["material_type"] = raw["primary_material"]
+                # "detected_media" from transfer_chain
+                if "detected_media" not in raw and "transfer_chain" in raw:
+                    raw["detected_media"] = [(m, 1.0) for m in raw.get("transfer_chain", [])]
+            else:
+                raw = {"material_type": str(getattr(raw_result, "primary_material", "unknown")),
+                       "confidence": float(getattr(raw_result, "confidence", 0.5))}
         except Exception as exc:  # noqa: BLE001
             logger.warning("TontraegerDenker: detect() fehlgeschlagen (%s). Fallback.", exc)
             return self._fallback_result()

@@ -76,9 +76,7 @@ class BanquetVinylPlugin:
 
     def _try_load_model(self) -> None:
         # Prefer the pre-patched variant; fall back to applying the patch on-the-fly.
-        patched_path = self._model_path.with_name(
-            self._model_path.stem + self._PATCHED_SUFFIX
-        )
+        patched_path = self._model_path.with_name(self._model_path.stem + self._PATCHED_SUFFIX)
         load_path = patched_path if patched_path.exists() else self._model_path
 
         if not load_path.exists():
@@ -94,6 +92,7 @@ class BanquetVinylPlugin:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("BanquetVinyl", size_gb=0.80):
                     logger.warning("BanquetVinyl: ML-Budget erschöpft — DSP-Fallback.")
                     return
@@ -120,10 +119,25 @@ class BanquetVinylPlugin:
                 self._input_name,
                 self._output_name,
             )
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "BanquetVinyl",
+                    size_gb=0.80,
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_ok", False),
+                )
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("BANQUET ONNX Ladefehler: %s — DSP-Fallback", exc)
             self._session = None
             self._model_ok = False
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("BanquetVinyl")
+            except Exception:
+                pass
 
     @staticmethod
     def _patch_onnx(src: Path, dst: Path) -> Path:
@@ -247,9 +261,7 @@ class BanquetVinylPlugin:
 
         return np.clip(out, -1.0, 1.0)
 
-    def _prepare_input(
-        self, chunk: np.ndarray, channels: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _prepare_input(self, chunk: np.ndarray, channels: int) -> tuple[np.ndarray, np.ndarray]:
         """Convert audio chunk [ch, chunk_len] → ONNX tensor [1, 128, 128, 128].
 
         The Banquet model uses a band-split RNN (SeqBand) that expects:
@@ -280,15 +292,19 @@ class BanquetVinylPlugin:
 
             feat = np.zeros((1, 128, 128, 128), dtype=np.float32)
             for b in range(128):
-                bin0 = 2 * b
+                2 * b
                 bin1 = min(2 * b + 1, Zxx.shape[0] - 1)
                 # 4 real features per frame: real/imag of two consecutive bins
                 r0 = stft_ctx[b, :]  # real part of band-centre bin
-                band_feat = np.stack([
-                    r0.real, r0.imag,
-                    Zxx[bin1, :n_frames].real[:128].astype(np.float32),
-                    Zxx[bin1, :n_frames].imag[:128].astype(np.float32),
-                ], axis=0)  # [4, 128]
+                band_feat = np.stack(
+                    [
+                        r0.real,
+                        r0.imag,
+                        Zxx[bin1, :n_frames].real[:128].astype(np.float32),
+                        Zxx[bin1, :n_frames].imag[:128].astype(np.float32),
+                    ],
+                    axis=0,
+                )  # [4, 128]
                 # Tile 32× to fill hidden_dim=128
                 tiled = np.tile(band_feat, (32, 1))[:128, :]  # [128, 128]
                 feat[0, b, :, :] = tiled
@@ -326,9 +342,7 @@ class BanquetVinylPlugin:
                 # Pad to 257 bins for ISTFT with n_fft=512
                 stft_full = np.zeros((257, 128), dtype=np.complex64)
                 stft_full[:128, :] = clean_stft
-                _, audio_out = sci_istft(
-                    stft_full, nperseg=512, noverlap=512 - 375, boundary="zeros"
-                )
+                _, audio_out = sci_istft(stft_full, nperseg=512, noverlap=512 - 375, boundary="zeros")
                 audio_out = audio_out.astype(np.float32)
                 # Pad/trim to chunk_len
                 if len(audio_out) >= chunk_len:

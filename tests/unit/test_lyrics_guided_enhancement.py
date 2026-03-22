@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import concurrent.futures
 import math
-import threading
 
 import numpy as np
 import pytest
@@ -37,7 +36,7 @@ from backend.core.content_aware_processor import (
     compute_lyrics_saliency,
     get_content_aware_processor,
 )
-from backend.core.perceptual_attention_model import PerceptualAttentionModel, get_perceptual_attention_model
+from backend.core.perceptual_attention_model import PerceptualAttentionModel
 
 # ---- Imports unter Test --------
 from plugins.lyrics_transcriber_plugin import (
@@ -45,7 +44,6 @@ from plugins.lyrics_transcriber_plugin import (
     LyricsTranscriptionResult,
     WordTimestamp,
     get_lyrics_transcriber,
-    transcribe_audio,
 )
 
 SR = 48_000
@@ -461,17 +459,20 @@ class TestLyricsGuidedTimelineConstants:
 #    und den compute_lyrics_saliency-Fix in ContentAwareProcessor (LGE-intern).
 # ===========================================================================
 
+
 def _make_lge_no_onnx():
     """Erzeugt LyricsGuidedEnhancement-Instanz ohne ONNX-Session (DSP-Fallback)."""
     from backend.core.lyrics_guided_enhancement import (
-        LyricsGuidedEnhancement,
         ContentAwareProcessor as _InternalCAP,
+        LyricsGuidedEnhancement,
         LyricsGuidedTimeline,
     )
+
     lge = LyricsGuidedEnhancement.__new__(LyricsGuidedEnhancement)
     lge._cap = _InternalCAP()
     lge._tl = LyricsGuidedTimeline()
-    lge._ort_session = None   # kein ONNX → DSP-Fallback aktiv
+    lge._ort_session = None  # kein ONNX → DSP-Fallback aktiv
+    lge._aligner_session = None
     return lge
 
 
@@ -480,21 +481,28 @@ class TestLGEClassifyPhonemeType:
 
     def test_lge_01_plosive_short_transient(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
-        n = int(0.01 * SR)   # 10 ms
+
+        n = int(0.01 * SR)  # 10 ms
         seg = np.zeros(n, dtype=np.float32)
-        seg[n // 2] = 0.9   # einzelner Spike → hoher Crest-Factor
+        seg[n // 2] = 0.9  # einzelner Spike → hoher Crest-Factor
         result = LyricsGuidedEnhancement._classify_phoneme_type(seg, SR, 0.8, True)
         assert result == "plosive"
 
     def test_lge_02_vowel_long_sine(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         seg = (0.4 * np.sin(2 * np.pi * 300.0 * np.linspace(0, 0.5, int(0.5 * SR)))).astype(np.float32)
         result = LyricsGuidedEnhancement._classify_phoneme_type(seg, SR, 0.5, True)
-        assert result in {"vowel_stressed", "vowel_unstressed",
-                          "fricative_stressed", "fricative_unstressed"}  # kein plosive
+        assert result in {
+            "vowel_stressed",
+            "vowel_unstressed",
+            "fricative_stressed",
+            "fricative_unstressed",
+        }  # kein plosive
 
     def test_lge_03_stressed_flag_vowel(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         seg = (0.4 * np.sin(2 * np.pi * 200.0 * np.linspace(0, 0.2, int(0.2 * SR)))).astype(np.float32)
         stressed = LyricsGuidedEnhancement._classify_phoneme_type(seg, SR, 0.8, True)
         unstressed = LyricsGuidedEnhancement._classify_phoneme_type(seg, SR, 0.2, False)
@@ -505,17 +513,19 @@ class TestLGEClassifyPhonemeType:
 
     def test_lge_04_empty_segment_no_raise(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         seg = np.zeros(3, dtype=np.float32)
         result = LyricsGuidedEnhancement._classify_phoneme_type(seg, SR, 0.0, False)
         assert isinstance(result, str) and len(result) > 0
 
     def test_lge_05_fricative_broadband_noise(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         rng = np.random.default_rng(42)
         seg = rng.standard_normal(int(0.2 * SR)).astype(np.float32) * 0.3
-        seg = np.diff(seg, prepend=seg[0]).astype(np.float32)   # high-pass → HF-betont
+        seg = np.diff(seg, prepend=seg[0]).astype(np.float32)  # high-pass → HF-betont
         result = LyricsGuidedEnhancement._classify_phoneme_type(seg, SR, 0.6, True)
-        assert isinstance(result, str)   # kein Absturz, beliebiger gültiger Typ
+        assert isinstance(result, str)  # kein Absturz, beliebiger gültiger Typ
 
 
 class TestLGEEnergyToWords:
@@ -523,16 +533,19 @@ class TestLGEEnergyToWords:
 
     def test_lge_06_empty_energy_returns_empty(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         words = LyricsGuidedEnhancement._energy_to_words(np.array([]), 0.0)
         assert words == []
 
     def test_lge_07_zero_dur_returns_empty(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         words = LyricsGuidedEnhancement._energy_to_words(np.ones(50), 0.0)
         assert words == []
 
     def test_lge_08_no_nan_in_output(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         rng = np.random.default_rng(7)
         energy = rng.random(100).astype(np.float32)
         audio = _make_audio(2.0)
@@ -545,6 +558,7 @@ class TestLGEEnergyToWords:
     def test_lge_09_word_field_always_empty(self) -> None:
         """Privacy invariant: word field darf nie Text enthalten."""
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         rng = np.random.default_rng(42)
         energy = rng.random(100).astype(np.float32)
         audio = _make_audio(2.0)
@@ -554,6 +568,7 @@ class TestLGEEnergyToWords:
 
     def test_lge_10_timestamps_non_overlapping(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         rng = np.random.default_rng(3)
         energy = rng.random(200).astype(np.float32)
         words = LyricsGuidedEnhancement._energy_to_words(energy, 4.0)
@@ -565,8 +580,10 @@ class TestLGEEnergyToWords:
 
     def test_lge_11_phoneme_types_valid(self) -> None:
         from backend.core.lyrics_guided_enhancement import (
-            LyricsGuidedEnhancement, ContentAwareProcessor as _InternalCAP,
+            ContentAwareProcessor as _InternalCAP,
+            LyricsGuidedEnhancement,
         )
+
         valid = set(_InternalCAP.SALIENCY_BOOST.keys())
         rng = np.random.default_rng(5)
         energy = rng.random(100).astype(np.float32)
@@ -577,6 +594,7 @@ class TestLGEEnergyToWords:
 
     def test_lge_12_silence_input_no_words(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         # All-zero energy: percentile=0, so 0>=0 → all frames "active" → at most 1 segment.
         # expectation: ≤ 1 word (not many disconnected words)
         energy = np.zeros(50, dtype=np.float32)
@@ -585,6 +603,7 @@ class TestLGEEnergyToWords:
 
     def test_lge_13_all_active_produces_words(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement
+
         energy = np.ones(50, dtype=np.float32)
         words = LyricsGuidedEnhancement._energy_to_words(energy, 1.0)
         assert len(words) >= 1
@@ -595,13 +614,15 @@ class TestLGEInternalCAP:
 
     def _cap(self):
         from backend.core.lyrics_guided_enhancement import ContentAwareProcessor as _InternalCAP
+
         return _InternalCAP()
 
-    def _make_result(self, phoneme_type: str) -> "object":
+    def _make_result(self, phoneme_type: str) -> object:
         from backend.core.lyrics_guided_enhancement import (
             LyricsTranscriptionResult,
             WordTimestamp,
         )
+
         word = WordTimestamp("", 0.0, 0.5, 0.9, True, phoneme_type)
         return LyricsTranscriptionResult([word], "de", 0.9, 1.0, fallback_used=False)
 
@@ -616,8 +637,10 @@ class TestLGEInternalCAP:
         cap = self._cap()
         base = np.ones(SR, dtype=np.float32)
         from backend.core.lyrics_guided_enhancement import (
-            LyricsTranscriptionResult, WordTimestamp,
+            LyricsTranscriptionResult,
+            WordTimestamp,
         )
+
         word = WordTimestamp("", 0.2, 0.8, 0.1, False, "silence")
         result_obj = LyricsTranscriptionResult([word], "de", 0.1, 1.0, fallback_used=False)
         sal = cap.compute_lyrics_saliency(base, result_obj, SR)
@@ -627,13 +650,14 @@ class TestLGEInternalCAP:
         cap = self._cap()
         base = np.ones(SR, dtype=np.float32)
         from backend.core.lyrics_guided_enhancement import LyricsTranscriptionResult
+
         result_obj = LyricsTranscriptionResult([], "de", 0.0, 1.0, fallback_used=True)
         sal = cap.compute_lyrics_saliency(base, result_obj, SR)
         assert np.allclose(sal, 1.0)
 
     def test_lge_17_output_bounds(self) -> None:
         cap = self._cap()
-        base = np.full(SR, 10.0, dtype=np.float32)   # out-of-range input
+        base = np.full(SR, 10.0, dtype=np.float32)  # out-of-range input
         result_obj = self._make_result("vowel_stressed")
         sal = cap.compute_lyrics_saliency(base, result_obj, SR)
         assert sal.min() >= 0.3
@@ -643,6 +667,7 @@ class TestLGEInternalCAP:
         cap = self._cap()
         base = np.full(SR, np.nan, dtype=np.float32)
         from backend.core.lyrics_guided_enhancement import LyricsTranscriptionResult
+
         result_obj = LyricsTranscriptionResult([], "de", 0.0, 1.0, fallback_used=True)
         sal = cap.compute_lyrics_saliency(base, result_obj, SR)
         assert np.all(np.isfinite(sal))
@@ -661,7 +686,7 @@ class TestLGEEnhance:
         lge = _make_lge_no_onnx()
         left = _make_audio(1.0, 440.0)
         right = _make_audio(1.0, 880.0)
-        audio = np.stack([left, right], axis=1)   # (N, 2)
+        audio = np.stack([left, right], axis=1)  # (N, 2)
         out, _ = lge.enhance(audio, SR)
         assert out.shape == audio.shape
 
@@ -697,6 +722,7 @@ class TestLGEEnhance:
 
     def test_lge_26_returns_transcription_result(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsTranscriptionResult
+
         lge = _make_lge_no_onnx()
         _, trans = lge.enhance(_make_audio(1.0), SR)
         assert isinstance(trans, LyricsTranscriptionResult)
@@ -710,12 +736,11 @@ class TestLGEEnhance:
 
     def test_lge_28_uv3_attribute_access_words_not_segments(self) -> None:
         """Regressions-Test für UV3-Bug: .segments existiert nicht — nur .words."""
-        from backend.core.lyrics_guided_enhancement import LyricsTranscriptionResult
+
         lge = _make_lge_no_onnx()
         _, trans = lge.enhance(_make_audio(1.0), SR)
         assert hasattr(trans, "words")
-        assert not hasattr(trans, "segments"), \
-            "LyricsTranscriptionResult hat kein .segments — UV3 muss .words nutzen"
+        assert not hasattr(trans, "segments"), "LyricsTranscriptionResult hat kein .segments — UV3 muss .words nutzen"
 
 
 class TestLGEBuildSampleSaliency:
@@ -723,6 +748,7 @@ class TestLGEBuildSampleSaliency:
 
     def test_lge_29_fallback_returns_ones(self) -> None:
         from backend.core.lyrics_guided_enhancement import LyricsTranscriptionResult
+
         lge = _make_lge_no_onnx()
         result_obj = LyricsTranscriptionResult([], "de", 0.0, 1.0, fallback_used=True)
         sal = lge._build_sample_saliency(result_obj, SR, SR)
@@ -731,8 +757,10 @@ class TestLGEBuildSampleSaliency:
 
     def test_lge_30_fricative_boost_correct(self) -> None:
         from backend.core.lyrics_guided_enhancement import (
-            LyricsTranscriptionResult, WordTimestamp,
+            LyricsTranscriptionResult,
+            WordTimestamp,
         )
+
         lge = _make_lge_no_onnx()
         word = WordTimestamp("", 0.0, 0.5, 0.9, True, "fricative_stressed")
         result_obj = LyricsTranscriptionResult([word], "de", 0.9, 1.0, fallback_used=False)
@@ -742,8 +770,10 @@ class TestLGEBuildSampleSaliency:
 
     def test_lge_31_silence_boost_correct(self) -> None:
         from backend.core.lyrics_guided_enhancement import (
-            LyricsTranscriptionResult, WordTimestamp,
+            LyricsTranscriptionResult,
+            WordTimestamp,
         )
+
         lge = _make_lge_no_onnx()
         word = WordTimestamp("", 0.0, 1.0, 0.0, False, "silence")
         result_obj = LyricsTranscriptionResult([word], "de", 0.0, 1.0, fallback_used=False)
@@ -752,8 +782,10 @@ class TestLGEBuildSampleSaliency:
 
     def test_lge_32_output_clipped(self) -> None:
         from backend.core.lyrics_guided_enhancement import (
-            LyricsTranscriptionResult, WordTimestamp,
+            LyricsTranscriptionResult,
+            WordTimestamp,
         )
+
         lge = _make_lge_no_onnx()
         word = WordTimestamp("", 0.0, 1.0, 0.9, True, "fricative_stressed")
         result_obj = LyricsTranscriptionResult([word], "de", 0.9, 1.0, fallback_used=False)
@@ -763,8 +795,11 @@ class TestLGEBuildSampleSaliency:
 
     def test_lge_33_plosive_boost_correct(self) -> None:
         from backend.core.lyrics_guided_enhancement import (
-            LyricsTranscriptionResult, WordTimestamp, ContentAwareProcessor as _ICAP,
+            ContentAwareProcessor as _ICAP,
+            LyricsTranscriptionResult,
+            WordTimestamp,
         )
+
         lge = _make_lge_no_onnx()
         expected = _ICAP.SALIENCY_BOOST["plosive"]
         word = WordTimestamp("", 0.1, 0.2, 0.9, True, "plosive")
@@ -780,17 +815,133 @@ class TestLGELGESingleton:
 
     def test_lge_34_singleton_identity(self) -> None:
         from backend.core.lyrics_guided_enhancement import get_lyrics_guided_enhancement
+
         a = get_lyrics_guided_enhancement()
         b = get_lyrics_guided_enhancement()
         assert a is b, "LyricsGuidedEnhancement Singleton gebrochen"
 
     def test_lge_35_has_enhance_method(self) -> None:
         from backend.core.lyrics_guided_enhancement import get_lyrics_guided_enhancement
+
         lge = get_lyrics_guided_enhancement()
         assert callable(lge.enhance)
 
     def test_lge_36_has_get_timeline_method(self) -> None:
         from backend.core.lyrics_guided_enhancement import get_lyrics_guided_enhancement
+
         lge = get_lyrics_guided_enhancement()
         timeline = lge.get_timeline()
         assert timeline is not None
+
+
+class TestLGEPhonemeAlignmentIntegration:
+    """§2.36 wav2vec2 forced-alignment integration in LyricsGuidedEnhancement."""
+
+    def test_lge_37_align_phonemes_fallback_without_session(self) -> None:
+        from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement, WordTimestamp
+
+        lge = LyricsGuidedEnhancement.__new__(LyricsGuidedEnhancement)
+        lge._aligner_session = None
+
+        words = [
+            WordTimestamp("", 0.0, 0.2, 0.7, True, "vowel_stressed"),
+            WordTimestamp("", 0.2, 0.4, 0.6, False, "fricative_unstressed"),
+        ]
+        mono_16k = np.zeros(int(0.5 * 16_000), dtype=np.float32)
+
+        out = lge._align_phonemes(words, mono_16k, 16_000)
+        assert out is words or out == words
+
+    def test_lge_38_align_phonemes_refines_type_and_privacy(self) -> None:
+        from backend.core.lyrics_guided_enhancement import LyricsGuidedEnhancement, WordTimestamp
+
+        class _FakeAlignerSession:
+            def run(self, _outputs, _inputs):
+                n_frames = 40
+                vocab = 64
+                logits = np.zeros((1, n_frames, vocab), dtype=np.float32)
+                # word-1 frames (0..9): fricative range 21..35 dominant
+                logits[0, 0:10, 25] = 8.0
+                # word-2 frames (10..19): plosive range 36..50 dominant
+                logits[0, 10:20, 40] = 8.0
+                # word-3 frames (20..29): vowel range 4..20 dominant
+                logits[0, 20:30, 10] = 8.0
+                return [logits]
+
+        lge = LyricsGuidedEnhancement.__new__(LyricsGuidedEnhancement)
+        lge._aligner_session = _FakeAlignerSession()
+
+        words = [
+            WordTimestamp("", 0.00, 0.20, 0.7, True, "vowel_stressed"),
+            WordTimestamp("", 0.20, 0.40, 0.7, False, "vowel_unstressed"),
+            WordTimestamp("", 0.40, 0.60, 0.7, False, "vowel_unstressed"),
+        ]
+        mono_16k = np.ones(int(1.0 * 16_000), dtype=np.float32) * 0.1
+
+        out = lge._align_phonemes(words, mono_16k, 16_000)
+
+        assert len(out) == 3
+        assert out[0].phoneme_type == "fricative_stressed"
+        assert out[1].phoneme_type == "plosive"
+        assert out[2].phoneme_type in {"vowel_unstressed", "vowel_stressed"}
+        # Privacy invariant: no lyric text in output word field
+        assert all(w.word == "" for w in out)
+
+    def test_lge_39_transcribe_dsp_calls_align_hook(self, monkeypatch) -> None:
+        from backend.core.lyrics_guided_enhancement import (
+            ContentAwareProcessor as _InternalCAP,
+            LyricsGuidedEnhancement,
+            LyricsGuidedTimeline,
+        )
+
+        lge = LyricsGuidedEnhancement.__new__(LyricsGuidedEnhancement)
+        lge._cap = _InternalCAP()
+        lge._tl = LyricsGuidedTimeline()
+        lge._ort_session = None
+        lge._aligner_session = object()  # non-None to exercise hook path
+
+        called = {"n": 0}
+
+        def _fake_align(words, mono_16k, sr_16k=16_000):
+            called["n"] += 1
+            assert sr_16k == 16_000
+            assert mono_16k.ndim == 1
+            return words
+
+        monkeypatch.setattr(lge, "_align_phonemes", _fake_align)
+        mono = _make_audio(1.2)
+        result = lge._transcribe_dsp(mono, SR, dur=1.2)
+        assert called["n"] == 1
+        assert result is not None
+
+    def test_lge_40_transcribe_onnx_calls_align_hook(self, monkeypatch) -> None:
+        from backend.core.lyrics_guided_enhancement import (
+            ContentAwareProcessor as _InternalCAP,
+            LyricsGuidedEnhancement,
+            LyricsGuidedTimeline,
+        )
+
+        class _FakeWhisperSession:
+            def run(self, _outputs, _inputs):
+                # shape expected by _transcribe_onnx: (1, 1500, 384)
+                return [np.ones((1, 1500, 384), dtype=np.float32) * 0.05]
+
+        lge = LyricsGuidedEnhancement.__new__(LyricsGuidedEnhancement)
+        lge._cap = _InternalCAP()
+        lge._tl = LyricsGuidedTimeline()
+        lge._ort_session = _FakeWhisperSession()
+        lge._aligner_session = object()  # non-None to exercise hook path
+
+        called = {"n": 0}
+
+        def _fake_align(words, mono_16k, sr_16k=16_000):
+            called["n"] += 1
+            assert sr_16k == 16_000
+            assert mono_16k.ndim == 1
+            return words
+
+        monkeypatch.setattr(lge, "_align_phonemes", _fake_align)
+        mono = _make_audio(1.0)
+        result = lge._transcribe_onnx(mono, SR, dur=1.0)
+        assert called["n"] == 1
+        assert result is not None

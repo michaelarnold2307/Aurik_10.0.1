@@ -119,9 +119,26 @@ class SGMSEPlusPlugin:
                     self._ts_model.eval()
                     self._model_loaded = True
                     logger.info("✅ SGMSE+ TorchScript geladen (%s)", _TS_PATH.name)
+                    try:
+                        from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                        _reg_plm(
+                            "SGMSE+",
+                            size_gb=0.12,
+                            unload_fn=lambda s=self: (
+                                setattr(s, "_ts_model", None) or setattr(s, "_model_loaded", False)
+                            ),
+                        )
+                    except Exception:
+                        pass
                     return
             except Exception as exc:
                 logger.warning("SGMSE+ TorchScript nicht ladbar: %s — WPE-DSP-Fallback aktiv.", exc)
+                try:
+                    from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                    _rel("SGMSE+")
+                except Exception:
+                    pass
 
         logger.info(
             "SGMSE+ Modell nicht verfügbar (TorchScript: %s) — WPE-DSP-Fallback aktiv.",

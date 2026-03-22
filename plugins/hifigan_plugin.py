@@ -38,6 +38,7 @@ class HifiGanPlugin:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("HiFiGAN", size_gb=0.004):
                     logger.warning("HiFiGAN: ML-Budget erschöpft — Griffin-Lim-Fallback.")
                     return
@@ -48,8 +49,19 @@ class HifiGanPlugin:
             opts.inter_op_num_threads = 2
             self._session = ort.InferenceSession(path, sess_options=opts, providers=["CPUExecutionProvider"])
             logger.info("HiFi-GAN ONNX geladen: %s", path)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm("HiFiGAN", size_gb=0.004, unload_fn=lambda s=self: setattr(s, "_session", None))
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("HiFi-GAN Ladefehler: %s — Fallback.", exc)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("HiFiGAN")
+            except Exception:
+                pass
 
     def vocode(self, mel: np.ndarray, sr_out: int = 48000) -> np.ndarray:
         """mel[80, T] → waveform float32. sr_out=48000 entspricht Aurik-Pipeline-SR."""

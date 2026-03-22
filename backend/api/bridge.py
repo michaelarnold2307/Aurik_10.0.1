@@ -108,6 +108,17 @@ def get_aurik_denker_class() -> type:
     return AurikDenker
 
 
+def get_aurik_denker_instance():
+    """Gibt den thread-sicheren AurikDenker-Prozess-Singleton zurück (lazy, §2.2 Spec 08).
+
+    Primary production accessor for BatchProcessingThread.
+    Ensures Single-Orchestrator Ownership per process (No-Competing-Instances-Protokoll).
+    Use ``get_aurik_denker_class()`` only for testing / mocking scenarios.
+    """
+    from denker.aurik_denker import get_aurik_denker  # type: ignore[import]
+    return get_aurik_denker()
+
+
 def get_defect_scanner() -> type:
     """Gibt die ``DefectScanner``-Klasse zurück (lazy import)."""
     from backend.core.defect_scanner import DefectScanner  # type: ignore[import]
@@ -273,38 +284,37 @@ def export_guard(audio: np.ndarray) -> np.ndarray:
 def warmup_models_background() -> None:
     """Initialisiert häufig genutzte ML-Modelle im Hintergrund vor.
 
-    Wird 2 Sekunden nach App-Start als Daemon-Thread gestartet (§9.7.4).
-    Fehler werden nur geloggt — der Warmup ist optional.
+    Kanonische Warmup-Funktion (§9.7.4). Wird 2 Sekunden nach App-Start
+    als Daemon-Thread gestartet — aus ``ModernMainWindow.__init__`` via
+    ``QTimer.singleShot(2000, ...)``. Fehler werden nur geloggt, kein Absturz.
+
+    Plugin-Reihenfolge spiegelt §4.4-Priorisierung:
+    Tier-1-Primär-Plugins zuerst, Fallbacks danach.
     """
-    try:
-        logger.info("bridge: Warmup gestartet (DeepFilterNet, BEATs, CREPE) …")
-        # DeepFilterNet
+    import importlib
+    import time
+
+    time.sleep(2)  # App-Fenster soll sichtbar sein bevor Last beginnt
+    _plugins = [
+        # Tier-1 Primär-Plugins (§9.7.4 — Pflicht-Vorwärmen)
+        ("plugins.fcpe_plugin",                 "get_fcpe_plugin"),    # Pitch-Tracking Primär (§4.4)
+        ("plugins.beats_plugin",                "get_beats_plugin"),   # Audio-Tagging Primär
+        ("plugins.sgmse_plugin",                "get_sgmse_plugin"),   # Dereverb/Denoising Primär
+        ("plugins.silero_plugin",               "get_silero_vad"),     # VAD (~1 MB, ultraschnell)
+        ("backend.core.noise_reduction",        "get_noise_reducer"),  # DeepFilterNet v3.II Breitrauschen
+        # Fallback-Plugins (nach Bedarf)
+        ("plugins.panns_plugin",                "get_panns_plugin"),   # Audio-Tagging Fallback
+        ("plugins.crepe_plugin",                "get_crepe_plugin"),   # Pitch-Tracking Fallback
+        ("plugins.rmvpe_plugin",                "get_rmvpe_plugin"),   # Pitch-Tracking Backup
+    ]
+    logger.info("bridge: Warmup gestartet (%d Plugins) …", len(_plugins))
+    for _mod, _accessor in _plugins:
         try:
-            from backend.core.noise_reduction import get_noise_reducer  # type: ignore[import]
-            get_noise_reducer()
-            logger.debug("bridge: DeepFilterNet vorgeladen")
-        except Exception as e:
-            logger.debug("bridge: DeepFilterNet warmup übersprungen: %s", e)
-        # BEATs (Primär-Tagger) — PANNs als Fallback
-        try:
-            from plugins.beats_plugin import get_beats_plugin  # type: ignore[import]
-            get_beats_plugin()
-            logger.debug("bridge: BEATs vorgeladen")
-        except Exception as e:
-            logger.debug("bridge: BEATs warmup übersprungen, versuche PANNs: %s", e)
-            try:
-                from plugins.panns_plugin import get_panns_plugin  # type: ignore[import]
-                get_panns_plugin()
-                logger.debug("bridge: PANNs vorgeladen (BEATs-Fallback)")
-            except Exception as e2:
-                logger.debug("bridge: PANNs warmup übersprungen: %s", e2)
-        # CREPE (nur Session laden, kein Audio-Pass)
-        try:
-            from plugins.crepe_plugin import get_crepe_plugin  # type: ignore[import]
-            get_crepe_plugin()
-            logger.debug("bridge: CREPE vorgeladen")
-        except Exception as e:
-            logger.debug("bridge: CREPE warmup übersprungen: %s", e)
-        logger.info("bridge: Warmup abgeschlossen")
-    except Exception as exc:
-        logger.warning("bridge: Warmup fehlgeschlagen: %s", exc)
+            m = importlib.import_module(_mod)
+            fn = getattr(m, _accessor, None)
+            if fn is not None:
+                fn()
+                logger.debug("bridge: %s.%s vorgeladen", _mod.split(".")[-1], _accessor)
+        except Exception as _e:
+            logger.debug("bridge: %s.%s übersprungen: %s", _mod, _accessor, _e)
+    logger.info("bridge: Warmup abgeschlossen")

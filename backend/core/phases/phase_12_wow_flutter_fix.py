@@ -195,8 +195,39 @@ class WowFlutterFix(PhaseInterface):
                     f"Memory: {adaptive_resource_manager.get_memory_usage():.1f}%)"
                 )
 
-        # ML-Hybrid only if resources available and quality mode permits
-        use_ml_hybrid = ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "maximum"] and not use_lightweight
+        # Strategy routing v4.0 — Capstan-kompetitiv:
+        # maximum  → PolyphonicSpeedCurveEstimator (multi-F0 consensus, §2.12)
+        # balanced → HybridWowFlutter pYIN+FCPE/CREPE (ML-Hybrid)
+        # fast / quality / lightweight → pYIN DSP
+        _poly_applied = False
+
+        if quality_mode == "maximum" and not use_lightweight:
+            try:
+                from backend.core.hybrid.hybrid_wow_flutter import (  # noqa: PLC0415
+                    PolyphonicSpeedCurveEstimator,
+                )
+
+                _poly_est = PolyphonicSpeedCurveEstimator()
+                pitch_trajectory, confidence = _poly_est.estimate(mono, sample_rate)
+                _poly_applied = True
+                logger.info(
+                    "Phase 12 polyphoner Konsensus: T=%d Frames, material=%s",
+                    len(pitch_trajectory),
+                    material.value,
+                )
+            except Exception as _poly_exc:  # noqa: BLE001
+                logger.warning(
+                    "PolyphonicSpeedCurveEstimator fehlgeschlagen (%s) — ML-Hybrid-Fallback",
+                    _poly_exc,
+                )
+
+        # ML-Hybrid only if polyphonic path did not succeed and resources permit
+        use_ml_hybrid = (
+            not _poly_applied
+            and ML_HYBRID_AVAILABLE
+            and quality_mode in ["balanced", "maximum"]
+            and not use_lightweight
+        )
 
         if use_ml_hybrid:
             try:
@@ -204,7 +235,7 @@ class WowFlutterFix(PhaseInterface):
 
                 # Configure ML pitch detector strategy
                 if quality_mode == "maximum":
-                    strategy = PitchDetectionStrategy.HYBRID  # Full YIN + CREPE
+                    strategy = PitchDetectionStrategy.HYBRID  # Full YIN + CREPE (polyphonic failed)
                 else:  # balanced
                     strategy = PitchDetectionStrategy.ADAPTIVE  # Smart: YIN only if confident
 
@@ -237,8 +268,8 @@ class WowFlutterFix(PhaseInterface):
                 # Fall through to DSP path below
                 use_ml_hybrid = False
 
-        # DSP-Only (Fast-Modus oder ML-Fallback): pYIN
-        if not use_ml_hybrid:
+        # DSP-Only (Fast-Modus oder Fallback): pYIN
+        if not _poly_applied and not use_ml_hybrid:
             logger.info(f"Phase 12 pYIN DSP: material={material.value}")
             pitch_trajectory, confidence = self._estimate_pitch_yin(mono, sample_rate)
 
@@ -254,9 +285,14 @@ class WowFlutterFix(PhaseInterface):
         if not wow_flutter_detected:
             # No significant wow/flutter detected
             metadata = {
-                "algorithm": "hybrid_ml_pyin_crepe_v3" if use_ml_hybrid else "pyin_phase_vocoder",
-                "version": "3.0_ml_hybrid" if use_ml_hybrid else "3.0_pyin",
+                "algorithm": (
+                    "polyphonic_multi_f0_consensus_v1"
+                    if _poly_applied
+                    else "hybrid_ml_pyin_crepe_v3" if use_ml_hybrid else "pyin_phase_vocoder"
+                ),
+                "version": "4.0_polyphonic" if _poly_applied else "3.0_ml_hybrid" if use_ml_hybrid else "3.0_pyin",
                 "ml_hybrid": use_ml_hybrid,
+                "polyphonic": _poly_applied,
             }
 
             if use_ml_hybrid:
@@ -320,15 +356,19 @@ class WowFlutterFix(PhaseInterface):
         # Build metadata
         metadata = {
             "algorithm": (
-                "hybrid_ml_pyin_crepe_psola_v3"
-                if (use_ml_hybrid and vocals_conf >= 0.4)
+                "polyphonic_multi_f0_consensus_v1"
+                if _poly_applied
                 else (
-                    "hybrid_ml_pyin_crepe_v3"
-                    if use_ml_hybrid
-                    else "pyin_psola" if vocals_conf >= 0.4 else "pyin_phase_vocoder"
+                    "hybrid_ml_pyin_crepe_psola_v3"
+                    if (use_ml_hybrid and vocals_conf >= 0.4)
+                    else (
+                        "hybrid_ml_pyin_crepe_v3"
+                        if use_ml_hybrid
+                        else "pyin_psola" if vocals_conf >= 0.4 else "pyin_phase_vocoder"
+                    )
                 )
             ),
-            "version": "3.0_ml_hybrid" if use_ml_hybrid else "3.0_pyin",
+            "version": "4.0_polyphonic" if _poly_applied else "3.0_ml_hybrid" if use_ml_hybrid else "3.0_pyin",
             "ml_hybrid": use_ml_hybrid,
             "psola_active": vocals_conf >= 0.4,
             "panns_vocals_confidence": vocals_conf,

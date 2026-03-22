@@ -113,7 +113,7 @@ class BSRoFormerPlugin:
             ),
             "sota_upgrade": {
                 "name": "Mel-RoFormer",
-                "url": ("https://huggingface.co/KimberleyJSN/melbandroformer" "/resolve/main/melbandroformer.onnx"),
+                "url": ("https://huggingface.co/KimberleyJSN/melbandroformer/resolve/main/melbandroformer.onnx"),
                 "reference": "Chen et al. (2024) — Mel-Band RoFormer Music Source Separation",
                 "license": "MIT",
                 "sdr_gain_db": 0.6,
@@ -127,9 +127,9 @@ class BSRoFormerPlugin:
             # Spec: §4.4 Gesang-Isolierung (sota_upgrade via sota_upgrade-Feld)
             "sota_upgrade": {
                 "name": "BS-RoFormer",
-                "url": ("https://huggingface.co/BSRoFormer/bs_roformer" "/resolve/main/bs_roformer.onnx"),
+                "url": ("https://huggingface.co/BSRoFormer/bs_roformer/resolve/main/bs_roformer.onnx"),
                 "reference": (
-                    "Lu et al. (2023) — Music Source Separation with " "Band-Split RoPE Transformer (arXiv:2309.02612)"
+                    "Lu et al. (2023) — Music Source Separation with Band-Split RoPE Transformer (arXiv:2309.02612)"
                 ),
                 "license": "MIT",
                 "sdr_gain_db": 2.5,
@@ -156,7 +156,8 @@ class BSRoFormerPlugin:
         # ── ML-Budget-Check VOR dem Laden (§5.1 OOM-Schutz) ──────────────────
         _allocated = False
         try:
-            from backend.core.ml_memory_budget import try_allocate, release as _release  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release, try_allocate  # noqa: PLC0415
+
             if not try_allocate("MelBandRoformer", size_gb=0.90):
                 logger.warning("BSRoFormer: ML-Budget erschöpft — Fallback aktiv")
                 self._fallback_active = True
@@ -176,12 +177,23 @@ class BSRoFormerPlugin:
                     )
                     self._model_loaded = True
                     logger.info("🎵 MelBandRoformer: ONNX-Modell geladen (%s)", model_path)
+                    try:
+                        from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                        _reg_plm(
+                            "MelBandRoformer",
+                            size_gb=0.90,
+                            unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                        )
+                    except Exception:
+                        pass
                     return
             logger.info("MelBandRoformer: Kein ONNX-Modell gefunden — Fallback aktiv")
             self._fallback_active = True
             if _allocated:
                 try:
                     from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
                     _release("MelBandRoformer")
                 except ImportError:
                     pass
@@ -191,6 +203,7 @@ class BSRoFormerPlugin:
             if _allocated:
                 try:
                     from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
                     _release("MelBandRoformer")
                 except ImportError:
                     pass
@@ -200,6 +213,7 @@ class BSRoFormerPlugin:
             if _allocated:
                 try:
                     from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
                     _release("MelBandRoformer")
                 except ImportError:
                     pass
@@ -258,11 +272,11 @@ class BSRoFormerPlugin:
     # ------------------------------------------------------------------
     # MelBandRoformer ONNX-Konstanten (reverse-engineered, validated)
     # ------------------------------------------------------------------
-    _MBR_SR: int = 44100     # internal model sample-rate
-    _MBR_NFFT: int = 7914    # → 3958 frequency bins (n_fft//2 + 1)
-    _MBR_HOP: int = 441      # 10 ms per frame at 44100 Hz
-    _MBR_BANDS: int = 60     # mel-spaced subbands
-    _MBR_FDIM: int = 384     # feature_dim per band (real+imag, zero-padded)
+    _MBR_SR: int = 44100  # internal model sample-rate
+    _MBR_NFFT: int = 7914  # → 3958 frequency bins (n_fft//2 + 1)
+    _MBR_HOP: int = 441  # 10 ms per frame at 44100 Hz
+    _MBR_BANDS: int = 60  # mel-spaced subbands
+    _MBR_FDIM: int = 384  # feature_dim per band (real+imag, zero-padded)
 
     @staticmethod
     def _mbr_mel_band_boundaries() -> np.ndarray:
@@ -357,7 +371,7 @@ class BSRoFormerPlugin:
                 s = int(bin_pts[b])
                 e = int(max(bin_pts[b + 1], s + 1))
                 e = min(e, F)
-                band = Z[s:e, :]                         # [bins, T]
+                band = Z[s:e, :]  # [bins, T]
                 ri = np.concatenate([band.real, band.imag], axis=0).T  # [T, 2*bins]
                 fill = min(ri.shape[1], _FD)
                 X[0, :, b, :fill] = ri[:, :fill].astype(np.float32)
@@ -423,7 +437,7 @@ class BSRoFormerPlugin:
                 "🎵 MelBandRoformer ONNX: SDRi=%.1f dB | Stems=%s | Vocals-RMS=%.4f",
                 sdri,
                 list(stems_out.keys()),
-                float(np.sqrt(np.mean(vocals_48 ** 2))),
+                float(np.sqrt(np.mean(vocals_48**2))),
             )
             return StemSeparationResult(
                 stems=stems_out,

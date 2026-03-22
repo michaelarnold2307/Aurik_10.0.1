@@ -32,7 +32,12 @@ from .automated_augmentation import (
     RandAugment,
 )
 from .e2e_optimizer import DifferentiableCompressor, DifferentiableEQ, DifferentiableNoiseGate, E2EOptimizationFramework
-from .hyperparameter_optimizer import HyperparameterConfig, MaterialSpecificOptimizer, MultiMaterialOptimizer
+try:
+    from .hyperparameter_optimizer import HyperparameterConfig, MaterialSpecificOptimizer, MultiMaterialOptimizer
+except ImportError:  # optuna not installed
+    HyperparameterConfig = None  # type: ignore[assignment,misc]
+    MaterialSpecificOptimizer = None  # type: ignore[assignment,misc]
+    MultiMaterialOptimizer = None  # type: ignore[assignment,misc]
 from .multi_objective import NSGAII, Individual, ObjectiveFunction, create_audio_restoration_moo
 from .neural_architecture_search import AudioNASNetwork, DARTSCell, MixedOp, NASTrainer
 from .perceptual_loss import (
@@ -99,6 +104,31 @@ __all__ = [
     "RandAugment",
     "AutoAugment",
     "ConsistencyTraining",
+    # Balanced Optimization (9.x)
+    "BalancedAudioProcessor",
+    "AlgorithmicEfficiencyOptimizer",
+    "OptimizedFFT",
+    "SelectiveVocalEnhancer",
+    "VocalPresenceDetector",
+    "ConsonantPreserver",
+    "AdaptiveOversamplingProcessor",
+    "MultibandPhaseCoherenceEnhancer",
+    "PhaseCoherentBassProcessor",
+    "ResonancePreserver",
+    "GenreOptimizedParameters",
+    "OptimizedPresets",
+    "PerformanceProfiler",
+    "QualityValidator",
 ]
+
+# Balanced Optimization imports (9.x)
+from .balanced_processor import BalancedAudioProcessor  # noqa: E402
+from .priority1_efficiency import AlgorithmicEfficiencyOptimizer, OptimizedFFT  # noqa: E402
+from .priority2_vocals import SelectiveVocalEnhancer, VocalPresenceDetector, ConsonantPreserver  # noqa: E402
+from .priority3_oversampling import AdaptiveOversamplingProcessor  # noqa: E402
+from .priority4_phase import MultibandPhaseCoherenceEnhancer  # noqa: E402
+from .priority5_bass import PhaseCoherentBassProcessor, ResonancePreserver  # noqa: E402
+from .priority6_parameters import GenreOptimizedParameters, OptimizedPresets  # noqa: E402
+from .profiling import PerformanceProfiler, QualityValidator  # noqa: E402
 
 __version__ = "8.2.0"

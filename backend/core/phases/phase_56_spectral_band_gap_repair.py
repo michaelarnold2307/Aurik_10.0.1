@@ -317,10 +317,10 @@ def _spectral_flatness(mag: np.ndarray) -> float:
 
 def _pghi_phase_reconstruction(mag: np.ndarray, n_fft: int, hop: int) -> np.ndarray:
     """
-    Vereinfachtes PGHI (Phase Gradient Heap Integration, Perraudin 2013).
+    PGHI Phase Gradient Heap Integration (Perraudin et al. 2013).
 
-    Initialisiert Phase per Instantaneous Frequency Algorithmus.
-    Für vollständige PGHI-Implementierung würde griffin-lim erweitert.
+    Primary path: uses PGHIReconstructor from dsp/pghi.py (full algorithm).
+    Fallback: Instantaneous Frequency estimation if dsp/pghi not available.
 
     Args:
         mag: [n_bins × n_frames] float32
@@ -330,15 +330,38 @@ def _pghi_phase_reconstruction(mag: np.ndarray, n_fft: int, hop: int) -> np.ndar
     Returns:
         Korrigierte Phase [n_bins × n_frames] float32
     """
+    # Primary: PGHIReconstructor (dsp/pghi.py — vollständige Implementierung)
+    try:
+        from dsp.pghi import PghiReconstructor as _PGHIRec
+
+        _pghi_rec = _PGHIRec(sr=48000, win_size=n_fft, hop=hop)
+        # reconstruct() returns PghiResult with .audio field; we derive phase from STFT of audio
+        _result = _pghi_rec.reconstruct(magnitude=mag, win_size=n_fft, hop=hop)
+        # Extract phase from the reconstructed STFT (stored in PghiResult)
+        if hasattr(_result, "stft") and _result.stft is not None:
+            _phase_out = np.angle(_result.stft).astype(np.float32)
+        else:
+            # fallback: compute phase from reconstructed audio via STFT
+            import scipy.signal as _sps
+
+            _, _, _stft_r = _sps.stft(_result.audio, fs=48000, nperseg=n_fft, noverlap=n_fft - hop)
+            _phase_out = np.angle(_stft_r).astype(np.float32)
+        # Ensure shape matches input
+        if _phase_out.shape == mag.shape:
+            logger.debug("Phase 56: PGHI via PghiReconstructor (dsp/pghi.py) — n_fft=%d hop=%d", n_fft, hop)
+            return _phase_out
+        logger.debug("Phase 56: PGHI shape mismatch (%s vs %s), IF-Fallback", _phase_out.shape, mag.shape)
+    except Exception as _pghi_import_exc:
+        logger.debug("PghiReconstructor nicht verfügbar, IF-Fallback: %s", _pghi_import_exc)
+
+    # Fallback: Instantaneous Frequency estimation
     n_bins, n_frames = mag.shape
     freq_per_bin = 2.0 * np.pi / n_fft  # normiert
 
-    # Instantaneous Phase Schätzung
     phase = np.zeros_like(mag)
     phase[:, 0] = np.random.uniform(-np.pi, np.pi, size=n_bins)
 
     for t in range(1, n_frames):
-        # Phase-Gradient aus Magnitudengradienten
         d_mag_dt = mag[:, t] - mag[:, t - 1]
         phase[:, t] = phase[:, t - 1] + freq_per_bin * hop * np.arange(n_bins) + 0.01 * d_mag_dt
 

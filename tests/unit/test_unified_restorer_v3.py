@@ -9,10 +9,9 @@ NaN/Inf-Invariante, Shape-Korrektheit, Bounds und Edge-Cases.
 
 from __future__ import annotations
 
+from dataclasses import fields
 import math
 import types
-from dataclasses import fields
-from typing import Dict, List
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -20,14 +19,14 @@ import pytest
 
 np.random.seed(42)
 
+from backend.core.defect_scanner import DefectType, MaterialType
+from backend.core.performance_guard import DeploymentMode, QualityMode
 from backend.core.unified_restorer_v3 import (
     RestorationConfig,
     RestorationResult,
     UnifiedRestorerV3,
     get_restorer,
 )
-from backend.core.defect_scanner import DefectType, MaterialType
-from backend.core.performance_guard import DeploymentMode, QualityMode
 
 SR = 48000
 
@@ -410,7 +409,7 @@ class TestPhaseRegressionLog:
 
     def test_42_phase_regression_log_is_dict_in_metadata(self):
         """RestorationResult.metadata muss 'phase_regression_log' als dict enthalten."""
-        import types
+
         restorer = UnifiedRestorerV3()
         audio = _sine(secs=0.5)
         # Minimales RestorationResult mit phase_regression_log in metadata
@@ -439,13 +438,9 @@ class TestPhaseRegressionLog:
         defect_mock = _make_mock_defect_result()
 
         _mat = MaterialType.CD_DIGITAL if hasattr(MaterialType, "CD_DIGITAL") else list(MaterialType)[0]
-        restorer._execute_pipeline(
-            audio, SR, _mat, defect_mock, selected_phases=[]
-        )
+        restorer._execute_pipeline(audio, SR, _mat, defect_mock, selected_phases=[])
         for phase_id, delta in restorer._phase_regression_log.items():
-            assert math.isfinite(delta), (
-                f"phase_regression_log['{phase_id}'] = {delta} ist nicht finite"
-            )
+            assert math.isfinite(delta), f"phase_regression_log['{phase_id}'] = {delta} ist nicht finite"
 
 
 # ---------------------------------------------------------------------------
@@ -505,8 +500,9 @@ class TestFailReasonsMetadata:
     def _make_minimal_result(self, fail_reasons=None):
         """Build a RestorationResult with controlled fail_reasons in metadata."""
         import numpy as np
-        from backend.core.unified_restorer_v3 import RestorationResult, RestorationConfig
-        from backend.core.defect_scanner import MaterialType, DefectType
+
+        from backend.core.defect_scanner import MaterialType
+        from backend.core.unified_restorer_v3 import RestorationConfig, RestorationResult
 
         return RestorationResult(
             audio=np.zeros(4800, dtype=np.float32),
@@ -565,7 +561,9 @@ class TestFailReasonsMetadata:
 
     def test_50_fail_reasons_is_list_not_mutable_default(self):
         """Two separate RestorationResult instances must not share the same fail_reasons list."""
-        result_a = self._make_minimal_result(fail_reasons=[{"component": "X", "error_code": "Y", "exc_type": "E", "exc_msg": "m"}])
+        result_a = self._make_minimal_result(
+            fail_reasons=[{"component": "X", "error_code": "Y", "exc_type": "E", "exc_msg": "m"}]
+        )
         result_b = self._make_minimal_result(fail_reasons=[])
         # Modifying b must not affect a
         result_b.metadata["fail_reasons"].append({"component": "Z", "error_code": "W", "exc_type": "T", "exc_msg": "n"})
@@ -579,8 +577,163 @@ class TestFailReasonsMetadata:
         }
         entries = [
             {"component": "PerceptualQualityScorer", "error_code": "PQS_UNAVAILABLE", "exc_type": "E", "exc_msg": ""},
-            {"component": "MusicalGoalsChecker", "error_code": "MUSICAL_GOALS_UNAVAILABLE", "exc_type": "E", "exc_msg": ""},
+            {
+                "component": "MusicalGoalsChecker",
+                "error_code": "MUSICAL_GOALS_UNAVAILABLE",
+                "exc_type": "E",
+                "exc_msg": "",
+            },
         ]
         result = self._make_minimal_result(fail_reasons=entries)
         for r in result.metadata["fail_reasons"]:
             assert r["error_code"] in KNOWN_CODES, f"Unknown error_code: {r['error_code']}"
+
+
+# ---------------------------------------------------------------------------
+# Klasse: quality_estimate Formel-Invarianten (Spec §8.1.1)
+# VERBOTEN: quality_estimate * 1.15 als fixer Bonus-Faktor
+# PFLICHT:  0.40*(1-sev) + 0.60*(mos-1)/4, dann clamp [0,1]
+# ---------------------------------------------------------------------------
+
+
+class TestQualityEstimateFormula:
+    """Normative tests for _estimate_quality() formula spec §8.1.1.
+
+    Ensures:
+    - Formula is 0.40*(1-sev) + 0.60*(mos-1)/4, clamped to [0,1]
+    - No 1.15 bonus factor applied anywhere
+    - Edge cases: perfect signal (sev=0, mos=5) → 1.0
+    - Edge case: fully defective (sev=1, mos=1) → 0.0
+    """
+
+    def _build_restorer(self) -> UnifiedRestorerV3:
+        return UnifiedRestorerV3(RestorationConfig())
+
+    def test_55_formula_perfect_signal(self):
+        """sev=0, mos=5 → 0.40*1 + 0.60*1 = 1.0."""
+        restorer = self._build_restorer()
+        mock_def = _make_mock_defect_result()
+        mock_def.get_total_severity.return_value = 0.0
+
+        with patch("backend.core.unified_restorer_v3.UnifiedRestorerV3._estimate_quality") as _m:
+            _m.side_effect = lambda *a, **kw: UnifiedRestorerV3._estimate_quality(restorer, *a, **kw)
+
+        # Call directly — bypass mock to test real formula
+        with patch(
+            "backend.core.perceptual_quality_scorer.score_audio_absolute",
+        ) as pqs_mock:
+            pqs_result = MagicMock()
+            pqs_result.pqs_mos = 5.0
+            pqs_mock.return_value = pqs_result
+            est = restorer._estimate_quality(mock_def, None, [], _sine(0.5), 48000)
+
+        assert abs(est - 1.0) < 1e-4, f"Expected ~1.0, got {est}"
+
+    def test_56_formula_fully_defective(self):
+        """sev=1, mos=1 → 0.40*0 + 0.60*0 = 0.0."""
+        restorer = self._build_restorer()
+        mock_def = _make_mock_defect_result()
+        mock_def.get_total_severity.return_value = 1.0
+
+        with patch(
+            "backend.core.perceptual_quality_scorer.score_audio_absolute",
+        ) as pqs_mock:
+            pqs_result = MagicMock()
+            pqs_result.pqs_mos = 1.0
+            pqs_mock.return_value = pqs_result
+            est = restorer._estimate_quality(mock_def, None, [], _sine(0.5), 48000)
+
+        assert abs(est - 0.0) < 1e-4, f"Expected ~0.0, got {est}"
+
+    def test_57_formula_midpoint(self):
+        """sev=0.5, mos=3.0 → 0.40*0.5 + 0.60*0.5 = 0.5."""
+        restorer = self._build_restorer()
+        mock_def = _make_mock_defect_result()
+        mock_def.get_total_severity.return_value = 0.5
+
+        with patch(
+            "backend.core.perceptual_quality_scorer.score_audio_absolute",
+        ) as pqs_mock:
+            pqs_result = MagicMock()
+            pqs_result.pqs_mos = 3.0
+            pqs_mock.return_value = pqs_result
+            est = restorer._estimate_quality(mock_def, None, [], _sine(0.5), 48000)
+
+        expected = 0.40 * 0.5 + 0.60 * (3.0 - 1.0) / 4.0  # = 0.5
+        assert abs(est - expected) < 1e-4, f"Expected {expected:.4f}, got {est}"
+
+    def test_58_no_1_15_bonus_factor(self):
+        """Regression guard: quality_estimate must never exceed formula result by >0.01.
+
+        Spec VERBOTEN: quality_estimate * 1.15 als fixer Bonus-Faktor.
+        """
+        restorer = self._build_restorer()
+        mock_def = _make_mock_defect_result()
+        mock_def.get_total_severity.return_value = 0.4
+
+        with patch(
+            "backend.core.perceptual_quality_scorer.score_audio_absolute",
+        ) as pqs_mock:
+            pqs_result = MagicMock()
+            pqs_result.pqs_mos = 3.5
+            pqs_mock.return_value = pqs_result
+            est = restorer._estimate_quality(mock_def, None, [], _sine(0.5), 48000)
+
+        expected = 0.40 * 0.6 + 0.60 * (3.5 - 1.0) / 4.0  # = 0.615
+        # With 1.15-factor: 0.615 * 1.15 = 0.707 — we must NOT see that
+        assert abs(est - expected) < 0.01, (
+            f"quality_estimate={est:.4f} deviates from spec formula {expected:.4f} by "
+            f"{abs(est - expected):.4f} — possible 1.15-bonus or other forbidden factor."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Klasse 12: RestorationResult — neue Spec-Felder (§8.2 / §2.16 / §2.29)
+# ---------------------------------------------------------------------------
+
+
+class TestRestorationResultSpecFields:
+    """Prüft dass §8.2/§2.16/§2.29 Felder im Dataclass existieren und korrekte Defaults haben."""
+
+    def test_59_emotional_arc_field_exists_and_defaults_none(self):
+        """§8.2: RestorationResult.emotional_arc muss als Optional existieren (default None)."""
+        result = _make_restoration_result(_sine(secs=0.5))
+        assert hasattr(result, "emotional_arc"), "RestorationResult fehlt Feld 'emotional_arc' (§8.2)"
+        assert result.emotional_arc is None
+
+    def test_60_temporal_coherence_field_exists_and_defaults_none(self):
+        """§2.16: RestorationResult.temporal_coherence muss als Optional existieren (default None)."""
+        result = _make_restoration_result(_sine(secs=0.5))
+        assert hasattr(result, "temporal_coherence"), "RestorationResult fehlt Feld 'temporal_coherence' (§2.16)"
+        assert result.temporal_coherence is None
+
+    def test_61_phase_gate_log_field_exists_and_defaults_none(self):
+        """§2.29: RestorationResult.phase_gate_log muss als Optional[List[str]] existieren (default None)."""
+        result = _make_restoration_result(_sine(secs=0.5))
+        assert hasattr(result, "phase_gate_log"), "RestorationResult fehlt Feld 'phase_gate_log' (§2.29)"
+        # Default ist None — wird erst nach restore() gesetzt
+        assert result.phase_gate_log is None
+
+    def test_62_phase_gate_log_accepts_list_of_strings(self):
+        """phase_gate_log darf nach Konstruktion als Liste gesetzt werden."""
+        result = _make_restoration_result(_sine(secs=0.5))
+        result.phase_gate_log = ["phase_03_denoise", "phase_20_reverb_reduction"]
+        assert isinstance(result.phase_gate_log, list)
+        assert all(isinstance(s, str) for s in result.phase_gate_log)
+
+    def test_63_emotional_arc_accepts_arbitrary_value(self):
+        """emotional_arc ist Optional[Any] — darf beliebiges Objekt aufnehmen."""
+        result = _make_restoration_result(_sine(secs=0.5))
+        import types as _t
+
+        dummy_arc = _t.SimpleNamespace(arc_preserved=True, arousal_pearson=0.92, valence_pearson=0.88)
+        result.emotional_arc = dummy_arc
+        assert result.emotional_arc.arc_preserved is True
+        assert result.emotional_arc.arousal_pearson == pytest.approx(0.92)
+
+    def test_64_all_three_new_fields_in_dataclass_fields(self):
+        """Alle drei neuen Felder müssen als @dataclass-Felder deklariert sein."""
+        f_names = {f.name for f in fields(RestorationResult)}
+        assert "emotional_arc" in f_names, "emotional_arc fehlt als dataclass-Feld"
+        assert "temporal_coherence" in f_names, "temporal_coherence fehlt als dataclass-Feld"
+        assert "phase_gate_log" in f_names, "phase_gate_log fehlt als dataclass-Feld"

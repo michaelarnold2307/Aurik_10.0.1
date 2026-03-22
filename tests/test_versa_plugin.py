@@ -201,3 +201,26 @@ def test_mos_normalization_to_0_1():
     score_01 = float(np.clip((result.mos - 1.0) / 4.0, 0.0, 1.0))
     assert 0.0 <= score_01 <= 1.0
     assert math.isfinite(score_01)
+
+
+def test_singmos_prefers_batched_input_shape():
+    """SingMOS path should pass a batched [B, T] tensor if backend requires it."""
+    from plugins.versa_plugin import VersaPlugin  # noqa: PLC0415
+
+    plugin = VersaPlugin()
+    plugin._model_loaded = True
+    plugin._predictor_dict = {}
+    plugin._predictor_fs = {}
+
+    def _fake_metric(x, sr, _pred, _fs):
+        assert sr == 16000
+        assert hasattr(x, "ndim")
+        assert x.ndim == 2
+        return {"singmos_pro": 4.2}
+
+    plugin._pseudo_mos_metric = _fake_metric
+
+    result = plugin._score_singmos_pro(AUDIO_SINE, SR)
+    assert math.isfinite(result.mos)
+    assert result.model_used == "singmos_pro"
+    assert result.mos >= 4.0

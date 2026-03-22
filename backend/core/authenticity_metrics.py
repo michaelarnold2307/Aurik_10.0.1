@@ -191,8 +191,11 @@ class BreathDetector:
                     energy = np.sqrt(np.mean(breath_segment**2))
 
                     # Confidence: based on spectral characteristics
-                    # Breaths have high spectral flatness (noise-like)
-                    stft = np.abs(librosa.stft(breath_segment))
+                    # Breaths have high spectral flatness (noise-like).
+                    # n_fft must not exceed the segment length — librosa warns and pads
+                    # internally when n_fft > len(signal), which produces misleading results.
+                    _n_fft_breath = min(2048, max(32, int(2 ** np.floor(np.log2(len(breath_segment))))))
+                    stft = np.abs(librosa.stft(breath_segment, n_fft=_n_fft_breath))
                     spectral_flatness = np.mean(librosa.feature.spectral_flatness(S=stft))
                     confidence = float(np.clip(spectral_flatness, 0, 1))
 

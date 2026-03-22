@@ -71,6 +71,7 @@ class DemucsV4Plugin:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("DemucsV4", size_gb=0.12):
                     logger.warning("DemucsV4: ML-Budget erschöpft — HPSS-Fallback.")
                     return
@@ -83,8 +84,19 @@ class DemucsV4Plugin:
                 self._model_path, sess_options=opts, providers=["CPUExecutionProvider"]
             )
             logger.info("Demucs htdemucs_6s ONNX geladen: %s", self._model_path)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm("DemucsV4", size_gb=0.12, unload_fn=lambda s=self: setattr(s, "_session", None))
+            except Exception:
+                pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("Demucs ONNX-Ladefehler: %s — DSP-Fallback aktiv.", exc)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("DemucsV4")
+            except Exception:
+                pass
 
     # ── Public API ───────────────────────────────────────────────────────────
 

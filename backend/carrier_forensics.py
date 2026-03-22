@@ -35,7 +35,27 @@ from backend.core.medium_classifier import (  # noqa: F401, E402
 # Aurik-6.0-kompatibler Alias
 CarrierForensics = MediumClassifier
 
+def analyze_carrier_forensics(mono: "np.ndarray", sr: int) -> dict:
+    """Legacy compatibility shim (Aurik 6.0 → 9.x).
+
+    Delegates to ``classify_medium`` and returns a dict compatible with the
+    Aurik 6.0 ``analyze_carrier_forensics`` signature.
+
+    Returns:
+        dict with keys ``carrier_forensic`` (str), ``score`` (float),
+        ``features`` (dict).
+    """
+    import numpy as _np  # noqa: PLC0415
+    result = classify_medium(_np.asarray(mono), sr)
+    return {
+        "carrier_forensic": str(result.material_type.value if hasattr(result.material_type, "value") else result.material_type),
+        "score": float(result.confidence),
+        "features": {},
+    }
+
+
 __all__ = [
+    "analyze_carrier_forensics",
     "CarrierForensics",
     "MediumClassifier",
     "ClassificationResult",

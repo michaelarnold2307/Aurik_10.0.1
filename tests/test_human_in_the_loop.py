@@ -4,9 +4,9 @@ Integrationstest für Human-in-the-Loop: Experten- und Community-Feedback, Aggre
 
 import unittest
 
-from community_rating_platform import CommunityRatingPlatform
-from expert_feedback_system import ExpertFeedbackSystem
-from feedback_integrator import FeedbackIntegrator
+from backend.core.community_rating_platform import CommunityRatingPlatform
+from backend.core.expert_feedback_system import ExpertFeedbackSystem
+from backend.core.feedback_integrator import FeedbackIntegrator
 
 
 class TestHumanInTheLoop(unittest.TestCase):

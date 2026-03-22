@@ -198,6 +198,24 @@ class PhysicalMediumChainModel:
             "wire_recording": MaterialType.WIRE_RECORDING,
         }
 
+        # Normalisierung: MediumDetectionResult (Dataclass) oder dict erlaubt.
+        # MediumDetectionResult.as_dict() liefert {"transfer_chain": [...], "primary_material": ...,
+        # "chain_label": ...} — kein "detected_media"-Key, daher separat behandeln.
+        if not isinstance(transfer_chain_raw, dict):
+            _chain_list = getattr(transfer_chain_raw, "transfer_chain", []) or []
+            _primary = getattr(transfer_chain_raw, "primary_material", "digital")
+            _label = getattr(transfer_chain_raw, "chain_label",
+                             " → ".join(_chain_list) if _chain_list else "")
+            transfer_chain_raw = {
+                "detected_media": [(m, 1.0) for m in _chain_list],
+                "type": _primary,
+                "chain": _label,
+            }
+        # as_dict()-Ergebnis hat "transfer_chain" statt "detected_media"
+        if "detected_media" not in transfer_chain_raw and "transfer_chain" in transfer_chain_raw:
+            _chain_list = transfer_chain_raw["transfer_chain"] or []
+            transfer_chain_raw = dict(transfer_chain_raw)
+            transfer_chain_raw["detected_media"] = [(m, 1.0) for m in _chain_list]
         detected_media = transfer_chain_raw.get("detected_media", [])
         if not detected_media:
             primary_type_str = transfer_chain_raw.get("type", "digital")
@@ -225,7 +243,7 @@ class PhysicalMediumChainModel:
 
         primary_material_str = detected_media[0][0] if detected_media else "digital"
         primary_material = _FORENSIC_TO_MATERIAL.get(primary_material_str, MaterialType.UNKNOWN)
-        chain_label = transfer_chain_raw.get("chain", " → ".join(m for m, _ in detected_media))
+        chain_label = transfer_chain_raw.get("chain", " → ".join(m for m, _ in detected_media)) if isinstance(transfer_chain_raw, dict) else " → ".join(m for m, _ in detected_media)
         logger.info(
             "Mehrstufige Ketteninversion [%s]: %d Korrekturen, Kette=%s",
             primary_material_str,

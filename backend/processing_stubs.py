@@ -93,11 +93,11 @@ def get_stem_processing_chain(stem: str) -> list:
     Liste zurückgegeben (Passthrough).
     """
     try:
-        from plugins.crepe_plugin import CrepePlugin
+        from plugins.fcpe_plugin import FcpePlugin  # §4.4 Primär-Pitch-Tracker
         from plugins.deepfilternet_v3_ii_plugin import DeepFilterNetV3IIPlugin
 
         chains: dict[str, list] = {
-            "vocals": [DeepFilterNetV3IIPlugin(), CrepePlugin()],
+            "vocals": [DeepFilterNetV3IIPlugin(), FcpePlugin()],  # FCPE primär §4.4
             "drums": [DeepFilterNetV3IIPlugin()],
             "bass": [DeepFilterNetV3IIPlugin()],
             "other": [DeepFilterNetV3IIPlugin()],

@@ -16,9 +16,10 @@ ALGORITHMUS:
 Pro Phase (wrap_phase()):
     1. 5-s-Stichprobe aus Mitte des Audios
     2. Phase ausführen: audio_after = phase(audio_before)
-    3. Schnell-Check (6 Ziele, ≤ 200 ms):
-       Brillanz, Wärme, Groove, TonalCenter,
-       Natürlichkeit (MFCC-Proxy), Timbre-Authentizität
+    3. Schnell-Check (14 Ziele, ≤ 200 ms, DSP-only):
+       Brillanz, Wärme, Groove, TonalCenter, Natürlichkeit (MFCC-Proxy),
+       Timbre-Authentizität, Bass-Kraft, Authentizität, Emotionalität,
+       Transparenz, Spatial Depth, Mikro-Dynamik, Separation-Treue, Artikulation
     4. Δ = score_after − score_before für jedes Ziel
        Falls Δ < −REGRESSION_THRESHOLD (adaptiv je nach Restorability):
          Retry-1: Phase mit strength × 0.65
@@ -34,7 +35,7 @@ REGRESSION_THRESHOLD = 0.025  (adaptiv: 0.012 / 0.040 / 0.060 je Restorability)
 SAMPLE_DURATION_S    = 5.0
 MAX_RETRIES          = 5  (v9.15-B3: 5 Retries mit sanftem Stärkegradienten)
 
-OVERHEAD: max. 56 × 200 ms = 11.2 s pro Verarbeitungsdurchlauf
+OVERHEAD: max. 56 × 200 ms = 11.2 s pro Verarbeitungsdurchlauf (alle 14 Ziele DSP-only)
 DEAKTIVIERUNG: --no-phase-gate (Debugging/Benchmarking)
 
 WICHTIG: MERT wird im Schnell-Check NICHT verwendet (zu langsam: 800 ms)
@@ -125,14 +126,25 @@ def _get_adaptive_threshold(restorability_score: float) -> float:
     return REGRESSION_THRESHOLD_POOR
 
 
-# Schnell-Subset der 14 Musical Goals (ohne MERT-abhängige Ziele)
+# Alle 14 Musical Goals werden per-Phase geprüft — 6 bereits vorhanden,
+# 8 neu ergänzt als schnelle DSP-Proxies (kein ML, ≤ 200 ms gesamt §2.29).
+# "natuerlichkeit_mfcc_proxy" ist der Per-Phase-Alias für "natuerlichkeit".
 FAST_GOALS_SUBSET: list[str] = [
     "brillanz",
     "waerme",
     "groove",
     "tonal_center",
-    "natuerlichkeit_mfcc_proxy",
+    "natuerlichkeit_mfcc_proxy",  # Proxy-Key für natuerlichkeit (§2.29 DSP-only)
     "timbre_authentizitaet",
+    # 8 neu (DSP-Proxies, v9.10.57):
+    "bass_kraft",
+    "authentizitaet",
+    "emotionalitaet",
+    "transparenz",
+    "spatial_depth",
+    "micro_dynamics",
+    "separation_fidelity",
+    "artikulation",
 ]
 
 
@@ -186,9 +198,10 @@ def get_phase_gate() -> "PerPhaseMusicalGoalsGate":
 
 def _measure_quick(audio: np.ndarray, sr: int) -> Dict[str, float]:
     """
-    Misst 6 Musical Goals auf einer 5-s-Stichprobe in ≤ 200 ms.
+    Misst alle 14 Musical Goals auf einer 5-s-Stichprobe in ≤ 200 ms.
 
-    Alle Messungen sind DSP-only (kein MERT, kein CREPE).
+    6 Ziele bereits vorhanden, 8 als DSP-Proxy ergänzt (v9.10.57).
+    Alle Messungen sind DSP-only (kein MERT, kein CREPE, kein NMF).
     NaN-sicher: fehlerhafte Einzelmessungen werden auf 0.5 (neutral) gesetzt.
 
     Args:
@@ -196,7 +209,7 @@ def _measure_quick(audio: np.ndarray, sr: int) -> Dict[str, float]:
         sr: 48000 Hz
 
     Returns:
-        Dict mit 6 Scores ∈ [0, 1]
+        Dict mit 14 Scores ∈ [0, 1]
     """
     mono = audio[:, 0] if audio.ndim == 2 else audio
     mono = np.nan_to_num(mono, nan=0.0).astype(np.float32)
@@ -293,6 +306,143 @@ def _measure_quick(audio: np.ndarray, sr: int) -> Dict[str, float]:
             scores["timbre_authentizitaet"] = 0.5
     except Exception:
         scores["timbre_authentizitaet"] = 0.5
+
+    # ── Bass-Kraft (Bassenergie 20–250 Hz) ─────────────────────────────
+    try:
+        bass_energy = float(np.mean(fft_mag[(freqs >= 20) & (freqs <= 250)] ** 2))
+        # Normierung: typische Bassenergie ~2% des Spektrums → 0.02 = Score 1.0
+        scores["bass_kraft"] = float(np.clip(bass_energy / (tot_energy * 0.02 + 1e-12), 0.0, 1.0))
+    except Exception:
+        scores["bass_kraft"] = 0.5
+
+    # ── Authentizität (Spektrale Konsistenz-Proxy, referenzfrei) ───────
+    try:
+        # Proxy: Gleichmäßigkeit der Spektralhüllkurve (glatte Hülle = authentisches Signal)
+        # Stark deformierte Spektren (Codec-Artefakte, Phasenfehler) zeigen hohe Varianz
+        log_mag = np.log(fft_mag + 1e-12)
+        # Glättung über 50 Bins
+        smooth_len = min(50, len(log_mag) // 4)
+        if smooth_len > 1:
+            smoothed = np.convolve(log_mag, np.ones(smooth_len) / smooth_len, mode="valid")
+            roughness = float(np.std(log_mag[smooth_len // 2 : smooth_len // 2 + len(smoothed)] - smoothed))
+            # Niedriger Roughness-Wert → glatte Hülle → hohe Authentizität
+            scores["authentizitaet"] = float(np.clip(1.0 - roughness / 3.0, 0.0, 1.0))
+        else:
+            scores["authentizitaet"] = 0.5
+    except Exception:
+        scores["authentizitaet"] = 0.5
+
+    # ── Emotionalität (Crest-Factor + RMS-Varianz) ─────────────────────
+    try:
+        rms_val = float(np.sqrt(np.mean(mono**2) + 1e-12))
+        peak_val = float(np.max(np.abs(mono)))
+        crest_db = 20.0 * math.log10(peak_val / (rms_val + 1e-12) + 1e-12)
+        # 2–14 dB Crestfaktor ist gesunder Dynamikbereich
+        crest_score = float(np.clip((crest_db - 2.0) / 12.0, 0.0, 1.0))
+        # RMS-Varianz über 10ms-Frames (Ausdruck)
+        hop_e = max(1, sr // 100)
+        rms_frames = np.array([float(np.sqrt(np.mean(mono[i : i + hop_e] ** 2) + 1e-12))
+                                for i in range(0, len(mono) - hop_e, hop_e)])
+        variance_score = float(np.clip(np.var(rms_frames) * 1000.0, 0.0, 1.0)) if len(rms_frames) > 2 else 0.5
+        scores["emotionalitaet"] = float(np.clip(0.5 * crest_score + 0.5 * variance_score, 0.0, 1.0))
+    except Exception:
+        scores["emotionalitaet"] = 0.5
+
+    # ── Transparenz (Spektrale Rolloff + Energie-Balance) ──────────────
+    try:
+        # 75%-Rolloff: Frequenz unterhalb derer 75% der Energie konzentriert ist
+        cumsum = np.cumsum(fft_mag**2)
+        total_e = cumsum[-1] + 1e-12
+        rolloff_idx = int(np.searchsorted(cumsum, 0.75 * total_e))
+        rolloff_hz = float(freqs[min(rolloff_idx, len(freqs) - 1)])
+        # 5500 Hz = 1.0 (gut gemastertes Material), 1500 Hz = 0.0
+        rolloff_score = float(np.clip((rolloff_hz - 1500.0) / 4000.0, 0.0, 1.0))
+        # Energie-Balance low/mid/high: gleichmäßig = transparent
+        e_low = float(np.mean(fft_mag[freqs < 500] ** 2) + 1e-12)
+        e_mid = float(np.mean(fft_mag[(freqs >= 500) & (freqs < 2000)] ** 2) + 1e-12)
+        e_high = float(np.mean(fft_mag[freqs >= 2000] ** 2) + 1e-12)
+        e_total = e_low + e_mid + e_high
+        balance_std = float(np.std([e_low / e_total, e_mid / e_total, e_high / e_total]))
+        balance_score = float(np.clip(1.0 - balance_std * 3.0, 0.0, 1.0))
+        scores["transparenz"] = float(np.clip(0.6 * rolloff_score + 0.4 * balance_score, 0.0, 1.0))
+    except Exception:
+        scores["transparenz"] = 0.5
+
+    # ── Spatial Depth (M/S-Korrelation bei Stereo, 0.5 bei Mono) ──────
+    try:
+        if audio.ndim == 2 and audio.shape[1] >= 2:
+            left = audio[:, 0].astype(np.float32)
+            right = audio[:, 1].astype(np.float32)
+            mid = (left + right) * 0.5
+            side = (left - right) * 0.5
+            mid_e = float(np.mean(mid**2) + 1e-12)
+            side_e = float(np.mean(side**2) + 1e-12)
+            # Hohe Side-Energie = breites Stereo-Bild = hohe Räumlichkeit
+            # Normierung: S/M-Ratio ≥ 0.5 = sehr breites Stereo → Score 1.0
+            stereo_ratio = side_e / (mid_e + side_e)
+            scores["spatial_depth"] = float(np.clip(stereo_ratio * 2.0, 0.0, 1.0))
+        else:
+            scores["spatial_depth"] = 0.5  # Mono: neutral (GoalApplicabilityFilter entscheidet)
+    except Exception:
+        scores["spatial_depth"] = 0.5
+
+    # ── Mikro-Dynamik (LUFS-Profil-Korrelation 400ms Proxy) ──────────
+    try:
+        # Proxy: RMS-Varianz über 400ms-Fenster (äquivalent zu LUFS-Profil-Korrelation)
+        win_400ms = max(1, int(sr * 0.4))
+        hop_400ms = win_400ms // 4
+        rms_400 = np.array([float(np.sqrt(np.mean(mono[i : i + win_400ms] ** 2) + 1e-12))
+                             for i in range(0, len(mono) - win_400ms, hop_400ms)])
+        if len(rms_400) > 2:
+            # Gleichmäßige Variation über 400ms-Fenster = gute Mikro-Dynamik
+            # (weder totales Limiting noch extreme Spitzen)
+            db_profile = 20.0 * np.log10(rms_400 + 1e-12)
+            db_range = float(np.max(db_profile) - np.min(db_profile))
+            # Gesunder Bereich: 3–18 dB Variation
+            scores["micro_dynamics"] = float(np.clip((db_range - 1.0) / 17.0, 0.0, 1.0))
+        else:
+            scores["micro_dynamics"] = 0.5
+    except Exception:
+        scores["micro_dynamics"] = 0.5
+
+    # ── Separation-Treue (Spektrale Tonalität als NMF-Proxy) ──────────
+    try:
+        # Proxy: Spektrale Flachheit (niedrig = tonal = gut separierbar)
+        # Rauschen hat hohe Flachheit → schwer zu trennen → niedrige Separation-Treue
+        # Tonales Signal: Flachheit ~ 0.01–0.05 → Score nahe 1.0
+        # Rauschen: Flachheit ~ 0.3–1.0 → Score nahe 0.0
+        eps = 1e-12
+        # Geometrisches Mittel / arithmetisches Mittel auf Leistungsspektrum
+        power = fft_mag**2 + eps
+        geom_mean = float(np.exp(np.mean(np.log(power))))
+        arith_mean = float(np.mean(power))
+        flatness = float(np.clip(geom_mean / (arith_mean + eps), 0.0, 1.0))
+        # Niedriger Flatness → hohe Tonalität → gute Separierbarkeit
+        scores["separation_fidelity"] = float(np.clip(1.0 - flatness * 2.5, 0.0, 1.0))
+    except Exception:
+        scores["separation_fidelity"] = 0.5
+
+    # ── Artikulation (Onset-Schärfe: Transient-Proxy) ─────────────────
+    try:
+        # Proxy: Varianz der Energiehüllkurve-Ableitungen (scharfe Transienten = hohe Varianz)
+        hop_a = max(1, sr // 200)  # 5 ms
+        env_a = np.array([float(np.max(np.abs(mono[i : i + hop_a])))
+                          for i in range(0, len(mono) - hop_a, hop_a)])
+        if len(env_a) > 4:
+            # Erste Ableitung der Hüllkurve
+            d_env = np.diff(env_a)
+            # Starke positive Sprünge = scharfe Anschläge (Artikulation)
+            pos_peaks = d_env[d_env > 0]
+            if len(pos_peaks) > 0:
+                onset_sharpness = float(np.mean(pos_peaks))
+                # Normierung: 0.01 = gute Artikulation → Score 1.0
+                scores["artikulation"] = float(np.clip(onset_sharpness / 0.01, 0.0, 1.0))
+            else:
+                scores["artikulation"] = 0.3  # Keine Transienten = schlechte Artikulation
+        else:
+            scores["artikulation"] = 0.5
+    except Exception:
+        scores["artikulation"] = 0.5
 
     # NaN-Schutz (§3.1)
     for k in FAST_GOALS_SUBSET:

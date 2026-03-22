@@ -14,14 +14,14 @@ import pytest
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from optimization.balanced_processor import BalancedAudioProcessor
-from optimization.priority1_efficiency import AlgorithmicEfficiencyOptimizer
-from optimization.priority2_vocals import SelectiveVocalEnhancer
-from optimization.priority3_oversampling import AdaptiveOversamplingProcessor
-from optimization.priority4_phase import MultibandPhaseCoherenceEnhancer
-from optimization.priority5_bass import PhaseCoherentBassProcessor
-from optimization.priority6_parameters import GenreOptimizedParameters, OptimizedPresets
-from optimization.profiling import PerformanceProfiler, QualityValidator
+from backend.core.optimization.balanced_processor import BalancedAudioProcessor
+from backend.core.optimization.priority1_efficiency import AlgorithmicEfficiencyOptimizer
+from backend.core.optimization.priority2_vocals import SelectiveVocalEnhancer
+from backend.core.optimization.priority3_oversampling import AdaptiveOversamplingProcessor
+from backend.core.optimization.priority4_phase import MultibandPhaseCoherenceEnhancer
+from backend.core.optimization.priority5_bass import PhaseCoherentBassProcessor
+from backend.core.optimization.priority6_parameters import GenreOptimizedParameters, OptimizedPresets
+from backend.core.optimization.profiling import PerformanceProfiler, QualityValidator
 
 
 # Test fixtures
@@ -99,7 +99,7 @@ def test_priority1_multicore_speedup(sample_audio):
 
 def test_priority1_fft_optimization():
     """Test optimized 4K FFT"""
-    from optimization.priority1_efficiency import OptimizedFFT
+    from backend.core.optimization.priority1_efficiency import OptimizedFFT
 
     sr = 48000
     fft = OptimizedFFT(sr=sr)
@@ -115,7 +115,7 @@ def test_priority1_fft_optimization():
 
 def test_priority2_vocal_detection(vocal_audio):
     """Test vocal presence detection"""
-    from optimization.priority2_vocals import VocalPresenceDetector
+    from backend.core.optimization.priority2_vocals import VocalPresenceDetector
 
     audio, sr = vocal_audio
     detector = VocalPresenceDetector(sr=sr)
@@ -139,7 +139,7 @@ def test_priority2_vocal_enhancement(vocal_audio):
 
 def test_priority2_consonant_detection(vocal_audio):
     """Test consonant detection"""
-    from optimization.priority2_vocals import ConsonantPreserver
+    from backend.core.optimization.priority2_vocals import ConsonantPreserver
 
     audio, sr = vocal_audio
     preserver = ConsonantPreserver(sr=sr)
@@ -235,7 +235,7 @@ def test_priority5_bass_processing(sample_audio):
 
 def test_priority5_resonance_detection(sample_audio):
     """Test resonance detection"""
-    from optimization.priority5_bass import ResonancePreserver
+    from backend.core.optimization.priority5_bass import ResonancePreserver
 
     audio, sr = sample_audio
     preserver = ResonancePreserver(sr=sr)

@@ -90,7 +90,11 @@ class MDX23CModel:
 
                 # ML-Budget-Guard: MDX23C Kim_Vocal_2 + Kim_Inst zusammen ~1.1 GB
                 try:
-                    from backend.core.ml_memory_budget import try_allocate as _try_alloc, release as _rel  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import (  # noqa: PLC0415
+                        release as _rel,
+                        try_allocate as _try_alloc,
+                    )
+
                     if not _try_alloc(f"MDX23C_{self.stem_key}", size_gb=0.55):
                         logger.warning("MDX23C [%s]: ML-Budget erschöpft — HPSS-Fallback", self.stem_key)
                         return
@@ -117,11 +121,22 @@ class MDX23CModel:
                     path.name,
                     self._dim_t,
                 )
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                    _reg_plm(
+                        f"MDX23C_{self.stem_key}",
+                        size_gb=0.55,
+                        unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_ok", False),
+                    )
+                except Exception:
+                    pass
                 return
             except Exception as exc:
                 logger.debug("MDX23C [%s] Ladefehler (%s): %s", self.stem_key, path.name, exc)
                 try:
                     from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+
                     _release(f"MDX23C_{self.stem_key}")
                 except Exception:
                     pass

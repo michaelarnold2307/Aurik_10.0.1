@@ -398,6 +398,38 @@ class TestIntegration:
         result = calculator.compute_all(short)
         assert result is not None
 
+    def test_ultra_short_audio_below_lra_frame(self, calculator, sample_rate):
+        """Should handle very short clips (<100 ms) without frame split errors."""
+        ultra_short = 0.5 * np.sin(2 * np.pi * 440 * np.linspace(0, 0.02, int(sample_rate * 0.02)))
+        result = calculator.compute_all(ultra_short)
+        assert result is not None
+        assert np.isfinite(result.psychoacoustic.integrated_lufs)
+
+    def test_extreme_short_audio_no_decimate_padlen_crash(self, calculator, sample_rate):
+        """Should not crash on tiny clips where decimate() padlen would normally fail."""
+        tiny = 0.5 * np.sin(2 * np.pi * 440 * np.linspace(0, 0.0002, max(1, int(sample_rate * 0.0002))))
+        result = calculator.compute_all(tiny)
+        assert result is not None
+        assert np.isfinite(result.aurik_quality_score)
+
+    def test_single_sample_audio_stability(self, calculator):
+        """Should handle single-sample input without exceptions."""
+        single = np.array([0.1], dtype=np.float32)
+        result = calculator.compute_all(single)
+        assert result is not None
+        assert np.isfinite(result.aurik_quality_score)
+
+    def test_stereo_channel_first_layout(self, calculator, sample_rate):
+        """Should accept channel-first stereo arrays (channels, samples)."""
+        t = np.linspace(0, 2, int(sample_rate * 2))
+        left = 0.5 * np.sin(2 * np.pi * 440 * t)
+        right = 0.5 * np.sin(2 * np.pi * 554 * t)
+        channel_first = np.stack([left, right], axis=0)
+
+        result = calculator.compute_all(channel_first)
+        assert result is not None
+        assert result.aurik_quality_score > 0
+
     def test_long_audio(self, calculator, sample_rate):
         """Should handle longer audio."""
         long = 0.5 * np.sin(2 * np.pi * 440 * np.linspace(0, 10, int(sample_rate * 10)))

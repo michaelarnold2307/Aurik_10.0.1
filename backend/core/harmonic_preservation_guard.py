@@ -21,7 +21,7 @@ Nach der Rauschunterdrückung: Energie-Korrektur falls |STFT(rest)| < 0.85·H_re
 
 ALGORITHMUS:
 -----------
-1. CREPE (CPU, full model, Fallback: pYIN) → f₀(t) mit Voicing-Konfidenz ≥ 0.60
+1. FCPE ONNX (fcpe_plugin, §4.4 Primär; Fallback: CREPE → pYIN) → f₀(t) mit Voicing-Konfidenz ≥ 0.60
 2. Harmonisches Gitter: fₙ(t) = n·f₀(t)·√(1+B·n²)  für n=1..20
    B = INHARMONICITY_PRIORS[instrument_tag] (aus §2.11)
 3. STFT-Bins innerhalb ±3 Cent von fₙ(t) → protected_bins[t, f] = True
@@ -43,7 +43,7 @@ Natürlichkeit:        +0.03 – 0.07
 Authentizität:        +0.03 – 0.06
 Timbre-Authentizität: +0.02 – 0.05
 
-LAUFZEIT: ≤ 1.2 s / Minute Audio (dominiert durch CREPE-Inferenz)
+LAUFZEIT: ≤ 1.2 s / Minute Audio (dominiert durch FCPE-Inferenz)
 
 REFERENZ:
 ---------
@@ -74,7 +74,7 @@ try:
     _CREPE_OK = True
 except Exception:
     _CREPE_OK = False
-    logger.debug("FCPE/CREPE nicht verfügbar — pYIN-Fallback für HPG aktiv")
+    logger.debug("FCPE/CREPE nicht verfügbar — PESTO/pYIN-Fallback für HPG aktiv")
 
 try:
     import librosa
@@ -82,7 +82,15 @@ try:
     _LIBROSA_OK = True
 except ImportError:
     _LIBROSA_OK = False
-    logger.debug("librosa nicht verfügbar — Autokorrelations-Fallback für f₀")
+    logger.debug("librosa nicht verfügbar — PESTO/Autokorrelations-Fallback für f₀")
+
+try:
+    from dsp.pesto_pitch import estimate_pitch as _pesto_estimate
+
+    _PESTO_OK = True
+except Exception:
+    _PESTO_OK = False
+    logger.debug("dsp.pesto_pitch nicht verfügbar — direkt pYIN-Fallback")
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +464,7 @@ class HarmonicPreservationGuard:
         """
         f₀ pro STFT-Frame schätzen.
 
-        Tier-1: CREPE → Tier-2: pYIN → Tier-3: globale Autokorrelation
+        Tier-1: FCPE → Tier-2: CREPE → Tier-3: PESTO (DSP) → Tier-4: pYIN → Tier-5: Autokorrelation
 
         Returns:
             float32-Array [n_frames] mit f₀ in Hz (0 = unvoiced)
@@ -484,7 +492,27 @@ class HarmonicPreservationGuard:
             except Exception as exc:
                 logger.debug("CREPE f₀-Track fehlgeschlagen: %s", exc)
 
-        # Tier-2: pYIN (Mauch & Dixon 2014) — §4.4-Pflicht-Fallback nach CREPE.
+        # Tier-2: PESTO DSP (Riou et al. ISMIR 2023) — §4.4: PESTO → pYIN.
+        # CQT-based, ~8-20× schneller als pYIN; gut für tonales/melodisches Material.
+        if _PESTO_OK:
+            try:
+                pesto_r = _pesto_estimate(mono, sr)
+                if pesto_r.f0_mean > 0 and np.sum(pesto_r.voiced) > 3:
+                    pesto_f0 = np.where(
+                        pesto_r.voiced,
+                        np.nan_to_num(pesto_r.f0, nan=0.0),
+                        0.0,
+                    )
+                    f0_track = np.interp(
+                        np.linspace(0, len(pesto_f0) - 1, n_frames),
+                        np.arange(len(pesto_f0)),
+                        pesto_f0,
+                    )
+                    return f0_track.astype(np.float32)
+            except Exception as exc:
+                logger.debug("PESTO f₀-Track fehlgeschlagen: %s", exc)
+
+        # Tier-3: pYIN (Mauch & Dixon 2014) — letzter DSP-Fallback (§4.4).
         # §4.2: librosa.yin (einfaches YIN, de Cheveigné 2002) ist VERBOTEN → pYIN.
         # Mindestlänge-Guard (≥ 8192 Samples) verhindert SIGSEGV aus
         # librosa.sequence.viterbi auf sehr kurzen / synthetischen Signalen.

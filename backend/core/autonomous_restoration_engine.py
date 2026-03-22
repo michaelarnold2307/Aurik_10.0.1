@@ -371,7 +371,8 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         logger.debug("[ENGINE] Phase 4: _build_variants …", flush=True)
         _t4 = time.perf_counter()
-        variants = self._build_variants(defect_result, goal_profile)
+        _audio_dur_s: float = len(audio) / max(float(sample_rate), 1.0)
+        variants = self._build_variants(defect_result, goal_profile, audio_duration_s=_audio_dur_s)
         logger.debug(f"[ENGINE] Phase 4 fertig ({time.perf_counter()-_t4:.1f}s): {len(variants)} Variante(n)", flush=True)
         audit.append(
             {
@@ -407,11 +408,17 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         # Phase 6: Quality-Gate & Rollback-Schutz
         # ----------------------------------------------------------------
+        # IAQS-Vergleich: quality_before wurde auf einem max. 30-s-Clip gemessen (Phase 1).
+        # quality_after MUSS auf dem gleichen kurzen Clip gemessen werden —
+        # IAQS-Metriken (SNR, Bark-Balance, Spektralregularität) sind längenabhängig.
+        # Ohne diese Symmetrie erzeugt eine 225-s-Datei systematisch Falsch-Rollbacks.
+        _qa_clip_samples = sample_rate * 30
+        _best_clip = best_audio[:_qa_clip_samples] if len(best_audio) > _qa_clip_samples else best_audio
         quality_after_estimate: QualityEstimate = self._quality_analyzer.analyze_quality(
-            best_audio, sample_rate
+            _best_clip, sample_rate
         )  # noqa: F841
-        # IAQS für Rollback-Vergleich (gleiche Skala wie quality_before)
-        quality_after = self._iaqs.score_as_float(best_audio, sample_rate) * 100
+        # IAQS für Rollback-Vergleich (beide auf gleichem 30-s-Clip — identische Länge wie quality_before)
+        quality_after = self._iaqs.score_as_float(_best_clip, sample_rate) * 100
         improvement = quality_after - quality_before
         rollback_triggered = False
 
@@ -569,6 +576,7 @@ class AutonomousRestorationEngine:
         self,
         defect_result: DefectAnalysisResult,
         goal_profile: MusicalGoalProfile,
+        audio_duration_s: float = 60.0,
     ) -> list[ProcessingVariant]:
         """
         Baut vollautomatisch 3–5 Processing-Varianten basierend auf
@@ -585,8 +593,18 @@ class AutonomousRestorationEngine:
 
         base_mode = self.mode
 
-        # MAX_VARIANTS: Performance-Grenze (jede Variante = 1 restore()-Aufruf)
-        MAX_VARIANTS = 7
+        # MAX_VARIANTS: Performance-Grenze (jede Variante = 1 restore()-Aufruf).
+        # Dynamisch nach Audiodauer skaliert — kurze Clips brauchen weniger Varianten
+        # als lange, da der Mehrwert zusätzlicher Passdurchläufe bei kurzen Signalen
+        # durch das Modell-Cold-Start-Overhead nicht gerechtfertigt wird.
+        if audio_duration_s < 10.0:
+            MAX_VARIANTS = 2   # Kurze Test-Clips / Snippets: minimal
+        elif audio_duration_s < 30.0:
+            MAX_VARIANTS = 3   # Kurze Passagen
+        elif audio_duration_s < 120.0:
+            MAX_VARIANTS = 5   # Standard-Stücke
+        else:
+            MAX_VARIANTS = 7   # Lange Aufnahmen: voller Multi-Pass
 
         # Basis-Varianten: immer dabei
         variants: list[ProcessingVariant] = [
@@ -594,12 +612,12 @@ class AutonomousRestorationEngine:
             ProcessingVariant.create_balanced(base_mode=base_mode),
         ]
 
-        # Natürlichkeit-Priorisierung: Bei RESTORATION immer als Alternative
-        if self.mode == ProcessingMode.RESTORATION:
+        # Natürlichkeit-Priorisierung: Bei RESTORATION als Alternative (nur wenn Platz)
+        if self.mode == ProcessingMode.RESTORATION and len(variants) < MAX_VARIANTS:
             variants.append(ProcessingVariant.create_naturalness_first(base_mode=base_mode))
 
-        # Adaptiv: Bei starken Defekten auch aggressive Variante hinzufügen
-        if primary_severity > 0.4:
+        # Adaptiv: Bei starken Defekten auch aggressive Variante hinzufügen (nur wenn Platz)
+        if primary_severity > 0.4 and len(variants) < MAX_VARIANTS:
             variants.append(ProcessingVariant.create_aggressive(base_mode=base_mode))
 
         # Spezialisten für ALLE Defekte mit Severity > 0.2 — nach Severity sortiert.
@@ -698,8 +716,8 @@ class AutonomousRestorationEngine:
             (best_audio, best_variant_name, {variant_name: score})
         """
         scorer = ObjectiveScorer(
-            enable_versa=False,  # Kein Referenz-Audio im Zero-Intervention-Modus
-            enable_dnsmos=False,  # Deaktiviert für Varianten-Selektion (zu langsam: ~14s/Variant)
+            enable_versa=True,  # VERSA ist non-reference MOS — kein Referenz-Audio nötig (§4.4)
+            enable_dnsmos=False,  # Deaktiviert — DNSMOS P.835 verboten als Musik-Metrik (§10.2)
             enable_musical_goals=True,
         )
         engine = MultiPassEngine(scorer=scorer)
@@ -746,13 +764,13 @@ class AutonomousRestorationEngine:
             _old = sys.stdout
             sys.stdout = io.StringIO()
             try:
-                full_audio = engine._restorer.restore(
+                _full_result = engine._restorer.restore(
                     audio=audio,
-                    sr=sample_rate,
-                    processing_config=best_variant_obj.config,
-                    quick_mode=False,
+                    sample_rate=sample_rate,
                 )
-                if np.max(np.abs(full_audio)) > 1e-6:
+                # restore() gibt RestorationResult zurück — Audio steckt in .audio
+                full_audio = _full_result.audio if hasattr(_full_result, "audio") else _full_result
+                if isinstance(full_audio, np.ndarray) and np.max(np.abs(full_audio)) > 1e-6:
                     best_audio = full_audio
             except Exception as e:
                 logger.warning("Full-Processing fehlgeschlagen: %s — nutze Quick-Ergebnis.", e)

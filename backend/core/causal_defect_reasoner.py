@@ -37,7 +37,7 @@ from dataclasses import dataclass
 import logging
 import math
 import threading
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -63,7 +63,7 @@ CAUSES = [
 ]
 
 # Material-Typen
-MATERIAL_PRIORS: Dict[str, Dict[str, float]] = {
+MATERIAL_PRIORS: dict[str, dict[str, float]] = {
     # Priors normiert auf 1.0 pro Materialtyp (3 neue Ursachen mit kleinen Priors)
     "tape": {
         "tape_dropout": 0.27,
@@ -265,7 +265,7 @@ MATERIAL_PRIORS: Dict[str, Dict[str, float]] = {
 }
 
 # Phase-Empfehlungen pro Ursache (kanonische phase_id = Dateiname ohne .py)
-CAUSE_TO_PHASES: Dict[str, List[str]] = {
+CAUSE_TO_PHASES: dict[str, list[str]] = {
     # ── Magnetband ────────────────────────────────────────────────────────────
     "tape_dropout": [
         "phase_24_dropout_repair",
@@ -317,6 +317,7 @@ CAUSE_TO_PHASES: Dict[str, List[str]] = {
     "pitch_drift": ["phase_31_speed_pitch_correction", "phase_12_wow_flutter_fix"],
     "reverb_excess": ["phase_20_reverb_reduction", "phase_49_advanced_dereverb"],
     "print_through": [
+        "phase_57_print_through_reduction",  # Bidirektionale LMS (Pre+Post-Echo) — Spec §7.x Primär
         "phase_29_tape_hiss_reduction",
         "phase_24_dropout_repair",  # §4.5+§7.2
         "phase_03_denoise",
@@ -364,17 +365,17 @@ CAUSE_TO_PHASES: Dict[str, List[str]] = {
     "clipping": ["phase_23_spectral_repair", "phase_06_frequency_restoration"],  # §7.2 — Alias für DefectType.CLIPPING
     # ── Entzerrungs- & Digitalisierungsfehler (§6.3, §7.2 v9.10.46) ─────────
     "riaa_curve_error": [
-        "phase_04_eq_correction",           # RIAA/AES/NAB/FFRR-Entzerrungs-Fehler
+        "phase_04_eq_correction",  # RIAA/AES/NAB/FFRR-Entzerrungs-Fehler
         "phase_06_frequency_restoration",
         "phase_07_harmonic_restoration",
     ],
     "aliasing": [
-        "phase_03_denoise",                 # AA-Filter-Artefakte aus Digitalisierung
+        "phase_03_denoise",  # AA-Filter-Artefakte aus Digitalisierung
         "phase_23_spectral_repair",
         "phase_50_spectral_repair",
     ],
     "bias_error": [
-        "phase_04_eq_correction",           # Falscher Vormagnetisierungsstrom (Bandaufnahme)
+        "phase_04_eq_correction",  # Falscher Vormagnetisierungsstrom (Bandaufnahme)
         "phase_03_denoise",
         "phase_06_frequency_restoration",
         "phase_29_tape_hiss_reduction",
@@ -382,7 +383,7 @@ CAUSE_TO_PHASES: Dict[str, List[str]] = {
 }
 
 # Empfohlene Parameter pro Ursache
-CAUSE_PARAMS: Dict[str, Dict[str, Any]] = {
+CAUSE_PARAMS: dict[str, dict[str, Any]] = {
     "tape_dropout": {
         "noise_reduction_strength": 0.55,
         "ar_order": 64,
@@ -458,10 +459,10 @@ class RestorationPlan:
     """Priorisierter Restaurierungsplan des CausalDefectReasoner."""
 
     primary_cause: str
-    cause_probabilities: Dict[str, float]  # normierte Posterioren
-    ranked_causes: List[Tuple[str, float]]  # absteigend nach Prob.
-    recommended_phases: List[str]  # geordnet
-    phase_parameters: Dict[str, Any]  # {phase_id: {param: value}}
+    cause_probabilities: dict[str, float]  # normierte Posterioren
+    ranked_causes: list[tuple[str, float]]  # absteigend nach Prob.
+    recommended_phases: list[str]  # geordnet
+    phase_parameters: dict[str, Any]  # {phase_id: {param: value}}
     confidence: float  # max. Posterior-Wert
     reasoning: str  # menschenlesbare Erklärung
     material: str
@@ -661,7 +662,7 @@ def _compute_pitch_instability(mono: np.ndarray, sr: int) -> float:
 # ---------------------------------------------------------------------------
 
 
-def _likelihood_tape_dropout(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_tape_dropout(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     """Bedingte Wahrscheinlichkeit für Tape-Dropout."""
     p = 0.0
     p += _gaussian_score(sf.dropout_density, mu=0.5, sigma=0.3) * 0.40
@@ -671,7 +672,7 @@ def _likelihood_tape_dropout(sf: SpectralFeatures, defect_scores: Dict[str, floa
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_tape_hiss(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_tape_hiss(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     p = 0.0
     p += _gaussian_score(sf.hf_energy_ratio, mu=0.35, sigma=0.15) * 0.40
     p += _sigmoid_score(defect_scores.get("noise_floor_db", -60.0) + 60.0, k=0.1, x0=30.0) * 0.35
@@ -680,7 +681,7 @@ def _likelihood_tape_hiss(sf: SpectralFeatures, defect_scores: Dict[str, float])
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_vinyl_crackle(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_vinyl_crackle(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     p = 0.0
     p += _sigmoid_score(sf.click_density, k=1.0, x0=2.0) * 0.45
     p += _sigmoid_score(defect_scores.get("click_severity", 0.0), k=8, x0=0.35) * 0.35
@@ -689,7 +690,7 @@ def _likelihood_vinyl_crackle(sf: SpectralFeatures, defect_scores: Dict[str, flo
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_vinyl_warp(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_vinyl_warp(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     p = 0.0
     p += _sigmoid_score(sf.pitch_instability, k=20, x0=0.02) * 0.50
     p += _gaussian_score(sf.lf_energy_ratio, mu=0.30, sigma=0.15) * 0.30
@@ -697,7 +698,7 @@ def _likelihood_vinyl_warp(sf: SpectralFeatures, defect_scores: Dict[str, float]
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_electrical_hum(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_electrical_hum(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     p = 0.0
     p += sf.hum_score * 0.60
     p += _gaussian_score(sf.lf_energy_ratio, mu=0.35, sigma=0.15) * 0.25
@@ -705,7 +706,7 @@ def _likelihood_electrical_hum(sf: SpectralFeatures, defect_scores: Dict[str, fl
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_head_misalignment(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_head_misalignment(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     p = 0.0
     # HF-Verlust: rolloff deutlich unter 10 kHz
     hf_loss = max(0.0, 1.0 - sf.spectral_rolloff_hz / 10000.0)
@@ -715,7 +716,7 @@ def _likelihood_head_misalignment(sf: SpectralFeatures, defect_scores: Dict[str,
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_dc_offset(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_dc_offset(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     p = 0.0
     p += _sigmoid_score(abs(sf.dc_offset), k=20, x0=0.03) * 0.70
     p += _gaussian_score(sf.lf_energy_ratio, mu=0.40, sigma=0.15) * 0.20
@@ -723,7 +724,7 @@ def _likelihood_dc_offset(sf: SpectralFeatures, defect_scores: Dict[str, float])
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_digital_clip(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_digital_clip(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     p = 0.0
     p += _sigmoid_score(sf.clip_fraction, k=30, x0=0.02) * 0.55
     p += _sigmoid_score(sf.crest_factor_db, k=0.1, x0=0.0) * 0.25  # niedriger Crestfaktor
@@ -731,7 +732,7 @@ def _likelihood_digital_clip(sf: SpectralFeatures, defect_scores: Dict[str, floa
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_soft_saturation(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_soft_saturation(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     """P(Merkmale | soft_saturation) — Röhren-/Tape-Sättigung (gerade Obertöne).
 
     Soft-Saturation erzeugt gerade Harmonische (H2, H4) und runde Wellenformen
@@ -748,7 +749,7 @@ def _likelihood_soft_saturation(sf: SpectralFeatures, defect_scores: Dict[str, f
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_head_wear(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_head_wear(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     """P(Merkmale | head_wear) — Kopfverschleiß / Frequenzband-Auslöschung.
 
     Charakteristisch: vollständiger HF-Energie-Verlust (> 3 kHz) über die
@@ -765,7 +766,7 @@ def _likelihood_head_wear(sf: SpectralFeatures, defect_scores: Dict[str, float])
     return float(np.clip(p, 0.0, 1.0))
 
 
-def _likelihood_print_through(sf: SpectralFeatures, defect_scores: Dict[str, float]) -> float:
+def _likelihood_print_through(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     """P(Merkmale | print_through) — Magnetisches Vorecho / Nachecho (Tape).
 
     Print-Through äußert sich als sehr schwaches Geister-Signal (typisch −20 bis
@@ -826,7 +827,7 @@ class CausalDefectReasoner:
         logger.debug(plan.recommended_phases)
     """
 
-    def __init__(self, detect_hum_hz: Optional[float] = None):
+    def __init__(self, detect_hum_hz: float | None = None):
         """
         Args:
             detect_hum_hz: Bekannte Netzfrequenz (50 oder 60 Hz). Wenn None,
@@ -840,11 +841,11 @@ class CausalDefectReasoner:
 
     def reason(
         self,
-        defect_scores: Dict[str, float],
+        defect_scores: dict[str, float],
         material: str = "unknown",
-        audio: Optional[np.ndarray] = None,
+        audio: np.ndarray | None = None,
         sample_rate: int = 48000,
-        sr: Optional[int] = None,
+        sr: int | None = None,
     ) -> RestorationPlan:
         """
         Berechnet den Restaurierungsplan für die gegebene Aufnahme.
@@ -879,12 +880,12 @@ class CausalDefectReasoner:
 
     def _infer(
         self,
-        defect_scores: Dict[str, float],
+        defect_scores: dict[str, float],
         sf: SpectralFeatures,
         material: str,
     ) -> RestorationPlan:
         priors = MATERIAL_PRIORS[material]
-        posteriors: Dict[str, float] = {}
+        posteriors: dict[str, float] = {}
 
         for cause in CAUSES:
             prior = priors.get(cause, 1.0 / len(CAUSES))
@@ -902,8 +903,8 @@ class CausalDefectReasoner:
 
         # Fusions-Plan: Phasen der Top-3 Ursachen zusammenführen
         seen_phases: set = set()
-        ordered_phases: List[str] = []
-        merged_params: Dict[str, Any] = {}
+        ordered_phases: list[str] = []
+        merged_params: dict[str, Any] = {}
 
         for cause, prob in ranked[:3]:
             if prob < 0.05:
@@ -932,7 +933,7 @@ class CausalDefectReasoner:
     def _build_reasoning(
         self,
         primary_cause: str,
-        ranked: List[Tuple[str, float]],
+        ranked: list[tuple[str, float]],
         sf: SpectralFeatures,
         material: str,
     ) -> str:
@@ -954,7 +955,7 @@ class CausalDefectReasoner:
 # Convenience-Funktion
 # ---------------------------------------------------------------------------
 
-_reasoner: Optional[CausalDefectReasoner] = None
+_reasoner: CausalDefectReasoner | None = None
 _reasoner_lock = threading.Lock()
 
 
@@ -969,11 +970,11 @@ def get_reasoner() -> CausalDefectReasoner:
 
 
 def reason_about_defects(
-    defect_scores: Dict[str, float],
+    defect_scores: dict[str, float],
     material: str = "unknown",
-    audio: Optional[np.ndarray] = None,
+    audio: np.ndarray | None = None,
     sample_rate: int = 44100,
-    sr: Optional[int] = None,
+    sr: int | None = None,
 ) -> RestorationPlan:
     """Convenience-Funktion für direkten Aufruf."""
     return get_reasoner().reason(defect_scores, material, audio, sample_rate, sr=sr)

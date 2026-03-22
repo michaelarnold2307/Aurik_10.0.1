@@ -56,8 +56,8 @@ UPLOAD_LIST: list[tuple[str, str]] = [
     ("banquet/banquet_vinyl_final.onnx",      "banquet/banquet_vinyl_final.onnx"),
     ("banquet/banquet_vinyl_final.onnx.data", "banquet/banquet_vinyl_final.onnx.data"),
     ("banquet/ev-pre-aug.ckpt",               "banquet/ev-pre-aug.ckpt"),
-    # ── DCCRN (custom ONNX export) ────────────────────────────────────────
-    ("dccrn/dccrn.onnx",                      "dccrn/dccrn.onnx"),
+    # ── DCCRN ── VERBOTEN (§4.4: ersetzt durch MP-SENet / DeepFilterNet) ──────
+    # ("dccrn/dccrn.onnx", ...)  # REMOVED — DCCRN ist VERBOTEN in Aurik 9
     # ── DiffWave (custom ONNX export) ─────────────────────────────────────
     ("diffwave/diffwave_model.onnx",          "diffwave/diffwave_model.onnx"),
     ("diffwave/diffwave_model.onnx.data",     "diffwave/diffwave_model.onnx.data"),
@@ -118,9 +118,9 @@ UPLOAD_LIST: list[tuple[str, str]] = [
     ("utmosv2/fold2_s42_best_model.pth", "utmosv2/fold2_s42_best_model.pth"),
     ("utmosv2/fold3_s42_best_model.pth", "utmosv2/fold3_s42_best_model.pth"),
     ("utmosv2/fold4_s42_best_model.pth", "utmosv2/fold4_s42_best_model.pth"),
-    # ── CDPAM (checkpoint) ────────────────────────────────────────────────
-    ("cdpam/cdpam/CDPAM_trained/scratchJNDdefault_best_model.pth",
-     "cdpam/scratchJNDdefault_best_model.pth"),
+    # ── CDPAM ── VERBOTEN (§4.4: ersetzt durch VERSA MOS-Metrik) ───────────────
+    # ("cdpam/...", ...)  # REMOVED — CDPAM ist VERBOTEN in Aurik 9 (kein Musiktraining)
+    # Nachfolger: versa_plugin (VERSA 2024 MOS) + utmos_plugin (Gesangs-MOS)
     # ── Silero EN v5 (custom ONNX) ────────────────────────────────────────
     ("silero/silero_en_v5.onnx",          "silero/silero_en_v5.onnx"),
     # ── Voice Cloning Detection ───────────────────────────────────────────

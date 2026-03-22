@@ -251,24 +251,31 @@ class MLModelPolicyEngine:
             goal: Assessment-Ziel
 
         Returns:
-            List[Plugin-Name]: ['cdpam', 'visqol', 'peaq', 'fad']
+            List[Plugin-Name]: ['versa', 'utmos', 'visqol', 'peaq']
 
         Entscheidungslogik (§4.4/§10.2 — Verbotene Metriken berücksichtigen):
-        - Immer: CDPAM (Musik-Wahrnehmungsqualität ohne Referenz)
+        - Immer: VERSA 2024 (primäre MOS ohne Referenz, Music+Speech trainiert)
+        - Bei Gesang (has_vocals=True): zusätzlich UTMOS (MOS-Verifikation Gesang)
         - Mit Referenz: +ViSQOL v3 (zwingend --audio Mode, kein Speech-Default)
-        - Vollständig: CDPAM + ViSQOL + PEAQ + FAD (erweiterte Metriken, nur Reporting)
+        - Vollständig: VERSA + UTMOS + ViSQOL + PEAQ (erweiterte Metriken, nur Reporting)
 
         VERBOTEN (§4.4/§10.2/§11.3):
+        - CDPAM: ersetzt durch VERSA 2024 (§4.4, ABSOLUTVERBOTEN als MOS-Primär)
         - DNSMOS: trainiert auf 16 kHz DNS-Challenge-Sprachkorpus, bewertet Musik falsch
         - NISQA: Sprachqualitäts-CNN, keine Musik-Trainingsdaten
         - PESQ: Telefonband 300–3400 Hz, strukturell ungeeignet für Vollband-Musik
         - STOI: Sprachverständlichkeit, sinnlos für Instrumentalmusik
         """
         has_reference = goal.get("has_reference", False)
+        has_vocals = context.get("has_vocals", False)
         assessment_type = goal.get("assessment_type", "full")
 
-        # Basis: CDPAM (musik-spezifisch, keine Referenz nötig)
-        models = ["cdpam"]
+        # Basis: VERSA 2024 (primäre musik-spezifische MOS ohne Referenz, §4.4)
+        models = ["versa"]
+
+        # Bei Gesang: UTMOS für MOS-Verifikation Vocals (§4.4)
+        if has_vocals:
+            models.append("utmos")
 
         # Mit Referenz: ViSQOL v3 (--audio Mode zwingend per Spec)
         if has_reference:
@@ -276,7 +283,10 @@ class MLModelPolicyEngine:
 
         # Vollständig: Erweiterte Metriken (nur für Reporting, kein Quality-Gate)
         if assessment_type == "full" and has_reference:
-            models = ["cdpam", "visqol", "peaq", "fad"]
+            base = ["versa"]
+            if has_vocals:
+                base.append("utmos")
+            models = base + ["visqol", "peaq"]
 
         self.logger.info(f"Quality Assessment (Musik-Metriken §4.4) → {models}")
         return models
@@ -346,17 +356,17 @@ class MLModelPolicyEngine:
             goal: Generation-Ziel
 
         Returns:
-            Plugin-Name: 'audioldm2', 'vampnet'
+            Plugin-Name: 'audioldm2', 'flow_matching'
 
         Entscheidungslogik:
         - Text-to-Audio → AudioLDM2 (text prompt)
-        - Music Generation → VampNet (generative music)
+        - Music Generation → flow_matching (generative inpainting, SOTA 2024)
         """
         generation_type = goal.get("generation_type", "text_to_audio")
 
         if generation_type == "music":
-            self.logger.info("Music Generation → VampNet")
-            return "vampnet"
+            self.logger.info("Music Generation → flow_matching (generative inpainting)")
+            return "flow_matching"
         else:
             self.logger.info("Text-to-Audio → AudioLDM2 (text prompt)")
             return "audioldm2"
@@ -517,30 +527,34 @@ class MLModelPolicyEngine:
         Returns:
             Liste von Metrik-Plugin-Namen
 
-        Metrik-Auswahl:
-        - Speech → dnsmos, nisqa (non-intrusive)
-        - Maximal Quality → alle Metriken (dnsmos, nisqa, pesq, visqol, cdpam)
-        - Standard → dnsmos, nisqa
+        Metrik-Auswahl (§4.4 — nur musik-geeignete Metriken):
+        - Standard: VERSA 2024 (primäre MOS, kein Referenzsignal nötig)
+        - Gesang: + UTMOS (Gesangs-MOS-Verifikation)
+        - Mit Referenz: + ViSQOL v3 (--audio Mode)
+        - Maximal Quality: VERSA + UTMOS + ViSQOL + PEAQ
+
+        VERBOTEN (§4.4): CDPAM, DNSMOS, NISQA, PESQ, STOI (kein Musiktraining)
         """
-        metrics = []  # Initialisierung
-        if context.get("has_vocals", False):
-            metrics.extend(["pesq", "visqol", "cdpam"])
-        elif context.get("genre") == "classical":
-            metrics.append("pesq")
-        # Bei maximal quality: Alle Metriken
+        has_vocals = context.get("has_vocals", False)
+        has_reference = goal.get("has_reference", False)
+        metrics = ["versa"]  # VERSA 2024 ist immer Basis (§4.4)
+
+        if has_vocals:
+            metrics.append("utmos")  # UTMOS MOS-Verifikation Gesang
+
+        if has_reference:
+            metrics.append("visqol")  # ViSQOL v3 --audio Mode
+
         if goal.get("quality_level") == "maximal":
-            metrics.extend(["pesq", "visqol", "cdpam"])
-            self.logger.info("Maximal Quality → ALLE Metriken (5)")
-
-        # Bei Speech: PESQ hinzufügen
-        elif context.get("has_vocals", False):
-            metrics.append("pesq")
-            self.logger.info("Speech → DNSMOS + NISQA + PESQ")
-
+            if "peaq" not in metrics:
+                metrics.append("peaq")
+            self.logger.info("Maximal Quality → VERSA + UTMOS + ViSQOL + PEAQ")
+        elif has_vocals:
+            self.logger.info("Gesang → VERSA + UTMOS")
         else:
-            self.logger.info("Standard → DNSMOS + NISQA")
+            self.logger.info("Standard → VERSA")
 
-        return metrics
+        return list(dict.fromkeys(metrics))  # Deduplizieren, Reihenfolge erhalten
 
     def should_use_diffusion_models(self, context: Dict[str, Any], goal: Dict[str, Any]) -> bool:
         """

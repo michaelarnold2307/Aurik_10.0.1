@@ -23,3 +23,12 @@ os.environ.setdefault("NUMEXPR_NUM_THREADS", _n)
 # Disable CUDA probing — Aurik is CPU-only (§8 — no GPU).
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 os.environ.setdefault("ONNXRUNTIME_PROVIDERS", "CPUExecutionProvider")
+
+# §2.37 InterOp-Thread-Pool — limits parallel operator dispatch in PyTorch.
+# Set to 4 to balance inter-operator and intra-operator parallelism on Ryzen 7.
+try:
+    import torch as _torch
+
+    _torch.set_num_interop_threads(4)
+except Exception:
+    pass  # torch optional at hook time (not yet imported)

@@ -169,6 +169,12 @@ def _inpaint_diffwave_onnx(
         except ImportError:
             pass
         sess = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+        try:
+            from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+            _reg_plm("DiffWave-FlowMatch", size_gb=0.01, unload_fn=lambda: None)
+        except Exception:
+            pass
         ctx_len = min(int(sr * 0.5), gap_start)
         ctx = audio[gap_start - ctx_len : gap_start].astype(np.float32)
         if len(ctx) < 128:
@@ -187,6 +193,11 @@ def _inpaint_diffwave_onnx(
         return result
     except Exception as e:  # noqa: BLE001
         logger.debug("DiffWave ONNX Fallback fehlgeschlagen: %s", e)
+        try:
+            from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+            _rel("DiffWave-FlowMatch")
+        except Exception:
+            pass
         return None
 
 

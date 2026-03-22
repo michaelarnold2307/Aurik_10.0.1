@@ -119,7 +119,7 @@ class VoiceGender:
 **Vocal-Restaurierungskette (Reihenfolge zwingend):**
 ```
 1. GenderDetector.detect() → VoiceCharacteristics (F₀, Formanten, Breathiness)
-2. CrepePlugin (f₀) → pYIN-Fallback
+2. FCPEPlugin (f₀) → CrepePlugin → pYIN-Fallback
 3. FormantTracker (LPC F1–F4) + WORLD-Vocoder-Quervalidierung
    (LPC↔WORLD Abweichung > 15% → WORLD-Wert bevorzugt)
 4. BreathDetector → breathiness ratio (Erhalt ±0.05)

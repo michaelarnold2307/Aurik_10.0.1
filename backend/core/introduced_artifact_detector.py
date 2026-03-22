@@ -67,6 +67,9 @@ class IntroducedArtifactDetector:
     MUSICAL_NOISE_THRESHOLD_DB: float = 3.0
     SILENCE_THRESHOLD_DBFS: float = -40.0
     HARMONICITY_THRESHOLD: float = 0.70
+    # Min. Residuum-RMS für echte ML-Halluzination (≈ −30 dBFS):
+    # Unterhalb dieser Schwelle ist das Residuum zu leise für eine wahrnehmbare Halluzination.
+    HALLUCINATION_MIN_RMS: float = 0.032
 
     def detect(self, original: np.ndarray, restored: np.ndarray, sr: int) -> IADResult:
         """Erkennt durch Restaurierung eingebrachte Artefakte."""
@@ -165,7 +168,13 @@ class IntroducedArtifactDetector:
         hop = max(1, int(1.0 * sr))
         artifacts: list[ArtifactRegion] = []
         for s in range(0, len(residuum) - win, hop):
-            h = self._harmonicity(residuum[s : s + win], sr)
+            frame = residuum[s : s + win]
+            # Energie-Gate: Residuum muss wahrnehmbar sein (>= HALLUCINATION_MIN_RMS)
+            # Verhindert False-Positives durch numerisches Rauschen bei leichten Phasen-änderungen
+            frame_rms = float(np.sqrt(np.mean(frame**2) + 1e-12))
+            if frame_rms < self.HALLUCINATION_MIN_RMS:
+                continue
+            h = self._harmonicity(frame, sr)
             if h > self.HARMONICITY_THRESHOLD:
                 artifacts.append(ArtifactRegion("ml_hallucination", s, s + win, float(np.clip(h, 0.0, 1.0)), float(h)))
         return artifacts

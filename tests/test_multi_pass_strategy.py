@@ -182,7 +182,7 @@ class TestObjectiveScorer:
         audio, sr = mock_audio
 
         # Scorer ohne externe plugins (für robuste tests)
-        scorer = ObjectiveScorer(enable_cdpam=False, enable_dnsmos=False, enable_musical_goals=False)
+        scorer = ObjectiveScorer(enable_versa=False, enable_dnsmos=False, enable_musical_goals=False)
 
         score = scorer.score(audio=audio, sample_rate=sr, variant_name="test_variant")
 
@@ -220,6 +220,34 @@ class TestObjectiveScorer:
         # Sollte relativ hoch sein da alle Metriken gut sind
         assert composite > 0.7
         assert 0.0 <= composite <= 1.0
+
+    def test_versa_receives_proper_mono_from_channel_first(self):
+        """Channel-first audio [C, N] must be converted to usable mono before VERSA."""
+
+        class _FakeVersa:
+            def score(self, audio, sample_rate):
+                assert sample_rate == 48000
+                assert isinstance(audio, np.ndarray)
+                assert audio.ndim == 1
+                assert audio.size > 1000
+
+                class _R:
+                    mos = 3.2
+
+                return _R()
+
+        scorer = ObjectiveScorer(enable_versa=False, enable_dnsmos=False, enable_musical_goals=False)
+        scorer.versa_plugin = _FakeVersa()
+        scorer.enable_versa = True
+
+        n = 48000
+        ch1 = 0.1 * np.sin(2 * np.pi * 220 * np.linspace(0, 1, n, endpoint=False))
+        ch2 = 0.1 * np.sin(2 * np.pi * 440 * np.linspace(0, 1, n, endpoint=False))
+        audio_cf = np.stack([ch1, ch2], axis=0).astype(np.float32)  # [C, N]
+
+        score = scorer.score(audio=audio_cf, sample_rate=48000, variant_name="cf")
+        assert score.versa_active is True
+        assert 0.0 <= score.versa_score <= 1.0
 
 
 class TestConfidenceCalculator:
@@ -415,6 +443,38 @@ class TestMultiPassEngine:
         # All times should be > 0
         for variant_name, time_sec in times.items():
             assert time_sec > 0.0
+
+    def test_default_process_func_maps_variant_to_restore_mode(self, mock_audio):
+        """Default path must not run all variants with the same fixed restore mode."""
+
+        class _FakeResult:
+            def __init__(self, audio: np.ndarray) -> None:
+                self.audio = audio
+
+        class _FakeRestorer:
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+
+            def restore(self, audio, sample_rate, mode="restoration"):
+                self.calls.append(mode)
+                return _FakeResult(audio)
+
+        audio, sr = mock_audio
+        engine = MultiPassEngine()
+        engine._restorer = _FakeRestorer()
+
+        gentle = ProcessingVariant.create_gentle_denoise().config
+        balanced = ProcessingVariant.create_balanced().config
+        strong = ProcessingVariant.create_strong_dynamics().config
+
+        _ = engine._default_process_func(audio, sr, gentle)
+        _ = engine._default_process_func(audio, sr, balanced)
+        _ = engine._default_process_func(audio, sr, strong)
+
+        calls = engine._restorer.calls
+        assert calls[0] == "fast"
+        assert calls[1] in {"restoration", "balanced"}
+        assert calls[2] == "maximum"
 
 
 class TestCreateDefaultVariants:

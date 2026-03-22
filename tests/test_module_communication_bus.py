@@ -4,7 +4,7 @@ Integrationstest für Module Cooperation & Inter-Communication
 
 import unittest
 
-from module_communication_bus import ModuleCommunicationBus
+from backend.core.module_communication_bus import ModuleCommunicationBus
 
 
 class TestModuleCommunicationBus(unittest.TestCase):

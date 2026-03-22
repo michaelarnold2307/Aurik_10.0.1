@@ -50,9 +50,9 @@ build_image() {
     cd "$MODELS_DIR"
 }
 
-# Processing Plugins (16)
+# Processing Plugins (14)
 echo ""
-echo "=== PROCESSING PLUGINS (16) ==="
+echo "=== PROCESSING PLUGINS (14) ==="
 echo ""
 
 build_image "deepfilternet_v3_ii" "Dockerfile.deepfilternet_v3_ii" "deepfilternet_v3_ii"
@@ -60,8 +60,8 @@ build_image "resemble_enhance" "Dockerfile.resemble_enhance" "resemble_enhance"
 build_image "demucs" "Dockerfile.demucs" "demucs"
 build_image "mdx23c" "Dockerfile.mdx23c" "mdx23c"
 build_image "sgmse_plus" "Dockerfile.sgmse_plus" "sgmse_plus"
-build_image "fullsubnet_plus" "Dockerfile.fullsubnet_plus" "fullsubnet_plus"
-build_image "dccrn" "Dockerfile.dccrn" "dccrn"
+# fullsubnet_plus: VERBOTEN (ersetzt durch mp_senet) — kein Build
+# dccrn: VERBOTEN (ersetzt durch mp_senet) — kein Build
 build_image "uvr_mdx_net" "Dockerfile.uvr_mdx_net" "uvr_mdx_net"
 build_image "banquet" "Dockerfile.banquet" "banquet"
 build_image "hifi_gan" "Dockerfile.hifi_gan" "hifi_gan"
@@ -71,29 +71,27 @@ build_image "waveunet" "Dockerfile.waveunet" "waveunet"
 build_image "crepe" "Dockerfile.crepe" "crepe"
 echo -e "${YELLOW}[SKIP]${NC} sota_universal_enhancer (meta-plugin, no Docker)"
 
-# Metriken Plugins (4)
+# Metriken Plugins (1)
 echo ""
-echo "=== METRIKEN PLUGINS (4) ==="
+echo "=== METRIKEN PLUGINS (1) ==="
 echo ""
 
-build_image "dnsmos" "Dockerfile.dnsmos" "dnsmos"
-build_image "nisqa" "Dockerfile.nisqa" "nisqa"
-build_image "pesq" "Dockerfile.pesq" "pesq"
+# dnsmos: VERBOTEN (Sprach-Korpus, kein Musik) — kein Build
+# nisqa: VERBOTEN (Sprach-CNN, kein Musik) — kein Build
+# pesq: VERBOTEN (Telefonband 300–3400 Hz) — kein Build
 build_image "visqol" "Dockerfile.visqol" "visqol"
 
 # Neue Plugins (8)
 echo ""
-echo "=== NEUE PLUGINS (7) ==="
+echo "=== NEUE PLUGINS (6) ==="
 echo ""
 
 build_image "audioldm2" "Dockerfile.audioldm2" "audioldm2"
 build_image "audiosr" "Dockerfile.audiosr" "audiosr"
-build_image "cdpam" "Dockerfile.cdpam" "cdpam"
+# cdpam: VERBOTEN (ersetzt durch VERSA) — kein Build
 build_image "gacela" "Dockerfile.gacela" "gacela"
 build_image "matchering2.0" "Dockerfile.matchering2.0" "matchering"
 build_image "silero" "Dockerfile.silero" "silero"
-build_image "vampnet" "Dockerfile.vampnet" "vampnet"
-
 # Zusammenfassung
 echo ""
 echo "=========================================="

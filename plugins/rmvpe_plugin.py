@@ -7,10 +7,10 @@ RMVPE (Robust Multi-period Vocoder-based Pitch Estimator via Mel spectrogram):
     - Fallback: librosa.pyin() (pYIN, Mauch & Dixon 2014)
 
 Aurik 9 Pitch-Tracking-Hierarchie (§4.4, Stand März 2026):
-    Primär:    RMVPE ONNX  (dieser Plugin)
+    Primär:    FCPE ONNX (fcpe_plugin)
     Fallback1: CREPE full ONNX (crepe_plugin)
-    Fallback2: FCPE ONNX (fcpe_plugin)
-    DSP:       pYIN via librosa
+    Fallback2: RMVPE ONNX (dieser Plugin — nur wenn stabil verifiziert)
+    DSP:       PESTO → pYIN via librosa
 
 Referenz:
     Wei et al. "RMVPE: A Robust Model for Vocal Pitch Estimation
@@ -38,8 +38,8 @@ _ONNX_PATH = _ROOT / "models" / "rmvpe" / "rmvpe.onnx"
 # RMVPE Mel-Parameter (16 kHz Modell-SR, gemäß Paper)
 _MODEL_SR: int = 16_000
 _N_MELS: int = 128
-_FRAME_LEN: int = 1024       # 64 ms @ 16 kHz
-_HOP_LEN: int = 160          # 10 ms @ 16 kHz → 100 Frames/s
+_FRAME_LEN: int = 1024  # 64 ms @ 16 kHz
+_HOP_LEN: int = 160  # 10 ms @ 16 kHz → 100 Frames/s
 # Decoder mapping for current rmvpe.onnx export.
 # Empirically calibrated from reference tones (220/440/880 Hz) to reduce
 # systematic high-bias while preserving monotonic bin ordering.
@@ -87,6 +87,7 @@ def _estimate_tonal_reference_hz(mono_16k: np.ndarray) -> tuple[float | None, fl
 # Result dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RmvpeResult:
     """Ergebnis der RMVPE-Pitch-Schätzung.
@@ -115,6 +116,7 @@ class RmvpeResult:
 # RmvpePlugin
 # ---------------------------------------------------------------------------
 
+
 class RmvpePlugin:
     """RMVPE Neural Pitch Tracker (ONNX, CPUExecutionProvider).
 
@@ -139,6 +141,7 @@ class RmvpePlugin:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("RMVPE", size_gb=0.03):
                     logger.warning("RMVPE: ML-Budget erschöpft — pYIN-Fallback.")
                     return
@@ -154,8 +157,23 @@ class RmvpePlugin:
             )
             self._model_loaded = True
             logger.info("✅ RMVPE ONNX geladen: %s (§4.4 primärer Pitch-Tracker)", _ONNX_PATH.name)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "RMVPE",
+                    size_gb=0.03,
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                )
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("RMVPE ONNX Ladefehler: %s — pYIN-Fallback aktiv.", exc)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("RMVPE")
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Public API
@@ -227,6 +245,7 @@ class RmvpePlugin:
         """RMVPE ONNX-Inferenz: Mel → Salience-Map → F0."""
         assert self._session is not None
         from math import gcd  # noqa: PLC0415
+
         from scipy.signal import resample_poly  # noqa: PLC0415
 
         # 48 kHz → 16 kHz
@@ -244,7 +263,7 @@ class RmvpePlugin:
             if pad_t:
                 mel = np.pad(mel, ((0, pad_t), (0, 0)), mode="edge")
             # RMVPE ONNX expects rank-3 input with mel channels first: [B, 128, T]
-            inp = mel.T[np.newaxis]                 # [1, 128, T]
+            inp = mel.T[np.newaxis]  # [1, 128, T]
             inp_name = self._session.get_inputs()[0].name
             ort_out = self._session.run(None, {inp_name: inp.astype(np.float32)})
             salience = np.asarray(ort_out[0], dtype=np.float32)  # [1, T, 360]
@@ -255,9 +274,9 @@ class RmvpePlugin:
 
             # RMVPE/CREPE-compatible cents mapping:
             #   cents_i = offset + i * 20, i=0..359
-            cents_bins = (_CENTS_OFFSET + np.arange(_PITCH_BINS, dtype=np.float32) * _CENTS_BIN_STEP)
-            max_sal = salience.max(axis=1)                          # [T]
-            voiced = max_sal >= voiced_threshold                    # [T] bool
+            cents_bins = _CENTS_OFFSET + np.arange(_PITCH_BINS, dtype=np.float32) * _CENTS_BIN_STEP
+            max_sal = salience.max(axis=1)  # [T]
+            voiced = max_sal >= voiced_threshold  # [T] bool
 
             # Local weighted decode around argmax (±4 bins) to avoid low-frequency bias.
             argmax_idx = np.argmax(salience, axis=1).astype(np.int32)
@@ -279,12 +298,7 @@ class RmvpePlugin:
             voiced_raw = f0_raw[max_sal >= voiced_threshold]
             f_ref_hz, tonal_conf = _estimate_tonal_reference_hz(mono_16k)
             delta_cents = 0.0
-            if (
-                f_ref_hz is not None
-                and tonal_conf >= 8.0
-                and voiced_raw.size >= 8
-                and np.isfinite(voiced_raw).all()
-            ):
+            if f_ref_hz is not None and tonal_conf >= 8.0 and voiced_raw.size >= 8 and np.isfinite(voiced_raw).all():
                 f_model_med = float(np.median(voiced_raw))
                 if f_model_med > 1e-6:
                     delta_cents = float(1200.0 * math.log2(f_ref_hz / f_model_med))
@@ -321,7 +335,35 @@ class RmvpePlugin:
             return self._analyze_pyin(mono_48k, sr)
 
     def _analyze_pyin(self, mono_48k: np.ndarray, sr: int) -> RmvpeResult:
-        """pYIN DSP-Fallback (Mauch & Dixon 2014) via librosa."""
+        """DSP-Fallback-Kette: PESTO (Riou et al. ISMIR 2023) → pYIN (Mauch & Dixon 2014).
+
+        PESTO (dsp/pesto_pitch.py) ist ~8-20× schneller als pYIN bei vergleichbarer
+        Genauigkeit für tonales Material. Fällt auf pYIN zurück bei PESTO-Fehler.
+        §4.4: FCPE → CREPE → RMVPE → PESTO → pYIN (letzte DSP-Stufe)
+        """
+        # Tier-DSP-1: PESTO (chromagram CQT, Riou et al. ISMIR 2023)
+        try:
+            from dsp.pesto_pitch import estimate_pitch as _pesto  # noqa: PLC0415
+
+            pesto_r = _pesto(mono_48k, sr)
+            if pesto_r.f0_mean > 0 and np.sum(pesto_r.voiced) > 3:
+                f0 = pesto_r.f0.astype(np.float32)
+                voiced = pesto_r.voiced
+                conf = pesto_r.confidence.astype(np.float32)
+                times = pesto_r.times.astype(np.float32)
+                voiced_f0 = f0[voiced & np.isfinite(f0)]
+                return RmvpeResult(
+                    f0=f0,
+                    times=times,
+                    confidence=conf,
+                    voiced_flag=voiced,
+                    model_used="pesto_dsp_fallback",
+                    f0_mean=float(np.mean(voiced_f0)) if len(voiced_f0) > 0 else 0.0,
+                    f0_std=float(np.std(voiced_f0)) if len(voiced_f0) > 1 else 0.0,
+                )
+        except Exception as exc:
+            logger.debug("PESTO-Fallback fehlgeschlagen: %s — weiter mit pYIN", exc)
+
         try:
             import librosa  # noqa: PLC0415
 

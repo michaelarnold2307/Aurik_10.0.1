@@ -22,6 +22,7 @@ import math
 from pathlib import Path
 import threading
 
+import os
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,20 @@ logger = logging.getLogger(__name__)
 _ROOT = Path(__file__).parent.parent
 _VERSA_PATH = _ROOT / "models" / "versa"
 _HUB_CACHE = str(_VERSA_PATH / "hub_cache")
+
+# Offline-Betrieb: S3PRL-Cache auf gebündeltes models/s3prl/ setzen (vor s3prl-Import!).
+# s3prl liest S3PRL_CACHE_HOME beim ersten Import — muss hier auf Modulebene gesetzt sein.
+_S3PRL_BUNDLED = _ROOT / "models" / "s3prl"
+if _S3PRL_BUNDLED.exists():
+    os.environ.setdefault("S3PRL_CACHE_HOME", str(_S3PRL_BUNDLED))
+
+# s3prl scannt beim Import alle Upstreams und loggt für jedes fehlende optionale
+# Paket (ESPnet, Fairseq, …) eine WARNING. Diese sind harmlos — Aurik nutzt nur
+# wav2vec2 (kein ESPnet/Fairseq erforderlich).  Logger-Filter einmalig setzen.
+import logging as _logging
+_logging.getLogger("s3prl.upstream.espnet_hubert.expert").setLevel(_logging.ERROR)
+_logging.getLogger("s3prl.upstream.fairseq.expert").setLevel(_logging.ERROR)
+del _logging
 _MODEL_SR: int = 16_000
 
 _lock = threading.Lock()
@@ -107,13 +122,18 @@ class VersaPlugin:
         # and downloads the .pth checkpoint to hub_cache/checkpoints/.
         _hub_dir = _VERSA_PATH / "hub_cache"
         _singmos_checkpoint = _hub_dir / "checkpoints" / "ft_wav2vec2_large_ll60k_mdf_p1_200epochs_all_192epochs.pth"
-        # s3prl caches wav2vec2-large at ~/.cache/s3prl/download/
-        import os  # noqa: PLC0415
-        _s3prl_cache = Path(os.path.expanduser("~/.cache/s3prl/download"))
-        _wav2vec2_cached = any(
-            f.name.endswith(".wav2vec_vox_new.pt") or "wav2vec_vox_new" in f.name
-            for f in _s3prl_cache.glob("*.wav2vec_vox_new.pt")
-        ) if _s3prl_cache.exists() else False
+        # s3prl sucht wav2vec2-large in $S3PRL_CACHE_HOME/download/
+        # Primär: gebündeltes models/s3prl/download/ (Offline-Betrieb)
+        # Fallback: ~/.cache/s3prl/download/ (Legacy / Entwicklungsumgebung)
+        _s3prl_bundled_dl = _S3PRL_BUNDLED / "download"
+        _s3prl_sys_cache = Path(os.path.expanduser("~/.cache/s3prl/download"))
+
+        def _has_wav2vec(_dir: Path) -> bool:
+            return _dir.exists() and any(
+                "wav2vec_vox_new" in f.name for f in _dir.iterdir()
+            )
+
+        _wav2vec2_cached = _has_wav2vec(_s3prl_bundled_dl) or _has_wav2vec(_s3prl_sys_cache)
 
         if not _singmos_checkpoint.exists():
             logger.info(
@@ -125,8 +145,9 @@ class VersaPlugin:
             return
         if not _wav2vec2_cached:
             logger.info(
-                "wav2vec2-large (s3prl) nicht lokal gecacht (~/.cache/s3prl/download/) "
-                "— PQS-DSP-Fallback. Für ML-Betrieb: s3prl Pre-Download ausführen."
+                "wav2vec2-large (s3prl) nicht lokal gefunden ("
+                "models/s3prl/download/ oder ~/.cache/s3prl/download/) "
+                "— PQS-DSP-Fallback. Für ML-Betrieb: models/s3prl/ befüllen."
             )
             return
 
@@ -194,8 +215,19 @@ class VersaPlugin:
             VersaResult mit MOS ∈ [1.0, 5.0] und Metadaten.
         """
         assert sr == 48_000, f"SR muss 48000 Hz sein, erhalten: {sr}"
-        audio = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
-        mono = audio if audio.ndim == 1 else audio.mean(axis=-1)
+        audio = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        if audio.ndim == 1:
+            mono = audio
+        elif audio.ndim == 2:
+            # Accept both layouts: [N, C] and [C, N].
+            if audio.shape[0] <= 2 and audio.shape[1] > audio.shape[0]:
+                mono = audio.mean(axis=0)
+            elif audio.shape[1] <= 2 and audio.shape[0] > audio.shape[1]:
+                mono = audio.mean(axis=1)
+            else:
+                mono = audio.mean(axis=-1)
+        else:
+            mono = np.ravel(audio)
         mono = np.clip(mono, -1.0, 1.0)
 
         # Lazy load: attempt once, then use whatever is available.
@@ -227,11 +259,43 @@ class VersaPlugin:
             mono_16k = resample_poly(mono_48k, _MODEL_SR // g, sr // g).astype(np.float32)
             mono_16k = np.nan_to_num(mono_16k, nan=0.0, posinf=0.0, neginf=0.0)
             mono_16k = np.clip(mono_16k, -1.0, 1.0)
+            if mono_16k.size < 320:
+                logger.debug("SingMOS input too short (%d samples @16k) — using PQS fallback", mono_16k.size)
+                return self._score_pqs_dsp(mono_48k, sr)
 
-            scores = self._pseudo_mos_metric(
-                mono_16k, _MODEL_SR, self._predictor_dict, self._predictor_fs
-            )
-            mos = float(np.clip(scores.get("singmos_pro", 3.0), 1.0, 5.0))
+            # Robustly handle backend-specific shape expectations (1D vs 2D [B, T]).
+            # Some SingMOS builds expect a batch dimension and raise "Dimension out of range"
+            # for plain 1D vectors.
+            _last_exc: Exception | None = None
+            _scores = None
+            for _candidate in (mono_16k[np.newaxis, :], mono_16k):
+                try:
+                    _scores = self._pseudo_mos_metric(
+                        _candidate, _MODEL_SR, self._predictor_dict, self._predictor_fs
+                    )
+                    break
+                except Exception as _shape_exc:
+                    _last_exc = _shape_exc
+
+            if _scores is None:
+                assert _last_exc is not None
+                raise _last_exc
+
+            if isinstance(_scores, dict):
+                _mos_raw = _scores.get("singmos_pro", _scores.get("overall", 3.0))
+            elif isinstance(_scores, (list, tuple)) and len(_scores) > 0:
+                _first = _scores[0]
+                if isinstance(_first, dict):
+                    _mos_raw = _first.get("singmos_pro", _first.get("overall", 3.0))
+                else:
+                    _mos_raw = _first
+            else:
+                _mos_raw = _scores
+
+            if hasattr(_mos_raw, "item"):
+                _mos_raw = _mos_raw.item()
+
+            mos = float(np.clip(float(_mos_raw), 1.0, 5.0))
             if not math.isfinite(mos):
                 mos = 3.0
             logger.debug("SingMOS Pro MOS: %.3f", mos)

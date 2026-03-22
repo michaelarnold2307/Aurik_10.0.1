@@ -105,6 +105,16 @@ class BasicPitchPlugin:
             )
             self._model_loaded = True
             logger.info("🎼 BasicPitch ONNX geladen: %s", _ONNX_PATH.name)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "BasicPitch",
+                    size_gb=0.12,
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                )
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("BasicPitch ONNX-Init fehlgeschlagen (%s) — DSP-Fallback.", exc)
 

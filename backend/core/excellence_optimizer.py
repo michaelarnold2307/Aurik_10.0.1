@@ -48,7 +48,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import logging
 import threading
-from typing import List, Optional, Tuple
 
 import numpy as np
 import scipy.signal as spsig
@@ -101,7 +100,7 @@ class MaterialProfile:
 
 #: Vordefinierte Material-Profile für bekannte Quellmaterialien.
 #: Zugriff: ``MATERIAL_PROFILES["vinyl"]``
-MATERIAL_PROFILES: "dict[str, MaterialProfile]" = {
+MATERIAL_PROFILES: dict[str, MaterialProfile] = {
     "auto": MaterialProfile(
         name="auto",
         flux_smoothing_max=_FLUX_SMOOTHING_MAX,
@@ -146,6 +145,43 @@ MATERIAL_PROFILES: "dict[str, MaterialProfile]" = {
         harm_boost_db=0.3,
         ola_ms=10.0,
         description="Rundfunk/Archiv: Kompressionsartefakte, digitale Präzision",
+    ),
+    # Lossy digital codecs — codec-aware, same base as broadcast
+    "mp3_low": MaterialProfile(
+        name="mp3_low",
+        flux_smoothing_max=0.75,
+        target_cv_min=0.03,
+        modulation_strength=0.10,
+        harm_boost_db=0.3,
+        ola_ms=10.0,
+        description="MP3/Lossy niedrig: Codec-Artefakte, digitale Präzision",
+    ),
+    "mp3_high": MaterialProfile(
+        name="mp3_high",
+        flux_smoothing_max=0.70,
+        target_cv_min=0.04,
+        modulation_strength=0.10,
+        harm_boost_db=0.3,
+        ola_ms=10.0,
+        description="MP3/Lossy hoch: minimale Codec-Artefakte",
+    ),
+    "aac": MaterialProfile(
+        name="aac",
+        flux_smoothing_max=0.70,
+        target_cv_min=0.04,
+        modulation_strength=0.10,
+        harm_boost_db=0.3,
+        ola_ms=10.0,
+        description="AAC: ähnlich MP3-High-Qualität",
+    ),
+    "cd_digital": MaterialProfile(
+        name="cd_digital",
+        flux_smoothing_max=0.80,
+        target_cv_min=0.02,
+        modulation_strength=0.08,
+        harm_boost_db=0.2,
+        ola_ms=8.0,
+        description="CD/Digital: höchste Qualität, minimalste Eingriffe",
     ),
 }
 
@@ -225,7 +261,7 @@ class ExcellenceContext:
 class ExcellenceResult:
     """Ergebnis des Excellence-Optimizers."""
 
-    applied_steps: List[str] = field(default_factory=list)
+    applied_steps: list[str] = field(default_factory=list)
     delta_rms_db: float = 0.0
     continuity_smoothing_applied: bool = False
     micro_dynamic_injected: bool = False
@@ -253,7 +289,7 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
     return np.mean(audio, axis=1) if audio.shape[1] <= audio.shape[0] else np.mean(audio, axis=0)
 
 
-def _stft(audio: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _stft(audio: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """STFT → (freqs, times, Zxx_complex)."""
     f, t, Zxx = spsig.stft(audio, nperseg=_WIN_LEN, noverlap=_WIN_LEN - _HOP, window="hann", return_onesided=True)
     return f, t, Zxx
@@ -529,7 +565,7 @@ def _reinforce_harmonics(
     return _istft(Zxx_new, len(audio))
 
 
-def _ola_crossfade_edges(audio: np.ndarray, sample_rate: int) -> Tuple[np.ndarray, int]:
+def _ola_crossfade_edges(audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, int]:
     """
     Wendet Overlap-Add-Crossfade an Anfang und Ende des Signals an.
     Eliminiert Phase-Diskontinuitäten nach Rekonstruktion.
@@ -603,7 +639,7 @@ class ExcellenceOptimizer:
         profile = MATERIAL_PROFILES.get(self.material, MATERIAL_PROFILES["auto"])
         if self.material not in MATERIAL_PROFILES:
             logger.warning(
-                "ExcellenceOptimizer: Unbekanntes Material '%s' → 'auto' verwendet. " "Gültige Profile: %s",
+                "ExcellenceOptimizer: Unbekanntes Material '%s' → 'auto' verwendet. Gültige Profile: %s",
                 material,
                 list(MATERIAL_PROFILES),
             )
@@ -620,8 +656,8 @@ class ExcellenceOptimizer:
     def optimize(
         self,
         audio: np.ndarray,
-        context: Optional[ExcellenceContext] = None,
-    ) -> Tuple[np.ndarray, ExcellenceResult]:
+        context: ExcellenceContext | None = None,
+    ) -> tuple[np.ndarray, ExcellenceResult]:
         """
         Wendet alle aktivierten Excellence-Optimierungsschritte an.
 
@@ -639,7 +675,9 @@ class ExcellenceOptimizer:
         # NaN/Inf-Guard am Eingang (§ Pflicht-Codemuster)
         audio = np.nan_to_num(
             np.asarray(audio, dtype=np.float32 if audio.dtype in (np.float16, np.float32) else np.float64),
-            nan=0.0, posinf=0.0, neginf=0.0,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
         )
 
         ctx = context or analyze_context(audio, self.sample_rate)
@@ -678,7 +716,7 @@ class ExcellenceOptimizer:
                 import os
                 import sys
 
-                _plugins_dir = os.path.join(os.path.dirname(__file__), "..", "plugins")
+                _plugins_dir = os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
                 if _plugins_dir not in sys.path:
                     sys.path.insert(0, os.path.abspath(_plugins_dir))
                 from mert_plugin import MertPlugin
@@ -784,6 +822,7 @@ class ExcellenceOptimizer:
         try:
             from backend.core.goal_priority_protocol import GoalPriorityProtocol
             from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
+
             _gpp = GoalPriorityProtocol()
             _checker = MusicalGoalsChecker()
             _goals_before = _checker.measure_all(audio, self.sample_rate)
@@ -829,7 +868,7 @@ def optimize_for_excellence(
     apply_ola_edges: bool = True,
     material: str = "auto",
     use_mert: bool = False,
-) -> Tuple[np.ndarray, ExcellenceResult]:
+) -> tuple[np.ndarray, ExcellenceResult]:
     """
     Convenience-Wrapper: Einzelnes Audio-Signal auf Excellence-Niveau bringen.
 
@@ -857,7 +896,7 @@ def optimize_for_excellence(
 
 # ─── Singleton-Accessor (gem. Aurik-9-Standard §3.2) ───────────────────────────────────
 
-_optimizer_instance: Optional[ExcellenceOptimizer] = None
+_optimizer_instance: ExcellenceOptimizer | None = None
 _optimizer_lock = threading.Lock()
 
 

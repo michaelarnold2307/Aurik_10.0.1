@@ -45,8 +45,8 @@ _ONNX_PATH = _ROOT / "models" / "mp_senet" / "mp_senet.onnx"
 
 # Verarbeitungs-Konstanten (48 kHz)
 _SR: int = 48_000
-_N_FFT: int = 960        # 20 ms @ 48 kHz
-_HOP: int = 480          # 10 ms
+_N_FFT: int = 960  # 20 ms @ 48 kHz
+_HOP: int = 480  # 10 ms
 _WIN: int = 960
 
 _lock = threading.Lock()
@@ -56,6 +56,7 @@ _instance: MpSenetPlugin | None = None
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MpSenetResult:
@@ -81,6 +82,7 @@ class MpSenetResult:
 # ---------------------------------------------------------------------------
 # MpSenetPlugin
 # ---------------------------------------------------------------------------
+
 
 class MpSenetPlugin:
     """MP-SENet Multi-path Sub-Band Enhancement (ONNX, CPUExecutionProvider).
@@ -108,6 +110,7 @@ class MpSenetPlugin:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("MP-SENet", size_gb=0.04):
                     logger.warning("MP-SENet: ML-Budget erschöpft — DSP-Fallback.")
                     return
@@ -123,8 +126,23 @@ class MpSenetPlugin:
             )
             self._model_loaded = True
             logger.info("✅ MP-SENet ONNX geladen (%s, §4.4 — DCCRN/FullSubNet+ Nachfolger)", _ONNX_PATH.name)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "MP-SENet",
+                    size_gb=0.04,
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                )
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("MP-SENet ONNX nicht ladbar: %s — OMLSA-DSP-Fallback aktiv.", exc)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("MP-SENet")
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Public API
@@ -162,7 +180,7 @@ class MpSenetPlugin:
         out = np.clip(out, -1.0, 1.0)
 
         # SNR-Verbesserungsschätzung
-        rms_in = float(np.sqrt(np.mean(audio ** 2))) + 1e-10
+        rms_in = float(np.sqrt(np.mean(audio**2))) + 1e-10
         rms_diff = float(np.sqrt(np.mean((out - audio) ** 2))) + 1e-10
         snr_imp = 20.0 * math.log10(rms_in / rms_diff) if rms_diff < rms_in else 0.0
 
@@ -215,12 +233,12 @@ class MpSenetPlugin:
         assert self._session is not None
         try:
             Z, _, n_orig = self._stft(mono)
-            mag = np.abs(Z).astype(np.float32)       # [freq, T]
-            phase = np.angle(Z).astype(np.float32)   # [freq, T]
+            mag = np.abs(Z).astype(np.float32)  # [freq, T]
+            phase = np.angle(Z).astype(np.float32)  # [freq, T]
 
             # Input: Real + Imag getrennt → [1, 2, freq, T]
-            real_part = Z.real[np.newaxis, np.newaxis]   # [1, 1, freq, T]
-            imag_part = Z.imag[np.newaxis, np.newaxis]   # [1, 1, freq, T]
+            real_part = Z.real[np.newaxis, np.newaxis]  # [1, 1, freq, T]
+            imag_part = Z.imag[np.newaxis, np.newaxis]  # [1, 1, freq, T]
             inp = np.concatenate([real_part, imag_part], axis=1).astype(np.float32)
 
             inp_name = self._session.get_inputs()[0].name
@@ -256,7 +274,7 @@ class MpSenetPlugin:
             4. ISTFT + PGHI-Phasenkonsistenz
         """
         try:
-            from scipy.signal import stft as scipy_stft, istft as scipy_istft  # noqa: PLC0415
+            from scipy.signal import istft as scipy_istft, stft as scipy_stft  # noqa: PLC0415
 
             n_orig = len(mono)
             window_size = min(_WIN, n_orig)
@@ -290,6 +308,7 @@ class MpSenetPlugin:
                 v = snr_prio / (1.0 + snr_prio) * snr_post
                 v = np.clip(v, 1e-10, 700.0)
                 from scipy.special import expn  # noqa: PLC0415
+
                 gain = np.exp(0.5 * expn(1, v)) * np.maximum(v, 1e-10) / (snr_post + 1e-15)
                 gain = np.clip(gain, G_floor, 1.0)
                 G[:, t] = gain

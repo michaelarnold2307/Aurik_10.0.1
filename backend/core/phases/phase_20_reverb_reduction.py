@@ -204,9 +204,9 @@ class ReverbReduction(PhaseInterface):
                 logger.info(f"Phase 20 ML-Hybrid: mode={quality_mode}, material={material.value}")
 
                 # Configure ML dereverb strategy
-                # 'quality' und 'maximum' → HYBRID (WPE-DSP + ResembleEnhance ML)
+                # 'quality' und 'maximum' → HYBRID (SGMSE+ ML-Primär + WPE-DSP-Fallback, §4.4)
                 if quality_mode in ("maximum", "quality"):
-                    strategy = DereverbStrategy.HYBRID  # WPE + ResembleEnhance (controlled)
+                    strategy = DereverbStrategy.HYBRID  # SGMSE+ primär → WPE DSP-Fallback (§4.4)
                 else:  # balanced
                     strategy = DereverbStrategy.ADAPTIVE  # Smart: DSP only if light reverb
 
@@ -284,7 +284,7 @@ class ReverbReduction(PhaseInterface):
         # DSP-Only Path (Fast mode or ML fallback)
         logger.info(f"Phase 20 DSP-Only: material={material.value}, strength={strength}")
 
-        # ── Tier-1 DSP: WPE (Nakatani 2010) — primäre Dereverb-Methode (Spec §4.4) ──
+        # ── Tier-1 DSP: WPE (Nakatani 2010) — DSP-Fallback für Dereverb (§4.4; ML-Primär: SGMSE+) ──
         # WPE entfernt Spätreflexionen via iterative gewichtete lineare Prädiktion.
         # Kaskade: nara_wpe → NumPy-WPE → OMLSA (innerhalb des Plugins).
         if WPE_AVAILABLE:

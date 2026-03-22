@@ -249,7 +249,7 @@ def _try_cqtdiff_plus_plugin(audio: np.ndarray, start: int, end: int, sample_rat
         import os as _os  # noqa: PLC0415
         import sys
 
-        _plugins_dir = _os.path.join(_os.path.dirname(__file__), "..", "..", "plugins")
+        _plugins_dir = _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "plugins")
         if _plugins_dir not in sys.path:
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
@@ -279,7 +279,7 @@ def _try_flow_matching_plugin(audio: np.ndarray, start: int, end: int, sample_ra
         import os as _os
         import sys
 
-        _plugins_dir = _os.path.join(_os.path.dirname(__file__), "..", "..", "plugins")
+        _plugins_dir = _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "plugins")
         if _plugins_dir not in sys.path:
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
@@ -304,7 +304,7 @@ def _try_diffwave_plugin(audio: np.ndarray, start: int, end: int, sample_rate: i
         import os
         import sys
 
-        plugins_dir = os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
+        plugins_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "plugins")
         if plugins_dir not in sys.path:
             sys.path.insert(0, os.path.abspath(plugins_dir))
 
@@ -400,7 +400,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
     def get_metadata(self) -> PhaseMetadata:
         """Implementiert PhaseInterface.get_metadata()."""
         return PhaseMetadata(
-            phase_id="phase_55",
+            phase_id="phase_55_diffusion_inpainting",
             name="Diffusion Inpainting",
             category=PhaseCategory.RESTORATION,
             priority=9,  # CRITICAL

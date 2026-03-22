@@ -5,7 +5,7 @@ Integrationstest für Transfer Learning: Cross-domain adaptation (Vinyl → Tape
 import unittest
 
 import numpy as np
-from transfer_learner import TransferLearner
+from backend.core.transfer_learner import TransferLearner
 
 
 class TestTransferLearner(unittest.TestCase):

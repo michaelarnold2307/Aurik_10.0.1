@@ -179,11 +179,6 @@ matchering>=2.0.6        # Multiband Mid/Side Wiener reference mastering
 patsy>=1.0.0             # matchering dep (statsmodels formula API)
 statsmodels>=0.14.0      # matchering dep (spectral Wiener filter)
 
-# --- VampNet (§4.4 Inpainting ≥50 ms, models/vampnet/) ---
-descript-audiotools @ git+https://github.com/hugofloresgarcia/audiotools.git  # VampNet-Pflichtabhängigkeit (vampnet_plugin.py)
-flatten_dict>=0.4.2      # audiotools dep
-pytorch-ignite>=0.5.0   # audiotools dep (ml/trainer.py)
-randomname>=0.2.1        # audiotools dep (ml/experiment.py)
 
 # --- AudioSR (§4.4 Bandbreiten-Erweiterung <8 kHz, 5.9 GB .safetensors) ---
 # audiosr>=1.0.0

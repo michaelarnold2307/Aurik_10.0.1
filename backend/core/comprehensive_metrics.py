@@ -18,12 +18,13 @@ Keine Dummys/Mocks - nur reale, wissenschaftlich fundierte Implementierungen.
 """
 
 from dataclasses import asdict, dataclass
+import logging
 import warnings
 
 import numpy as np
 from scipy import fft, signal
 from scipy.stats import pearsonr
-import logging
+
 logger = logging.getLogger(__name__)
 
 # Import existing metrics modules
@@ -205,14 +206,18 @@ class ComprehensiveMetricsCalculator:
         Returns:
             ComprehensiveMetricsResult with all metrics
         """
-        # Ensure audio is 1D for most computations
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
+        # Normalize stereo layout to (samples, channels) and derive mono robustly.
+        # Some callers provide channel-first audio with shape (channels, samples).
+        audio_for_metrics = np.asarray(audio)
+        if audio_for_metrics.ndim == 2:
+            if audio_for_metrics.shape[0] <= 8 and audio_for_metrics.shape[1] > audio_for_metrics.shape[0]:
+                audio_for_metrics = audio_for_metrics.T
+            audio_mono = np.mean(audio_for_metrics, axis=1)
         else:
-            audio_mono = audio
+            audio_mono = audio_for_metrics
 
         # Compute each category
-        psychoacoustic = self._compute_psychoacoustic(audio, audio_mono, reference)
+        psychoacoustic = self._compute_psychoacoustic(audio_for_metrics, audio_mono, reference)
         musical = self._compute_musical(audio_mono)
         emotional = self._compute_emotional(audio_mono)
 
@@ -395,7 +400,8 @@ class ComprehensiveMetricsCalculator:
 
         # Estimate LRA from percentile differences
         frame_size = int(0.1 * self.sr)
-        frames = np.array_split(audio.flatten(), len(audio.flatten()) // frame_size)
+        n_frames = max(1, len(audio.flatten()) // max(frame_size, 1))
+        frames = np.array_split(audio.flatten(), n_frames)
         frame_rms = [np.sqrt(np.mean(f**2)) for f in frames if len(f) == frame_size]
         if frame_rms:
             lra = np.percentile(frame_rms, 95) - np.percentile(frame_rms, 10)
@@ -412,9 +418,28 @@ class ComprehensiveMetricsCalculator:
         crest_db = 20 * np.log10((peak + 1e-10) / (rms + 1e-10))
         return float(crest_db)
 
+    def _safe_stft(
+        self, audio: np.ndarray, nperseg: int = 2048, noverlap: int | None = None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Compute STFT with adaptive parameters for short clips.
+
+        This avoids SciPy warnings/exceptions when input is shorter than fixed STFT windows.
+        """
+        x = np.asarray(audio, dtype=np.float32)
+        if x.size == 0:
+            return np.array([0.0]), np.array([0.0]), np.zeros((1, 1), dtype=np.complex64)
+
+        seg = max(1, min(int(nperseg), x.size))
+        if noverlap is None:
+            ov = min(seg // 2, seg - 1)
+        else:
+            ov = min(int(noverlap), seg - 1)
+
+        return signal.stft(x, self.sr, nperseg=seg, noverlap=ov)
+
     def _compute_spectral_features(self, audio: np.ndarray) -> tuple[float, float, float, float]:
         """Spektrale Merkmale: Flatness, Centroid, Rolloff, Flux (vektorisiert)."""
-        f, t, Zxx = signal.stft(audio, self.sr, nperseg=2048)
+        f, t, Zxx = self._safe_stft(audio, nperseg=2048)
         magnitude = np.abs(Zxx)  # shape: (freq_bins, time_frames)
 
         # Spektrale Flatness — vektorisiert (kein Python-Loop)
@@ -766,8 +791,16 @@ class ComprehensiveMetricsCalculator:
 
     def _detect_tempo(self, audio: np.ndarray) -> tuple[float, float]:
         """Detect tempo (BPM) and stability."""
+        if len(audio) < 16:
+            return 120.0, 0.5
+
+        nperseg = min(2048, len(audio))
+        if nperseg < 2:
+            return 120.0, 0.5
+        noverlap = min(1536, int(0.75 * nperseg), nperseg - 1)
+
         # Onset detection via spectral flux
-        f, t, Zxx = signal.stft(audio, self.sr, nperseg=2048, noverlap=1536)
+        f, t, Zxx = self._safe_stft(audio, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
 
         # Spectral flux
@@ -782,7 +815,7 @@ class ComprehensiveMetricsCalculator:
         autocorr = autocorr / (autocorr[0] + 1e-10)
 
         # Find tempo in reasonable range (60-180 BPM)
-        hop_time = (2048 - 1536) / self.sr
+        hop_time = max(1 / self.sr, (nperseg - noverlap) / self.sr)
         min_lag = int(60 / 180 / hop_time)  # 180 BPM
         max_lag = int(60 / 60 / hop_time)  # 60 BPM
 
@@ -803,13 +836,27 @@ class ComprehensiveMetricsCalculator:
 
     def _compute_rhythmic_regularity(self, audio: np.ndarray) -> float:
         """Beat regularity (periodicity of onset envelope)."""
+        if len(audio) < 32:
+            return 0.3
+
         # Onset envelope
         envelope = np.abs(signal.hilbert(audio))
 
         # Downsample to ~100 Hz for beat tracking
         target_rate = 100
-        decimation = self.sr // target_rate
-        envelope_ds = signal.decimate(envelope, decimation, zero_phase=True)
+        decimation = max(1, self.sr // target_rate)
+        # signal.decimate with zero_phase=True can fail on very short vectors due to padlen.
+        # Use simple stride-based downsampling fallback when the clip is too short.
+        if len(envelope) <= 27:
+            envelope_ds = envelope[::decimation] if decimation > 1 else envelope
+        else:
+            try:
+                envelope_ds = signal.decimate(envelope, decimation, zero_phase=True)
+            except ValueError:
+                envelope_ds = envelope[::decimation] if decimation > 1 else envelope
+
+        if len(envelope_ds) < 16:
+            return 0.3
 
         # Autocorrelation
         autocorr = np.correlate(envelope_ds, envelope_ds, mode="full")
@@ -1043,7 +1090,7 @@ class ComprehensiveMetricsCalculator:
         loudness_factor = np.clip(rms / 0.3, 0, 1)
 
         # Spectral flux
-        f, t, Zxx = signal.stft(audio, self.sr, nperseg=2048)
+        f, t, Zxx = self._safe_stft(audio, nperseg=2048)
         magnitude = np.abs(Zxx)
         flux_values = []
         for i in range(1, magnitude.shape[1]):
@@ -1189,7 +1236,7 @@ class ComprehensiveMetricsCalculator:
     def _compute_perceived_surprise(self, audio: np.ndarray) -> float:
         """Perceived surprise (high spectral flux + transients)."""
         # Spectral flux
-        f, t, Zxx = signal.stft(audio, self.sr, nperseg=2048)
+        f, t, Zxx = self._safe_stft(audio, nperseg=2048)
         magnitude = np.abs(Zxx)
         flux_values = []
         for i in range(1, magnitude.shape[1]):

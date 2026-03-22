@@ -40,8 +40,9 @@ class QualityMode(Enum):
     """Quality-Modi für adaptive Processing."""
 
     FAST = "fast"  # ~1.5× RT, 87% Quality
-    BALANCED = "balanced"  # ~2.4× RT, 92% Quality (DEFAULT)
-    QUALITY = "quality"  # ~9× RT, 95% Quality (kein 3× RT Limit!)
+    BALANCED = "balanced"  # max 3× RT (DEFAULT)
+    QUALITY = "quality"  # max 5× RT
+    MAXIMUM = "maximum"  # max 8× RT (§9.5 — maximum / studio_2026)
 
 
 class DeploymentMode(Enum):
@@ -56,7 +57,7 @@ class DeploymentMode(Enum):
               Kein Release-Risiko, da explizit opt-in.
     """
 
-    PRODUCT = "product"    # stable paths only — default
+    PRODUCT = "product"  # stable paths only — default
     RESEARCH = "research"  # experimental SOTA features enabled
 
 
@@ -93,7 +94,7 @@ class PerformanceReport:
             f"  Total: {self.total_duration_seconds:.1f}s for {self.audio_duration_seconds:.1f}s audio\n"
             f"  RT Factor: {self.total_rt_factor:.2f}× ({self.status.value})\n"
             f"  Phases: {len(self.phases)} executed, {len(self.skipped_phases)} skipped\n"
-            f"  Quality: {(1-self.quality_degradation)*100:.1f}%"
+            f"  Quality: {(1 - self.quality_degradation) * 100:.1f}%"
         )
 
 
@@ -111,6 +112,8 @@ class PerformanceGuard:
     LIMIT_3X_RT = 3.0  # Hard Limit für Balanced Mode
     LIMIT_FAST = 1.5  # Target für Fast Mode
     LIMIT_BALANCED = 3.0  # Budget für Balanced Mode — maximal RT×3
+    LIMIT_QUALITY = 5.0  # Budget für Quality Mode — maximal RT×5
+    LIMIT_MAXIMUM = 8.0  # Spec-Referenz für Maximum/Studio-artige Pfade
 
     # Warnschwellen
     WARNING_THRESHOLD_OPTIMAL = 2.0
@@ -171,6 +174,9 @@ class PerformanceGuard:
     # Hard Budget: maximaler RT-Faktor für Musikalische Exzellenz-Betrieb
     RT3_EXCELLENCE_BUDGET: float = 3.0
 
+    # Absolutes Zeitlimit (§9.5 Ausnahme-Deckel): Restaurierung darf niemals > 30 Minuten dauern
+    MAX_ABSOLUTE_SECONDS: float = 1800.0
+
     def __init__(
         self, mode: QualityMode = QualityMode.QUALITY, enforce_limit: bool = True, enable_adaptive_skipping: bool = True
     ):
@@ -190,7 +196,8 @@ class PerformanceGuard:
         self.target_rt_factor = {
             QualityMode.FAST: self.LIMIT_FAST,
             QualityMode.BALANCED: self.LIMIT_BALANCED,
-            QualityMode.QUALITY: 15.0,  # Kein Limit
+            QualityMode.QUALITY: self.LIMIT_QUALITY,
+            QualityMode.MAXIMUM: self.LIMIT_MAXIMUM,  # 8× RT — maximum / studio_2026
         }[mode]
 
         # Tracking State
@@ -217,7 +224,7 @@ class PerformanceGuard:
             )
             # audio_duration bleibt None → should_skip_phase gibt False zurück
             return
-        self.start_time = time.time()
+        self.start_time = time.perf_counter()
         self.audio_duration = audio_duration_seconds
         self.phase_performances.clear()
         self.skipped_phases.clear()
@@ -236,7 +243,7 @@ class PerformanceGuard:
         Returns:
             Phase start timestamp
         """
-        return time.time()
+        return time.perf_counter()
 
     def end_phase(self, phase_id: str, phase_start_time: float) -> PhasePerformance:
         """
@@ -249,8 +256,25 @@ class PerformanceGuard:
         Returns:
             PhasePerformance Objekt
         """
-        phase_end_time = time.time()
+        phase_end_time = time.perf_counter()
         phase_duration = phase_end_time - phase_start_time
+
+        # Guard: start_monitoring() may not have been called (e.g. short audio < 0.5s)
+        if self.start_time is None:
+            logger.debug(
+                "end_phase(%s): start_time is None — start_monitoring() was not called. Skipping RT update.",
+                phase_id,
+            )
+            return PhasePerformance(
+                phase_id=phase_id,
+                start_time=phase_start_time,
+                end_time=phase_end_time,
+                duration_seconds=phase_duration,
+                audio_duration_seconds=self.audio_duration or 0.0,
+                rt_factor=0.0,
+                is_critical=self._is_phase_critical(phase_id),
+                skipped=False,
+            )
 
         # RT Factor für diese Phase
         phase_rt_factor = phase_duration / self.audio_duration if self.audio_duration else 0
@@ -310,9 +334,6 @@ class PerformanceGuard:
         if not self.enable_adaptive_skipping:
             return False
 
-        if self.mode == QualityMode.QUALITY:
-            return False  # Quality Mode: Never skip
-
         # Kein Skip wenn audio_duration nicht gesetzt oder zu kurz (Dummy-Audio-Guard)
         if not self.audio_duration or self.audio_duration < 0.5 or self.start_time is None:
             return False
@@ -332,7 +353,7 @@ class PerformanceGuard:
             return False
 
         # Prognostiziere RT Factor nach dieser Phase
-        estimated_total_time = (time.time() - self.start_time) + estimated_time_seconds
+        estimated_total_time = (time.perf_counter() - self.start_time) + estimated_time_seconds
         estimated_total_time / self.audio_duration if self.audio_duration else 0
 
         # Schätze verbleibende Zeit (konservativ: 0.5s pro Phase)
@@ -344,13 +365,13 @@ class PerformanceGuard:
         # Skip-Kriterien basierend auf Phase Priority
         phase_priority = self.PHASE_PRIORITIES.get(phase_id, 5)  # Default: Medium
 
-        # Skip-Thresholds
+        # Skip-Thresholds relativ zum aktiven Budget.
         if phase_priority <= 3:  # LOW Priority
-            skip_threshold = 3.5
+            skip_threshold = self.target_rt_factor * 0.85
         elif phase_priority <= 6:  # MEDIUM Priority
-            skip_threshold = 4.5
+            skip_threshold = self.target_rt_factor * 0.93
         elif phase_priority <= 8:  # HIGH Priority
-            skip_threshold = 4.8
+            skip_threshold = self.target_rt_factor * 0.97
         else:  # CRITICAL (≥ 9)
             return False  # Never skip
 
@@ -368,7 +389,7 @@ class PerformanceGuard:
 
     def check_early_exit(self, remaining_phases: int) -> bool:
         """
-        Prüft ob Early-Exit nötig ist (3× RT Limit bereits erreicht/überschritten).
+        Prüft ob Early-Exit nötig ist (RT-Limit oder absolutes 30-Minuten-Limit erreicht).
 
         Args:
             remaining_phases: Anzahl verbleibender Phasen
@@ -379,25 +400,41 @@ class PerformanceGuard:
         if not self.enforce_limit:
             return False
 
-        if self.mode == QualityMode.QUALITY:
-            return False  # Quality Mode: No limit
+        # §9.5 Absolutes 30-Minuten-Limit — gilt unabhängig vom RT-Faktor.
+        # Timeout-Ausnahmen bei langsamen Systemen oder großen Modellen sind einkalkuliert,
+        # aber das Gesamtlimit von 1800 s darf unter keinen Umständen überschritten werden.
+        if self.start_time is not None:
+            elapsed_abs = time.perf_counter() - self.start_time
+            if elapsed_abs >= self.MAX_ABSOLUTE_SECONDS:
+                logger.error(
+                    "❌ ABSOLUTES ZEITLIMIT: %.0fs ≥ %.0fs (30 min) — "
+                    "Early-Exit bei %d verbleibenden Phasen erzwungen.",
+                    elapsed_abs,
+                    self.MAX_ABSOLUTE_SECONDS,
+                    remaining_phases,
+                )
+                return True
 
+        current_limit = self.target_rt_factor
         # Aktuelle RT Factor
-        if self.current_rt_factor > self.LIMIT_3X_RT:
+        if self.current_rt_factor > current_limit:
             logger.error(
-                f"❌ EARLY EXIT: 3× RT Limit exceeded ({self.current_rt_factor:.2f}× RT), "
+                f"❌ EARLY EXIT: RT-Limit exceeded ({self.current_rt_factor:.2f}× RT, limit={current_limit:.1f}×), "
                 f"aborting {remaining_phases} remaining phases"
             )
             return True
 
         # Prognose: Werden wir das Limit überschreiten?
+        if self.start_time is None:
+            # start_monitoring() not yet called — cannot project RT factor
+            return False
         estimated_remaining_time = remaining_phases * 0.5  # Konservativ
-        total_time = (time.time() - self.start_time) + estimated_remaining_time
+        total_time = (time.perf_counter() - self.start_time) + estimated_remaining_time
         projected_rt_factor = total_time / self.audio_duration if self.audio_duration else 0
 
-        if projected_rt_factor > self.LIMIT_3X_RT * 1.1:  # 10% Puffer
+        if projected_rt_factor > current_limit * 1.1:  # 10% Puffer
             logger.warning(
-                f"⚠️ EARLY EXIT recommended: Projected {projected_rt_factor:.2f}× RT > limit, "
+                f"⚠️ EARLY EXIT recommended: Projected {projected_rt_factor:.2f}× RT > {current_limit:.1f}× limit, "
                 f"would abort {remaining_phases} phases"
             )
             # Aber nicht wirklich abbrechen, nur warnen
@@ -410,7 +447,7 @@ class PerformanceGuard:
         if self.start_time is None or self.audio_duration is None:
             raise RuntimeError("Monitoring not started!")
 
-        total_duration = time.time() - self.start_time
+        total_duration = time.perf_counter() - self.start_time
         total_rt_factor = total_duration / self.audio_duration
         status = self._get_status()
 
@@ -487,7 +524,7 @@ class PerformanceGuard:
         total_budget = self.target_rt_factor * self.audio_duration if self.audio_duration else 0
 
         # Bereits verbrauchte Zeit
-        elapsed_time = time.time() - self.start_time if self.start_time else 0
+        elapsed_time = time.perf_counter() - self.start_time if self.start_time else 0
 
         # Verbleibendes Budget
         remaining_budget = total_budget - elapsed_time
@@ -507,9 +544,9 @@ if __name__ == "__main__":
     # Setup Logging
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    logger.debug(f"\n{'='*60}")
+    logger.debug(f"\n{'=' * 60}")
     logger.debug("PERFORMANCE GUARD TEST")
-    logger.debug(f"{'='*60}\n")
+    logger.debug(f"{'=' * 60}\n")
 
     # Simuliere 3:45 Audio (225 Sekunden)
     audio_duration = 225.0
@@ -567,16 +604,16 @@ if __name__ == "__main__":
     report2 = guard2.get_performance_report()
 
     # Zusammenfassung
-    logger.debug(f"\n\n{'='*60}")
+    logger.debug(f"\n\n{'=' * 60}")
     logger.debug("SUMMARY")
-    logger.debug(f"{'='*60}")
+    logger.debug(f"{'=' * 60}")
     logger.debug(
         f"Balanced Mode: {report1.total_rt_factor:.2f}× RT, "
         f"{len(report1.skipped_phases)} skipped, "
-        f"{(1-report1.quality_degradation)*100:.1f}% quality"
+        f"{(1 - report1.quality_degradation) * 100:.1f}% quality"
     )
     logger.debug(
         f"Fast Mode:     {report2.total_rt_factor:.2f}× RT, "
         f"{len(report2.skipped_phases)} skipped, "
-        f"{(1-report2.quality_degradation)*100:.1f}% quality"
+        f"{(1 - report2.quality_degradation) * 100:.1f}% quality"
     )

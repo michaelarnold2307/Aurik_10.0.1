@@ -132,6 +132,7 @@ class CQTdiffPlusPlugin:
             if model_path.exists():
                 try:
                     from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                     if not _try_alloc("CQTdiff+", size_gb=0.19):
                         logger.warning("CQTdiff+: ML-Budget erschöpft — Fallback aktiv.")
                         self._fallback_active = True
@@ -145,6 +146,16 @@ class CQTdiffPlusPlugin:
                 )
                 self._model_loaded = True
                 logger.info("🔵 CQTdiff: Score-Netzwerk geladen (%s)", model_path)
+                try:
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                    _reg_plm(
+                        "CQTdiff+",
+                        size_gb=0.19,
+                        unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                    )
+                except Exception:
+                    pass
             else:
                 logger.info(
                     "CQTdiff: ONNX-Modell nicht gefunden (%s) — Fallback aktiv",
@@ -157,6 +168,11 @@ class CQTdiffPlusPlugin:
         except Exception as exc:
             logger.warning("CQTdiff+ Modell-Lade-Fehler: %s — Fallback aktiv", exc)
             self._fallback_active = True
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("CQTdiff+")
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Öffentliche API

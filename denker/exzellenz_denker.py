@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Eager top-level import verhindert Import-Lock-Deadlock in langen Test-Läufen
 # (§3.4 Lazy Imports / Spec Threading-Invariante)
 try:
-    from core.vocal_ai_enhancement import (  # noqa: E402
+    from backend.core.vocal_ai_enhancement import (  # noqa: E402
         EmotionPreservationMode,
         UnifiedVocalAIEnhancer,
     )
@@ -60,6 +60,10 @@ class ExzellenzErgebnis:
     improvements: list[str]
     processing_note: str
     warnings: list[str] = field(default_factory=list)
+    versa_mos: float = 0.0
+    """VERSA MOS-Score \u2208 [1, 5] gemessen am optimierten Audio (0.0 = nicht verfügbar).
+    Wird von AurikDenker wiederverwendet, um doppelte VERSA-Inferenz zu vermeiden.
+    """
 
     def as_dict(self) -> dict:
         """Serialisierungsformat für Logging und Persistenz."""
@@ -265,6 +269,7 @@ class ExzellenzDenker:
             improvements=improvements,
             processing_note=note,
             warnings=warnings,
+            versa_mos=versa_mos,
         )
 
     def messe_ziele(self, audio: np.ndarray, sr: int) -> dict[str, float]:
@@ -322,7 +327,7 @@ class ExzellenzDenker:
     @staticmethod
     def _build_optimizer(sr: int, material: str) -> object:
         """Erstellt einen neuen ExcellenceOptimizer."""
-        from core.excellence_optimizer import ExcellenceOptimizer  # lazy import
+        from backend.core.excellence_optimizer import ExcellenceOptimizer  # lazy import
 
         return ExcellenceOptimizer(
             sample_rate=sr,

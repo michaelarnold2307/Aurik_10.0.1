@@ -28,7 +28,6 @@ import logging
 import math
 from pathlib import Path
 import threading
-from typing import Optional
 
 import numpy as np
 
@@ -91,9 +90,7 @@ class LyricsTranscriber:
     MODEL_PATH: Path = Path(__file__).parent.parent / "models" / "whisper" / "whisper_tiny.onnx"
     VOCAB_PATH: Path = Path(__file__).parent.parent / "models" / "whisper" / "whisper_tiny_vocab.json"
     # Fallback: Whisper-Base ONNX (§13.3 — gebündeltes Modell falls tiny fehlt)
-    _BASE_MODEL_PATH: Path = (
-        Path(__file__).parent.parent / "models" / "whisper" / "whisper-base_beamsearch.onnx"
-    )
+    _BASE_MODEL_PATH: Path = Path(__file__).parent.parent / "models" / "whisper" / "whisper-base_beamsearch.onnx"
     WHISPER_SR: int = 16_000
     MIN_WORD_CONFIDENCE: float = 0.30
 
@@ -104,7 +101,7 @@ class LyricsTranscriber:
     _STRESS_RMS_FACTOR: float = 1.3
 
     def __init__(self) -> None:
-        self._session: Optional[object] = None
+        self._session: object | None = None
         self._session_loaded: bool = False
         self._load_onnx()
 
@@ -140,6 +137,7 @@ class LyricsTranscriber:
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+
                 if not _try_alloc("WhisperTiny", size_gb=0.41):
                     logger.warning("WhisperTiny: ML-Budget erschöpft — DSP-Fallback.")
                     return
@@ -152,9 +150,24 @@ class LyricsTranscriber:
             )
             self._session_loaded = True
             logger.info("✅ %s ONNX geladen (%s, §2.36)", label, model_path.name)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "WhisperTiny",
+                    size_gb=0.41,
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_session_loaded", False),
+                )
+            except Exception:
+                pass
 
         except Exception as exc:
             logger.info("Whisper-ONNX nicht verfügbar — DSP-Energie-Fallback aktiv: %s", exc)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("WhisperTiny")
+            except Exception:
+                pass
 
     def transcribe(
         self,
@@ -209,7 +222,7 @@ class LyricsTranscriber:
         mel = self._compute_log_mel(audio_16k)
 
         # 3. ONNX-Encoder-Forward
-        encoder_out: Optional[np.ndarray] = None
+        encoder_out: np.ndarray | None = None
         try:
             input_name = self._session.get_inputs()[0].name  # type: ignore[union-attr]
             outputs = self._session.run(None, {input_name: mel})  # type: ignore[union-attr]
@@ -233,7 +246,7 @@ class LyricsTranscriber:
     def _segment_with_encoder(
         self,
         audio_16k: np.ndarray,
-        encoder_out: Optional[np.ndarray],
+        encoder_out: np.ndarray | None,
         duration_s: float,
     ) -> list[WordTimestamp]:
         """Energie-basierte Segmentierung, Konfidenz erhöht wenn Encoder aktiv."""
@@ -540,7 +553,7 @@ class LyricsTranscriber:
 # Singleton + Convenience (§3.2 Double-Checked Locking)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[LyricsTranscriber] = None
+_instance: LyricsTranscriber | None = None
 _lock = threading.Lock()
 
 

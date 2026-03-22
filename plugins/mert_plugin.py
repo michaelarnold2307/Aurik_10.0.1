@@ -413,6 +413,11 @@ class MertPlugin:
             logger.info("MERT-v1-330M (HuggingFace, CC BY-NC 4.0) geladen: %s", hf_dir)
         except Exception as e:
             logger.debug("MERT-v1-330M HuggingFace Ladefehler: %s → weiter", e)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("MERT-330M-HF")
+            except Exception:
+                pass
 
     def _try_load_fairseq_330m(self) -> None:
         """Lädt MERT-v1-330M als fairseq-Checkpoint.
@@ -450,6 +455,11 @@ class MertPlugin:
             logger.info("MERT-v1-330M fairseq-Checkpoint geladen: %s (%d Parameter-Blöcke)", pt_path, n_keys)
         except Exception as e:
             logger.debug("MERT-v1-330M fairseq Ladefehler: %s → weiter", e)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                _rel("MERT-330M-fairseq")
+            except Exception:
+                pass
 
     def _try_load_hf(self) -> None:
         """Lädt MERT-v1-95M aus models/mert-95m/ via HuggingFace transformers.
@@ -505,13 +515,39 @@ class MertPlugin:
             logger.debug("MERT ONNX nicht gefunden (%s) → DSP-Fallback", onnx_path)
             return
         try:
-            import onnxruntime as ort  # noqa: F401
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
 
-            self._model = ort.InferenceSession(str(onnx_path))
+            if not _try_alloc("MERT-ONNX", size_gb=0.18):
+                logger.warning("MERT ONNX: ML-Budget erschöpft — DSP-Fallback")
+                return
+        except Exception:
+            pass
+        try:
+            import onnxruntime as ort  # noqa: PLC0415
+
+            self._model = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
             self._model_type = "mert_onnx"
             logger.info("MERT ONNX geladen: %s", onnx_path)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "MERT-ONNX",
+                    size_gb=0.18,
+                    unload_fn=lambda s=self: (
+                        setattr(s, "_model", None) or setattr(s, "_model_type", "dsp")
+                    ),
+                )
+            except Exception:
+                pass
         except Exception as e:
             logger.debug("MERT ONNX Ladefehler: %s → DSP-Fallback", e)
+            try:
+                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+
+                _rel("MERT-ONNX")
+            except Exception:
+                pass
 
     def _try_load_local_dsp(self) -> None:
         """Lokaler DSP-Fallback — kein Netzwerkzugriff, kein Modell-Download."""

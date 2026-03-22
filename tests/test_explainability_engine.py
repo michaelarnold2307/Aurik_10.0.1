@@ -1,6 +1,6 @@
 import unittest
 
-from explainability_engine import ExplainabilityEngine
+from backend.core.explainability_engine import ExplainabilityEngine
 
 
 class TestExplainabilityEngine(unittest.TestCase):

@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from restoration_workflow import RestorationWorkflow
+from backend.core.restoration_workflow import RestorationWorkflow
 
 
 class TestRestorationWorkflow(unittest.TestCase):

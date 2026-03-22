@@ -32,7 +32,25 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-_3X_RT_LIMIT: float = 3.0  # Maximaler Echtzeit-Faktor (Spec §9.5)
+_3X_RT_LIMIT: float = 3.0  # RT-Reported max (Spec §9.5 — caps rt_factor in output)
+# Mode-abhängige RT-Budgets für RestaurierDenker-Thread (Spec §9.5):
+#   BALANCED=3×, QUALITY=5×, MAXIMUM=8×
+_RT_BUDGET_BY_MODE: dict = {
+    "balanced": 3.0,
+    "restoration": 5.0,  # "Restoration" maps to quality
+    "quality":    5.0,
+    "studio2026": 8.0,
+    "maximum":    8.0,
+}
+# Cold-Start-Minimum: Erster Lauf lädt ML-Modelle (PANNs 0.7GB, UV3 vollständig, etc.)
+# UV3-Init + Klassifikation allein dauert 20–60s. 900s = 15 min Watchdog-konsistenter Floor
+# (Frontend-Watchdog ebenfalls 600s/Datei). UV3's interne PerformanceGuard begrenzt
+# die eigentliche Verarbeitungszeit — dieser Floor ist nur für Cold-Start-Model-Loading.
+_COLDSTART_MIN_SECONDS: float = 900.0
+# Absolutes Gesamtlimit (§9.5 Ausnahme-Deckel): eine Restaurierung dauert niemals > 30 Minuten.
+# Zeitbudget-Ausnahmen (Cold-Start, langsame Systeme) sind einkalkuliert; dieses Limit
+# gilt als härte Schranke, damit der Nutzer niemals endlos wartet.
+_MAX_TOTAL_SECONDS: float = 1800.0
 _MIN_AUDIO_SAMPLES: int = 64  # Mindestsignallänge
 
 
@@ -246,22 +264,21 @@ class AurikDenker:
         defekt: Any = None  # M-1/M-4: hoisted — für Stage-5-Flags
 
         def _budget_ok() -> bool:
-            # M-2: RT-Primärcheck — immer aktiv
-            if _rt() >= _3X_RT_LIMIT * 0.90:
+            # M-2: RT-Primärcheck — mode-abhängig (Spec §9.5):
+            #   BALANCED=3× | RESTORATION/QUALITY=5× | MAXIMUM=8×
+            # Zusätzlich: absolutes 30-Minuten-Limit — gilt unabhängig vom RT-Faktor.
+            # StrategieDenker.check() wird hier NICHT verwendet, da es immer 3×RT
+            # hardcoded prüft und so ExzellenzDenker in Restoration/Quality-Mode
+            # fälschlich blockieren würde. Der primäre _RT_BUDGET_BY_MODE-Check ist
+            # die einzige authoritative Schranke.
+            if (time.perf_counter() - t_start) >= _MAX_TOTAL_SECONDS:
+                logger.warning(
+                    "⚠️ 30-Minuten-Absolutlimit erreicht (%.0fs) — Stage wird übersprungen.",
+                    time.perf_counter() - t_start,
+                )
                 return False
-            # M-2: StrategieDenker-Budget-Gate — aktiv sobald Stufe 3 abgeschlossen
-            if strat_denker is not None:
-                try:
-                    if strat_denker.check(phases_remaining=0).should_exit_early:
-                        logger.info("AurikDenker: StrategieDenker signalisiert Budget-Abbruch")
-                        return False
-                except Exception as budget_exc:
-                    logger.debug(
-                        "AurikDenker: StrategieDenker-Budgetcheck fehlgeschlagen (Ursache: %s). "
-                        "Lösung: Budget-Status aus StrategieDenker prüfen.",
-                        budget_exc,
-                    )
-            return True
+            _mode_limit = _RT_BUDGET_BY_MODE.get(mode.lower(), 5.0)
+            return _rt() < _mode_limit * 0.90
 
         # ── Stufe 1: Tonträger-Erkennung ─────────────────────────────────────
         _emit(2, "Tonträger wird erkannt …")
@@ -328,7 +345,11 @@ class AurikDenker:
             # bereits parallel in UnifiedRestorerV3 (§P-3). Doppelaufruf vermeiden
             # (Anti-Parallelwelten-Pflicht). Nur DSP-Heuristik in Stufe 2b.
             _globalplan = _erstelle_gp(
-                aktuelles_audio, sr, material=material, use_ml_classifiers=False
+                aktuelles_audio,
+                sr,
+                material=material,
+                use_ml_classifiers=False,
+                chain_info=chain_info,
             )
             stage_notes["globalplan"] = (
                 f"\u00c4ra: {_globalplan.portrait.decade}er, "
@@ -352,7 +373,13 @@ class AurikDenker:
         strategie = None
         try:
             strat_denker = get_strategie_denker()
-            strategie = strat_denker.plan(aktuelles_audio, sr, enforce_3x_rt=True)
+            # M-2b: §7.6 defekt-adaptive Chunk-Größe — übergebe Defektschwere an Strategie
+            _defect_sev_for_plan = float(getattr(defekt, "overall_severity", 0.0)) if defekt is not None else 0.0
+            strategie = strat_denker.plan(
+                aktuelles_audio, sr,
+                enforce_3x_rt=True,
+                defect_severity=_defect_sev_for_plan,
+            )
             strat_denker.starte_timer(audio_duration_s)
             stage_notes["strategie"] = f"Budget: {strategie.max_processing_s:.1f}s, " f"Modus: {strategie.quality_mode}"
             phases_executed.append("strategie_plan")
@@ -383,13 +410,27 @@ class AurikDenker:
                 # M-3: Mode-Hierarchie: expliziter mode-Parameter hat Vorrang vor StrategieDenker
                 _strat_mode = strategie.quality_mode if strategie is not None else "quality"
                 _mode = mode if mode != "quality" else _strat_mode  # Studio 2026 überschreibt
-                # RT-Budget-Guard: Restaurierung läuft in eigenem Thread, damit
-                # ein langsamer Kaltstart (Modul-Import-Kaskade) das Gesamt-
-                # Budget nicht sprengt und den pytest-Timeout auslöst.
+                # RT-Budget-Guard: Restaurierung läuft in eigenem Thread.
+                # Budget ist mode-abhängig (Spec §9.5: 5× für Quality, 8× für Maximum).
+                # Cold-Start-Minimum: mindestens _COLDSTART_MIN_SECONDS um ML-Modell-Ladezeit
+                # (PANNs 0.7 GB, wav2vec2 0.35 GB …) nicht dem Restaurierungs-Budget anzulasten.
+                _rt_multiplier = _RT_BUDGET_BY_MODE.get(_mode.lower(), 5.0)
+                _elapsed_so_far = time.perf_counter() - t_start
                 _remaining = max(
-                    audio_duration_s * _3X_RT_LIMIT - (time.perf_counter() - t_start),
-                    0.5,
+                    audio_duration_s * _rt_multiplier - _elapsed_so_far,
+                    _COLDSTART_MIN_SECONDS,
                 )
+                # §9.5 Absolutes 30-Minuten-Limit: Thread-Timeout darf nie über die
+                # verbleibende Zeit bis zur Gesamtgrenze hinausgehen. Mindestens 30 s
+                # werden immer einkalkuliert, damit auch beim Cold-Start-Ablauf noch
+                # ein sinnvoller Verarbeitungsversuch möglich ist.
+                _abs_remaining = _MAX_TOTAL_SECONDS - _elapsed_so_far
+                if _abs_remaining <= 0:
+                    raise RuntimeError(
+                        f"30-Minuten-Absolutlimit bereits überschritten "
+                        f"({_elapsed_so_far:.0f}s) — Restaurierung wird nicht gestartet."
+                    )
+                _remaining = min(_remaining, max(30.0, _abs_remaining))
                 _result_box: list = []
                 _err_box: list = []
                 _rep_result_box: list = []   # ReparaturDenker Ergebnis (4a)
@@ -468,7 +509,8 @@ class AurikDenker:
                 _rest_confidence = float(getattr(rest, "confidence", 0.85))
                 _rest_rollback = bool(getattr(rest, "rollback_triggered", False))
                 _rest_variant = getattr(rest, "winning_variant", None)
-                _rest_musical_goals = dict(getattr(rest, "musical_goals", {}))
+                _raw_goals = getattr(rest, "musical_goals", None)
+                _rest_musical_goals = dict(_raw_goals) if _raw_goals else {}
                 _rest_goals_passed = int(getattr(rest, "goals_passed", 0))
                 # §Dach-Enrichment: era_decade aus RestorationResult in Globalplan übernehmen
                 # (ML-Klassifikatoren liefen in UV3 — jetzt Ergebnis in Plan einpflegen)
@@ -538,6 +580,7 @@ class AurikDenker:
         musical_goals: dict[str, float] = dict(_rest_musical_goals)
         goals_passed: int = _rest_goals_passed
         excellence_score = 0.0
+        _exz_versa_mos: float = 0.0  # M-8b: aus ExzellenzDenker gecachter VERSA-Score
 
         if _budget_ok():
             try:
@@ -548,14 +591,18 @@ class AurikDenker:
                     musical_goals = exz.musical_goals
                     goals_passed = exz.goals_passed
                 excellence_score = exz.excellence_score
+                # M-8b: VERSA-MOS aus ExzellenzDenker zwischenspeichern —
+                # vermeidet doppelte VERSA-Inferenz in Stage 8
+                _exz_versa_mos: float = float(getattr(exz, "versa_mos", 0.0))
                 warnings.extend(exz.warnings or [])
                 stage_notes["exzellenz"] = exz.processing_note
                 phases_executed.append("exzellenz_optimierung")
                 logger.info(
-                    "AurikDenker [7/8] Exzellenz: Score=%.3f, Goals %d/%d",
+                    "AurikDenker [7/8] Exzellenz: Score=%.3f, Goals %d/%d%s",
                     excellence_score,
                     goals_passed,
                     exz.goals_total,
+                    f", VERSA={_exz_versa_mos:.3f}" if _exz_versa_mos > 0.0 else "",
                 )
             except Exception as exc:
                 warnings.append(f"ExzellenzDenker fehlgeschlagen: {exc}")
@@ -568,11 +615,25 @@ class AurikDenker:
 
         # ── Stufe 8: VERSA MOS — finales Qualitätsurteil (§4.4) ─────────────
         _emit(95, "VERSA MOS-Qualitätsbewertung läuft …")
-        # VERSA 2024 liefert eine unabhängige, nicht-referenzbasierte MOS-Bewertung.
-        # Dieser Score fließt in quality_estimate ein und entscheidet ob eine
-        # Warnung für den Benutzer erzeugt wird.
-        _versa_mos: float = 0.0
-        if _budget_ok():
+        # M-8b: VERSA-MOS-Cache aus ExzellenzDenker übernehmen um doppelte
+        # Inferenz zu vermeiden. Nur wenn dort kein Score verfügbar, VERSA neu fahren.
+        _versa_mos: float = _exz_versa_mos
+        if _exz_versa_mos > 0.0:
+            # ExzellenzDenker hat bereits VERSA auf optimiertem Audio gemessen
+            stage_notes["versa_mos"] = f"MOS={_versa_mos:.3f} (ExzellenzDenker-Cache)"
+            phases_executed.append("versa_qualitaetsbewertung")
+            logger.info(
+                "AurikDenker [8/8] VERSA MOS=%.3f (ExzellenzDenker-Cache) — %s",
+                _versa_mos,
+                "✓ Studioqualität" if _versa_mos >= 4.3 else (
+                    "✓ Gute Qualität" if _versa_mos >= 3.5 else "⚠ Qualität unter Mindestniveau"
+                ),
+            )
+            if _versa_mos < 3.5:
+                warnings.append(
+                    f"VERSA MOS={_versa_mos:.2f} < 3.5 — Klangqualität unter Mindestniveau"
+                )
+        elif _budget_ok():
             try:
                 from plugins.versa_plugin import score_mos  # noqa: PLC0415
 
@@ -593,33 +654,37 @@ class AurikDenker:
                     warnings.append(
                         f"VERSA MOS={_versa_mos:.2f} < 3.5 — Klangqualität unter Mindestniveau"
                     )
-                # §Spec VERSA MOS-Gate: MOS < 4.0 → zweiter ExzellenzDenker-Durchlauf
-                if _versa_mos > 0.0 and _versa_mos < 4.0 and _budget_ok():
-                    _emit(97, "VERSA MOS-Gate: 2. Exzellenz-Optimierungspass …")
-                    try:
-                        exz2 = get_exzellenz_denker().optimiere(aktuelles_audio, sr, material=material)
-                        aktuelles_audio = exz2.audio
-                        if exz2.musical_goals and exz2.goals_passed >= goals_passed:
-                            musical_goals = exz2.musical_goals
-                            goals_passed = exz2.goals_passed
-                        if exz2.excellence_score > excellence_score:
-                            excellence_score = exz2.excellence_score
-                        warnings.extend(exz2.warnings or [])
-                        stage_notes["exzellenz_2"] = (
-                            f"MOS-Gate (MOS={_versa_mos:.2f} < 4.0): "
-                            f"Score={exz2.excellence_score:.3f}, Goals {exz2.goals_passed}/{exz2.goals_total}"
-                        )
-                        phases_executed.append("exzellenz_optimierung_2")
-                        logger.info(
-                            "AurikDenker [8/8] MOS-Gate: 2. Exzellenz Score=%.3f, Goals %d/%d",
-                            exz2.excellence_score, goals_passed, exz2.goals_total,
-                        )
-                    except Exception as exc:
-                        warnings.append(f"ExzellenzDenker 2. Durchlauf fehlgeschlagen: {exc}")
-                        stage_notes["exzellenz_2"] = f"MOS-Gate Fehler: {exc}"
-                        logger.warning("AurikDenker [8/8] MOS-Gate ExzellenzDenker 2. Pass: %s", exc)
             except Exception as _ve:  # noqa: BLE001
                 logger.debug("AurikDenker [8/8] VERSA MOS nicht verfügbar: %s", _ve)
+        # §Spec VERSA MOS-Gate: MOS < 4.0 → zweiter ExzellenzDenker-Durchlauf
+        if _versa_mos > 0.0 and _versa_mos < 4.0 and _budget_ok():
+            _emit(97, "VERSA MOS-Gate: 2. Exzellenz-Optimierungspass …")
+            try:
+                exz2 = get_exzellenz_denker().optimiere(aktuelles_audio, sr, material=material)
+                aktuelles_audio = exz2.audio
+                if exz2.musical_goals and exz2.goals_passed >= goals_passed:
+                    musical_goals = exz2.musical_goals
+                    goals_passed = exz2.goals_passed
+                if exz2.excellence_score > excellence_score:
+                    excellence_score = exz2.excellence_score
+                # M-8b: VERSA vom 2. Exzellenz-Pass übernehmen wenn verfügbar
+                _exz2_mos = float(getattr(exz2, "versa_mos", 0.0))
+                if _exz2_mos > 0.0:
+                    _versa_mos = _exz2_mos
+                warnings.extend(exz2.warnings or [])
+                stage_notes["exzellenz_2"] = (
+                    f"MOS-Gate (MOS={_versa_mos:.2f} < 4.0): "
+                    f"Score={exz2.excellence_score:.3f}, Goals {exz2.goals_passed}/{exz2.goals_total}"
+                )
+                phases_executed.append("exzellenz_optimierung_2")
+                logger.info(
+                    "AurikDenker [8/8] MOS-Gate: 2. Exzellenz Score=%.3f, Goals %d/%d",
+                    exz2.excellence_score, goals_passed, exz2.goals_total,
+                )
+            except Exception as exc:
+                warnings.append(f"ExzellenzDenker 2. Durchlauf fehlgeschlagen: {exc}")
+                stage_notes["exzellenz_2"] = f"MOS-Gate Fehler: {exc}"
+                logger.warning("AurikDenker [8/8] MOS-Gate ExzellenzDenker 2. Pass: %s", exc)
 
         # ── Stufe 8b: RAM-Cleanup nach Pipeline ──────────────────────────────
         # PluginLifecycleManager entlädt inaktive ML-Modelle wenn RAM knapp ist.
@@ -646,15 +711,23 @@ class AurikDenker:
             )
         rt_factor = min(_rt_raw, _3X_RT_LIMIT)  # Spec §9.5: niemals > 3.0
 
-        # Qualitätsschätzung: Priorität VERSA MOS → excellence_score → DSP-basiert
+        # Qualitätsschätzung nach Spec §8.1 (normative Formel):
+        # quality_estimate = 0.40*(1-defect_severity) + 0.60*(pqs_mos-1)/4
+        # VERBOTEN: quality_estimate * 1.15 als fixer Bonus-Faktor
+        _defect_sev_final = float(getattr(defekt, "overall_severity", 0.0)) if defekt is not None else 0.0
+        _defect_sev_final = max(0.0, min(1.0, _defect_sev_final))
         if _versa_mos > 0.0:
-            # VERSA MOS [1,5] → [0,1] skaliert, mit Excellence-Bonus gewichtet
-            _versa_norm = float(np.clip((_versa_mos - 1.0) / 4.0, 0.0, 1.0))
-            quality_estimate = 0.6 * _versa_norm + 0.4 * excellence_score if excellence_score > 0.0 else _versa_norm
+            # VERSA MOS als pqs_mos-Proxy (kalibriert, Pearson=0.74 vs PQS-Gammatone)
+            _mos_norm = float(np.clip((_versa_mos - 1.0) / 4.0, 0.0, 1.0))
+            quality_estimate = 0.40 * (1.0 - _defect_sev_final) + 0.60 * _mos_norm
+            quality_estimate = float(np.clip(quality_estimate, 0.0, 1.0))
         elif excellence_score > 0.0:
-            quality_estimate = excellence_score
+            # Kein VERSA verfügbar — excellence_score als mos_proxy verwenden
+            quality_estimate = float(np.clip(
+                0.40 * (1.0 - _defect_sev_final) + 0.60 * excellence_score, 0.0, 1.0
+            ))
         else:
-            # Einfache DSP-basierte Schätzung (SNR-Proxy)
+            # Einfache DSP-basierte Schätzung (SNR-Proxy, kein ML)
             rms = float(np.sqrt(np.mean(aktuelles_audio.astype(np.float64) ** 2)))
             quality_estimate = min(max(rms * 4.0, 0.55), 0.95)
 

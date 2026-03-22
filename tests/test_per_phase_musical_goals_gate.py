@@ -181,7 +181,7 @@ class TestConstants:
         assert MAX_RETRIES == 5  # v9.15-B3: 5-Retry-Strategie
 
     def test_06_fast_goals_subset_length(self):
-        assert len(FAST_GOALS_SUBSET) == 6
+        assert len(FAST_GOALS_SUBSET) == 14  # v9.10.57: alle 14 Musical Goals per-Phase geprüft
 
     def test_07_fast_goals_contains_brillanz(self):
         assert "brillanz" in FAST_GOALS_SUBSET

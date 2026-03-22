@@ -91,7 +91,8 @@ class DeepFilterNetV3Plugin:
         # ── ML-Budget-Check VOR dem Laden (§5.1 OOM-Schutz) ──────────────────
         _allocated = False
         try:
-            from backend.core.ml_memory_budget import try_allocate, release as _release  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release, try_allocate  # noqa: PLC0415
+
             if not try_allocate("DeepFilterNetV3", size_gb=0.15):
                 logger.warning("DeepFilterNet: ML-Budget erschöpft — DSP-Fallback aktiv")
                 return
@@ -109,12 +110,25 @@ class DeepFilterNetV3Plugin:
             self._dec = ort.InferenceSession(os.path.join(d, "dec.onnx"), sess_options=opts, providers=prov)
             self._erb_dec = ort.InferenceSession(os.path.join(d, "erb_dec.onnx"), sess_options=opts, providers=prov)
             logger.info("DeepFilterNet v3 II ONNX-Modelle geladen aus: %s", d)
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+
+                _reg_plm(
+                    "DeepFilterNetV3",
+                    size_gb=0.15,
+                    unload_fn=lambda s=self: (
+                        setattr(s, "_enc", None) or setattr(s, "_dec", None) or setattr(s, "_erb_dec", None)
+                    ),
+                )
+            except Exception:
+                pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("DeepFilterNet ONNX-Ladefehler: %s — DSP-Fallback aktiv.", exc)
             self._enc = self._dec = self._erb_dec = None
             if _allocated:
                 try:
                     from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+
                     _release("DeepFilterNetV3")
                 except ImportError:
                     pass

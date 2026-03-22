@@ -17,7 +17,7 @@ try:
     from dsp.custom_compressor import CustomCompressor
 except ImportError:
     CustomCompressor = None
-from validate_musical_goals import (
+from backend.core.validate_musical_goals import (
     ArtifactChecker,
     FormantGuard,
     MixBalanceChecker,
@@ -67,7 +67,8 @@ class AdaptiveController:
         # Beispiel: KI-gestützte Auswahl und Gewichtung der Module
         import random
 
-        modules = ["DeepFilterNet", "Demucs", "WPE", "HiFi-GAN", "DiffWave", "PANNS", "CDPAM", "DNSMOS", "NISQA"]
+        # §4.4: Nur musik-geeignete ML-Module (CDPAM/DNSMOS/NISQA VERBOTEN)
+        modules = ["DeepFilterNet", "HTDemucs", "WPE", "Vocos", "DiffWave", "BEATs", "VERSA", "UTMOS", "ViSQOL"]
         # Gewichtung nach Quality-Gates, User-Feedback, Genre
         genre = feedback.get("genre", "default")
         quality = feedback.get("user_score", 0.8)
@@ -141,7 +142,8 @@ class AdaptiveController:
                 "Dither",
                 "EnvelopeMatcher",
             ],
-            "ki_models": ["DNSMOS", "NISQA", "CDPAM", "PESQ", "ViSQOL"],
+            # §4.4: Nur musik-geeignete MOS-Metriken (CDPAM/DNSMOS/NISQA/PESQ VERBOTEN)
+            "ki_models": ["VERSA", "UTMOS", "ViSQOL", "PEAQ", "BEATs"],
         }
 
 

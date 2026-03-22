@@ -7,7 +7,6 @@ Launch the desktop application for audio restoration
 from pathlib import Path
 import sys
 import logging
-import threading
 import time
 
 # Add parent directory to path
@@ -35,38 +34,12 @@ _ch.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
 _root_logger.addHandler(_ch)
 # ──────────────────────────────────────────────────────────────────────────────
 
+logger = logging.getLogger(__name__)
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from Aurik910.ui.modern_window import ModernMainWindow
-
-
-def _warmup_models_background() -> None:
-    """Lädt ONNX-Sessions aller Pflicht-Plugins im Hintergrund (§9.7.4).
-
-    2 s Verzögerung stellt sicher, dass App-Fenster vollständig sichtbar
-    ist bevor Hintergrundlast beginnt. Kein Absturz bei fehlendem Plugin.
-    """
-    time.sleep(2)
-    import importlib
-
-    for _mod, _accessor in (
-        # Tier-1 Primär-Plugins (§9.7.4 — Pflicht-Vorwärmen)
-        ("plugins.rmvpe_plugin", "get_rmvpe_plugin"),          # Pitch-Tracking (Primär)
-        ("plugins.beats_plugin", "get_beats_plugin"),          # Audio-Tagging (Primär)
-        ("plugins.sgmse_plugin", "get_sgmse_plugin"),          # Dereverb/Denoising (Primär)
-        ("plugins.silero_plugin", "get_silero_vad"),           # VAD (Primär, ~1 MB, ultraschnell)
-        ("plugins.deepfilternet_v3_ii_plugin", "get_deepfilternet"),  # Breitrauschen
-        ("plugins.panns_plugin", "get_panns_plugin"),          # Audio-Tagging (Fallback zu BEATs)
-        ("plugins.crepe_plugin", "get_crepe_plugin"),          # Pitch-Tracking (Fallback zu RMVPE)
-    ):
-        try:
-            m = importlib.import_module(_mod)
-            fn = getattr(m, _accessor, None)
-            if fn is not None:
-                fn()
-        except Exception:
-            pass  # Lazy-Load uebernimmt bei Bedarf
 
 
 def _run_startup_model_check(app: QApplication) -> None:
@@ -122,14 +95,8 @@ def main():
     _run_startup_model_check(app)
     window = ModernMainWindow()
     window.show()
-
-    # §9.7.4 Modell-Warmup im Hintergrund (daemon=True -> endet mit App)
-    threading.Thread(
-        target=_warmup_models_background,
-        daemon=True,
-        name="AurikWarmup",
-    ).start()
-
+    # §9.7.4 Modell-Warmup: ModernMainWindow.__init__ startet via QTimer.singleShot(2000)
+    # warmup_models_background() aus backend.api.bridge — kein zweiter Thread hier.
     sys.exit(app.exec_())
 
 

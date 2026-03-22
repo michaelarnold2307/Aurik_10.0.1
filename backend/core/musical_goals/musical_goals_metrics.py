@@ -154,6 +154,65 @@ class GoalMeasurement:
     details: dict[str, float]
 
 
+# ---------------------------------------------------------------------------
+# ISO 226:2003/2023 Equal-Loudness Weighting  (Spec §8.1 — Pflicht)
+# ---------------------------------------------------------------------------
+# SPL in dB required at each frequency to sound as loud as 40 dB at 1 kHz.
+# Source: ISO 226:2003 Table 1 — 40-phon equal-loudness contour.
+# The 2023 revision (corrected by BS EN ISO 226:2023) leaves these anchor
+# values unchanged within ±0.5 dB for the frequencies listed here.
+_ISO226_FREQS: np.ndarray = np.array(
+    [
+        20.0,
+        50.0,
+        100.0,
+        200.0,
+        315.0,
+        500.0,
+        800.0,
+        1000.0,
+        1600.0,
+        2500.0,
+        3150.0,
+        4000.0,
+        5000.0,
+        6300.0,
+        8000.0,
+        10000.0,
+        12500.0,
+        16000.0,
+        20000.0,
+    ],
+    dtype=np.float64,
+)
+_ISO226_SPL40: np.ndarray = np.array(
+    # dB SPL needed at each frequency for 40-phon equal-loudness level:
+    [99.0, 65.0, 55.9, 48.5, 45.1, 41.9, 38.7, 40.0, 36.1, 32.2, 31.4, 31.6, 33.3, 37.5, 44.0, 50.2, 56.8, 64.6, 75.5],
+    dtype=np.float64,
+)
+
+
+def _iso226_weights(freqs: np.ndarray) -> np.ndarray:
+    """Per-bin perceptual-weight array (float32, shape [F]) — ISO 226:2023 @ 40 phon.
+
+    ``weight(f) = 10^((SPL_1kHz − SPL_40phon(f)) / 20)``
+
+    - weight > 1.0: ear is MORE sensitive (3–4 kHz region) — equal energy sounds louder.
+    - weight < 1.0: ear is LESS sensitive (LF / HF roll-off) — energy sounds quieter.
+
+    Spec §8.1: BrillanzMetric and WaermeMetric MUST apply this weighting;
+    linear spectral energy measurement is explicitly forbidden.
+    """
+    spl_ref = float(np.interp(1000.0, _ISO226_FREQS, _ISO226_SPL40))  # = 40.0 dB
+    spl_f = np.interp(
+        np.clip(freqs, _ISO226_FREQS[0], _ISO226_FREQS[-1]),
+        _ISO226_FREQS,
+        _ISO226_SPL40,
+    )
+    weights = np.power(10.0, (spl_ref - spl_f) / 20.0)
+    return np.nan_to_num(weights, nan=1.0, posinf=1.0, neginf=0.0).astype(np.float32)
+
+
 class BassKraftMetric:
     """
     Bass-Kraft: Kraftvolle Basswiedergabe (20-250 Hz)
@@ -249,17 +308,69 @@ class BassKraftMetric:
             except Exception:  # noqa: BLE001
                 bass_harmonic_strength = 0.5
 
+        # Virtual Pitch / Missing Fundamental (Spec §8.1: Oberton-Analyse 120–500 Hz)
+        virtual_pitch = self._virtual_pitch_score(magnitude, freqs)
+
         # Final score (weighted combination)
         score = (
             0.40 * bass_ratio * 20  # Normalize to 0-1 (bass_ratio typically 0-0.05)
-            + 0.35 * weighted_bass
-            + 0.25 * bass_harmonic_strength
+            + 0.25 * weighted_bass  # reduced 0.35→0.25 to free weight for VP
+            + 0.20 * bass_harmonic_strength  # reduced 0.25→0.20
+            + 0.15 * virtual_pitch  # NEW: Missing Fundamental perception
         )
 
         # Clip to [0, 1]
         score = min(1.0, max(0.0, score))
 
         return score
+
+    @staticmethod
+    def _virtual_pitch_score(magnitude: np.ndarray, freqs: np.ndarray) -> float:
+        """Estimates Virtual Pitch strength via overtone series in 120–500 Hz.
+
+        The 'missing fundamental' effect: even when F0 (20–120 Hz) is weak or absent,
+        the brain synthesises the bass pitch from preserved harmonics 2F0, 3F0, …, 6F0
+        in the 120–500 Hz range.  A strong harmonic ladder → high virtual-pitch score.
+
+        Algorithm:
+            1. Time-average magnitude in the 120–500 Hz overtone band.
+            2. For each candidate F0 in 20–120 Hz (5 Hz step), evaluate alignment of
+               harmonics k = 2…6 with spectral peaks.
+            3. Best harmonic-alignment ratio is normalised to [0, 1].
+
+        Returns:
+            Score ∈ [0, 1].  0.5 = inconclusive; 1.0 = strong harmonic series.
+        """
+        ot_mask = (freqs >= 120) & (freqs <= 500)
+        if not ot_mask.any():
+            return 0.5
+        ot_freqs = freqs[ot_mask]
+        ot_mag = np.mean(magnitude[ot_mask], axis=1) if magnitude.ndim == 2 else magnitude[ot_mask]
+        n_bins = len(ot_mag)
+        total_energy = float(np.dot(ot_mag, ot_mag) + 1e-10)
+        mean_bin_energy = total_energy / max(1, n_bins)  # expected power per bin
+
+        best_saliency = 0.0
+        for f0 in range(20, 121, 5):
+            harm_e = 0.0
+            count = 0
+            for k in range(2, 7):
+                fk = k * f0
+                if fk < 120 or fk > 500:
+                    continue
+                idx = int(np.argmin(np.abs(ot_freqs - fk)))
+                harm_e += float(ot_mag[idx] ** 2)
+                count += 1
+            if count >= 2:
+                # Saliency: ratio of actual harmonic energy to expected-random level.
+                # For flat noise: expected = count * mean_bin_energy → saliency ≈ 1.0.
+                # For tonal harmonic series: saliency >> 1.
+                saliency = harm_e / (count * mean_bin_energy + 1e-10)
+                if saliency > best_saliency:
+                    best_saliency = saliency
+        # saliency = 1.0 → random noise (no harmonic structure) → score = 0.0
+        # saliency ≥ 6.0 → very strong harmonic ladder   → score = 1.0
+        return float(np.clip((best_saliency - 1.0) / 5.0, 0.0, 1.0))
 
     def check_preservation(
         self, original: np.ndarray, processed: np.ndarray, sr: int
@@ -318,14 +429,18 @@ class BrillanzMetric:
         # Frequency bins
         freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
 
+        # ISO 226:2023 Equal-Loudness weighting (Spec §8.1 — kein lineares Energiemessen)
+        _w = _iso226_weights(freqs)
+        magnitude_w = magnitude * _w[:, None]  # perceptually-weighted magnitude (F, T)
+
         # HF band (8-20 kHz)
         hf_mask = (freqs >= 8000) & (freqs <= 20000)
 
-        # Full spectrum energy
-        full_energy = np.sum(magnitude**2)
+        # Full spectrum energy (perceptual)
+        full_energy = np.sum(magnitude_w**2)
 
-        # HF energy
-        hf_energy = np.sum(magnitude[hf_mask] ** 2)
+        # HF energy (perceptual)
+        hf_energy = np.sum(magnitude_w[hf_mask] ** 2)
 
         # HF Energy Ratio
         hf_ratio = hf_energy / (full_energy + 1e-10)
@@ -345,9 +460,9 @@ class BrillanzMetric:
         bright_mask_2 = (freqs >= 12000) & (freqs <= 16000)
         bright_mask_3 = (freqs >= 16000) & (freqs <= 20000)
 
-        bright_1 = np.sum(magnitude[bright_mask_1] ** 2)
-        bright_2 = np.sum(magnitude[bright_mask_2] ** 2)
-        bright_3 = np.sum(magnitude[bright_mask_3] ** 2)
+        bright_1 = np.sum(magnitude_w[bright_mask_1] ** 2)
+        bright_2 = np.sum(magnitude_w[bright_mask_2] ** 2)
+        bright_3 = np.sum(magnitude_w[bright_mask_3] ** 2)
 
         hf_total = bright_1 + bright_2 + bright_3 + 1e-10
         brightness = 0.40 * (bright_1 / hf_total) + 0.35 * (bright_2 / hf_total) + 0.25 * (bright_3 / hf_total)
@@ -398,20 +513,24 @@ class WaermeMetric:
         # Frequency bins
         freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
 
+        # ISO 226:2023 Equal-Loudness weighting (Spec §8.1 — kein lineares Energiemessen)
+        _w = _iso226_weights(freqs)
+        magnitude_w = magnitude * _w[:, None]  # perceptually-weighted magnitude (F, T)
+
         # Mid band (200-2000 Hz)
         mid_mask = (freqs >= 200) & (freqs <= 2000)
         low_mid_mask = (freqs >= 200) & (freqs <= 500)  # Body
         mid_mid_mask = (freqs >= 500) & (freqs <= 1000)  # Presence
         upper_mid_mask = (freqs >= 1000) & (freqs <= 2000)  # Clarity
 
-        # Full spectrum energy
-        full_energy = np.sum(magnitude**2)
+        # Full spectrum energy (perceptual)
+        full_energy = np.sum(magnitude_w**2)
 
-        # Mid energies
-        mid_energy = np.sum(magnitude[mid_mask] ** 2)
-        low_mid_energy = np.sum(magnitude[low_mid_mask] ** 2)
-        mid_mid_energy = np.sum(magnitude[mid_mid_mask] ** 2)
-        upper_mid_energy = np.sum(magnitude[upper_mid_mask] ** 2)
+        # Mid energies (perceptual)
+        mid_energy = np.sum(magnitude_w[mid_mask] ** 2)
+        low_mid_energy = np.sum(magnitude_w[low_mid_mask] ** 2)
+        mid_mid_energy = np.sum(magnitude_w[mid_mid_mask] ** 2)
+        upper_mid_energy = np.sum(magnitude_w[upper_mid_mask] ** 2)
 
         # Mid Energy Ratio
         mid_ratio = mid_energy / (full_energy + 1e-10)
@@ -426,18 +545,61 @@ class WaermeMetric:
             + 0.20 * (upper_mid_energy / (mid_energy + 1e-10))
         )
 
-        # Harmonic warmth (2nd/3rd harmonics typically in 200-1000 Hz)
-        # Use spectral flatness as proxy (lower = more harmonic = warmer)
+        # Harmonic warmth: spectral flatness proxy + H2/H4 even-harmonic overtone ratio
+        # H2/H4 even-harmonic dominance indicates tube/tape warmth character (Spec §WaermeMetric)
         spectral_flatness = librosa.feature.spectral_flatness(y=audio, n_fft=2048, hop_length=512)[0]
         mean_flatness = np.mean(spectral_flatness)
-        # Lower flatness = more harmonic = higher warmth
-        harmonic_warmth = 1.0 - mean_flatness
+        harmonic_warmth = 0.5 * (1.0 - mean_flatness) + 0.5 * WaermeMetric._h2h4_warmth(audio, sr)
 
         # Final score
         score = 0.40 * (mid_ratio * 15) + 0.35 * weighted_mid + 0.25 * harmonic_warmth  # Normalize mid ratio
 
         score = min(1.0, max(0.0, score))
         return score
+
+    @staticmethod
+    def _h2h4_warmth(audio: np.ndarray, sr: int) -> float:
+        """H2/H4 overtone warmth — even-harmonic bias as tube/tape character proxy.
+
+        Measures even-harmonic amplitude (H2, H4) vs odd-harmonic amplitude (H3, H5)
+        for the dominant bass frequency (80-300 Hz per frame). Even dominance indicates
+        tube/tape warmth character; ratio ≈ 1.0 means clean digital or noise character.
+        Normalized: even/odd ratio = 1.0 → score=0.0; ratio ≥ 10.0 → score=1.0.
+        """
+        clip = audio[: min(len(audio), int(2.0 * sr))].astype(np.float32)
+        if len(clip) < 512:
+            return 0.5
+        N_FFT = 4096
+        hop = N_FFT // 4
+        win = np.hanning(N_FFT).astype(np.float32)
+        freqs = np.fft.rfftfreq(N_FFT, d=1.0 / sr)
+        bin_w = float(sr) / N_FFT
+        n_frames = max(1, (len(clip) - N_FFT) // hop + 1)
+        frame_scores: list[float] = []
+        for i in range(min(n_frames, 16)):
+            seg = clip[i * hop : i * hop + N_FFT]
+            if len(seg) < N_FFT:
+                break
+            mag = np.abs(np.fft.rfft(seg * win))
+            # Dominant F0 in bass register 80-300 Hz
+            bass_mask = (freqs >= 80.0) & (freqs <= 300.0)
+            if not np.any(bass_mask):
+                continue
+            bass_idx = np.where(bass_mask)[0]
+            f0 = float(freqs[bass_idx[int(np.argmax(mag[bass_mask]))]])
+
+            def _peak_amp(freq: float, _mag: np.ndarray = mag, _bw: float = bin_w) -> float:
+                center = int(round(freq / _bw))
+                lo = max(0, center - 2)
+                hi = min(len(_mag) - 1, center + 2)
+                return float(np.max(_mag[lo : hi + 1]))
+
+            even = _peak_amp(2.0 * f0) + _peak_amp(4.0 * f0)
+            odd = _peak_amp(3.0 * f0) + _peak_amp(5.0 * f0) + 1e-10
+            ratio = float(even / odd)
+            # Normalize: 1.0 (neutral/noise) → 0.0; 10.0 (strong even dominance) → 1.0
+            frame_scores.append(float(np.clip((ratio - 1.0) / 9.0, 0.0, 1.0)))
+        return float(np.clip(np.mean(frame_scores), 0.0, 1.0)) if frame_scores else 0.5
 
 
 class NatuerlichkeitMetric:
@@ -573,6 +735,10 @@ class AuthentizitaetMetric:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
 
         if reference is not None:
+            # Special case: identical audio should have perfect authenticity
+            if np.allclose(audio, reference, rtol=1e-5, atol=1e-8):
+                return 1.0
+
             if reference.ndim > 1:
                 reference = np.mean(reference, axis=0 if reference.shape[0] <= 2 else 1)
 
@@ -594,6 +760,9 @@ class AuthentizitaetMetric:
 
             # Correlation
             correlation = np.corrcoef(chroma_current.flatten(), chroma_reference.flatten())[0, 1]
+            # Handle NaN (occurs when std=0, i.e., identical/constant signals)
+            if np.isnan(correlation):
+                correlation = 1.0 if np.allclose(chroma_current, chroma_reference) else 0.0
             fingerprint_match = max(0.0, correlation)
 
             # Spectral Centroid Stability (formant proxy)
@@ -977,8 +1146,8 @@ class SpatialDepthMetric:
         r = right[:n_use].astype(np.float64)
 
         # Normalise to unit energy
-        e_l = float(np.sqrt(np.mean(l ** 2))) or 1.0
-        e_r = float(np.sqrt(np.mean(r ** 2))) or 1.0
+        e_l = float(np.sqrt(np.mean(l**2))) or 1.0
+        e_r = float(np.sqrt(np.mean(r**2))) or 1.0
         l = l / e_l
         r = r / e_r
 
@@ -991,7 +1160,7 @@ class SpatialDepthMetric:
         R = np.fft.rfft(r, n=fft_n)
         xcorr_full = np.fft.irfft(L * np.conj(R), n=fft_n).real
         # xcorr_full[0] corresponds to lag=0; negative lags are at the end
-        xcorr = np.concatenate([xcorr_full[-max_lag:], xcorr_full[:max_lag + 1]])
+        xcorr = np.concatenate([xcorr_full[-max_lag:], xcorr_full[: max_lag + 1]])
         # Normalise by sqrt(E_L * E_R) — already unit energy, so divide by n_use
         xcorr /= n_use
 
@@ -1256,14 +1425,38 @@ class TonalCenterMetric:
     dass kein Key-Shift > 0 Cent stattgefunden hat.
 
     Schwellwert: ≥ 0.95 (kein Key-Shift > 0 Cent)
+
+    Key-Shift-Penalty-Tabelle (absolut tonarterhaltend, Spec-Invariante):
+        0 Halbtöne  → kein Abzug (penalty = 1.0)
+        1 Halbton   → schwere Strafe, Score ≤ 0.50 (deutlich unter Schwellwert)
+        ≥ 2 Halbtöne → Score = 0.0 (katastrophale Tonartverschiebung)
     """
+
+    # Key-shift penalty map (spec: absolutely tonal-preserving, Invariante §1.2)
+    _KEY_SHIFT_PENALTY: dict[int, float] = {0: 1.0, 1: 0.50}
+    _KEY_SHIFT_PENALTY_DEFAULT: float = 0.0  # ≥ 2 semitones → catastrophic
+
+    @staticmethod
+    def _dominant_chroma_class(chroma: np.ndarray) -> int:
+        """Returns the pitch class (0-11) with the highest mean energy across frames."""
+        return int(np.argmax(np.mean(chroma, axis=1)))
+
+    @staticmethod
+    def _key_shift_semitones(key_a: int, key_b: int) -> int:
+        """Circular distance in semitones between two pitch classes ([0,6])."""
+        diff = (key_b - key_a) % 12
+        return min(diff, 12 - diff)
 
     def measure(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> float:
         """Berechnet Tonal-Center-Score.
 
         Algorithmus:
             1. Chroma-Features aus STFT (12 Tonklassen).
-            2. Wenn Referenz gegeben: Pearson-Korrelation Ref-Chroma ↔ Rest-Chroma.
+            2. Wenn Referenz gegeben:
+               a. Pearson-Korrelation Ref-Chroma ↔ Rest-Chroma.
+               b. Key-Shift-Erkennung (dominante Pitch-Class) — Spec-Pflicht:
+                  kein Key-Shift > 0 Cent (0 Halbtöne = OK, 1 = schwere Strafe,
+                  ≥ 2 = Score 0.0).
             3. Wenn keine Referenz: Interne Chroma-Stabilität über Zeit.
 
         Args:
@@ -1295,8 +1488,16 @@ class TonalCenterMetric:
             cs = chroma_rest[:, :min_len].flatten()
             if np.std(cr) < 1e-10 or np.std(cs) < 1e-10:
                 return 1.0
-            corr = float(np.corrcoef(cr, cs)[0, 1])
-            return float(np.clip((corr + 1.0) / 2.0, 0.0, 1.0))
+            chroma_corr = float(np.corrcoef(cr, cs)[0, 1])
+            corr_score = float(np.clip((chroma_corr + 1.0) / 2.0, 0.0, 1.0))
+
+            # Key-Shift-Penalty (Spec-Invariante: kein Key-Shift > 0 Cent)
+            ref_key = self._dominant_chroma_class(chroma_ref[:, :min_len])
+            rest_key = self._dominant_chroma_class(chroma_rest[:, :min_len])
+            shift = self._key_shift_semitones(ref_key, rest_key)
+            penalty = self._KEY_SHIFT_PENALTY.get(shift, self._KEY_SHIFT_PENALTY_DEFAULT)
+
+            return float(np.clip(corr_score * penalty, 0.0, 1.0))
 
         # Referenz-freier Modus: zeitliche Chroma-Stabilität
         if chroma_rest.shape[1] < 4:
@@ -1414,14 +1615,13 @@ class MicroDynamicsMetric:
         return score
 
     def _rms_profile(self, audio: np.ndarray, win_samples: int) -> np.ndarray:
-        """Berechnet RMS-Energie pro Fenster."""
+        """Berechnet RMS-Energie pro Fenster (vektorisiert)."""
         if win_samples < 1 or len(audio) < win_samples:
             return np.array([float(np.sqrt(np.mean(audio**2)))])
         n_frames = len(audio) // win_samples
-        profile = np.zeros(n_frames, dtype=np.float32)
-        for i in range(n_frames):
-            seg = audio[i * win_samples : (i + 1) * win_samples]
-            profile[i] = float(np.sqrt(np.mean(seg**2) + 1e-10))
+        # Vectorised reshape — no Python loop (O(n) → O(1) allocations)
+        frames = audio[: n_frames * win_samples].reshape(n_frames, win_samples).astype(np.float64)
+        profile = np.sqrt(np.mean(frames**2, axis=1) + 1e-10).astype(np.float32)
         return profile
 
     def _crest_factor_db(self, audio: np.ndarray) -> float:
@@ -1532,7 +1732,26 @@ class SeparationFidelityMetric:
             cos_sims.append(float(np.clip(num / denom, 0.0, 1.0)))
 
         koh_score = float(np.mean(cos_sims)) if cos_sims else 1.0
-        score = float(0.5 * sdr_score + 0.5 * koh_score)
+
+        # SIR proxy: periodic content in residual → interference/leakage → low SIR
+        # FFT-based autocorrelation of residual; high AC peak at 1-50 ms lag = harmonic leakage
+        sir_score = 1.0
+        residual_clip = residual[: min(len(residual), 4096)]
+        n_ac = len(residual_clip)
+        if n_ac >= 64:
+            f_ac = np.fft.rfft(residual_clip.astype(np.float32), n=2 * n_ac)
+            ac = np.fft.irfft(f_ac * np.conj(f_ac))[:n_ac]
+            zero_lag = float(ac[0])
+            if zero_lag > 1e-12:
+                ac_norm = ac / zero_lag
+                # At 48 kHz: 1 ms ≈ 48 smp, 50 ms ≈ 2400 smp (spec: internal SR = 48 000 Hz)
+                min_lag = max(1, self.N_FFT // 20)  # ≈ 51 samples
+                max_lag = min(n_ac - 1, self.N_FFT * 2)  # ≈ 2048 samples
+                if max_lag > min_lag:
+                    peak_ac = float(np.max(np.abs(ac_norm[min_lag : max_lag + 1])))
+                    sir_score = float(np.clip(1.0 - peak_ac, 0.0, 1.0))
+
+        score = float(0.40 * sdr_score + 0.35 * koh_score + 0.25 * sir_score)
         return float(np.clip(score, 0.0, 1.0))
 
     def _reference_free(self, audio: np.ndarray, sr: int) -> float:
@@ -2057,7 +2276,7 @@ class MusicalGoalsChecker:
             GoalMeasurement with detailed result
         """
         if goal_name not in self.metrics:
-            raise ValueError(f"Unknown goal: {goal_name}. " f"Available: {list(self.metrics.keys())}")
+            raise ValueError(f"Unknown goal: {goal_name}. Available: {list(self.metrics.keys())}")
 
         metric = self.metrics[goal_name]
         score = metric.measure(audio, sr)

@@ -95,6 +95,10 @@ class _AiMediaType(Enum):
     UNKNOWN = "unknown"
 
 
+#: Public alias for the internal _AiMediaType enum (for external imports).
+MaterialType = _AiMediaType
+
+
 class RestorationMode(Enum):
     """Restoration-Modi."""
 

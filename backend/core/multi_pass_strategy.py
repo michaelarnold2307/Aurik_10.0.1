@@ -439,7 +439,13 @@ class ObjectiveScorer:
 
                 proc_arr = _np.asarray(audio, dtype=_np.float32)
                 if proc_arr.ndim == 2:
-                    proc_arr = proc_arr.mean(axis=1)
+                    # Accept both layouts: [N, C] and [C, N].
+                    if proc_arr.shape[0] <= 2 and proc_arr.shape[1] > proc_arr.shape[0]:
+                        proc_arr = proc_arr.mean(axis=0)
+                    elif proc_arr.shape[1] <= 2 and proc_arr.shape[0] > proc_arr.shape[1]:
+                        proc_arr = proc_arr.mean(axis=1)
+                    else:
+                        proc_arr = proc_arr.mean(axis=-1)
                 proc_arr = _np.nan_to_num(proc_arr, nan=0.0, posinf=0.0, neginf=0.0)
                 versa_result = self.versa_plugin.score(proc_arr, sample_rate)
                 # MOS [1,5] → [0,1] skaliert → versa_score (§4.4)
@@ -577,9 +583,9 @@ class ObjectiveScorer:
 
         # §10.2: DNSMOS-Block entfernt — Sprach-Metrik verboten für Musikrestaurierung
 
-        # VERSA (normiert 0.0–1.0, invert) — nur wenn aktiv
+        # VERSA (normiert 0.0–1.0) — höherer MOS = bessere Variante (§4.4)
         if score.versa_active:
-            versa_norm = 1.0 - min(score.versa_score, 1.0)
+            versa_norm = min(score.versa_score, 1.0)
             composite += pool_versa * versa_norm
 
         # SNR (typ. 10-40 dB → 0.0-1.0) — Gewicht inkl. umverteilter Anteile
@@ -790,6 +796,28 @@ class MultiPassEngine:
             "processing_times": processing_times,
         }
 
+    @staticmethod
+    def _derive_restore_mode(config: ProcessingConfig) -> str:
+        """Map variant-level ProcessingConfig to a coarse UV3 restore mode.
+
+        This keeps variant intent effective in default Multi-Pass execution instead of
+        running every variant with the same hardcoded mode.
+        """
+        # Very gentle profiles should use FAST path.
+        if config.denoise_strength <= 0.15 and config.click_removal_sensitivity <= 0.35 and config.compression_ratio <= 1.5:
+            return "fast"
+
+        # Heavy profiles should use MAXIMUM path.
+        if config.denoise_strength >= 0.60 or config.enhancement_strength >= 0.65 or config.compression_ratio >= 5.0:
+            return "maximum"
+
+        # Mid profiles use BALANCED for better speed/quality trade-off.
+        if config.denoise_strength >= 0.45 or config.click_removal_sensitivity >= 0.70:
+            return "balanced"
+
+        # Default profile: restoration quality path.
+        return "restoration"
+
     def _default_process_func(self, audio: np.ndarray, sample_rate: int, config: ProcessingConfig) -> np.ndarray:
         """
         Default processing function using UnifiedRestorerV3.
@@ -815,11 +843,17 @@ class MultiPassEngine:
             # Für Varianten-Bewertung: max. 10 s Audio (Geschwindigkeit)
             _max_eval = sample_rate * 10
             _eval_audio = audio[:_max_eval] if len(audio) > _max_eval else audio
-            logger.debug(f"[MPASS] restore() auf {len(_eval_audio)/sample_rate:.0f}s Excerpt …", flush=True)
+            _restore_mode = self._derive_restore_mode(config)
+            logger.debug(
+                "[MPASS] restore(mode=%s) auf %.0fs Excerpt …",
+                _restore_mode,
+                len(_eval_audio) / sample_rate,
+                flush=True,
+            )
             result = self._restorer.restore(
                 audio=_eval_audio,
                 sample_rate=sample_rate,
-                mode="restoration",
+                mode=_restore_mode,
             )
 
             # V3 gibt RestorationResult zurück — audio-Array extrahieren
@@ -828,7 +862,8 @@ class MultiPassEngine:
             return audio
 
         except Exception as e:
-            logger.error(f"Default processing failed: {e}")
+            import traceback as _tb
+            logger.error("Default processing failed: %s\n%s", e, _tb.format_exc())
             # Fallback: return original
             return audio
 

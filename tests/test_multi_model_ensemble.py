@@ -4,8 +4,8 @@ Test für Multi-Model Ensemble Processor
 
 import unittest
 
-from ensemble_processor import EnsembleProcessor
-from fusion_engine import FusionEngine
+from backend.core.ensemble_processor import EnsembleProcessor
+from backend.core.fusion_engine import FusionEngine
 import numpy as np
 
 from plugins.deepfilternet_v3_ii_plugin import DeepFilterNetV3IIPlugin

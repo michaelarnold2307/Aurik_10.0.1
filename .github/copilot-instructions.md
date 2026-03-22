@@ -189,6 +189,99 @@ assert report.passes_os_leadership_threshold(), f"Score: {report.overall_score}"
 
 ---
 
+## [RELEASE_MUST] Autonomer Magic-Button-Betrieb + Profi-Highlights
+
+### Vollautarker Bedienvertrag (bindend)
+
+- Nutzerinteraktion ist auf **genau eine Entscheidung** begrenzt: `Restoration` oder `Studio 2026`.
+- Danach läuft die gesamte Kette ohne manuelle Parameter, ohne Modul-Slider, ohne Nachjustage bis zum Export.
+- Jeder zusätzliche manuelle Eingriffspfad im Produktions-Workflow ist als Regression zu behandeln.
+- Pflicht-Einstieg bleibt `AurikDenker.denke(audio, sr, mode, progress_callback)`; kein UI-Bypass direkt in UV3.
+- Export erfolgt nur nach bestandenem Qualitäts-Gate (Musical Goals + PQS + OQS/AMRB-Kontext + Safety-Invarianten).
+
+```python
+# One-button contract (normative):
+assert user_choice in {"Restoration", "Studio 2026"}
+result = aurik_denker.denke(audio, sr=48000, mode=user_choice, progress_callback=cb)
+assert result is not None
+assert result.export_ready is True
+```
+
+### Profi-/Studio-Programme als Inspirations-Quellen (ohne proprietäre Interna)
+
+Die folgenden Highlights sind als **Qualitätsprinzipien** bindend in Aurik zu berücksichtigen,
+ohne Closed-Source-Algorithmen zu kopieren:
+
+| Referenz (Markt) | Highlight | Verbindliche Übersetzung in Aurik |
+|---|---|---|
+| iZotope RX 11 | Reparaturketten + problemorientierte Modulwahl | CausalDefectReasoner + adaptive Phase-Selektion bleiben primär; feste Global-Presets sind verboten |
+| Spectral-Editor-Klasse (z. B. SpectraLayers) | Quell-/Objekttrennung vor Detailreparatur | Stem/HPSS/NMF-Auftrennung vor aggressiven Einzelreparaturen priorisieren |
+| CEDAR-/Cambridge-Klasse | Artefaktarme Rausch-/Crackle-Reduktion mit Erhalt der Natürlichkeit | PMGG + GoalPriorityProtocol: Natürlichkeit/Authentizität nie für stärkere NR opfern |
+| Mastering-DAW-Klasse (z. B. Sequoia, Pyramix, WaveLab) | Striktes Loudness-/TruePeak-Finalizing | LUFS + TruePeak + Chroma-/TonalCenter-Checks als harte Export-Voraussetzung |
+| Adaptive Assistant-Workflows (Pro-Toolsuite-typisch) | Mehrpass-Optimierung mit Sicherheitsnetzen | FeedbackChain-Rollback + PhysicalCeilingEstimator + second-pass only when justified |
+
+### Autopilot-Optimierungsregeln (bindend)
+
+- **Best-of-Candidates statt Single-Shot**: Mindestens 2 Kandidatenpfade (primär/fallback-adaptiv), Auswahl per MOO-Score mit Goal-Prioritäten.
+- **Safety-first Ranking**: Kandidaten mit Priority-1/2 Regression werden verworfen, selbst bei höherem MOS.
+- **Material-/Ära-Authentizität vor Modernisierung**: Vintage-Invarianten haben Vorrang vor Brillanz-Maximierung.
+- **No-Guess Export**: Wenn Gate nicht erfüllt ist, strukturierter Fail-Reason in `RestorationResult.metadata` statt „best effort still export".
+
+```python
+# Candidate arbitration (normative sketch)
+candidates = [run_primary_chain(), run_fallback_chain()]
+valid = [c for c in candidates if not gpp.should_abort_iteration(base_scores, c.scores).should_abort]
+best = select_best_by_priority_then_quality(valid)
+assert best.metadata.get("fail_reason") is None
+```
+
+### Wettbewerbsziel (operativ)
+
+- Aurik soll sich mindestens auf RX-11-Niveau bewegen: **Aurik ≥ iZotope RX 11 in ≥ 7/10 AMRB-Szenarien** bleibt harter Gate.
+- Zusätzlich gilt als Entwicklungsrichtung: „keine manuelle Rettung notwendig“ — Qualität muss im Standardlauf reproduzierbar erreicht werden.
+- Bei Abweichungen sind zuerst Kettenlogik, adaptive Schwellen und Fallback-Orchestrierung zu korrigieren, nicht UI-Komplexität zu erhöhen.
+
+### [RELEASE_MUST] No-Competing-Instances-Protokoll (Autopilot-Stabilität)
+
+Um ein in sich geschlossenes Hochleistungssystem ohne Kinderkrankheiten sicherzustellen, sind konkurrierende
+Verarbeitungsläufe im selben Prozess strikt zu verhindern:
+
+- **Single-Orchestrator Ownership**: Pro App-Prozess darf nur **eine aktive Aurik-Orchestrierung** laufen.
+- **Canonical Accessor**: Produktion verwendet `get_aurik_denker()` als Singleton-Zugriff; direkte Mehrfach-Instanziierung in konkurrierenden Threads ist zu vermeiden.
+- **Single Active Batch Thread**: `BatchProcessingThread` darf nur einmal aktiv sein; Startversuche bei `isRunning()==True` müssen blockiert werden.
+- **Watchdog + Interrupt Pflicht**: Hängende Läufe müssen über `requestInterruption()` + Wait + harte Terminierung abgefangen werden; keine Zombie-Threads.
+- **UI-Gating Pflicht**: Magic-Buttons und Prozess-Trigger sind während aktiver Verarbeitung deaktiviert.
+- **No Parallel Export Race**: Export-Pfad nur aus dem aktiven Verarbeitungslauf; atomisches Schreiben (`.tmp` → `os.replace`) bleibt Pflicht.
+
+```python
+# Single-run invariant (normative)
+assert not (batch_thread and batch_thread.isRunning()), "Konkurrierender Batch-Lauf erkannt"
+denker = get_aurik_denker()
+result = denker.denke(audio, sr=48000, mode=mode, progress_callback=cb)
+assert result is not None
+```
+
+### [RELEASE_MUST] Tiefenanalyse-Härtungsfahrplan (voll einsatzbereit)
+
+Diese Schritte sind vor Release vollständig zu prüfen; Ziel ist konsistentes Verhalten unter Last,
+bei Fehlern und in langen Batch-Läufen:
+
+1. **Orchestrierungs-Kohärenz**: Frontend darf restaurierende Aufrufe nur über den Denker-Einstieg fahren (kein UV3-Bypass).
+2. **Konkurrenzfreiheit**: Keine zweite aktive Verarbeitung im selben Prozess; Abbruchpfade schließen Threads deterministisch.
+3. **Determinismus**: AMRB-Seeds, adaptive Schwellen und Candidate-Auswahl liefern reproduzierbare Entscheidungen.
+4. **Failure Containment**: Jeder ML-Fehler hat einen dokumentierten Fallback; `release_mode` bleibt `primary|fallback|blocked`.
+5. **Qualitäts-Gates als Export-Barriere**: Export nur bei bestandenem Musical-Goals/PQS/OQS-Kontext; sonst strukturierter `fail_reason`.
+6. **Performance/Memory-Stabilität**: 3×RT-Budget, `ml_memory_budget.try_allocate()` und PLM-Eviction müssen gemeinsam greifen.
+7. **Autopilot-Integrität**: Nach Moduswahl (`Restoration`/`Studio 2026`) kein manueller Eingriffspfad in der Produktionskette.
+
+### CI-Guard-Erwartung für diesen Abschnitt
+
+- Normative Tests müssen Single-Run-Invariante, Denker-Entrypoint und UI-Gating strukturell prüfen.
+- Wettbewerbs- und AMRB-Gates bleiben nicht skippbar (`RELEASE_MUST`).
+- Neue Autopilot- oder Thread-Features ohne Gate-Test gelten als unvollständig.
+
+---
+
 ## Kanonischer Pipeline-Ablauf (Zusammenfassung)
 
 **PFLICHT-EINSTIEGSPUNKT: `AurikDenker.denke(audio, sr, mode, progress_callback)`**
@@ -408,6 +501,7 @@ conflict_result = gpp.resolve_conflict(goal_a, goal_b, delta_a, delta_b)
 | Pitch-Tracking | FCPE ONNX (`fcpe_plugin`) | CREPE ONNX (`crepe_plugin`) → RMVPE ONNX (`rmvpe_plugin`, nur wenn stabil verifiziert) | PESTO → pYIN | ~~YIN~~ |
 > **PESTO** (Riou et al. ISMIR 2023): Chromagramm-basiertes Pitch-Tracking, 40× schneller als pYIN bei vergleichbarer Genauigkeit. Als letzter DSP-Fallback einsetzbar (`dsp/pesto_pitch.py`). VERBOTEN als Primär-Tracker (FCPE-/RMVPE-Genauigkeit überlegen).
 | **Polyphoner Pitch** | BasicPitch ONNX (`basicpitch_plugin`) | Spektrale Peak-Verfolgung | Spektrale Peak-Verfolgung | ~~CREPE mono für Polyphonie~~ |
+| **Wow/Flutter-Korrektur (`qm=maximum`)** | `PolyphonicSpeedCurveEstimator` (`basicpitch_plugin`, Konfidenz-Median-Konsensus, §2.12) | `HybridWowFlutter` pYIN+FCPE/CREPE (`balanced`/`quality`) | pYIN Phase-Vocoder DSP | ~~mono pYIN als einziges Speed-Signal bei polyphonem Ensemble~~ |
 | Phasen-Rekonstruktion | PGHI | Griffin-Lim+ ≥ 32 It. | Griffin-Lim+ ≥ 32 It. | ~~ISTFT direkt~~ |
 | Vocoder (MOS < 4.3) | Vocos ONNX (`vocos_plugin`) — **48 kHz nativ** bevorzugt (`models/vocos_48khz/vocos_48khz.onnx`, kein Resampling), sonst 44.1 kHz (`vocos_mel_spec_44khz.onnx`), sonst 24 kHz (`vocos_mel_spec_24khz.onnx`, Release-Bundle) | BigVGAN v2 (`bigvgan_v2_plugin`) | HiFi-GAN | ~~Griffin-Lim~~ |
 | Audio-Klassifikation / Tagging | BEATs iter3 ONNX (`beats_plugin`) | PANNs ONNX (`panns_plugin`) | Spectral Features | — |
@@ -888,6 +982,37 @@ ZONES = {
 #
 # VERBOTEN: Comb-Filter, einseitiges α-Modell (alpha_pre == alpha_post)
 # Fallback: NMF-β Dekomposition (einseitig, nur Post-Echo)
+```
+
+### §2.12 PolyphonicSpeedCurveEstimator — Capstan-kompetitive Wow/Flutter-Korrektur (PFLICHT für `maximum`)
+
+```python
+# Aktivierung: quality_mode == "maximum" in phase_12_wow_flutter_fix.WowFlutterFix.process()
+# Klasse:      backend/core/hybrid/hybrid_wow_flutter.PolyphonicSpeedCurveEstimator
+# Fallback:    HybridWowFlutter pYIN+FCPE/CREPE (balanced) → pYIN DSP
+
+# Vorteil gegenüber mono pYIN (Capstan-Parität):
+# Capstans Kernstärke ist das polyphon-harmonische Speed-Modell: mehrere Grundtöne
+# simultan verfolgt → robuste Geschwindi gkeitskurve auch in dichten Ensembles unter
+# starkem Rauschen (Schellack-Orchester, Tape-Aussetzer).
+
+# Algorithmus (Klapuri 2003; Salamon & Gómez 2012 MELODIA; Plangent consensus):
+# 1. BasicPitch ONNX → pitches_hz[T, K=6], confidences[T, K=6]
+# 2. Per Voice k: ref_hz[k] = robuster Median über alle gestimmten Frames
+# 3. Per Frame t, Voice k: deviation_cents[t,k] = 1200·log₂(hz / ref_hz[k])
+# 4. Per Frame t: Konfidenz-gewichteter Median (1D Weiszfeld) über voiced slots ≥ 2
+# 5. Lücken ≤ 1 s: lineare Interpolation; längere: 0-Füll
+# 6. Savitzky-Golay SG(51, 3) für finalen Speed-Curve
+# 7. Ausgabe: virtual_pitch[t] = 440 · 2^(speed_cents[t]/1200)
+#    → drop-in kompatibel mit _separate_wow_flutter / _calculate_stretch_factors
+
+# Mindest-Anforderungen (RELEASE_MUST):
+# - ≥ 2 gleichzeitig gestimmte Voices für Konsensus (sonst pYIN-Fallback per Frame)
+# - MIN_CONF ≥ 0.20 per Voice-Slot (schwächere Slots tragen nicht bei)
+# - Speicher: BasicPitch 0.12 GB → try_allocate("BasicPitch", 0.12) Pflicht
+# - Laufzeit ≤ 3× Echtzeit auf Ryzen 7 (PolyphonicSpeedCurve + Phase-Vocoder zusammen)
+# - AuthentizitaetMetric ≥ Ausgangswert (Korrektur darf Signaturton nicht vernichten)
+# - GrooveMetric-DTW ≤ 8 ms RMS nach Korrektur (kein Timing-Flattening)
 ```
 
 ### Perceptuelle Verpflichtungen — Pflicht-Messwerte (§8.3)
