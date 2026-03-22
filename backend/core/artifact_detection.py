@@ -19,11 +19,12 @@ Date: 8. Februar 2026
 Phase: 2D.2.1 - Real-World Validation Testing
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
-import logging
+
 logger = logging.getLogger(__name__)
 
 

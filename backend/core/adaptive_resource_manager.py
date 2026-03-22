@@ -21,11 +21,11 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-_instance: Optional["AdaptiveResourceManager"] = None
+_instance: AdaptiveResourceManager | None = None
 _lock_singleton = threading.Lock()
 
 
-def get_resource_manager() -> "AdaptiveResourceManager":
+def get_resource_manager() -> AdaptiveResourceManager:
     """Get or create AdaptiveResourceManager singleton.
 
     Returns:

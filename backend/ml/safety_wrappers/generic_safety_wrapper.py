@@ -18,13 +18,15 @@ Version: 1.0.0
 Date: 8. Februar 2026
 """
 
-from collections.abc import Callable
-
 # Import Musical Goals integration
 import sys
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+
+from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
+from backend.core.musical_goals.processing_modes import PROCESSING_MODE_CONFIGS, ProcessingMode
 
 from .safety_wrapper_template import (
     BaseSafetyWrapper,
@@ -35,9 +37,6 @@ from .safety_wrapper_template import (
     compute_spectral_centroid,
     validate_audio_basic,
 )
-
-from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
-from backend.core.musical_goals.processing_modes import PROCESSING_MODE_CONFIGS, ProcessingMode
 
 # ============================================================================
 # GENERIC NOISE REDUCTION SAFETY WRAPPER
@@ -191,9 +190,8 @@ class GenericNoiseReductionSafety(BaseSafetyWrapper):
             violations = []
 
             for goal_name, threshold in thresholds.items():
-                if goal_name in proc_goals:
-                    if proc_goals[goal_name] < threshold:
-                        violations.append(f"{goal_name}: {proc_goals[goal_name]:.2f} < {threshold:.2f}")
+                if goal_name in proc_goals and proc_goals[goal_name] < threshold:
+                    violations.append(f"{goal_name}: {proc_goals[goal_name]:.2f} < {threshold:.2f}")
 
             if violations:
                 issues.append(f"Musical Goals violations: {', '.join(violations)}")

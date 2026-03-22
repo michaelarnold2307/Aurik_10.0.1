@@ -224,3 +224,47 @@ def test_singmos_prefers_batched_input_shape():
     assert math.isfinite(result.mos)
     assert result.model_used == "singmos_pro"
     assert result.mos >= 4.0
+
+
+def test_score_uses_pqs_fallback_for_non_vocal_content(monkeypatch):
+    """SingMOS darf für nicht-vokale Inhalte nicht verwendet werden."""
+    from plugins.versa_plugin import VersaPlugin
+
+    plugin = VersaPlugin()
+    plugin._model_loaded = True
+
+    class _FakePanns:
+        def get_tags(self, _audio, _sr):
+            return {"Singing voice": 0.10, "Vocals": 0.15}
+
+    monkeypatch.setattr("plugins.panns_plugin.get_panns_plugin", lambda: _FakePanns())
+    monkeypatch.setattr(plugin, "_score_singmos_pro", lambda *_args, **_kwargs: pytest.fail("SingMOS should not run"))
+
+    result = plugin.score(AUDIO_SINE, SR)
+    assert result.model_used == "pqs_dsp_fallback"
+    assert 1.0 <= result.mos <= 5.0
+
+
+def test_score_uses_singmos_for_vocal_content(monkeypatch):
+    """SingMOS wird nur bei ausreichender Vocal-Konfidenz aktiviert."""
+    from plugins.versa_plugin import VersaPlugin, VersaResult
+
+    plugin = VersaPlugin()
+    plugin._model_loaded = True
+    plugin._predictor_dict = {}
+    plugin._predictor_fs = {}
+
+    class _FakePanns:
+        def get_tags(self, _audio, _sr):
+            return {"Singing voice": 0.72, "Vocals": 0.68}
+
+    monkeypatch.setattr("plugins.panns_plugin.get_panns_plugin", lambda: _FakePanns())
+    monkeypatch.setattr(
+        plugin,
+        "_score_singmos_pro",
+        lambda *_args, **_kwargs: VersaResult(mos=4.1, model_used="singmos_pro", confidence=0.9),
+    )
+
+    result = plugin.score(AUDIO_SINE, SR)
+    assert result.model_used == "singmos_pro"
+    assert result.mos == pytest.approx(4.1)

@@ -2,157 +2,135 @@ import logging
 import os
 import sys
 
+import numpy as np
 import soundfile as sf
 
-from backend.adaptive_pipeline import AdaptiveProcessingPipeline
+# Canonical entrypoint: AurikDenker (spec §2.2 — no bypass via AdaptiveProcessingPipeline)
+from denker.aurik_denker import get_aurik_denker
+
+_TARGET_SR = 48_000
+_VALID_MODES = {"Restoration", "Studio 2026"}
 
 
-def process_audio(input_path, output_path, verbose=True):
-    logger = logging.getLogger("aurik_cli")
-    # Demucs YAML — lokale Prüfung (kein Docker erforderlich)
-    demucs_yaml_host = os.path.join("models", "demucs", "htdemucs.yaml")
-    if not os.path.exists(demucs_yaml_host):
-        logger.warning(
-            "Demucs-Konfiguration nicht gefunden: %s — " "Stem-Separation nutzt internen DSP-Fallback.",
-            demucs_yaml_host,
-        )
-
-    # MDX-Net Modell — lokale Prüfung (kein Docker erforderlich)
-    mdx_model_host = os.path.join("models", "mdx_net", "mdx_net_vocal_v2.onnx")
-    if not os.path.exists(mdx_model_host):
-        logger.warning(
-            "MDX-Net Modell nicht gefunden: %s — "
-            "Stem-Separation nutzt Kim_Vocal_2/Kim_Inst ONNX oder HPSS-Fallback.",
-            mdx_model_host,
-        )
-    logger = logging.getLogger("aurik_cli")
-    logging.basicConfig(level=logging.INFO if verbose else logging.WARNING, format="%(levelname)s: %(message)s")
-    # Audio als Bytes laden (wie bei /magic_button API)
-    if not os.path.exists(input_path):
-        logger.error(f"Input-Datei nicht gefunden: {input_path}")
-        sys.exit(2)
+def _load_audio(path: str) -> tuple[np.ndarray, int]:
+    """Load audio file using soundfile with pedalboard fallback."""
     try:
-        with open(input_path, "rb") as f:
-            audio_bytes = f.read()
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Datei: {e}")
+        audio, sr = sf.read(path, always_2d=True, dtype="float32")
+        return audio, sr
+    except Exception:
+        pass
+    try:
+        import pedalboard.io as _pb_io  # type: ignore[import]
+
+        with _pb_io.AudioFile(path) as f:
+            audio = f.read(f.frames).T.astype(np.float32)
+            sr = int(f.samplerate)
+        return audio, sr
+    except Exception:
+        pass
+    try:
+        import librosa  # type: ignore[import]
+
+        audio, sr = librosa.load(path, sr=None, mono=False)
+        if audio.ndim == 1:
+            audio = audio[np.newaxis, :]
+        return audio.T.astype(np.float32), int(sr)
+    except Exception as exc:
+        raise RuntimeError(f"Audio konnte nicht geladen werden: {exc}") from exc
+
+
+def _resample_to_48k(audio: np.ndarray, sr: int) -> np.ndarray:
+    """Resample to 48 kHz if necessary (Lanczos via scipy)."""
+    if sr == _TARGET_SR:
+        return audio
+    try:
+        import scipy.signal as _sig
+
+        n_out = int(round(audio.shape[0] * _TARGET_SR / sr))
+        return _sig.resample_poly(audio, _TARGET_SR, sr, axis=0).astype(np.float32)
+    except Exception as exc:
+        logging.getLogger("aurik_cli").warning("Resampling fehlgeschlagen: %s — verwende Originaldaten", exc)
+        return audio
+
+
+def process_audio(input_path: str, output_path: str, verbose: bool = True, mode: str = "Restoration") -> object:
+    logging.basicConfig(level=logging.INFO if verbose else logging.WARNING, format="%(levelname)s: %(message)s")
+    logger = logging.getLogger("aurik_cli")
+
+    if mode not in _VALID_MODES:
+        logger.warning("Unbekannter Modus '%s' — verwende 'Restoration'.", mode)
+        mode = "Restoration"
+
+    if not os.path.exists(input_path):
+        logger.error("Input-Datei nicht gefunden: %s", input_path)
+        sys.exit(2)
+
+    # ── 1. Audio laden ────────────────────────────────────────────────────────
+    try:
+        audio_raw, sr_raw = _load_audio(input_path)
+    except RuntimeError as exc:
+        logger.error("Fehler beim Laden der Datei: %s", exc)
         sys.exit(3)
 
-    # Automatisiere detected_medium und Quality-Kontext für MP3
-    features = {}
-    if input_path.lower().endswith(".mp3"):
-        features["detected_medium"] = {"type": "mp3"}
-        features["snr"] = 10
-        features["quality_gates"] = {"overall": "bad"}
-        features["has_vocals"] = True
-        features["genre"] = "pop"
-        features["has_reverb"] = True
-        features["has_clipping"] = True
-        features["transient_rich"] = False
-        features["defects"] = ["compression_artifacts", "hf_loss"]
-        features["artifacts"] = "mp3_lowpass"
-        features["lufs"] = -18
-        features["quality_level"] = "maximal"
+    file_mb = os.path.getsize(input_path) / 1024 / 1024
+    if verbose:
+        logger.info("Datei: %s  (%.2f MB, %d Hz, %d Kanäle)", input_path, file_mb, sr_raw, audio_raw.shape[1])
+
+    # ── 2. Auf 48 kHz resamplen (Aurik-kanonische SR) ─────────────────────────
+    audio_48k = _resample_to_48k(audio_raw, sr_raw)
 
     if verbose:
-        logger.info(f"Größe: {len(audio_bytes) / 1024 / 1024:.2f} MB")
-        logger.info("🔧 Starte Adaptive Processing Pipeline...")
-        logger.info("   • Defekterkennung (11 Typen)")
-        logger.info("   • Tonträgerketten-Analyse")
-        logger.info("   • ML-Modell-Auswahl")
-        logger.info("   • Ethics Engine")
-        logger.info("   • Quality Monitoring")
+        logger.info("🔧 Starte AurikDenker — Modus: %s", mode)
 
-    # Pipeline initialisieren und verarbeiten
+    # ── 3. Kanonischer Einstiegspunkt: AurikDenker.denke() (Spec §2.2) ────────
     try:
-        pipeline = AdaptiveProcessingPipeline()
-        # detected_medium und Quality-Kontext explizit übergeben
-        result = pipeline.run(
-            audio_bytes,
-            features=features,
-            user_profile={},
-            reference_audio=None,
-            detected_medium=features.get("detected_medium", None),
-        )
-    except Exception as e:
-        logger.error(f"Fehler in der Pipeline: {e}")
+        denker = get_aurik_denker()
+        result = denker.denke(audio_48k, sr=_TARGET_SR, mode=mode)
+    except Exception as exc:
+        logger.error("Fehler in der Restaurierungspipeline: %s", exc)
         sys.exit(4)
 
     if verbose:
-        logger.info("✅ Verarbeitung abgeschlossen")
+        logger.info(
+            "✅ Verarbeitung abgeschlossen  ·  Material: %s  ·  Qualität: %.3f  ·  RT-Faktor: %.2f×",
+            result.material,
+            result.quality_estimate,
+            result.rt_factor,
+        )
+        if result.warnings:
+            for w in result.warnings:
+                logger.warning("⚠ %s", w)
+        if result.processing_note:
+            logger.info("ℹ %s", result.processing_note)
+        logger.info(
+            "🎯 Musical Goals: %d/14 bestanden  ·  Phasen: %d",
+            result.goals_passed,
+            len(result.phases_executed),
+        )
 
-    # Ergebnis speichern — Pipeline liefert WAV-Bytes in result["steps"][-1]["audio"]
-    import io
-
-    processed_audio = None
-    processed_sr = None
-    steps_list = (result or {}).get("steps") or []
-    if steps_list:
-        raw = steps_list[-1].get("audio")
-        if raw:
-            try:
-                processed_audio, processed_sr = sf.read(io.BytesIO(raw))
-            except Exception:
-                processed_audio = None
-
+    # ── 4. Ergebnis speichern ─────────────────────────────────────────────────
+    restored = result.audio
     try:
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        if processed_audio is not None:
-            sf.write(output_path, processed_audio, processed_sr)
-        else:
-            # Fallback: Original verwenden
-            if verbose:
-                logger.warning("Kein processed_audio - verwende Original")
-            audio_orig, sr = sf.read(input_path)
-            sf.write(output_path, audio_orig, sr)
-    except Exception as e:
-        logger.error(f"Fehler beim Speichern der Audiodatei: {e}")
+        sf.write(output_path, restored, _TARGET_SR, subtype="PCM_24")
+    except Exception as exc:
+        logger.error("Fehler beim Speichern der Audiodatei: %s", exc)
         sys.exit(5)
 
     if verbose:
-        logger.info(f"💾 Gespeichert: {output_path}")
-        # Stats anzeigen
-        steps = result.get("steps", [])
-        quality = result.get("quality", [])
-        log = result.get("log", [])
-        logger.info("📊 Verarbeitungs-Details:")
-        logger.info(f"   • Steps: {len(steps)}")
-        logger.info(f"   • Quality Checks: {len(quality)}")
-        logger.info(f"   • Log Entries: {len(log)}")
-        # Zeige angewandte Steps
-        if steps:
-            logger.info("   Angewandte Processing-Steps:")
-            for step in steps[:5]:  # Max 5 anzeigen
-                module = step.get("module", "unknown")
-                logger.info(f"      - {module}")
-            if len(steps) > 5:
-                logger.info(f"      ... und {len(steps) - 5} weitere")
-        # Erweiterte Log-Ausgabe
-        if log:
-            logger.info("📋 Detailliertes Log:")
-            for entry in log:
-                step = entry.get("step", "?")
-                info = entry.get("info", "")
-                params = entry.get("params", {})
-                stages = entry.get("stages", [])
-                logger.info(f"   • Step: {step}")
-                logger.info(f"     Info: {info}")
-                if stages:
-                    logger.info(f"     Stages: {', '.join(stages)}")
-                if params:
-                    logger.info(f"     Params: {params}")
-        # Zusätzlicher Hinweis bei Modellproblemen
-        if result.get("warnings"):
-            logger.warning("Modell-/Plugin-Warnungen:")
-            for w in result["warnings"]:
-                logger.warning(f"   - {w}")
+        logger.info("💾 Gespeichert: %s", output_path)
+
     return result
 
 
 def print_usage():
+    print("\nVerwendung: aurik_cli [--input PATH] [--output PATH] [--mode MODUS] [-q] [-h]")
     print("\nOptionen:")
-    print("  -q, --quiet     Keine Fortschritts-Ausgaben")
-    print("  -h, --help      Diese Hilfe anzeigen")
+    print("  --input, --input_audio PATH  Eingabe-Audiodatei")
+    print("  --output, --output_audio PATH Ausgabe-Audiodatei")
+    print("  --mode MODUS                 Restaurierungsmodus: 'Restoration' (Standard) oder 'Studio 2026'")
+    print("  -q, --quiet                  Keine Fortschritts-Ausgaben")
+    print("  -h, --help                   Diese Hilfe anzeigen")
     print()
 
 
@@ -169,6 +147,7 @@ def main():
 
     input_file = None
     output_file = None
+    mode = "Restoration"
     skip_next = False
     for i, arg in enumerate(args):
         if skip_next:
@@ -186,8 +165,12 @@ def main():
                 skip_next = True
         elif "=" in arg and arg.split("=", 1)[0] in ("--output_audio", "--output"):
             output_file = arg.split("=", 1)[1]
-        elif arg in ("--mode",):
-            skip_next = True  # Verbrauche naechsten Wert, Modus wird ignoriert
+        elif arg == "--mode":
+            if i + 1 < len(args):
+                mode = args[i + 1]
+                skip_next = True
+        elif "=" in arg and arg.split("=", 1)[0] == "--mode":
+            mode = arg.split("=", 1)[1]
 
     # Positional Fallback: nur Nicht-Flag-Argumente verwenden
     positional = [a for a in args if not a.startswith("-")]
@@ -201,7 +184,7 @@ def main():
         print_usage()
         sys.exit(1)
 
-    process_audio(input_file, output_file, verbose=verbose)
+    process_audio(input_file, output_file, verbose=verbose, mode=mode)
 
 
 if __name__ == "__main__":

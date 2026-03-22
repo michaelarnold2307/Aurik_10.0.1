@@ -1,4 +1,5 @@
 import logging
+
 """
 logger = logging.getLogger(__name__)
 AURIK Unified Defect Detection System v8.2
@@ -46,12 +47,12 @@ __version__ = "8.2.0"
 
 __all__ = [
     "DefectDetector",
-    "DefectType",
-    "DefectReport",
-    "DefectInstance",
-    "TreatmentRecommendation",
-    "SeverityLevel",
     "DefectDetectorRegistry",
-    "UnifiedDefectDetector",
+    "DefectInstance",
+    "DefectReport",
+    "DefectType",
+    "SeverityLevel",
+    "TreatmentRecommendation",
     "TreatmentRecommender",
+    "UnifiedDefectDetector",
 ]

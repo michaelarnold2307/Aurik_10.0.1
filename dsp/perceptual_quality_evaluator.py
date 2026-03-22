@@ -18,9 +18,9 @@ Primäre Musik-Metriken (Aurik 9):
   - STOI   (Sprachverständlichkeit, 150–5000 Hz)
 """
 
-from dataclasses import asdict, dataclass
 import logging
 import math
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
@@ -63,7 +63,7 @@ class AdaptivePerceptualQualityEvaluator:
         # Optionaler CDPAM-Import
         self._cdpam = None
         try:
-            import cdpam  # noqa: F401
+            import cdpam
 
             self._cdpam = cdpam
         except ImportError:

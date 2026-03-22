@@ -439,6 +439,7 @@ class MusicalRestorationBenchmark:
     def __init__(self, config: BenchmarkConfig) -> None:
         self.config = config
         self._mushra = None  # Lazily loaded
+        self._scenario_audio_cache: dict[str, tuple[np.ndarray, np.ndarray, int]] = {}
 
     def run(self) -> BenchmarkReport:
         """Führt den vollständigen AMRB aus.
@@ -487,6 +488,9 @@ class MusicalRestorationBenchmark:
             aurik_version=self.config.aurik_version,
         )
         report.sign()  # P2-1: compute SHA-256 for audit-trail
+
+        # Formal ITU-R BS.1534-3-style session across all scenarios (uses cached audio pairs)
+        self.run_formal_session()
 
         if self.config.report_path:
             self._save_report(report)
@@ -587,6 +591,9 @@ class MusicalRestorationBenchmark:
                 pqs_mean,
             )
 
+        # Cache last item's audio pair for formal MUSHRA session
+        self._scenario_audio_cache[sid] = (ref_t, res_t, sr)
+
         return ScenarioResult(
             scenario_id=sid,
             description=description,
@@ -609,6 +616,39 @@ class MusicalRestorationBenchmark:
 
             self._mushra = get_mushra_evaluator()
         return self._mushra
+
+    def run_formal_session(self):
+        """Run a formal ITU-R BS.1534-3-style MUSHRA session across all AMRB scenarios.
+
+        Uses audio pairs cached during the last :meth:`run` call.
+        Returns a :class:`~backend.core.mushra_session.MushraSessionReport` or None on failure.
+        """
+        if not self._scenario_audio_cache:
+            logger.warning("run_formal_session: kein Audio-Cache — zuerst run() aufrufen")
+            return None
+        try:
+            from backend.core.mushra_session import get_mushra_session
+
+            cache = self._scenario_audio_cache
+            first_sid = next(iter(cache))
+            ref_audio, _, sr = cache[first_sid]
+            conditions: dict[str, np.ndarray] = {
+                sid: restored for sid, (_, restored, _) in cache.items()
+            }
+            report = get_mushra_session().run_automated(
+                ref_audio, conditions, sr, seed=self.config.run_seed
+            )
+            logger.info(
+                "📋 Formale MUSHRA-Session: %d Szenarien | %d/%d Hörer valide | Sieger: %s",
+                len(conditions),
+                report.n_listeners_valid,
+                report.n_listeners_total,
+                report.ranking[0][0] if report.ranking else "-",
+            )
+            return report
+        except Exception as exc:
+            logger.debug("run_formal_session Fehler: %s", exc)
+            return None
 
     def _mushra_score(self, ref: np.ndarray, test: np.ndarray, sr: int) -> float:
         try:

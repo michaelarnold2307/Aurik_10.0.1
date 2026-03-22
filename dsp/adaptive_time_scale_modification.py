@@ -4,8 +4,8 @@ adaptive_time_scale_modification.py - SOTA-konformes TSM/Speed Correction Modul 
 Dieses Modul ist jetzt mit DSPContract für Auditierbarkeit und SOTA-Konformität ausgestattet.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import librosa
@@ -182,7 +182,7 @@ class AdaptiveTimeScaleModification:
             return audio.copy()
         if abs(rate - 1.0) < 1e-6:
             return audio.copy()
-        out_len = max(1, int(round(n_in / rate)))
+        out_len = max(1, round(n_in / rate))
         output = np.zeros(out_len + frame_len, dtype=np.float64)
         norm_acc = np.zeros_like(output)
         window = np.hanning(frame_len)
@@ -190,7 +190,7 @@ class AdaptiveTimeScaleModification:
         out_pos = 0
         in_pos_f = 0.0
         while out_pos < out_len:
-            ip = int(round(in_pos_f))
+            ip = round(in_pos_f)
             # Bestes Segment per Kreuzkorrelation (vereinfacht)
             best_start = ip
             best_val = -1.0

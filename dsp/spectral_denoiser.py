@@ -41,7 +41,7 @@ class SpectralDenoiser:
         hop_length = self.hop_length
         if n_fft <= hop_length:
             n_fft = hop_length + 1
-        f, t, Zxx = stft(audio, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
+        _f, _t, Zxx = stft(audio, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
         mag = np.abs(Zxx)  # (n_freqs, n_frames)
         phase = np.angle(Zxx)
 

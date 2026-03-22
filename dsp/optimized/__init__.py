@@ -36,20 +36,20 @@ except ImportError:
     cython_loops = None
 
 __all__ = [
-    # NumExpr
-    "OptimizedDSP",
-    "spectral_gate",
-    "soft_threshold",
-    "hard_threshold",
-    # FFT
-    "CachedFFT",
-    "rfft",
-    "irfft",
-    "stft",
-    "istft",
-    # Cython
-    "cython_loops",
+    "HAS_CYTHON",
     # Flags
     "HAS_PYFFTW",
-    "HAS_CYTHON",
+    # FFT
+    "CachedFFT",
+    # NumExpr
+    "OptimizedDSP",
+    # Cython
+    "cython_loops",
+    "hard_threshold",
+    "irfft",
+    "istft",
+    "rfft",
+    "soft_threshold",
+    "spectral_gate",
+    "stft",
 ]

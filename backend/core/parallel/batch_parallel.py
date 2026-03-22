@@ -21,14 +21,14 @@ Author: AURIK Team
 Date: 8. Februar 2026
 """
 
+import logging
+import multiprocessing as mp
+import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
-import multiprocessing as mp
 from pathlib import Path
-import time
 from typing import Any
 
 logger = logging.getLogger(__name__)

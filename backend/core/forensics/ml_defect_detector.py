@@ -17,9 +17,9 @@ Features:
 - Ensemble Learning für Robustheit
 """
 
-from dataclasses import dataclass
 import logging
 import pickle
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -154,10 +154,7 @@ class DefectFeatureExtractor:
         defect_features = DefectFeatures()
 
         # Convert to mono if stereo
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim > 1 else audio
 
         # 1. Click/Pop Detection
         defect_features.impulsiveness = self._detect_impulsiveness(audio_mono, sr)
@@ -257,17 +254,14 @@ class DefectFeatureExtractor:
 
         # Find peaks in differentiated signal
         threshold = np.mean(np.abs(diff)) + 5 * np.std(np.abs(diff))
-        peaks, properties = find_peaks(np.abs(diff), height=threshold, distance=sr // 100)
+        peaks, _properties = find_peaks(np.abs(diff), height=threshold, distance=sr // 100)
 
         # Click density (clicks per second)
         duration_sec = len(audio) / sr
         click_density = len(peaks) / max(duration_sec, 1.0)
 
         # Max impulse amplitude
-        if len(peaks) > 0:
-            max_impulse = np.max(np.abs(diff[peaks]))
-        else:
-            max_impulse = 0.0
+        max_impulse = np.max(np.abs(diff[peaks])) if len(peaks) > 0 else 0.0
 
         return click_density, max_impulse
 
@@ -412,7 +406,7 @@ class DefectFeatureExtractor:
         # Simplified: Look for non-harmonic spectral components
         from scipy.signal import welch
 
-        f, psd = welch(audio, sr, nperseg=min(8192, len(audio)))
+        _f, psd = welch(audio, sr, nperseg=min(8192, len(audio)))
 
         # Total power
         np.sum(psd)
@@ -463,10 +457,7 @@ class DefectFeatureExtractor:
         dropout_count = np.sum(drops)
 
         # Amplitude discontinuities (max drop)
-        if dropout_count > 0:
-            max_discontinuity = np.abs(np.min(np.diff(rms_db)))
-        else:
-            max_discontinuity = 0.0
+        max_discontinuity = np.abs(np.min(np.diff(rms_db))) if dropout_count > 0 else 0.0
 
         return int(dropout_count), max_discontinuity
 
@@ -483,7 +474,7 @@ class DefectFeatureExtractor:
 
         # Find peaks in envelope
         threshold = np.mean(envelope_smooth) + 5 * np.std(envelope_smooth)
-        peaks, properties = find_peaks(envelope_smooth, height=threshold, distance=sr // 10)
+        peaks, _properties = find_peaks(envelope_smooth, height=threshold, distance=sr // 10)
 
         transient_count = len(peaks)
 
@@ -507,7 +498,7 @@ class DefectFeatureExtractor:
         spectral_variances = []
         for i in range(0, len(audio) - frame_length, hop_length):
             frame = audio[i : i + frame_length]
-            f, psd = welch(frame, sr, nperseg=len(frame))
+            _f, psd = welch(frame, sr, nperseg=len(frame))
 
             # Spectral variance (irregularity)
             spectral_var = np.std(psd)
@@ -736,10 +727,7 @@ class MLDefectDetector:
 
         # Summary
         detected_list = [d for d, detected in defects_detected.items() if detected]
-        if detected_list:
-            summary = f"Detected: {', '.join(detected_list)}"
-        else:
-            summary = "No defects detected"
+        summary = f"Detected: {', '.join(detected_list)}" if detected_list else "No defects detected"
 
         result = DefectDetectionResult(
             defects_detected=defects_detected,
@@ -857,7 +845,7 @@ def train_ml_defect_detector_from_dataset(
 
     # Train detector
     detector = MLDefectDetector(n_estimators=n_estimators, max_depth=max_depth)
-    training_metrics = detector.train(X_train, y_train, cv_folds=cv_folds, verbose=verbose)  # noqa: F841
+    detector.train(X_train, y_train, cv_folds=cv_folds, verbose=verbose)
 
     # Evaluate on test set
     evaluation_metrics = {}

@@ -20,8 +20,8 @@ Autor: Aurik v8.0 - Psychoacoustic Core
 Lizenz: Proprietär
 """
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.signal import butter, sosfilt
@@ -286,10 +286,7 @@ class BarkScaleProcessor:
         total_energy = np.sum(energies)
 
         # Normalize if requested
-        if normalize and total_energy > 1e-10:
-            energies_normalized = energies / total_energy
-        else:
-            energies_normalized = energies
+        energies_normalized = energies / total_energy if normalize and total_energy > 1e-10 else energies
 
         # Convert to dB
         energies_db = 10 * np.log10(energies + 1e-10)

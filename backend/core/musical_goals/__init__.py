@@ -35,27 +35,27 @@ from .musical_goals_metrics import (
 from .musical_goals_monitor import MonitoringCheckpoint, MonitoringReport, MusicalGoalsMonitor, PreValidationResult
 
 __all__ = [
+    "AuthentizitaetMetric",
     # Metriken (einzeln)
     "BassKraftMetric",
     "BrillanzMetric",
-    "WaermeMetric",
-    "NatuerlichkeitMetric",
-    "AuthentizitaetMetric",
     "EmotionalitaetMetric",
-    "TransparenzMetric",
+    "GoalMeasurement",
     "GrooveMetric",  # v9.9 — 8. Ziel
-    "SpatialDepthMetric",  # v9.9 — 9. Ziel
+    "MonitoringCheckpoint",
+    "MonitoringReport",
     # Checker
     "MusicalGoalsChecker",
-    "GoalMeasurement",
+    # Monitor
+    "MusicalGoalsMonitor",
+    "NatuerlichkeitMetric",
+    "PreValidationResult",
+    "SpatialDepthMetric",  # v9.9 — 9. Ziel
+    "TransparenzMetric",
+    "WaermeMetric",
     # Singletons & Convenience
     "get_checker",
     "measure_all",
-    # Monitor
-    "MusicalGoalsMonitor",
-    "PreValidationResult",
-    "MonitoringCheckpoint",
-    "MonitoringReport",
 ]
 
 __version__ = "9.9.0"

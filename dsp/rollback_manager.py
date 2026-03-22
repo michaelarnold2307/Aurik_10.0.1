@@ -40,6 +40,4 @@ class RollbackManager:
             return True
         # Zu viele fehlgeschlagene Module
         n_fail = sum(1 for v in values if float(v) < 0.5)
-        if len(values) > 0 and n_fail / len(values) >= self.max_fail_ratio:
-            return True
-        return False
+        return bool(len(values) > 0 and n_fail / len(values) >= self.max_fail_ratio)

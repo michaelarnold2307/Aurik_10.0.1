@@ -41,8 +41,8 @@ class VoiceHealthAnalysisResult:
     fatigue: bool
     hoarseness: bool
     recommendation: str
-    hnr_db: Optional[float]
-    spectral_tilt: Optional[float]
+    hnr_db: float | None
+    spectral_tilt: float | None
 
     # Backward-compatible dict-style access
     def get(self, key: str, default=None):
@@ -163,10 +163,7 @@ class SibilantNet:
         spec = np.abs(np.fft.rfft(mono[:n_fft] * np.hanning(n_fft)))
         freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
         mask = (freqs >= f_lo) & (freqs <= f_hi)
-        if mask.any():
-            peak_freq = float(freqs[mask][np.argmax(spec[mask])])
-        else:
-            peak_freq = float((f_lo + f_hi) / 2)
+        peak_freq = float(freqs[mask][np.argmax(spec[mask])]) if mask.any() else float((f_lo + f_hi) / 2)
 
         peak_freq = max(100.0, min(peak_freq, sr / 2 - 50))
         Q = 8.0
@@ -349,10 +346,7 @@ class VoiceHealthNet:
         except Exception:
             spectral_tilt = None
 
-        if issues:
-            recommendation = "Stimmschonung empfohlen: " + ", ".join(issues)
-        else:
-            recommendation = "ok"
+        recommendation = "Stimmschonung empfohlen: " + ", ".join(issues) if issues else "ok"
 
         return VoiceHealthAnalysisResult(
             fatigue=fatigue,

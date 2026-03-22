@@ -198,11 +198,15 @@ ZONES = {
 # PGHI per Zone; Kreuzfade Hanning 10 ms an Zonenübergängen
 ```
 
-### Neuronale Synthese / Vocos (wenn PQS-MOS < 4.3)
+### Neuronale Synthese / Vocoder-Kaskade (wenn PQS-MOS < 4.3)
 ```
-Primär: Vocos 0.2.0 — vocos_mel_spec_24khz.onnx (CPUExecutionProvider)
-    Mel-Bins 80; True-Peak −1.0 dBTP nach Synthese
-    Fallback: HiFi-GAN (3,6 MB ONNX) → PGHI-ISTFT
+4-stufige Fallback-Kaskade (Studio-2026):
+    1. Vocos 48 kHz nativ — vocos_mel_spec_24khz.onnx (CPUExecutionProvider)
+       Mel-Bins 80; True-Peak −1.0 dBTP nach Synthese
+    2. BigVGAN-v2 — bigvgan_v2 (0,4 GB, ONNX/PyTorch, CPU-only)
+       NVIDIA 2024; nur Studio-2026-Modus; Mel-Eingang 80 Bänder
+    3. HiFi-GAN (3,6 MB ONNX) — Tertiär-Fallback
+    4. PGHI-ISTFT — DSP-Endfall-Fallback
 VERBOTEN: Griffin-Lim als Endschritt in Studio-2026
 ```
 

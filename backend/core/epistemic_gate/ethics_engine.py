@@ -20,9 +20,9 @@ Version: 8.0 (Ethics Extension)
 Datum: 7. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -316,9 +316,8 @@ class EthicsEngine:
             )
 
         # 6. Special: Cultural Significance → Extra Conservative
-        if context.get("has_cultural_significance", False):
-            if strength > 0.5:
-                violations.append("Kulturell bedeutsames Material: Max Enhancement 0.5 " f"(aktuell: {strength:.2f})")
+        if context.get("has_cultural_significance", False) and strength > 0.5:
+            violations.append("Kulturell bedeutsames Material: Max Enhancement 0.5 " f"(aktuell: {strength:.2f})")
 
         # FINAL DECISION
         approved = len(violations) == 0

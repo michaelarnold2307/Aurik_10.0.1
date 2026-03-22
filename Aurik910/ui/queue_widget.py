@@ -249,7 +249,7 @@ class QueueWidget(QWidget):
 
         self.update_ui()
 
-    def update_item(self, item_id: str, progress: int = None, status: QueueStatus = None):
+    def update_item(self, item_id: str, progress: int | None = None, status: QueueStatus = None):
         """Update item display"""
         if item_id in self.item_widgets:
             _, item_widget = self.item_widgets[item_id]

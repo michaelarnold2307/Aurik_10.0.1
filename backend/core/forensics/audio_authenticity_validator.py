@@ -22,13 +22,13 @@ Version: 1.0.0
 Date: 8. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
 import numpy as np
-from scipy.fft import fft, fftfreq
 import scipy.signal as signal
+from scipy.fft import fft, fftfreq
 
 logger = logging.getLogger(__name__)
 
@@ -180,10 +180,7 @@ class AudioForensicsAnalyzer:
             ForensicReport with detailed analysis and recommendations
         """
         # Convert to mono
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
         logger.debug(f"Analyzing {len(audio_mono)/sr:.2f}s audio for authenticity")
 
@@ -278,7 +275,7 @@ class AudioForensicsAnalyzer:
         """
         # Compute spectrogram
         nperseg = min(2048, len(audio) // 4)
-        f, t, Sxx = signal.spectrogram(audio, sr, nperseg=nperseg)
+        _f, _t, Sxx = signal.spectrogram(audio, sr, nperseg=nperseg)
 
         # Look for periodic patterns in spectrum (GAN artifact)
         spectral_variance = np.var(Sxx, axis=1)
@@ -313,10 +310,7 @@ class AudioForensicsAnalyzer:
         lf_energy = np.mean(spectrum[lf_mask]) if np.any(lf_mask) else 1.0
 
         # Unusual HF/LF ratio suggests diffusion artifacts
-        if lf_energy == 0:
-            ratio = 0.0
-        else:
-            ratio = hf_energy / lf_energy
+        ratio = 0.0 if lf_energy == 0 else hf_energy / lf_energy
 
         # Typical authentic audio: ratio < 0.1
         # Diffusion models: ratio often > 0.2
@@ -365,10 +359,7 @@ class AudioForensicsAnalyzer:
         flux_mean = np.mean(flux_values)
         flux_std = np.std(flux_values)
 
-        if flux_mean == 0:
-            cv = 0.0
-        else:
-            cv = flux_std / flux_mean
+        cv = 0.0 if flux_mean == 0 else flux_std / flux_mean
 
         # Real voices: CV typically > 0.5
         # Voice clones: CV often < 0.3 (too uniform)

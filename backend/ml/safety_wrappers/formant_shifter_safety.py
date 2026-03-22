@@ -159,7 +159,7 @@ def detect_voice_presence(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     # 3. Harmonic structure
 
     # Compute spectrogram
-    f, t, Sxx = signal.spectrogram(audio, sr, nperseg=2048)
+    f, _t, Sxx = signal.spectrogram(audio, sr, nperseg=2048)
 
     # Check for energy in voice frequency range (80-400 Hz)
     voice_band = (f >= 80) & (f <= 400)
@@ -309,10 +309,7 @@ class FormantShifterSafety(BaseSafetyWrapper):
             )
 
         # Detect formants
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
         formants = detect_formants_lpc(audio_mono, sr, n_formants=5)
         metadata["formants_hz"] = formants.tolist()
@@ -415,7 +412,7 @@ class FormantShifterSafety(BaseSafetyWrapper):
         # 5. Singer's Formant preservation (if present)
         has_sf_before = params.get("__pre_check_singers_formant", False)
         if has_sf_before:
-            has_sf_after, sf_strength_after = detect_singers_formant(proc_mono, sr)
+            has_sf_after, _sf_strength_after = detect_singers_formant(proc_mono, sr)
             metrics["singers_formant_preserved"] = has_sf_after
 
             if not has_sf_after:

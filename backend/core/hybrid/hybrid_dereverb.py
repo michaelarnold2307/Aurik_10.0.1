@@ -26,10 +26,10 @@ Version: 1.0.0
 Date: 16. Februar 2026
 """
 
-from dataclasses import dataclass
-from enum import Enum
 import logging
 import threading
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Optional
 
 import numpy as np
@@ -130,7 +130,7 @@ class HybridDereverb:
         """
         # Stufe 1: SGMSE+ ONNX (§4.4 Primär — Score-Based Generative Model for Speech Enhancement)
         try:
-            from plugins.sgmse_plugin import get_sgmse_plus_plugin  # noqa: PLC0415
+            from plugins.sgmse_plugin import get_sgmse_plus_plugin
 
             self.dccrn = get_sgmse_plus_plugin()
             self._sgmse_active = True
@@ -143,7 +143,7 @@ class HybridDereverb:
 
         # Stufe 2: Resemble-Enhance ONNX (§4.4 Fallback 1)
         try:
-            from plugins.resemble_enhance_plugin import ResembleEnhancePlugin  # noqa: PLC0415
+            from plugins.resemble_enhance_plugin import ResembleEnhancePlugin
 
             self.dccrn = ResembleEnhancePlugin()
             self._sgmse_active = False
@@ -346,10 +346,7 @@ class HybridDereverb:
                 energy[i] = np.sqrt(np.mean(window**2))
 
         # Smooth energy envelope
-        if len(energy) > 0:
-            energy_smooth = signal.medfilt(energy, kernel_size=min(5, len(energy)))
-        else:
-            energy_smooth = energy
+        energy_smooth = signal.medfilt(energy, kernel_size=min(5, len(energy))) if len(energy) > 0 else energy
 
         # Estimate decay time (RT60-like)
         # Find peak

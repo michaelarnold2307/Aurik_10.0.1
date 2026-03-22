@@ -219,8 +219,25 @@ class VocalQualityChecker:
 
     def check(self, scores: dict[str, float]) -> dict[str, bool]:
         results = {}
+        media_characteristics = scores.get("media_characteristics", {})
+        is_vocal_material = bool(media_characteristics.get("vocal")) if isinstance(media_characteristics, dict) else False
+
+        # Prefer explicit vocal_scores payload provided by the caller.
+        vocal_scores = scores.get("vocal_scores", {})
+        metric_source = vocal_scores if isinstance(vocal_scores, dict) and vocal_scores else scores
+
+        # Do not create false negatives for non-vocal material or absent vocal metrics.
+        if not is_vocal_material and metric_source is scores:
+            return results
+
         for key, threshold in self.THRESHOLDS.items():
-            score = scores.get(key, 0.0)
+            raw_score = metric_source.get(key)
+            if raw_score is None:
+                continue
+            try:
+                score = float(raw_score)
+            except (TypeError, ValueError):
+                continue
             results[key] = score >= threshold
         # Audit-Log Integration
         try:

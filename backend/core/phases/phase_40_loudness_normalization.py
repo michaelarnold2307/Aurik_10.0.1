@@ -62,11 +62,9 @@ Version: 2.0.0 (Professional)
 Quality Impact: 0.80 → 0.96 (+20%)
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 
 import numpy as np
@@ -75,6 +73,7 @@ from scipy import signal
 logger = logging.getLogger(__name__)
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 
@@ -124,7 +123,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         audio: np.ndarray,
         sample_rate: int,
         material: MaterialType,
-        platform: str = None,  # Optional platform preset
+        platform: str | None = None,  # Optional platform preset
         preserve_dynamics: bool = False,  # Preserve DR (minimal compression)
         **kwargs,
     ) -> PhaseResult:
@@ -147,7 +146,6 @@ class LoudnessNormalizationPhase(PhaseInterface):
 
         self.validate_input(audio)
 
-        is_stereo = audio.ndim == 2  # noqa: F841
 
         # Get target (platform overrides material)
         if platform and platform in self.PLATFORM_PRESETS:

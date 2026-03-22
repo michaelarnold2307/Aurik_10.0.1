@@ -91,7 +91,8 @@ class DeepFilterNetV3Plugin:
         # ── ML-Budget-Check VOR dem Laden (§5.1 OOM-Schutz) ──────────────────
         _allocated = False
         try:
-            from backend.core.ml_memory_budget import release as _release, try_allocate  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate("DeepFilterNetV3", size_gb=0.15):
                 logger.warning("DeepFilterNet: ML-Budget erschöpft — DSP-Fallback aktiv")
@@ -100,7 +101,7 @@ class DeepFilterNetV3Plugin:
         except ImportError:
             pass
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             opts = ort.SessionOptions()
             opts.inter_op_num_threads = 2
@@ -111,7 +112,7 @@ class DeepFilterNetV3Plugin:
             self._erb_dec = ort.InferenceSession(os.path.join(d, "erb_dec.onnx"), sess_options=opts, providers=prov)
             logger.info("DeepFilterNet v3 II ONNX-Modelle geladen aus: %s", d)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "DeepFilterNetV3",
@@ -122,12 +123,12 @@ class DeepFilterNetV3Plugin:
                 )
             except Exception:
                 pass
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("DeepFilterNet ONNX-Ladefehler: %s — DSP-Fallback aktiv.", exc)
             self._enc = self._dec = self._erb_dec = None
             if _allocated:
                 try:
-                    from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                    from backend.core.ml_memory_budget import release as _release
 
                     _release("DeepFilterNetV3")
                 except ImportError:
@@ -180,24 +181,21 @@ class DeepFilterNetV3Plugin:
         """Verarbeite einen einzelnen Mono-Kanal."""
         # Resampling auf 48 kHz
         if sr != _SR:
-            from scipy.signal import resample_poly  # noqa: PLC0415
+            from scipy.signal import resample_poly
 
             g = math.gcd(sr, _SR)
             mono = resample_poly(mono, _SR // g, sr // g).astype(np.float32)
 
-        if self._enc is not None:
-            out = self._infer_onnx(mono)
-        else:
-            out = self._omlsa_fallback(mono, _SR)
+        out = self._infer_onnx(mono) if self._enc is not None else self._omlsa_fallback(mono, _SR)
 
         # Rückresampling auf Original-SR
         if sr != _SR:
-            from scipy.signal import resample_poly  # noqa: PLC0415
+            from scipy.signal import resample_poly
 
             g = math.gcd(sr, _SR)
             out = resample_poly(out, sr // g, _SR // g).astype(np.float32)
 
-        n_orig = int(len(mono) * sr / _SR) if sr != _SR else len(mono)  # noqa: F841
+        int(len(mono) * sr / _SR) if sr != _SR else len(mono)
         return out.astype(np.float32)
 
     def _compute_features(self, mono: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -298,7 +296,7 @@ class DeepFilterNetV3Plugin:
             alpha_np = alpha
             spec_filtered = self._apply_df_filter(spec_filtered, coefs_np, alpha_np)
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("DeepFilterNet ONNX-Inferenz-Fehler: %s — DSP-Fallback.", exc)
             return self._omlsa_fallback(mono, _SR)
 
@@ -315,6 +313,7 @@ class DeepFilterNetV3Plugin:
 
         win_sum = np.where(win_sum < 1e-8, 1.0, win_sum)
         out /= win_sum
+        out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
         return out[: len(mono)].astype(np.float32)
 
     @staticmethod
@@ -323,7 +322,7 @@ class DeepFilterNetV3Plugin:
 
         Numerisch robust, kein ML-Modell erforderlich.
         """
-        from scipy.signal import istft, stft  # noqa: PLC0415
+        from scipy.signal import istft, stft
 
         n_fft = 1024
         hop = n_fft // 4
@@ -331,7 +330,7 @@ class DeepFilterNetV3Plugin:
 
         mag = np.abs(Zxx)
         # MCRA-Rauschschätzung: Minima in gleitenden Fenstern (5 Frames)
-        from scipy.ndimage import uniform_filter  # noqa: PLC0415
+        from scipy.ndimage import uniform_filter
 
         noise_est = uniform_filter(mag, size=(1, 5))
         noise_est = np.minimum(noise_est, mag)

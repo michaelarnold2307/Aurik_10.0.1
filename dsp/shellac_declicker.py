@@ -27,7 +27,7 @@ class ShellacDeclicker:
     - Klassische Pulsdetektion als Fallback
     """
 
-    def __init__(self, sensitivity: float = 1.0, model_path: str = None):
+    def __init__(self, sensitivity: float = 1.0, model_path: str | None = None):
         self.sensitivity = sensitivity
         self.model_path = model_path
         self.model = None

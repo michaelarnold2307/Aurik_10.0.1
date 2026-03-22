@@ -97,7 +97,7 @@ assert report.passes_os_leadership_threshold(), f"Score: {report.overall_score}"
 | **Stereo-Authentizität** | Mono-Ären M/S-Korrelation nach Restaur. ≥ 0.97 |
 | **HF-Kumulativ-Limit** | Presence + Air kumulativ ≤ +4 dB (Listening-Fatigue) |
 | Mikro-Dynamik-Erhalt | Pearson LUFS-Profil (400 ms) ≥ 0.92, Crest-Faktor ≤ 1.5 dB |
-| Tests grün | 6312 Tests (v9.10.42, Stand Feb 2026) |
+| Tests grün | Alle bestehenden Pytest-IDs (CI: `pytest --collect-only -q \| tail -1`) |
 
 ---
 

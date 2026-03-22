@@ -4,9 +4,9 @@ import os
 import time
 from typing import Any
 
+import requests
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-import requests
 
 app = FastAPI()
 

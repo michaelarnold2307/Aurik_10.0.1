@@ -46,10 +46,7 @@ class SOTAUniversalEnhancer:
         return "speech"
 
     def process(self, audio: np.ndarray, sr: int = 16000) -> np.ndarray:
-        if self.mode == "auto":
-            typ = self.detect_type(audio, sr)
-        else:
-            typ = self.mode
+        typ = self.detect_type(audio, sr) if self.mode == "auto" else self.mode
         if typ == "speech" and self.speech_model:
             # §4.4: MP-SENet 2023 — enhance(audio, sr) → MpSenetResult
             result = self.speech_model.enhance(audio, sr)

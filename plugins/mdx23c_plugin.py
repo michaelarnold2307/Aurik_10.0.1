@@ -15,8 +15,8 @@ Fallback: Harmonisch-Perkussiv-Trennung via HPSS (scipy/librosa).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import threading
+from pathlib import Path
 
 import numpy as np
 
@@ -90,8 +90,10 @@ class MDX23CModel:
 
                 # ML-Budget-Guard: MDX23C Kim_Vocal_2 + Kim_Inst zusammen ~1.1 GB
                 try:
-                    from backend.core.ml_memory_budget import (  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import (
                         release as _rel,
+                    )
+                    from backend.core.ml_memory_budget import (
                         try_allocate as _try_alloc,
                     )
 
@@ -122,7 +124,7 @@ class MDX23CModel:
                     self._dim_t,
                 )
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm(
                         f"MDX23C_{self.stem_key}",
@@ -135,7 +137,7 @@ class MDX23CModel:
             except Exception as exc:
                 logger.debug("MDX23C [%s] Ladefehler (%s): %s", self.stem_key, path.name, exc)
                 try:
-                    from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import release as _release
 
                     _release(f"MDX23C_{self.stem_key}")
                 except Exception:
@@ -226,6 +228,7 @@ class MDX23CModel:
             inp = np.stack([sl_L.real, sl_L.imag, sl_R.real, sl_R.imag], axis=0)[np.newaxis].astype(np.float32)
 
             mask = self._session.run(None, {self._session.get_inputs()[0].name: inp})[0]
+            mask = np.nan_to_num(mask, nan=0.0, posinf=0.0, neginf=0.0)
             mask = np.squeeze(mask)  # [4, dim_f, dim_t] oder [dim_f, dim_t]
 
             if mask.ndim == 3:
@@ -299,7 +302,7 @@ class MDX23CModel:
         is_vocals=False → perkussiver Anteil  (Instrumente)
         """
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             channels, n = audio.shape
             result = []
@@ -312,7 +315,7 @@ class MDX23CModel:
 
         # Numpy-only Fallback: Medianfilter auf Spektrogramm
         try:
-            from scipy.ndimage import median_filter  # noqa: PLC0415
+            from scipy.ndimage import median_filter
 
             channels, n = audio.shape
             n_fft = 2048

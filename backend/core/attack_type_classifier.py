@@ -203,7 +203,7 @@ class AttackTypeClassifier:
             return 0
 
         prev_mag = np.zeros(win // 2 + 1)
-        flux_values: List[float] = []
+        flux_values: list[float] = []
         for start in range(0, len(audio_slice) - win, hop):
             frame = audio_slice[start:start + win] * np.hanning(win)
             mag = np.abs(np.fft.rfft(frame))
@@ -231,7 +231,7 @@ class AttackTypeClassifier:
         flatness: float,
         zcr: float,
         rise_ms: float,
-    ) -> Tuple[str, float]:
+    ) -> tuple[str, float]:
         """Map features to (attack_type, confidence) via rule-based decision tree.
 
         Ordered by discriminative power (most separable first):
@@ -294,7 +294,7 @@ class AttackTypeClassifier:
         self,
         audio: np.ndarray,
         sr: int,
-        onset_sample: Optional[int] = None,
+        onset_sample: int | None = None,
     ) -> AttackTypeResult:
         """Classify the physical attack type of the dominant onset in *audio*.
 
@@ -384,8 +384,8 @@ class AttackTypeClassifier:
         self,
         audio: np.ndarray,
         sr: int,
-        onset_samples: List[int],
-    ) -> List[AttackTypeResult]:
+        onset_samples: list[int],
+    ) -> list[AttackTypeResult]:
         """Classify multiple onsets in *audio* at the given sample positions.
 
         Args:
@@ -401,7 +401,7 @@ class AttackTypeClassifier:
 
 # ── Singleton (§3.2 Double-Checked Locking) ──────────────────────────────────
 
-_instance: Optional[AttackTypeClassifier] = None
+_instance: AttackTypeClassifier | None = None
 _lock = threading.Lock()
 
 
@@ -421,7 +421,7 @@ def get_attack_type_classifier() -> AttackTypeClassifier:
 def classify_attack_type(
     audio: np.ndarray,
     sr: int,
-    onset_sample: Optional[int] = None,
+    onset_sample: int | None = None,
 ) -> AttackTypeResult:
     """Convenience wrapper: classify attack type of *audio*.
 

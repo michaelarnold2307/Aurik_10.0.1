@@ -256,9 +256,8 @@ class PresetBrowserWidget(QWidget):
 
         for preset in self.preset_manager.get_all_presets():
             # Apply filter
-            if category_filter != "all":
-                if category_filter != preset.category.value:
-                    continue
+            if category_filter != "all" and category_filter != preset.category.value:
+                continue
 
             # Add item
             item = QListWidgetItem()
@@ -343,7 +342,7 @@ class PresetBrowserWidget(QWidget):
             if reply != QMessageBox.Yes:
                 return
 
-        description, ok = QInputDialog.getText(
+        _description, ok = QInputDialog.getText(
             self,
             t("legacy.preset.description_title"),
             t("legacy.preset.enter_description"),

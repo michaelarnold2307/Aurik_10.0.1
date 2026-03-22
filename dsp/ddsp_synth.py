@@ -26,10 +26,10 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -63,9 +63,9 @@ class AdditiveSynthParams:
 
     f0_hz: np.ndarray  # [n_frames]
     amplitudes: np.ndarray  # [n_frames, n_harmonics]
-    harmonic_dist: Optional[np.ndarray] = None  # [n_harmonics]
-    noise_magnitudes: Optional[np.ndarray] = None  # [n_frames, n_noise_bands]
-    global_amp: Optional[np.ndarray] = None  # [n_frames]
+    harmonic_dist: np.ndarray | None = None  # [n_harmonics]
+    noise_magnitudes: np.ndarray | None = None  # [n_frames, n_noise_bands]
+    global_amp: np.ndarray | None = None  # [n_frames]
 
 
 @dataclass
@@ -88,7 +88,7 @@ class InstrumentResonanceParams:
     inharmonicity_b: float = 0.0  # Fletcher-Inharmonizität B ∈ [0, 0.01]
     resonance_peaks_hz: list[float] = field(default_factory=list)
     resonance_bw_hz: list[float] = field(default_factory=list)
-    body_radiation_db: Optional[np.ndarray] = None  # Abstrahlcharakteristik [n_bins]
+    body_radiation_db: np.ndarray | None = None  # Abstrahlcharakteristik [n_bins]
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +246,7 @@ class DdspSynthesizer:
         sr: int,
         era_decade: int,
         f_max_source_hz: float,
-        anchor_spectrum: Optional[np.ndarray] = None,
+        anchor_spectrum: np.ndarray | None = None,
     ) -> np.ndarray:
         """Synthetisiert era-authentische HF-Ergänzung für bandbreitenbegrenzte Quellen.
 
@@ -305,7 +305,7 @@ class DdspSynthesizer:
         # Spektral-Analyse der Quelle (STFT)
         win_size = 4096
         hop = 512
-        stft_mag, stft_phase = _stft_mag_phase(audio_ref, win_size, hop)
+        stft_mag, _stft_phase = _stft_mag_phase(audio_ref, win_size, hop)
         n_bins = stft_mag.shape[0]
         freqs = np.linspace(0.0, sr / 2.0, n_bins)
 
@@ -330,10 +330,7 @@ class DdspSynthesizer:
         # Extrapolation: Spektral-Hüllkurve aus letzten 500 Hz des Quell-Materials
         taper_start = max(0, len(src_envelope) - int(500.0 / (sr / 2.0) * n_bins))
         src_tail = src_envelope[taper_start:]
-        if len(src_tail) > 0:
-            tail_level = np.mean(src_tail) * (ceiling * 0.3)
-        else:
-            tail_level = 1e-4
+        tail_level = np.mean(src_tail) * (ceiling * 0.3) if len(src_tail) > 0 else 0.0001
 
         # Fallende Hüllkurve für HF-Zone (era-authentisch: nicht linear erhöhen)
         hf_envelope = tail_level * np.exp(-np.linspace(0.0, 4.0, n_hf_bins))
@@ -394,8 +391,8 @@ class DdspSynthesizer:
         audio: np.ndarray,
         sr: int,
         instrument_tag: str = "unknown",
-        partial_freqs: Optional[np.ndarray] = None,
-        partial_amps: Optional[np.ndarray] = None,
+        partial_freqs: np.ndarray | None = None,
+        partial_amps: np.ndarray | None = None,
     ) -> np.ndarray:
         """Modelliert Instrument-Körperresonanz via Additivsynthese (§4.1, §4.4).
 
@@ -412,7 +409,7 @@ class DdspSynthesizer:
         Returns:
             Verbessertes Audio [n_samples] mit rekonstruierter Körperresonanz.
         """
-        assert sr == 48000, f"SR muss 48000 sein"
+        assert sr == 48000, "SR muss 48000 sein"
         n_samples = len(audio)
         B = INHARMONICITY_PRIORS.get(instrument_tag, 0.0002)
 
@@ -420,7 +417,7 @@ class DdspSynthesizer:
         win_size = 2048
         hop = 256
         stft_mag, stft_phase = _stft_mag_phase(audio, win_size, hop)
-        n_bins, n_frames = stft_mag.shape
+        n_bins, _n_frames = stft_mag.shape
         freqs = np.linspace(0.0, sr / 2.0, n_bins)
 
         # Instrument-spezifische Resonanz-Peaks (vereinfachtes Körpermodell)
@@ -657,7 +654,7 @@ def _istft(
     Returns:
         Audio [n_samples] float32
     """
-    n_bins, n_frames = stft_complex.shape
+    _n_bins, n_frames = stft_complex.shape
     window = np.hanning(win_size)
     # normierung window (OLA-Konsistenz)
     win_sq = window**2
@@ -716,7 +713,7 @@ def _get_instrument_resonance_peaks(instrument_tag: str, sr: int) -> list[tuple[
 # Singleton (§3.2 — Thread-sicheres Double-Checked Locking)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[DdspSynthesizer] = None
+_instance: DdspSynthesizer | None = None
 _lock = threading.Lock()
 
 
@@ -743,8 +740,8 @@ def synthesize_partials(
     n_samples: int,
     sr: int = 48000,
     instrument_tag: str = "unknown",
-    noise_magnitudes: Optional[np.ndarray] = None,
-    global_amp: Optional[np.ndarray] = None,
+    noise_magnitudes: np.ndarray | None = None,
+    global_amp: np.ndarray | None = None,
 ) -> DdspSynthResult:
     """Convenience-Wrapper: Additive Synthese + gefilterte Rauschen.
 
@@ -778,7 +775,7 @@ def synthesize_era_hf(
     sr: int,
     era_decade: int,
     f_max_source_hz: float,
-    anchor_spectrum: Optional[np.ndarray] = None,
+    anchor_spectrum: np.ndarray | None = None,
 ) -> np.ndarray:
     """Convenience-Wrapper: Era-authentische HF-Ergänzung (§2.35).
 
@@ -799,8 +796,8 @@ def model_instrument_resonance(
     audio: np.ndarray,
     sr: int,
     instrument_tag: str = "unknown",
-    partial_freqs: Optional[np.ndarray] = None,
-    partial_amps: Optional[np.ndarray] = None,
+    partial_freqs: np.ndarray | None = None,
+    partial_amps: np.ndarray | None = None,
 ) -> np.ndarray:
     """Convenience-Wrapper: Instrument-Körperresonanz-Modellierung (§4.1, §4.4).
 

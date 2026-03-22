@@ -193,7 +193,7 @@ def _detect_band_gaps(
     Returns:
         Liste von (bin_low, bin_high) Tupeln für identifizierte Lücken.
     """
-    n_bins, n_frames = stft_mag.shape
+    n_bins, _n_frames = stft_mag.shape
     freq_resolution = sr / n_fft  # Hz pro Bin
 
     # Energie pro Bin (logarithmisch)
@@ -268,11 +268,11 @@ def _harmonic_interpolate_gap(
         f_n = n_partial * f0_hz * math.sqrt(1.0 + B * n_partial**2)
         if f_n > sr / 2.0:
             break
-        bin_n = int(round(f_n / freq_per_bin))
+        bin_n = round(f_n / freq_per_bin)
         if gap_low <= bin_n < gap_high:
             # Nachbar-Partials für geometrisches Mittel
-            bin_prev = int(round((n_partial - 1) * f0_hz / freq_per_bin)) if n_partial > 1 else 0
-            bin_next = int(round((n_partial + 1) * f0_hz / freq_per_bin))
+            bin_prev = round((n_partial - 1) * f0_hz / freq_per_bin) if n_partial > 1 else 0
+            bin_next = round((n_partial + 1) * f0_hz / freq_per_bin)
             bin_prev = max(0, min(bin_prev, stft_mag.shape[0] - 1))
             bin_next = max(0, min(bin_next, stft_mag.shape[0] - 1))
 
@@ -420,7 +420,7 @@ def _nmf_beta_refine(
         W_context_T = W_context.T  # [n_context_bins × n_frames]
         model.fit(W_context_T)
         H = model.components_  # [n_components × n_frames]
-        W_gap = model.components_.mean(axis=1, keepdims=True).T  # Fallback  # noqa: F841
+        model.components_.mean(axis=1, keepdims=True).T  # Fallback
 
         # Rekonstruktion für Lücken-Bins
         mag_out = stft_mag.copy()
@@ -540,7 +540,7 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         hop = self.hop_length
 
         # STFT
-        stft = np.fft.rfft(  # noqa: F841
+        np.fft.rfft(
             np.pad(mono.astype(np.float32), (n_fft // 2, n_fft // 2), mode="reflect")[: len(mono) + n_fft - 1],
         )
 

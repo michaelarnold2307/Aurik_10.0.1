@@ -18,9 +18,9 @@ Datum: 20. Februar 2026
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -102,10 +102,7 @@ class PipelineUncertaintyEstimator:
             PipelineConfidence mit Tier + GP-Steuerungsparametern.
         """
         # Primäre Konfidenz aus CausalPlan
-        if causal_plan is not None:
-            plan_confidence = float(getattr(causal_plan, "confidence", 0.5))
-        else:
-            plan_confidence = 0.5
+        plan_confidence = float(getattr(causal_plan, "confidence", 0.5)) if causal_plan is not None else 0.5
 
         # DSP-Konfidenz aus DefectScores (optional enhacements)
         dsp_confidence = self._estimate_dsp_confidence(defect_scores)
@@ -250,7 +247,7 @@ class PipelineUncertaintyEstimator:
             uq = UncertaintyQuantifier()
             details["ml_uq_available"] = True
             details["ml_uq_class"] = type(uq).__name__
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             details["ml_uq_available"] = False
             details["ml_uq_error"] = str(e)
         return details

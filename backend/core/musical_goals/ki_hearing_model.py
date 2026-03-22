@@ -18,8 +18,8 @@ Status: PRODUKTIONSREIF ✅
 """
 
 import logging
-from typing import Any
 import warnings
+from typing import Any
 
 import numpy as np
 from scipy import signal
@@ -137,7 +137,7 @@ class KIHörbarkeitsAnalyzer:
                 return 0.0
 
             # STFT
-            f, t, Zxx = signal.stft(audio, fs=sr, nperseg=window_size, noverlap=hop_size)
+            f, _t, Zxx = signal.stft(audio, fs=sr, nperseg=window_size, noverlap=hop_size)
 
             # Magnitude Spektrum
             magnitude = np.abs(Zxx)
@@ -195,10 +195,7 @@ class KIHörbarkeitsAnalyzer:
 
             # Pitch Variation = Standardabweichung der ZCR
             mean_zcr = np.mean(zcr_values)
-            if mean_zcr > 0:
-                pitch_variation = np.std(zcr_values) / mean_zcr
-            else:
-                pitch_variation = 0.0
+            pitch_variation = np.std(zcr_values) / mean_zcr if mean_zcr > 0 else 0.0
 
             # Normalisiere (JND für Pitch ≈ 0.3%)
             # Variationen > 1% sind deutlich hörbar
@@ -244,10 +241,7 @@ class KIHörbarkeitsAnalyzer:
             amp_variance = np.var(envelope_smooth)
             mean_amp = np.mean(envelope_smooth)
 
-            if mean_amp > 0:
-                amp_mod_ratio = np.sqrt(amp_variance) / mean_amp
-            else:
-                amp_mod_ratio = 0.0
+            amp_mod_ratio = np.sqrt(amp_variance) / mean_amp if mean_amp > 0 else 0.0
 
             # Normalisiere (JND für Amplitude ≈ 0.5 dB ≈ 6%)
             # Modulationen > 10% sind deutlich hörbar

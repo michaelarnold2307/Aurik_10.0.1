@@ -16,13 +16,13 @@ CPU-Only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
-from pathlib import Path
-import threading
-
 import os
+import threading
+from dataclasses import dataclass, field
+from pathlib import Path
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,7 @@ if _S3PRL_BUNDLED.exists():
 # Paket (ESPnet, Fairseq, …) eine WARNING. Diese sind harmlos — Aurik nutzt nur
 # wav2vec2 (kein ESPnet/Fairseq erforderlich).  Logger-Filter einmalig setzen.
 import logging as _logging
+
 _logging.getLogger("s3prl.upstream.espnet_hubert.expert").setLevel(_logging.ERROR)
 _logging.getLogger("s3prl.upstream.fairseq.expert").setLevel(_logging.ERROR)
 del _logging
@@ -101,6 +102,28 @@ class VersaPlugin:
         # Eager loading of SingMOS Pro (wav2vec2-large 606 MB) would cause OOM
         # when multiple plugins are imported simultaneously during test collection.
 
+    @staticmethod
+    def _vocal_confidence(audio: np.ndarray, sr: int) -> float:
+        """Returns vocal confidence [0, 1] from PANNs for SingMOS gating."""
+        try:
+            from plugins.panns_plugin import get_panns_plugin
+
+            tags = get_panns_plugin().get_tags(audio, sr)
+        except Exception as exc:
+            logger.debug("VERSA: PANNs unavailable for vocal gating: %s", exc)
+            return 0.0
+
+        singing_conf = float(tags.get("Singing voice", 0.0))
+        vocals_conf = float(tags.get("Vocals", 0.0))
+        max_vocal_conf = max(singing_conf, vocals_conf)
+        logger.debug("VERSA: vocal_conf=%.3f", max_vocal_conf)
+        return max_vocal_conf
+
+    @staticmethod
+    def _should_use_singmos(audio: np.ndarray, sr: int) -> bool:
+        """Uses SingMOS only for vocal-dominant content per spec."""
+        return VersaPlugin._vocal_confidence(audio, sr) >= 0.5
+
     # Budget: wav2vec2-large (s3prl, ~600 MB) + SingMOS Pro checkpoint (~150 MB)
     _BUDGET_GB: float = 0.80
 
@@ -152,7 +175,7 @@ class VersaPlugin:
             return
 
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
             if not _try_alloc("VersaSingMOS", size_gb=self._BUDGET_GB):
                 logger.warning("VERSA SingMOS Pro: ML-Budget erschöpft (%.2f GB) — PQS-Fallback.", self._BUDGET_GB)
                 return
@@ -160,8 +183,9 @@ class VersaPlugin:
             pass
 
         try:
-            import importlib.util  # noqa: PLC0415
-            import torch  # noqa: PLC0415
+            import importlib.util
+
+            import torch
 
             # Load pseudo_mos.py directly to bypass versa/__init__.py which imports
             # pysptk (mcd_f0 dependency) that may not be installed on the target machine.
@@ -185,7 +209,7 @@ class VersaPlugin:
             self._model_loaded = True
 
             # PLM lifecycle registration
-            from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+            from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
             def _unload_singmos() -> None:
                 global _instance
@@ -230,6 +254,12 @@ class VersaPlugin:
             mono = np.ravel(audio)
         mono = np.clip(mono, -1.0, 1.0)
 
+        # Tiered vocal gating: ≥0.7 pure SingMOS, 0.3–0.7 blend, <0.3 pure PQS
+        _vocal_conf = self._vocal_confidence(mono, sr)
+
+        if _vocal_conf < 0.3:
+            return self._score_pqs_dsp(mono, sr)
+
         # Lazy load: attempt once, then use whatever is available.
         if not self._load_attempted:
             with self._load_lock:
@@ -237,9 +267,25 @@ class VersaPlugin:
                     self._try_load()
                     self._load_attempted = True
 
-        if self._model_loaded and self._predictor_dict is not None:
+        if not (self._model_loaded and self._predictor_dict is not None):
+            return self._score_pqs_dsp(mono, sr)
+
+        if _vocal_conf >= 0.7:
+            # High vocal confidence → pure SingMOS Pro
             return self._score_singmos_pro(mono, sr)
-        return self._score_pqs_dsp(mono, sr)
+
+        # Blend zone (0.3–0.7): weighted average of SingMOS and PQS-DSP
+        _singmos_result = self._score_singmos_pro(mono, sr)
+        _pqs_result = self._score_pqs_dsp(mono, sr)
+        # Linear blend weight: 0.3→0.0 SingMOS, 0.7→1.0 SingMOS
+        _w = (_vocal_conf - 0.3) / 0.4
+        _blended_mos = float(np.clip(_w * _singmos_result.mos + (1.0 - _w) * _pqs_result.mos, 1.0, 5.0))
+        _blended_conf = float(_w * _singmos_result.confidence + (1.0 - _w) * _pqs_result.confidence)
+        logger.debug(
+            "VERSA: Blended MOS=%.3f (SingMOS=%.3f×%.2f + PQS=%.3f×%.2f)",
+            _blended_mos, _singmos_result.mos, _w, _pqs_result.mos, 1.0 - _w,
+        )
+        return VersaResult(mos=_blended_mos, model_used="singmos_pqs_blend", confidence=_blended_conf)
 
     # ------------------------------------------------------------------
     # SingMOS Pro Inference
@@ -252,8 +298,9 @@ class VersaPlugin:
         returns calibrated MOS ∈ [1.0, 5.0].
         """
         try:
-            from math import gcd  # noqa: PLC0415
-            from scipy.signal import resample_poly  # noqa: PLC0415
+            from math import gcd
+
+            from scipy.signal import resample_poly
 
             g = gcd(sr, _MODEL_SR)
             mono_16k = resample_poly(mono_48k, _MODEL_SR // g, sr // g).astype(np.float32)
@@ -268,6 +315,7 @@ class VersaPlugin:
             # for plain 1D vectors.
             _last_exc: Exception | None = None
             _scores = None
+            assert self._pseudo_mos_metric is not None  # guarded by _model_loaded check
             for _candidate in (mono_16k[np.newaxis, :], mono_16k):
                 try:
                     _scores = self._pseudo_mos_metric(
@@ -285,10 +333,7 @@ class VersaPlugin:
                 _mos_raw = _scores.get("singmos_pro", _scores.get("overall", 3.0))
             elif isinstance(_scores, (list, tuple)) and len(_scores) > 0:
                 _first = _scores[0]
-                if isinstance(_first, dict):
-                    _mos_raw = _first.get("singmos_pro", _first.get("overall", 3.0))
-                else:
-                    _mos_raw = _first
+                _mos_raw = _first.get("singmos_pro", _first.get("overall", 3.0)) if isinstance(_first, dict) else _first
             else:
                 _mos_raw = _scores
 
@@ -343,9 +388,14 @@ class VersaPlugin:
 
             total_e = float(np.mean(band_energies))
             rms = float(np.sqrt(np.mean(mono ** 2))) + 1e-10
-            # Pseudo-SNR: Verhältnis Signalenergie zu Rauschuntergrenze
-            snr_db = 20.0 * math.log10(rms / 0.01) if rms > 0.01 else 0.0
-            snr_db = float(np.clip(snr_db, -10.0, 40.0))
+            # dB-normalized SNR: relative to local signal level (not fixed 0.01 floor)
+            # This prevents penalizing quiet but high-quality recordings (pianissimo, classical).
+            # Noise floor estimated from lowest-energy Bark bands (top 25% quietest).
+            _sorted_be = sorted(band_energies)
+            _noise_floor_e = float(np.mean(_sorted_be[:max(1, len(_sorted_be) // 4)])) + 1e-12
+            _signal_e = float(np.mean(_sorted_be[len(_sorted_be) // 2:])) + 1e-12
+            snr_db = 10.0 * math.log10(_signal_e / _noise_floor_e)
+            snr_db = float(np.clip(snr_db, -10.0, 50.0))
 
             # Frequency-weighted SNR aus Bark-Bändern (mittlere Bänder gewichtet)
             weights = np.array([0.5, 0.6, 0.8, 1.0, 1.2, 1.4, 1.5, 1.5,
@@ -353,10 +403,13 @@ class VersaPlugin:
                                 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.1][: len(band_energies)])
             w_e = np.array(band_energies[: len(weights)]) * weights
             freq_snr = 20.0 * math.log10(float(np.mean(w_e)) / (total_e + 1e-12) + 1e-5)
-            combined_snr = 0.6 * snr_db + 0.4 * float(np.clip(freq_snr + 20, -10, 40))
+            combined_snr = 0.6 * snr_db + 0.4 * float(np.clip(freq_snr + 20, -10, 50))
 
-            # MOS-Mapping: Sigmoid skaliert auf [1.0, 5.0]
-            z = 0.2 * combined_snr - 1.5
+            # MOS-Mapping: adaptive sigmoid slope based on signal level
+            # Quiet signals (rms < -30 dBFS) get gentler slope to avoid floor-clamping
+            _rms_db = 20.0 * math.log10(rms)
+            _slope = 0.25 if _rms_db > -20.0 else max(0.12, 0.25 + 0.005 * _rms_db)
+            z = _slope * combined_snr - 1.5
             sigma = 1.0 / (1.0 + math.exp(-z))
             mos = float(np.clip(1.0 + 4.0 * sigma, 1.0, 5.0))
             if not math.isfinite(mos):

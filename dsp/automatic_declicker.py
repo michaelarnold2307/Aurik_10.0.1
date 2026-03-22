@@ -6,8 +6,8 @@ Dieses Modul entfernt Klicks/Knackser automatisch aus Audiosignalen.
 Kombiniert klassische Pulsdetektion/Interpolation (SOTA-Maximum, keine ML/AI) und ist auditierbar sowie rollback-fähig.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

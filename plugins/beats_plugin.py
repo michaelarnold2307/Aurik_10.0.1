@@ -28,11 +28,11 @@ CPU-Only: CPUExecutionProvider.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hashlib
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -125,10 +125,10 @@ class BeatsPlugin:
             )
             return
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("BEATs", size_gb=0.09):
                     logger.warning("BEATs: ML-Budget erschöpft — PANNs-Fallback.")
@@ -146,7 +146,7 @@ class BeatsPlugin:
             self._model_loaded = True
             logger.info("✅ BEATs ONNX geladen (%s, §4.4 Spec — PANNs-Nachfolger)", self._ONNX_PATH.name)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "BEATs",
@@ -158,7 +158,7 @@ class BeatsPlugin:
         except Exception as exc:
             logger.warning("BEATs ONNX nicht ladbar: %s — PANNs-Fallback aktiv.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("BEATs")
             except Exception:
                 pass
@@ -168,9 +168,9 @@ class BeatsPlugin:
 
         Returns: [1, _MODEL_SAMPLES] float32
         """
-        from math import gcd  # noqa: PLC0415
+        from math import gcd
 
-        from scipy.signal import resample_poly  # noqa: PLC0415
+        from scipy.signal import resample_poly
 
         audio = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         mono = audio if audio.ndim == 1 else audio.mean(axis=-1)
@@ -261,7 +261,7 @@ class BeatsPlugin:
     def _panns_fallback(self, audio: np.ndarray, sr: int, top_k: int) -> BeatsResult:
         """PANNs CNN14 als Fallback wenn BEATs nicht verfügbar."""
         try:
-            from plugins.panns_plugin import get_panns_plugin  # noqa: PLC0415
+            from plugins.panns_plugin import get_panns_plugin
 
             panns = get_panns_plugin()
             tags = panns.get_tags(audio, sr)
@@ -287,7 +287,7 @@ class BeatsPlugin:
             # Grob-Spektrum
             spec = np.abs(np.fft.rfft(mono[: min(n, 65536)]))
             freqs = np.linspace(0, sr / 2, len(spec))
-            energy = lambda lo, hi: float(np.mean(spec[(freqs >= lo) & (freqs < hi)] ** 2) + 1e-12)  # noqa
+            energy = lambda lo, hi: float(np.mean(spec[(freqs >= lo) & (freqs < hi)] ** 2) + 1e-12)
             total = energy(20, sr / 2) + 1e-12
             tags = {
                 "Music": float(np.clip(energy(80, 8000) / total * 4, 0, 1)),

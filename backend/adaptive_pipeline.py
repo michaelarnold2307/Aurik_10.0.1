@@ -117,27 +117,27 @@ class BSRoFormerPlugin(_PluginStub):
 # damit --import-mode=importlib (pytest) keine Namespace-Probleme verursacht.
 # Jeder try/except-Block ist eigenständig: ein Fehler blockiert keine anderen.
 try:
-    from plugins.deepfilternet_v3_ii_plugin import DeepFilterNetV3IIPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.deepfilternet_v3_ii_plugin import DeepFilterNetV3IIPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("DeepFilterNetV3IIPlugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.resemble_enhance_plugin import ResembleEnhancePlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.resemble_enhance_plugin import ResembleEnhancePlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("ResembleEnhancePlugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.demucs_v4_plugin import DemucsV4Plugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.demucs_v4_plugin import DemucsV4Plugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("DemucsV4Plugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.mdx23c_plugin import MDX23CPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.mdx23c_plugin import MDX23CPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("MDX23CPlugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.wpe_plugin import SGMSEPlugin, WpePlugin  # type: ignore[no-redef]  # noqa: F401,F811
+    from plugins.wpe_plugin import SGMSEPlugin, WpePlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("wpe_plugin (WpePlugin/SGMSEPlugin) nicht verfügbar: %s", _e)
 
@@ -146,36 +146,36 @@ except Exception as _e:
 
 try:
     # §4.4: MP-SENet 2023 ersetzt DCCRN (§4.4 verboten)
-    from plugins.mp_senet_plugin import MpSenetPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.mp_senet_plugin import MpSenetPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("MpSenetPlugin (DCCRN-Nachfolger) nicht verfügbar: %s", _e)
 
 try:
-    from plugins.uvr_mdxnet_plugin import UVRMDXNetPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.uvr_mdxnet_plugin import UVRMDXNetPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("UVRMDXNetPlugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.banquet_vinyl_plugin import BanquetVinylPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.banquet_vinyl_plugin import BanquetVinylPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("BanquetVinylPlugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.hifigan_plugin import HiFiGANPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.hifigan_plugin import HiFiGANPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("HiFiGANPlugin nicht verfügbar: %s", _e)
 
 # ConvTasNetPlugin: Import entfernt — Sprach-Separation (Luo 2019), nicht in §11.3
 
 try:
-    from plugins.diffwave_plugin import DiffWavePlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.diffwave_plugin import DiffWavePlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("DiffWavePlugin nicht verfügbar: %s", _e)
 
 # WaveUNetPlugin: Import entfernt — Sprach-Separation (Stoller 2018), nicht in §11.3
 
 try:
-    from plugins.crepe_plugin import CREPEPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.crepe_plugin import CREPEPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("CREPEPlugin nicht verfügbar: %s", _e)
 
@@ -187,24 +187,24 @@ except Exception as _e:
 # ViSQOLPlugin: Import entfernt — explizit verboten §4.4+§10.2 (Sprach-Qualitätsmetrik)
 
 try:
-    from plugins.audioldm2_plugin import AudioLDM2Plugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.audioldm2_plugin import AudioLDM2Plugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("AudioLDM2Plugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.audiosr_plugin import AudioSRPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.audiosr_plugin import AudioSRPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("AudioSRPlugin nicht verfügbar: %s", _e)
 
 # CDPAMPlugin: Import entfernt — explizit verboten §4.4+§10.2 (Speech-perceptual metric)
 
 try:
-    from plugins.gacela_plugin import GACELAPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.gacela_plugin import GACELAPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("GACELAPlugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.matchering_plugin import MatcheringPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.matchering_plugin import MatcheringPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("MatcheringPlugin nicht verfügbar: %s", _e)
 
@@ -214,12 +214,12 @@ except Exception as _e:
     _log.warning("PANNSPlugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.silero_plugin import SileroPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.silero_plugin import SileroPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("SileroPlugin nicht verfügbar: %s", _e)
 
 try:
-    from plugins.bs_roformer_plugin import BSRoFormerPlugin  # type: ignore[no-redef]  # noqa: F811
+    from plugins.bs_roformer_plugin import BSRoFormerPlugin  # type: ignore[no-redef]
 except Exception as _e:
     _log.warning("BSRoFormerPlugin nicht verfügbar: %s", _e)
 
@@ -827,9 +827,7 @@ class AdaptiveProcessingPipeline:
         )
 
         # Kontextanalyse und alle Folge-Analysen greifen jetzt auf das aktualisierte features zu
-        context = self.context_analyzer.analyze(
-            features, user_profile, reference_audio, detected_medium=detected_medium_final  # ← VERPFLICHTEND
-        )
+        context = self.context_analyzer.analyze(audio_np)
         self.log.append({"step": "context_analysis", "context": context})
         self.logger.info(f"Kontextanalyse abgeschlossen: {context}")
 
@@ -1160,7 +1158,7 @@ class AdaptiveProcessingPipeline:
             f"Genre: {context.get('genre', 'unknown')}, "
             f"Quality: {goal.get('quality_level', 'standard')}"
         )
-        self.logger.info()
+        self.logger.info("")
 
         # Lade das ausgewählte Plugin
         plugin = getattr(self, model_name, None)
@@ -1193,15 +1191,12 @@ class AdaptiveProcessingPipeline:
                 self.logger.info("  → Fallback zu DSP-basierter Verarbeitung\n")
                 audio_denoised = audio_original  # Behalte Original
             else:
-                self.logger.info()  # Leerzeile vor Processing
+                self.logger.info("")  # Leerzeile vor Processing
         else:
             self.logger.info(f"Plugin-Status: ✓ {model_name} geladen und bereit\n")
 
         # Nur wenn Plugin verfügbar ist, führe ML-Processing durch
         if plugin is not None:
-            # Create temporary files for ML plugin
-            import tempfile  # noqa: F811
-
             # CRITICAL FIX: Use workspace temp directory instead of /tmp
             # Docker containers need writable directories with proper permissions
             workspace_temp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "temp_ml_processing")
@@ -1425,7 +1420,7 @@ class AdaptiveProcessingPipeline:
         self.logger.info(f"Policy-Selektion: {model_name}")
         self.logger.info(f"  Typ: {repair_type}")
         self.logger.info(f"  Vocals: {'Ja' if context.get('has_vocals', False) else 'Nein'}")
-        self.logger.info()
+        self.logger.info("")
 
         # Lade das ausgewählte Plugin
         plugin = getattr(self, model_name, None)
@@ -1498,7 +1493,7 @@ class AdaptiveProcessingPipeline:
         try:
             from dsp.hybrid_denoise_refiner import apply_hybrid_refinement
 
-            audio_refined, refine_metrics = apply_hybrid_refinement(
+            audio_refined, _refine_metrics = apply_hybrid_refinement(
                 audio_repaired,
                 audio_original,
                 sr,
@@ -1554,14 +1549,13 @@ class AdaptiveProcessingPipeline:
         self.logger.info(f"{'='*80}")
         self.logger.info(f"   Stems: {goal.get('stems', 4)}")
         self.logger.info(f"   Genre: {context.get('genre', 'unknown')}")
-        self.logger.info("   Model: ", end="")
 
         if "mdx23c" in model_name:
-            self.logger.info("MDX23C (maximal quality)")
+            self.logger.info("   Model: MDX23C (maximal quality)")
         elif "demucs" in model_name:
-            self.logger.info("Demucs v4 (4+ stems)")
+            self.logger.info("   Model: Demucs v4 (4+ stems)")
         else:
-            self.logger.info("UVR-MDXNet (2-stem)")
+            self.logger.info("   Model: UVR-MDXNet (2-stem)")
 
         self.logger.info(f"{'='*80}\n")
 
@@ -1623,7 +1617,12 @@ class AdaptiveProcessingPipeline:
         import soundfile as sf
 
         from .mastering import mastering_chain
-        from .matchering_api_client import MatcheringAPIClient
+
+        try:
+            from .matchering_api_client import MatcheringAPIClient
+        except ImportError:
+            MatcheringAPIClient = None  # type: ignore[assignment,misc]
+            _log.warning("MatcheringAPIClient nicht verfügbar — Fallback auf mastering_chain")
 
         # NUTZE CONTEXT AUS PHASE 1
         self.logger.info(f"Remastering Pipeline: detected_medium={context.get('detected_medium', 'unknown')}")
@@ -1654,6 +1653,8 @@ class AdaptiveProcessingPipeline:
             output_path = out_file.name
 
         try:
+            if MatcheringAPIClient is None:
+                raise ImportError("MatcheringAPIClient nicht verfügbar")
             client = MatcheringAPIClient()
             client.remaster(target_path, ref_path, output_path)
             # Remastertes Audio laden
@@ -1804,8 +1805,8 @@ class AdaptiveProcessingPipelineV2:
         self.logger.info("AdaptiveProcessingPipelineV2 initialized with 27 Docker-based ML plugins")
 
     def run_with_job_tracking(
-        self, input_audio_path: str, output_audio_path: str, user_id: str = None
-    ) -> object:  # noqa: F821 — ResturationJob defined in batch_api
+        self, input_audio_path: str, output_audio_path: str, user_id: str | None = None
+    ) -> object:
         """
         Complete restoration workflow with formal ResturationJob tracking.
 
@@ -1855,6 +1856,11 @@ class AdaptiveProcessingPipelineV2:
             analysis_profile=analysis_profile,
             user_id=user_id,
             status="running",
+            completed_at=None,
+            output_file=None,
+            quality_report=None,
+            archive_path=None,
+            error_message=None,
         )
 
         # Prepare context from analysis for legacy pipeline
@@ -1864,7 +1870,7 @@ class AdaptiveProcessingPipelineV2:
 
         # 4. Calculate initial CAS
         self.logger.info("Calculating initial CAS...")
-        initial_cas, initial_scores = self.ajm.cas_calculator.calculate_cas(
+        initial_cas, _initial_scores = self.ajm.cas_calculator.calculate_cas(
             audio,
             sr,
             analysis_profile,
@@ -1877,7 +1883,7 @@ class AdaptiveProcessingPipelineV2:
         step_counter = 0
 
         # Context analysis for pipeline decisions
-        context = self.context_analyzer.analyze(features, user_profile=None, reference_audio=None)
+        context = self.context_analyzer.analyze(audio)
         goal = self.goal_engine.define_goal(context)
 
         # Process each step and track
@@ -1926,7 +1932,7 @@ class AdaptiveProcessingPipelineV2:
         self.logger.info("Calculating final CAS...")
         final_analysis = self.analysis_engine.analyze(current_audio, sr)
 
-        final_cas, final_scores = self.ajm.cas_calculator.calculate_cas(
+        final_cas, _final_scores = self.ajm.cas_calculator.calculate_cas(
             current_audio,
             sr,
             final_analysis,
@@ -1982,9 +1988,9 @@ class AdaptiveProcessingPipelineV2:
 
     def _process_step_with_tracking(self, job, audio, sr, operation, model_name, step_id, context, goal):
         """Process a single step and create ProcessingStep tracking"""
-        from datetime import datetime
         import io
         import tempfile
+        from datetime import datetime
 
         import soundfile as sf
 
@@ -2061,6 +2067,7 @@ class AdaptiveProcessingPipelineV2:
             cas_delta=cas_after - cas_before,
             decision_reason=f"Context: {context.get('artefact_risk', False)}, Goal: {goal.get('quality_level', 'unknown')}",
             skipped=False,
+            skip_reason=None,
             duration_seconds=duration,
         )
 

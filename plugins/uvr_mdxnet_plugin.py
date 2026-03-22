@@ -43,11 +43,11 @@ class UVRMDXNetPlugin:
 
     def _try_load(self, d: str) -> None:
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             # ML-Budget-Guard: 4 UVR-MDX-Net-Modelle zusammen ~1.2 GB
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("UVR_MDXNet", size_gb=1.20):
                     logger.warning("UVR MDX-Net: ML-Budget erschöpft — DSP-Fallback.")
@@ -66,22 +66,22 @@ class UVRMDXNetPlugin:
             if not self._sessions:
                 logger.warning("Keine UVR-Modelle in: %s — DSP-Fallback.", d)
                 try:
-                    from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import release as _release
 
                     _release("UVR_MDXNet")
                 except Exception:
                     pass
             else:
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm("UVR_MDXNet", size_gb=1.20, unload_fn=lambda s=self: setattr(s, "_sessions", []))
                 except Exception:
                     pass
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("UVR ONNX-Ladefehler: %s — DSP-Fallback.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _release
 
                 _release("UVR_MDXNet")
             except Exception:
@@ -93,10 +93,7 @@ class UVRMDXNetPlugin:
         """(vocals, instrumental) aus Audio trennen."""
         audio = np.nan_to_num(audio.astype(np.float32))
         mono = audio if audio.ndim == 1 else audio.mean(axis=1)
-        if self._sessions:
-            inst = self._run_ensemble(mono, sr)
-        else:
-            inst = self._hpss_fallback(mono)
+        inst = self._run_ensemble(mono, sr) if self._sessions else self._hpss_fallback(mono)
         voc = np.clip(mono - inst, -1.0, 1.0)
         return voc.astype(np.float32), inst.astype(np.float32)
 
@@ -131,11 +128,11 @@ class UVRMDXNetPlugin:
         return (out / ws)[:n_orig].astype(np.float32)
 
     def _run_ensemble(self, mono: np.ndarray, sr: int) -> np.ndarray:
-        from scipy.signal import resample_poly  # noqa: PLC0415
+        from scipy.signal import resample_poly
 
         # Resample zu Modell-SR
         if sr != _SR:
-            from math import gcd  # noqa: PLC0415
+            from math import gcd
 
             g = gcd(sr, _SR)
             mono = resample_poly(mono, _SR // g, sr // g).astype(np.float32)
@@ -159,7 +156,7 @@ class UVRMDXNetPlugin:
                 try:
                     out = sess.run(None, {"input": inp})[0]  # [1,4,3072,256]
                     mask_out[:, s:e] = np.clip(out[0, 0, :, :T], 0, 1)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.debug("UVR chunk-Fehler: %s", exc)
                     mask_out[:, s:e] = 0.5
             masks_sum += mask_out
@@ -169,7 +166,7 @@ class UVRMDXNetPlugin:
         inst = self._istft(inst_spec, n)
         # Zurück auf Eingangs-SR
         if sr != _SR:
-            from math import gcd  # noqa: PLC0415
+            from math import gcd
 
             g = gcd(_SR, sr)
             inst = resample_poly(inst, sr // g, _SR // g).astype(np.float32)
@@ -181,11 +178,11 @@ class UVRMDXNetPlugin:
     @staticmethod
     def _hpss_fallback(mono: np.ndarray) -> np.ndarray:
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             _H, P = librosa.effects.hpss(mono)
             return P.astype(np.float32)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return (mono * 0.7).astype(np.float32)
 
 

@@ -13,13 +13,13 @@ Datum: 14. Februar 2026
 
 import argparse
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
 import yaml
+from torch.utils.data import DataLoader, Dataset
 
 # Setup logging
 logging.basicConfig(
@@ -95,7 +95,7 @@ class AudioRestorationDataset(Dataset):
         Returns:
             (degraded_audio, clean_audio) as tensors [1, samples]
         """
-        degraded_path, clean_path = self.audio_pairs[idx]
+        _degraded_path, _clean_path = self.audio_pairs[idx]
 
         # Load audio (placeholder - actual implementation would use librosa/soundfile)
         # For now, return dummy data
@@ -278,7 +278,7 @@ def train_all_materials(dataset_path: Path, output_path: Path, n_trials: int = 1
     process_functions = {material: lambda audio, config: audio * 0.9 for material in datasets}
 
     # Run optimization for all materials
-    results = optimizer.optimize_all(datasets=datasets, process_functions=process_functions)  # noqa: F841
+    optimizer.optimize_all(datasets=datasets, process_functions=process_functions)
 
     logger.info("\nAll materials optimized!")
     logger.info(f"Results saved to: {output_path}")

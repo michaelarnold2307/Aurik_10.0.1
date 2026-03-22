@@ -74,7 +74,7 @@ def _estimate_key(mono: np.ndarray, sr: int) -> str:
     """Chromagramm + Krumhansl-Profile → Tonart-Schätzung."""
     n_fft = 4096
     hop = 1024
-    f, t, Zxx = sig.stft(mono, fs=sr, nperseg=n_fft, noverlap=n_fft - hop, window="hann")
+    f, _t, Zxx = sig.stft(mono, fs=sr, nperseg=n_fft, noverlap=n_fft - hop, window="hann")
     mag = np.abs(Zxx)
 
     # Frequenz → Chroma-Bin (12-stufige gleichmäßige Stimmung, A4=440 Hz)
@@ -86,7 +86,7 @@ def _estimate_key(mono: np.ndarray, sr: int) -> str:
         if freq < 27.5:
             continue
         midi = 69 + 12 * np.log2(freq / 440.0 + eps)
-        chroma_bin = int(round(midi)) % 12
+        chroma_bin = round(midi) % 12
         chroma[chroma_bin] += float(np.mean(mag[i]))
 
     if chroma.sum() < eps:

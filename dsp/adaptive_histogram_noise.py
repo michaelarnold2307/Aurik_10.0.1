@@ -68,7 +68,7 @@ class AdaptiveHistogramNoise:
                 self._audit_log("info", "DL-Inferenz aktiviert (Platzhalter)")
                 noise_psd = self._dl_noise_estimate(power_spectrogram)
             else:
-                n_frames, n_bins = power_spectrogram.shape
+                n_frames, _n_bins = power_spectrogram.shape
                 noise_psd = np.zeros_like(power_spectrogram)
                 for t in range(n_frames):
                     start = max(0, t - self.win_length + 1)

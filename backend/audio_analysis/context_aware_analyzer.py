@@ -17,9 +17,9 @@ Version: 1.0.0
 Date: 8. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
 import numpy as np
 
@@ -153,10 +153,7 @@ class ContextAwareAnalyzer:
             AudioContext with comprehensive analysis
         """
         # Convert to mono for analysis
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
         logger.debug(f"Analyzing {len(audio_mono)/sr:.2f}s audio context")
 
@@ -228,10 +225,7 @@ class ContextAwareAnalyzer:
         instrumental_energy = np.sum(spectrum[bass_region]) + np.sum(spectrum[high_region])
 
         total_energy = vocal_energy + instrumental_energy
-        if total_energy == 0:
-            vocal_percentage = 0.5
-        else:
-            vocal_percentage = vocal_energy / total_energy
+        vocal_percentage = 0.5 if total_energy == 0 else vocal_energy / total_energy
 
         # Classify density
         if vocal_percentage < 0.2:
@@ -259,10 +253,7 @@ class ContextAwareAnalyzer:
         rms = np.sqrt(np.mean(audio**2))
         peak = np.max(np.abs(audio))
 
-        if rms == 0:
-            crest_factor_db = 0.0
-        else:
-            crest_factor_db = 20 * np.log10(peak / rms)
+        crest_factor_db = 0.0 if rms == 0 else 20 * np.log10(peak / rms)
 
         # Classify profile
         if crest_factor_db < 6:

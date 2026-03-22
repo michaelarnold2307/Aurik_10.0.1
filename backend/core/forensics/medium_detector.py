@@ -6,7 +6,7 @@ Die kanonische Implementierung liegt in ``forensics/medium_detector.py``
 dorthin weiter — bestehende Aufrufer müssen nicht angepasst werden.
 """
 
-from forensics.medium_detector import (  # noqa: F401
+from forensics.medium_detector import (
     MediumDetectionResult,
     MediumDetector,
     SpectralFingerprint,
@@ -16,10 +16,10 @@ from forensics.medium_detector import (  # noqa: F401
 )
 
 __all__ = [
-    "MediumDetector",
     "MediumDetectionResult",
+    "MediumDetector",
     "SpectralFingerprint",
     "TransferChain",
-    "get_medium_detector",
     "detect_medium_chain",
+    "get_medium_detector",
 ]

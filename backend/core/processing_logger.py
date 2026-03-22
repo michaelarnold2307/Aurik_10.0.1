@@ -19,11 +19,11 @@ Use Cases:
 - Kontinuierliche Verbesserung
 """
 
+import json
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-import json
 from pathlib import Path
-import time
 from typing import Any
 
 import numpy as np

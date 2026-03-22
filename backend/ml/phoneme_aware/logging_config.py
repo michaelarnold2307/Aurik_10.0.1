@@ -9,8 +9,8 @@ Provides structured logging for:
 """
 
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 
 
 def setup_logger(name: str, level: int = logging.INFO, log_file: Path | None = None) -> logging.Logger:

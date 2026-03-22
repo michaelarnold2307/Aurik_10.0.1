@@ -68,11 +68,11 @@ class ConsonantDetectionResult:
 
 # ── Singleton ────────────────────────────────────────────────────────────── #
 
-_instance: Optional["ConsonantDetector"] = None
+_instance: ConsonantDetector | None = None
 _lock = threading.Lock()
 
 
-def get_consonant_detector() -> "ConsonantDetector":
+def get_consonant_detector() -> ConsonantDetector:
     """Thread-sicherer Singleton-Accessor (Double-Checked Locking, §3.2)."""
     global _instance
     if _instance is None:
@@ -197,10 +197,7 @@ class ConsonantDetector:
             mono = audio
         elif audio.ndim == 2:
             # Unterstütze [channels, samples] und [samples, channels]
-            if audio.shape[0] <= 2 and audio.shape[0] < audio.shape[1]:
-                mono = audio.mean(axis=0)
-            else:
-                mono = audio.mean(axis=1)
+            mono = audio.mean(axis=0) if audio.shape[0] <= 2 and audio.shape[0] < audio.shape[1] else audio.mean(axis=1)
         else:
             mono = audio.flatten()
 

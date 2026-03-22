@@ -22,10 +22,10 @@ USAGE:
     # → {'medium': 'VINYL', 'confidence': 0.97, 'probabilities': {...}}
 """
 
-from dataclasses import dataclass
 import logging
-from pathlib import Path
 import pickle
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np

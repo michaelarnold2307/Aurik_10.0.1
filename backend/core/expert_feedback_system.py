@@ -1,0 +1,66 @@
+"""
+backend/core/expert_feedback_system.py — Expert feedback aggregator
+===================================================================
+"""
+
+from __future__ import annotations
+
+from typing import Dict, List
+
+
+class ExpertFeedbackSystem:
+    """Collects expert feedback and computes per-dimension averages."""
+
+    def __init__(self) -> None:
+        self._feedback: list[dict[str, float]] = []
+
+    def add_feedback(self, expert: str, scores: dict[str, float]) -> None:
+        """Add *scores* from *expert*."""
+        self._feedback.append(dict(scores))
+
+    def aggregate(self) -> dict[str, float]:
+        """Return mean score per dimension across all expert feedback entries."""
+        if not self._feedback:
+            return {}
+        keys = self._feedback[0].keys()
+        return {
+            k: sum(f.get(k, 0.0) for f in self._feedback) / len(self._feedback)
+            for k in keys
+        }
+
+
+# ---------------------------------------------------------------------------
+# Singleton accessor (thread-safe, double-checked locking)
+# ---------------------------------------------------------------------------
+import threading as _threading
+
+_expert_feedback_system_instance = None
+_expert_feedback_system_lock = _threading.Lock()
+
+def get_expert_feedback_system() -> ExpertFeedbackSystem:
+    """Return the process-wide singleton ExpertFeedbackSystem instance."""
+    global _expert_feedback_system_instance
+    if _expert_feedback_system_instance is None:
+        with _expert_feedback_system_lock:
+            if _expert_feedback_system_instance is None:
+                _expert_feedback_system_instance = ExpertFeedbackSystem()
+    return _expert_feedback_system_instance
+
+
+# ---------------------------------------------------------------------------
+# Singleton accessor (thread-safe, double-checked locking)
+# ---------------------------------------------------------------------------
+import threading as _threading
+
+_expert_feedback_system_instance = None
+_expert_feedback_system_lock = _threading.Lock()
+
+
+def get_expert_feedback_system() -> ExpertFeedbackSystem:
+    """Return the process-wide singleton ``ExpertFeedbackSystem`` instance."""
+    global _expert_feedback_system_instance
+    if _expert_feedback_system_instance is None:
+        with _expert_feedback_system_lock:
+            if _expert_feedback_system_instance is None:
+                _expert_feedback_system_instance = ExpertFeedbackSystem()
+    return _expert_feedback_system_instance

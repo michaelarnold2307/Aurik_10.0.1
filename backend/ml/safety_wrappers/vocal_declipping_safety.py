@@ -48,10 +48,7 @@ def detect_clipping(audio: np.ndarray, threshold: float = 0.99) -> tuple[bool, f
         (is_clipped, severity, metadata): Detection result
     """
     # Flatten if stereo
-    if audio.ndim > 1:
-        audio_flat = audio.flatten()
-    else:
-        audio_flat = audio
+    audio_flat = audio.flatten() if audio.ndim > 1 else audio
 
     # Find clipped samples
     clipped_samples = np.abs(audio_flat) >= threshold
@@ -378,8 +375,8 @@ class VocalDeclippingSafety(BaseSafetyWrapper):
             return PostCheckResult(passed=False, quality_score=0.0, issues=issues)
 
         # 1. Check clipping reduction
-        is_clipped_before, severity_before, _ = detect_clipping(original)
-        is_clipped_after, severity_after, clip_metadata_after = detect_clipping(processed)
+        _is_clipped_before, severity_before, _ = detect_clipping(original)
+        _is_clipped_after, severity_after, clip_metadata_after = detect_clipping(processed)
 
         metrics["severity_before"] = severity_before
         metrics["severity_after"] = severity_after
@@ -392,7 +389,7 @@ class VocalDeclippingSafety(BaseSafetyWrapper):
         metrics["clipping_reduction"] = float(clipping_reduction)
 
         # 2. Check harmonic structure preservation
-        has_harm_before, strength_before = detect_harmonic_structure(original, sr)
+        _has_harm_before, strength_before = detect_harmonic_structure(original, sr)
         has_harm_after, strength_after = detect_harmonic_structure(processed, sr)
 
         metrics["harmonic_strength_before"] = strength_before

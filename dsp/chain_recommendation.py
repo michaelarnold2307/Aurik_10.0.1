@@ -93,10 +93,7 @@ class AiChainRecommendation:
         self.log_contract()
 
         # ── Mono + NaN-Schutz ──────────────────────────────────────────
-        if audio.ndim == 2:
-            mono = audio.mean(axis=0).astype(np.float64)
-        else:
-            mono = audio.astype(np.float64)
+        mono = audio.mean(axis=0).astype(np.float64) if audio.ndim == 2 else audio.astype(np.float64)
         mono = np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0)
         n = len(mono)
         if n == 0:

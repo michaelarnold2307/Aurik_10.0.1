@@ -111,7 +111,12 @@ Audio-Eingang (mono/stereo, beliebige SR)
     (ONNX gibt GIL frei → echte Parallelität)
 
     ↓
-[DefectScanner]  → DefectAnalysisResult (27 DefectTypes)
+[MusikalischerGlobalplanDienst]  ← Stufe 2b (Cross-Phase-Reasoning)
+    │ erstelle_globalplan(audio, sr, use_ml_classifiers=False)  [DSP-only]
+    │ 13 Ära-Profile × 7 Genre-Modifikatoren → 17 Per-Phase-Adjustments
+    │ Enrichment nach Stufe 4 mit era_decade (→ RestorationConfig.global_plan)
+    ↓
+[DefectScanner]  → DefectAnalysisResult (28 DefectTypes)
     ↓
 [CausalDefectReasoner]  → RestorationPlan (14 Kausal-Ursachen)
     ↓

@@ -89,6 +89,7 @@ if __name__ == "__main__":
 else:
     from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -285,10 +286,7 @@ class RumbleFilterPhase(PhaseInterface):
             (has_rumble, energy_ratio, rumble_frequencies)
         """
         # Convert to mono for analysis
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # FFT analysis
         fft_size = min(16384, len(mono))
@@ -306,10 +304,7 @@ class RumbleFilterPhase(PhaseInterface):
         bass_energy = np.sum(magnitude[bass_mask] ** 2)
 
         # Energy ratio
-        if bass_energy > 0:
-            energy_ratio = sub_bass_energy / bass_energy
-        else:
-            energy_ratio = 0.0
+        energy_ratio = sub_bass_energy / bass_energy if bass_energy > 0 else 0.0
 
         # Find rumble peak frequencies
         rumble_freqs = []
@@ -386,17 +381,14 @@ class RumbleFilterPhase(PhaseInterface):
             Boolean mask of transient locations
         """
         # Convert to mono for onset detection
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Compute spectral flux (onset strength)
         hop_length = 512
         n_fft = 2048
 
         # Spectrogram
-        f, t, Zxx = signal.stft(mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
+        _f, _t, Zxx = signal.stft(mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
         magnitude = np.abs(Zxx)
 
         # Spectral flux (frame-to-frame difference)

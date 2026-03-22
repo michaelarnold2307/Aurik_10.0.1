@@ -32,6 +32,7 @@ from .automated_augmentation import (
     RandAugment,
 )
 from .e2e_optimizer import DifferentiableCompressor, DifferentiableEQ, DifferentiableNoiseGate, E2EOptimizationFramework
+
 try:
     from .hyperparameter_optimizer import HyperparameterConfig, MaterialSpecificOptimizer, MultiMaterialOptimizer
 except ImportError:  # optuna not installed
@@ -58,77 +59,77 @@ from .uncertainty_quantification import (
 )
 
 __all__ = [
-    # Perceptual Loss
-    "MultiResolutionSTFTLoss",
-    "PANNsPerceptualLoss",
-    "PsychoacousticMaskingLoss",
-    "MusicalFeatureLoss",
-    "CombinedPerceptualLoss",
-    # E2E Optimization
-    "DifferentiableEQ",
-    "DifferentiableCompressor",
-    "DifferentiableNoiseGate",
-    "E2EOptimizationFramework",
-    # Hyperparameter Optimization
-    "HyperparameterConfig",
-    "MaterialSpecificOptimizer",
-    "MultiMaterialOptimizer",
-    # Neural Architecture Search
-    "MixedOp",
-    "DARTSCell",
-    "AudioNASNetwork",
-    "NASTrainer",
-    # Advanced Ensemble
-    "EnsembleMember",
-    "MetaLearner",
-    "AttentionWeightPredictor",
-    "DynamicEnsembleSelector",
-    "MixtureOfExperts",
-    "AdvancedEnsemble",
-    # Multi-Objective Optimization
-    "Individual",
-    "ObjectiveFunction",
     "NSGAII",
-    "create_audio_restoration_moo",
-    # Uncertainty Quantification
-    "MCDropoutModel",
+    "AdaptiveOversamplingProcessor",
+    "AdvancedEnsemble",
+    "AlgorithmicEfficiencyOptimizer",
+    "AttentionWeightPredictor",
+    # Automated Augmentation
+    "AudioAugmentations",
+    "AudioNASNetwork",
+    "AugmentationPolicy",
+    "AutoAugment",
+    # Balanced Optimization (9.x)
+    "BalancedAudioProcessor",
     "BayesianLinear",
     "BayesianNN",
+    "CombinedPerceptualLoss",
+    "ConsistencyTraining",
+    "ConsonantPreserver",
+    "DARTSCell",
+    "DifferentiableCompressor",
+    # E2E Optimization
+    "DifferentiableEQ",
+    "DifferentiableNoiseGate",
+    "DynamicEnsembleSelector",
+    "E2EOptimizationFramework",
+    # Advanced Ensemble
+    "EnsembleMember",
     "EnsembleUncertainty",
+    "GenreOptimizedParameters",
+    # Hyperparameter Optimization
+    "HyperparameterConfig",
+    # Multi-Objective Optimization
+    "Individual",
+    # Uncertainty Quantification
+    "MCDropoutModel",
+    "MaterialSpecificOptimizer",
+    "MetaLearner",
+    # Neural Architecture Search
+    "MixedOp",
+    "MixtureOfExperts",
+    "MultiMaterialOptimizer",
+    # Perceptual Loss
+    "MultiResolutionSTFTLoss",
+    "MultibandPhaseCoherenceEnhancer",
+    "MusicalFeatureLoss",
+    "NASTrainer",
+    "ObjectiveFunction",
+    "OptimizedFFT",
+    "OptimizedPresets",
+    "PANNsPerceptualLoss",
+    "PerformanceProfiler",
+    "PhaseCoherentBassProcessor",
+    "PsychoacousticMaskingLoss",
+    "QualityValidator",
+    "RandAugment",
+    "ResonancePreserver",
+    "SelectiveVocalEnhancer",
     "TemperatureScaling",
     "UncertaintyMetrics",
     "UncertaintyQuantifier",
-    # Automated Augmentation
-    "AudioAugmentations",
-    "AugmentationPolicy",
-    "RandAugment",
-    "AutoAugment",
-    "ConsistencyTraining",
-    # Balanced Optimization (9.x)
-    "BalancedAudioProcessor",
-    "AlgorithmicEfficiencyOptimizer",
-    "OptimizedFFT",
-    "SelectiveVocalEnhancer",
     "VocalPresenceDetector",
-    "ConsonantPreserver",
-    "AdaptiveOversamplingProcessor",
-    "MultibandPhaseCoherenceEnhancer",
-    "PhaseCoherentBassProcessor",
-    "ResonancePreserver",
-    "GenreOptimizedParameters",
-    "OptimizedPresets",
-    "PerformanceProfiler",
-    "QualityValidator",
+    "create_audio_restoration_moo",
 ]
 
 # Balanced Optimization imports (9.x)
-from .balanced_processor import BalancedAudioProcessor  # noqa: E402
-from .priority1_efficiency import AlgorithmicEfficiencyOptimizer, OptimizedFFT  # noqa: E402
-from .priority2_vocals import SelectiveVocalEnhancer, VocalPresenceDetector, ConsonantPreserver  # noqa: E402
-from .priority3_oversampling import AdaptiveOversamplingProcessor  # noqa: E402
-from .priority4_phase import MultibandPhaseCoherenceEnhancer  # noqa: E402
-from .priority5_bass import PhaseCoherentBassProcessor, ResonancePreserver  # noqa: E402
-from .priority6_parameters import GenreOptimizedParameters, OptimizedPresets  # noqa: E402
-from .profiling import PerformanceProfiler, QualityValidator  # noqa: E402
+from .balanced_processor import BalancedAudioProcessor
+from .priority1_efficiency import AlgorithmicEfficiencyOptimizer, OptimizedFFT
+from .priority2_vocals import ConsonantPreserver, SelectiveVocalEnhancer, VocalPresenceDetector
+from .priority3_oversampling import AdaptiveOversamplingProcessor
+from .priority4_phase import MultibandPhaseCoherenceEnhancer
+from .priority5_bass import PhaseCoherentBassProcessor, ResonancePreserver
+from .priority6_parameters import GenreOptimizedParameters, OptimizedPresets
+from .profiling import PerformanceProfiler, QualityValidator
 
 __version__ = "8.2.0"

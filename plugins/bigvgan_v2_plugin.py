@@ -24,11 +24,11 @@ Modell-Gewichte: ~/.aurik/models/bigvgan_v2/ (via ModelDownloader, Apache 2.0)
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import os
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 _ROOT: Path = Path(__file__).parent.parent
 
@@ -137,7 +137,8 @@ class BigVGANv2Plugin:
         """Lädt BigVGAN-v2 aus PyTorch-Checkpoint, sonst Fallback."""
         # [RELEASE_MUST] memory budget guard before torch.load (§2.37 Checkliste)
         try:
-            from backend.core.ml_memory_budget import release as _release, try_allocate  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
                 logger.info("BigVGAN-v2: ML-Budget erschöpft — PGHI-ISTFT Fallback aktiv.")
@@ -147,7 +148,7 @@ class BigVGANv2Plugin:
             pass  # budget module absent → attempt load anyway
         # Versuch 1: torch (CPU)
         try:
-            import torch  # noqa: PLC0415
+            import torch
 
             torch.set_num_threads(os.cpu_count() or 4)
             checkpoint = self.MODELS_DIR / "bigvgan_v2.pth"
@@ -159,7 +160,7 @@ class BigVGANv2Plugin:
                 self._fallback_mode = "bigvgan_v2_torch"
                 logger.info("🟢 BigVGAN-v2: torch-Modell geladen (CPU, %s)", checkpoint)
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm(
                         self._BUDGET_NAME,
@@ -174,7 +175,7 @@ class BigVGANv2Plugin:
         except Exception as exc:
             logger.debug("BigVGAN-v2 torch nicht ladbar: %s", exc)
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _release
 
                 _release(self._BUDGET_NAME)
             except Exception:
@@ -280,7 +281,7 @@ class BigVGANv2Plugin:
 
             elif self._torch_gen is not None:
                 # torch-Pfad
-                import torch  # noqa: PLC0415
+                import torch
 
                 with torch.no_grad():
                     mel_t = torch.from_numpy(mel[np.newaxis, :, :])
@@ -345,7 +346,7 @@ class BigVGANv2Plugin:
             np.ndarray: [n_mel, T] float32
         """
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             mel = librosa.feature.melspectrogram(
                 y=audio,

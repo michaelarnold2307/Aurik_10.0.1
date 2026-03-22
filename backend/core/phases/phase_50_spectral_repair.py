@@ -49,7 +49,7 @@ _INTERP_BINS = 2  # ±K Bins für Interpolation
 
 def _repair_channel(channel: np.ndarray, sample_rate: int) -> tuple[np.ndarray, int]:
     """Spektrale Reparatur eines Mono-Kanals. Gibt (repaired, n_repaired_bins) zurück."""
-    f, t, Zxx = sig.stft(
+    _f, _t, Zxx = sig.stft(
         channel,
         fs=sample_rate,
         window=_WIN,
@@ -60,7 +60,7 @@ def _repair_channel(channel: np.ndarray, sample_rate: int) -> tuple[np.ndarray, 
     mag = np.abs(Zxx)
     phase = np.angle(Zxx)
 
-    n_freq, n_time = mag.shape
+    _n_freq, _n_time = mag.shape
     # --------------------------------------------------------------------------
     # Vollständig vektorisierte Spike-Detektion + Reparatur (O(n_freq × K), kein
     # Python-Loop über n_freq × n_time — vormals >5 s, jetzt <0.1 s).
@@ -99,10 +99,7 @@ def _repair_channel(channel: np.ndarray, sample_rate: int) -> tuple[np.ndarray, 
     )
     # Auf Original-Länge zuschneiden
     out_len = len(channel)
-    if len(repaired) >= out_len:
-        repaired = repaired[:out_len]
-    else:
-        repaired = np.pad(repaired, (0, out_len - len(repaired)))
+    repaired = repaired[:out_len] if len(repaired) >= out_len else np.pad(repaired, (0, out_len - len(repaired)))
 
     return repaired.astype(channel.dtype), n_repaired
 

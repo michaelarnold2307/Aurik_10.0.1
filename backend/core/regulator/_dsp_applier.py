@@ -7,8 +7,8 @@ Kanonisch zusammengeführt aus backend/_dsp_applier.py (Phase-Skip-Gate, Modul-D
 und backend/core/regulator/_dsp_applier.py (Biquad-EQ, Kompressor, Limiter, Enhancer).
 """
 
-from collections.abc import Callable
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -426,7 +426,8 @@ def _apply_dsp_module(audio: np.ndarray, sr: int, module_name: str, params: dict
         elif module_name == "RIAAEqualizer":
             from dsp.riaa_equalizer import RIAAEqualizer  # type: ignore[import]
 
-            return RIAAEqualizer().process(audio, sr)
+            _curve = params.get("curve", "auto")
+            return RIAAEqualizer(mode="invert", curve=_curve).process(audio, sr)
         elif module_name == "TapeEqualizer":
             from dsp.tape_equalizer import TapeEqualizer  # type: ignore[import]
 

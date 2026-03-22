@@ -17,16 +17,25 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
+class GrooveViolationError(Exception):
+    """Raised when percussive recombination exceeds DTW 8 ms RMS threshold."""
+
+    def __init__(self, dtw_ms: float):
+        self.dtw_ms = dtw_ms
+        super().__init__(f"Groove DTW {dtw_ms:.2f} ms > 8 ms threshold")
+
+
 HPSS_HARMONIC_KERNEL: int = 31
 HPSS_PERCUSSIVE_KERNEL: int = 31
 CROSSFADE_MS: float = 10.0
-PERCUSSIVE_ONLY_PHASES: List[str] = [
+PERCUSSIVE_ONLY_PHASES: list[str] = [
     "phase_01_click_removal",
     "phase_27_click_pop_removal",
 ]
 
 
-def _hpss_separate(stft: np.ndarray, h_len: int, p_len: int) -> Tuple[np.ndarray, np.ndarray]:
+def _hpss_separate(stft: np.ndarray, h_len: int, p_len: int) -> tuple[np.ndarray, np.ndarray]:
     """Medianfilter-HPSS (Fitzgerald 2010). Gibt (mask_h, mask_p) zurueck."""
     try:
         from scipy.ndimage import median_filter
@@ -46,13 +55,13 @@ class TransientDecoupledProcessing:
 
     HPSS_HARMONIC_KERNEL: int = HPSS_HARMONIC_KERNEL
     HPSS_PERCUSSIVE_KERNEL: int = HPSS_PERCUSSIVE_KERNEL
-    PERCUSSIVE_ONLY_PHASES: List[str] = PERCUSSIVE_ONLY_PHASES
+    PERCUSSIVE_ONLY_PHASES: list[str] = PERCUSSIVE_ONLY_PHASES
 
     def __init__(self) -> None:
         self._n_fft: int = 1024
         self._hop_length: int = 256
 
-    def separate(self, audio: np.ndarray, sr: int) -> Tuple[np.ndarray, np.ndarray]:
+    def separate(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """Gibt (audio_percussive, audio_harmonic) zurueck."""
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
         if audio.ndim == 2:
@@ -61,7 +70,8 @@ class TransientDecoupledProcessing:
             half = audio * 0.5
             return half.copy(), half.copy()
         try:
-            from scipy.signal import istft as _istft, stft as _stft
+            from scipy.signal import istft as _istft
+            from scipy.signal import stft as _stft
 
             _, _, Z = _stft(audio, fs=sr, nperseg=self._n_fft, noverlap=self._n_fft - self._hop_length)
             mask_h, mask_p = _hpss_separate(Z, self.HPSS_HARMONIC_KERNEL, self.HPSS_PERCUSSIVE_KERNEL)
@@ -83,24 +93,39 @@ class TransientDecoupledProcessing:
         audio_p: np.ndarray,
         audio_h: np.ndarray,
         sr: int,
-        original_perc: Optional[np.ndarray] = None,
+        original_perc: np.ndarray | None = None,
+        raise_on_groove_violation: bool = False,
     ) -> np.ndarray:
-        """OLA-Crossfade-Rekombination. NaN/Inf-sicher, geclipped auf [-1,1]."""
+        """OLA-Crossfade-Rekombination. NaN/Inf-sicher, geclipped auf [-1,1].
+
+        Args:
+            raise_on_groove_violation: If True, raise GrooveViolationError instead
+                of silently falling back. Used by FeedbackChain to abort iterations.
+        """
         audio_p = np.nan_to_num(np.asarray(audio_p, dtype=np.float32))
         audio_h = np.nan_to_num(np.asarray(audio_h, dtype=np.float32))
         n = max(len(audio_p), len(audio_h))
         audio_p = np.pad(audio_p, (0, max(0, n - len(audio_p))))[:n]
         audio_h = np.pad(audio_h, (0, max(0, n - len(audio_h))))[:n]
         mix = audio_p + audio_h
-        if original_perc is not None and self._grove_violated(audio_p, original_perc, sr):
-            orig = np.nan_to_num(np.asarray(original_perc, dtype=np.float32))
-            orig = np.pad(orig, (0, max(0, n - len(orig))))[:n]
-            mix = orig + audio_h
-            logger.debug("GrooveMetric DTW >8 ms -- original_perc uebernommen")
+        if original_perc is not None:
+            violated, dtw_ms = self._grove_violated_ex(audio_p, original_perc, sr)
+            if violated:
+                if raise_on_groove_violation:
+                    raise GrooveViolationError(dtw_ms)
+                orig = np.nan_to_num(np.asarray(original_perc, dtype=np.float32))
+                orig = np.pad(orig, (0, max(0, n - len(orig))))[:n]
+                mix = orig + audio_h
+                logger.debug("GrooveMetric DTW %.2f ms > 8 ms -- original_perc uebernommen", dtw_ms)
         mix = np.nan_to_num(mix)
         return np.clip(mix, -1.0, 1.0).astype(np.float32)
 
     def _grove_violated(self, proc: np.ndarray, orig: np.ndarray, sr: int) -> bool:
+        violated, _ = self._grove_violated_ex(proc, orig, sr)
+        return violated
+
+    def _grove_violated_ex(self, proc: np.ndarray, orig: np.ndarray, sr: int) -> tuple[bool, float]:
+        """Returns (is_violated, dtw_rms_ms)."""
         try:
             from scipy.signal import find_peaks
 
@@ -110,15 +135,16 @@ class TransientDecoupledProcessing:
             o_pk, _ = find_peaks(o_env, height=0.01, distance=4)
             p_pk, _ = find_peaks(p_env, height=0.01, distance=4)
             if len(o_pk) == 0 or len(p_pk) == 0:
-                return False
+                return False, 0.0
             n = min(len(o_pk), len(p_pk))
             diff_ms = np.abs(o_pk[:n] - p_pk[:n]) * hop / sr * 1000.0
-            return float(np.sqrt(np.mean(diff_ms**2))) > 8.0
+            dtw_ms = float(np.sqrt(np.mean(diff_ms**2)))
+            return dtw_ms > 8.0, dtw_ms
         except Exception:
-            return False
+            return False, 0.0
 
 
-_instance: Optional[TransientDecoupledProcessing] = None
+_instance: TransientDecoupledProcessing | None = None
 _lock = threading.Lock()
 
 
@@ -132,7 +158,7 @@ def get_transient_decoupled_processor() -> TransientDecoupledProcessing:
     return _instance
 
 
-def separate_transients(audio: np.ndarray, sr: int) -> Tuple[np.ndarray, np.ndarray]:
+def separate_transients(audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
     """Convenience-Wrapper."""
     return get_transient_decoupled_processor().separate(audio, sr)
 
@@ -141,7 +167,7 @@ def recombine_transients(
     audio_p: np.ndarray,
     audio_h: np.ndarray,
     sr: int,
-    original_perc: Optional[np.ndarray] = None,
+    original_perc: np.ndarray | None = None,
 ) -> np.ndarray:
     """Convenience-Wrapper."""
     return get_transient_decoupled_processor().recombine(audio_p, audio_h, sr, original_perc)
@@ -152,13 +178,14 @@ TransientDecoupledProcessor = TransientDecoupledProcessing
 
 
 __all__ = [
+    "CROSSFADE_MS",
+    "GrooveViolationError",
+    "HPSS_HARMONIC_KERNEL",
+    "HPSS_PERCUSSIVE_KERNEL",
+    "PERCUSSIVE_ONLY_PHASES",
     "TransientDecoupledProcessing",
     "TransientDecoupledProcessor",
     "get_transient_decoupled_processor",
-    "separate_transients",
     "recombine_transients",
-    "HPSS_HARMONIC_KERNEL",
-    "HPSS_PERCUSSIVE_KERNEL",
-    "CROSSFADE_MS",
-    "PERCUSSIVE_ONLY_PHASES",
+    "separate_transients",
 ]

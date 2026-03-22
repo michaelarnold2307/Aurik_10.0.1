@@ -156,6 +156,43 @@ ignore = [
     "B007",
     # Ambiguous variable name (I = Iterator oft verwendet)
     "E741",
+    # =========================================================================
+    # Aurik-DSP-Spezifische Ausnahmen (bewusste Design-Entscheidungen)
+    # =========================================================================
+    # Deutschsprachige Unicode-Zeichen in Docstrings/Kommentaren/Strings
+    # sind in Aurik 9 bewusst gesetzt (Nutzermeldungen, Kommentare auf Deutsch)
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # DSP-Konvention: Großbuchstaben für mathematische Variablen (N, X, Y, SR)
+    "N806",
+    # try/except-Import-Pattern für optionale ML-Dependencies (RELEASE_MUST)
+    "E402",
+    # Mutable class attributes als Klassenkonstanten/Konfiguration — bewusst
+    "RUF012",
+    # CamelCase-Import als Konstante (z.B. InferenceSession as IS) — DSP-Konvention
+    "N814",
+    # DSP-Argument-Namen: sr, N, X — Konvention in Audio-Algorithmen
+    "N803",
+    # zip() ohne strict= — bei len-garantierten Arrays in DSP kein Problem
+    "B905",
+    # Ternary-Stil: komplexe DSP-Bedingungen bleiben bei if/else-Schreibweise
+    "SIM108",
+    # warnings.warn ohne stacklevel — in DSP-Fallbacks akzeptabel
+    "B028",
+    # Collapsible if — manchmal klarer getrennt für Lesbarkeit
+    "SIM102",
+    # DSP-Funktionsnamen (Konvention für Algorithmen wie compute_rms, etc.)
+    "N802",
+    # lowercase-imported-as-non-lowercase — DSP-Aliasing z.B. np, sp, etc.
+    "N812",
+    # contextlib.suppress vs try/except — bekanntes Pattern, kein Refactoring
+    "SIM105",
+    # Modulnamen mit Unterstrichen (phase_03_denoise.py) — Aurik-Namenskonvention
+    "N999",
+    # typing.Dict/List/Tuple = Python 3.9+ deprecated, aber im Codebase als
+    # Runtime-Typ verwendet (kein reines Annotation-Kontext), weiterhin valide
+    "UP035",
 ]
 fixable = [
     "E",

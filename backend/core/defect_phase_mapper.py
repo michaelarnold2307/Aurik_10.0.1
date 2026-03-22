@@ -51,8 +51,8 @@ Date: 2026-02-17
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 from backend.core.defect_scanner import DefectType
 
@@ -92,16 +92,19 @@ class PhaseAssignment:
         config: object,
         severity: float = 1.0,
         mode_factor: float = 1.0,
+        material_factor: float = 1.0,
     ) -> None:
         """
         Wendet config_delta auf ein ProcessingConfig-Objekt an.
 
         Args:
-            config:       ProcessingConfig-Instanz (wird in-place modifiziert)
-            severity:     Defekt-Severity [0–1]; skaliert Stärke-Parameter
-            mode_factor:  Zusätzlicher Modes-Faktor (z.B. 0.7 für RESTORATION)
+            config: ProcessingConfig-Instanz (wird in-place modifiziert)
+            severity: Defekt-Severity [0–1]; skaliert Stärke-Parameter
+            mode_factor: Zusätzlicher Modus-Faktor (z.B. 0.8 für RESTORATION)
+            material_factor: Material-Anpassungsfaktor aus _MATERIAL_PHASE_FACTORS
+                (Werte < 1.0 = Charakter-Schutz, Werte > 1.0 werden auf 1.0 geklammert).
         """
-        effective = severity * mode_factor
+        effective = max(0.0, min(1.0, severity * mode_factor * material_factor))
         for k, v in self.config_delta.items():
             if not hasattr(config, k):
                 logger.warning("ProcessingConfig hat kein Feld %r — übersprungen.", k)
@@ -219,6 +222,26 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         config_delta={
             "denoise_strength": 0.15,  # Minimal: Rauschen ist Sekundärproblem
             "click_removal_sensitivity": 0.20,
+            "declip_strength": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    DefectType.FLUTTER: PhaseAssignment(
+        defect_type=DefectType.FLUTTER,
+        primary_phases=[
+            "phase_12_wow_flutter_fix",  # Pitch-Detect + Time-Warp
+            "phase_31_speed_pitch_correction",  # Grobe Geschwindigkeitsfehler
+        ],
+        secondary_phases=[
+            "phase_25_azimuth_correction",  # Bandmaschinen-Nebeneffekte
+        ],
+        description=(
+            "Flutter-Korrektur via Wow/Flutter-Spezialpfad mit Fokus auf schnellere "
+            "Tonhöhenschwankungen und mechanische Laufwerksinstabilität."
+        ),
+        config_delta={
+            "denoise_strength": 0.10,
+            "click_removal_sensitivity": 0.15,
             "declip_strength": 0.0,
             "preserve_analog_character": True,
         },
@@ -637,7 +660,325 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
             "preserve_analog_character": True,  # Dynamik ist Teil des analogen Charakters
         },
     ),
+    # ------------------------------------------------------------------
+    # SOFT_SATURATION — Röhren-/Tape-Sättigung soll erhalten, nicht entfernt werden
+    # ------------------------------------------------------------------
+    DefectType.SOFT_SATURATION: PhaseAssignment(
+        defect_type=DefectType.SOFT_SATURATION,
+        primary_phases=[
+            "phase_22_tape_saturation",  # Emulation/Erhalt statt Entfernung
+        ],
+        secondary_phases=[
+            "phase_08_transient_preservation",
+        ],
+        description=(
+            "Bewahrt weiche Röhren-/Tape-Sättigung als musikalischen Charakter. "
+            "Keine destruktive Reparatur, sondern konservative Charaktererhaltung."
+        ),
+        config_delta={
+            "denoise_strength": 0.0,
+            "declip_strength": 0.0,
+            "click_removal_sensitivity": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # HEAD_WEAR — Frequenzband-Auslöschung durch Kopfverschleiß
+    # ------------------------------------------------------------------
+    DefectType.HEAD_WEAR: PhaseAssignment(
+        defect_type=DefectType.HEAD_WEAR,
+        primary_phases=[
+            "phase_56_spectral_band_gap_repair",
+            "phase_06_frequency_restoration",
+        ],
+        secondary_phases=[
+            "phase_14_phase_correction",
+            "phase_25_azimuth_correction",
+        ],
+        description=(
+            "Repariert spektrale Bandlücken und Höhenausfälle durch Kopfverschleiß "
+            "oder Kontaktprobleme im Bandpfad."
+        ),
+        config_delta={
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.85,
+            "high_freq_boost_db": 2.0,
+            "denoise_strength": 0.15,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # AZIMUTH_ERROR — HF-Phasen-Slope / Kopf-Schrägstellung
+    # ------------------------------------------------------------------
+    DefectType.AZIMUTH_ERROR: PhaseAssignment(
+        defect_type=DefectType.AZIMUTH_ERROR,
+        primary_phases=[
+            "phase_25_azimuth_correction",
+            "phase_14_phase_correction",
+        ],
+        secondary_phases=[
+            "phase_34_mid_side_processing",
+            "phase_15_stereo_balance",
+        ],
+        description=(
+            "Korrigiert Azimuth-Fehler und daraus resultierende Hochton- und Phasenprobleme "
+            "zwischen linkem und rechtem Kanal."
+        ),
+        config_delta={
+            "denoise_strength": 0.05,
+            "declip_strength": 0.0,
+            "click_removal_sensitivity": 0.05,
+            "stereo_width_factor": 1.0,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # TRANSIENT_SMEARING — verschmierte Anschläge/Attacks
+    # ------------------------------------------------------------------
+    DefectType.TRANSIENT_SMEARING: PhaseAssignment(
+        defect_type=DefectType.TRANSIENT_SMEARING,
+        primary_phases=[
+            "phase_08_transient_preservation",
+            "phase_36_transient_shaper",
+        ],
+        secondary_phases=[
+            "phase_23_spectral_repair",
+        ],
+        description=(
+            "Restauriert verschmierte Transienten und Attack-Definition nach Kompression, "
+            "Limiter-Artefakten oder Codec-Verschleifung."
+        ),
+        config_delta={
+            "denoise_strength": 0.05,
+            "declip_strength": 0.10,
+            "click_removal_sensitivity": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # PRE_ECHO — Codec-Pre-Echo vor Transienten
+    # ------------------------------------------------------------------
+    DefectType.PRE_ECHO: PhaseAssignment(
+        defect_type=DefectType.PRE_ECHO,
+        primary_phases=[
+            "phase_23_spectral_repair",
+            "phase_50_spectral_repair",
+        ],
+        secondary_phases=[
+            "phase_08_transient_preservation",
+        ],
+        description=(
+            "Unterdrückt Codec-Pre-Echo vor Transienten durch spektrale Reparatur, "
+            "ohne den eigentlichen Einschwingvorgang zu verwischen."
+        ),
+        config_delta={
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.70,
+            "denoise_strength": 0.10,
+            "click_removal_sensitivity": 0.0,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # RIAA_CURVE_ERROR — falsche Disc-Entzerrung
+    # ------------------------------------------------------------------
+    DefectType.RIAA_CURVE_ERROR: PhaseAssignment(
+        defect_type=DefectType.RIAA_CURVE_ERROR,
+        primary_phases=[
+            "phase_04_eq_correction",
+            "phase_06_frequency_restoration",
+        ],
+        secondary_phases=[
+            "phase_07_harmonic_restoration",
+        ],
+        description=(
+            "Korrigiert falsche Entzerrungskurven bei Disc-Transfers "
+            "(RIAA/AES/NAB/FFRR/Columbia)."
+        ),
+        config_delta={
+            "high_freq_boost_db": 2.5,
+            "denoise_strength": 0.10,
+            "declip_strength": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # ALIASING — Spiegelartefakte durch unzureichenden AA-Filter
+    # ------------------------------------------------------------------
+    DefectType.ALIASING: PhaseAssignment(
+        defect_type=DefectType.ALIASING,
+        primary_phases=[
+            "phase_23_spectral_repair",
+            "phase_03_denoise",
+        ],
+        secondary_phases=[
+            "phase_50_spectral_repair",
+        ],
+        description=(
+            "Reduziert Aliasing-Spiegelfrequenzen aus fehlerhafter Digitalisierung "
+            "durch spektrale Glättung und selektive HF-Bereinigung."
+        ),
+        config_delta={
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.55,
+            "denoise_strength": 0.25,
+            "declip_strength": 0.0,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # BIAS_ERROR — falscher Vormagnetisierungsstrom bei Bandaufnahme
+    # ------------------------------------------------------------------
+    DefectType.BIAS_ERROR: PhaseAssignment(
+        defect_type=DefectType.BIAS_ERROR,
+        primary_phases=[
+            "phase_04_eq_correction",
+            "phase_29_tape_hiss_reduction",
+        ],
+        secondary_phases=[
+            "phase_06_frequency_restoration",
+            "phase_03_denoise",
+        ],
+        description=(
+            "Kompensiert Bias-Fehler bei Bandaufnahmen, die zu unausgewogenem Frequenzgang, "
+            "Hiss und Höhenverlust führen."
+        ),
+        config_delta={
+            "denoise_strength": 0.30,
+            "high_freq_boost_db": 1.5,
+            "declip_strength": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # SIBILANCE — überbetonte Zischlaute
+    # ------------------------------------------------------------------
+    DefectType.SIBILANCE: PhaseAssignment(
+        defect_type=DefectType.SIBILANCE,
+        primary_phases=[
+            "phase_19_de_esser",
+            "phase_43_ml_deesser",
+        ],
+        secondary_phases=[
+            "phase_38_presence_boost",
+        ],
+        description=(
+            "Kontrolliert überbetonte Sibilanten stimmtyp-adaptiv, ohne Sprachverständlichkeit "
+            "oder Präsenz pauschal zu beschneiden."
+        ),
+        config_delta={
+            "denoise_strength": 0.05,
+            "declip_strength": 0.0,
+            "click_removal_sensitivity": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
 }
+
+
+# ---------------------------------------------------------------------------
+# Material-adaptive Phase-Initialstärken (§2.29 / §2.31)
+# ---------------------------------------------------------------------------
+# Maps MaterialType.value → { phase_id → initial_strength ∈ (0, 1.0] }
+#
+# initial_strength < 1.0: Charakter-Schutz / physikalische Grenze
+#   (z.B. 0.25 für phase_22_tape_saturation bei shellac → Röhrencharakter bewahren)
+# initial_strength > 1.0: NICHT erlaubt — strength ∈ [0,1] in allen Phasen.
+#   Stattdessen signalisiert ein Eintrag nahe 1.0 "maximale Stärke gewünscht".
+# Kein Eintrag → 1.0 (volle Initialstärke, PMGG-gesteuerter Abbau bei Regression)
+
+_MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
+    # WAX_CYLINDER — extreme noise, very limited BW (≤5 kHz), highest degradation
+    "wax_cylinder": {
+        "phase_03_denoise":              0.90,   # aggressive NR ok — extreme noise
+        "phase_09_crackle_removal":      0.85,   # heavy crackle on wax
+        "phase_22_tape_saturation":      0.20,   # protect tube/wax character
+        "phase_20_reverb_reduction":     0.20,   # protect period-correct room
+        "phase_49_advanced_dereverb":    0.20,   # same: vintage reverb is authentic
+        "phase_06_frequency_restoration": 0.30,  # BW << 5kHz, don't over-extend
+        "phase_07_harmonic_restoration": 0.35,   # careful harmonic reconstruction
+    },
+    # SHELLAC — broad noise, BW ≤ 8 kHz, clicks/crackle primary
+    "shellac": {
+        "phase_03_denoise":              0.85,   # strong NR for shellac noise floor
+        "phase_09_crackle_removal":      0.85,   # heavy crackle
+        "phase_01_click_removal":        0.85,   # many deep clicks
+        "phase_27_click_pop_removal":    0.80,
+        "phase_22_tape_saturation":      0.25,   # protect tube character
+        "phase_20_reverb_reduction":     0.20,   # vintage room — don't over-dereverberate
+        "phase_49_advanced_dereverb":    0.20,
+        "phase_06_frequency_restoration": 0.40,  # BW limited; careful extension
+        "phase_07_harmonic_restoration": 0.45,
+    },
+    # LACQUER_DISC — similar to shellac, more substrate clicks
+    "lacquer_disc": {
+        "phase_03_denoise":              0.80,
+        "phase_01_click_removal":        0.85,
+        "phase_27_click_pop_removal":    0.80,
+        "phase_22_tape_saturation":      0.25,
+        "phase_20_reverb_reduction":     0.20,
+        "phase_49_advanced_dereverb":    0.20,
+        "phase_06_frequency_restoration": 0.50,
+    },
+    # WIRE_RECORDING — high noise, jitter, good dynamic range
+    "wire_recording": {
+        "phase_03_denoise":              0.85,
+        "phase_12_wow_flutter_fix":      0.90,   # jitter is primary problem
+        "phase_31_speed_pitch_correction": 0.85,
+        "phase_22_tape_saturation":      0.35,
+        "phase_10_compression":          0.40,
+    },
+    # VINYL — crackle priority, moderate NR
+    "vinyl": {
+        "phase_09_crackle_removal":      0.85,
+        "phase_01_click_removal":        0.80,
+        "phase_03_denoise":              0.70,   # vinyl NR gentler than shellac
+    },
+    # TAPE — hiss priority, preserve tape character (§2.22 Spec)
+    "tape": {
+        "phase_29_tape_hiss_reduction":  0.85,
+        "phase_03_denoise":              0.75,
+        "phase_22_tape_saturation":      0.35,   # tape imprint must be preserved
+    },
+    # REEL_TAPE — higher quality, print-through focus
+    "reel_tape": {
+        "phase_29_tape_hiss_reduction":  0.80,
+        "phase_03_denoise":              0.70,
+        "phase_22_tape_saturation":      0.35,   # tape character preserved
+    },
+    # MP3_LOW — heavy codec artifacts; careful HF extension
+    "mp3_low": {
+        "phase_06_frequency_restoration": 0.75,  # codec cuts HF; restore carefully
+        "phase_07_harmonic_restoration":  0.75,
+        "phase_23_spectral_repair":       0.80,
+        "phase_50_spectral_repair":       0.80,
+    },
+    # CD_DIGITAL — high quality input; minimal aggressive processing
+    "cd_digital": {
+        "phase_03_denoise":              0.25,   # minimal NR for clean digital
+        "phase_09_crackle_removal":      0.20,
+        "phase_01_click_removal":        0.30,
+    },
+    # DAT — near-lossless digital; near-zero NR
+    "dat": {
+        "phase_03_denoise":              0.20,
+        "phase_09_crackle_removal":      0.15,
+    },
+}
+
+
+def get_material_initial_strength(material: str, phase_id: str) -> float:
+    """Returns the material-adaptive initial strength for a given phase.
+
+    Used by PMGG to set the correct starting strength instead of always 1.0.
+    Returns 1.0 (default / no override) when no entry is found.
+
+    Args:
+        material:  MaterialType.value string (e.g. 'shellac', 'vinyl')
+        phase_id:  Full phase_id string (e.g. 'phase_03_denoise')
+
+    Returns:
+        initial_strength ∈ (0, 1.0]; default = 1.0
+    """
+    factors = _MATERIAL_PHASE_FACTORS.get(material, {})
+    return float(factors.get(phase_id, 1.0))
 
 
 # ---------------------------------------------------------------------------
@@ -675,6 +1016,7 @@ class DefectPhaseMapper:
         defect_type: DefectType,
         severity: float,
         is_restoration_mode: bool = True,
+        material: str | None = None,
     ) -> tuple[object, str]:
         """
         Konfiguriert base_config für den angegebenen Defekt.
@@ -684,6 +1026,8 @@ class DefectPhaseMapper:
             defect_type:          Primärer Defekttyp
             severity:             Defektstärke [0–1]
             is_restoration_mode:  True = RESTORATION (sanfterer mode_factor)
+            material:             MaterialType.value-String für material-adaptive Skalierung
+                                  (z.B. 'shellac', 'vinyl'). None = kein Material-Override.
 
         Returns:
             (konfiguriertes_config, variant_name_string)
@@ -700,7 +1044,18 @@ class DefectPhaseMapper:
         # RESTORATION-Modus: etwas sanfter (0.8×)
         mode_factor = 0.80 if is_restoration_mode else 1.0
 
-        assignment.apply_to_config(config, severity=severity, mode_factor=mode_factor)
+        # Material-Faktor: Mittelwert der primary Phase-Faktoren als config-Skalierung
+        mat_factor = 1.0
+        if material is not None and assignment.primary_phases:
+            phase_factors = [
+                get_material_initial_strength(material, pid)
+                for pid in assignment.primary_phases
+            ]
+            mat_factor = sum(phase_factors) / len(phase_factors)
+
+        assignment.apply_to_config(
+            config, severity=severity, mode_factor=mode_factor, material_factor=mat_factor
+        )
 
         # Sicherheitscheck: denoise_strength nie > 0.9 (Authentizität)
         if hasattr(config, "denoise_strength") and is_restoration_mode:
@@ -708,10 +1063,11 @@ class DefectPhaseMapper:
 
         variant_name = f"specialist_{defect_type.value.replace('_', '')}"
         logger.info(
-            "Specialist-Config für %s (severity=%.2f, mode_factor=%.1f): " "phases=%s",
+            "Specialist-Config für %s (severity=%.2f, mode_factor=%.1f, mat_factor=%.2f): " "phases=%s",
             defect_type.value,
             severity,
             mode_factor,
+            mat_factor,
             assignment.primary_phases[:2],
         )
         return config, variant_name
@@ -732,7 +1088,6 @@ class DefectPhaseMapper:
             Geordnete Phase-ID-Liste (primary first, dann secondary, dann de-dup)
         """
         seen: dict[str, float] = {}  # phase_id → max_severity
-
         for defect in defects:
             severity = getattr(defect, "severity", 0.5)
             dt = getattr(defect, "defect_type", None)

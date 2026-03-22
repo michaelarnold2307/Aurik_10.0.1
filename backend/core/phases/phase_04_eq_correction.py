@@ -94,6 +94,7 @@ if __name__ == "__main__":
 else:
     from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -387,7 +388,7 @@ class EQCorrectionPhase(PhaseInterface):
         start_time = time.time()
 
         # Resolve decade-aware shellac variant before fetching params
-        decade = kwargs.get("decade", None)
+        decade = kwargs.get("decade")
         effective_material = material_type
         detected_variant: str | None = None
         if material_type in ("shellac", "wax_cylinder") and decade is not None:
@@ -583,10 +584,7 @@ class EQCorrectionPhase(PhaseInterface):
             Dict of {frequency: deviation_db}
         """
         # Convert to mono
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Average spectrum via Welch method
         freqs, psd = signal.welch(mono, self.sample_rate, nperseg=4096)
@@ -596,7 +594,7 @@ class EQCorrectionPhase(PhaseInterface):
 
         # Sample at key frequencies
         deviations = {}
-        for target_freq in params["eq_curve"].keys():
+        for target_freq in params["eq_curve"]:
             # Find closest frequency bin
             idx = np.argmin(np.abs(freqs - target_freq))
             actual_level = psd_db[idx]

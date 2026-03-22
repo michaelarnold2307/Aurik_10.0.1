@@ -24,10 +24,10 @@ Aktivierung (in CAUSE_TO_PHASES):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -137,7 +137,8 @@ class CQTdiffPlusPlugin:
         Interface:  forward(x_noisy: (1,65536), sigma: (1,1)) → (1,65536)
         """
         try:
-            from backend.core.ml_memory_budget import try_allocate, release as _release  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
                 logger.info("CQTdiff+: ML-Budget erschöpft — Fallback aktiv.")
@@ -146,7 +147,7 @@ class CQTdiffPlusPlugin:
         except ImportError:
             pass
         try:
-            import torch  # noqa: PLC0415
+            import torch
 
             torch.set_num_threads(max(1, __import__("os").cpu_count() or 1))
             model_path = self.MODELS_DIR / "score_network.pt"
@@ -158,7 +159,7 @@ class CQTdiffPlusPlugin:
                 self._model_loaded = True
                 logger.info("🔵 CQTdiff: Score-Netzwerk geladen (%s)", model_path)
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
                     _reg_plm(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB, unload_fn=_unload_cqtdiff_plus)
                 except Exception:
                     pass
@@ -172,7 +173,7 @@ class CQTdiffPlusPlugin:
             logger.debug("torch nicht verfügbar — CQTdiff+ Fallback aktiv")
             self._fallback_active = True
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                from backend.core.ml_memory_budget import release as _release
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -180,7 +181,7 @@ class CQTdiffPlusPlugin:
             logger.warning("CQTdiff+ Modell-Lade-Fehler: %s — Fallback aktiv", exc)
             self._fallback_active = True
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                from backend.core.ml_memory_budget import release as _release
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -269,7 +270,7 @@ class CQTdiffPlusPlugin:
         sr: int,
         gap_start: int,
         gap_end: int,
-        context: np.ndarray | None,  # noqa: ARG002 (reserviert für zukünftige Konditionierung)
+        context: np.ndarray | None,
     ) -> np.ndarray:
         """Diffusions-Inpainting via EDM-Sampling mit CQT-Score-Netzwerk.
 
@@ -293,8 +294,8 @@ class CQTdiffPlusPlugin:
             return self._inpaint_dsp_fallback(audio, sr, gap_start, gap_end)
 
         try:
-            import torch  # noqa: PLC0415
-            import torchaudio  # noqa: PLC0415
+            import torch
+            import torchaudio
 
             gap_len_48k = gap_end - gap_start
             scale = self._CQTDIFF_SR / sr  # 22050/48000 ≈ 0.459
@@ -307,7 +308,7 @@ class CQTdiffPlusPlugin:
             # Lücken-Indices in 22050-Hz-Domäne
             gap_s22 = int(gap_start * scale)
             gap_e22 = int(gap_end * scale)
-            gap_len_22k = max(1, gap_e22 - gap_s22)
+            max(1, gap_e22 - gap_s22)
 
             # --- 2. Kontext-Fenster extrahieren (65536 Samples) ---
             win = self._AUDIO_LEN  # 65536
@@ -417,7 +418,7 @@ class CQTdiffPlusPlugin:
 
         # --- ML-Fallback Stufe 1: DiffWave ONNX ---
         try:
-            from plugins.diffwave_plugin import DiffwavePlugin  # noqa: PLC0415
+            from plugins.diffwave_plugin import DiffwavePlugin
 
             dw = DiffwavePlugin()
             if dw._session is not None:
@@ -521,7 +522,7 @@ class CQTdiffPlusPlugin:
     def _compute_chroma_corr(original: np.ndarray, restored: np.ndarray, sr: int) -> float:
         """Pearson-Korrelation der Chroma-Vektoren (soll ≥ 0.92)."""
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             n = min(len(original), len(restored), sr * 4)  # max. 4 s
             c1 = librosa.feature.chroma_stft(y=original[:n].astype(np.float32), sr=sr)
@@ -544,7 +545,7 @@ def _unload_cqtdiff_plus() -> None:
     try:
         import gc
         gc.collect()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 

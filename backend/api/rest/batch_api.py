@@ -1,4 +1,5 @@
 import logging
+
 """
 Minimal-API für die Integration des SOTA-Batch-Workflows in ein Frontend (z.B. Web-UI, Desktop-GUI)
 Bietet REST-Endpunkte für Start, Status, Ergebnis und Audit-Report.
@@ -9,10 +10,9 @@ import threading
 from typing import Any, Dict
 
 import numpy as np
-from flask import Flask, jsonify
 import soundfile as sf
-
 from Aurik_Standalone.dsp.dsp_decision_logic import DSPDecisionLogic
+from flask import Flask, jsonify
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ app = Flask(__name__)
 AUDIO_IN_DIR = "input_audio/"
 AUDIO_OUT_DIR = "output_audio/"
 CONFIG = "config_dsp_chain_example.yaml"
-BATCH_STATUS: Dict[str, Any] = {
+BATCH_STATUS: dict[str, Any] = {
     "running": False,
     "progress": 0,
     "total": 0,

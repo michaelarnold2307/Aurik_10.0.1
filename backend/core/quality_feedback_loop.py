@@ -25,8 +25,8 @@ from typing import Any
 
 import numpy as np
 
-from backend.core.psychoacoustic_metrics import PsychoAcousticMetrics
 from backend.core.phases.phase_interface import PhaseInterface, PhaseResult
+from backend.core.psychoacoustic_metrics import PsychoAcousticMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -199,10 +199,9 @@ class QualityFeedbackLoop:
                 adapted["blend_amount"] = adapted["blend_amount"] * 0.95
 
             # If harmonic coherence is low, preserve more original
-            if harmonic_coherence < 0.7:
-                if "texture_preserve" in adapted:
-                    adapted["texture_preserve"] = min(0.95, adapted.get("texture_preserve", 0.85) * 1.1)
-                    logger.debug("  texture_preserve increased (low coherence)")
+            if harmonic_coherence < 0.7 and "texture_preserve" in adapted:
+                adapted["texture_preserve"] = min(0.95, adapted.get("texture_preserve", 0.85) * 1.1)
+                logger.debug("  texture_preserve increased (low coherence)")
 
         # Small deficit: minimal adjustment
         else:

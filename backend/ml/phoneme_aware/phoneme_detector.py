@@ -24,11 +24,11 @@ Version: 1.0.0
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
-import warnings
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -39,13 +39,13 @@ if TYPE_CHECKING:
 
 # Conditional imports (will be checked at runtime)
 try:
-    import torch  # noqa: F811
-    from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor  # noqa: F811
+    import torch
+    from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
     TRANSFORMERS_AVAILABLE = True
 except (ImportError, OSError):
     # OSError: libcupti.so.12 undefined symbol — torch-CUDA-Abhängigkeit in venv
-    torch = None  # type: ignore[assignment]  # noqa: F811
+    torch = None  # type: ignore[assignment]
     TRANSFORMERS_AVAILABLE = False
     # Warning will be shown when actually trying to use phoneme detection
     # (not at import time to avoid cluttering logs)
@@ -126,11 +126,11 @@ class DetectionConfig:
         cache_dir: Nicht genutzt — Modell wird immer aus lokalem Pfad geladen
     """
 
-    model_name: str = str(_WAV2VEC2_LOCAL_DIR)
+    model_name: str = "facebook/wav2vec2-lv-60-espeak-cv-ft"
     language: Language = Language.ENGLISH
     min_confidence: float = 0.5
     target_sample_rate: int = 16000
-    use_gpu: bool = False  # §9.5 CPU-only — GPU-Nutzung verboten
+    use_gpu: bool = True
     cache_dir: Path | None = None
 
     def __post_init__(self):
@@ -189,22 +189,30 @@ class PhonemeDetector:
 
         logger.info(f"PhonemeDetector initialized with model: {self.config.model_name}")
 
+    def _resolved_model_name(self) -> str:
+        """Resolve model source with local-first fallback for offline runtime."""
+        if _WAV2VEC2_LOCAL_DIR.exists():
+            return str(_WAV2VEC2_LOCAL_DIR)
+        return self.config.model_name
+
     @property
-    def device(self) -> "torch.device":
+    def device(self) -> Any:
         """Get PyTorch device (always cpu, §9.5 CPU-only policy)."""
+        assert torch is not None
         if self._device is None:
             self._device = torch.device("cpu")
             logger.info("Using CPU for phoneme detection (§9.5 CPU-only)")
         return self._device
 
     @property
-    def model(self) -> "Wav2Vec2ForCTC":
+    def model(self) -> Wav2Vec2ForCTC:
         """Lazy load Wav2Vec2 model."""
         if self._model is None:
-            logger.info(f"Loading model: {self.config.model_name}")
+            model_name = self._resolved_model_name()
+            logger.info(f"Loading model: {model_name}")
             self._model = Wav2Vec2ForCTC.from_pretrained(
-                self.config.model_name,
-                local_files_only=True,
+                model_name,
+                local_files_only=Path(model_name).exists(),
             )
             self._model = self._model.to(self.device)
             self._model.eval()  # Inference mode
@@ -212,13 +220,14 @@ class PhonemeDetector:
         return self._model
 
     @property
-    def processor(self) -> "Wav2Vec2Processor":
+    def processor(self) -> Wav2Vec2Processor:
         """Lazy load Wav2Vec2 processor."""
         if self._processor is None:
-            logger.info(f"Loading processor: {self.config.model_name}")
+            model_name = self._resolved_model_name()
+            logger.info(f"Loading processor: {model_name}")
             self._processor = Wav2Vec2Processor.from_pretrained(
-                self.config.model_name,
-                local_files_only=True,
+                model_name,
+                local_files_only=Path(model_name).exists(),
             )
             logger.info("Processor loaded successfully")
         return self._processor
@@ -256,7 +265,7 @@ class PhonemeDetector:
 
         return audio
 
-    def _decode_predictions(self, logits: torch.Tensor, audio_length: int) -> list[tuple[str, int, float]]:
+    def _decode_predictions(self, logits: Any, audio_length: int) -> list[tuple[str, int, float]]:
         """
         Decode CTC predictions to phonemes.
 
@@ -271,6 +280,7 @@ class PhonemeDetector:
         Returns:
             List of (phoneme, frame_index, confidence) tuples
         """
+        assert torch is not None
         # Get token IDs (greedy decoding: argmax)
         predicted_ids = torch.argmax(logits, dim=-1)
 
@@ -345,6 +355,7 @@ class PhonemeDetector:
         """
         language = language or self.config.language
         min_confidence = min_confidence or self.config.min_confidence
+        assert torch is not None
 
         logger.info(
             f"Detecting phonemes in {len(audio)/sr:.2f}s audio " f"(lang={language.value}, min_conf={min_confidence})"
@@ -354,16 +365,26 @@ class PhonemeDetector:
         audio_processed = self._preprocess_audio(audio, sr)
         audio_duration = len(audio_processed) / self.config.target_sample_rate
 
-        # Prepare input for model
-        inputs = self.processor(audio_processed, sampling_rate=self.config.target_sample_rate, return_tensors="pt")
-        input_values = inputs.input_values.to(self.device)
+        # Very short clips are often non-speech and can trigger tokenizer deps (phonemizer).
+        if audio_duration < 0.2:
+            logger.info("Audio too short for reliable phoneme detection (%.3fs), returning empty result", audio_duration)
+            return []
 
-        # Run model
-        with torch.no_grad():
-            logits = self.model(input_values).logits[0]  # [time, vocab_size]
+        try:
+            # Prepare input for model
+            inputs = self.processor(audio_processed, sampling_rate=self.config.target_sample_rate, return_tensors="pt")
+            input_values = inputs.input_values.to(self.device)
 
-        # Decode predictions
-        phonemes_raw = self._decode_predictions(logits, len(audio_processed))
+            # Run model
+            with torch.no_grad():
+                logits = self.model(input_values).logits[0]  # [time, vocab_size]
+
+            # Decode predictions
+            phonemes_raw = self._decode_predictions(logits, len(audio_processed))
+        except (ImportError, ModuleNotFoundError) as exc:
+            # Optional tokenizer deps like phonemizer may be missing in lightweight envs.
+            logger.warning("Phoneme detection dependency missing (%s); returning empty result", exc)
+            return []
 
         # Convert to PhonemeSegment objects
         total_frames = logits.shape[0]
@@ -437,7 +458,7 @@ class PhonemeDetector:
 
         return timeline
 
-    def get_statistics(self, segments: list[PhonemeSegment]) -> dict[str, any]:
+    def get_statistics(self, segments: list[PhonemeSegment]) -> dict[str, Any]:
         """
         Compute statistics about detected phonemes.
 

@@ -55,10 +55,10 @@ Version: 2.0.0
 Date: 8. Februar 2026
 """
 
-from dataclasses import dataclass
-from enum import Enum
 import logging
 import warnings
+from dataclasses import dataclass
+from enum import Enum
 
 import numpy as np
 import scipy.signal as signal

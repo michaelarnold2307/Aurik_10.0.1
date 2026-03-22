@@ -50,18 +50,18 @@ Version: 2.0.0 (Professional)
 Quality Impact: 0.65 → 0.92 (+42%)
 """
 
+import logging
 import os
 import sys
-
-
 import time
 
 import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-import logging
+
 logger = logging.getLogger(__name__)
 
 

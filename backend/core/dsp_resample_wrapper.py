@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from aurik6.core.resampling_utils import resample_to_48k
 import logging
 from typing import Any
 
+import librosa
+import numpy as _np
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def resample_to_48k(audio: _np.ndarray, sr: int) -> tuple[_np.ndarray, int]:
+    """Resample audio to 48 kHz using librosa (DSP fallback, no aurik6 required)."""
+    if sr == 48000:
+        return audio, 48000
+    return librosa.resample(_np.asarray(audio, dtype=_np.float32), orig_sr=sr, target_sr=48000), 48000
 
 
 class DSPResampleWrapper:

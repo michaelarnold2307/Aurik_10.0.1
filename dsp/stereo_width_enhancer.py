@@ -120,10 +120,7 @@ class StereoWidthEnhancer:
         numerator = np.sum(left_centered * right_centered)
         denominator = np.sqrt(np.sum(left_centered**2) * np.sum(right_centered**2))
 
-        if denominator > 0:
-            correlation = numerator / denominator
-        else:
-            correlation = 0.0
+        correlation = numerator / denominator if denominator > 0 else 0.0
 
         return np.clip(correlation, -1.0, 1.0)
 
@@ -160,10 +157,7 @@ class StereoWidthEnhancer:
         mono_energy = np.mean(mono**2) * 2  # *2 to account for both channels
 
         # Compute loss
-        if stereo_energy > 0 and mono_energy > 0:
-            loss_db = 10 * np.log10(mono_energy / stereo_energy)
-        else:
-            loss_db = -np.inf
+        loss_db = 10 * np.log10(mono_energy / stereo_energy) if stereo_energy > 0 and mono_energy > 0 else -np.inf
 
         is_compatible = loss_db > threshold_db
 
@@ -318,10 +312,7 @@ class StereoWidthEnhancer:
         side_energy_db = 10 * np.log10(side_energy) if side_energy > 0 else -np.inf
 
         # Estimate current width
-        if mid_energy > 0 and side_energy > 0:
-            width_estimate = np.sqrt(side_energy / mid_energy)
-        else:
-            width_estimate = 0.0
+        width_estimate = np.sqrt(side_energy / mid_energy) if mid_energy > 0 and side_energy > 0 else 0.0
 
         # Phase correlation
         phase_corr = self.compute_phase_correlation(left, right)

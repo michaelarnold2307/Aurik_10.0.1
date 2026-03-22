@@ -70,38 +70,6 @@ class TimeAligner:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "time_aligner",
-            "category": "multi_track",
-            "version": "1.0.0",
-            "io": {
-                "channels": "stereo|multi",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"max_delay_ms": 100.0, "correlation_threshold": 0.3},
-                "safe_ranges": {
-                    "max_delay_ms": {"min": 1.0, "max": 1000.0},
-                    "correlation_threshold": {"min": 0.0, "max": 1.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.00,
-                "identity_budget": 1.0,
-                "spectral_change_budget": 0.0,
-                "temporal_change_budget": 0.01,
-                "compute_cost": 0.05,
-            },
-            "side_effects": [{"risk": "Sample truncation bei shift", "expected_when": "delay > 0", "severity": 0.1}],
-            "reports": {"self_metrics": ["delay_samples", "correlation", "alignment_applied"], "confidence": 0.9},
-            "rollback": {"strategy": "snapshot_restore", "supports_partial": False},
-        }
 
     def detect_delay(self, reference: np.ndarray, target: np.ndarray, sample_rate: int) -> tuple[int, float]:
         """
@@ -309,43 +277,6 @@ class PhaseAligner:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "phase_aligner",
-            "category": "multi_track",
-            "version": "1.0.0",
-            "io": {
-                "channels": "stereo|multi",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"phase_threshold_degrees": 90.0, "correction_strength": 0.8},
-                "safe_ranges": {
-                    "phase_threshold_degrees": {"min": 10.0, "max": 180.0},
-                    "correction_strength": {"min": 0.0, "max": 1.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.01,
-                "identity_budget": 0.98,
-                "spectral_change_budget": 0.02,
-                "temporal_change_budget": 0.00,
-                "compute_cost": 0.03,
-            },
-            "side_effects": [
-                {"risk": "Minimal spectral coloration", "expected_when": "correction_strength > 0.9", "severity": 0.1}
-            ],
-            "reports": {
-                "self_metrics": ["phase_diff_degrees", "polarity_inverted", "correction_applied"],
-                "confidence": 0.85,
-            },
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def detect_phase_difference(self, reference: np.ndarray, target: np.ndarray) -> float:
         """
@@ -537,43 +468,6 @@ class PhaseCancellationCorrector:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "phase_cancellation_corrector",
-            "category": "multi_track",
-            "version": "1.0.0",
-            "io": {
-                "channels": "stereo",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"cancellation_threshold_db": -20.0, "correction_strength": 0.8},
-                "safe_ranges": {
-                    "cancellation_threshold_db": {"min": -40.0, "max": -10.0},
-                    "correction_strength": {"min": 0.0, "max": 1.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.01,
-                "identity_budget": 0.98,
-                "spectral_change_budget": 0.02,
-                "temporal_change_budget": 0.00,
-                "compute_cost": 0.02,
-            },
-            "side_effects": [
-                {"risk": "Stereo image alteration", "expected_when": "correction_strength > 0.8", "severity": 0.2}
-            ],
-            "reports": {
-                "self_metrics": ["cancellation_detected", "ms_ratio_db", "correction_applied"],
-                "confidence": 0.8,
-            },
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def detect_cancellation(self, left: np.ndarray, right: np.ndarray) -> tuple[bool, float]:
         """
@@ -732,38 +626,6 @@ class StereoBalanceCorrector:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "stereo_balance_corrector",
-            "category": "multi_track",
-            "version": "1.0.0",
-            "io": {
-                "channels": "stereo",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"imbalance_threshold_db": 1.0, "correction_strength": 0.8},
-                "safe_ranges": {
-                    "imbalance_threshold_db": {"min": 0.5, "max": 10.0},
-                    "correction_strength": {"min": 0.0, "max": 1.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.00,
-                "identity_budget": 1.0,
-                "spectral_change_budget": 0.0,
-                "temporal_change_budget": 0.0,
-                "compute_cost": 0.01,
-            },
-            "side_effects": [],
-            "reports": {"self_metrics": ["imbalance_db", "louder_channel", "correction_applied"], "confidence": 0.95},
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def detect_imbalance(self, left: np.ndarray, right: np.ndarray) -> tuple[float, int]:
         """
@@ -937,39 +799,6 @@ class MidSideProcessor:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "mid_side_processor",
-            "category": "multi_track",
-            "version": "1.0.0",
-            "io": {
-                "channels": "stereo",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"width_factor": 1.0, "mid_gain_db": 0.0, "side_gain_db": 0.0},
-                "safe_ranges": {
-                    "width_factor": {"min": 0.0, "max": 2.0},
-                    "mid_gain_db": {"min": -12.0, "max": 12.0},
-                    "side_gain_db": {"min": -12.0, "max": 12.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.01,
-                "identity_budget": 0.98,
-                "spectral_change_budget": 0.02,
-                "temporal_change_budget": 0.00,
-                "compute_cost": 0.01,
-            },
-            "side_effects": [{"risk": "Phase cancellation", "expected_when": "width_factor > 1.5", "severity": 0.2}],
-            "reports": {"self_metrics": ["width_applied", "mid_gain_applied", "side_gain_applied"], "confidence": 1.0},
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def encode_ms(self, left: np.ndarray, right: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -1113,40 +942,6 @@ class CombFilterRemover:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "comb_filter_remover",
-            "category": "multi_track",
-            "version": "1.0.0",
-            "io": {
-                "channels": "mono|stereo",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"notch_threshold_db": -6.0, "correction_strength": 0.7},
-                "safe_ranges": {
-                    "notch_threshold_db": {"min": -20.0, "max": -3.0},
-                    "correction_strength": {"min": 0.0, "max": 1.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.02,
-                "identity_budget": 0.97,
-                "spectral_change_budget": 0.03,
-                "temporal_change_budget": 0.00,
-                "compute_cost": 0.04,
-            },
-            "side_effects": [
-                {"risk": "Spectral coloration", "expected_when": "correction_strength > 0.8", "severity": 0.2}
-            ],
-            "reports": {"self_metrics": ["notches_detected", "correction_applied"], "confidence": 0.75},
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def detect_comb(self, audio: np.ndarray, sample_rate: int) -> list[float]:
         """
@@ -1441,7 +1236,7 @@ class MultiTrackSpecialist:
                 except Exception as e:
                     logger.error(f"[MultiTrack] ⚠️  Phase Alignment failed: {e}")
             # Step 3: Comb Filter Removal (deaktiviert)
-            if False and self.enable_comb_filter_removal:
+            if False:
                 logger.info("\n[MultiTrack] Step 3/6: Comb Filter Removal (SKIPPED - performance issue)")
                 try:
                     output = self.comb_filter_remover.process(output, sample_rate)

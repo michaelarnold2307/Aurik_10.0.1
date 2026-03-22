@@ -11,11 +11,11 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-_instance: Optional["AdaptiveChainRouter"] = None
+_instance: AdaptiveChainRouter | None = None
 _lock = threading.Lock()
 
 
-def get_adaptive_chain_router(templates: dict[str, list[str]] | None = None) -> "AdaptiveChainRouter":
+def get_adaptive_chain_router(templates: dict[str, list[str]] | None = None) -> AdaptiveChainRouter:
     """Get or create AdaptiveChainRouter singleton.
 
     Args:

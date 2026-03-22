@@ -1,5 +1,5 @@
-from dataclasses import asdict, dataclass, field
 import logging
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
@@ -91,12 +91,9 @@ class ReverbAmountEstimator:
             from scipy.stats import linregress
 
             t = np.arange(window) / sr
-            slope, intercept, r, p, stderr = linregress(t, env_db)
+            slope, _intercept, _r, _p, _stderr = linregress(t, env_db)
             # 3. RT60-Schätzung (klassisch: -60dB/Slope)
-            if slope >= 0:
-                rt60 = 0.0
-            else:
-                rt60 = -60.0 / slope
+            rt60 = 0.0 if slope >= 0 else -60.0 / slope
             # 4. Quality-Gate: Plausibilität
             if rt60 < 0 or rt60 > 10:
                 logger.warning("[QualityGate] Warnung: Unplausible RT60-Schätzung, Rollback aktiviert.")

@@ -280,7 +280,7 @@ def apply_stereo_widening_if_needed(audio: np.ndarray, sr: int, context: dict, g
     audio_widened = widener.widen(audio, sr, width=params["width"], genre=params["genre"])
 
     # Mono-Compatibility Check
-    is_compatible, correlation = widener.check_mono_compatibility(audio_widened)
+    is_compatible, _correlation = widener.check_mono_compatibility(audio_widened)
 
     if not is_compatible:
         logger.warning("Reducing width for mono-compatibility")

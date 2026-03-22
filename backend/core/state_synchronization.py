@@ -3,8 +3,8 @@ core/state_synchronization.py
 Automatische State-Propagation und Synchronisation für alle AURIK-Module.
 """
 
-from collections.abc import Callable
 import threading
+from collections.abc import Callable
 from typing import Any
 
 

@@ -20,6 +20,6 @@ from .demucs_v5_wrapper import DemucsV5Separator
 from .hybrid_separation import HybridVocalSeparator
 from .mdx_net_wrapper import MDXNetSeparator
 
-__all__ = ["DemucsV5Separator", "MDXNetSeparator", "HybridVocalSeparator"]
+__all__ = ["DemucsV5Separator", "HybridVocalSeparator", "MDXNetSeparator"]
 
 __version__ = "8.1.0"

@@ -68,11 +68,11 @@ class AiVoiceConversion:
             features["panns_tags"] = "not_available"
         # §4.4: VERSA 2024 MOS (nicht-referenzbasiert) ersetzt CDPAM
         try:
-            from plugins.versa_plugin import score_mos  # noqa: PLC0415
+            from plugins.versa_plugin import score_mos
 
             versa_res = score_mos(audio, sr)
             features["versa_mos"] = float(versa_res.mos)
-        except Exception:  # noqa: BLE001
+        except Exception:
             features["versa_mos"] = "not_available"
         # Policy-Engine-Proxy
         features["policy_decision"] = "aurik_policy_proxy"
@@ -163,7 +163,7 @@ class AiVoiceConversion:
                 # Policy-Gate: Nur Wiederherstellung/Rekonstruktion — bereits oben geprüft
                 try:
                     restored_audio = self._run_container(container_id, restored_audio, sr, original_voice_profile)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     _logger.warning(
                         "[Docker] Container '%s' fehlgeschlagen, behalte letztes Audio: %s", container_id, exc
                     )

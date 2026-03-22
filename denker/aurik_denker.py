@@ -22,13 +22,15 @@ Spec §2.1, §2.2, §9.5 — v9.10.45
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+
+from backend.core.pipeline_health_state import PipelineHealthState, pipeline_health_from_fail_reasons
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,62 @@ _COLDSTART_MIN_SECONDS: float = 900.0
 # gilt als härte Schranke, damit der Nutzer niemals endlos wartet.
 _MAX_TOTAL_SECONDS: float = 1800.0
 _MIN_AUDIO_SAMPLES: int = 64  # Mindestsignallänge
+
+# Material-adaptive MOS-Mindestziele (§6.2)
+_MATERIAL_MOS_TARGETS: dict[str, float] = {
+    "wax_cylinder": 3.5,
+    "shellac": 3.8,
+    "lacquer_disc": 3.7,
+    "wire_recording": 3.6,
+    "vinyl": 4.0,
+    "tape": 4.2,
+    "reel_tape": 4.3,
+    "dat": 4.5,
+    "cd_digital": 4.5,
+    "mp3_low": 3.9,
+    "mp3_high": 4.2,
+    "aac": 4.2,
+    "minidisc": 4.0,
+    "streaming": 4.0,
+    "quadrophony": 4.1,
+    "ambisonic": 4.1,
+    "unknown": 3.8,
+}
+
+_HISTORICAL_OR_FRAGILE_MATERIALS: frozenset[str] = frozenset(
+    {
+        "wax_cylinder",
+        "shellac",
+        "lacquer_disc",
+        "wire_recording",
+        "vinyl",
+        "tape",
+        "reel_tape",
+    }
+)
+
+_MODERN_DIGITAL_MATERIALS: frozenset[str] = frozenset(
+    {
+        "cd_digital",
+        "dat",
+        "aac",
+        "mp3_high",
+        "streaming",
+    }
+)
+
+_HEAVY_DEFECT_HINTS: frozenset[str] = frozenset(
+    {
+        "dropout",
+        "clipping",
+        "hum",
+        "wow",
+        "flutter",
+        "crackle",
+        "click",
+        "print_through",
+    }
+)
 
 
 # ─── Ergebnis-Datenklasse ────────────────────────────────────────────────────
@@ -99,6 +157,8 @@ class AurikErgebnis:
     gaps_found: int = 0
     gaps_repaired: int = 0
     gap_total_repaired_ms: float = 0.0
+    degradation_status: str = PipelineHealthState.OK.value
+    fail_reason: str | None = None
     # §Dach: Musikalischer Globalplan — stilbewusstes Restaurierungsportrait
     global_plan: dict[str, Any] | None = field(default=None)
 
@@ -121,6 +181,8 @@ class AurikErgebnis:
             "gaps_found": self.gaps_found,
             "gaps_repaired": self.gaps_repaired,
             "gap_total_repaired_ms": float(self.gap_total_repaired_ms),
+            "degradation_status": self.degradation_status,
+            "fail_reason": self.fail_reason,
         }
 
 
@@ -190,7 +252,7 @@ class AurikDenker:
             elapsed = time.perf_counter() - t_start
             rt = elapsed / max(audio_duration_s, 1e-6)
             try:
-                from backend.core.plugin_lifecycle_manager import evict_stale_plugins  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import evict_stale_plugins
 
                 evict_stale_plugins(required_mb=2048.0)
             except Exception:
@@ -218,8 +280,212 @@ class AurikDenker:
         return self.restauriere(
             audio, sr,
             mode=kwargs.get("mode", "quality"),
-            progress_callback=kwargs.get("progress_callback", None),
+            progress_callback=kwargs.get("progress_callback"),
         )
+
+    @staticmethod
+    def _resolve_excellence_material(material: str, chain_info: dict[str, Any] | None) -> str:
+        """Uses the final carrier stage for Excellence decisions when available."""
+        if isinstance(chain_info, dict):
+            primary_medium = str(chain_info.get("primary_medium", "")).strip().lower()
+            if primary_medium:
+                return primary_medium
+            chain = chain_info.get("chain")
+            if isinstance(chain, list) and chain:
+                last = str(chain[-1]).strip().lower()
+                if last:
+                    return last
+        return str(material or "unknown").strip().lower()
+
+    @classmethod
+    def _should_skip_excellence_for_clean_digital(
+        cls,
+        audio: np.ndarray,
+        sr: int,
+        material: str,
+        chain_info: dict[str, Any] | None,
+    ) -> tuple[bool, dict[str, float | str]]:
+        """Skips Excellence for benign digital end-formats to avoid overprocessing."""
+        resolved_material = cls._resolve_excellence_material(material, chain_info)
+
+        # Fast-path for very short benign clips: avoid full ARE/UV3 orchestration in
+        # tiny snippets where heavy restoration is not meaningful and often unstable.
+        try:
+            arr = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+            if arr.ndim == 2:
+                mono = arr.mean(axis=0) if arr.shape[0] <= arr.shape[1] else arr.mean(axis=1)
+                sample_count = int(mono.shape[0])
+            else:
+                mono = arr
+                sample_count = int(mono.shape[0])
+
+            duration_s = float(sample_count / max(1, sr))
+            _short_clip_materials = {
+                "unknown", "digital_unknown", "mp3_low", "mp3_high", "aac", "cd_digital", "dat"
+            }
+            if duration_s <= 5.0 and resolved_material in _short_clip_materials and sample_count > 0:
+                abs_mono = np.abs(mono)
+                hard_clip_ratio = float(np.mean(abs_mono >= 0.999))
+                near_clip_ratio = float(np.mean(abs_mono >= 0.98))
+                rms = float(np.sqrt(np.mean(mono.astype(np.float64) ** 2) + 1e-12))
+                # Only skip if truly silent (RMS ≤ -60dBFS, ~0.001).
+                # Avoid confusing noisy signal with "clean" audio.
+                if hard_clip_ratio <= 1e-4 and near_clip_ratio <= 1e-3 and rms <= 0.001:
+                    logger.warning(
+                        "Short silence clip autopass: duration=%.1fs, material=%s, rms=%.4f — "
+                        "To force restoration, use mode='studio2026'",
+                        duration_s, resolved_material, rms
+                    )
+                    return True, {
+                        "material": resolved_material,
+                        "reason": "short_benign_clip_autopass",
+                        "duration_s": float(round(duration_s, 3)),
+                        "hard_clip_ratio": hard_clip_ratio,
+                        "near_clip_ratio": near_clip_ratio,
+                        "rms": float(round(rms, 6)),
+                    }
+        except Exception as exc:
+            logger.debug("AurikDenker: short-clip guard unavailable: %s", exc)
+
+        # Never skip restoration when the recording chain has an analog origin.
+        # primary_medium = chain[-1] (e.g. "mp3_low"), but if original_medium = "tape",
+        # the source is a tape transfer and must not be treated as a clean digital source.
+        _ANALOG_ORIGINALS = {
+            "tape", "reel_tape", "vinyl", "shellac", "cassette",
+            "phonograph", "wax_cylinder",
+        }
+        if isinstance(chain_info, dict):
+            _orig = str(chain_info.get("original_medium", "")).strip().lower()
+            if _orig in _ANALOG_ORIGINALS:
+                logger.debug(
+                    "AurikDenker: analog-origin chain (%s → %s) — pass-through blocked.",
+                    _orig, resolved_material,
+                )
+                return False, {
+                    "material": resolved_material,
+                    "reason": "analog_chain_no_passthrough",
+                    "original_medium": _orig,
+                }
+
+        try:
+            from backend.core.defect_scanner import MaterialType
+            from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+            material_enum = next(
+                (member for member in MaterialType if getattr(member, "value", None) == resolved_material),
+                None,
+            )
+            benign, metrics = UnifiedRestorerV3._is_benign_digital_source(audio, sr, material_enum)
+            metrics = dict(metrics)
+            metrics.setdefault("material", resolved_material)
+            return benign, metrics
+        except Exception as exc:
+            logger.debug("AurikDenker: Clean-digital guard unavailable: %s", exc)
+            return False, {"material": resolved_material, "reason": "guard_unavailable"}
+
+    @classmethod
+    def _material_mos_target(cls, material: str, chain_info: dict[str, Any] | None) -> tuple[str, float]:
+        """Returns resolved material key and its adaptive MOS target."""
+        resolved = cls._resolve_excellence_material(material, chain_info)
+        target = float(_MATERIAL_MOS_TARGETS.get(resolved, _MATERIAL_MOS_TARGETS["unknown"]))
+        return resolved, target
+
+    @staticmethod
+    def _normalize_mode_name(mode: str | None) -> str:
+        """Normalizes user-facing mode aliases to canonical internal names."""
+        normalized = str(mode or "quality").strip().lower().replace("_", "")
+        aliases = {
+            "studio 2026": "studio2026",
+            "studio2026": "studio2026",
+            "restoration": "restoration",
+            "quality": "quality",
+            "balanced": "balanced",
+            "fast": "fast",
+            "maximum": "maximum",
+        }
+        return aliases.get(normalized, normalized)
+
+    @classmethod
+    def _recommend_autopilot_mode(
+        cls,
+        *,
+        requested_mode: str,
+        material: str,
+        chain_info: dict[str, Any] | None,
+        defekt: Any,
+        global_plan: Any,
+        strategy_mode: str | None,
+    ) -> tuple[str, str]:
+        """Selects the safest high-level mode for one-button/autopilot execution."""
+        requested = cls._normalize_mode_name(requested_mode)
+        strategy = cls._normalize_mode_name(strategy_mode)
+        resolved_material = cls._resolve_excellence_material(material, chain_info)
+        severity = float(getattr(defekt, "overall_severity", 0.0) or 0.0)
+        primary_defect = str(
+            getattr(defekt, "primary_defect", None) or getattr(defekt, "primary_cause", "unknown")
+        ).strip().lower()
+
+        decade_value = None
+        genre_value = ""
+        if global_plan is not None:
+            portrait = getattr(global_plan, "portrait", None)
+            if portrait is not None:
+                try:
+                    decade_value = int(getattr(portrait, "decade", 0) or 0)
+                except (TypeError, ValueError):
+                    decade_value = None
+                genre_value = str(getattr(portrait, "genre", "") or "").strip().lower()
+
+        is_historical_material = resolved_material in _HISTORICAL_OR_FRAGILE_MATERIALS
+        is_modern_digital = resolved_material in _MODERN_DIGITAL_MATERIALS
+        is_historical_era = decade_value is not None and decade_value <= 1965
+        is_schlager = "schlager" in genre_value
+        has_heavy_defect = severity >= 0.60 or any(token in primary_defect for token in _HEAVY_DEFECT_HINTS)
+        has_medium_risk = severity >= 0.35
+
+        recommended = "restoration"
+        reason = "Unsicherer oder analoger Fall: Restoration als sicherer Standard."
+
+        if is_historical_material or is_historical_era or has_heavy_defect:
+            reason = (
+                f"Restoration empfohlen: Material={resolved_material}, decade={decade_value}, "
+                f"severity={severity:.2f}, defect={primary_defect}."
+            )
+        elif is_schlager:
+            if is_modern_digital and not has_medium_risk and (decade_value is None or decade_value >= 1970):
+                recommended = "studio2026"
+                reason = (
+                    f"Studio 2026 empfohlen: stabiler Schlager-Fall auf {resolved_material} "
+                    f"bei severity={severity:.2f}."
+                )
+            else:
+                reason = (
+                    f"Restoration empfohlen: Schlager bleibt konservativ auf {resolved_material} "
+                    f"bei severity={severity:.2f}."
+                )
+        elif is_modern_digital and not has_medium_risk and (decade_value is None or decade_value >= 1970):
+            recommended = "studio2026"
+            reason = (
+                f"Studio 2026 empfohlen: modernes Digitalmaterial {resolved_material} "
+                f"bei severity={severity:.2f}."
+            )
+        elif strategy in {"studio2026", "maximum"} and not has_medium_risk and is_modern_digital:
+            recommended = "studio2026"
+            reason = (
+                f"Studio 2026 empfohlen: Strategie bevorzugt High-End und Material {resolved_material} wirkt stabil."
+            )
+
+        if requested in {"restoration", "studio2026", "maximum", "fast", "balanced"}:
+            if requested == "studio2026" and recommended != "studio2026":
+                return "restoration", (
+                    f"Studio 2026 defensiv auf Restoration zurückgesetzt. {reason}"
+                )
+            return requested, f"Expliziter Modus '{requested}' beibehalten. {reason}"
+
+        if requested == "quality":
+            return recommended, f"Autopilot wählte '{recommended}'. {reason}"
+
+        return recommended, f"Unbekannter Modus '{requested_mode}' auf '{recommended}' normalisiert. {reason}"
 
     # ── Pipeline-Logik ───────────────────────────────────────────────────────
 
@@ -245,7 +511,7 @@ class AurikDenker:
                 try:
                     elapsed = time.perf_counter() - t_start
                     progress_callback(pct, msg, elapsed)
-                except Exception as cb_exc:  # noqa: BLE001
+                except Exception as cb_exc:
                     logger.debug(
                         "AurikDenker: Progress-Callback fehlgeschlagen (Ursache: %s). "
                         "Lösung: Callback-Signatur (pct, msg, elapsed_s) prüfen.",
@@ -253,8 +519,37 @@ class AurikDenker:
                     )
         warnings: list[str] = []
         phases_executed: list[str] = []
-        stage_notes: dict[str, str] = {}
+        stage_notes: dict[str, Any] = {}
         aktuelles_audio = audio.copy()
+        effective_mode = self._normalize_mode_name(mode)
+        _critical_stages: frozenset[str] = frozenset({"tontraeger", "defekt", "restaurierung"})
+        _stage_severity: dict[str, str] = {
+            "tontraeger": "critical",
+            "kette": "degraded",
+            "defekt": "critical",
+            "globalplan": "degraded",
+            "strategie": "critical",
+            "restaurierung": "critical",
+            "exzellenz": "degraded",
+        }
+        _stage_fail_reasons: list[dict[str, str]] = []
+        _degradation_status: str = PipelineHealthState.OK.value
+        _fail_reason: str | None = None
+
+        def _record_stage_failure(stage: str, component: str, exc: Exception) -> None:
+            msg = str(exc)
+            warnings.append(f"{component} fehlgeschlagen: {msg}")
+            stage_notes[stage] = f"Fehler: {msg}"
+            _stage_fail_reasons.append(
+                {
+                    "component": component,
+                    "stage": stage,
+                    "error_code": f"STAGE_{stage.upper()}_FAILED",
+                    "severity": _stage_severity.get(stage, "degraded"),
+                    "exc_type": type(exc).__name__,
+                    "exc_msg": msg,
+                }
+            )
 
         def _rt() -> float:
             elapsed = time.perf_counter() - t_start
@@ -277,7 +572,7 @@ class AurikDenker:
                     time.perf_counter() - t_start,
                 )
                 return False
-            _mode_limit = _RT_BUDGET_BY_MODE.get(mode.lower(), 5.0)
+            _mode_limit = _RT_BUDGET_BY_MODE.get(effective_mode.lower(), 5.0)
             return _rt() < _mode_limit * 0.90
 
         # ── Stufe 1: Tonträger-Erkennung ─────────────────────────────────────
@@ -290,8 +585,7 @@ class AurikDenker:
             phases_executed.append("tontraeger_erkennung")
             logger.info("AurikDenker [1/8] Träger: %s (%.2f)", material, toni.confidence)
         except Exception as exc:
-            warnings.append(f"TontraegerDenker fehlgeschlagen: {exc}")
-            stage_notes["tontraeger"] = f"Fehler: {exc}"
+            _record_stage_failure("tontraeger", "TontraegerDenker", exc)
             logger.warning("AurikDenker [1/8] TontraegerDenker: %s", exc)
 
         # ── Stufe 1b: Tonträgerketten-Analyse ────────────────────────────────
@@ -308,8 +602,7 @@ class AurikDenker:
                 kette.chain_complexity,
             )
         except Exception as exc:
-            warnings.append(f"TontraegerketteDenker fehlgeschlagen: {exc}")
-            stage_notes["kette"] = f"Fehler: {exc}"
+            _record_stage_failure("kette", "TontraegerketteDenker", exc)
             logger.warning("AurikDenker [1b/8] TontraegerketteDenker: %s", exc)
 
         # ── Stufe 2: Defekt-Analyse ───────────────────────────────────────────
@@ -332,8 +625,7 @@ class AurikDenker:
                 defekt.overall_severity,
             )
         except Exception as exc:
-            warnings.append(f"DefektDenker fehlgeschlagen: {exc}")
-            stage_notes["defekt"] = f"Fehler: {exc}"
+            _record_stage_failure("defekt", "DefektDenker", exc)
             logger.warning("AurikDenker [2/8] DefektDenker: %s", exc)
 
         # ── Stufe 2b: Musikalischer Globalplan (§Dach) ───────────────────────
@@ -364,13 +656,13 @@ class AurikDenker:
                 _globalplan.authenticity_target,
             )
         except Exception as exc:
-            warnings.append(f"MusikalischerGlobalplan fehlgeschlagen: {exc}")
-            stage_notes["globalplan"] = f"Fehler: {exc}"
+            _record_stage_failure("globalplan", "MusikalischerGlobalplan", exc)
             logger.warning("AurikDenker [2b/8] MusikalischerGlobalplan: %s", exc)
 
         # ── Stufe 3: Strategie (3×RT-Budget) ────────────────────────────────
         _emit(10, "Restaurierungsstrategie geplant …")
         strategie = None
+        _strat_mode = "quality"
         try:
             strat_denker = get_strategie_denker()
             # M-2b: §7.6 defekt-adaptive Chunk-Größe — übergebe Defektschwere an Strategie
@@ -381,17 +673,42 @@ class AurikDenker:
                 defect_severity=_defect_sev_for_plan,
             )
             strat_denker.starte_timer(audio_duration_s)
-            stage_notes["strategie"] = f"Budget: {strategie.max_processing_s:.1f}s, " f"Modus: {strategie.quality_mode}"
+            _budget_raw = getattr(strategie, "max_processing_s", audio_duration_s * _3X_RT_LIMIT)
+            try:
+                _budget_s = float(_budget_raw)
+            except (TypeError, ValueError):
+                _budget_s = float(audio_duration_s * _3X_RT_LIMIT)
+            _mode_raw = getattr(strategie, "quality_mode", "quality")
+            _strat_mode = str(_mode_raw) if _mode_raw is not None else "quality"
+            stage_notes["strategie"] = f"Budget: {_budget_s:.1f}s, Modus: {_strat_mode}"
             phases_executed.append("strategie_plan")
             logger.info(
                 "AurikDenker [3/8] Budget: %.1fs für %.1fs Audio",
-                strategie.max_processing_s,
+                _budget_s,
                 audio_duration_s,
             )
         except Exception as exc:
-            warnings.append(f"StrategieDenker fehlgeschlagen: {exc}")
-            stage_notes["strategie"] = f"Fehler: {exc}"
+            _record_stage_failure("strategie", "StrategieDenker", exc)
             logger.warning("AurikDenker [3/8] StrategieDenker: %s", exc)
+
+        try:
+            effective_mode, autopilot_note = self._recommend_autopilot_mode(
+                requested_mode=mode,
+                material=material,
+                chain_info=chain_info,
+                defekt=defekt,
+                global_plan=_globalplan,
+                strategy_mode=_strat_mode,
+            )
+        except Exception as _autopilot_exc:
+            logger.warning("Autopilot mode selection failed: %s — defaulting to requested mode", _autopilot_exc)
+            effective_mode = self._normalize_mode_name(mode) or "restoration"
+            autopilot_note = f"Autopilot fallback (error): {_autopilot_exc}"
+        stage_notes["autopilot"] = autopilot_note
+        if self._normalize_mode_name(mode) == "studio2026" and effective_mode == "restoration":
+            warnings.append(
+                "Autopilot-Sicherheitsfallback: Studio 2026 wurde auf Restoration zurückgesetzt."
+            )
 
         # ── ARE-Metadaten-Träger (A-2/A-5/B-1) ────────────────────────────────
         _rest_confidence: float = 0.85
@@ -405,11 +722,35 @@ class AurikDenker:
 
         # ── Stufe 4: _run_rest()-Closure — Reparatur → Rekonstruktion → Restaurierung ──
         _emit(12, "Vorverarbeitung & Restaurierung laufen …")
-        if _budget_ok():
+        _skip_restoration, _skip_rest_metrics = self._should_skip_excellence_for_clean_digital(
+            aktuelles_audio,
+            sr,
+            material,
+            chain_info,
+        )
+        if _skip_restoration:
+            _skip_mat = _skip_rest_metrics.get("material", self._resolve_excellence_material(material, chain_info))
+            stage_notes["reparatur"] = (
+                f"Übersprungen (saubere Digitalquelle: {_skip_mat}, keine Vorverarbeitung erforderlich)"
+            )
+            stage_notes["rekonstruktion"] = (
+                f"Übersprungen (saubere Digitalquelle: {_skip_mat}, keine Lückenrekonstruktion erforderlich)"
+            )
+            stage_notes["restaurierung"] = (
+                f"Übersprungen (saubere Digitalquelle: {_skip_mat}, "
+                "Autopilot priorisiert Pass-Through vor Overprocessing)"
+            )
+            _rest_confidence = 1.0
+            _rest_variant = "clean_digital_pass_through"
+            phases_executed.append("clean_digital_pass_through")
+            logger.info(
+                "AurikDenker [4/8] Restaurierung übersprungen für saubere Digitalquelle: %s",
+                _skip_rest_metrics,
+            )
+        elif _budget_ok():
             try:
                 # M-3: Mode-Hierarchie: expliziter mode-Parameter hat Vorrang vor StrategieDenker
-                _strat_mode = strategie.quality_mode if strategie is not None else "quality"
-                _mode = mode if mode != "quality" else _strat_mode  # Studio 2026 überschreibt
+                _mode = effective_mode
                 # RT-Budget-Guard: Restaurierung läuft in eigenem Thread.
                 # Budget ist mode-abhängig (Spec §9.5: 5× für Quality, 8× für Maximum).
                 # Cold-Start-Minimum: mindestens _COLDSTART_MIN_SECONDS um ML-Modell-Ladezeit
@@ -488,7 +829,7 @@ class AurikDenker:
                                 progress_callback=_inner_cb,
                             )
                         )
-                    except Exception as _e:  # noqa: BLE001
+                    except Exception as _e:
                         _err_box.append(_e)
 
                 _t = threading.Thread(target=_run_rest, daemon=True)
@@ -525,7 +866,7 @@ class AurikDenker:
                             _globalplan.reasoning_trace.append(
                                 f"Enriched with pipeline era_decade={_era_from_pipeline} (UV3 ML)"
                             )
-                        except Exception:  # noqa: BLE001
+                        except Exception:
                             pass
                 # 4a: ReparaturDenker-Ergebnis (Preprocessing-Schritt)
                 if _rep_result_box:
@@ -567,8 +908,7 @@ class AurikDenker:
                     _rest_confidence,
                 )
             except Exception as exc:
-                warnings.append(f"RestaurierDenker fehlgeschlagen: {exc}")
-                stage_notes["restaurierung"] = f"Fehler: {exc}"
+                _record_stage_failure("restaurierung", "RestaurierDenker", exc)
                 logger.warning("AurikDenker [4/8] RestaurierDenker: %s", exc)
         else:
             stage_notes["restaurierung"] = "Übersprungen (RT-Budget ausgeschöpft)"
@@ -581,10 +921,42 @@ class AurikDenker:
         goals_passed: int = _rest_goals_passed
         excellence_score = 0.0
         _exz_versa_mos: float = 0.0  # M-8b: aus ExzellenzDenker gecachter VERSA-Score
+        _exz_material = self._resolve_excellence_material(material, chain_info)
+        _skip_excellence, _skip_metrics = self._should_skip_excellence_for_clean_digital(
+            aktuelles_audio,
+            sr,
+            material,
+            chain_info,
+        )
 
-        if _budget_ok():
+        if _rest_rollback:
+            # ARE rollback means restoration degraded quality — ExzellenzDenker
+            # on unrestored audio is wasteful and violates Autopilot rules.
+            stage_notes["exzellenz"] = (
+                "Übersprungen (ARE-Rollback: Restaurierung verschlechterte Qualität, "
+                "ExzellenzDenker auf unrestauriertem Audio nicht sinnvoll)"
+            )
+            warnings.append(
+                "ExzellenzDenker übersprungen: ARE-Rollback aktiv — "
+                "Restaurierung hat Qualität verschlechtert"
+            )
+            logger.warning(
+                "AurikDenker [7/8] Exzellenz übersprungen: ARE-Rollback aktiv "
+                "(restoration degraded quality, excellence on unrestored audio skipped)",
+            )
+        elif _skip_excellence:
+            _skip_mat = _skip_metrics.get("material", _exz_material)
+            stage_notes["exzellenz"] = (
+                f"Übersprungen (saubere Digitalquelle: {_skip_mat}, "
+                "Autopilot priorisiert Originaltreue vor Overprocessing)"
+            )
+            logger.info(
+                "AurikDenker [7/8] Exzellenz übersprungen für saubere Digitalquelle: %s",
+                _skip_metrics,
+            )
+        elif _budget_ok():
             try:
-                exz = get_exzellenz_denker().optimiere(aktuelles_audio, sr, material=material)
+                exz = get_exzellenz_denker().optimiere(aktuelles_audio, sr, material=_exz_material)
                 aktuelles_audio = exz.audio
                 # A-5: ExzellenzDenker nur wenn er bessere Goals liefert
                 if exz.musical_goals and exz.goals_passed >= goals_passed:
@@ -605,8 +977,7 @@ class AurikDenker:
                     f", VERSA={_exz_versa_mos:.3f}" if _exz_versa_mos > 0.0 else "",
                 )
             except Exception as exc:
-                warnings.append(f"ExzellenzDenker fehlgeschlagen: {exc}")
-                stage_notes["exzellenz"] = f"Fehler: {exc}"
+                _record_stage_failure("exzellenz", "ExzellenzDenker", exc)
                 logger.warning("AurikDenker [7/8] ExzellenzDenker: %s", exc)
         else:
             stage_notes["exzellenz"] = "Übersprungen (RT-Budget ausgeschöpft)"
@@ -635,7 +1006,7 @@ class AurikDenker:
                 )
         elif _budget_ok():
             try:
-                from plugins.versa_plugin import score_mos  # noqa: PLC0415
+                from plugins.versa_plugin import score_mos
 
                 _mono_final = aktuelles_audio if aktuelles_audio.ndim == 1 else aktuelles_audio.mean(axis=-1)
                 _mono_final = np.nan_to_num(_mono_final.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -654,13 +1025,21 @@ class AurikDenker:
                     warnings.append(
                         f"VERSA MOS={_versa_mos:.2f} < 3.5 — Klangqualität unter Mindestniveau"
                     )
-            except Exception as _ve:  # noqa: BLE001
+            except Exception as _ve:
                 logger.debug("AurikDenker [8/8] VERSA MOS nicht verfügbar: %s", _ve)
-        # §Spec VERSA MOS-Gate: MOS < 4.0 → zweiter ExzellenzDenker-Durchlauf
-        if _versa_mos > 0.0 and _versa_mos < 4.0 and _budget_ok():
-            _emit(97, "VERSA MOS-Gate: 2. Exzellenz-Optimierungspass …")
+        # §Spec VERSA MOS-Gate: material-adaptiver Schwellwert (§6.2)
+        # Digital ≥ 4.5, Tape ≥ 4.2, Vinyl ≥ 4.0, Shellac ≥ 3.8, Default 4.0
+        _MATERIAL_MOS_GATE: dict[str, float] = {
+            "cd_digital": 4.5, "dat": 4.5, "mp3_high": 4.5, "aac": 4.5,
+            "tape": 4.2, "reel_tape": 4.2, "cassette": 4.2,
+            "vinyl": 4.0,
+            "shellac": 3.8,
+        }
+        _mos_gate_target = _MATERIAL_MOS_GATE.get(_exz_material, 4.0)
+        if _versa_mos > 0.0 and _versa_mos < _mos_gate_target and not _skip_excellence and _budget_ok():
+            _emit(97, f"VERSA MOS-Gate (Ziel {_mos_gate_target:.1f}): 2. Exzellenz-Optimierungspass …")
             try:
-                exz2 = get_exzellenz_denker().optimiere(aktuelles_audio, sr, material=material)
+                exz2 = get_exzellenz_denker().optimiere(aktuelles_audio, sr, material=_exz_material)
                 aktuelles_audio = exz2.audio
                 if exz2.musical_goals and exz2.goals_passed >= goals_passed:
                     musical_goals = exz2.musical_goals
@@ -692,7 +1071,7 @@ class AurikDenker:
         # cleanup_after_file()), nur druckbasiertes Evict.
         _emit(98, "RAM-Management …")
         try:
-            from backend.core.plugin_lifecycle_manager import evict_stale_plugins  # noqa: PLC0415
+            from backend.core.plugin_lifecycle_manager import evict_stale_plugins
             _n_evicted = evict_stale_plugins()
             if _n_evicted > 0:
                 stage_notes["ram_cleanup"] = f"{_n_evicted} Plugin(s) aus RAM entladen"
@@ -727,9 +1106,79 @@ class AurikDenker:
                 0.40 * (1.0 - _defect_sev_final) + 0.60 * excellence_score, 0.0, 1.0
             ))
         else:
-            # Einfache DSP-basierte Schätzung (SNR-Proxy, kein ML)
-            rms = float(np.sqrt(np.mean(aktuelles_audio.astype(np.float64) ** 2)))
-            quality_estimate = min(max(rms * 4.0, 0.55), 0.95)
+            # DSP fallback: normative formula (§8.1) with defect_severity;
+            # neutral mos_proxy = 0.55 corresponds to MOS ≈ 3.2 when no scorer available
+            quality_estimate = float(np.clip(
+                0.40 * (1.0 - _defect_sev_final) + 0.60 * 0.55, 0.0, 1.0
+            ))
+
+        # Structured degradation signaling for downstream gates and UI transparency.
+        _failed_stage_details: dict[str, str] = {
+            str(entry.get("stage", "")): str(entry.get("exc_msg", ""))
+            for entry in _stage_fail_reasons
+            if isinstance(entry, dict)
+        }
+        if not _failed_stage_details:
+            _failed_stage_details = {
+                key: value.split("Fehler:", 1)[1].strip()
+                for key, value in stage_notes.items()
+                if isinstance(value, str) and value.startswith("Fehler:")
+            }
+        if _failed_stage_details:
+            _failed_stages = sorted(_failed_stage_details.keys())
+            stage_notes["fail_reasons"] = list(_stage_fail_reasons)
+            _derived_health = pipeline_health_from_fail_reasons(_stage_fail_reasons)
+            if _derived_health == PipelineHealthState.OK:
+                _critical_failed = sorted(stage for stage in _failed_stages if stage in _critical_stages)
+                _degradation_status = (
+                    PipelineHealthState.CRITICAL_DEGRADED.value
+                    if _critical_failed
+                    else PipelineHealthState.DEGRADED.value
+                )
+            else:
+                _degradation_status = _derived_health.value
+                _critical_failed = sorted(
+                    str(entry.get("stage", ""))
+                    for entry in _stage_fail_reasons
+                    if str(entry.get("severity", "")).strip().lower() in {"critical", "critical_degraded", "blocked"}
+                )
+            stage_notes["degradation_status"] = _degradation_status
+            stage_notes["degradation_failures"] = ",".join(_failed_stages)
+            stage_notes["degradation_details"] = "; ".join(
+                f"{stage}={_failed_stage_details[stage]}" for stage in _failed_stages
+            )
+            if _stage_fail_reasons:
+                stage_notes["degradation_error_codes"] = ",".join(
+                    sorted({str(entry.get("error_code", "")) for entry in _stage_fail_reasons if entry.get("error_code")})
+                )
+            if _critical_failed:
+                _fail_reason = f"critical_stage_failure:{','.join(_critical_failed)}"
+                stage_notes["fail_reason"] = _fail_reason
+                quality_estimate = min(float(quality_estimate), 0.54)
+                warnings.append(
+                    "Kritische Stufen ausgefallen: "
+                    f"{', '.join(_critical_failed)}. Qualitätsausgabe wurde defensiv begrenzt."
+                )
+        else:
+            stage_notes["degradation_status"] = PipelineHealthState.OK.value
+
+        # Material-adaptives MOS-Gate (zentral im Orchestrator).
+        # Falls VERSA-MOS unter Materialziel liegt, erzwingt ein Clamp
+        # quality_estimate < 0.55, sodass Export-Gates konsistent blockieren.
+        _mos_material, _mos_target = self._material_mos_target(material, chain_info)
+        stage_notes["material_mos_gate"] = f"{_mos_material}: MOS-Ziel≥{_mos_target:.2f}"
+        if _versa_mos > 0.0 and _versa_mos < _mos_target:
+            _msg = (
+                f"Material-MOS-Gate nicht bestanden: {_mos_material} "
+                f"(VERSA MOS={_versa_mos:.2f} < Ziel {_mos_target:.2f}). "
+                "Lösung: defensivere Kette/fallback oder Pass-Through für saubere Digitalquellen."
+            )
+            warnings.append(_msg)
+            stage_notes["material_mos_gate"] = (
+                f"FAILED: {_mos_material} MOS={_versa_mos:.3f} < {_mos_target:.3f}"
+            )
+            if mode.lower() in {"restoration", "studio2026", "maximum"}:
+                quality_estimate = min(float(quality_estimate), 0.54)
 
         # Finale NaN/Inf-Bereinigung und Clip
         aktuelles_audio = np.nan_to_num(aktuelles_audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -761,6 +1210,8 @@ class AurikDenker:
             gaps_found=_gaps_found,
             gaps_repaired=_gaps_repaired,
             gap_total_repaired_ms=_gap_total_ms,
+            degradation_status=_degradation_status,
+            fail_reason=_fail_reason,
             global_plan=_globalplan.as_dict() if _globalplan is not None else None,
         )
 
@@ -785,8 +1236,24 @@ class AurikDenker:
             phases_executed=[],
             warnings=[grund],
             processing_note=f"Restaurierung fehlgeschlagen: {grund}",
-            stage_notes={"fehler": grund},
+            stage_notes={
+                "fehler": grund,
+                "degradation_status": PipelineHealthState.BLOCKED.value,
+                "fail_reason": f"pipeline_blocked:{grund}",
+                "fail_reasons": [
+                    {
+                        "component": "AurikDenker",
+                        "stage": "fallback",
+                        "error_code": "PIPELINE_BLOCKED",
+                        "severity": "blocked",
+                        "exc_type": "Fallback",
+                        "exc_msg": str(grund),
+                    }
+                ],
+            },
             chain_info=None,
+            degradation_status=PipelineHealthState.BLOCKED.value,
+            fail_reason=f"pipeline_blocked:{grund}",
         )
 
 

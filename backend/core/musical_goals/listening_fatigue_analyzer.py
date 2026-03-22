@@ -26,14 +26,15 @@ Autor: AURIK Phase 2.0 - Psychoakustische Exzellenz
 Datum: 13. Februar 2026
 """
 
-from dataclasses import dataclass
+import logging
 import warnings
+from dataclasses import dataclass
 
 import librosa
 import numpy as np
 from scipy import signal
 from scipy.fft import rfft, rfftfreq
-import logging
+
 logger = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)

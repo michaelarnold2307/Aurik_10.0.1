@@ -18,12 +18,12 @@ from backend.ml.phoneme_aware.phoneme_classifier import PhonemeCategory, Phoneme
 from backend.ml.phoneme_aware.phoneme_detector import DetectionConfig, Language, PhonemeDetector, PhonemeSegment
 
 __all__ = [
-    "PhonemeDetector",
-    "PhonemeSegment",
     "DetectionConfig",
     "Language",
-    "PhonemeClassifier",
     "PhonemeCategory",
+    "PhonemeClassifier",
+    "PhonemeDetector",
+    "PhonemeSegment",
     "SibilantType",
 ]
 

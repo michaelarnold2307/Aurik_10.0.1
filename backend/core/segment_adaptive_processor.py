@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import threading
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 import numpy as np
 
@@ -315,21 +316,21 @@ process_adaptive = process_segment_adaptive
 
 
 __all__ = [
-    "MAX_SEGMENTS",
     "DEFAULT_MIN_SEGMENT_SECONDS",
+    "MAX_SEGMENTS",
     "MIN_FILE_DURATION_S",
-    "AudioSegment",
     "AdaptiveProcessingResult",
+    "AudioSegment",
     "SegmentAdaptiveProcessor",
+    "adaptive_chunk_size",
     "get_segment_adaptive_processor",
     "get_segment_processor",
-    "process_segment_adaptive",
     "process_adaptive",
-    "adaptive_chunk_size",
+    "process_segment_adaptive",
 ]
 
 # Aliase für Rückwärtskompatibilität (Spec §3.2)
 get_segment_processor = get_segment_adaptive_processor
 process_adaptive = process_segment_adaptive
 
-__all__ += ["adaptive_chunk_size", "_CHUNK_MIN_S", "_CHUNK_MAX_S"]
+__all__ += ["_CHUNK_MAX_S", "_CHUNK_MIN_S", "adaptive_chunk_size"]

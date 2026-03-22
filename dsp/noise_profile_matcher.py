@@ -60,7 +60,7 @@ class NoiseProfileMatcher:
         hum_bins = []
         for f_hum in [50, 60]:
             for k in range(1, 6):
-                b = int(round(f_hum * k * (2 * (n - 1)) / sr))
+                b = round(f_hum * k * (2 * (n - 1)) / sr)
                 if 0 < b < n:
                     hum_bins.append(b)
         hum_energy = float(np.sum(power_spectrum[hum_bins])) / total if hum_bins else 0.0

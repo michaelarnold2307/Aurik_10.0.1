@@ -43,14 +43,27 @@ def multiband_compress(
 
 
 def adaptive_eq(audio: np.ndarray, sr: int) -> np.ndarray:
-    # SOTA: ML-basiertes Target-EQing möglich, hier spektrale Glättung
-    S = np.abs(librosa.stft(audio, n_fft=2048))
-    mean_spectrum = np.mean(S, axis=1)
+    # SOTA: spectral smoothing EQ — phase reconstruction via PGHI (§4.5 RELEASE_MUST)
+    n_fft = 2048
+    hop = n_fft // 4
+    stft_full = librosa.stft(audio, n_fft=n_fft, hop_length=hop)
+    S_orig = np.abs(stft_full)
+    mean_spectrum = np.mean(S_orig, axis=1)
     target = np.median(mean_spectrum)
     gain = target / (mean_spectrum + 1e-6)
-    S_eq = S * gain[:, None]
-    audio_eq = librosa.istft(S_eq * np.exp(1j * np.angle(librosa.stft(audio, n_fft=2048))))
-    return librosa.util.fix_length(audio_eq, len(audio))
+    S_eq = S_orig * gain[:, None]
+    # PGHI phase reconstruction — VERBOTEN: istft(S*exp(j*angle(stft(audio)))) direkt
+    try:
+        from dsp.pghi import reconstruct_phase  # type: ignore[import]
+
+        result = reconstruct_phase(S_eq, window_size=n_fft, hop_size=hop, sr=sr)
+        audio_eq = result.audio
+    except Exception:
+        # Fallback: Griffin-Lim via librosa (≥ 32 Iterationen, §4.5)
+        audio_eq = librosa.griffinlim(
+            S_eq, n_iter=32, hop_length=hop, win_length=n_fft, n_fft=n_fft
+        )
+    return librosa.util.fix_length(audio_eq, size=len(audio))
 
 
 def limiter(audio: np.ndarray, threshold: float = 0.98) -> np.ndarray:
@@ -72,7 +85,7 @@ def stereo_enhance(audio: np.ndarray, width: float = 1.1) -> np.ndarray:
     return np.vstack([left, right])
 
 
-def mastering_chain(audio: np.ndarray, sr: int, config: dict[str, Any] = None) -> np.ndarray:
+def mastering_chain(audio: np.ndarray, sr: int, config: dict[str, Any] | None = None) -> np.ndarray:
     """
     Vollständige SOTA-Mastering-Chain.
     Args:

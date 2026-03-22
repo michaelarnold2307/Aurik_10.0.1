@@ -5,6 +5,7 @@ Python-Interface für historische EQ-Kurven (DSP-Contract) für Schellack
 import logging
 from dataclasses import dataclass
 from typing import Any
+
 logger = logging.getLogger(__name__)
 
 

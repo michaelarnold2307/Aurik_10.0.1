@@ -51,18 +51,18 @@ Version: 2.0.0 (Professional)
 Quality Impact: 0.70 → 0.95 (+36%)
 """
 
+import logging
 import os
 import sys
-
-
 import time
 
 import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -251,10 +251,7 @@ class LimitingPhase(PhaseInterface):
                 upsampled = np.abs(upsampled)
         else:
             # Kein Oversampling
-            if audio.ndim == 2:
-                upsampled = np.maximum(np.abs(audio[:, 0]), np.abs(audio[:, 1]))
-            else:
-                upsampled = np.abs(audio)
+            upsampled = np.maximum(np.abs(audio[:, 0]), np.abs(audio[:, 1])) if audio.ndim == 2 else np.abs(audio)
 
         true_peak_linear = np.max(upsampled)
         true_peak_db = 20 * np.log10(true_peak_linear + 1e-10)

@@ -4,8 +4,8 @@ Dieses Modul ist jetzt mit DSPContract für Auditierbarkeit und SOTA-Konformitä
 Implementiert eine energie- und zcr-basierte VAD, erweiterbar für ML-basierte Ansätze.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

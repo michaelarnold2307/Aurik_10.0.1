@@ -53,6 +53,7 @@ class TestONNXPluginManager:
                         "cpu_threads": 4,
                     },
                     "plugin": "plugins.test_plugin.TestPlugin",
+                    "docker_image": "aurik-plugin-runtime:latest",
                     "notes": "Test model for integration testing",
                 }
             },

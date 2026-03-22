@@ -28,9 +28,9 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -194,7 +194,7 @@ def detect_onsets(
 def dtw_align(
     seq_a: np.ndarray,
     seq_b: np.ndarray,
-    sakoe_chiba_radius: Optional[int] = None,
+    sakoe_chiba_radius: int | None = None,
 ) -> tuple[np.ndarray, float]:
     """Dynamic Time Warping zwischen zwei Onsetzeit-Sequenzen.
 
@@ -245,10 +245,7 @@ def dtw_align(
                 candidates.append(dtw[i - 1, j])
             if j > 0:
                 candidates.append(dtw[i, j - 1])
-            if not candidates:
-                min_prev = 0.0
-            else:
-                min_prev = min(candidates)
+            min_prev = 0.0 if not candidates else min(candidates)
             dtw[i, j] = cost_matrix[i, j] + min_prev
 
     # Rückverfolgung
@@ -309,7 +306,7 @@ class DtwGrooveMeasurer:
         self,
         original: np.ndarray,
         restored: np.ndarray,
-        sr: Optional[int] = None,
+        sr: int | None = None,
         max_dtw_ms: float = DTW_MAX_MS,
     ) -> GrooveMeasurementResult:
         """Misst Groove-Erhaltung via DTW-Onset-Alignierung.
@@ -348,7 +345,7 @@ class DtwGrooveMeasurer:
             1,
             int(max_dtw_ms * 2 / (1000.0 / sr)),  # Band ≈ 2× Schwellwert
         )
-        pair_arr, dtw_dist = dtw_align(
+        pair_arr, _dtw_dist = dtw_align(
             orig_onsets.onset_times_ms,
             rest_onsets.onset_times_ms,
             sakoe_chiba_radius=sakoe_radius * 10,  # großzügig für Groove-Messung
@@ -400,7 +397,7 @@ class DtwGrooveMeasurer:
     def measure_quick(
         self,
         audio_sample: np.ndarray,
-        reference_onsets_ms: Optional[np.ndarray] = None,
+        reference_onsets_ms: np.ndarray | None = None,
         sr: int = 48000,
     ) -> float:
         """Schnelle Groove-Schätzung für PMGG (§2.29, ≤ 50 ms).
@@ -449,7 +446,7 @@ class DtwGrooveMeasurer:
 # Singleton (§3.2)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[DtwGrooveMeasurer] = None
+_instance: DtwGrooveMeasurer | None = None
 _lock = threading.Lock()
 
 
@@ -510,7 +507,7 @@ def measure_groove(
 
 def measure_groove_quick(
     audio_sample: np.ndarray,
-    reference_onsets_ms: Optional[np.ndarray] = None,
+    reference_onsets_ms: np.ndarray | None = None,
     sr: int = 48000,
 ) -> float:
     """Schnelle Groove-Schätzung für PMGG Schnell-Subset (§2.29, ≤ 50 ms).

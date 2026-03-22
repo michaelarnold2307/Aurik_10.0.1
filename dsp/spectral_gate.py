@@ -123,7 +123,7 @@ class SpectralGate:
         except ValueError as e:
             if "noverlap must be less than nperseg" in str(e):
                 n_fft = hop_length + 1
-                f, t, Zxx = stft(audio, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
+                _f, _t, Zxx = stft(audio, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
             else:
                 raise
         mag = np.abs(Zxx)

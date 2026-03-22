@@ -15,11 +15,11 @@ Type-Annotations nach §3.7.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -176,7 +176,7 @@ class StrategieDenker:
                     enable_adaptive_skipping=True,
                 )
                 logger.info("StrategieDenker: PerformanceGuard (mode=%s) geladen.", mode)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "StrategieDenker: PerformanceGuard nicht verfügbar (%s). " "Einfacher Timer-Fallback wird genutzt.",
                     exc,
@@ -199,7 +199,7 @@ class StrategieDenker:
                 # "speed" existiert nicht im QualityMode-Enum → FAST als Fallback
             }
             return mapping.get(mode_str.lower(), QualityMode.QUALITY)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return mode_str  # PerformanceGuard handles unknown mode gracefully
 
     # ------------------------------------------------------------------
@@ -284,7 +284,7 @@ class StrategieDenker:
         if self._guard is not None:
             try:
                 self._guard.start_monitoring(audio_duration_seconds=self._audio_duration_s)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug("StrategieDenker: start_monitoring() Fehler: %s", exc)
 
         logger.info(
@@ -320,7 +320,7 @@ class StrategieDenker:
         if self._guard is not None:
             try:
                 guard_exit = bool(self._guard.check_early_exit(remaining_phases=phases_remaining))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug("StrategieDenker: check_early_exit() Fehler: %s", exc)
 
         # Hard limit override

@@ -19,9 +19,9 @@ Architecture:
     → Combined Semantic Goals → Musical Goals Monitor
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -743,7 +743,7 @@ class SemanticGoalsEngine:
             with torch.no_grad():
                 outputs = model(**inputs)
                 logits = outputs.logits
-                probs = torch.softmax(logits, dim=-1)  # noqa: F841
+                torch.softmax(logits, dim=-1)
 
             # Map to instrument categories (simplified)
             # In production: Use proper label mapping
@@ -774,7 +774,7 @@ class SemanticGoalsEngine:
         from scipy import signal
 
         # Compute spectral centroid
-        f, t, Sxx = signal.spectrogram(audio, sr)
+        f, _t, Sxx = signal.spectrogram(audio, sr)
         centroid = np.sum(f[:, np.newaxis] * Sxx, axis=0) / np.sum(Sxx, axis=0)
         mean_centroid = np.mean(centroid)
 

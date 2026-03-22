@@ -164,15 +164,17 @@ class TestClassifyClipping:
         result = classify_clipping(audio, SR)
         assert result == ClippingType.SOFT_SATURATION
 
-    def test_13_wrong_sr_raises_assertion(self):
+    def test_13_non_48k_sr_accepted(self):
+        """SR != 48000 is accepted (THD math is SR-agnostic)."""
         audio = _make_clean_signal()
-        with pytest.raises(AssertionError):
-            classify_clipping(audio, sr=44100)
+        result = classify_clipping(audio, sr=44100)
+        assert isinstance(result, ClippingType)
 
-    def test_14_wrong_sr_22050_raises_assertion(self):
+    def test_14_non_48k_sr_22050_accepted(self):
+        """SR 22050 is accepted (THD math is SR-agnostic)."""
         audio = _make_clean_signal()
-        with pytest.raises(AssertionError):
-            classify_clipping(audio, sr=22050)
+        result = classify_clipping(audio, sr=22050)
+        assert isinstance(result, ClippingType)
 
 
 # ---------------------------------------------------------------------------

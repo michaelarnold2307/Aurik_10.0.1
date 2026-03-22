@@ -207,7 +207,7 @@ def detect_birdie_artifacts(audio: np.ndarray, sr: int) -> tuple[bool, float]:
         audio = np.mean(audio, axis=0)
 
     # Compute spectrogram
-    f, t, Sxx = signal.spectrogram(audio, sr, nperseg=2048, noverlap=1536)
+    f, _t, Sxx = signal.spectrogram(audio, sr, nperseg=2048, noverlap=1536)
 
     # Birdies appear as isolated spectral peaks in time-frequency
     # Look for peaks that are:
@@ -224,7 +224,7 @@ def detect_birdie_artifacts(audio: np.ndarray, sr: int) -> tuple[bool, float]:
         # Find peaks
         from scipy.signal import find_peaks
 
-        peaks, properties = find_peaks(frame, prominence=np.max(frame) * 0.3)
+        peaks, _properties = find_peaks(frame, prominence=np.max(frame) * 0.3)
 
         # Count narrow, prominent peaks
         for peak_idx in peaks:
@@ -516,7 +516,7 @@ class DeNoiseSafety(BaseSafetyWrapper):
         metrics["spectral_balance_after"] = balance_after
 
         # Check each band
-        for band in balance_before.keys():
+        for band in balance_before:
             ratio = balance_after[band] / (balance_before[band] + 1e-10)
 
             if ratio < 0.5 or ratio > 2.0:

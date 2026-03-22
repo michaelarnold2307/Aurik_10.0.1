@@ -96,13 +96,15 @@ class BatchProcessor:
         self.current_job: Optional[BatchJobConfig] = None
 
     def _default_restorer_factory(self):
-        """Default restorer factory — erzeugt UnifiedRestorerV3-Instanzen."""
-        try:
-            from core.unified_restorer_v3 import UnifiedRestorerV3
+        """Default restorer factory — liefert AurikDenker-Singleton (§2.2 normativer Einstiegspunkt).
 
-            return UnifiedRestorerV3()
+        Direkter UV3-Zugriff ist verboten (§RELEASE_MUST). Stets über get_aurik_denker().
+        """
+        try:
+            from denker.aurik_denker import get_aurik_denker  # type: ignore[import]
+            return get_aurik_denker()
         except Exception as e:
-            logger.error(f"Failed to create restorer: {e}")
+            logger.error("AurikDenker nicht verfügbar: %s", e)
             raise
 
     def process_batch(self, config: BatchJobConfig) -> BatchJobResult:
@@ -238,8 +240,21 @@ class BatchProcessor:
 
             audio, sr = sf.read(input_file, always_2d=False)
 
-            # Process
-            processed = restorer.process(audio, sr, mode=config.processing_mode, medium_type=config.medium_type)
+            # §2.2: AurikDenker.denke() ist der normative Einstiegspunkt.
+            # Custom factories mit .process()-API werden als Legacy-Pfad toleriert.
+            if hasattr(restorer, "denke"):
+                _res = restorer.denke(
+                    audio, sr,
+                    mode=config.processing_mode or "restoration",
+                )
+                processed = _res.audio
+            else:
+                # Legacy-Pfad für custom restorer_factory (kein UV3-Default mehr)
+                processed = restorer.process(
+                    audio, sr,
+                    mode=config.processing_mode,
+                    medium_type=config.medium_type,
+                )
 
             # Save output
             sf.write(output_path, processed, sr)

@@ -29,10 +29,10 @@ References:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 
 import numpy as np
 import numpy.typing as npt

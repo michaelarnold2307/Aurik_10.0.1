@@ -20,10 +20,10 @@ warnings.warn(
     stacklevel=2,
 )
 
-from backend.quality_control import (  # noqa: F401, E402
+from backend.quality_control import (
     CASScoreCalculator,
     QualityControl,
     QualityGates,
 )
 
-__all__ = ["QualityControl", "CASScoreCalculator", "QualityGates"]
+__all__ = ["CASScoreCalculator", "QualityControl", "QualityGates"]

@@ -16,6 +16,6 @@ Version: 8.0.0
 from .context_analysis import ContextAnalyzer
 from .zone_engine import Zone, ZoneAwareContextAnalyzer, ZoneClassification, ZoneEngine
 
-__all__ = ["Zone", "ZoneClassification", "ZoneEngine", "ZoneAwareContextAnalyzer", "ContextAnalyzer"]
+__all__ = ["ContextAnalyzer", "Zone", "ZoneAwareContextAnalyzer", "ZoneClassification", "ZoneEngine"]
 
 __version__ = "8.0.0"

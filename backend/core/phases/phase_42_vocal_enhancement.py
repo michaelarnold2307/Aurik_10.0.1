@@ -44,11 +44,9 @@ Author: Aurik Development Team
 Version: 2.0.0 Professional
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 from typing import Any
 
@@ -56,6 +54,7 @@ import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 # VocalAI Enhancement (Spec §2.8 — Stimmtyp-adaptive Gesangsverarbeitung)
@@ -69,7 +68,8 @@ except ImportError:
 
 # FormantSystem: LPC-basiertes Formant-Tracking + Singer's Formant Enhancement (§2.8)
 try:
-    from dsp.formant_system import FormantSystem as _FormantSystemCls, VowelPhonemeFormantTargets as _VowelTargetsCls
+    from dsp.formant_system import FormantSystem as _FormantSystemCls
+    from dsp.formant_system import VowelPhonemeFormantTargets as _VowelTargetsCls
     _FORMANT_SYSTEM_AVAILABLE = True
 except ImportError:
     _FormantSystemCls = None  # type: ignore
@@ -263,7 +263,7 @@ class VocalEnhancement(PhaseInterface):
 
             # StemRemixBalancer: LUFS-korrekter Re-Mix (§1.4 Spec)
             try:
-                from backend.core.stem_remix_balancer import StemRemixBalancer  # noqa: PLC0415
+                from backend.core.stem_remix_balancer import StemRemixBalancer
                 enhanced_audio = StemRemixBalancer().balance_remix(
                     enhanced_vocals, instr_stem, audio, sample_rate, float(vocal_weight)
                 )
@@ -316,7 +316,7 @@ class VocalEnhancement(PhaseInterface):
 
         # ── 1: BSRoFormer (MelBandRoformer, falls Modell verfügbar) ──────────
         try:
-            from plugins.bs_roformer_plugin import get_bs_roformer  # noqa: PLC0415
+            from plugins.bs_roformer_plugin import get_bs_roformer
             roformer = get_bs_roformer()
             sep = roformer.separate(audio_mono, sr, stems=["vocals"])
             if sep is not None and "vocals" in sep.stems:
@@ -337,7 +337,7 @@ class VocalEnhancement(PhaseInterface):
 
         # ── 2: DemucsV4 fallback ──────────────────────────────────────────────
         try:
-            from plugins.demucs_v4_plugin import DemucsV4Plugin  # noqa: PLC0415
+            from plugins.demucs_v4_plugin import DemucsV4Plugin
             demucs = DemucsV4Plugin()
             voc_mono, inst_mono = demucs.separate_vocals(audio_mono, sr)
             n = min(len(audio_mono), len(voc_mono), len(inst_mono))

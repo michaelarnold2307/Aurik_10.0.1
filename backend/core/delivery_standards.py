@@ -22,14 +22,14 @@ Version: 1.0
 Date: 2026-02-10
 """
 
-from dataclasses import asdict, dataclass
-from datetime import datetime
-from enum import Enum
 import json
 import logging
 import os
-from pathlib import Path
 import threading
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
@@ -314,10 +314,7 @@ class LoudnessAnalyzer:
         if audio.ndim == 1:
             audio_2d = audio.reshape(-1, 1)
         elif audio.ndim == 2:
-            if audio.shape[0] < audio.shape[1]:
-                audio_2d = audio.T
-            else:
-                audio_2d = audio
+            audio_2d = audio.T if audio.shape[0] < audio.shape[1] else audio
         else:
             raise ValueError(f"Invalid audio shape: {audio.shape}")
 

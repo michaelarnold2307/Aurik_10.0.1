@@ -28,11 +28,11 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import heapq
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -121,9 +121,9 @@ class PghiReconstructor:
     def reconstruct(
         self,
         magnitude: np.ndarray,
-        win_size: Optional[int] = None,
-        hop: Optional[int] = None,
-        initial_phase: Optional[np.ndarray] = None,
+        win_size: int | None = None,
+        hop: int | None = None,
+        initial_phase: np.ndarray | None = None,
     ) -> PghiResult:
         """Rekonstruiert Audio aus Betrags-Spektrogramm via PGHI.
 
@@ -177,8 +177,8 @@ class PghiReconstructor:
     def reconstruct_from_stft(
         self,
         stft_modified: np.ndarray,
-        win_size: Optional[int] = None,
-        hop: Optional[int] = None,
+        win_size: int | None = None,
+        hop: int | None = None,
         use_original_phase: bool = False,
     ) -> PghiResult:
         """Rekonstruiert Audio aus modifiziertem STFT (Betrag + alte Phase als Hint).
@@ -222,7 +222,7 @@ class PghiReconstructor:
         magnitude: np.ndarray,
         win_size: int,
         hop: int,
-        initial_phase: Optional[np.ndarray] = None,
+        initial_phase: np.ndarray | None = None,
     ) -> np.ndarray:
         """Kern-PGHI-Algorithmus.
 
@@ -292,7 +292,7 @@ class PghiReconstructor:
 
         propagated = 0
         while heap and propagated < n_bins * n_frames * 2:
-            neg_energy, k, m = heapq.heappop(heap)
+            _neg_energy, k, m = heapq.heappop(heap)
             if visited[k, m]:
                 continue
             visited[k, m] = True
@@ -351,7 +351,7 @@ class PghiReconstructor:
         magnitude: np.ndarray,
         win_size: int,
         hop: int,
-        n_iter: Optional[int] = None,
+        n_iter: int | None = None,
     ) -> np.ndarray:
         """Griffin-Lim+ Algorithmus (Fallback, 32 Iterationen).
 
@@ -431,7 +431,7 @@ class PghiReconstructor:
         n_samples: int = -1,
     ) -> np.ndarray:
         """Inverse STFT via Overlap-Add (OLA). Gibt float32-Audio zurück."""
-        n_bins, n_frames = stft_complex.shape
+        _n_bins, n_frames = stft_complex.shape
         window = np.hanning(win_size)
 
         if n_samples < 0:
@@ -458,7 +458,7 @@ class PghiReconstructor:
 # Singleton (§3.2 — Thread-sicheres Double-Checked Locking)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[PghiReconstructor] = None
+_instance: PghiReconstructor | None = None
 _lock = threading.Lock()
 
 
@@ -495,7 +495,7 @@ def pghi_reconstruct(
     sr: int = 48000,
     win_size: int = 2048,
     hop: int = 256,
-    initial_phase: Optional[np.ndarray] = None,
+    initial_phase: np.ndarray | None = None,
 ) -> np.ndarray:
     """Rekonstruiert Audio aus Betrags-Spektrogramm via PGHI.
 

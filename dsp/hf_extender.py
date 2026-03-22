@@ -73,12 +73,11 @@ class HighFrequencyExtender:
             )
 
         # Regel 3: Genre-spezifisch (Classical/Jazz profitieren)
-        if genre in ["classical", "jazz", "acoustic"]:
-            if sr == 44100:  # CD-Quality, aber könnte besser sein
-                return (
-                    True,
-                    f"Genre '{genre}' benefits from HF extension (air/brilliance)",
-                )
+        if genre in ["classical", "jazz", "acoustic"] and sr == 44100:  # CD-Quality, aber könnte besser sein
+            return (
+                True,
+                f"Genre '{genre}' benefits from HF extension (air/brilliance)",
+            )
 
         return False, "No HF extension needed (already high-quality)"
 
@@ -309,7 +308,7 @@ def apply_hf_extension_if_needed(audio: np.ndarray, sr: int, context: dict, goal
 
     # Apply Extension
     extender = HighFrequencyExtender()
-    audio_extended, is_authentic, metrics = extender.extend_with_authenticity_check(
+    audio_extended, _is_authentic, _metrics = extender.extend_with_authenticity_check(
         audio,
         sr,
         sr_target=hf_params["sr_target"],

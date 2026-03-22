@@ -57,17 +57,16 @@ Version: 2.0.0
 Date: February 2026
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 
 import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -352,10 +351,7 @@ class TapeSaturation(PhaseInterface):
         rms_original = np.sqrt(np.mean(original**2))
         rms_difference = np.sqrt(np.mean(difference**2))
 
-        if rms_original > 1e-10:
-            thd_percent = (rms_difference / rms_original) * 100.0
-        else:
-            thd_percent = 0.0
+        thd_percent = rms_difference / rms_original * 100.0 if rms_original > 1e-10 else 0.0
 
         return min(thd_percent, 100.0)
 
@@ -373,10 +369,7 @@ class TapeSaturation(PhaseInterface):
         # Harmonic band (200 Hz - 5 kHz)
         harmonic_band = (freqs >= 200) & (freqs <= 5000)
 
-        if np.any(harmonic_band):
-            harmonic_energy = np.mean(spectrum[harmonic_band])
-        else:
-            harmonic_energy = 0.0
+        harmonic_energy = np.mean(spectrum[harmonic_band]) if np.any(harmonic_band) else 0.0
 
         return harmonic_energy
 

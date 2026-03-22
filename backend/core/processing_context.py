@@ -16,14 +16,14 @@ Author: AURIK Team
 Date: 10. Februar 2026
 """
 
+import json
+import logging
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-import json
-import logging
 from pathlib import Path
-import threading
-import time
 from typing import Any
 
 
@@ -285,10 +285,9 @@ class ProcessingContext:
             # Track timing
             if state == ModuleState.IN_PROGRESS:
                 module.start_time = time.time()
-            elif state in [ModuleState.COMPLETED, ModuleState.FAILED]:
-                if module.start_time:
-                    module.end_time = time.time()
-                    module.duration_ms = (module.end_time - module.start_time) * 1000
+            elif state in [ModuleState.COMPLETED, ModuleState.FAILED] and module.start_time:
+                module.end_time = time.time()
+                module.duration_ms = (module.end_time - module.start_time) * 1000
 
             self._trigger_event(
                 "module_state_changed", {"module": module_name, "old_state": old_state, "new_state": state}
@@ -445,9 +444,8 @@ class ProcessingContext:
             callback: Callback function to remove
         """
         with self._lock:
-            if event_name in self._event_listeners:
-                if callback in self._event_listeners[event_name]:
-                    self._event_listeners[event_name].remove(callback)
+            if event_name in self._event_listeners and callback in self._event_listeners[event_name]:
+                self._event_listeners[event_name].remove(callback)
 
     def _trigger_event(self, event_name: str, event_data: dict[str, Any]) -> None:
         """

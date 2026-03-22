@@ -243,10 +243,7 @@ def detect_intermodulation_distortion(audio: np.ndarray, sr: int) -> float:
             if not is_harmonic:
                 imd_energy += energy**2
 
-        if total_peak_energy > 0:
-            imd_ratio = imd_energy / total_peak_energy
-        else:
-            imd_ratio = 0.0
+        imd_ratio = imd_energy / total_peak_energy if total_peak_energy > 0 else 0.0
     else:
         imd_ratio = 0.0
 
@@ -421,7 +418,7 @@ class HarmonicExciterSafety(BaseSafetyWrapper):
         metrics["headroom_used_db"] = float(headroom_before - headroom_after)
 
         # 3. Check for harshness
-        is_harsh_after, harshness_after = detect_harshness(processed, sr)
+        _is_harsh_after, harshness_after = detect_harshness(processed, sr)
         harshness_before = detect_harshness(original, sr)[1]
 
         metrics["harshness_before"] = harshness_before

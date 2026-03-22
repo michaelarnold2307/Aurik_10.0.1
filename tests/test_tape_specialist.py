@@ -29,8 +29,8 @@ from dsp.tape_specialist import (
 
 @pytest.fixture
 def sample_rate():
-    """Standard sample rate for tests"""
-    return 44100
+    """Standard sample rate for tests (Spec §2.37: Interne Verarbeitungs-SR stets 48000 Hz)"""
+    return 48000
 
 
 @pytest.fixture

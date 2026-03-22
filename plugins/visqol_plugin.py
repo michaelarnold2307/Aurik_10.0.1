@@ -7,6 +7,7 @@ Gammatone-aehnliche Bark-Filterbank + SSIM-Variante -> MOS [1.0-5.0].
 
 from __future__ import annotations
 
+import itertools
 import logging
 import threading
 
@@ -104,7 +105,7 @@ class VisqolPlugin:
         mag2 = np.abs(Z) ** 2
         freqs = np.fft.rfftfreq(self.N_FFT, 1.0 / sr)
         bands = []
-        for lo, hi in zip(_BARK_EDGES_HZ[:-1], _BARK_EDGES_HZ[1:]):
+        for lo, hi in itertools.pairwise(_BARK_EDGES_HZ):
             mask = (freqs >= lo) & (freqs < hi)
             if mask.any():
                 bands.append(mag2[mask].mean(axis=0))

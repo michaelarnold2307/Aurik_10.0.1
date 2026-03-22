@@ -238,7 +238,8 @@ class AudioFileValidator:
 ✅ = lokal gebündelt, out-of-the-box, kein Download
 
 # Vocoder / Synthese
-plugins/vocos_plugin.py               ✅ PRIMÄRER Vocoder (Vocos 24 kHz ONNX, 52 MB)
+plugins/vocos_plugin.py               ✅ PRIMÄRER Vocoder (Vocos 48 kHz nativ, Kaskade: 48k→44.1k→24k)
+plugins/bigvgan_v2_plugin.py           ✅ BigVGAN-v2 (0,4 GB ONNX/PyTorch, SEKUNDÄRER Vocoder; Studio-2026, CPU-only)
 plugins/hifigan_plugin.py             ✅ HiFi-GAN (3,6 MB ONNX, Tertiär-Fallback)
 
 # Stem-Separation
@@ -247,7 +248,7 @@ plugins/bs_roformer_plugin.py         ✅ BS-RoFormer / Mel-RoFormer (+0.4–0.8
 
 # Rauschunterdrückung & Dereverb
 plugins/deepfilternet_v3_ii_plugin.py ✅ DeepFilterNet v3.II (37 MB, 3 ONNX) — PRIMÄR NR
-plugins/sgmse_plugin.py               ✅ SGMSE+ (120 MB ONNX) — PRIMÄR Dereverb/Enhancement
+plugins/sgmse_plugin.py               ✅ SGMSE+ (251 MB TorchScript) — PRIMÄR Dereverb/Enhancement
 plugins/mp_senet_plugin.py            ✅ MP-SENet 2023 (35 MB ONNX) — Speech/Music Enhancement
 plugins/wpe_plugin.py                 ✅ WPE Dereverb (3-Tier: nara_wpe→NumPy→OMLSA)
 # VERBOTEN: dccrn_plugin (deprecated — ersetzt durch mp_senet_plugin)
@@ -316,6 +317,63 @@ self.btn_magic_restoration.setStyleSheet(f"""
 | `Ctrl+R` | Restaurierung (RESTORATION) |
 | `Ctrl+Shift+R` | Restaurierung (STUDIO 2026) |
 | `Escape` | Verarbeitung abbrechen |
+
+---
+
+## §11.4a Echtzeit-UX-Features (ab 9.10.57 — bindend)
+
+### Signal-Kontrakt Erweiterung
+
+Drei neue Signale auf `BatchProcessingThread` (nach `ml_status_update`):
+
+```python
+phase_progress = pyqtSignal(int)    # sub-phase progress 0–100 within current step
+scan_progress  = pyqtSignal(float)  # waveform scan-cursor fraction 0.0–1.0
+quality_update = pyqtSignal(float)  # live MOS estimate 0.0–5.0
+```
+
+### Feature-Übersicht
+
+| # | Feature | Klasse / Methode | Verhalten |
+|---|---|---|---|
+| 1 | Zweistufiger Fortschrittsbalken | `phase_progress_bar` (`QProgressBar`, `setFixedHeight(5)`, lila Gradient) | Unter `progress_bar`; eingeblendet bei Batch-Start, ausgeblendet + `setValue(10000)` in `_on_all_finished` |
+| 2 | Defekte hochzählen / herunterzählen | `_update_defects` + `_tick_defect_reveal` | `status=="detected"` → Count-up-Animation (QTimer, 22 Frames × 85 ms); `_PHASE_REDUCES`-Mapping × 0.3 bei passenden Phasen-Keywords → `defect_update.emit` |
+| 3 | Varianten-Wettkampf | `multi_pass_strategy.process_with_variants()` + `_on_batch_progress` | Nach jeder Variante: `"Variante X/N: 'name' → MOS 4.12 ✓"`; Frontend baut Rangliste `★name_1 (4.12) › name_2 (3.87)` |
+| 4 | Musical-Goals-Meter live | `quality_meter_widget.set_mos()` ← `quality_update` | Startet bei 2.5 MOS, steigt proportional zum Fortschritt auf 4.2 |
+| 5 | Phasen-Erklärungstext | `_PHASE_EXPL` (22 Einträge) in `_on_batch_progress` | Phasen-Keyword → Kurzbeschreibung, angehängt als `[Kontext]` in Statuszeile |
+| 6 | Waveform-Scan-Cursor | `WaveformWidget.set_scan_pos(frac)` ← `_on_scan_progress` | Oranger gestrichelter Cursor: 12 px Glow `rgba(255,150,30,45)` + 2 px DashLine `rgba(255,178,55,215)`; `set_scan_pos(-1.0)` blendet aus; Reset in `_on_all_finished` |
+| 7 | Live-Qualitätszahl | `quality_meter_widget` ← `quality_update` | Eingeblendet bei Batch-Start mit `set_mos(2.5)`; steigt mit Fortschritt |
+| 8 | Vorab-Hörprobe | `_auto_preview_restored()` ← `QTimer.singleShot(1400, …)` | Spielt erste 5 s (5×48 000 Samples) nach Fertigstellung; nur wenn kein aktiver Playback-Thread läuft |
+
+### Implementierungsregeln
+
+- **Thread-Safety**: alle Widget-Zugriffe via `_dispatch_to_gui` / `QTimer.singleShot(0, fn)` — kein direkter Widget-Zugriff aus `BatchProcessingThread`
+- **Scan-Cursor Skalierung**: `scan_progress.emit(float(pct) / 100.0)` in `_on_batch_progress`
+- **Quality-Estimate Skalierung**: `quality_update.emit(2.5 + (pct / 100.0) * 1.7)` — Bereich 2.5–4.2 MOS
+- **Sub-Bar Skalierung**: `phase_progress.connect(lambda v: phase_progress_bar.setValue(v * 100))` — Eingang 0–100, Bar intern 0–10000
+- **Defekt-Countdown Multiplier**: 0.3 (reduziert auf 30 % des ursprünglichen Scan-Werts)
+- **Auto-Preview Guard**: `_play_thread.is_alive()` prüfen → kein doppelter Playback
+- **`_tick_defect_reveal`**: 22 Frames × 85 ms = ~1.9 s Zähleranimation; `_frac = frame / 22.0`
+
+### `_PHASE_REDUCES`-Mapping (17 Einträge, bindend)
+
+```python
+_PHASE_REDUCES = {
+    "tape_hiss": ["crackle", "noise_level", "noise"],
+    "denoise": ["noise_level", "noise", "hum"],
+    "dropout": ["dropout"],
+    "click_repair": ["clicks", "pops"], "declick": ["clicks", "pops"],
+    "wow_flutter": ["wow", "flutter"],
+    "reverb_reduction": ["reverb_excess"],
+    "frequency_restoration": ["bandwidth_loss"],
+    "vocal": ["sibilance"],
+    "diffusion_inpainting": ["dropout", "bandwidth_loss"],
+    "hum_removal": ["hum"], "rumble": ["rumble"], "declip": ["clipping"],
+    "dc_offset": ["dc_offset"], "quantization": ["quantization_noise"],
+    "compression_artifact": ["compression_artifacts"],
+    "transient": ["transient_smearing"],
+}
+```
 
 ---
 
@@ -411,7 +469,7 @@ python -m pip install --dry-run -r requirements/requirements_aurik.txt
 □ torch-Imports: +cpu-Suffix, CPUExecutionProvider
 □ models/manifest.json: neues Modell eingetragen (sha256 + bundled_path + fallback)
 □ scripts/verify_requirements.sh fehlerfrei
-□ Alle 6312+ bestehenden Tests weiterhin grün
+□ Alle bestehenden Tests weiterhin grün (CI: `pytest --collect-only -q | tail -1`)
 ```
 
 ### §9.4 Anti-Parallelwelten-Workflow (vor jeder Implementierung)

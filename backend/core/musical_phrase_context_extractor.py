@@ -24,7 +24,7 @@ _warnings.warn(
     stacklevel=2,
 )
 
-from backend.core.musical_phrase_context import (  # noqa: F401, E402
+from backend.core.musical_phrase_context import (
     CHROMA_JUMP_THRESHOLD,
     ENERGY_DELTA_DB,
     GAP_FRACTION_THRESHOLD,
@@ -43,19 +43,19 @@ from backend.core.musical_phrase_context import (  # noqa: F401, E402
 )
 
 __all__ = [
-    "PhraseContext",
-    "PhraseBoundary",
-    "MusicalPhraseContextExtractor",
-    "get_phrase_extractor",
-    "get_phrase_context_extractor",
-    "extract_phrase_context",
-    "MIN_FILE_DURATION_S",
-    "MAX_CONTEXT_DURATION_S",
-    "MIN_PHRASE_BEATS",
-    "MAX_GAP_DURATION_MS",
-    "GAP_FRACTION_THRESHOLD",
-    "N_CHROMA",
     "CHROMA_JUMP_THRESHOLD",
     "ENERGY_DELTA_DB",
+    "GAP_FRACTION_THRESHOLD",
     "GAP_PHRASE_RATIO_MAX",
+    "MAX_CONTEXT_DURATION_S",
+    "MAX_GAP_DURATION_MS",
+    "MIN_FILE_DURATION_S",
+    "MIN_PHRASE_BEATS",
+    "N_CHROMA",
+    "MusicalPhraseContextExtractor",
+    "PhraseBoundary",
+    "PhraseContext",
+    "extract_phrase_context",
+    "get_phrase_context_extractor",
+    "get_phrase_extractor",
 ]

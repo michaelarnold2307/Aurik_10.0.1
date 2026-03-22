@@ -177,7 +177,7 @@ class ONNXPluginManager:
 
         # Multi-model-Plugins (z.B. DeepFilterNet: encoder + decoder + erb_dec)
         # werden vollständig geladen; alle Teilmodelle im Config-Dict hinterlegt.
-        primary_model = list(onnx_models.values())[0]
+        primary_model = next(iter(onnx_models.values()))
         if len(onnx_models) > 1:
             model_config["_all_onnx_models"] = onnx_models
             logger.info(

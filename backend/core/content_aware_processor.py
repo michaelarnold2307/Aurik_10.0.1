@@ -48,7 +48,7 @@ try:
     )
 except ImportError:
     try:
-        from lyrics_transcriber_plugin import (  # type: ignore[import]  # noqa: PLC0415
+        from lyrics_transcriber_plugin import (  # type: ignore[import]
             LyricsTranscriptionResult,
             WordTimestamp,
         )
@@ -129,7 +129,7 @@ def _resolve_boost_key(phoneme_type: str, is_stressed: bool) -> str:
 def _find_word_at(
     words: list,
     t_center_s: float,
-) -> Optional[object]:
+) -> object | None:
     """Findet das Wort, das den Zeitpunkt t_center_s enthält.
 
     Args:
@@ -249,7 +249,7 @@ class ContentAwareProcessor:
 # Singleton + Convenience (§3.2)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[ContentAwareProcessor] = None
+_instance: ContentAwareProcessor | None = None
 _lock = threading.Lock()
 
 

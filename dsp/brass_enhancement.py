@@ -94,7 +94,7 @@ class BrassHarmonicsEnhancer:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             return np.stack([left, right], axis=-1), report_l
         else:
             return self._process_channel(audio, sr)
@@ -216,7 +216,7 @@ class BreathAttackPreserver:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             return np.stack([left, right], axis=-1), report_l
         else:
             return self._process_channel(audio, sr)
@@ -335,7 +335,7 @@ class ValveClickReducer:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             return np.stack([left, right], axis=-1), report_l
         else:
             return self._process_channel(audio, sr)
@@ -455,7 +455,7 @@ class ResonanceEnhancer:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             return np.stack([left, right], axis=-1), report_l
         else:
             return self._process_channel(audio, sr)
@@ -620,10 +620,7 @@ def main():
     audio, sr = sf.read(args.input, always_2d=True)
 
     # Make mono for processing
-    if audio.shape[1] == 2:
-        audio_mono = np.mean(audio, axis=1)
-    else:
-        audio_mono = audio[:, 0]
+    audio_mono = np.mean(audio, axis=1) if audio.shape[1] == 2 else audio[:, 0]
 
     # Create brass enhancement system
     logger.info("\n🎺 Brass/Wind Enhancement System")

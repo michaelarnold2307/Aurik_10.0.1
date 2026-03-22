@@ -21,16 +21,16 @@ Author: Aurik Phase 06/07 ML-Hybrid Integration
 Version: 1.0
 """
 
-from dataclasses import dataclass
-from enum import Enum
 import logging
-from pathlib import Path
 import tempfile
 import time
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
 
 import numpy as np
-from scipy.fft import rfft, rfftfreq
 import scipy.signal as signal
+from scipy.fft import rfft, rfftfreq
 
 logger = logging.getLogger(__name__)
 
@@ -176,10 +176,7 @@ class HybridNVSR:
         rolloff_threshold = -40.0
         rolloff_indices = np.where(magnitude_db > rolloff_threshold)[0]
 
-        if len(rolloff_indices) > 0:
-            rolloff_freq = freqs[rolloff_indices[-1]]
-        else:
-            rolloff_freq = sample_rate / 2.0
+        rolloff_freq = freqs[rolloff_indices[-1]] if len(rolloff_indices) > 0 else sample_rate / 2.0
 
         return float(rolloff_freq)
 

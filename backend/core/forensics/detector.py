@@ -4,13 +4,11 @@ Multi-Layer Forensik-Engine
 """
 
 import logging
-
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from backend.core.forensics.signatures import MEDIA_SIGNATURES, MediaType
-
 
 logger = logging.getLogger(__name__)
 

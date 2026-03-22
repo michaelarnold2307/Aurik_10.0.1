@@ -1,5 +1,5 @@
-from dataclasses import asdict, dataclass, field
 import logging
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
@@ -98,6 +98,6 @@ class SpectralEnergyGuard:
             self._audit_log(result, sr if "sr" in locals() else None)
             return result
 
-    def _audit_log(self, result: dict[str, Any], sr: int = None):
+    def _audit_log(self, result: dict[str, Any], sr: int | None = None):
         # Minimaler Audit-Log als Code, erweiterbar für zentrale Audit-Logik
         logger.info(f"[AuditLog][SpectralEnergyGuard] Ergebnis: {result} | SR: {sr}")

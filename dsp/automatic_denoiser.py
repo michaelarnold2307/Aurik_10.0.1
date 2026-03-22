@@ -79,7 +79,7 @@ class AutomaticDenoiser:
         :return: Denoised Signal (np.ndarray)
         """
         self.log_contract()  # Audit: Contract-Infos loggen (optional)
-        f, t, Zxx = stft(audio, fs=sr, nperseg=1024)
+        _f, _t, Zxx = stft(audio, fs=sr, nperseg=1024)
         mag = np.abs(Zxx)
         noise_thresh = 10 ** (self.noise_floor_db / 20)
         mask = mag > noise_thresh

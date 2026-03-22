@@ -118,3 +118,42 @@ def test_aurik_denker_fast_mode(synthetic_audio):
         pytest.fail(f"Modus 'fast' crashed: {type(exc).__name__}: {exc}")
 
     assert result is not None
+
+
+def test_aurik_denker_short_clip_gate_rms_threshold():
+    """
+    Short-Clip-Gate: RMS-Schwelle ≤ 0.001 (nicht ≥ 0.0001).
+    
+    Verifikation des Fix für: "ML-Modelle werden nicht eingesetzt"
+    — Noisy 5s audio sollte NICHT als "benign silence" übersprungen werden.
+    
+    Spec: §2.31–§2.34 Adaptive Qualitätsziele — statische Schwellwerte verboten.
+    """
+    try:
+        from denker.aurik_denker import AurikDenker
+    except ImportError as exc:
+        pytest.skip(f"AurikDenker nicht importierbar: {exc}")
+
+    sr = 48_000
+    
+    # Test 1: 5-Sekunden Rauschen (RMS ≈ 0.14) → sollte NICHT übersprungen werden
+    audio_noisy = np.random.default_rng(123).standard_normal(5 * sr).astype(np.float32) * 0.2
+    skip_noisy, metrics_noisy = AurikDenker._should_skip_excellence_for_clean_digital(
+        audio_noisy, sr, "cd_digital", None
+    )
+    assert not skip_noisy, (
+        f"Noisy 5s audio sollte NICHT übersprungen werden (RMS > 0.001), aber wurde es: {metrics_noisy}"
+    )
+    rms_noisy = float(np.sqrt(np.mean(audio_noisy.astype(np.float64) ** 2)))
+    assert rms_noisy > 0.001, f"Test-Audio RMS = {rms_noisy}, sollte > 0.001 sein"
+    
+    # Test 2: 5-Sekunden sehr leises Audio (RMS ≈ 0.00001) → sollte übersprungen werden
+    audio_quiet = np.random.default_rng(456).standard_normal(5 * sr).astype(np.float32) * 0.00001
+    skip_quiet, metrics_quiet = AurikDenker._should_skip_excellence_for_clean_digital(
+        audio_quiet, sr, "cd_digital", None
+    )
+    assert skip_quiet, (
+        f"Quiet 5s audio (RMS ≤ 0.001) sollte übersprungen werden, aber wurde es nicht: {metrics_quiet}"
+    )
+    rms_quiet = float(np.sqrt(np.mean(audio_quiet.astype(np.float64) ** 2)))
+    assert rms_quiet <= 0.001, f"Quiet-Audio RMS = {rms_quiet}, sollte ≤ 0.001 sein"

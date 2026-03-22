@@ -7,11 +7,11 @@ Handles model-specific quirks and validates conversion quality.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-import warnings
 
 import numpy as np
 

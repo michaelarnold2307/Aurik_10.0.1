@@ -9,8 +9,8 @@ Fallback: DSP-Median-Declicker + Butterworth-Hochpass (scipy/numpy).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import threading
+from pathlib import Path
 
 import numpy as np
 
@@ -59,6 +59,8 @@ class BanquetVinylPlugin:
         self._input_name: str = ""
         self._output_name: str = ""
         self._model_ok: bool = False
+        self._chunk_failures: int = 0
+        self._runtime_quarantined: bool = False
 
         if model_dir is not None:
             model_path = Path(model_dir) / "banquet_vinyl_final.onnx"
@@ -88,10 +90,10 @@ class BanquetVinylPlugin:
                 return
 
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("BanquetVinyl", size_gb=0.80):
                     logger.warning("BanquetVinyl: ML-Budget erschöpft — DSP-Fallback.")
@@ -120,7 +122,7 @@ class BanquetVinylPlugin:
                 self._output_name,
             )
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "BanquetVinyl",
@@ -134,7 +136,7 @@ class BanquetVinylPlugin:
             self._session = None
             self._model_ok = False
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("BanquetVinyl")
             except Exception:
                 pass
@@ -150,15 +152,15 @@ class BanquetVinylPlugin:
         exception handler activates the DSP fallback).
         """
         try:
-            import onnx  # noqa: PLC0415
-            from onnx import numpy_helper  # noqa: PLC0415
+            import onnx
+            from onnx import numpy_helper
 
             model = onnx.load(str(src))
             patched = 0
             for init in model.graph.initializer:
                 arr = numpy_helper.to_array(init)
                 if arr.ndim == 0 and init.name in ("val_21", "val_22"):
-                    import numpy as _np  # noqa: PLC0415
+                    import numpy as _np
 
                     new_arr = _np.array([arr.item()], dtype=arr.dtype)
                     init.CopyFrom(numpy_helper.from_array(new_arr, name=init.name))
@@ -238,13 +240,34 @@ class BanquetVinylPlugin:
             if pad > 0:
                 chunk = np.pad(chunk, ((0, 0), (0, pad)))
 
-            try:
-                inp_tensor, stft_ctx = self._prepare_input(chunk, channels)
-                raw_out = self._session.run([self._output_name], {self._input_name: inp_tensor})[0]
-                chunk_out = self._extract_output(raw_out, channels, chunk_len, stft_ctx)
-            except Exception as exc:
-                logger.debug("ONNX-Chunk-Fehler: %s — DSP für diesen Chunk", exc)
+            if self._runtime_quarantined or self._session is None:
                 chunk_out = self._process_dsp(chunk, self.TARGET_SR, strength)
+            else:
+                try:
+                    inp_tensor, stft_ctx = self._prepare_input(chunk, channels)
+                    raw_out = self._session.run([self._output_name], {self._input_name: inp_tensor})[0]
+                    raw_out = np.nan_to_num(raw_out, nan=0.0, posinf=0.0, neginf=0.0)
+                    chunk_out = self._extract_output(raw_out, channels, chunk_len, stft_ctx)
+                    self._chunk_failures = 0
+                except Exception as exc:
+                    logger.debug("ONNX-Chunk-Fehler: %s — DSP für diesen Chunk", exc)
+                    self._chunk_failures += 1
+                    # Quarantine ONNX path after repeated deterministic failures.
+                    if self._chunk_failures >= 3:
+                        self._runtime_quarantined = True
+                        self._model_ok = False
+                        self._session = None
+                        logger.warning(
+                            "BANQUET ONNX zur Laufzeit deaktiviert (wiederholte Chunk-Fehler)."
+                            " Nutze DSP-Fallback fuer Stabilitaet."
+                        )
+                        try:
+                            from backend.core.ml_memory_budget import release as _rel
+
+                            _rel("BanquetVinyl")
+                        except Exception:
+                            pass
+                    chunk_out = self._process_dsp(chunk, self.TARGET_SR, strength)
 
             actual = end - pos
             for c in range(channels):
@@ -281,7 +304,7 @@ class BanquetVinylPlugin:
         """
         mono = chunk.mean(axis=0).astype(np.float32)
         try:
-            from scipy.signal import stft as sci_stft  # noqa: PLC0415
+            from scipy.signal import stft as sci_stft
 
             # hop=375 at 48 kHz → exactly 128 frames per 1-second chunk
             _, _, Zxx = sci_stft(mono, nperseg=512, noverlap=512 - 375, boundary="zeros")
@@ -313,7 +336,7 @@ class BanquetVinylPlugin:
             if std > 1e-8:
                 feat /= std
             return feat, stft_ctx
-        except Exception:  # noqa: BLE001
+        except Exception:
             return np.zeros((1, 128, 128, 128), dtype=np.float32), np.zeros((128, 128), dtype=np.complex64)
 
     @staticmethod
@@ -330,8 +353,8 @@ class BanquetVinylPlugin:
         preserved original phase.
         """
         try:
-            from scipy.signal import istft as sci_istft  # noqa: PLC0415
-            from scipy.special import expit as _sigmoid  # noqa: PLC0415
+            from scipy.signal import istft as sci_istft
+            from scipy.special import expit as _sigmoid
 
             # Mean across hidden_dim → [128, 128] mask (freq × time)
             mask_2d = raw.squeeze().mean(axis=2).astype(np.float64)  # [128, 128]
@@ -350,7 +373,7 @@ class BanquetVinylPlugin:
                 else:
                     audio_out = np.pad(audio_out, (0, chunk_len - len(audio_out)))
                 return np.tile(audio_out[np.newaxis, :], (channels, 1))
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         # Shape fallback — return silence (chunk exception handler will use DSP)
         return np.zeros((channels, chunk_len), dtype=np.float32)

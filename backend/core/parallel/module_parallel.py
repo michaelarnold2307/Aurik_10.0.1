@@ -20,12 +20,12 @@ Author: AURIK Team
 Date: 8. Februar 2026
 """
 
+import logging
 from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np
@@ -420,10 +420,7 @@ class PipelineBuilder:
         metadata = metadata or {}
 
         # Determine dependency type
-        if not depends_on:
-            dep_type = ModuleDependency.INDEPENDENT
-        else:
-            dep_type = ModuleDependency.DEPENDS_ON_MODULES
+        dep_type = ModuleDependency.INDEPENDENT if not depends_on else ModuleDependency.DEPENDS_ON_MODULES
 
         module = ModuleInfo(
             name=name,

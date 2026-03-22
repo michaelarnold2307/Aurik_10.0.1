@@ -58,11 +58,9 @@ Performance Target: <0.3× realtime
 Quality Target: 0.90 (Professional-Grade)
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 from typing import Any
 
@@ -70,6 +68,7 @@ import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -446,10 +445,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         mid_rms = np.sqrt(np.mean(mid**2))
         side_rms = np.sqrt(np.mean(side**2))
 
-        if mid_rms > 0:
-            width = side_rms / mid_rms
-        else:
-            width = 0.0
+        width = side_rms / mid_rms if mid_rms > 0 else 0.0
 
         return width
 

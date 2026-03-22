@@ -26,9 +26,9 @@ Referenzen:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -101,7 +101,7 @@ class AudioEmbedding:
     sample_rate: int
     duration_s: float
 
-    def cosine_similarity(self, other: "AudioEmbedding") -> float:
+    def cosine_similarity(self, other: AudioEmbedding) -> float:
         """Kosinus-Ähnlichkeit [-1, 1]. Gleicher Sound → ~1.0."""
         a = self.vector
         b = other.vector
@@ -111,7 +111,7 @@ class AudioEmbedding:
             return 0.0
         return float(np.dot(a, b) / (na * nb))
 
-    def perceptual_distance(self, other: "AudioEmbedding") -> float:
+    def perceptual_distance(self, other: AudioEmbedding) -> float:
         """Euklidischer Abstand im normierten Raum [0, √2]."""
         return float(np.linalg.norm(self.vector - other.vector))
 
@@ -259,7 +259,7 @@ def _channel_c(mono: np.ndarray) -> np.ndarray:
 
     # Chroma-Energie: Summe über alle Oktaven pro Halbton
     chroma = np.zeros((12, n_frames), dtype=np.float32)
-    df = freqs[1] - freqs[0] if len(freqs) > 1 else 1.0  # noqa: F841
+    freqs[1] - freqs[0] if len(freqs) > 1 else 1.0
     for i, f0 in enumerate(f_midi):
         pitch_class = int(midi_nums[i]) % 12
         # Gaussianisches Frequenzfenster um f0 (±Semitonebreite/2)
@@ -426,7 +426,7 @@ class PerceptualEmbedder:
         self,
         audio: np.ndarray,
         sample_rate: int,
-        segment_s: Optional[float] = None,
+        segment_s: float | None = None,
     ) -> AudioEmbedding:
         """
         Berechnet das perzeptuelle Embedding.
@@ -496,7 +496,7 @@ class PerceptualEmbedder:
 
 
 # Singleton
-_embedder: Optional[PerceptualEmbedder] = None
+_embedder: PerceptualEmbedder | None = None
 _embedder_lock = threading.Lock()
 
 
@@ -510,6 +510,6 @@ def get_embedder() -> PerceptualEmbedder:
     return _embedder
 
 
-def embed_audio(audio: np.ndarray, sample_rate: int, segment_s: Optional[float] = 10.0) -> AudioEmbedding:
+def embed_audio(audio: np.ndarray, sample_rate: int, segment_s: float | None = 10.0) -> AudioEmbedding:
     """Convenience-Funktion: Embedding für ein Audio-Array."""
     return get_embedder().embed(audio, sample_rate, segment_s=segment_s)

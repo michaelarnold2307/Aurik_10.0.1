@@ -19,9 +19,9 @@ Autor: AI Team
 Datum: 8. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-import logging
 
 import numpy as np
 
@@ -205,9 +205,8 @@ class MusicalGoalsMonitor:
         violations = []
         if self.thresholds:
             for goal_name, score in current_goals.items():
-                if goal_name in self.thresholds:
-                    if score < self.thresholds[goal_name]:
-                        violations.append(goal_name)
+                if goal_name in self.thresholds and score < self.thresholds[goal_name]:
+                    violations.append(goal_name)
 
         checkpoint = MonitoringCheckpoint(
             step_name=step_name,
@@ -240,9 +239,8 @@ class MusicalGoalsMonitor:
         violations = []
         if self.thresholds:
             for goal_name, score in final_goals.items():
-                if goal_name in self.thresholds:
-                    if score < self.thresholds[goal_name]:
-                        violations.append(goal_name)
+                if goal_name in self.thresholds and score < self.thresholds[goal_name]:
+                    violations.append(goal_name)
 
         # Recommendations based on final state
         recommendations = []

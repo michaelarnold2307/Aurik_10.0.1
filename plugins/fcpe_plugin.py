@@ -33,8 +33,8 @@ from __future__ import annotations
 
 import logging
 import math
-from pathlib import Path
 import threading
+from pathlib import Path
 
 import numpy as np
 
@@ -77,7 +77,7 @@ def _get_mel_basis() -> np.ndarray:
         with _MEL_BASIS_LOCK:
             if _MEL_BASIS is None:
                 try:
-                    from librosa.filters import mel as librosa_mel  # noqa: PLC0415
+                    from librosa.filters import mel as librosa_mel
 
                     _MEL_BASIS = librosa_mel(
                         sr=_FCPE_SR,
@@ -86,7 +86,7 @@ def _get_mel_basis() -> np.ndarray:
                         fmin=_FCPE_FMIN,
                         fmax=_FCPE_FMAX,
                     ).astype(np.float32)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     # Fallback: einfache Dreiecksfilterbänke
                     _MEL_BASIS = np.eye(_FCPE_N_MELS, _FCPE_N_FFT // 2 + 1, dtype=np.float32)
     return _MEL_BASIS
@@ -101,7 +101,7 @@ def _compute_mel(audio_16k: np.ndarray) -> np.ndarray:
     Returns:
         mel: float32  (T, 128) — log-komprimiertes Mel-Spektrogramm.
     """
-    import scipy.signal as sps  # noqa: PLC0415
+    import scipy.signal as sps
 
     # Padding wie torchfcpe.MelModule (center-Pad)
     pad_l = (_FCPE_WIN - _FCPE_HOP) // 2
@@ -196,11 +196,11 @@ class FcpePlugin:
         """FCPE ONNX laden; sonst CREPE-Plugin-Delegation registrieren."""
         # Versuch 1: FCPE ONNX (Zhu et al. 2023, ~69 MB)
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             if _FCPE_ONNX_PATH.exists():
                 try:
-                    from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                     if not _try_alloc("FCPE", size_gb=0.07):
                         logger.warning("FCPE: ML-Budget erschöpft — CREPE-Fallback.")
@@ -219,7 +219,7 @@ class FcpePlugin:
                 )
                 logger.info("🎵 FCPE ONNX geladen: %s", _FCPE_ONNX_PATH.name)
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm("FCPE", size_gb=0.07, unload_fn=lambda s=self: setattr(s, "_session", None))
                 except Exception:
@@ -229,7 +229,7 @@ class FcpePlugin:
                 "FCPE ONNX nicht gefunden (%s) — CREPE ONNX-Fallback aktiv",
                 _FCPE_ONNX_PATH,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("FCPE ONNX-Init fehlgeschlagen (%s) — CREPE-Fallback", exc)
 
         # Versuch 2: CREPE ONNX als transparente Delegation
@@ -239,7 +239,7 @@ class FcpePlugin:
                 "🎵 FCPE-Plugin: delegiert an CREPE ONNX (Modell=%s)",
                 self._crepe_delegate._model_used,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("CREPE-Delegation fehlgeschlagen (%s) — pYIN DSP aktiv", exc)
 
     @property
@@ -278,7 +278,7 @@ class FcpePlugin:
             Output: salience (1, T, 360) float32  sigmoid Pitch-Klassen-Probs
         """
         try:
-            import scipy.signal as sps  # noqa: PLC0415
+            import scipy.signal as sps
 
             # 1) Resample auf 16 kHz
             if sr != _FCPE_SR:
@@ -317,7 +317,7 @@ class FcpePlugin:
                 times_s=times_s,
                 model_used="fcpe_onnx",
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("FCPE-ONNX-Inferenz fehlgeschlagen (%s) — CREPE/pYIN Fallback", exc)
             if self._crepe_delegate is not None:
                 return self._crepe_delegate.analyze(audio, sr)
@@ -326,7 +326,7 @@ class FcpePlugin:
     def _analyze_pyin(self, audio: np.ndarray, sr: int) -> CrepeResult:
         """pYIN DSP-Fallback (Mauch & Dixon 2014)."""
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             seg = audio[: min(len(audio), int(sr * 30.0))]
             # fmin must be > sr / frame_length (default 2048). At 48 kHz: min ≈ 23.449 Hz.
@@ -343,7 +343,7 @@ class FcpePlugin:
                 times_s=times_s,
                 model_used="dsp_pyin",
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("pYIN-Fallback fehlgeschlagen (%s)", exc)
             return CrepeResult(
                 f0_hz=np.zeros(1, np.float32),
@@ -390,7 +390,7 @@ def unload_fcpe() -> None:
                 pass
             _instance = None
     try:
-        from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+        from backend.core.ml_memory_budget import release as _release
 
         _release("FCPE")
     except Exception:

@@ -3,8 +3,8 @@ Logging configuration for pitch correction module.
 """
 
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 
 
 def setup_logger(name: str = "pitch_correction") -> logging.Logger:

@@ -4,6 +4,7 @@ Template für Schellack-spezifische Quality-Reports (auditierbar)
 
 import logging
 from typing import Any
+
 logger = logging.getLogger(__name__)
 
 

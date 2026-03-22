@@ -15,15 +15,16 @@ Features:
 - Unified Report Generation
 """
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict
 
 import numpy as np
 
 from backend.core.forensics.ml_defect_detector import DefectDetectionResult, MLDefectDetector
 from backend.core.forensics.ml_era_detector import EraDetectionResult, MLEraDetector
-from backend.core.forensics.ml_medium_detector import DetectionResult as MediumResult, MLMediumDetector
+from backend.core.forensics.ml_medium_detector import DetectionResult as MediumResult
+from backend.core.forensics.ml_medium_detector import MLMediumDetector
 
 logger = logging.getLogger(__name__)
 
@@ -438,10 +439,7 @@ class UnifiedForensicAnalyzer:
 
         defects_list = [d for d, detected in results["defects"].defects_detected.items() if detected]
 
-        if defects_list:
-            defects_str = f", Defects: {', '.join(defects_list)}"
-        else:
-            defects_str = ", No defects"
+        defects_str = f", Defects: {', '.join(defects_list)}" if defects_list else ", No defects"
 
         return f"{medium} ({era}){defects_str}"
 
@@ -497,7 +495,7 @@ class UnifiedForensicAnalyzer:
         medium_model_path: str | None = None,
         era_model_path: str | None = None,
         defect_model_path: str | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Load trained models from files.
 

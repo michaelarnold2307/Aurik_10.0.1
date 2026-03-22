@@ -218,10 +218,7 @@ class PsychoacousticEnhancer:
 
     def _measure_bass_energy(self, audio: np.ndarray, sr: int) -> float:
         """Measure bass energy in 40-240 Hz range."""
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim == 2 else audio
 
         # Extract 40-240 Hz range
         nyquist = sr / 2

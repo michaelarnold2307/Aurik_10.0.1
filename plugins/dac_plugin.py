@@ -29,11 +29,11 @@ CPU-only: CPUExecutionProvider.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -129,9 +129,9 @@ def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
     """Resample audio using scipy.signal.resample_poly (polyphase, near-Lanczos quality)."""
     if from_sr == to_sr:
         return audio
-    from math import gcd  # noqa: PLC0415
+    from math import gcd
 
-    from scipy.signal import resample_poly  # noqa: PLC0415
+    from scipy.signal import resample_poly
 
     g = gcd(from_sr, to_sr)
     up, down = to_sr // g, from_sr // g
@@ -160,9 +160,9 @@ def _pad_to_stride(audio: np.ndarray) -> tuple[np.ndarray, int]:
 def _make_session_options():
     """ONNX session options following Aurik §2.37 CPU-aware scheduling."""
     try:
-        import os  # noqa: PLC0415
+        import os
 
-        import onnxruntime as ort  # noqa: PLC0415
+        import onnxruntime as ort
 
         opts = ort.SessionOptions()
         n = os.cpu_count() or 4
@@ -226,11 +226,11 @@ class DacPlugin:
             return
 
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             # Memory budget check
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("DacEncoder", size_gb=_ENCODER_GB):
                     logger.warning("DacPlugin: RAM-Budget erschöpft — Encoder nicht geladen.")
@@ -247,7 +247,7 @@ class DacPlugin:
             self._enc_loaded = True
             logger.info("✅ DAC encoder ONNX geladen (%s)", _ENCODER_PATH.name)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm("DacEncoder", size_gb=_ENCODER_GB, unload_fn=lambda: self._unload_encoder())
             except Exception:
@@ -256,7 +256,7 @@ class DacPlugin:
             # Decoder is optional (larger, only needed for full round-trip)
             if _DECODER_PATH.exists():
                 try:
-                    from backend.core.ml_memory_budget import try_allocate as _try_alloc2  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import try_allocate as _try_alloc2
 
                     if not _try_alloc2("DacDecoder", size_gb=_DECODER_GB):
                         logger.info("DacPlugin: RAM-Budget erschöpft — Decoder nicht geladen (Encoder aktiv).")
@@ -268,7 +268,7 @@ class DacPlugin:
                 self._dec_loaded = True
                 logger.info("✅ DAC decoder ONNX geladen (%s)", _DECODER_PATH.name)
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm("DacDecoder", size_gb=_DECODER_GB, unload_fn=lambda: self._unload_decoder())
                 except Exception:
@@ -277,7 +277,7 @@ class DacPlugin:
         except Exception as exc:
             logger.warning("DAC ONNX nicht ladbar: %s — Plugin deaktiviert.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _release
 
                 if self._enc_loaded:
                     _release("DacEncoder")
@@ -404,6 +404,7 @@ class DacPlugin:
                 {"audio_codes": codes},
             )
             audio_44k = outputs[0].astype(np.float32)  # [B, 1, T_44k]
+            audio_44k = np.nan_to_num(audio_44k, nan=0.0, posinf=0.0, neginf=0.0)
 
             # Resample 44.1 kHz → 48 kHz
             audio_48k = _resample(audio_44k, _MODEL_SR, _AURIK_SR)

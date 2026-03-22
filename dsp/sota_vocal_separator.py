@@ -8,6 +8,7 @@ import os
 
 import numpy as np
 import onnxruntime as ort
+
 logger = logging.getLogger(__name__)
 
 MODEL_PATH_BANQUET = os.path.abspath(
@@ -34,16 +35,30 @@ class SotaVocalSeparator:
             logger.warning(f"[WARN] ONNX-Modell nicht gefunden: {self.model_path}")
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        result, _ = self.process_with_confidence(audio, sr)
+        return result
+
+    def process_with_confidence(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, float]:
+        """Separate vocals and return (audio, vocal_confidence).
+
+        vocal_confidence is in [0, 1]: ratio of separated vocal energy
+        to total energy. 0.0 means no model / fallback.
+        """
         if self.session is None:
             logger.warning("[WARN] Kein ONNX-Modell geladen, Rückgabe des Originalsignals.")
-            return audio
+            return audio, 0.0
         x = audio.astype(np.float32)
         if x.ndim == 1:
             x = x[None, :]
         ort_inputs = {self.session.get.inputs()[0].name: x}
         try:
             ort_outs = self.session.run(None, ort_inputs)
-            return np.asarray(ort_outs[0].squeeze())
+            separated = np.asarray(ort_outs[0].squeeze())
+            # Estimate vocal confidence as energy ratio
+            sep_energy = float(np.sum(separated**2))
+            orig_energy = float(np.sum(audio.astype(np.float32) ** 2)) + 1e-10
+            vocal_confidence = float(np.clip(sep_energy / orig_energy, 0.0, 1.0))
+            return separated, vocal_confidence
         except Exception as e:
             logger.error(f"[ERROR] Inferenz fehlgeschlagen: {e}")
-            return audio
+            return audio, 0.0

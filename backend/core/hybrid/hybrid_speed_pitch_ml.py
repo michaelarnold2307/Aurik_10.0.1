@@ -41,9 +41,9 @@ Version: 1.0.0
 Date: 16. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np
@@ -135,17 +135,17 @@ class HybridSpeedPitch:
     def _init_crepe(self) -> None:
         """Initialize FCPE/CREPE plugin (FCPE bevorzugt, CREPE als Fallback)."""
         try:
-            from plugins.fcpe_plugin import get_fcpe_plugin  # noqa: PLC0415
+            from plugins.fcpe_plugin import get_fcpe_plugin
             self.crepe = get_fcpe_plugin()
             logger.info("FCPE plugin loaded for Phase 31 speed/pitch detection (model=%s)", self.crepe.model_used)
             return
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.debug("FCPE nicht verfügbar (%s) — CREPE-Fallback", e)
         try:
-            from plugins.crepe_plugin import CREPEPlugin  # noqa: PLC0415
+            from plugins.crepe_plugin import CREPEPlugin
             self.crepe = CREPEPlugin()
             logger.info("CREPE plugin loaded for Phase 31 speed/pitch detection")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"Kein Pitch-ML-Plugin verfügbar: {e}")
             self.crepe = None
 

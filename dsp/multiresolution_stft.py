@@ -8,6 +8,7 @@ from typing import Any
 
 import librosa
 import numpy as np
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,11 +38,14 @@ class AdaptiveSTFT:
         try:
             if not isinstance(y, np.ndarray) or y.size == 0:
                 raise ValueError("Ungültige Eingabe für AdaptiveSTFT.stft")
+            # Guard: n_fft must not exceed signal length; clamp to next-lower power of 2.
+            raw_n_fft = kwargs.get("n_fft", self.n_fft)
+            safe_n_fft = min(raw_n_fft, max(32, 1 << int(np.floor(np.log2(max(1, len(y)))))))
             result = librosa.stft(
                 y,
-                n_fft=kwargs.get("n_fft", self.n_fft),
+                n_fft=safe_n_fft,
                 hop_length=kwargs.get("hop_length", self.hop_length),
-                win_length=kwargs.get("win_length", self.win_length),
+                win_length=kwargs.get("win_length", min(kwargs.get("win_length", self.win_length), safe_n_fft)),
                 window=kwargs.get("window", self.window),
                 center=kwargs.get("center", self.center),
                 pad_mode=kwargs.get("pad_mode", self.pad_mode),

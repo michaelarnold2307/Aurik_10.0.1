@@ -64,17 +64,16 @@ Version: 2.0.0 (Professional)
 Date: February 2026
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 
 import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 # Resource Management for fallback to lightweight algorithms
@@ -176,10 +175,7 @@ class WowFlutterFix(PhaseInterface):
 
         # Convert to mono for pitch analysis
         is_stereo = audio.ndim == 2
-        if is_stereo:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio.copy()
+        mono = np.mean(audio, axis=1) if is_stereo else audio.copy()
 
         # ML-Hybrid Mode Routing (v3.0)
         quality_mode = kwargs.get("quality_mode", "balanced")
@@ -197,13 +193,14 @@ class WowFlutterFix(PhaseInterface):
 
         # Strategy routing v4.0 — Capstan-kompetitiv:
         # maximum  → PolyphonicSpeedCurveEstimator (multi-F0 consensus, §2.12)
-        # balanced → HybridWowFlutter pYIN+FCPE/CREPE (ML-Hybrid)
-        # fast / quality / lightweight → pYIN DSP
+        # quality  → HybridWowFlutter pYIN+FCPE/CREPE (ML-Hybrid, HYBRID strategy)
+        # balanced → HybridWowFlutter pYIN+FCPE/CREPE (ML-Hybrid, ADAPTIVE strategy)
+        # fast / lightweight → pYIN DSP
         _poly_applied = False
 
-        if quality_mode == "maximum" and not use_lightweight:
+        if quality_mode in ["quality", "maximum"] and not use_lightweight:
             try:
-                from backend.core.hybrid.hybrid_wow_flutter import (  # noqa: PLC0415
+                from backend.core.hybrid.hybrid_wow_flutter import (
                     PolyphonicSpeedCurveEstimator,
                 )
 
@@ -215,7 +212,7 @@ class WowFlutterFix(PhaseInterface):
                     len(pitch_trajectory),
                     material.value,
                 )
-            except Exception as _poly_exc:  # noqa: BLE001
+            except Exception as _poly_exc:
                 logger.warning(
                     "PolyphonicSpeedCurveEstimator fehlgeschlagen (%s) — ML-Hybrid-Fallback",
                     _poly_exc,
@@ -225,7 +222,7 @@ class WowFlutterFix(PhaseInterface):
         use_ml_hybrid = (
             not _poly_applied
             and ML_HYBRID_AVAILABLE
-            and quality_mode in ["balanced", "maximum"]
+            and quality_mode in ["balanced", "quality", "maximum"]
             and not use_lightweight
         )
 
@@ -234,7 +231,7 @@ class WowFlutterFix(PhaseInterface):
                 logger.info(f"Phase 12 ML-Hybrid: mode={quality_mode}, material={material.value}")
 
                 # Configure ML pitch detector strategy
-                if quality_mode == "maximum":
+                if quality_mode in ["quality", "maximum"]:
                     strategy = PitchDetectionStrategy.HYBRID  # Full YIN + CREPE (polyphonic failed)
                 else:  # balanced
                     strategy = PitchDetectionStrategy.ADAPTIVE  # Smart: YIN only if confident
@@ -243,7 +240,7 @@ class WowFlutterFix(PhaseInterface):
                     config=WowFlutterConfig(
                         strategy=strategy,
                         yin_threshold=self.YIN_THRESHOLD,
-                        crepe_model="full" if quality_mode == "maximum" else "medium",
+                        crepe_model="full" if quality_mode in ["quality", "maximum"] else "medium",
                         confidence_threshold=0.7,
                         enable_preprocessing=True,
                     )
@@ -339,10 +336,7 @@ class WowFlutterFix(PhaseInterface):
             restored = _stretch_fn(audio, stretch_factors, sample_rate)
 
         # Step 6: Verify correction (measure residual deviation)
-        if is_stereo:
-            restored_mono = np.mean(restored, axis=1)
-        else:
-            restored_mono = restored
+        restored_mono = np.mean(restored, axis=1) if is_stereo else restored
 
         residual_pitch, residual_conf = self._estimate_pitch_yin(restored_mono, sample_rate)
         residual_deviation = self._calculate_max_deviation(residual_pitch, residual_conf)
@@ -480,11 +474,10 @@ class WowFlutterFix(PhaseInterface):
             for thr, w in zip(thresholds, beta_weights):
                 tau_est = 0
                 for tau in range(min_period, max_period):
-                    if cmnd[tau] < thr:
-                        if 0 < tau < max_period - 1:
-                            if cmnd[tau] <= cmnd[tau - 1] and cmnd[tau] <= cmnd[tau + 1]:
-                                tau_est = tau
-                                break
+                    if cmnd[tau] < thr and 0 < tau < max_period - 1:
+                        if cmnd[tau] <= cmnd[tau - 1] and cmnd[tau] <= cmnd[tau + 1]:
+                            tau_est = tau
+                            break
                 if tau_est == 0:
                     tau_est = min_period + int(np.argmin(cmnd[min_period:max_period]))
 
@@ -552,12 +545,11 @@ class WowFlutterFix(PhaseInterface):
         tau_estimate = 0
         min_cmnd = 1.0
         for tau in range(min_period, max_period):
-            if cmnd[tau] < self.YIN_THRESHOLD:
-                if 0 < tau < max_period - 1:
-                    if cmnd[tau] < cmnd[tau - 1] and cmnd[tau] < cmnd[tau + 1]:
-                        tau_estimate = tau
-                        min_cmnd = cmnd[tau]
-                        break
+            if cmnd[tau] < self.YIN_THRESHOLD and 0 < tau < max_period - 1:
+                if cmnd[tau] < cmnd[tau - 1] and cmnd[tau] < cmnd[tau + 1]:
+                    tau_estimate = tau
+                    min_cmnd = cmnd[tau]
+                    break
         if tau_estimate == 0:
             tau_estimate = min_period + int(np.argmin(cmnd[min_period:max_period]))
             min_cmnd = cmnd[tau_estimate]
@@ -833,7 +825,7 @@ class WowFlutterFix(PhaseInterface):
             i_e = min(n_input, in_center + period)
             grain = audio_f[i_s:i_e].copy()
             if len(grain) == 0:
-                out_write += int(round(hop * sf))
+                out_write += round(hop * sf)
                 continue
 
             win = np.hanning(len(grain))
@@ -845,7 +837,7 @@ class WowFlutterFix(PhaseInterface):
             o_e = min(len(out_buf), out_center + period)
             g_len = o_e - o_s
             if g_len <= 0:
-                out_write += int(round(hop * sf))
+                out_write += round(hop * sf)
                 continue
 
             # Grain auf Fensterlänge anpassen (Trimm oder Zero-Pad)
@@ -859,7 +851,7 @@ class WowFlutterFix(PhaseInterface):
 
             out_buf[o_s:o_e] += grain
             weight_buf[o_s:o_e] += win
-            out_write += int(round(hop * sf))
+            out_write += round(hop * sf)
 
         # OLA-Normierung; Ausgabe auf Originallänge trimmen + NaN-Schutz
         safe_w = np.maximum(weight_buf[:n_input], 1e-8)

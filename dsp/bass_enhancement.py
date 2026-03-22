@@ -102,7 +102,7 @@ class SubBassEnhancer:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             result = np.stack([left, right], axis=-1)
             return (
                 np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(orig_dtype),
@@ -259,7 +259,7 @@ class MidBassClarifier:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             result = np.stack([left, right], axis=-1)
             return (
                 np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(orig_dtype),
@@ -394,7 +394,7 @@ class BassHarmonicsEnhancer:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             result = np.stack([left, right], axis=-1)
             return (
                 np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(orig_dtype),
@@ -529,7 +529,7 @@ class BassDynamicsController:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             result = np.stack([left, right], axis=-1)
             return (
                 np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(orig_dtype),
@@ -574,7 +574,7 @@ class BassDynamicsController:
         from scipy.signal import lfilter
 
         # Determine if we need attack or release per sample
-        is_attack = np.diff(gain_reduction_db, prepend=gain_reduction_db[0]) < 0  # noqa: F841
+        np.diff(gain_reduction_db, prepend=gain_reduction_db[0]) < 0
 
         # Use attack coefficient for attack, release for release
         attack_coeff = np.exp(-1.0 / (self.attack_ms * sr / 1000.0))
@@ -739,10 +739,7 @@ def main():
     audio, sr = sf.read(args.input, always_2d=True)
 
     # Make mono for processing
-    if audio.shape[1] == 2:
-        audio_mono = np.mean(audio, axis=1)
-    else:
-        audio_mono = audio[:, 0]
+    audio_mono = np.mean(audio, axis=1) if audio.shape[1] == 2 else audio[:, 0]
 
     # Create bass enhancement system
     _logger.info("Bass Enhancement System")

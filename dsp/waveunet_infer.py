@@ -23,7 +23,7 @@ except ImportError:
 
     class Evaluate:  # type: ignore[no-redef]
         @staticmethod
-        def predict(track, model_config, load_model_fn):  # noqa: F811
+        def predict(track, model_config, load_model_fn):
             raise RuntimeError("Wave-U-Net Evaluate nicht verfügbar")
 
 
@@ -68,7 +68,7 @@ def main():
     # (samples, channels) -> (channels, samples) für soundfile
     if isinstance(sources, dict):
         # Nimm die erste Quelle im Dict
-        first_key = list(sources.keys())[0]
+        first_key = next(iter(sources.keys()))
         enhanced = sources[first_key]
     else:
         enhanced = sources

@@ -445,7 +445,14 @@ class TestMultiPassEngine:
             assert time_sec > 0.0
 
     def test_default_process_func_maps_variant_to_restore_mode(self, mock_audio):
-        """Default path must not run all variants with the same fixed restore mode."""
+        """Default path must not run all variants with the same fixed restore mode.
+
+        Mapping expectations per _derive_restore_mode thresholds:
+          naturalness_first (denoise=0.08) → "fast"
+          gentle_denoise    (denoise=0.15) → "balanced"
+          balanced_variant  (denoise=0.30) → "restoration"
+          strong_dynamics   (comp=6.0)     → "maximum"
+        """
 
         class _FakeResult:
             def __init__(self, audio: np.ndarray) -> None:
@@ -463,18 +470,21 @@ class TestMultiPassEngine:
         engine = MultiPassEngine()
         engine._restorer = _FakeRestorer()
 
-        gentle = ProcessingVariant.create_gentle_denoise().config
-        balanced = ProcessingVariant.create_balanced().config
-        strong = ProcessingVariant.create_strong_dynamics().config
+        natural = ProcessingVariant.create_naturalness_first().config   # denoise=0.08 → fast
+        gentle = ProcessingVariant.create_gentle_denoise().config        # denoise=0.15 → balanced
+        balanced_cfg = ProcessingVariant.create_balanced().config        # denoise=0.30 → restoration
+        strong = ProcessingVariant.create_strong_dynamics().config       # comp=6.0    → maximum
 
+        _ = engine._default_process_func(audio, sr, natural)
         _ = engine._default_process_func(audio, sr, gentle)
-        _ = engine._default_process_func(audio, sr, balanced)
+        _ = engine._default_process_func(audio, sr, balanced_cfg)
         _ = engine._default_process_func(audio, sr, strong)
 
         calls = engine._restorer.calls
-        assert calls[0] == "fast"
-        assert calls[1] in {"restoration", "balanced"}
-        assert calls[2] == "maximum"
+        assert calls[0] == "fast",        f"naturalness_first expected fast, got {calls[0]}"
+        assert calls[1] == "balanced",    f"gentle_denoise expected balanced, got {calls[1]}"
+        assert calls[2] == "restoration", f"balanced expected restoration, got {calls[2]}"
+        assert calls[3] == "maximum",     f"strong_dynamics expected maximum, got {calls[3]}"
 
 
 class TestCreateDefaultVariants:

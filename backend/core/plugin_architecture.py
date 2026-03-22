@@ -11,7 +11,7 @@ class PluginManager:
         self.plugins: dict[str, Callable[[Any], Any]] = {}
         self.plugin_meta: dict[str, dict] = {}
 
-    def register_plugin(self, name: str, process_fn: Callable[[Any], Any], meta: dict = None):
+    def register_plugin(self, name: str, process_fn: Callable[[Any], Any], meta: dict | None = None):
         self.plugins[name] = process_fn
         self.plugin_meta[name] = meta or {}
 

@@ -31,7 +31,7 @@ from backend.core.authenticity_metrics_extended import (
 @pytest.fixture
 def sample_rate():
     """Standard sample rate"""
-    return 44100
+    return 48000
 
 
 @pytest.fixture

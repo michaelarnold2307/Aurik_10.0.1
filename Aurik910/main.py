@@ -4,10 +4,10 @@ AURIK Professional - Main Application Entry Point
 Launch the desktop application for audio restoration
 """
 
-from pathlib import Path
-import sys
 import logging
+import sys
 import time
+from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -22,6 +22,7 @@ _root_logger.setLevel(logging.DEBUG)
 
 # Datei-Handler (5 MB, Rotation)
 from logging.handlers import RotatingFileHandler as _RFH
+
 _fh = _RFH(str(_log_file), maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8")
 _fh.setLevel(logging.INFO)
 _fh.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s %(name)s: %(message)s"))
@@ -49,8 +50,10 @@ def _run_startup_model_check(app: QApplication) -> None:
     Warnung bei fehlenden Primär-Modellen (DSP-Fallback aktiv).
     """
     try:
-        from backend.core.startup_model_check import get_startup_check_result  # type: ignore[import]
+        from backend.api.bridge import get_startup_check_result  # type: ignore[import]
         result = get_startup_check_result()
+        if result is None:
+            return
         if not result.all_ok and result.user_message_de:
             icon = QMessageBox.Icon.Critical if result.is_critical else QMessageBox.Icon.Warning
             box = QMessageBox()
@@ -63,6 +66,21 @@ def _run_startup_model_check(app: QApplication) -> None:
     except Exception as exc:
         # Startup-Check darf niemals den App-Start blockieren
         logger.warning("Startup-Modell-Check fehlgeschlagen (non-fatal): %s", exc)
+
+
+def _warmup_models_background() -> None:
+    """Start background warmup of ML models — non-blocking daemon thread."""
+    import threading
+
+    def _run() -> None:
+        try:
+            from backend.api.bridge import warmup_models_background as _wb  # type: ignore[import]
+            _wb()
+        except Exception as _e:
+            logger.debug("Warmup fehlgeschlagen (non-fatal): %s", _e)
+
+    t = threading.Thread(target=_run, daemon=True, name="AurikWarmup")
+    t.start()
 
 
 def main():

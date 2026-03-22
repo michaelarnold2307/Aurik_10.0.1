@@ -29,8 +29,8 @@ Autor: Aurik v8.0 - Psychoacoustic Foundation
 Lizenz: Proprietär
 """
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np

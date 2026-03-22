@@ -16,10 +16,10 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -160,10 +160,7 @@ class ReferenceAnchorSynthesizer:
         else:
             anchor_spectrum = np.zeros(N_ANCHOR_BINS, dtype=np.float32)
 
-        if audio.ndim == 2:
-            channels = [audio[0], audio[1]] if audio.shape[0] == 2 else [audio[0]]
-        else:
-            channels = [audio]
+        channels = ([audio[0], audio[1]] if audio.shape[0] == 2 else [audio[0]]) if audio.ndim == 2 else [audio]
 
         processed = []
         for ch in channels:
@@ -174,10 +171,7 @@ class ReferenceAnchorSynthesizer:
                 ch_processed = ch
             processed.append(ch_processed)
 
-        if original_shape == audio.shape and audio.ndim == 1:
-            result = processed[0]
-        else:
-            result = np.stack(processed, axis=0)
+        result = processed[0] if original_shape == audio.shape and audio.ndim == 1 else np.stack(processed, axis=0)
 
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
         return np.clip(result, -1.0, 1.0)
@@ -191,7 +185,7 @@ class ReferenceAnchorSynthesizer:
         era_decade: int,
         genre_label: str,
         material: str,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Lädt Anker aus anchors.npz wenn vorhanden, sonst None."""
         if not _ANCHORS_PATH.exists():
             return None
@@ -299,7 +293,7 @@ class ReferenceAnchorSynthesizer:
 # Thread-sicherer Singleton (Double-Checked Locking §3.2)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[ReferenceAnchorSynthesizer] = None
+_instance: ReferenceAnchorSynthesizer | None = None
 _lock = threading.Lock()
 
 

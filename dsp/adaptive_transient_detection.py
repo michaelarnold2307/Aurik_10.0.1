@@ -4,8 +4,8 @@ adaptive_transient_detection.py - SOTA-konformes Transient Detection Modul für 
 Dieses Modul ist jetzt mit DSPContract für Auditierbarkeit und SOTA-Konformität ausgestattet.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

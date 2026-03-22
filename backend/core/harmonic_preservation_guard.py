@@ -96,7 +96,7 @@ except Exception:
 # ---------------------------------------------------------------------------
 # Inharmonizitäts-Priors (§2.11 HarmonicLatticeAnalyzer)
 # ---------------------------------------------------------------------------
-INHARMONICITY_PRIORS: Dict[str, float] = {
+INHARMONICITY_PRIORS: dict[str, float] = {
     "piano_bass": 0.0080,
     "piano_mid": 0.0020,
     "piano_treble": 0.0001,
@@ -128,11 +128,11 @@ SNR_ADAPTIVE_SCALE: float = 5.0
 # ---------------------------------------------------------------------------
 # Singleton (§3.2)
 # ---------------------------------------------------------------------------
-_instance: Optional[HarmonicPreservationGuard] = None
+_instance: HarmonicPreservationGuard | None = None
 _lock = threading.Lock()
 
 
-def get_harmonic_preservation_guard() -> "HarmonicPreservationGuard":
+def get_harmonic_preservation_guard() -> HarmonicPreservationGuard:
     """Thread-sicherer Singleton-Accessor (Double-Checked Locking)."""
     global _instance
     if _instance is None:
@@ -168,7 +168,7 @@ class HarmonicPreservationGuard:
         audio: np.ndarray,
         sr: int,
         instrument_tag: str = "unknown",
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Extrahiert den harmonischen Fingerabdruck und liefert eine Schutzmaske.
 
@@ -216,7 +216,7 @@ class HarmonicPreservationGuard:
                 # Fenster um Partial-Frequenz in Bins
                 bin_n = f_n / freq_per_bin
                 bin_low = max(0, int(bin_n / cent_fraction))
-                bin_high = min(n_bins - 1, int(math.ceil(bin_n * cent_fraction)))
+                bin_high = min(n_bins - 1, math.ceil(bin_n * cent_fraction))
                 protected_mask[bin_low : bin_high + 1, t] = 1.0
 
         logger.debug(
@@ -270,8 +270,8 @@ class HarmonicPreservationGuard:
     def build_gfloor_mask(
         self,
         protected_mask: np.ndarray,
-        noise_psd: Optional[np.ndarray] = None,
-        stft: Optional[np.ndarray] = None,
+        noise_psd: np.ndarray | None = None,
+        stft: np.ndarray | None = None,
     ) -> np.ndarray:
         """
         Baut G_floor-Maske für OMLSA/DeepFilterNet-Integration.
@@ -323,7 +323,7 @@ class HarmonicPreservationGuard:
     def _compute_local_snr(
         self,
         stft: np.ndarray,
-        noise_psd: Optional[np.ndarray] = None,
+        noise_psd: np.ndarray | None = None,
     ) -> np.ndarray:
         """
         Computes frame-wise local SNR per bin in dB.
@@ -345,7 +345,7 @@ class HarmonicPreservationGuard:
 
         if noise_psd is None:
             # Minimum statistics (Martin 2001 simplified)
-            n_bins, n_frames = power.shape
+            _n_bins, n_frames = power.shape
             noise_est = np.empty_like(power)
             win = _NOISE_STAT_WINDOW
             for t in range(n_frames):
@@ -566,7 +566,7 @@ def extract_harmonic_mask(
     audio: np.ndarray,
     sr: int,
     instrument_tag: str = "unknown",
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Convenience: Extrahiert harmonische Schutzmaske.
 

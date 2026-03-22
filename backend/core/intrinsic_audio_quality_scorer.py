@@ -45,8 +45,8 @@ Date: 2026-02-17
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 
 import numpy as np
 import scipy.signal as sp_signal
@@ -162,25 +162,54 @@ class IntrinsicAudioQualityScorer:
     Funktioniert für beliebige Audiodatei-Typen.
     """
 
-    # Gewichte für den Gesamt-Score
-    _WEIGHTS: dict[str, float] = {
-        "snr_score": 0.18,
-        "spectral_regularity": 0.12,
-        "bandwidth_score": 0.08,
+    # Mode-adaptive weights: Restoration emphasizes authenticity/harmonicity,
+    # Studio 2026 emphasizes SNR/bandwidth for clean modern sound.
+    _WEIGHTS_RESTORATION: dict[str, float] = {
+        "snr_score": 0.10,
+        "spectral_regularity": 0.10,
+        "bandwidth_score": 0.06,
         "bark_balance": 0.10,
         "dynamic_range_score": 0.10,
-        "transient_clarity": 0.08,
+        "transient_clarity": 0.10,
         "thd_score": 0.07,
-        "harmonicity": 0.07,
-        "pitch_consistency": 0.05,
+        "harmonicity": 0.15,
+        "pitch_consistency": 0.07,
         "click_residual": 0.07,
         "clipping_score": 0.05,
         "codec_artifact_score": 0.03,
     }
 
-    def __init__(self, fft_size: int = 2048, hop_size: int = 512):
+    _WEIGHTS_STUDIO_2026: dict[str, float] = {
+        "snr_score": 0.22,
+        "spectral_regularity": 0.13,
+        "bandwidth_score": 0.10,
+        "bark_balance": 0.10,
+        "dynamic_range_score": 0.10,
+        "transient_clarity": 0.07,
+        "thd_score": 0.07,
+        "harmonicity": 0.05,
+        "pitch_consistency": 0.04,
+        "click_residual": 0.05,
+        "clipping_score": 0.05,
+        "codec_artifact_score": 0.02,
+    }
+
+    # Default (backward-compat): average of both profiles
+    _WEIGHTS: dict[str, float] = _WEIGHTS_RESTORATION
+
+    def __init__(self, fft_size: int = 2048, hop_size: int = 512, mode: str | None = None):
         self.fft_size = fft_size
         self.hop_size = hop_size
+        self.set_mode(mode)
+
+    def set_mode(self, mode: str | None) -> None:
+        """Select weight profile based on processing mode."""
+        if mode and "studio" in str(mode).lower():
+            self._active_weights = self._WEIGHTS_STUDIO_2026
+        elif mode and "restoration" in str(mode).lower():
+            self._active_weights = self._WEIGHTS_RESTORATION
+        else:
+            self._active_weights = self._WEIGHTS
 
     def score(self, audio: np.ndarray, sample_rate: int) -> IntrinsicQualityScore:
         """
@@ -347,7 +376,7 @@ class IntrinsicAudioQualityScorer:
 
         bark_energies: list[float] = []
         valid_bands = [b for b in _BARK_BANDS_HZ if b <= nyquist]
-        limits = [0.0] + list(valid_bands)
+        limits = [0.0, *list(valid_bands)]
 
         for i in range(len(limits) - 1):
             lo, hi = limits[i], limits[i + 1]
@@ -642,15 +671,14 @@ class IntrinsicAudioQualityScorer:
     # ------------------------------------------------------------------
 
     def _weighted_overall(self, r: IntrinsicQualityScore) -> float:
-        """Berechnet gewichteten Gesamt-Score."""
+        """Berechnet gewichteten Gesamt-Score mit modus-adaptiven Gewichten."""
         weighted_sum = 0.0
         total_weight = 0.0
-        for metric, weight in self._WEIGHTS.items():
+        for metric, weight in self._active_weights.items():
             value = getattr(r, metric, None)
-            if value is not None and isinstance(value, float):
-                if not (np.isnan(value) or np.isinf(value)):
-                    weighted_sum += weight * float(np.clip(value, 0.0, 1.0))
-                    total_weight += weight
+            if value is not None and isinstance(value, float) and not (np.isnan(value) or np.isinf(value)):
+                weighted_sum += weight * float(np.clip(value, 0.0, 1.0))
+                total_weight += weight
         if total_weight < 1e-6:
             return 0.5
         result = float(np.clip(weighted_sum / total_weight, 0.0, 1.0))

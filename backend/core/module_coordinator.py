@@ -17,12 +17,12 @@ Author: AURIK Team
 Date: 10. Februar 2026
 """
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
-from enum import Enum
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -32,8 +32,10 @@ from backend.core.module_communication import ModuleCommunicationBus
 from backend.core.musical_quality_assurance import (
     MediumType,
     MusicalQualityAssurance,
-    ProcessingMode as QualityProcessingMode,
     map_forensic_to_medium_type,
+)
+from backend.core.musical_quality_assurance import (
+    ProcessingMode as QualityProcessingMode,
 )
 from backend.core.processing_context import ModuleState, ProcessingContext
 from backend.core.quality_recovery import QualityRecoverySystem
@@ -323,10 +325,7 @@ class ModuleCoordinator:
         """
         with self._lock:
             # Determine which modules to execute
-            if selected_modules is None:
-                modules_to_execute = list(self._modules.keys())
-            else:
-                modules_to_execute = selected_modules
+            modules_to_execute = list(self._modules.keys()) if selected_modules is None else selected_modules
 
             # Apply forensic-based filtering if available
             if forensic_analysis and self.enable_ml_optimization:
@@ -906,7 +905,19 @@ class ModuleCoordinator:
             try:
                 inferred = self._ml_param_inference_engine.infer_parameters(features)
                 logger.info(f"  → ML Parameter Inference für {descriptor.name}: {inferred}")
-                return inferred
+                if hasattr(inferred, "params") and isinstance(inferred.params, dict):
+                    return dict(inferred.params)
+                if isinstance(inferred, dict):
+                    params = inferred.get("params")
+                    if isinstance(params, dict):
+                        return dict(params)
+                    return dict(inferred)
+                logger.warning(
+                    "ML Parameter Inference returned unsupported type for %s: %s",
+                    descriptor.name,
+                    type(inferred).__name__,
+                )
+                return {}
             except Exception as e:
                 logger.warning(f"ML Parameter Inference Engine Fehler: {e}")
                 # Fallback auf Heuristik

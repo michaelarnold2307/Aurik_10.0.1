@@ -3,8 +3,8 @@ adaptive_omlsa.py - SOTA-konformes OMLSA-Modul für Aurik 6.0
 Dieses Modul implementiert adaptives OMLSA und ist jetzt mit DSPContract für Auditierbarkeit und SOTA-Konformität ausgestattet.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

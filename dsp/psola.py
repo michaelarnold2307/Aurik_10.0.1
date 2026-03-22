@@ -27,10 +27,10 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -105,8 +105,8 @@ class PsolaPitchShifter:
         self,
         audio: np.ndarray,
         semitones: float,
-        f0_hz: Optional[float] = None,
-        f0_trajectory: Optional[np.ndarray] = None,
+        f0_hz: float | None = None,
+        f0_trajectory: np.ndarray | None = None,
     ) -> PsolaResult:
         """Verschiebt die Tonhöhe um `semitones` Halbtöne (formanterhaltend).
 
@@ -254,7 +254,7 @@ class PsolaPitchShifter:
         audio: np.ndarray,
         f0_hz: float,
         ratio: float,
-        f0_trajectory: Optional[np.ndarray],
+        f0_trajectory: np.ndarray | None,
     ) -> tuple[np.ndarray, int]:
         """TD-PSOLA Kern-Algorithmus.
 
@@ -271,14 +271,14 @@ class PsolaPitchShifter:
         n_samples = len(audio)
 
         # Analyse-Marker: Abstand = T₀ in Samples
-        t0_source = int(round(sr / f0_hz))
+        t0_source = round(sr / f0_hz)
         t0_source = max(t0_source, 8)  # Minimum 8 Samples
 
         # Analyse-Epochen-Marker
         analysis_markers = list(range(t0_source // 2, n_samples, t0_source))
 
         # Synthese-Marker: neuer Abstand = T₀/ratio
-        t0_target = int(round(t0_source / ratio))
+        t0_target = round(t0_source / ratio)
         t0_target = max(t0_target, 8)
         n_synth = int(n_samples / t0_target) + 2
         synthesis_markers = [i * t0_target for i in range(n_synth)]
@@ -303,7 +303,7 @@ class PsolaPitchShifter:
                 frame_idx = min(sm * len(f0_trajectory) // n_samples, len(f0_trajectory) - 1)
                 f0_local = f0_trajectory[frame_idx]
                 if self.MIN_F0_HZ <= f0_local <= self.MAX_F0_HZ:
-                    int(round(sr / f0_local))
+                    round(sr / f0_local)
                     am = min(range(len(analysis_markers)), key=lambda i: abs(analysis_markers[i] - sm))
                     # Lokaler Analyse-Marker
                     am_idx = analysis_markers[am]
@@ -448,7 +448,7 @@ class PsolaPitchShifter:
 # Singleton (§3.2)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[PsolaPitchShifter] = None
+_instance: PsolaPitchShifter | None = None
 _lock = threading.Lock()
 
 
@@ -478,8 +478,8 @@ def psola_shift(
     audio: np.ndarray,
     semitones: float,
     sr: int = 48000,
-    f0_hz: Optional[float] = None,
-    f0_trajectory: Optional[np.ndarray] = None,
+    f0_hz: float | None = None,
+    f0_trajectory: np.ndarray | None = None,
 ) -> np.ndarray:
     """Formanterhaltende Pitch-Verschiebung via PSOLA (§4.5).
 

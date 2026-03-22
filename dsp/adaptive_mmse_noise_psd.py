@@ -14,7 +14,7 @@ class AdaptiveMMSENoisePSD:
 
     def estimate_noise(self, power_spectrogram):
         """Schätzt das Noise-Power-Spektrum adaptiv mit MMSE-Ansatz."""
-        n_frames, n_bins = power_spectrogram.shape
+        n_frames, _n_bins = power_spectrogram.shape
         noise_psd = np.zeros_like(power_spectrogram)
         # Initialisiere mit erstem Frame
         noise_psd[0] = power_spectrogram[0]

@@ -3,8 +3,8 @@ Adaptive Formant Shifting & Formantkorrektur Modul für Aurik 6.0 (SOTA-Maximum)
 SOTA-tauglich, adaptiv, mit automatischer Parameteroptimierung (klassische DSP, SOTA-Maximum).
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import librosa
@@ -115,22 +115,57 @@ class AdaptiveFormantShifter:
             return self._lpc_formant_shift(audio, sr, shift_ratio)
 
     def _lpc_formant_shift(self, audio: np.ndarray, sr: int, shift_ratio: float) -> np.ndarray:
-        # Einfache LPC-basierte Formantverschiebung (nur Demonstration, nicht SOTA)
-        import scipy.signal
+        """LPC pole-frequency-warping formant shift (spec-compliant, order 30–40 @ 48 kHz).
 
-        order = 16
-        # LPC-Analyse (librosa ≥ 0.9: lpc(y, order=N))
-        a = librosa.lpc(audio, order=order)
-        # Frequenzgang berechnen
-        w, h = scipy.signal.freqz(1, a)
-        # Frequenzen verschieben
-        w_shifted = np.clip(w * shift_ratio, 0, np.pi)
-        h_shifted = np.interp(w_shifted, w, np.abs(h))
-        # Filter anwenden (vereinfachtes Beispiel)
-        audio_fft = np.fft.fft(audio)
-        audio_fft[: len(h_shifted)] *= h_shifted
-        result = np.fft.ifft(audio_fft)
-        return np.real(result)[: len(audio)]
+        Replaces illegal direct FFT-magnitude mutation (violates PGHI invariant) with
+        time-domain LPC Analysis-Synthesis using pole-angle warping (z-domain):
+          1. LPC analysis → denominator polynomial A(z) → poles
+          2. Rotate pole angles by shift_ratio (formant frequency warp)
+          3. Reconstruct A'(z) from shifted poles
+          4. LPC inverse filter (source residual) → synthesis with A'(z)
+
+        LPC order: Spec §2.8 — 30–40 @ 48 kHz-SR (Faustregel SR[kHz]×2+4 = 100; Kompromiss 30–40).
+        """
+        import scipy.signal as _sps
+
+        # Spec §2.8: LPC Ord. 30–40 @ 48 kHz-SR (clamp from theoretical ~100)
+        order = max(30, min(40, 4 + int(sr / 1000) * 2))
+        audio_f64 = audio.astype(np.float64)
+        try:
+            a = librosa.lpc(audio_f64, order=order)  # [1, a1, a2, …, a_order]
+        except Exception:
+            return audio.copy()
+
+        # Extract poles (roots of A polynomial)
+        poles = np.roots(a)
+
+        # Warp pole angles by shift_ratio (formant frequency shift in z-domain)
+        angles = np.angle(poles)
+        radii = np.abs(poles)
+        new_angles = np.clip(angles * shift_ratio, -np.pi, np.pi)
+        new_poles = radii * np.exp(1j * new_angles)
+
+        # Stability guard: keep all poles strictly inside the unit circle
+        over_unit = np.abs(new_poles) >= 1.0
+        new_poles[over_unit] = (
+            new_poles[over_unit] / (np.abs(new_poles[over_unit]) + 1e-9) * 0.9999
+        )
+
+        # Reconstruct LPC denominator from shifted poles
+        new_a = np.poly(new_poles).real
+        new_a = new_a / (new_a[0] + 1e-30)  # normalize leading coefficient to 1
+
+        # LPC residual (inverse filter) — all time-domain, no FFT modification
+        residual = _sps.lfilter(a, np.array([1.0]), audio_f64)
+        result = _sps.lfilter(np.array([1.0]), new_a, residual)
+
+        # DSP-internal RMS normalization (LUFS used at export; this is for gain stability)
+        rms_in = float(np.sqrt(np.mean(audio_f64**2) + 1e-30))
+        rms_out = float(np.sqrt(np.mean(result**2) + 1e-30))
+        if rms_out > 1e-10:
+            result *= rms_in / rms_out
+
+        return np.clip(result, -1.0, 1.0).astype(audio.dtype)
 
     # ------------------------------------------------------------------
     # PSOLA-basierte Formantverschiebung (scipy-only, kein pysptk/pyworld)
@@ -158,12 +193,13 @@ class AdaptiveFormantShifter:
 
         hop_length = 128
         n_fft = 1024
-        lpc_order = 16
+        # Spec §2.8: LPC Ord. 30–40 @ 48 kHz-SR (clamp from theoretical ~100)
+        lpc_order = max(30, min(40, 4 + int(sr / 1000) * 2))
         n_bins = n_fft // 2 + 1
         freq_axis = np.linspace(0, np.pi, n_bins)
 
         # STFT
-        f, t, S = scipy.signal.stft(
+        _f, _t, S = scipy.signal.stft(
             audio.astype(np.float64),
             fs=sr,
             window="hann",
@@ -254,17 +290,17 @@ class AdaptiveFormantShifter:
         Returns:
             Formant-verschobenes Signal (gleiche Länge wie Input).
         """
-        from scipy.fft import dct, idct
         import scipy.signal
+        from scipy.fft import dct, idct
 
         hop_length = 128
         n_fft = 1024
         n_bins = n_fft // 2 + 1
         # Lifter-Grenzwert: trennt Hüllkurve (niedere Quefrenz) von Anreger
-        lifter_cutoff = lpc_order = 60  # noqa: F841
+        lifter_cutoff = 60
         freq_axis = np.linspace(0, np.pi, n_bins)
 
-        f, t, S = scipy.signal.stft(
+        _f, _t, S = scipy.signal.stft(
             audio.astype(np.float64),
             fs=sr,
             window="hann",

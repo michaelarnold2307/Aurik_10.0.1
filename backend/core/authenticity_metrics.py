@@ -16,9 +16,9 @@ Date: 2026-02-08
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -571,10 +571,7 @@ class RoomToneDetector:
                     decay_time_ms = below_threshold[0] / sr * 1000
                     reverb_times.append(decay_time_ms)
 
-        if reverb_times:
-            reverb_tail_ms = float(np.median(reverb_times))
-        else:
-            reverb_tail_ms = 0.0
+        reverb_tail_ms = float(np.median(reverb_times)) if reverb_times else 0.0
 
         # 4. Spatial correlation (stereo width)
         if is_stereo and audio.shape[0] == 2:

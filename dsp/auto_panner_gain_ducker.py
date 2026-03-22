@@ -272,7 +272,7 @@ class AutoGain:
     def log_contract(self) -> None:
         logger.debug("[DSPContract] %s", asdict(self.contract))
 
-    def process(self, audio: np.ndarray, sr: int = None) -> np.ndarray:
+    def process(self, audio: np.ndarray, sr: int | None = None) -> np.ndarray:
         """
         Pegelt das Signal auf den Zielpegel (dBFS). Quality-Gate, Audit-Logging, robuste Fehlerbehandlung integriert.
         :param audio: Audio (np.ndarray)

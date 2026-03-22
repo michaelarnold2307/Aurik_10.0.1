@@ -22,4 +22,4 @@ warnings.warn(
 GPUPipeline = CPUPipeline
 GPUPipelineStats = PipelineStats
 
-__all__ = ["GPUPipeline", "GPUPipelineStats", "CPUPipeline", "PipelineStats"]
+__all__ = ["CPUPipeline", "GPUPipeline", "GPUPipelineStats", "PipelineStats"]

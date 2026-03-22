@@ -45,9 +45,9 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
+from dataclasses import dataclass, field
 
 import numpy as np
 import scipy.signal as spsig
@@ -66,7 +66,7 @@ _TRANSIENT_THRESH_PERCENTILE = 75  # Frames über diesem Flux-Perzentil = Transi
 # Micro-Dynamic
 _TARGET_CV_MIN = 0.05  # Mindest-Variationskoeffizient (natural music)
 _TARGET_CV_MAX = 0.20  # Maximal-Variationskoeffizient (noise threshold)
-_MODULATION_STRENGTH = 0.15  # Stärke der re-injizierten Modulation [0–1]
+_MODULATION_STRENGTH = 0.25  # Stärke der re-injizierten Modulation [0–1] (v9.10.58: ↑0.15→0.25 für über-denoisete Signale)
 
 # Harmonic Reinforcement
 _HARM_BOOST_DB = 1.0  # Max Anhebung der Obertöne in dB (v9.11: erhöht von 0.7 — Oberton-Brillanz)
@@ -114,35 +114,35 @@ MATERIAL_PROFILES: dict[str, MaterialProfile] = {
         name="vinyl",
         flux_smoothing_max=0.55,
         target_cv_min=0.07,
-        modulation_strength=0.18,
-        harm_boost_db=0.7,
+        modulation_strength=0.20,
+        harm_boost_db=0.8,
         ola_ms=25.0,
-        description="Vinyl-Schallplatte: Wow/Flutter-Micro-Dynamics, Hochton-Boost",
+        description="Vinyl-Schallplatte: Wow/Flutter-Micro-Dynamics, Oberton-Boost",
     ),
     "tape": MaterialProfile(
         name="tape",
         flux_smoothing_max=0.65,
         target_cv_min=0.04,
-        modulation_strength=0.12,
-        harm_boost_db=0.4,
+        modulation_strength=0.14,
+        harm_boost_db=0.6,
         ola_ms=15.0,
-        description="Magnetband: Dropout-Robustheit, Kompression-Aware",
+        description="Magnetband: Dropout-Robustheit, moderater Harmonic-Boost, Kompression-Aware",
     ),
     "shellac": MaterialProfile(
         name="shellac",
         flux_smoothing_max=0.60,
         target_cv_min=0.06,
-        modulation_strength=0.20,
-        harm_boost_db=0.8,
+        modulation_strength=0.22,
+        harm_boost_db=1.2,
         ola_ms=30.0,
-        description="Schellack/78rpm: Bandbreitenbegrenzte Anhebung, lange Crossfades",
+        description="Schellack/78rpm: Bandbreitenbegrenzte Anhebung, starke Harmonics, lange Crossfades",
     ),
     "broadcast": MaterialProfile(
         name="broadcast",
         flux_smoothing_max=0.75,
         target_cv_min=0.03,
         modulation_strength=0.10,
-        harm_boost_db=0.3,
+        harm_boost_db=0.15,
         ola_ms=10.0,
         description="Rundfunk/Archiv: Kompressionsartefakte, digitale Präzision",
     ),
@@ -178,8 +178,8 @@ MATERIAL_PROFILES: dict[str, MaterialProfile] = {
         name="cd_digital",
         flux_smoothing_max=0.80,
         target_cv_min=0.02,
-        modulation_strength=0.08,
-        harm_boost_db=0.2,
+        modulation_strength=0.06,
+        harm_boost_db=0.15,
         ola_ms=8.0,
         description="CD/Digital: höchste Qualität, minimalste Eingriffe",
     ),
@@ -370,17 +370,26 @@ def analyze_context(audio: np.ndarray, sample_rate: int) -> ExcellenceContext:
             if harm_scores:
                 harmonicity = float(np.mean(harm_scores))
 
-    # Transient Density: Anteil stark fluxiver Frames (Spektral-Flux > Median)
+    # Transient Density: Use TDP HPSS percussive energy ratio if available,
+    # fall back to spectral flux for robustness.
     transient_density = 0.2
     if len(mono) >= _WIN_LEN * 2:
         try:
-            _, _, Zxx = _stft(mono)
-            mag = np.abs(Zxx)
-            flux = np.mean(np.abs(np.diff(mag, axis=1)), axis=0) if mag.shape[1] > 1 else np.array([0.0])
-            thresh = np.percentile(flux, _TRANSIENT_THRESH_PERCENTILE)
-            transient_density = float(np.mean(flux >= thresh))
+            from backend.core.transient_decoupled_processor import separate_transients
+            perc, harm = separate_transients(mono, sample_rate)
+            perc_energy = float(np.sum(perc**2))
+            total_energy = float(np.sum(mono**2)) + 1e-10
+            transient_density = float(np.clip(perc_energy / total_energy, 0.0, 1.0))
         except Exception:
-            pass
+            # DSP fallback: spectral flux
+            try:
+                _, _, Zxx = _stft(mono)
+                mag = np.abs(Zxx)
+                flux = np.mean(np.abs(np.diff(mag, axis=1)), axis=0) if mag.shape[1] > 1 else np.array([0.0])
+                thresh = np.percentile(flux, _TRANSIENT_THRESH_PERCENTILE)
+                transient_density = float(np.mean(flux >= thresh))
+            except Exception:
+                pass
 
     # Spectral Centroid
     spectral_centroid_mean = 1500.0
@@ -538,7 +547,7 @@ def _reinforce_harmonics(
         frame = mono[t_start:t_end]
 
         # F0-Detektion: stärkste Komponente unter F0_FREQ_MAX
-        window = frame * np.hanning(len(frame))  # noqa: F841
+        frame * np.hanning(len(frame))
         frame_mag = mag[:, t]
         low_mask = freqs < _F0_FREQ_MAX
         if not np.any(low_mask) or frame_mag.max() < 1e-10:

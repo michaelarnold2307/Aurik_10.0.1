@@ -91,7 +91,7 @@ SR_REQUIRED: int = 48_000
 # Each entry: (low_hz, high_hz, label, eq_gain_db)
 # eq_gain_db: default gentle EQ nudge applied after NR (0 = flat pass-through)
 
-_BANDS: Dict[str, List[Tuple[float, float, str, float]]] = {
+_BANDS: dict[str, list[tuple[float, float, str, float]]] = {
     "guitar": [
         (50.0,   800.0,  "bass_body",  +0.5),
         (800.0,  4000.0, "string_mid", +0.8),
@@ -178,7 +178,7 @@ class SubStemResult:
     audio: np.ndarray
     instrument: str
     n_bands: int
-    bands: List[SubStemBandResult] = field(default_factory=list)
+    bands: list[SubStemBandResult] = field(default_factory=list)
     processing_strength: float = 0.0
     passthrough: bool = False
 
@@ -210,10 +210,7 @@ def _extract_band(
     """Extract the frequency band [low_hz, high_hz] from *audio* via LR4 crossovers."""
     nyq = sr / 2.0
     # LP at high_hz unless it's effectively SR/2 (pass-through that edge)
-    if high_hz < nyq * 0.95:
-        band = _lr4_lowpass(audio, sr, high_hz)
-    else:
-        band = audio.astype(np.float32)
+    band = _lr4_lowpass(audio, sr, high_hz) if high_hz < nyq * 0.95 else audio.astype(np.float32)
     # HP at low_hz unless it's effectively 0
     if low_hz > 10.0:
         band = _lr4_highpass(band, sr, low_hz)
@@ -225,7 +222,7 @@ def _extract_band(
 
 def _soft_spectral_subtraction(
     band: np.ndarray, strength: float, noise_estimate_frames: int = 10
-) -> Tuple[np.ndarray, float]:
+) -> tuple[np.ndarray, float]:
     """Lightweight stationary-noise spectral subtraction for a narrow band signal.
 
     Estimates noise floor from the quietest *noise_estimate_frames* frames of
@@ -340,7 +337,7 @@ class SubStemProcessor:
         audio: np.ndarray,
         sr: int,
         instrument: str = "guitar",
-        processing_strength: Optional[float] = None,
+        processing_strength: float | None = None,
     ) -> SubStemResult:
         """Process *audio* by sub-stem decomposition.
 
@@ -389,10 +386,7 @@ class SubStemProcessor:
             ]
             band_results = result_channels[0][1]   # diagnostics from first channel
             processed_channels = [r[0] for r in result_channels]
-            if audio.shape[0] <= 8:
-                out = np.stack(processed_channels, axis=0)
-            else:
-                out = np.stack(processed_channels, axis=1)
+            out = np.stack(processed_channels, axis=0) if audio.shape[0] <= 8 else np.stack(processed_channels, axis=1)
         else:
             out, band_results = self._process_mono(
                 audio.astype(np.float32), sr, bands_cfg, strength
@@ -420,13 +414,13 @@ class SubStemProcessor:
         self,
         mono: np.ndarray,
         sr: int,
-        bands_cfg: List[Tuple[float, float, str, float]],
+        bands_cfg: list[tuple[float, float, str, float]],
         strength: float,
-    ) -> Tuple[np.ndarray, List[SubStemBandResult]]:
+    ) -> tuple[np.ndarray, list[SubStemBandResult]]:
         """Process a single mono signal through the band decomposition chain."""
 
-        sub_stems: List[np.ndarray] = []
-        band_results: List[SubStemBandResult] = []
+        sub_stems: list[np.ndarray] = []
+        band_results: list[SubStemBandResult] = []
 
         for low_hz, high_hz, label, eq_gain_db in bands_cfg:
             # 1. Extract sub-stem band
@@ -470,7 +464,7 @@ class SubStemProcessor:
 
 # ── Singleton (§3.2 Double-Checked Locking) ──────────────────────────────────
 
-_instance: Optional[SubStemProcessor] = None
+_instance: SubStemProcessor | None = None
 _lock = threading.Lock()
 
 
@@ -491,7 +485,7 @@ def process_sub_stems(
     audio: np.ndarray,
     sr: int,
     instrument: str = "guitar",
-    processing_strength: Optional[float] = None,
+    processing_strength: float | None = None,
 ) -> SubStemResult:
     """Convenience wrapper: apply sub-stem processing to *audio*.
 

@@ -95,6 +95,7 @@ if __name__ == "__main__":
 else:
     from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 import logging
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -102,11 +103,10 @@ logger = logging.getLogger(__name__)
 # ============================================================
 ML_HYBRID_AVAILABLE = False
 try:
-    pass
-
+    from plugins.audiosr_plugin import AudioSRPlugin
     ML_HYBRID_AVAILABLE = True
 except ImportError:
-    pass
+    ML_HYBRID_AVAILABLE = False
 
 
 class FrequencyRestorationPhase(PhaseInterface):
@@ -257,7 +257,11 @@ class FrequencyRestorationPhase(PhaseInterface):
         # Step 2: Multi-band HF restoration with ML-Hybrid support
         # =========================================================
         quality_mode = kwargs.get("quality_mode", "balanced")
-        use_ml_hybrid = ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "maximum"]
+        use_ml_hybrid = (
+            ML_HYBRID_AVAILABLE
+            and quality_mode in ["balanced", "quality", "maximum"]
+            and hasattr(self, "_restore_frequency_ml_hybrid")
+        )
 
         if use_ml_hybrid:
             # ML-Hybrid path: DSP (SBR + LPC) + AudioSR (Neural Vocoder Super Resolution)
@@ -279,10 +283,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         hf_energy_before = self._measure_hf_energy(audio, params["rolloff_hz"])
         hf_energy_after = self._measure_hf_energy(restored, params["rolloff_hz"])
 
-        if hf_energy_before > 0:
-            hf_boost_db = 20 * np.log10(hf_energy_after / (hf_energy_before + 1e-10))
-        else:
-            hf_boost_db = 0.0
+        hf_boost_db = 20 * np.log10(hf_energy_after / (hf_energy_before + 1e-10)) if hf_energy_before > 0 else 0.0
 
         # Clamp boost to maximum (avoid excessive artifacts)
         max_boost = params["max_boost_db"]
@@ -332,10 +333,7 @@ class FrequencyRestorationPhase(PhaseInterface):
             (has_rolloff, rolloff_db, rolloff_frequency)
         """
         # Convert to mono for analysis
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Welch PSD
         freqs, psd = signal.welch(mono, self.sample_rate, nperseg=8192)
@@ -401,7 +399,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         Restore single channel with SBR + harmonic extension.
         """
         # STFT
-        f, t, Zxx = signal.stft(channel, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
+        f, _t, Zxx = signal.stft(channel, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
 
         # Separate into low-band (source) and high-band (target)
         rolloff_freq = params["rolloff_hz"]
@@ -440,8 +438,19 @@ class FrequencyRestorationPhase(PhaseInterface):
         if params["transient_synthesis"] > 0:
             Zxx = self._apply_transient_synthesis(Zxx, f, rolloff_bin, extension_end_bin, params["transient_synthesis"])
 
-        # ISTFT
-        _, restored = signal.istft(Zxx, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
+        # PGHI phase reconstruction (§4.5 — ISTFT nach Spektral-Modifikation erfordert PGHI)
+        try:
+            from dsp.pghi import pghi_reconstruct_from_stft
+
+            restored = pghi_reconstruct_from_stft(
+                Zxx, sr=self.sample_rate, win_size=n_fft, hop=hop_length
+            )
+        except Exception:
+            import librosa
+
+            restored = librosa.griffinlim(
+                np.abs(Zxx), n_iter=32, hop_length=hop_length, win_length=n_fft, n_fft=n_fft
+            )
 
         # Match length
         if len(restored) > len(channel):
@@ -580,10 +589,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         Measure RMS energy above frequency threshold.
         """
         # Convert to mono
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # High-pass filter
         nyquist = self.sample_rate / 2

@@ -21,9 +21,9 @@ Version: 1.0.0
 Date: 8. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 
 import numpy as np
 import scipy.signal as signal
@@ -169,10 +169,7 @@ class IntelligibilityScorer:
             IntelligibilityReport with scores and recommendations
         """
         # Ensure mono
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
         logger.debug(f"Scoring {len(audio_mono)/sr:.2f}s audio at {sr} Hz")
 
@@ -278,10 +275,9 @@ class IntelligibilityScorer:
                 effective_sr = sr
 
             # LPC order based on EFFECTIVE sample rate (after downsampling).
-            # Rule of thumb: 2 + sr_kHz (e.g. 18 for 16 kHz).
-            # Using original sr here would give ~50 coefficients for 48 kHz input,
-            # producing spurious roots after downsampling to 16 kHz.
-            lpc_order = 2 + int(effective_sr / 1000)
+            # §2.8 Spec: Downsampling auf 16 kHz → LPC Ordnung 16 korrekt (Rabiner & Schafer 1978).
+            # rule-of-thumb 2+sr_kHz würde bei 16 kHz → 18 liefern; auf Spec-konformes 16 begrenzt.
+            lpc_order = min(int(effective_sr / 1000), 16)
 
             # Compute LPC coefficients
             from scipy.linalg import solve_toeplitz

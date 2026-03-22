@@ -884,8 +884,8 @@ class AestheticJudgmentModel:
 # ============================================================================
 
 __all__ = [
-    "GenreWeightRegistry",
+    "AestheticJudgmentModel",
     "AestheticProxyCalculator",
     "CompositeAestheticScoreCalculator",
-    "AestheticJudgmentModel",
+    "GenreWeightRegistry",
 ]

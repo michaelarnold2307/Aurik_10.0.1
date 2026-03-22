@@ -737,3 +737,36 @@ class TestRestorationResultSpecFields:
         assert "emotional_arc" in f_names, "emotional_arc fehlt als dataclass-Feld"
         assert "temporal_coherence" in f_names, "temporal_coherence fehlt als dataclass-Feld"
         assert "phase_gate_log" in f_names, "phase_gate_log fehlt als dataclass-Feld"
+
+
+class TestLocalizedPassThroughGuard:
+    def _score(self, defect_name: str, severity: float) -> types.SimpleNamespace:
+        return types.SimpleNamespace(
+            defect_type=types.SimpleNamespace(value=defect_name),
+            severity=float(severity),
+        )
+
+    def test_65_localized_click_blocks_pass_through_guard(self):
+        defects = [self._score("click", 0.12), self._score("noise_floor", 0.03)]
+
+        active, metrics = UnifiedRestorerV3._has_localized_critical_defects(defects)
+
+        assert active is True
+        assert int(metrics["localized_count"]) == 1
+        assert float(metrics["max_localized_severity"]) >= 0.12
+
+    def test_66_non_localized_defects_keep_guard_inactive(self):
+        defects = [self._score("hum", 0.25), self._score("hiss", 0.21)]
+
+        active, metrics = UnifiedRestorerV3._has_localized_critical_defects(defects)
+
+        assert active is False
+        assert int(metrics["localized_count"]) == 0
+
+    def test_67_localized_but_below_threshold_keeps_guard_inactive(self):
+        defects = [self._score("dropout", 0.05), self._score("click", 0.07)]
+
+        active, metrics = UnifiedRestorerV3._has_localized_critical_defects(defects)
+
+        assert active is False
+        assert int(metrics["localized_count"]) == 0

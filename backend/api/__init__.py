@@ -7,8 +7,8 @@ Provides REST and WebSocket APIs for AURIK audio restoration system.
 from backend.api.musical_goals_monitor_api import ConnectionManager, GoalsSnapshot, GoalUpdate, MusicalGoalsMonitorAPI
 
 __all__ = [
-    "MusicalGoalsMonitorAPI",
     "ConnectionManager",
     "GoalUpdate",
     "GoalsSnapshot",
+    "MusicalGoalsMonitorAPI",
 ]

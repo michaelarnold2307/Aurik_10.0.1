@@ -25,10 +25,10 @@ Aktivierung (in CAUSE_TO_PHASES):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -126,12 +126,12 @@ class CQTdiffPlusPlugin:
     def _try_load_model(self) -> None:
         """Lädt ONNX Score-Netzwerk; aktiviert Fallback bei Fehler."""
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             model_path = self.MODELS_DIR / "score_network.onnx"
             if model_path.exists():
                 try:
-                    from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                     if not _try_alloc("CQTdiff+", size_gb=0.19):
                         logger.warning("CQTdiff+: ML-Budget erschöpft — Fallback aktiv.")
@@ -147,7 +147,7 @@ class CQTdiffPlusPlugin:
                 self._model_loaded = True
                 logger.info("🔵 CQTdiff: Score-Netzwerk geladen (%s)", model_path)
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm(
                         "CQTdiff+",
@@ -169,7 +169,7 @@ class CQTdiffPlusPlugin:
             logger.warning("CQTdiff+ Modell-Lade-Fehler: %s — Fallback aktiv", exc)
             self._fallback_active = True
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("CQTdiff+")
             except Exception:
                 pass
@@ -308,7 +308,7 @@ class CQTdiffPlusPlugin:
 
         # --- ML-Fallback Stufe 1: DiffWave ONNX ---
         try:
-            from plugins.diffwave_plugin import DiffwavePlugin  # noqa: PLC0415
+            from plugins.diffwave_plugin import DiffwavePlugin
 
             dw = DiffwavePlugin()
             if dw._session is not None:
@@ -412,7 +412,7 @@ class CQTdiffPlusPlugin:
     def _compute_chroma_corr(original: np.ndarray, restored: np.ndarray, sr: int) -> float:
         """Pearson-Korrelation der Chroma-Vektoren (soll ≥ 0.92)."""
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             n = min(len(original), len(restored), sr * 4)  # max. 4 s
             c1 = librosa.feature.chroma_stft(y=original[:n].astype(np.float32), sr=sr)

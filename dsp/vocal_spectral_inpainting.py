@@ -154,7 +154,7 @@ class SpectralGapFiller:
         """
         # Compute average spectrum
         nperseg = 2048
-        f, t, Zxx = stft(audio, sr, nperseg=nperseg)
+        f, _t, Zxx = stft(audio, sr, nperseg=nperseg)
 
         # Average over time
         avg_spectrum = np.mean(np.abs(Zxx), axis=1)
@@ -216,7 +216,7 @@ class SpectralGapFiller:
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
+        f, _t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
 
         # Fill each gap
         for gap_low, gap_high in gaps:
@@ -355,7 +355,7 @@ class VocalSpectralInpainting:
             else:
                 # Format: (samples, channels) - AURIK standard
                 left, left_report = self.process(audio[:, 0], sr)
-                right, right_report = self.process(audio[:, 1], sr)
+                right, _right_report = self.process(audio[:, 1], sr)
                 return np.column_stack([left, right]), {**left_report, "stereo": True}
 
         # Detect gaps

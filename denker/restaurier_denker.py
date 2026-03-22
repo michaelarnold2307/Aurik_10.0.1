@@ -15,11 +15,11 @@ Usage::
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -139,9 +139,71 @@ class _AREAdapter:
         # Musikalische Ziele (ARE liefert keine Einzel-Scores)
         self.musical_goals: dict[str, float] = {}
 
-        # Phasen aus passes_executed
+        # Phasen aus passes_executed + Ableitung echter Phase-IDs aus ARE-Metadaten
+        # Ziel: _ML_PHASE_MARKERS im Frontend kann ML-Plugins erkennen.
         passes: int = int(getattr(are_result, "passes_executed", 1))
-        self.phases_executed: list[str] = [f"are_pass_{i + 1}" for i in range(passes)]
+        _phases: list[str] = [f"are_pass_{i + 1}" for i in range(passes)]
+
+        # Derive phase IDs from causal_order defect types (ARE exposes these).
+        # Maps defect type values → UV3-style phase-ID substrings matching _ML_PHASE_MARKERS.
+        _DEFECT_TO_PHASE: dict[str, str] = {
+            "noise": "phase_denoise",
+            "hiss": "phase_tape_hiss",
+            "clicks": "phase_01_click_removal",
+            "crackle": "phase_09_crackle_removal",
+            "pops": "phase_27_click_pop_removal",
+            "dropout": "phase_dropout_repair",
+            "wow": "phase_12_wow_flutter",
+            "flutter": "phase_12_wow_flutter",
+            "clipping": "phase_23_spectral_repair",
+            "hum": "phase_02_hum_removal",
+            "reverb": "phase_reverb_reduction",
+            "sibilance": "phase_ml_deesser",
+            "frequency": "phase_frequency_restoration",
+        }
+        _seen_phases: set[str] = set(_phases)
+        causal_order: list[Any] = list(getattr(are_result, "causal_order", []))
+        for defect_val in causal_order:
+            _dv = str(defect_val).lower()
+            for _key, _phase in _DEFECT_TO_PHASE.items():
+                if _key in _dv and _phase not in _seen_phases:
+                    _phases.append(_phase)
+                    _seen_phases.add(_phase)
+
+        # Map winning variant name → additional phase IDs.
+        _VARIANT_TO_PHASES: dict[str, list[str]] = {
+            "aggressive": ["phase_denoise", "phase_deepfilternet", "phase_vocal_enhancement"],
+            "balanced": ["phase_denoise", "phase_deepfilternet"],
+            "conservative": ["phase_denoise"],
+            "naturalness": ["phase_denoise", "phase_reverb_reduction"],
+            "gentle_denoise": ["phase_denoise"],
+            "light": ["phase_denoise"],
+        }
+        _winning: str = str(getattr(are_result, "winning_variant", "") or "").lower()
+        if not getattr(are_result, "rollback_triggered", False) and _winning not in ("passthrough", "passthrough_error", "passthrough_fallback", ""):
+            for _vkey, _vphases in _VARIANT_TO_PHASES.items():
+                if _vkey in _winning:
+                    for _p in _vphases:
+                        if _p not in _seen_phases:
+                            _phases.append(_p)
+                            _seen_phases.add(_p)
+                    break
+            else:
+                # Unknown variant name — add baseline denoise phase
+                if "phase_denoise" not in _seen_phases:
+                    _phases.append("phase_denoise")
+
+        # Add DeepFilterNet whenever noise/hiss/tape reduction ran (always active for reel_tape/vinyl)
+        _mat_val: str = str(
+            getattr(getattr(are_result, "material_type", None), "value", "") or ""
+        ).lower()
+        if any(m in _mat_val for m in ("tape", "vinyl", "shellac", "reel")):
+            for _p in ("phase_denoise", "phase_tape_hiss", "phase_deepfilternet"):
+                if _p not in _seen_phases:
+                    _phases.append(_p)
+                    _seen_phases.add(_p)
+
+        self.phases_executed: list[str] = _phases
         self.phases_skipped: list[str] = []
 
         # Warnungen
@@ -233,7 +295,20 @@ class RestaurierDenker:
         if pipeline is not None:
             try:
                 _t0_are = time.perf_counter()
-                are_result = pipeline.process(audio, sample_rate=sr)
+                # §Dach: Forward Denker context (global_plan, chain_info, defekt_hint, mode, material)
+                # so ARE can propagate it to the UV3 full-processing call.
+                _are_ctx: dict = {}
+                if global_plan is not None:
+                    _are_ctx["global_plan"] = global_plan
+                if chain_info is not None:
+                    _are_ctx["chain_info"] = chain_info
+                if defekt_hint is not None:
+                    _are_ctx["defekt_hint"] = defekt_hint
+                if mode:
+                    _are_ctx["mode"] = mode
+                if material:
+                    _are_ctx["material"] = material
+                are_result = pipeline.process(audio, sample_rate=sr, progress_callback=progress_callback, **_are_ctx)
                 adapter = _AREAdapter(are_result, audio_duration_s=_audio_dur_s)
                 logger.info(
                     "\U0001f680 RestaurierDenker: ARE primary OK \u2014 Q=%.3f RT=%.2f\u00d7",
@@ -265,7 +340,7 @@ class RestaurierDenker:
                                 adapter.quality_estimate,
                                 float(getattr(_v3_raw, "quality_estimate", 0.0)),
                             )
-                            adapter.phases_executed = list(adapter.phases_executed) + ["v3_post_pass"]
+                            adapter.phases_executed = [*list(adapter.phases_executed), "v3_post_pass"]
                             logger.info(
                                 "RestaurierDenker: V3 Post-Pass OK \u2014" " ARE RT-Nutzung: %.1f%% (< %.0f%%)",
                                 _are_rt / _3X_RT_LIMIT * 100,

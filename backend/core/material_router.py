@@ -22,11 +22,11 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-_instance: Optional["MaterialRouter"] = None
+_instance: MaterialRouter | None = None
 _lock = threading.Lock()
 
 
-def get_material_router() -> "MaterialRouter":
+def get_material_router() -> MaterialRouter:
     """Get or create MaterialRouter singleton.
 
     Returns:

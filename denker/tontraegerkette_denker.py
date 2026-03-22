@@ -24,10 +24,10 @@ Docstrings mit mathematischen Formeln und deutschen Nutzer-Texten.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -431,7 +431,13 @@ class TontraegerketteDenker:
                 # transfer_chain → detected_media (list[tuple[str, float]])
                 chain: list[str] = raw.get("transfer_chain", [])
                 conf: float = float(raw.get("confidence", 0.5))
-                raw["detected_media"] = [(m, conf) for m in chain]
+                # Use per-link confidences when available (same length as chain).
+                # Fallback to global confidence for every link if not present.
+                per_link: list[float] = raw.get("medium_confidences", [])
+                if len(per_link) == len(chain):
+                    raw["detected_media"] = list(zip(chain, per_link))
+                else:
+                    raw["detected_media"] = [(m, conf) for m in chain]
                 return raw
             # Fallback: dict wurde direkt zurückgegeben (Legacy)
             if isinstance(result, dict):

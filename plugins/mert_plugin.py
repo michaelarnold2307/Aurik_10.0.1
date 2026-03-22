@@ -31,10 +31,10 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import scipy.signal as spsig
@@ -279,10 +279,7 @@ def _enhance_mono(
 
         Zxx_mod = mag * gain * np.exp(1j * phase)
         _, rec = spsig.istft(Zxx_mod, nperseg=_FFT_SIZE, noverlap=_FFT_SIZE - _HOP, window="hann")
-        if len(rec) >= orig_len:
-            out = rec[:orig_len]
-        else:
-            out = np.pad(rec, (0, orig_len - len(rec)))
+        out = rec[:orig_len] if len(rec) >= orig_len else np.pad(rec, (0, orig_len - len(rec)))
 
     # ── 2. Tonal-Smoothing (bei niedriger tonal_consistency) ───────────
     if analysis.tonal_consistency < 0.50:
@@ -374,7 +371,7 @@ class MertPlugin:
         # PLM-Registrierung nach erfolgreichem ML-Laden
         if self._model_type != "dsp_fallback":
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
                 _unload_fn = globals().get("unload_mert")
                 if _unload_fn is not None:
                     _reg_plm("MERT", size_gb=3.7, unload_fn=_unload_fn)
@@ -394,7 +391,7 @@ class MertPlugin:
             return
         # Globaler ML-Budget-Guard: ~1.2 GB für MERT-330M HuggingFace.
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
             if not _try_alloc("MERT-330M-HF", 1.2):
                 return  # Budget erschöpft → nächste Priorität
         except Exception:
@@ -414,7 +411,7 @@ class MertPlugin:
         except Exception as e:
             logger.debug("MERT-v1-330M HuggingFace Ladefehler: %s → weiter", e)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("MERT-330M-HF")
             except Exception:
                 pass
@@ -439,14 +436,17 @@ class MertPlugin:
             return
         # Globaler ML-Budget-Guard: ~3.7 GB für MERT-330M fairseq.
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
             if not _try_alloc("MERT-330M-fairseq", 3.7):
                 return  # Budget erschöpft → weiter mit nächster Priorität
         except Exception:
             pass
         try:
+            import os as _os
+
             import torch
 
+            torch.set_num_threads(_os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
             checkpoint = torch.load(pt_path, map_location="cpu", weights_only=False)  # nosec B614 — lokaler, SHA256-verifizierter fairseq Checkpoint
             state_dict = checkpoint.get("model", checkpoint)
             self._model = state_dict
@@ -456,7 +456,7 @@ class MertPlugin:
         except Exception as e:
             logger.debug("MERT-v1-330M fairseq Ladefehler: %s → weiter", e)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("MERT-330M-fairseq")
             except Exception:
                 pass
@@ -498,8 +498,11 @@ class MertPlugin:
             logger.debug("MERT fairseq-Checkpoint nicht gefunden (%s) → weiter", pt_path)
             return
         try:
+            import os as _os
+
             import torch
 
+            torch.set_num_threads(_os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
             checkpoint = torch.load(pt_path, map_location="cpu", weights_only=False)  # nosec B614 — lokaler, SHA256-verifizierter fairseq Checkpoint
             state_dict = checkpoint.get("model", checkpoint)
             self._model = state_dict
@@ -515,7 +518,7 @@ class MertPlugin:
             logger.debug("MERT ONNX nicht gefunden (%s) → DSP-Fallback", onnx_path)
             return
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
             if not _try_alloc("MERT-ONNX", size_gb=0.18):
                 logger.warning("MERT ONNX: ML-Budget erschöpft — DSP-Fallback")
@@ -523,13 +526,13 @@ class MertPlugin:
         except Exception:
             pass
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             self._model = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
             self._model_type = "mert_onnx"
             logger.info("MERT ONNX geladen: %s", onnx_path)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "MERT-ONNX",
@@ -543,7 +546,7 @@ class MertPlugin:
         except Exception as e:
             logger.debug("MERT ONNX Ladefehler: %s → DSP-Fallback", e)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
 
                 _rel("MERT-ONNX")
             except Exception:
@@ -755,7 +758,7 @@ def unload_mert() -> None:
     DSP-Fallback zurück (MertPlugin._model_type == 'dsp_fallback').
     Aufruf: nach Abschluss der Analyse-Phase in der Pipeline.
     """
-    import gc  # noqa: PLC0415
+    import gc
     if _default_plugin is not None and _default_plugin._model is not None:
         model_type = _default_plugin._model_type
         _default_plugin._model = None
@@ -763,7 +766,7 @@ def unload_mert() -> None:
         _default_plugin._model_type = "dsp_fallback"
         gc.collect()
         try:
-            from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _rel
             for key in ("MERT-330M-HF", "MERT-330M-fairseq", "MERT-95M-HF"):
                 _rel(key)
         except Exception:

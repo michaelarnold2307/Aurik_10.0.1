@@ -9,6 +9,8 @@ Tests alle drei Module:
 Author: AURIK Development Team
 """
 
+import importlib.util
+
 import numpy as np
 import pytest
 
@@ -19,6 +21,9 @@ from dsp.digital_restoration_specialist import (
     PacketLossConcealer,
 )
 
+
+_HAS_PYTEST_BENCHMARK = importlib.util.find_spec("pytest_benchmark") is not None
+
 # =============================================================================
 # TEST FIXTURES
 # =============================================================================
@@ -27,7 +32,7 @@ from dsp.digital_restoration_specialist import (
 @pytest.fixture
 def sample_rate():
     """Standard sample rate"""
-    return 44100
+    return 48000
 
 
 @pytest.fixture
@@ -571,7 +576,7 @@ class TestIntegration:
         output = specialist.process(stereo_audio, sample_rate)
 
         # Check stereo difference exists
-        stereo_audio[0] - stereo_audio[1]
+        _ = stereo_audio[0] - stereo_audio[1]
         stereo_diff_output = output[0] - output[1]
 
         # Some stereo difference should remain
@@ -586,7 +591,7 @@ class TestIntegration:
 class TestPerformance:
     """Performance tests for real-time suitability"""
 
-    @pytest.mark.skipif(True, reason="pytest-benchmark not installed")
+    @pytest.mark.skipif(not _HAS_PYTEST_BENCHMARK, reason="pytest-benchmark not installed")
     def test_performance_codec_artifact_removal(self, mono_audio, sample_rate, benchmark):
         """Benchmark codec artifact removal performance"""
         remover = CodecArtifactRemover()
@@ -605,7 +610,7 @@ class TestPerformance:
         # Should be < 5x RT
         assert rt_factor < 5.0
 
-    @pytest.mark.skipif(True, reason="pytest-benchmark not installed")
+    @pytest.mark.skipif(not _HAS_PYTEST_BENCHMARK, reason="pytest-benchmark not installed")
     def test_performance_packet_loss_concealment(self, packet_loss_audio, sample_rate, benchmark):
         """Benchmark packet loss concealment performance"""
         concealer = PacketLossConcealer()
@@ -622,7 +627,7 @@ class TestPerformance:
 
         assert rt_factor < 5.0
 
-    @pytest.mark.skipif(True, reason="pytest-benchmark not installed")
+    @pytest.mark.skipif(not _HAS_PYTEST_BENCHMARK, reason="pytest-benchmark not installed")
     def test_performance_jitter_correction(self, jittered_audio, sample_rate, benchmark):
         """Benchmark jitter correction performance"""
         corrector = JitterCorrector()
@@ -639,7 +644,7 @@ class TestPerformance:
 
         assert rt_factor < 5.0
 
-    @pytest.mark.skipif(True, reason="pytest-benchmark not installed")
+    @pytest.mark.skipif(not _HAS_PYTEST_BENCHMARK, reason="pytest-benchmark not installed")
     def test_performance_full_pipeline(self, mono_audio, sample_rate, benchmark):
         """Benchmark full digital restoration pipeline"""
         specialist = DigitalRestorationSpecialist()

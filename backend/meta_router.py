@@ -39,7 +39,7 @@ except Exception:
 logger = logging.getLogger(__name__)
 
 try:
-    from scipy.signal import butter, sosfilt  # type: ignore  # noqa: F401
+    from scipy.signal import butter, sosfilt  # type: ignore
 
     _SCIPY_OK = True
 except Exception:
@@ -76,7 +76,7 @@ def _load_audio(path: str) -> tuple[np.ndarray, int]:
 
     # scipy fallback (WAV only)
     try:
-        from scipy.io import wavfile  # noqa: PLC0415
+        from scipy.io import wavfile
 
         sr, data = wavfile.read(path)
         if data.ndim > 1:

@@ -21,9 +21,9 @@ Datum: 20. Februar 2026
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -357,9 +357,8 @@ class StereoAuthenticitiyInvariant:
             return "mono"
         # Decca-Wide-Bereich
         lo, hi = self.DECCA_CORRELATION_RANGE
-        if self.DECCA_DECADE_START <= decade <= self.DECCA_DECADE_END:
-            if lo <= lr_cross <= hi:
-                return "decca_wide"
+        if self.DECCA_DECADE_START <= decade <= self.DECCA_DECADE_END and lo <= lr_cross <= hi:
+            return "decca_wide"
         # Abbey-Road (post-1967)
         if decade >= self.ABBEY_ROAD_DECADE_START:
             return "abbey_road"

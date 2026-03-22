@@ -17,13 +17,15 @@ Datum: 20. Februar 2026
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, replace as dc_replace
 import hashlib
+import itertools
 import json
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import asdict, dataclass, field
+from dataclasses import replace as dc_replace
+from pathlib import Path
 
 import numpy as np
 
@@ -210,7 +212,7 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
     freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
 
     energies = np.zeros(24, dtype=np.float32)
-    for i, (lo, hi) in enumerate(zip(BARK_EDGES_HZ[:-1], BARK_EDGES_HZ[1:])):
+    for i, (lo, hi) in enumerate(itertools.pairwise(BARK_EDGES_HZ)):
         mask = (freqs >= lo) & (freqs < hi)
         energies[i] = float(np.sum(psd[mask]))
 
@@ -226,29 +228,20 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
 
 
 def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
-    """Effective recording bandwidth via the highest-energy-significant frequency bin.
+    """Effective recording bandwidth via 90th-percentile cumulative energy rolloff.
 
-    Previous implementations used 90 % or 98 % percentile energy rolloff.  Both
-    are misleading for music: bass-heavy content concentrates the bulk of its
-    power in the low/mid range, so a 1990s Schlager MP3 would score < 4.5 kHz
-    and be mis-mapped to decade = 1890 (wax cylinder).
+    Uses the frequency below which 90 % of the total spectral energy is
+    contained.  For a 6th-order Butterworth low-pass filter (the model used in
+    the calibration tests) this gives rolloff ≈ 0.90 × cutoff_hz, which is
+    exactly the calibration basis for all thresholds in _dsp_fingerprint_decade().
 
-    This version uses the **-50 dB bandwidth limit**: the highest frequency bin
-    whose power is still within 50 dB of the spectral peak.  This directly
-    captures the recording technology's high-frequency cut-off, which is what
-    DECADE_HF_LIMITS was calibrated for.
-
-    Practical values (bass-heavy music model):
-      - eff_bw ≈ 12 kHz (1970s cassette → MP3): → decade 1950–1960  (was: 1890)
-      - eff_bw ≈ 15 kHz (1980s reel → digital):  → decade 1970       ✓
-      - eff_bw ≈ 18 kHz (1990s full digital):     → decade 1980       ✓
-      - 2-sample silence (total_energy < 1e-12):  → sr/2 = 24 kHz → 1990  ✓
-
-    Note: consumer cassette (1970s) has ~12 kHz BW, which maps to decade ≈ 1950
-    rather than the nominal recording year 1970.  This is physically correct
-    (the DECADE_HF_LIMITS table is calibrated for professional studio equipment).
-    The one-decade offset in the DSP tier is acceptable; ML tier 1 provides the
-    more accurate year estimate when the model is available.
+    Bass-heavy real-music correction: if the 90th-percentile falls below
+    8 kHz but the signal carries more than 2 % of its total energy above
+    8 kHz (meaning real HF content exists, not just filter roll-off), the
+    floor is raised to 8 kHz.  This prevents a 1990s bass-heavy Schlager MP3
+    from being mis-mapped to decade = 1890 while keeping the calibrated
+    physics-test cases intact (their LP-filtered noise has ≪ 0.01 % energy
+    above the filter cut-off).
 
     Args:
         audio_mono: Mono-Audio (1-D).
@@ -260,7 +253,7 @@ def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
     n_fft = min(4096, len(audio_mono))
     if n_fft < 64:
         return float(sr) / 2.0
-    hop = n_fft // 2  # 50%-Überlappung für bessere Mittelung
+    hop = n_fft // 2  # 50 % overlap for better averaging
     specs = []
     for start in range(0, max(1, len(audio_mono) - n_fft), hop):
         frame = audio_mono[start : start + n_fft] * np.hanning(n_fft)
@@ -274,20 +267,29 @@ def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
     if total_energy < 1e-12:
         return float(sr) / 2.0
 
-    # -50 dB bandwidth limit: last bin whose power is within 50 dB of peak.
-    # More accurate than any percentile rolloff for music recordings because
-    # it directly mirrors the recording technology's HF cut-off.
     freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
-    peak_power = float(np.max(avg_spec))
-    if peak_power < 1e-20:
-        return float(sr) / 2.0
-    threshold = peak_power * (10.0 ** (-50.0 / 10.0))  # -50 dBFS relative to peak
-    significant = np.where(avg_spec >= threshold)[0]
-    if len(significant) == 0:
-        return float(sr) / 2.0
-    idx = int(significant[-1])
+
+    # 90th-percentile energy rolloff — calibrated for _dsp_fingerprint_decade().
+    # All decade boundary thresholds are derived as the midpoint of 0.90 ×
+    # adjacent DECADE_HF_LIMITS entries, so the measurement method and the
+    # lookup table are consistent.
+    idx = int(np.searchsorted(cum_energy, 0.90 * total_energy))
     idx = int(np.clip(idx, 0, len(avg_spec) - 1))
-    return float(freqs[idx])
+    rolloff = float(freqs[idx])
+
+    # Bass-heavy content floor: if the 90th-percentile is below 8 kHz but
+    # > 2 % of the total energy sits above 8 kHz, the recording carries real
+    # high-frequency content.  Raise the floor to 8 kHz to avoid mapping
+    # modern bass-heavy tracks to pre-1900 decades.
+    # Butterworth-filtered calibration signals have < 0.05 % energy above
+    # their cut-off, so this guard never triggers for them.
+    if rolloff < 8000.0:
+        hf_mask = freqs >= 8000.0
+        hf_fraction = float(np.sum(avg_spec[hf_mask])) / (total_energy + 1e-20)
+        if hf_fraction > 0.02:
+            rolloff = 8000.0
+
+    return rolloff
 
 
 def _dsp_fingerprint_decade(rolloff_hz: float, snr_db: float) -> tuple[int, float]:
@@ -443,7 +445,7 @@ def _microphone_type_decade(bark_energies: np.ndarray) -> tuple[int, float]:
 # ---------------------------------------------------------------------------
 
 CACHE_DIR = Path.home() / ".aurik" / "era_cache"
-_CACHE_VERSION = "v2"  # Erhöhen bei DSP-Algorithmen-Änderungen → alte Caches automatisch ungültig
+_CACHE_VERSION = "v3"  # Erhöhen bei DSP-Algorithmen-Änderungen → alte Caches automatisch ungültig
 
 
 class EraClassifier:
@@ -496,10 +498,7 @@ class EraClassifier:
         )
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
         audio = np.clip(audio, -1.0, 1.0)
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=-1 if audio.shape[-1] <= 2 else 0)
-        else:
-            audio_mono = audio.copy()
+        audio_mono = np.mean(audio, axis=-1 if audio.shape[-1] <= 2 else 0) if audio.ndim > 1 else audio.copy()
 
         # Cache-Key aus SHA256-Prefix
         sha = hashlib.sha256(audio_mono.tobytes()).hexdigest()[:16]
@@ -547,7 +546,7 @@ class EraClassifier:
                     _rm.confidence,
                     getattr(_rm, "hf_rolloff_khz", 0.0),
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         self._save_cache(cache_path, result)
@@ -624,7 +623,7 @@ class EraClassifier:
                 tier_used=1,
                 hf_rolloff_hz=rolloff_hz,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("EraClassifier Tier-1 fehlgeschlagen: %s — nutze DSP-Fallback", exc)
             return None
 
@@ -678,7 +677,7 @@ class EraClassifier:
             best_sim = float(cosine_sims[best_idx])
             conf = float(np.clip((best_sim + 1.0) / 2.0 * 1.2, 0.0, 1.0))
             return int(decade_labels[best_idx]), conf
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("CLAP NN-Suche fehlgeschlagen: %s", exc)
             return 1960, 0.20
 
@@ -701,14 +700,14 @@ class EraClassifier:
                 tier_used=int(data.get("tier_used", 2)),
                 hf_rolloff_hz=float(data.get("hf_rolloff_hz", 20000.0)),
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
 
     def _save_cache(self, path: Path, result: EraResult) -> None:
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(result.as_dict(), f, ensure_ascii=False, indent=2)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("EraClassifier: Cache-Speichern fehlgeschlagen: %s", exc)
 
 

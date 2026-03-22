@@ -138,10 +138,7 @@ class ContextAnalyzer:
             total_power = float(np.sum(power))
 
             # Spektrales Zentroid (Hz) – gewichteter Mittelwert
-            if total_power > 1e-30:
-                centroid = float(np.sum(freqs * power) / total_power)
-            else:
-                centroid = 0.0
+            centroid = float(np.sum(freqs * power) / total_power) if total_power > 1e-30 else 0.0
             features["spectral_centroid_hz"] = centroid
 
             # Spektrale Flachheit (Wiener-Entropie) – 0=Ton, 1=Rauschen

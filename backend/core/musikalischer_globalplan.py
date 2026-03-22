@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 
 # Für jede Ära definieren wir, wie die Pipeline sich verhalten soll.
 # Werte sind relative Verstärkungs-/Dämpfungsfaktoren (1.0 = neutral).
-_ERA_PROFILES: Dict[int, Dict[str, Any]] = {
+_ERA_PROFILES: dict[int, dict[str, Any]] = {
     1890: {
         "label": "Früheste Aufnahmen (Zylinder/Wachswalze)",
         "nr_aggressiveness": 0.45,    # Sehr sanfte NR — Originalcharakter erhalten
@@ -206,7 +206,7 @@ _ERA_PROFILES: Dict[int, Dict[str, Any]] = {
 }
 
 # Genre-Modifikatoren — überlagern Ära-Profil additiv/multiplikativ
-_GENRE_MODIFIERS: Dict[str, Dict[str, float]] = {
+_GENRE_MODIFIERS: dict[str, dict[str, float]] = {
     "schlager": {
         "warmth_boost": +0.04,
         "presence_boost_add": +0.03,
@@ -287,7 +287,7 @@ class MusikalischesPortrait:
     # Material
     material: str                       # z.B. "shellac", "tape"
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "decade": self.decade,
             "era_label": self.era_label,
@@ -330,16 +330,16 @@ class StilbewussterRestaurierungsplan:
 
     # Per-Phase-Anpassungen: phase_id → {param: delta}
     # Jede Phase kann plan.get_phase_params(phase_id) aufrufen
-    phase_adjustments: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    phase_adjustments: dict[str, dict[str, float]] = field(default_factory=dict)
 
     # Toleranzprofil: phase_id → erlaubte Qualitätsverschlechterung
-    tolerance_profile: Dict[str, float] = field(default_factory=dict)
+    tolerance_profile: dict[str, float] = field(default_factory=dict)
 
     # Planungs-Metadaten
     plan_version: str = "9.10.47"
-    reasoning_trace: List[str] = field(default_factory=list)
+    reasoning_trace: list[str] = field(default_factory=list)
 
-    def get_phase_params(self, phase_id: str) -> Dict[str, float]:
+    def get_phase_params(self, phase_id: str) -> dict[str, float]:
         """Gibt stilbewusste Parameter für eine spezifische Phase zurück.
 
         Wenn keine phasenspezifischen Parameter existieren, werden
@@ -363,7 +363,7 @@ class StilbewussterRestaurierungsplan:
             "aggressiveness", 0.75
         )
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "portrait": self.portrait.as_dict(),
             "authenticity_target": round(self.authenticity_target, 3),
@@ -389,7 +389,9 @@ class StilbewussterRestaurierungsplan:
 def _safe_mono(audio: np.ndarray) -> np.ndarray:
     """Convert to mono without NaN propagation."""
     arr = np.nan_to_num(np.asarray(audio, dtype=np.float32))
-    return arr.mean(axis=0) if arr.ndim == 2 else arr
+    if arr.ndim == 2:
+        return arr.mean(axis=0) if arr.shape[0] <= arr.shape[1] else arr.mean(axis=1)
+    return arr
 
 
 def _estimate_warmth(mono: np.ndarray, sr: int) -> float:
@@ -512,7 +514,7 @@ def _estimate_mood(warmth: float, brightness: float, bpm: float, genre: str) -> 
             return "ausgewogen-natürlich"
 
 
-def _nearest_era_profile(decade: int) -> Dict[str, Any]:
+def _nearest_era_profile(decade: int) -> dict[str, Any]:
     """Findet das nächste definierte Ära-Profil für eine Dekade."""
     available = sorted(_ERA_PROFILES.keys())
     # Nächstgelegene Dekade (Snap to defined)
@@ -596,10 +598,10 @@ class MusikalischerGlobalplanDienst:
         audio: np.ndarray,
         sr: int,
         material: str = "unknown",
-        hint_genre: Optional[str] = None,
-        hint_decade: Optional[int] = None,
+        hint_genre: str | None = None,
+        hint_decade: int | None = None,
         use_ml_classifiers: bool = True,
-        chain_info: Optional[dict] = None,
+        chain_info: dict | None = None,
     ) -> StilbewussterRestaurierungsplan:
         """Erstellt den musikalischen Globalplan für ein Audiostück.
 
@@ -625,7 +627,23 @@ class MusikalischerGlobalplanDienst:
         assert sr == 48000, f"Globalplan erwartet SR=48000, erhalten: {sr}"
         audio = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         mono = _safe_mono(audio)
-        reasoning: List[str] = []
+        reasoning: list[str] = []
+
+        chain_materials: set[str] = set()
+        if isinstance(chain_info, dict):
+            for _key in ("chain", "transfer_chain"):
+                _chain_raw = chain_info.get(_key)
+                if isinstance(_chain_raw, list):
+                    chain_materials.update(
+                        str(x).strip().lower() for x in _chain_raw if x is not None
+                    )
+            for _key in ("primary", "secondary", "tertiary", "primary_material"):
+                _value = chain_info.get(_key)
+                if isinstance(_value, str) and _value.strip():
+                    chain_materials.add(_value.strip().lower())
+
+        is_tape_chain = any(m in {"tape", "cassette", "kassette", "reel_tape"} for m in chain_materials)
+        is_lossy_chain = any(m in {"mp3_low", "mp3_high", "aac"} for m in chain_materials)
 
         # ── 1. Ära-Klassifikation ───────────────────────────────────────────
         decade = hint_decade
@@ -653,25 +671,47 @@ class MusikalischerGlobalplanDienst:
             reasoning.append("ML-Klassifikatoren deaktiviert (use_ml_classifiers=False) — DSP-only")
 
         if decade is None:
-            # DSP-Heuristik: Bandbreite als Ära-Proxy
-            fft = np.abs(np.fft.rfft(mono[:min(len(mono), 32768)]))
-            freqs = np.fft.rfftfreq(min(len(mono), 32768), d=1.0 / sr)
-            energy = np.cumsum(fft ** 2)
-            total = energy[-1] + 1e-12
-            idx_95 = int(np.searchsorted(energy, 0.95 * total))
-            bw_khz = float(freqs[min(idx_95, len(freqs) - 1)]) / 1000.0
-            if bw_khz < 5.0:
-                decade = 1910
-            elif bw_khz < 8.0:
-                decade = 1930
-            elif bw_khz < 12.0:
-                decade = 1950
-            elif bw_khz < 16.0:
+            # Reuse the calibrated DSP era path instead of the old 95 %-energy bandwidth,
+            # which overestimates modern bandwidth on bass-heavy music and pushes tape→MP3
+            # transfers into the 1990s.
+            try:
+                from backend.core.era_classifier import (
+                    _dsp_fingerprint_decade,
+                    _dsp_hf_rolloff,
+                    _estimate_snr,
+                )
+
+                rolloff_hz = _dsp_hf_rolloff(mono, sr)
+                snr_db = _estimate_snr(mono, sr)
+                decade, era_conf = _dsp_fingerprint_decade(rolloff_hz, snr_db)
+                bw_khz = rolloff_hz / 1000.0
+                reasoning.append(f"Era-DSP-Heuristik: BW={bw_khz:.1f} kHz, SNR={snr_db:.1f} dB → {decade}er")
+            except Exception:
+                fft = np.abs(np.fft.rfft(mono[:min(len(mono), 32768)]))
+                freqs = np.fft.rfftfreq(min(len(mono), 32768), d=1.0 / sr)
+                energy = np.cumsum(fft ** 2)
+                total = energy[-1] + 1e-12
+                idx_95 = int(np.searchsorted(energy, 0.95 * total))
+                bw_khz = float(freqs[min(idx_95, len(freqs) - 1)]) / 1000.0
+                if bw_khz < 5.0:
+                    decade = 1910
+                elif bw_khz < 8.0:
+                    decade = 1930
+                elif bw_khz < 12.0:
+                    decade = 1950
+                elif bw_khz < 16.0:
+                    decade = 1970
+                else:
+                    decade = 1990
+                era_conf = 0.40
+                reasoning.append(f"Bandbreiten-Heuristik: BW={bw_khz:.1f} kHz → {decade}er")
+
+            if is_tape_chain and is_lossy_chain and 10.5 <= bw_khz <= 14.5 and decade >= 1950:
                 decade = 1970
-            else:
-                decade = 1990
-            era_conf = 0.40
-            reasoning.append(f"Bandbreiten-Heuristik: BW={bw_khz:.1f} kHz → {decade}er")
+                era_conf = max(era_conf, 0.55)
+                reasoning.append(
+                    "Ketten-Prior: tape→lossy bei 10.5–14.5 kHz → 1970er Aufnahmeära plausibler als 1990er"
+                )
 
         # Profil aus dezennium-nächstem Profil
         era_profile = _nearest_era_profile(decade)
@@ -728,6 +768,15 @@ class MusikalischerGlobalplanDienst:
         brightness_raw = _estimate_brightness(mono, sr)
         dynamic_range = _estimate_dynamic_range(mono)
 
+        if genre == "unknown" and is_tape_chain and is_lossy_chain and 1960 <= decade <= 1980:
+            if 90.0 <= bpm <= 150.0 and warmth_raw >= 0.45 and brightness_raw <= 0.60:
+                genre = "schlager"
+                subgenre = "deutscher_schlager"
+                genre_conf = 0.36
+                reasoning.append(
+                    "DSP-Fallback: tape→lossy + 1970er + moderates Tempo/Wärmeprofil → deutscher Schlager"
+                )
+
         # Semantische CLAP-Ähnlichkeit (wenn CLAP aktiv)
         semantic_sim = era_conf if clap_available else era_conf * 0.7
 
@@ -775,16 +824,6 @@ class MusikalischerGlobalplanDienst:
             "dat":        0.30,
         }
 
-        chain_materials: set[str] = set()
-        if isinstance(chain_info, dict):
-            _chain_raw = chain_info.get("chain")
-            if isinstance(_chain_raw, list):
-                chain_materials = {str(x).strip().lower() for x in _chain_raw if x is not None}
-            for _k in ("primary", "secondary", "tertiary"):
-                _v = chain_info.get(_k)
-                if isinstance(_v, str) and _v.strip():
-                    chain_materials.add(_v.strip().lower())
-
         is_digital_chain = bool(
             (material in _DIGITAL_NR_CAP)
             or any(m in _DIGITAL_NR_CAP for m in chain_materials)
@@ -826,7 +865,7 @@ class MusikalischerGlobalplanDienst:
         )
 
         # ── 6. Cross-Phase-Anpassungen ──────────────────────────────────────
-        phase_adjustments: Dict[str, Dict[str, float]] = {}
+        phase_adjustments: dict[str, dict[str, float]] = {}
 
         # Phase 01: Click Removal — stärker bei Pre-1940-Material
         click_strength = float(np.clip(1.5 - (decade - 1890) / 200.0, 0.5, 1.5))
@@ -993,7 +1032,7 @@ class MusikalischerGlobalplanDienst:
 # Singleton (§3.x — Thread-sicher, Double-Checked Locking)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[MusikalischerGlobalplanDienst] = None
+_instance: MusikalischerGlobalplanDienst | None = None
 _lock = threading.Lock()
 
 
@@ -1011,10 +1050,10 @@ def erstelle_globalplan(
     audio: np.ndarray,
     sr: int,
     material: str = "unknown",
-    hint_genre: Optional[str] = None,
-    hint_decade: Optional[int] = None,
+    hint_genre: str | None = None,
+    hint_decade: int | None = None,
     use_ml_classifiers: bool = True,
-    chain_info: Optional[dict] = None,
+    chain_info: dict | None = None,
 ) -> StilbewussterRestaurierungsplan:
     """Convenience-Funktion: erstellt den Globalplan via Singleton-Dienst."""
     return get_musikalischer_globalplan_dienst().erstelle_plan(

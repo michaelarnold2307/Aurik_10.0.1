@@ -212,10 +212,7 @@ class MediaChainDetector:
         # ── Vorverarbeitung: Mono, Float32 ──────────────────────────────────
         if audio is None or len(audio) == 0:
             return self._zero_features()
-        if audio.ndim > 1:
-            mono = audio.mean(axis=1).astype(np.float32)
-        else:
-            mono = audio.astype(np.float32)
+        mono = audio.mean(axis=1).astype(np.float32) if audio.ndim > 1 else audio.astype(np.float32)
         # NaN/Inf-Guard
         mono = np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0)
         n = len(mono)
@@ -358,7 +355,7 @@ class MediaChainDetector:
                         fh = f0 * nk
                         if fh >= nyq:
                             return 0.0
-                        ih = int(round(fh * fft_ns / sr))
+                        ih = round(fh * fft_ns / sr)
                         ih = min(ih, len(spec_s) - 1)
                         lo = max(0, ih - 3)
                         hi = min(len(spec_s), ih + 4)

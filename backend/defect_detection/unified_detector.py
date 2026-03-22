@@ -1,4 +1,5 @@
 import logging
+
 """
 Unified Defect Detector
 =======================

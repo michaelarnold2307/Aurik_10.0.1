@@ -12,10 +12,10 @@ Invariante: Kein ML, nur DSP-Schnellanalyse. Laufzeit ≤ 5 s.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np
@@ -34,8 +34,8 @@ class RestorabilityResult:
     restorability_score: float  # 0–100: 100 = optimale Restaurierbarkeit
     predicted_mos: float  # Erwarteter PQS-MOS ∈ [1.0, 5.0]
     predicted_mos_range: tuple  # 90 %-Konfidenzintervall
-    limiting_defects: List[str]  # Top-3 Defekte, die Restaurierbarkeit begrenzen
-    recommendations: List[str]  # Laienverständliche Empfehlungen (Deutsch)
+    limiting_defects: list[str]  # Top-3 Defekte, die Restaurierbarkeit begrenzen
+    recommendations: list[str]  # Laienverständliche Empfehlungen (Deutsch)
     processing_time_estimate_s: float  # Geschätzte Verarbeitungszeit
     snr_db: float = 0.0  # Geschätzter SNR
     grade: str = "unknown"  # excellent / good / fair / poor / critical
@@ -116,13 +116,10 @@ class RestorabilityEstimator:
         assert sr == 48000, f"SR muss 48000 Hz sein, erhalten: {sr}"
 
         # Mono-Konvertierung
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=0).astype(np.float32)
-        else:
-            mono = audio.astype(np.float32)
+        mono = np.mean(audio, axis=0).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
         mono = np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0)
 
-        limiting_defects: List[str] = []
+        limiting_defects: list[str] = []
         score = 100.0
 
         # ----------------------------------------------------------------
@@ -321,7 +318,7 @@ class RestorabilityEstimator:
         clip_ratio: float,
         bw_hz: float,
         material: str,
-    ) -> List[str]:
+    ) -> list[str]:
         msgs = {
             "excellent": "Exzellent restaurierbar — fast wie Neuaufnahme erwartet.",
             "good": "Gut restaurierbar — deutliche Verbesserung erwartet.",
@@ -346,7 +343,7 @@ class RestorabilityEstimator:
 # Thread-sicherer Singleton (Double-Checked Locking §3.2)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[RestorabilityEstimator] = None
+_instance: RestorabilityEstimator | None = None
 _lock = threading.Lock()
 
 

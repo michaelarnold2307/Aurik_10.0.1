@@ -5,8 +5,8 @@ Entfernt transiente Störungen (plötzliche laute Impulse, Spikes, Pops)
 Integration: Phase 2.2 (nach Click/Crackle, vor Dropout Repair)
 """
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np

@@ -74,11 +74,9 @@ Version: 4.0.0 (Gender-Aware De-Esser + Musical Excellence)
 Date: 16. Februar 2026
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 from typing import Optional
 
@@ -86,6 +84,7 @@ import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -108,9 +107,9 @@ except ImportError:  # pragma: no cover
 try:
     from dsp.breath_intelligence import BreathDetector, BreathIntelligence
     from dsp.formant_system import FormantSystem, FormantTracker
+    from dsp.vocal_dynamics_intelligence import VocalDynamicsIntelligence
     from dsp.vocal_presence_enhancer import VocalPresenceEnhancer
     from dsp.vocal_spectral_inpainting import VocalSpectralInpainting
-    from dsp.vocal_dynamics_intelligence import VocalDynamicsIntelligence
     AURIK_8_AVAILABLE = True
     logger.debug("Aurik 8.0 Enhancement-Module geladen (Formant, Breath, Presence, Inpainting, Dynamics)")
 except ImportError as _aurik8_err:
@@ -384,7 +383,7 @@ class DeEsserPhase(PhaseInterface):
 
         is_stereo = audio.ndim == 2
         enhanced_audio = audio.copy()
-        audio_original = audio.copy()  # Save original for measurement!  # noqa: F841
+        audio.copy()  # Save original for measurement!
 
         # Mono-Konvertierung für Analysis (aber später stereo processing)
         audio_mono = np.mean(audio, axis=1) if is_stereo else audio
@@ -427,7 +426,7 @@ class DeEsserPhase(PhaseInterface):
 
                 # STAGE 4: Vocal Presence (Harmonic + Air Band + Broadcast)
                 logger.debug("🎵 Stage 4: Vocal Presence Enhancement")
-                enhanced_audio, presence_metrics = self.vocal_presence.process(enhanced_audio, sample_rate)
+                enhanced_audio, _presence_metrics = self.vocal_presence.process(enhanced_audio, sample_rate)
                 logger.debug("  ✅ Harmonics enhanced, air band boosted")
 
                 # STAGE 5: Spectral Inpainting (Codec Artifact Repair)
@@ -439,7 +438,7 @@ class DeEsserPhase(PhaseInterface):
 
                 # STAGE 6: Vocal Dynamics (Micro-Compression)
                 logger.debug("🎵 Stage 6: Vocal Dynamics Intelligence")
-                enhanced_audio, dynamics_metrics = self.vocal_dynamics.process(enhanced_audio, sample_rate)
+                enhanced_audio, _dynamics_metrics = self.vocal_dynamics.process(enhanced_audio, sample_rate)
                 logger.debug("  ✅ Micro-compression applied")
 
                 logger.info(
@@ -535,7 +534,7 @@ class DeEsserPhase(PhaseInterface):
             )
             deessed_audio = np.column_stack((deessed_left, deessed_right))
         else:
-            deessed_audio, gender_bands_used = self._process_channel_multiband_gender_aware(
+            deessed_audio, _gender_bands_used = self._process_channel_multiband_gender_aware(
                 enhanced_audio,
                 sample_rate,
                 material,
@@ -567,7 +566,7 @@ class DeEsserPhase(PhaseInterface):
         # Frikative, die durch vorangehende NR abgedämpft wurden, wieder anheben.
         # Läuft NACH De-Essing (Phase 19) → vor Phase 43 und Phase 42.
         # ==============================================================
-        consonant_result: Optional[ConsonantEnhancementResult] = None
+        consonant_result: ConsonantEnhancementResult | None = None
         if _HAS_CONSONANT_ENHANCEMENT:
             try:
                 _gender_str = (
@@ -983,10 +982,7 @@ class DeEsserPhase(PhaseInterface):
             energy_original = np.sqrt(np.mean(hf_original**2))
             energy_processed = np.sqrt(np.mean(hf_processed**2))
 
-            if energy_original > 1e-9:
-                loss_ratio = 1.0 - (energy_processed / energy_original)
-            else:
-                loss_ratio = 0.0
+            loss_ratio = 1.0 - energy_processed / energy_original if energy_original > 1e-09 else 0.0
 
         except Exception as e:
             logger.warning(f"Intelligibility check failed: {e}")

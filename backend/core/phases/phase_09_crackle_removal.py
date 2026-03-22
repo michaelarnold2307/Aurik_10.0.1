@@ -69,15 +69,16 @@ Version: 2.0.0 (Professional Upgrade + ML-Hybrid BANQUET)
 Date: 15. Februar 2026
 """
 
+import contextlib
 import logging
-from pathlib import Path
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
-from scipy.fft import rfft, rfftfreq
 import scipy.signal as signal
+from scipy.fft import rfft, rfftfreq
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 
@@ -117,22 +118,51 @@ def _get_banquet_onnx_session():
                 try:
                     import onnxruntime as ort
 
+                    from backend.core.ml_memory_budget import release as _ml_release
+                    from backend.core.ml_memory_budget import try_allocate as _try_allocate
+
+                    _BANQUET_SIZE_GB = 0.05  # banquet_vinyl_final.onnx ~ 50 MB
+                    if not _try_allocate("BANQUET", size_gb=_BANQUET_SIZE_GB):
+                        logger.warning(
+                            "ML-Budget erschöpft — BANQUET ONNX kann nicht geladen werden. "
+                            "DSP-Fallback (SpektralDecrackler) wird aktiviert."
+                        )
+                        _BANQUET_ONNX_SESSION = False
+                        return None
+
                     _model_path = (
                         Path(__file__).parent.parent.parent / "models" / "banquet" / "banquet_vinyl_final.onnx"
                     )
                     if _model_path.exists():
-                        sess = ort.InferenceSession(
-                            str(_model_path),
-                            providers=["CPUExecutionProvider"],
-                        )
+                        try:
+                            sess = ort.InferenceSession(
+                                str(_model_path),
+                                providers=["CPUExecutionProvider"],
+                            )
+                        except Exception as _load_exc:
+                            _ml_release("BANQUET")
+                            logger.warning(
+                                "BANQUET ONNX-Session Ladefehler: %s — DSP-Fallback aktiv.", _load_exc
+                            )
+                            _BANQUET_ONNX_SESSION = False
+                            return None
+
                         _BANQUET_ONNX_SESSION = sess
+                        try:
+                            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager
+                            get_plugin_lifecycle_manager().register(
+                                "BANQUET", size_gb=_BANQUET_SIZE_GB, unload_fn=lambda: None
+                            )
+                        except Exception:
+                            pass
                         logger.info(
                             "BANQUET ONNX-Session geladen (direkter Zugriff, kein Docker): %s",
                             _model_path,
                         )
                     else:
+                        _ml_release("BANQUET")
                         logger.warning(
-                            "BANQUET ONNX-Modell nicht gefunden: %s — Docker-Fallback aktiv",
+                            "BANQUET ONNX-Modell nicht gefunden: %s — DSP-Fallback aktiv",
                             _model_path,
                         )
                         _BANQUET_ONNX_SESSION = False
@@ -422,14 +452,10 @@ class CrackleRemovalPhase(PhaseInterface):
                 # Cleanup
                 import os
 
-                try:
+                with contextlib.suppress(Exception):
                     os.unlink(tmp_in_path)
-                except Exception:
-                    pass
-                try:
+                with contextlib.suppress(Exception):
                     os.unlink(tmp_out_path)
-                except Exception:
-                    pass
 
         except Exception as e:
             logger.error(f"BANQUET ML processing failed: {e}")
@@ -607,10 +633,7 @@ class CrackleRemovalPhase(PhaseInterface):
             (short_transients, medium_transients, long_transients)
         """
         # Convert to mono
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Short-term (1-5ms): Individual clicks
         transients_short = self._detect_transients_scale(
@@ -732,10 +755,7 @@ class CrackleRemovalPhase(PhaseInterface):
             List of (start, end) crackle regions
         """
         # Convert to mono
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Sliding window (1 second)
         window_samples = int(1.0 * self.sample_rate)
@@ -851,10 +871,7 @@ class CrackleRemovalPhase(PhaseInterface):
             Background texture model (same shape as audio)
         """
         # Extract clean regions (no crackle)
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Mask for clean regions
         clean_mask = np.ones(len(mono), dtype=bool)
@@ -867,7 +884,7 @@ class CrackleRemovalPhase(PhaseInterface):
 
             # Average spectrum (background texture)
             nperseg = 2048
-            f, t, Zxx = signal.stft(clean_audio, self.sample_rate, nperseg=nperseg)
+            _f, _t, Zxx = signal.stft(clean_audio, self.sample_rate, nperseg=nperseg)
             avg_spectrum = np.mean(np.abs(Zxx), axis=1)
 
             return avg_spectrum

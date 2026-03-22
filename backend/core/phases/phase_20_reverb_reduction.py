@@ -72,8 +72,8 @@ import time
 import numpy as np
 from scipy import signal
 
-
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 # Resource Management for fallback to lightweight algorithms

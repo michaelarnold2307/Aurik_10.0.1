@@ -28,9 +28,9 @@ Spec:   §2.8 Step 5b/5c, §4.4 (ConsonantEnhancement DSP-Zeile)
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
+from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # ── Stimmtyp-adaptive Frikativ-Bänder (§2.8, §4.4) ─────────────────────────
 #   MALE:   5–10 kHz | FEMALE: 6–12 kHz | CHILD: 7–14 kHz
-FRICATIVE_BANDS: Dict[str, Tuple[float, float]] = {
+FRICATIVE_BANDS: dict[str, tuple[float, float]] = {
     "male": (5_000.0, 10_000.0),
     "female": (6_000.0, 12_000.0),
     "child": (7_000.0, 14_000.0),
@@ -63,7 +63,7 @@ HF_ENERGY_THRESHOLD: float = 0.25
 # Kausal-Konditionierungsfaktoren (§2.8 positionsabhängige Stärke):
 # – Wenn BANDWIDTH_LOSS hoch → NR hat mehr abgedämpft → mehr Boost nötig
 # – Wenn HIGH_FREQ_NOISE hoch → Rauschentfernung war stärker → mehr Boost
-CAUSAL_DEFECT_BOOST: Dict[str, float] = {
+CAUSAL_DEFECT_BOOST: dict[str, float] = {
     "bandwidth_loss": 1.0,  # maximaler Boost-Faktor (up to MAX_BOOST_DB)
     "high_freq_noise": 0.85,
     "compression_artifacts": 0.60,
@@ -103,11 +103,11 @@ class ConsonantEnhancementResult:
 
 # ── ConsonantEnhancement Singleton ──────────────────────────────────────────
 
-_instance: Optional[ConsonantEnhancement] = None
+_instance: ConsonantEnhancement | None = None
 _lock = threading.Lock()
 
 
-def get_consonant_enhancer() -> "ConsonantEnhancement":
+def get_consonant_enhancer() -> ConsonantEnhancement:
     """Thread-sicherer Singleton-Accessor (Double-Checked Locking, §3.2)."""
     global _instance
     if _instance is None:
@@ -121,7 +121,7 @@ def enhance_consonants(
     audio: np.ndarray,
     sr: int,
     voice_gender: str = "unknown",
-    defect_scores: Optional[Dict[str, float]] = None,
+    defect_scores: dict[str, float] | None = None,
 ) -> ConsonantEnhancementResult:
     """Convenience-Wrapper: Konsonanten-Enhancement ohne Klassen-Instantiierung.
 
@@ -175,7 +175,7 @@ class ConsonantEnhancement:
         audio: np.ndarray,
         sr: int,
         voice_gender: str = "unknown",
-        defect_scores: Optional[Dict[str, float]] = None,
+        defect_scores: dict[str, float] | None = None,
     ) -> ConsonantEnhancementResult:
         """Frikativ-Konsonanten stimmtyp-adaptiv wiederherstellen.
 
@@ -306,7 +306,7 @@ class ConsonantEnhancement:
 
     # ── Private Hilfsmethoden ────────────────────────────────────────────── #
 
-    def _causal_factor(self, defect_scores: Dict[str, float]) -> float:
+    def _causal_factor(self, defect_scores: dict[str, float]) -> float:
         """Kausal-Konditionierungsfaktor aus Defekt-Scores ableiten (0..1).
 
         Stärkere Defekte → stärkere Frikativ-Dämpfung durch NR → mehr Boost nötig.
@@ -452,7 +452,7 @@ class ConsonantEnhancement:
 # ── Modul-Hilfsfunktionen ────────────────────────────────────────────────── #
 
 
-def _fricative_band(voice_gender: str, sr: int) -> Tuple[float, float]:
+def _fricative_band(voice_gender: str, sr: int) -> tuple[float, float]:
     """Stimmtyp-adaptives Frikativband (Nyquist-sicher)."""
     f_lo, f_hi = FRICATIVE_BANDS.get(voice_gender.lower(), FRICATIVE_BANDS["unknown"])
     nyq = sr / 2.0
@@ -544,11 +544,11 @@ class PlosiveBurstResult:
     """Onset timestamps in milliseconds."""
 
 
-_plosive_instance: Optional["PlosiveBurstPreserver"] = None
+_plosive_instance: PlosiveBurstPreserver | None = None
 _plosive_lock = threading.Lock()
 
 
-def get_plosive_preserver() -> "PlosiveBurstPreserver":
+def get_plosive_preserver() -> PlosiveBurstPreserver:
     """Thread-safe singleton accessor (Double-Checked Locking, §3.2)."""
     global _plosive_instance
     if _plosive_instance is None:
@@ -738,10 +738,7 @@ class PlosiveBurstPreserver:
             onset_ms_list.append(round(onset_sample / sr * 1000.0, 2))
 
         # Reassemble
-        if stereo and len(result_channels) > 1:
-            out = np.column_stack(result_channels)
-        else:
-            out = result_channels[0]
+        out = np.column_stack(result_channels) if stereo and len(result_channels) > 1 else result_channels[0]
 
         out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
         out = np.clip(out, -1.0, 1.0)

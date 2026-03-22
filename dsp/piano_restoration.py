@@ -733,10 +733,7 @@ def main():
     audio, sr = sf.read(args.input, always_2d=True)
 
     # Make mono for processing
-    if audio.shape[1] == 2:
-        audio_mono = np.mean(audio, axis=1)
-    else:
-        audio_mono = audio[:, 0]
+    audio_mono = np.mean(audio, axis=1) if audio.shape[1] == 2 else audio[:, 0]
 
     # Create piano restoration system
     _logger.info("Piano/Keys Restoration System")

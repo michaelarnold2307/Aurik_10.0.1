@@ -49,11 +49,11 @@ class InferenceResult:
             return default
 
 
-_instance: Optional["MLParameterInferenceEngine"] = None
+_instance: MLParameterInferenceEngine | None = None
 _lock = threading.Lock()
 
 
-def get_ml_inference_engine(model_path: str | None = None) -> "MLParameterInferenceEngine":
+def get_ml_inference_engine(model_path: str | None = None) -> MLParameterInferenceEngine:
     """Get or create MLParameterInferenceEngine singleton.
 
     Args:

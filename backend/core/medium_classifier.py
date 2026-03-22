@@ -5,11 +5,11 @@ Automatische Trägermedien-Erkennung (17 Materialtypen).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hashlib
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def _get_material_type():
     try:
-        from backend.core.defect_scanner import MaterialType  # noqa: PLC0415
+        from backend.core.defect_scanner import MaterialType
 
         return MaterialType
     except Exception:
@@ -30,10 +30,10 @@ def _get_material_type():
 class MaterialEvidence:
     material: Any
     confidence: float
-    features_matched: List[str] = field(default_factory=list)
-    features_against: List[str] = field(default_factory=list)
+    features_matched: list[str] = field(default_factory=list)
+    features_against: list[str] = field(default_factory=list)
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         mt = self.material
         return {
             "material": mt.value if hasattr(mt, "value") else str(mt),
@@ -47,7 +47,7 @@ class MaterialEvidence:
 class ClassificationResult:
     material: Any
     confidence: float
-    evidence: List[MaterialEvidence] = field(default_factory=list)
+    evidence: list[MaterialEvidence] = field(default_factory=list)
     bandwidth_hz: float = 0.0
     snr_db: float = 0.0
     noise_color: float = 1.0
@@ -64,7 +64,7 @@ class ClassificationResult:
             return str(mt.value)
         return str(mt)
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         mt = self.material
         return {
             "material": mt.value if hasattr(mt, "value") else str(mt),
@@ -85,11 +85,11 @@ class _SpectralFingerprinter:
     _FRAME_SIZE = 1024
     _HOP_SIZE = 512
 
-    def extract(self, audio: np.ndarray, sr: int) -> Dict[str, float]:
+    def extract(self, audio: np.ndarray, sr: int) -> dict[str, float]:
         mono = self._to_mono(audio)
         if mono.size < self._FRAME_SIZE:
             return self._null_features()
-        f: Dict[str, float] = {}
+        f: dict[str, float] = {}
         f["bandwidth_hz"] = self._bandwidth(mono, sr)
         f["snr_db"] = self._snr(mono)
         f["noise_color"] = self._noise_color(mono, sr)
@@ -109,7 +109,7 @@ class _SpectralFingerprinter:
         return arr.mean(axis=0) if arr.ndim == 2 else arr
 
     @staticmethod
-    def _null_features() -> Dict[str, float]:
+    def _null_features() -> dict[str, float]:
         return {
             "bandwidth_hz": 0.0,
             "snr_db": 0.0,
@@ -200,7 +200,7 @@ class _SpectralFingerprinter:
 
 
 class _MaterialScorer:
-    def score(self, features: Dict[str, float], MaterialType: Any) -> "ClassificationResult":
+    def score(self, features: dict[str, float], MaterialType: Any) -> ClassificationResult:
         bw = features.get("bandwidth_hz", 0.0)
         snr = features.get("snr_db", 0.0)
         nc = features.get("noise_color", 1.0)
@@ -224,6 +224,8 @@ class _MaterialScorer:
             "aac": self._s(ba > 0.03, bw > 17000.0, pe < 3.0),
             "minidisc": self._s(ba > 0.1, bw < 16000.0, snr > 35.0),
             "streaming": self._s(ba > 0.02, bw > 16000.0),
+            "quadrophony": self._s(cd > 0.0003, nc > 1.2, wf > 0.3, bw > 10000.0),
+            "ambisonic": self._s(bw > 14000.0, snr > 35.0, wf < 0.4),
             "unknown": 0.10,
         }
 
@@ -270,7 +272,7 @@ class _MaterialScorer:
         return name
 
 
-_sha_cache: Dict[str, ClassificationResult] = {}
+_sha_cache: dict[str, ClassificationResult] = {}
 _sha_cache_lock = threading.Lock()
 _MAX_CACHE = 64
 
@@ -282,10 +284,10 @@ class MediumClassifier:
         self._fp = _SpectralFingerprinter()
         self._sc = _MaterialScorer()
 
-    def classify_medium(self, audio: np.ndarray, sr: int) -> "ClassificationResult":
+    def classify_medium(self, audio: np.ndarray, sr: int) -> ClassificationResult:
         return self.classify(audio, sr, use_ml=False)
 
-    def classify(self, audio: np.ndarray, sr: int, use_ml: bool = True) -> "ClassificationResult":
+    def classify(self, audio: np.ndarray, sr: int, use_ml: bool = True) -> ClassificationResult:
         key = self._cache_key(audio, sr)
         with _sha_cache_lock:
             if key in _sha_cache:
@@ -299,7 +301,7 @@ class MediumClassifier:
         self._cache_put(key, r)
         return r
 
-    def _dsp_classify(self, audio: np.ndarray, sr: int) -> "ClassificationResult":
+    def _dsp_classify(self, audio: np.ndarray, sr: int) -> ClassificationResult:
         MT = _get_material_type()
         if audio.size == 0:
             mat = MT.UNKNOWN if MT is not None else "unknown"
@@ -308,9 +310,9 @@ class MediumClassifier:
             )
         return self._sc.score(self._fp.extract(audio, sr), MT)
 
-    def _try_clap_classification(self, audio: np.ndarray, sr: int) -> Optional["ClassificationResult"]:
+    def _try_clap_classification(self, audio: np.ndarray, sr: int) -> ClassificationResult | None:
         try:
-            from plugins.laion_clap_plugin import get_laion_clap_plugin  # noqa: PLC0415
+            from plugins.laion_clap_plugin import get_laion_clap_plugin
 
             plugin = get_laion_clap_plugin()
             r = plugin.classify_medium(audio, sr)
@@ -329,14 +331,14 @@ class MediumClassifier:
         return h.hexdigest()[:16]
 
     @staticmethod
-    def _cache_put(key: str, result: "ClassificationResult") -> None:
+    def _cache_put(key: str, result: ClassificationResult) -> None:
         with _sha_cache_lock:
             if len(_sha_cache) >= _MAX_CACHE:
                 del _sha_cache[next(iter(_sha_cache))]
             _sha_cache[key] = result
 
 
-_instance: Optional[MediumClassifier] = None
+_instance: MediumClassifier | None = None
 _lock = threading.Lock()
 
 
@@ -353,4 +355,4 @@ def classify_medium(audio: np.ndarray, sr: int, use_ml: bool = True) -> Classifi
     return get_medium_classifier().classify(audio, sr, use_ml=use_ml)
 
 
-__all__ = ["ClassificationResult", "MaterialEvidence", "MediumClassifier", "get_medium_classifier", "classify_medium"]
+__all__ = ["ClassificationResult", "MaterialEvidence", "MediumClassifier", "classify_medium", "get_medium_classifier"]

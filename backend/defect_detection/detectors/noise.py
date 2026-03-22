@@ -25,7 +25,7 @@ class BroadbandNoiseDetector(DefectDetector):
         """Detect broadband noise, kontextbewusst."""
         if audio.ndim == 2:
             audio = audio[:, 0]
-        freqs, psd = welch(audio, sr, nperseg=min(2048, len(audio) // 4))
+        _freqs, psd = welch(audio, sr, nperseg=min(2048, len(audio) // 4))
         geometric_mean = np.exp(np.mean(np.log(psd + 1e-10)))
         arithmetic_mean = np.mean(psd)
         spectral_flatness = geometric_mean / (arithmetic_mean + 1e-10)

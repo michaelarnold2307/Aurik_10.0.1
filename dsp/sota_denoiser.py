@@ -6,9 +6,9 @@ Dieses Modul implementiert SOTA-orientiertes adaptives Denoising (DeepFilterNet2
 Es ist mit DSPContract, Auditierbarkeit und Rollback-Fähigkeit gemäß Dokumentation ausgestattet.
 """
 
-from dataclasses import asdict, dataclass
 import os
 import tempfile
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
@@ -249,7 +249,7 @@ class SotaDenoiser:
                 self._audit_log("success", "DeepFilterNet2-Inferenz erfolgreich")
                 return np.asarray(model.denoise(audio, sr))
             # Fallback: Spektrale Maskierung
-            f, t, Zxx = scipy.signal.stft(audio, fs=sr, nperseg=1024, noverlap=512)
+            f, _t, Zxx = scipy.signal.stft(audio, fs=sr, nperseg=1024, noverlap=512)
             mag = np.abs(Zxx)
             phase = np.angle(Zxx)
             noise_mag = np.minimum.accumulate(mag, axis=1)

@@ -30,8 +30,10 @@ Example:
     ...     logger.debug(f"Blocked: {result.reason}")
 """
 
-from .conduct_enforcer import ConductEnforcer, ValidationResult, Zone
 import logging
+
+from .conduct_enforcer import ConductEnforcer, ValidationResult, Zone
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["ConductEnforcer", "ValidationResult", "Zone"]

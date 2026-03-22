@@ -33,10 +33,10 @@ Referenzen:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -292,6 +292,24 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_04_eq_correction",
         "phase_03_denoise",
     ],
+    # §7.2 Spec 06 — getrennte Routing-Einträge für WOW/FLUTTER DefectTypes
+    "wow_flutter": [
+        "phase_12_wow_flutter_fix",
+        "phase_31_speed_pitch_correction",
+        "phase_04_eq_correction",
+        "phase_03_denoise",
+    ],
+    "wow": [
+        "phase_12_wow_flutter_fix",
+        "phase_31_speed_pitch_correction",
+        "phase_04_eq_correction",
+    ],
+    "flutter": [
+        "phase_12_wow_flutter_fix",
+        "phase_08_transient_preservation",
+        "phase_31_speed_pitch_correction",
+        "phase_03_denoise",
+    ],
     # ── Elektrik / Mechanik ──────────────────────────────────────────────────
     "electrical_hum": ["phase_02_hum_removal", "phase_03_denoise", "phase_04_eq_correction"],
     "head_misalignment": [
@@ -379,6 +397,12 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_03_denoise",
         "phase_06_frequency_restoration",
         "phase_29_tape_hiss_reduction",
+    ],
+    # ── Sibilanten (§6.3 v9.10.57) ──────────────────────────────────────────
+    "sibilance": [
+        "phase_19_de_esser",  # Primär: De-Esser (Sibilantenreduktion)
+        "phase_43_ml_deesser",  # ML-gestützter De-Esser
+        "phase_42_vocal_enhancement",  # Gesangs-Enhancement (Frikativ-Balance)
     ],
 }
 
@@ -589,11 +613,11 @@ def _compute_hum_score(ps: np.ndarray, freqs: np.ndarray) -> float:
 
 def _harmonic_line_score(ps: np.ndarray, freqs: np.ndarray, f0: float, n_harmonics: int = 5) -> float:
     df = freqs[1] - freqs[0] if len(freqs) > 1 else 1.0
-    total = np.sum(ps) + 1e-12  # noqa: F841
+    np.sum(ps) + 1e-12
     score = 0.0
     for k in range(1, n_harmonics + 1):
         fk = k * f0
-        idx = int(round(fk / df))
+        idx = round(fk / df)
         idx = min(max(idx, 0), len(ps) - 1)
         # Schmales Fenster ± 2 Bins
         window = ps[max(0, idx - 2) : idx + 3]
@@ -609,7 +633,7 @@ def _harmonic_line_score(ps: np.ndarray, freqs: np.ndarray, f0: float, n_harmoni
 def _compute_click_density(mono: np.ndarray, sr: int) -> float:
     """Clicks pro Sekunde mittels robustem Z-Score."""
     diff = np.diff(mono)
-    med = np.median(np.abs(diff))  # noqa: F841
+    np.median(np.abs(diff))
     mad = np.median(np.abs(diff - np.median(diff))) + 1e-9
     z = np.abs(diff - np.median(diff)) / (1.4826 * mad)
     clicks = float(np.sum(z > 8.0))

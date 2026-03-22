@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def _k_weighted_lufs(x: np.ndarray, sr: int = 48000) -> float:
@@ -51,13 +55,58 @@ class StemRemixBalancer:
     statt RMS-Näherung für spec-konforme Gain-Korrektur.
     """
 
+    @staticmethod
+    def _estimate_vocal_weight(original: np.ndarray, sr: int) -> float:
+        """Estimate optimal vocal-to-instrumental LUFS weight from spectral analysis.
+
+        Analyses up to 10 s of the original (centre excerpt, spec §1.5) and measures
+        the power ratio in the vocal frequency range (300 Hz – 3500 Hz) relative to
+        total power. Bass-heavy mixes are penalised to decrease vocal weight.
+
+        Returns:
+            float in [0.35, 0.65] — higher = more vocal-dominant mix.
+            Returns 0.5 on analysis failure.
+        """
+        try:
+            mono = original.mean(axis=0) if original.ndim == 2 else original
+            mono = np.nan_to_num(np.asarray(mono, dtype=np.float32))
+            max_s = int(sr * 10)  # up to 10 s centre excerpt
+            if len(mono) > max_s:
+                c = len(mono) // 2
+                mono = mono[c - max_s // 2: c + max_s // 2]
+            if len(mono) < 1024:
+                return 0.5
+            n_fft = min(8192, len(mono))
+            window = np.hanning(n_fft)
+            c = len(mono) // 2
+            chunk = mono[max(0, c - n_fft // 2): c - n_fft // 2 + n_fft]
+            if len(chunk) < n_fft:
+                chunk = np.pad(chunk, (0, n_fft - len(chunk)))
+            spec = np.abs(np.fft.rfft(chunk * window)) ** 2
+            freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+            total_power = float(np.sum(spec)) + 1e-30
+            vocal_mask = (freqs >= 300.0) & (freqs <= 3500.0)
+            vocal_power = float(np.sum(spec[vocal_mask]))
+            bass_mask = (freqs >= 50.0) & (freqs < 300.0)
+            bass_ratio = float(np.sum(spec[bass_mask])) / total_power
+            vocal_ratio = vocal_power / total_power
+            weight = 0.35 + 0.30 * float(np.clip((vocal_ratio - 0.20) / 0.35, 0.0, 1.0))
+            if bass_ratio > 0.15:
+                weight = max(0.35, weight - 0.05)
+            result = float(np.clip(weight, 0.35, 0.65))
+            logger.debug("_estimate_vocal_weight: %.3f (vr=%.3f br=%.3f)", result, vocal_ratio, bass_ratio)
+            return result
+        except Exception as exc:
+            logger.warning("_estimate_vocal_weight failed (%s) — using 0.5", exc)
+            return 0.5
+
     def balance_remix(
         self,
         vocals: np.ndarray,
         instruments: np.ndarray,
         original: np.ndarray,
         sr: int,
-        vocal_weight: float = 0.5,
+        vocal_weight: float | None = None,
     ) -> np.ndarray:
         """Gain-korrigierter Re-Mix: LUFS(mix) - LUFS(original) ≤ 0.3 LU (§1.4 Spec).
 
@@ -79,6 +128,10 @@ class StemRemixBalancer:
         v = v[..., :n]
         i = i[..., :n]
         o = o[..., :n]
+
+        if vocal_weight is None:
+            vocal_weight = self._estimate_vocal_weight(o, sr)
+            logger.info("StemRemixBalancer: auto vocal_weight=%.3f", vocal_weight)
 
         # BS.1770-5 K-gewichtete LUFS-Messung (statt RMS)
         _mono_o = o.mean(axis=0) if o.ndim == 2 else o
@@ -127,10 +180,10 @@ def balance_remix(
     instruments: np.ndarray,
     original: np.ndarray,
     sr: int,
-    vocal_weight: float = 0.5,
+    vocal_weight: float | None = None,
 ) -> np.ndarray:
     """Convenience-Wrapper für StemRemixBalancer.balance_remix() (§1.4 Spec)."""
     return get_stem_remix_balancer().balance_remix(vocals, instruments, original, sr, vocal_weight)
 
 
-__all__ = ["StemRemixBalancer", "get_stem_remix_balancer", "balance_remix"]
+__all__ = ["StemRemixBalancer", "balance_remix", "get_stem_remix_balancer"]

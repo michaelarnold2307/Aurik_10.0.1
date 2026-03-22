@@ -5,8 +5,8 @@ bandwidth_extender.py - SOTA-Bandbreiten-Extender für Aurik 6.0
 SOTA-konformer Bandbreiten-Extender mit DSPContract und Auditierbarkeit.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

@@ -372,8 +372,8 @@ class DeEsserSafety(BaseSafetyWrapper):
             return PostCheckResult(passed=False, quality_score=0.0, issues=issues)
 
         # 1. Check sibilance reduction
-        has_sib_before, intensity_before, _ = detect_sibilance(original, sr)
-        has_sib_after, intensity_after, _ = detect_sibilance(processed, sr)
+        _has_sib_before, intensity_before, _ = detect_sibilance(original, sr)
+        _has_sib_after, intensity_after, _ = detect_sibilance(processed, sr)
 
         metrics["sibilance_before"] = intensity_before
         metrics["sibilance_after"] = intensity_after

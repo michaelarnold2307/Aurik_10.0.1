@@ -100,7 +100,7 @@ class AiDehiss:
         audio_f32 = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0)
 
         noverlap = self._NPERSEG * 3 // 4
-        f, t, Zxx = stft(audio_f32, fs=sr, nperseg=self._NPERSEG, noverlap=noverlap)
+        _f, _t, Zxx = stft(audio_f32, fs=sr, nperseg=self._NPERSEG, noverlap=noverlap)
         mag = np.abs(Zxx)
         phase = np.angle(Zxx)
 

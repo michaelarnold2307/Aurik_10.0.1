@@ -12,13 +12,15 @@ import numpy as np
 import pytest
 
 from backend.core.defect_analysis import DefectAnalysis, DefectAnalyzer, SourceMedium
+from backend.core.defect_scanner import DefectScore, DefectType, MaterialType
 from backend.core.phase_skipping import PhaseSkipper, ProcessingPhase
+from backend.core.unified_restorer_v3 import RestorationConfig, UnifiedRestorerV3
 
 
 @pytest.fixture
 def sample_rate():
     """Standard sample rate."""
-    return 44100
+    return 48000
 
 
 @pytest.fixture
@@ -377,6 +379,59 @@ class TestPhaseSkippingIntegration:
         assert "Estimated Speedup" in report
         assert "PHASE DECISIONS" in report
         assert len(report) > 100  # Substantial report
+
+
+class TestUnifiedRestorerGuards:
+    """Tests for pass-through and clean digital guards."""
+
+    def test_clean_digital_guard_accepts_benign_mp3_profile(self):
+        """Clean, bandwidth-rich digital sources should stay near pass-through."""
+        sr = 48000
+        duration = 8.0
+        t = np.linspace(0.0, duration, int(sr * duration), endpoint=False)
+        envelope = np.where(t < 2.5, 0.25, np.where(t < 5.0, 0.55, 0.12)).astype(np.float32)
+        mono = envelope * (
+            0.60 * np.sin(2 * np.pi * 220 * t)
+            + 0.25 * np.sin(2 * np.pi * 1760 * t)
+            + 0.08 * np.sin(2 * np.pi * 6400 * t)
+            + 0.03 * np.sin(2 * np.pi * 12000 * t)
+        )
+        audio = np.stack([mono, mono], axis=1).astype(np.float32)
+
+        guarded, metrics = UnifiedRestorerV3._is_benign_digital_source(audio, sr, MaterialType.MP3_HIGH)
+
+        assert guarded is True
+        assert float(metrics["effective_bandwidth_hz"]) >= 12000.0
+        assert float(metrics["dyn_std_db"]) >= 3.5
+
+    def test_clean_digital_guard_rejects_noise_like_signal(self):
+        """Noise-like digital inputs must not trigger clean digital pass-through."""
+        rng = np.random.default_rng(42)
+        sr = 48000
+        audio = rng.normal(0.0, 0.12, size=(sr * 4, 2)).astype(np.float32)
+
+        guarded, metrics = UnifiedRestorerV3._is_benign_digital_source(audio, sr, MaterialType.MP3_HIGH)
+
+        assert guarded is False
+        assert float(metrics["flatness_median"]) > 2e-3
+
+    def test_apply_phase_skipping_skips_denoise_for_clean_digital(self):
+        """Clean digital sources must skip denoise when hiss severity is zero."""
+        restorer = UnifiedRestorerV3(RestorationConfig())
+
+        class _FakeDefectResult:
+            material_type = MaterialType.CD_DIGITAL
+            scores = {
+                DefectType.CLICKS: DefectScore(DefectType.CLICKS, 0.0, 1.0),
+                DefectType.HUM: DefectScore(DefectType.HUM, 0.0, 1.0),
+                DefectType.HIGH_FREQ_NOISE: DefectScore(DefectType.HIGH_FREQ_NOISE, 0.0, 1.0),
+                DefectType.DROPOUTS: DefectScore(DefectType.DROPOUTS, 0.0, 1.0),
+            }
+
+        filtered, reasons = restorer._apply_phase_skipping(["phase_03_denoise"], _FakeDefectResult())
+
+        assert filtered == []
+        assert reasons["phase_03_denoise"].startswith("Very low noise floor")
 
 
 class TestRealWorldScenarios:

@@ -37,18 +37,17 @@ Author: Aurik Development Team
 Version: 3.0.0
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 
 import numpy as np
 from scipy import interpolate, ndimage, signal
 
-from backend.core.quality_mode import QualityModeConfig, is_phase_ml_enabled, log_mode_decision
 from backend.core.defect_scanner import MaterialType
+from backend.core.quality_mode import QualityModeConfig, is_phase_ml_enabled, log_mode_decision
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -246,7 +245,7 @@ class SpectralRepair(PhaseInterface):
     ) -> np.ndarray:
         """Repair a single audio channel using spectral inpainting."""
         # Compute STFT
-        f, t, Zxx = signal.stft(
+        _f, _t, Zxx = signal.stft(
             audio,
             fs=sample_rate,
             window="hann",
@@ -338,7 +337,7 @@ class SpectralRepair(PhaseInterface):
         Returns:
             Repaired mono float32 audio.
         """
-        from backend.core.mrsa_zones import analyze_zones, synthesize_zone, merge_zones
+        from backend.core.mrsa_zones import analyze_zones, merge_zones, synthesize_zone
 
         audio_f32 = np.asarray(audio, dtype=np.float32)
         zone_stfts = analyze_zones(audio_f32, sample_rate)
@@ -600,10 +599,7 @@ class SpectralRepair(PhaseInterface):
         noise_orig = np.std(Pxx_orig)
         noise_rep = np.std(Pxx_rep)
 
-        if noise_orig > 1e-10:
-            reduction = max(0, min(1, (noise_orig - noise_rep) / noise_orig))
-        else:
-            reduction = 0.0
+        reduction = max(0, min(1, (noise_orig - noise_rep) / noise_orig)) if noise_orig > 1e-10 else 0.0
 
         return reduction
 
@@ -613,7 +609,7 @@ class SpectralRepair(PhaseInterface):
             audio = audio[:, 0]  # Use left channel
 
         # Compute spectrogram
-        f, t, Pxx = signal.spectrogram(audio, fs=sample_rate, nperseg=2048)
+        _f, _t, Pxx = signal.spectrogram(audio, fs=sample_rate, nperseg=2048)
 
         # Measure smoothness (inverse of spectral roughness)
         spectral_diff = np.diff(Pxx, axis=0)

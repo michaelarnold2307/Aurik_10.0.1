@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Dict, Optional
 import warnings
+from typing import Any, Dict, Optional
 
 import numpy as np
 from scipy import signal
@@ -193,7 +193,7 @@ class BowNoiseDetector:
         # Compute spectral flatness (noise-like vs tonal)
         # Bow noise is broadband → high flatness
         nperseg = 2048
-        f, t, Zxx = signal.stft(filtered, sample_rate, nperseg=nperseg)
+        _f, _t, Zxx = signal.stft(filtered, sample_rate, nperseg=nperseg)
 
         # Spectral flatness per frame
         mag = np.abs(Zxx) + 1e-8
@@ -293,7 +293,7 @@ class PedalNoiseDetector:
         # Find peaks (pedal clicks)
         from scipy.signal import find_peaks
 
-        peaks, properties = find_peaks(
+        peaks, _properties = find_peaks(
             onset_envelope, height=threshold, distance=int(0.1 * sample_rate)  # Min 100ms between clicks
         )
 
@@ -578,10 +578,7 @@ class AuthenticityMetricsExtended:
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
         # Handle stereo (use left channel for analysis)
-        if audio.ndim == 2:
-            audio_mono = audio[0]
-        else:
-            audio_mono = audio
+        audio_mono = audio[0] if audio.ndim == 2 else audio
         audio_mono = np.nan_to_num(audio_mono, nan=0.0, posinf=0.0, neginf=0.0)
 
         logger.debug("AuthenticityMetricsExtended: Analysiere genre-spezifische Authentizitätselemente")

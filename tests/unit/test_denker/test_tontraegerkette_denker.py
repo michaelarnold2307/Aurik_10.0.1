@@ -44,7 +44,7 @@ def _make_ketten_ergebnis():
         return KettenErgebnis(
             chain_string="cassette_tape → mp3_low",
             combined_phases=["phase_03_denoise", "phase_23_spectral_repair"],
-            chain_complexity=1.8,
+            chain_complexity=0.8,
             is_multi_generation=True,
             generation_count=2,
         )
@@ -52,7 +52,7 @@ def _make_ketten_ergebnis():
         mock = MagicMock()
         mock.chain_string = "cassette_tape → mp3_low"
         mock.combined_phases = ["phase_03_denoise", "phase_23_spectral_repair"]
-        mock.chain_complexity = 1.8
+        mock.chain_complexity = 0.8
         mock.is_multi_generation = True
         mock.generation_count = 2
         mock.as_dict.return_value = {
@@ -82,11 +82,11 @@ class TestKettenErgebnisFields:
         assert isinstance(erg.combined_phases, list)
 
     def test_03_chain_complexity_non_negative(self):
-        """chain_complexity ist ≥ 0.0 und endlich."""
+        """chain_complexity liegt in [0.0, 1.0] und ist endlich."""
         erg = _make_ketten_ergebnis()
         c = float(erg.chain_complexity)
         assert math.isfinite(c)
-        assert c >= 0.0
+        assert 0.0 <= c <= 1.0
 
     def test_04_is_multi_generation_is_bool(self):
         """is_multi_generation ist ein boolescher Wert."""

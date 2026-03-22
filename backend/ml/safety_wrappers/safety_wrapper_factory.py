@@ -1,4 +1,5 @@
 import logging
+
 """
 safety_wrapper_factory.py - Automated Safety Wrapper Deployment
 
@@ -17,8 +18,8 @@ Version: 1.0.0
 Date: 8. Februar 2026
 """
 
-from collections.abc import Callable
 import importlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -387,11 +388,11 @@ class SafetyWrapperFactory:
         logger.info("HIPS SAFETY WRAPPER DEPLOYMENT REPORT")
         logger.info(str("=" * 70))
         logger.info(f"Total Modules Wrapped: {stats['total_wrapped']}")
-        logger.info(str())
+        logger.info("")
         logger.info("Coverage by Type:")
         for wrapper_type, coverage in stats["coverage"].items():
             logger.info(f"  {wrapper_type:20s}: {coverage}")
-        logger.info(str())
+        logger.info("")
         logger.info("Wrapper Type Distribution:")
         for wrapper_type, count in stats["by_type"].items():
             pct = 100 * count / max(1, stats["total_wrapped"])

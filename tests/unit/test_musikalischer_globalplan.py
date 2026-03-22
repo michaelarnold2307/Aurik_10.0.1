@@ -468,3 +468,31 @@ class TestPlanVersion:
         plan = dienst.erstelle_plan(mono_sine, SR)
         assert isinstance(plan.plan_version, str)
         assert len(plan.plan_version) > 0
+
+
+# ---------------------------------------------------------------------------
+# 12. Chain-aware NR-Cap
+# ---------------------------------------------------------------------------
+
+class TestChainAwareNRCap:
+    def test_tape_mp3_chain_caps_nr_aggressiveness(self, dienst, mono_sine):
+        plan = dienst.erstelle_plan(
+            mono_sine,
+            SR,
+            material="tape",
+            hint_decade=1970,
+            chain_info={"chain": ["tape", "mp3_low"], "primary": "tape"},
+        )
+        nr = plan.phase_adjustments["phase_03_denoise"]["aggressiveness"]
+        assert nr <= 0.20, f"Erwarte NR-Cap <= 0.20 für tape→mp3_low, got {nr:.3f}"
+
+    def test_convenience_function_forwarded_chain_info(self, mono_sine):
+        plan = erstelle_globalplan(
+            mono_sine,
+            SR,
+            material="tape",
+            hint_decade=1970,
+            chain_info={"chain": ["tape", "mp3_low"], "primary": "tape"},
+        )
+        nr = plan.phase_adjustments["phase_03_denoise"]["aggressiveness"]
+        assert nr <= 0.20, f"Erwarte NR-Cap <= 0.20 via Convenience-Funktion, got {nr:.3f}"

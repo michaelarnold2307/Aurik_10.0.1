@@ -9,7 +9,7 @@ die kanonische Implementierung in ``backend/core/era_classifier.py``.
 Keine eigene Logik — Single Source of Truth bleibt ``backend/core/era_classifier``.
 """
 
-from backend.core.era_classifier import (  # noqa: F401  (re-export)
+from backend.core.era_classifier import (
     EraClassifier,
     EraResult,
     classify_era,

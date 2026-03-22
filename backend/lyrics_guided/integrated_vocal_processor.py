@@ -14,9 +14,9 @@ Version: 1.0.0
 Date: 11. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
 import numpy as np
 
@@ -175,10 +175,7 @@ class IntegratedVocalProcessor:
             IntegratedVocalTimeline with comprehensive processing guidance
         """
         # Convert to mono for analysis
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
         # NaN/Inf-Guard
         audio_mono = np.nan_to_num(audio_mono, nan=0.0, posinf=0.0, neginf=0.0)
         audio_mono = np.clip(audio_mono, -1.0, 1.0)

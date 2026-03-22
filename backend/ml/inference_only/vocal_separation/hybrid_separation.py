@@ -1,4 +1,5 @@
 import logging
+
 """
 Hybrid Vocal Separator - Combines MDX-Net + Demucs v5
 
@@ -78,11 +79,11 @@ class HybridVocalSeparator:
 
         # HIPS tracking
         self.separation_count = 0
-        self.fusion_decisions_log: List[Dict] = []
+        self.fusion_decisions_log: list[dict] = []
 
     def separate(
         self, audio: np.ndarray, sr: int | None = None, return_individual: bool = False
-    ) -> Dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray]:
         """
         Hybrid vocal separation
 
@@ -175,7 +176,7 @@ class HybridVocalSeparator:
         mdx_instrumental: np.ndarray,
         demucs_vocals: np.ndarray,
         demucs_instrumental: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray, Dict]:
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
         """
         Fuse stems from both models
 

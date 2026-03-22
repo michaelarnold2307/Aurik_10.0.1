@@ -20,6 +20,12 @@ from backend.api.musical_goals_monitor_api import ConnectionManager, GoalsSnapsh
 pytestmark = pytest.mark.anyio
 
 
+@pytest.fixture
+def anyio_backend():
+    """Run anyio tests on asyncio backend to avoid trio portal edge cases in TestClient."""
+    return "asyncio"
+
+
 class TestConnectionManager:
     """Test WebSocket connection management"""
 

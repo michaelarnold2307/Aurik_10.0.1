@@ -100,7 +100,7 @@ class PickAttackEnhancer:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             # Ensure both channels have same length
             left, right = _match_lengths(left, right)
             return np.stack([left, right], axis=-1), report_l
@@ -245,7 +245,7 @@ class StringResonanceEnhancer:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             # Ensure both channels have same length
             left, right = _match_lengths(left, right)
             return np.stack([left, right], axis=-1), report_l
@@ -369,7 +369,7 @@ class FretNoiseReducer:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             # Ensure both channels have same length
             left, right = _match_lengths(left, right)
             return np.stack([left, right], axis=-1), report_l
@@ -526,7 +526,7 @@ class AcousticBodyResonance:
         # Handle stereo
         if audio.ndim == 2:
             left, report_l = self._process_channel(audio[:, 0], sr)
-            right, report_r = self._process_channel(audio[:, 1], sr)
+            right, _report_r = self._process_channel(audio[:, 1], sr)
             # Ensure both channels have same length
             left, right = _match_lengths(left, right)
             return np.stack([left, right], axis=-1), report_l
@@ -709,10 +709,7 @@ def main():
     audio, sr = sf.read(args.input, always_2d=True)
 
     # Make mono for processing
-    if audio.shape[1] == 2:
-        audio_mono = np.mean(audio, axis=1)
-    else:
-        audio_mono = audio[:, 0]
+    audio_mono = np.mean(audio, axis=1) if audio.shape[1] == 2 else audio[:, 0]
 
     # Create guitar enhancement system
     logger.info("\n🎸 Guitar/String Enhancement System")

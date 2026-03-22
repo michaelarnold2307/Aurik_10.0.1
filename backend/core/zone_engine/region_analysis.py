@@ -24,9 +24,9 @@ Version: 8.0 (Normative Compliance Edition)
 Datum: 7. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 from typing import Any
 
 import librosa

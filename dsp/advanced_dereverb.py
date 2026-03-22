@@ -92,7 +92,7 @@ class WienerDereverb:
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = stft(audio_mono, sr, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = stft(audio_mono, sr, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
         phase = np.angle(Zxx)
 
@@ -177,7 +177,7 @@ class LateReflectionCanceller:
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
 
         # Energy envelope per frequency band
@@ -225,7 +225,7 @@ class LateReflectionCanceller:
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = stft(audio_mono, sr, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = stft(audio_mono, sr, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
         phase = np.angle(Zxx)
 
@@ -299,7 +299,7 @@ class SpectralTemporalAnalyzer:
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = stft(audio_mono, sr, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = stft(audio_mono, sr, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
 
         # Temporal characteristics
@@ -329,10 +329,7 @@ class SpectralTemporalAnalyzer:
 
         # Find -60dB point
         below_60 = np.where(envelope_db < -60)[0]
-        if len(below_60) > 0:
-            rt60_estimate = below_60[0] / sr
-        else:
-            rt60_estimate = len(audio_mono) / sr
+        rt60_estimate = below_60[0] / sr if len(below_60) > 0 else len(audio_mono) / sr
 
         return {
             "reverb_score": float(reverb_score),

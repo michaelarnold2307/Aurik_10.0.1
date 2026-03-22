@@ -14,13 +14,14 @@ Spec-Referenz: §13.3 Distribution & Installation — Out-of-the-Box-Pflicht.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+import contextlib
 import hashlib
 import json
 import logging
-from pathlib import Path
 import threading
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -223,10 +224,8 @@ class ModelDownloader:
             ok = path is not None
             results[entry.name] = ok
             if progress_callback is not None:
-                try:
+                with contextlib.suppress(Exception):
                     progress_callback(entry.name, (i + 1) / max(1, n))
-                except Exception:  # noqa: BLE001
-                    pass
         logger.info(
             "ensure_all: %d/%d Modelle verfügbar.",
             sum(results.values()),
@@ -298,14 +297,13 @@ class ModelDownloader:
             return None
 
         # 3) SHA256-Verifikation (überspringen wenn kein Hash angegeben)
-        if me.sha256:
-            if not verify_model(bundled_abs, me.sha256):
-                logger.warning(
-                    "KI-Modell %s konnte nicht geladen werden — SHA256-Prüfung fehlgeschlagen. "
-                    "Klassische Methode wird genutzt.",
-                    me.name,
-                )
-                return None
+        if me.sha256 and not verify_model(bundled_abs, me.sha256):
+            logger.warning(
+                "KI-Modell %s konnte nicht geladen werden — SHA256-Prüfung fehlgeschlagen. "
+                "Klassische Methode wird genutzt.",
+                me.name,
+            )
+            return None
 
         logger.debug("Gebündeltes Modell geladen: %s", bundled_abs)
         return bundled_abs
@@ -359,7 +357,7 @@ class ModelDownloader:
                     return
                 logger.info("Besseres KI-Modell (%s) wird im Hintergrund geladen...", sota_name)
                 try:
-                    urllib.request.urlretrieve(sota_url, target)  # noqa: S310  # nosec B310 — sota_url aus lokalem Manifest, SHA256-verifiziert nach Download
+                    urllib.request.urlretrieve(sota_url, target)  # nosec B310 — sota_url aus lokalem Manifest, SHA256-verifiziert nach Download
                     expected_sha256 = sota.get("sha256", "")
                     if expected_sha256:
                         if verify_model(target, expected_sha256):
@@ -377,10 +375,8 @@ class ModelDownloader:
                         sota_name,
                     )
                     if progress_callback is not None:
-                        try:
+                        with contextlib.suppress(Exception):
                             progress_callback(sota_name, 1.0)
-                        except Exception:  # noqa: BLE001
-                            pass
                 except (urllib.error.URLError, OSError) as exc:
                     logger.info(
                         "Download fehlgeschlagen (%s) — Standard-Modell bleibt aktiv. " "Fehler: %s",

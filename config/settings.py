@@ -14,7 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class DSPConfig(BaseModel):
     """DSP Processing Configuration"""
 
-    default_sr: int = Field(default=44100, ge=8000, le=96000, description="Default sample rate in Hz")
+    default_sr: int = Field(default=48000, ge=8000, le=96000, description="Default sample rate in Hz (Aurik canonical SR)")
     max_duration: int = Field(default=7200, ge=1, description="Maximum audio duration in seconds")
     buffer_size: int = Field(default=2048, ge=64, le=8192, description="Audio buffer size")
     hop_length: int = Field(default=512, ge=32, le=4096, description="STFT hop length")
@@ -32,7 +32,7 @@ class DSPConfig(BaseModel):
 class DockerConfig(BaseModel):
     """Docker/Container Configuration"""
 
-    enabled: bool = Field(default=True, description="Enable Docker-based processing")
+    enabled: bool = Field(default=False, description="Enable Docker-based processing (RELEASE_MUST: False for production)")
     voice_conversion_container: str = Field(default="aurik_voice_conversion_container")
     codec_enhance_container: str = Field(default="aurik_hifigan_container")
     timeout: int = Field(default=300, ge=10, description="Docker operation timeout in seconds")
@@ -45,7 +45,7 @@ class MLConfig(BaseModel):
     # §4.4: versa_plugin ersetzt cdpam_plugin als non-reference MOS-Metrik (April 2026)
     feature_plugins: List[str] = Field(default_factory=lambda: ["panns_integration", "versa_plugin"])
     model_cache_dir: Path = Field(default=Path("models/"), description="ML model cache directory")
-    use_gpu: bool = Field(default=True, description="Enable GPU acceleration if available")
+    use_gpu: bool = Field(default=False, description="Enable GPU acceleration (RELEASE_MUST: False — CPU-only product)")
     batch_size: int = Field(default=1, ge=1, le=128, description="Batch size for ML inference")
     precision: Literal["fp32", "fp16", "int8"] = Field(default="fp32", description="Model precision mode")
 
@@ -155,15 +155,18 @@ def cfg() -> dict:
 
 
 if __name__ == "__main__":
-    # Test configuration
+    import logging as _logging
+    _logging.basicConfig(level=_logging.DEBUG)
+    _main_logger = _logging.getLogger("aurik.config.settings")
+    # Sanity-check: dump configuration via logger (never print() in production code)
     settings = get_settings()
-    print("=== Aurik Configuration ===")
-    print(f"App: {settings.app_name} v{settings.version}")
-    print(f"Debug: {settings.debug}")
-    print(f"Sample Rate: {settings.dsp.default_sr} Hz")
-    print(f"Docker Enabled: {settings.docker.enabled}")
-    print(f"GPU Enabled: {settings.ml.use_gpu}")
-    print(f"Policy Mode: {settings.policy.policy_mode}")
-    print(f"Caching: {settings.performance.enable_caching}")
-    print("\n=== Legacy Config Format ===")
-    print(settings.to_legacy_config())
+    _main_logger.info("=== Aurik Configuration ===")
+    _main_logger.info("App: %s v%s", settings.app_name, settings.version)
+    _main_logger.info("Debug: %s", settings.debug)
+    _main_logger.info("Sample Rate: %d Hz", settings.dsp.default_sr)
+    _main_logger.info("Docker Enabled: %s", settings.docker.enabled)
+    _main_logger.info("GPU Enabled: %s", settings.ml.use_gpu)
+    _main_logger.info("Policy Mode: %s", settings.policy.policy_mode)
+    _main_logger.info("Caching: %s", settings.performance.enable_caching)
+    _main_logger.info("=== Legacy Config Format ===")
+    _main_logger.info("%s", settings.to_legacy_config())

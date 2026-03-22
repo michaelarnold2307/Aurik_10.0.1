@@ -19,7 +19,7 @@ class AudioSuperResolution:
     - Kann mit vortrainiertem Modell geladen werden
     """
 
-    def __init__(self, target_sr: int = 48000, model_path: str = None):
+    def __init__(self, target_sr: int = 48000, model_path: str | None = None):
         self.target_sr = target_sr
         self.model_path = model_path
         self.model = self._load_model(model_path)

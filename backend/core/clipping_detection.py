@@ -104,7 +104,7 @@ def _flat_tops_pct(mono: np.ndarray, boundary: float = FLAT_TOPS_CLIP_BOUNDARY) 
     return ratio * 100.0
 
 
-def _find_dominant_fundamental_hz(mono: np.ndarray, sr: int) -> Optional[float]:
+def _find_dominant_fundamental_hz(mono: np.ndarray, sr: int) -> float | None:
     """
     Estimate dominant fundamental frequency via normalised autocorrelation (AMDF).
 
@@ -262,14 +262,10 @@ def classify_clipping(audio: np.ndarray, sr: int) -> ClippingType:
     Args:
         audio: Audio signal as float32 numpy array, shape (N,) or (N, 2).
                Expected range [-1.0, 1.0].
-        sr:    Sample rate — MUST be 48000 Hz.
+        sr:    Sample rate (any valid rate, e.g. 44100, 48000).
 
     Returns:
         ClippingType.CLIPPING or ClippingType.SOFT_SATURATION.
-
-    Raises:
-        AssertionError: When sr != 48000.
-        ValueError:     When audio is empty or all-zero.
     """
     return analyse_clipping(audio, sr).clipping_type
 
@@ -283,9 +279,10 @@ def analyse_clipping(audio: np.ndarray, sr: int) -> ClippingAnalysisResult:
 
     Args:
         audio: Audio signal, float32, shape (N,) or (N, C).
-        sr:    Sample rate — MUST be 48000 Hz.
+        sr:    Sample rate (any valid rate, e.g. 44100, 48000).
     """
-    assert sr == 48000, f"SR muss 48000 Hz sein, erhalten: {sr}"
+    if sr < 8000 or sr > 192000:
+        logger.warning("ClippingDetector: unusual SR=%d, results may be unreliable", sr)
 
     audio = np.asarray(audio, dtype=np.float32)
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -370,7 +367,7 @@ class ClippingClassifier:
         return analyse_clipping(audio, sr)
 
 
-_instance: Optional[ClippingClassifier] = None
+_instance: ClippingClassifier | None = None
 _lock = threading.Lock()
 
 

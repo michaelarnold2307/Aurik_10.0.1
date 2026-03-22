@@ -171,11 +171,8 @@ class Zero(nn.Module):
 
     def forward(self, x):
         # Create output with correct shape
-        n, c, l = x.shape
-        if self.stride == 1:
-            out_length = l
-        else:
-            out_length = (l + self.stride - 1) // self.stride
+        n, _c, l = x.shape
+        out_length = l if self.stride == 1 else (l + self.stride - 1) // self.stride
 
         return torch.zeros(n, self.out_channels, out_length, device=x.device, dtype=x.dtype)
 
@@ -380,7 +377,7 @@ class NASTrainer:
         lr_model: float = 0.025,
         lr_arch: float = 3e-4,
         weight_decay: float = 3e-4,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         self.model = model.to(device)
         self.device = device
 

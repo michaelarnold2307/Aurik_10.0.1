@@ -35,11 +35,11 @@ Version: 1.0.0
 Date: 16. Februar 2026
 """
 
-from dataclasses import dataclass
-from enum import Enum
 import logging
 import os
 import tempfile
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -229,13 +229,10 @@ class HybridMLDenoiser:
         original_length = audio.shape[1] if is_stereo else audio.shape[0]
 
         # Handle stereo → mono
-        if is_stereo:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if is_stereo else audio
 
         # STFT
-        f, t, Zxx = signal.stft(audio_mono, fs=sample_rate, nperseg=2048, noverlap=1536)
+        _f, _t, Zxx = signal.stft(audio_mono, fs=sample_rate, nperseg=2048, noverlap=1536)
 
         noisy_mag = np.abs(Zxx)
         noisy_phase = np.angle(Zxx)
@@ -293,7 +290,7 @@ class HybridMLDenoiser:
 
         try:
             # Process with Resemble
-            returncode, stdout, stderr = self.resemble.process(
+            returncode, _stdout, stderr = self.resemble.process(
                 input_path,
                 output_path,
                 denoise_level=self.config.resemble_denoise,

@@ -24,8 +24,8 @@ Bekannte kausale Ketten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 
 from backend.core.defect_scanner import DefectScore, DefectType
 

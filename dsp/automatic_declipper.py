@@ -5,8 +5,8 @@ Dieses Modul entfernt Clipping-Artefakte automatisch aus Audiosignalen per klass
 Alle Algorithmen sind nachvollziehbar, auditierbar und rollback-fähig.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

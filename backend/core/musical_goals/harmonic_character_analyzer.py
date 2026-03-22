@@ -40,12 +40,13 @@ Autor: AURIK Phase 2.0 - Psychoakustische Exzellenz
 Datum: 13. Februar 2026
 """
 
-from dataclasses import dataclass
+import logging
 import warnings
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.fft import rfft, rfftfreq
-import logging
+
 logger = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -102,10 +103,7 @@ class HarmonicCharacterAnalyzer:
             Complete harmonic analysis
         """
         # Convert to mono for analysis
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
         # Normalize audio for consistent analysis
         audio_mono = audio_mono / (np.max(np.abs(audio_mono)) + 1e-10)

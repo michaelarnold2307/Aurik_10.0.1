@@ -73,7 +73,7 @@ class CrowdNoiseIsolator:
         """
         # STFT analysis
         nperseg = 2048
-        f, t, Zxx = stft(audio, sr, nperseg=nperseg)
+        f, _t, Zxx = stft(audio, sr, nperseg=nperseg)
         magnitude = np.abs(Zxx)
 
         # Crowd noise characteristics: broadband 200-4000 Hz, continuous
@@ -122,7 +122,7 @@ class CrowdNoiseIsolator:
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
         phase = np.angle(Zxx)
 
@@ -253,7 +253,7 @@ class RoomDeverberator:
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
         phase = np.angle(Zxx)
 
@@ -331,7 +331,7 @@ class StageBleedReducer:
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
+        f, _t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
         phase = np.angle(Zxx)
 
@@ -414,7 +414,7 @@ class FeedbackCanceller:
 
         # Detect peaks (feedback = narrow-band, high-energy peaks)
         threshold = np.percentile(magnitude_feedback, 95) * (0.5 + 0.5 * self.sensitivity)
-        peaks, properties = find_peaks(
+        peaks, _properties = find_peaks(
             magnitude_feedback,
             height=threshold,
             prominence=threshold * 0.3,
@@ -504,7 +504,7 @@ class PAResonanceRemover:
 
         # Detect peaks (resonances = narrow peaks above median)
         threshold = np.median(magnitude_resonance) + (10 * self.sensitivity)  # +10dB threshold
-        peaks, properties = find_peaks(magnitude_resonance, height=threshold, prominence=5, width=3)  # 5dB prominence
+        peaks, _properties = find_peaks(magnitude_resonance, height=threshold, prominence=5, width=3)  # 5dB prominence
 
         # Extract resonance frequencies and magnitudes
         resonances = [(freqs_resonance[p], magnitude_resonance[p]) for p in peaks]
@@ -666,7 +666,7 @@ class DeWindTool:
         # Wind noise characteristics: chaotic, non-harmonic
         # Use spectral flatness (wind = noise-like → high flatness)
         nperseg = 2048
-        f, t, Zxx = stft(lf_content, sr, nperseg=nperseg)
+        _f, _t, Zxx = stft(lf_content, sr, nperseg=nperseg)
         magnitude = np.abs(Zxx)
 
         eps = 1e-10

@@ -9,6 +9,47 @@
 
 ---
 
+## v9.10.57d (21. März 2026) — Denker-Härtung: Pipeline-Zuverlässigkeit
+
+- **Fix 1**: `AurikDenker._recommend_autopilot_mode()` in try/except gewrappt — verhindert Gesamtpipeline-Abbruch bei Autopilot-Fehler (Fallback: requested mode)
+- **Fix 2**: 5 fehlende Tier-1-Severity-Checks in `_select_phases()` ergänzt:
+  - `HEAD_WEAR` (>0.15) → phase_56 + phase_14 + phase_06
+  - `AZIMUTH_ERROR` (>0.12) → phase_25 + phase_14 + phase_06
+  - `TRANSIENT_SMEARING` (>0.15) → phase_08 + phase_36
+  - `PRE_ECHO` (>0.15) → phase_23 + phase_50 + phase_08
+  - `SIBILANCE` (>0.15) → phase_19 + phase_43
+  - Bisher wurden diese 5 DefectTypes nur indirekt (CausalReasoner Tier 1.5 / PANNs) oder gar nicht in Phasen übersetzt
+- **Fix 3**: `DefectScanner.scan()` None-Guard in UV3 — erzeugt Fallback-`DefectAnalysisResult` statt AttributeError-Crash
+- **Fix 4**: NaN-Merge in paralleler Phase-Ausführung: `logger.warning()` statt stiller `pass` — Traceability bei NaN-Revert
+
+## v9.10.57c (21. März 2026) — Spec-Konsistenz-Audit Mittel-Prio: instructions_version 2.3
+
+- **instructions_version**: 2.2 → **2.3** (Bump für Mittel-Prio Spec-Korrekturen)
+- **B-2**: `streaming`-Material in Spec 05 §6.2 ergänzt (MOS ≥ 4.1, Dropouts/Codec-Artefakte/Bitrate-Varianz)
+- **B-3**: `MusikalischerGlobalplanDienst` (v9.10.50) in Spec 02 §2.2 Pipeline + Spec 03 §2.1 Kernmodule dokumentiert
+- **B-5**: `BigVGAN-v2` Plugin in Spec 08 §11.3 Plugin-Policy ergänzt (0,4 GB, SEKUNDÄRER Vocoder)
+- **D-5**: Vocoder-Kaskade in Spec 04 §4.5 explizit 4-stufig dokumentiert (Vocos → BigVGAN-v2 → HiFi-GAN → PGHI-ISTFT)
+- **D-6**: Hardcodierte Testzähler in Specs 07/08 durch dynamische CI-Referenz ersetzt (`pytest --collect-only`)
+- **D-4**: wow/flutter — bereits korrekt in Spec 05/06 dokumentiert, kein Fix nötig
+
+---
+
+## v9.10.57b (21. März 2026) — Spec-Konsistenz-Audit: instructions_version 2.2
+
+- **instructions_version**: 2.1 → **2.2** (Bump für SIBILANCE-Mapping + Zahlen-Korrekturen)
+- **B-1**: `SIBILANCE` CAUSE_TO_PHASES-Mapping in `causal_defect_reasoner.py` ergänzt
+  (`phase_19_de_esser`, `phase_43_ml_deesser`, `phase_42_vocal_enhancement`)
+- **A-1**: DefectScanner-Zählung: 29/30/27 → einheitlich **28** (Instructions + Specs 02/03/05)
+- **A-3**: SGMSE+ Modellgröße: Spec 08 „120 MB ONNX" → „251 MB TorchScript" (Realwert)
+- **A-4**: Vocos Primär-Modell: Spec 08 „24 kHz ONNX" → „48 kHz nativ (bevorzugt)"
+- **A-5**: Testzahl: Specs 07/08 „6312" → „~7750+" (aktueller Stand v9.10.57)
+- **A-6**: Materialien-Zählung: Spec 03/05 „17" → „15 + 2 Multichannel" (SUPPORTED_MATERIALS = 15)
+- **A-7**: `DefectType` Docstring: „30 Defekttypen" → „28 Defekttypen"
+- **A-8**: `utmos_plugin.py` Docstring: CDPAM-Fallback entfernt (VERBOTEN laut §4.4)
+- **B-1b**: SIBILANCE + CAUSE_TO_PHASES in Spec 05 §6.3 + Spec 06 §7.2 ergänzt
+
+---
+
 ## v9.10.57 (14. März 2026) — §SR-Invariante lückenlos
 
 - `backend/core/genre_classifier.py`: `GermanSchlagerClassifier.classify()` — `assert sr == 48000`

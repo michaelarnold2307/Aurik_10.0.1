@@ -28,8 +28,8 @@ Autor: Aurik v8.0 - Psychoacoustic Core
 Lizenz: Proprietär
 """
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.ndimage import maximum_filter1d
@@ -388,7 +388,7 @@ class MaskingAnalyzer:
         # STFT
         nperseg = self.config.stft_nperseg
         noverlap = int(nperseg * self.config.stft_overlap)
-        f, t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = stft(audio, sr, nperseg=nperseg, noverlap=noverlap)
 
         # Get audible mask
         audible = profile.get_audible_mask(threshold_db)

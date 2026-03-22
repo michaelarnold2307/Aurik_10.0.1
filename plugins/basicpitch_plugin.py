@@ -17,11 +17,11 @@ Design goals:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -83,10 +83,10 @@ class BasicPitchPlugin:
             logger.info("BasicPitch ONNX nicht gefunden (%s) — DSP-Fallback aktiv.", _ONNX_PATH)
             return
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("BasicPitch", size_gb=0.12):
                     logger.warning("BasicPitch: ML-Budget erschöpft — DSP-Fallback aktiv.")
@@ -106,7 +106,7 @@ class BasicPitchPlugin:
             self._model_loaded = True
             logger.info("🎼 BasicPitch ONNX geladen: %s", _ONNX_PATH.name)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "BasicPitch",
@@ -158,10 +158,7 @@ class BasicPitchPlugin:
         in_name = inp.name
 
         # Normalize input layout to [B, T]
-        if audio_m.ndim == 1:
-            model_in = audio_m[np.newaxis, :]
-        else:
-            model_in = np.asarray(audio_m).reshape(1, -1)
+        model_in = audio_m[np.newaxis, :] if audio_m.ndim == 1 else np.asarray(audio_m).reshape(1, -1)
         model_in = model_in.astype(np.float32)
 
         out_names = [o.name for o in self._session.get_outputs()]
@@ -202,7 +199,7 @@ class BasicPitchPlugin:
     def _analyze_dsp(self, audio: np.ndarray, sr: int, max_polyphony: int) -> BasicPitchResult:
         """STFT peak-based polyphonic fallback."""
         try:
-            import scipy.signal as sps  # noqa: PLC0415
+            import scipy.signal as sps
 
             if len(audio) < _WINDOW:
                 pad = _WINDOW - len(audio)
@@ -269,7 +266,7 @@ class BasicPitchPlugin:
 def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
     if from_sr == to_sr:
         return audio.astype(np.float32)
-    from scipy.signal import resample_poly  # noqa: PLC0415
+    from scipy.signal import resample_poly
 
     g = math.gcd(from_sr, to_sr)
     up = to_sr // g
@@ -357,7 +354,7 @@ def unload_basicpitch() -> None:
                 pass
             _instance = None
     try:
-        from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+        from backend.core.ml_memory_budget import release as _release
 
         _release("BasicPitch")
     except Exception:

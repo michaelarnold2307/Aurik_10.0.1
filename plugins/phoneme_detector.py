@@ -9,9 +9,9 @@ Referenz: §2.8 Vocal-Restaurierungskette (ConsonantDetector, PhonemeDetector)
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
+from dataclasses import dataclass, field
 
 import numpy as np
 

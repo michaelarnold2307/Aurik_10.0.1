@@ -28,7 +28,7 @@ _warnings.warn(
     stacklevel=2,
 )
 
-from backend.core.epistemic_gate.ethics_engine import (  # noqa: F401, E402
+from backend.core.epistemic_gate.ethics_engine import (
     AuthenticityConstraints,
     EpistemicDecision,
     EthicsEngine,
@@ -38,10 +38,10 @@ from backend.core.epistemic_gate.ethics_engine import (  # noqa: F401, E402
 )
 
 __all__ = [
-    "EpistemicDecision",
-    "ProcessingMode",
     "AuthenticityConstraints",
-    "EthicsReport",
+    "EpistemicDecision",
     "EthicsEngine",
+    "EthicsReport",
+    "ProcessingMode",
     "integrate_ethics_into_pipeline",
 ]

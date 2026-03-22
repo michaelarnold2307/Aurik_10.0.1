@@ -367,7 +367,7 @@ class VocalDynamicsIntelligence:
                 logger.info(f"DEBUG [VocalDynamicsIntelligence.process]: Transposed shape: {audio_transposed.shape}")
                 left, left_report = self.process(audio_transposed[0], sr)
                 logger.info(f"DEBUG [VocalDynamicsIntelligence.process]: Left channel processed, shape: {left.shape}")
-                right, right_report = self.process(audio_transposed[1], sr)
+                right, _right_report = self.process(audio_transposed[1], sr)
                 logger.info(f"DEBUG [VocalDynamicsIntelligence.process]: Right channel processed, shape: {right.shape}")
                 # Return in original format: (samples, channels)
                 result = np.column_stack([left, right])

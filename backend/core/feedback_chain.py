@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -42,13 +43,13 @@ class FeedbackChain:
         convergence_delta: float = 0.02,
         *,
         sample_rate: int = 48000,
-        target_score: Optional[float] = None,
+        target_score: float | None = None,
         excellence_mode: bool = False,
         material: str = "auto",
         use_mert: bool = False,
         use_pqs_in_loop: bool = False,
         use_versa_in_loop: bool = False,
-        max_retries: Optional[int] = None,
+        max_retries: int | None = None,
     ) -> None:
         # Legacy-Kompatibilitaet: max_retries entspricht max_iterations.
         if max_retries is not None:
@@ -61,9 +62,9 @@ class FeedbackChain:
         self.use_mert = bool(use_mert)
         self.use_pqs_in_loop = bool(use_pqs_in_loop)
         self.use_versa_in_loop = bool(use_versa_in_loop)
-        self.goal_priority_callback: Optional[Callable[[np.ndarray, np.ndarray], tuple[bool, str]]] = None
-        self._pqs_score_fn: Optional[Callable[[np.ndarray, int], object]] = None
-        self._versa_score_fn: Optional[Callable[[np.ndarray, int], object]] = None
+        self.goal_priority_callback: Callable[[np.ndarray, np.ndarray], tuple[bool, str]] | None = None
+        self._pqs_score_fn: Callable[[np.ndarray, int], object] | None = None
+        self._versa_score_fn: Callable[[np.ndarray, int], object] | None = None
         self._last_score_source: str = "heuristic_rms"
         if self.use_pqs_in_loop:
             try:
@@ -122,12 +123,25 @@ class FeedbackChain:
         self._last_score_source = "heuristic_rms"
         return self.compute_perceptual_score(audio)
 
+    def _adaptive_convergence_delta(self, current_mos: float) -> float:
+        """Adaptive convergence threshold based on current MOS level.
+
+        High-quality audio (MOS > 4.0) uses tighter delta to squeeze out
+        remaining improvements. Low-quality uses relaxed delta to avoid
+        wasting iterations on negligible gains.
+        """
+        if current_mos >= 4.0:
+            return max(1e-6, self.convergence_delta * 0.25)  # 0.005 for default 0.02
+        if current_mos >= 3.5:
+            return self.convergence_delta  # 0.02 default
+        return min(0.05, self.convergence_delta * 2.5)  # 0.05 for poor audio
+
     def run(
         self,
         audio: np.ndarray,
-        phases_or_fn: "Union[Callable[[np.ndarray, int], np.ndarray], list]",
-        sr: Optional[int] = None,
-        ceiling: Optional[float] = None,
+        phases_or_fn: Callable[[np.ndarray, int], np.ndarray] | list,
+        sr: int | None = None,
+        ceiling: float | None = None,
     ) -> FeedbackChainResult:
         """Führt die Feedback-Schleife aus.
 
@@ -161,6 +175,10 @@ class FeedbackChain:
         _t0 = time.perf_counter()
 
         current = np.nan_to_num(np.asarray(audio, dtype=np.float32))
+
+        # §Performance-Budget: ≤60s per minute audio for FeedbackChain (all iterations).
+        _audio_dur_s = float(max(current.shape) if current.ndim == 2 else len(current)) / float(_sr)
+        _time_budget_s = max(60.0, 60.0 * (_audio_dur_s / 60.0))  # 60s per minute, min 60s
         best = current.copy()
         best_mos = self._compute_iteration_score(best, _sr)
         history = [best_mos]
@@ -181,6 +199,14 @@ class FeedbackChain:
 
         converged = False
         for i in range(1, self.max_iterations + 1):
+            # §Performance-Budget: abort if time budget exceeded
+            _elapsed = time.perf_counter() - _t0
+            if _elapsed > _time_budget_s:
+                logger.warning(
+                    "FeedbackChain: time budget exceeded (%.1fs > %.1fs) — aborting at iteration %d",
+                    _elapsed, _time_budget_s, i,
+                )
+                break
             candidate = improve_fn(current, _sr)
             candidate = np.clip(np.nan_to_num(np.asarray(candidate, dtype=np.float32)), -1.0, 1.0)
             mos = self._compute_iteration_score(candidate, _sr)
@@ -201,7 +227,9 @@ class FeedbackChain:
                     logger.debug("FeedbackChain goal_priority_callback fehlgeschlagen: %s", _cb_exc)
 
             # §2.34 GoalPriorityProtocol: Stufe-1/2-Ziele schützen
-            if _gpp is not None and _prev_goals:
+            # Skip internal GPP check when external goal_priority_callback is wired
+            # (UV3 provides its own GPP callback that already calls measure_all).
+            if _gpp is not None and _prev_goals and not callable(self.goal_priority_callback):
                 try:
                     from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
                     _checker = MusicalGoalsChecker()
@@ -215,7 +243,7 @@ class FeedbackChain:
                     _prev_goals = _curr_goals
                 except Exception as _gpp_exc:
                     logger.debug("GoalPriorityProtocol in FeedbackChain nicht verfügbar: %s", _gpp_exc)
-            elif _gpp is not None and not _prev_goals:
+            elif _gpp is not None and not _prev_goals and not callable(self.goal_priority_callback):
                 try:
                     from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
                     _checker = MusicalGoalsChecker()
@@ -228,7 +256,9 @@ class FeedbackChain:
                 best = candidate.copy()
 
             # §2.33 PhysicalCeilingEstimator: Frühzeitiger Abbruch wenn Ceiling erreicht
-            if ceiling is not None and best_mos >= ceiling - HEADROOM_THRESHOLD:
+            # Adaptive headroom: low MOS → more headroom (5%), high MOS → tight (2%)
+            _adaptive_headroom = 0.05 if best_mos < 3.5 else (0.03 if best_mos < 4.0 else 0.02)
+            if ceiling is not None and best_mos >= ceiling - _adaptive_headroom:
                 _ceiling_reached = True
                 converged = True
                 logger.debug(
@@ -238,7 +268,7 @@ class FeedbackChain:
                 )
                 break
 
-            if abs(history[-1] - history[-2]) < self.convergence_delta:
+            if abs(history[-1] - history[-2]) < self._adaptive_convergence_delta(best_mos):
                 converged = True
                 break
 
@@ -285,8 +315,8 @@ def get_feedback_chain() -> FeedbackChain:
 
 
 def compute_perceptual_score(
-    original: "np.ndarray",
-    degraded: "np.ndarray",
+    original: np.ndarray,
+    degraded: np.ndarray,
     *,
     sample_rate: int = 48000,
 ) -> dict:
@@ -299,7 +329,7 @@ def compute_perceptual_score(
         transient_score    Hüllkurven-Korrelation ∈ [0, 1]
         combined       Gewichteter Gesamt-Score ∈ [0, 1]
     """
-    import numpy as _np  # noqa: F811
+    import numpy as _np
 
     _ = sample_rate  # wird für zukünftige SR-abhängige Metriken genutzt
 
@@ -384,12 +414,12 @@ FEEDBACK_CRITICAL_PHASES: frozenset[int] = frozenset(
 )
 
 __all__ = [
-    "FeedbackChainResult",
-    "FeedbackChain",
-    "get_feedback_chain",
-    "compute_perceptual_score",
-    "FEEDBACK_CRITICAL_PHASES",
     "DEFAULT_TARGET_SCORE",
     "EXCELLENCE_TARGET_SCORE",
+    "FEEDBACK_CRITICAL_PHASES",
     "MUSIC_OVR_EXCELLENCE_THRESHOLD",
+    "FeedbackChain",
+    "FeedbackChainResult",
+    "compute_perceptual_score",
+    "get_feedback_chain",
 ]

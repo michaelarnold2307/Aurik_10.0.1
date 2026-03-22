@@ -12,8 +12,8 @@ Modell-Quelle: Liu et al. (2023) "AudioLDM 2: Learning Holistic Audio Generation
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import threading
+from pathlib import Path
 
 import numpy as np
 
@@ -56,7 +56,7 @@ class AudioLDM2Plugin:
     def _load(self) -> None:
         # Globaler ML-Budget-Guard: ~1.3 GB für AudioLDM2 ONNX.
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
             if not _try_alloc("AudioLDM2", 1.3):
                 logger.warning("AudioLDM2: ML-Budget erschöpft — Modell nicht geladen.")
@@ -85,7 +85,7 @@ class AudioLDM2Plugin:
                     self._input_names,
                 )
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm(
                         "AudioLDM2",
@@ -100,7 +100,7 @@ class AudioLDM2Plugin:
 
         logger.warning("AudioLDM2: Kein ONNX-Modell gefunden — generiere Platzhalterton.")
         try:
-            from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _rel
             _rel("AudioLDM2")
         except Exception:
             pass
@@ -168,6 +168,7 @@ class AudioLDM2Plugin:
         out = self._session.run(None, feeds)
         if out and isinstance(out[0], np.ndarray):
             result = out[0].flatten().astype(np.float32)
+            result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
             # Auf n_samples skalieren
             if len(result) < n_samples:
                 result = np.tile(result, math.ceil(n_samples / len(result)))

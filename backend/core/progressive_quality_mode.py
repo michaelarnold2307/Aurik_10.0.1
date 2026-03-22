@@ -17,11 +17,12 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
-from typing import Callable, List, Optional
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import List, Optional
 
 import numpy as np
 
@@ -39,7 +40,7 @@ class PreviewResult:
 
     preview_audio: np.ndarray  # 5-s restauriertes Vorschau-Audio
     preview_mos: float  # Geschätzter PQS-MOS nach Stage-1
-    detected_defects: List[str]  # Erkannte Defekte (laienverständlich)
+    detected_defects: list[str]  # Erkannte Defekte (laienverständlich)
     processing_time_s: float  # Tatsächliche Rechenzeit
     cached_defect_result: object  # Gecacheter DefectScanner-Output
     sha256_key: str = ""  # Cache-Schlüssel aus SHA256[:8]
@@ -80,7 +81,7 @@ class ProgressiveQualityMode:
 
     PREVIEW_DURATION_S: float = 5.0
     MAX_STAGE1_COMPUTE_S: float = 8.0
-    PREVIEW_ONLY_PHASES: List[str] = [
+    PREVIEW_ONLY_PHASES: list[str] = [
         "phase_01_click_removal",
         "phase_02_hum_removal",
         "phase_03_denoise",
@@ -91,7 +92,7 @@ class ProgressiveQualityMode:
         audio: np.ndarray,
         sr: int,
         material: str = "unknown",
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Callable | None = None,
     ) -> PreviewResult:
         """Stage-1: Schnelle 5-Sekunden-Vorschau (≤ 8 s).
 
@@ -129,7 +130,7 @@ class ProgressiveQualityMode:
 
         # Schneller DefectScan (DSP-only, kein ML)
         defect_result = None
-        detected_defects: List[str] = []
+        detected_defects: list[str] = []
         try:
             from backend.core.defect_scanner import DefectScanner
 
@@ -177,9 +178,9 @@ class ProgressiveQualityMode:
         self,
         audio: np.ndarray,
         sr: int,
-        restoration_fn: Optional[Callable] = None,
-        preview_cache: Optional[PreviewResult] = None,
-        progress_callback: Optional[Callable] = None,
+        restoration_fn: Callable | None = None,
+        preview_cache: PreviewResult | None = None,
+        progress_callback: Callable | None = None,
     ) -> np.ndarray:
         """Stage-2: Vollständige Restaurierung mit optionalem Stage-1-Cache.
 
@@ -310,10 +311,7 @@ class ProgressiveQualityMode:
             energies_arr = np.array(energies)
             noise = np.percentile(energies_arr, 5)
             signal = np.percentile(energies_arr, 90)
-            if noise < 1e-9:
-                snr = 40.0
-            else:
-                snr = 20.0 * math.log10(signal / noise + 1e-12)
+            snr = 40.0 if noise < 1e-09 else 20.0 * math.log10(signal / noise + 1e-12)
             snr = float(np.clip(snr, -20.0, 50.0))
             # SNR → MOS: empirisch kalibriert
             mos = 1.0 + 4.0 / (1.0 + math.exp(-(snr - 15.0) / 8.0))
@@ -321,7 +319,7 @@ class ProgressiveQualityMode:
         except Exception:
             return 3.0
 
-    def _defect_result_to_labels(self, defect_result) -> List[str]:
+    def _defect_result_to_labels(self, defect_result) -> list[str]:
         """Konvertiert DefectScanner-Ergebnis in laienverständliche Labels."""
         labels = []
         try:
@@ -346,7 +344,7 @@ class ProgressiveQualityMode:
             pass
         return labels[:5]  # Max 5
 
-    def _quick_defect_heuristic(self, audio: np.ndarray, sr: int) -> List[str]:
+    def _quick_defect_heuristic(self, audio: np.ndarray, sr: int) -> list[str]:
         """DSP-Schnell-Heuristik für Defekterkennung ohne DefectScanner."""
         labels = []
         try:
@@ -378,7 +376,7 @@ class ProgressiveQualityMode:
 # Thread-sicherer Singleton (Double-Checked Locking §3.2)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[ProgressiveQualityMode] = None
+_instance: ProgressiveQualityMode | None = None
 _lock = threading.Lock()
 
 

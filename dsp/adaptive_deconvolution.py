@@ -3,8 +3,8 @@ Adaptive Deconvolution / Inverse Filtering Modul für Aurik 6.0 (SOTA-Maximum)
 SOTA-tauglich, adaptiv, mit automatischer Parameteroptimierung (klassische DSP, SOTA-Maximum).
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -286,7 +286,7 @@ class AdaptiveDeconvolution:
         """
         # SNR-Schätzung: Verhältnis Signalleistung zu geschätztem Rauschboden
         mag = np.abs(np.fft.rfft(audio.astype(float)))
-        ir_mag = np.abs(np.fft.rfft(ir.astype(float), n=len(audio)))  # noqa: F841
+        np.abs(np.fft.rfft(ir.astype(float), n=len(audio)))
         noise_floor = np.percentile(mag, 10)
         signal_power = np.mean(mag)
         snr_est = float(signal_power / (noise_floor + 1e-8))

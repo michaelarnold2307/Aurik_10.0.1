@@ -7,8 +7,8 @@ Implementierung gemäß Spec §2.17: Self-Similarity-Matrix, Novelty-Kurve, Foot
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import threading
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -100,7 +100,7 @@ class MusicalStructureAnalyzer:
         # Einfache Segmentierung alle 8 Sekunden (stabile Baseline §2.17)
         hop_s = 8.0
         hop = max(1, int(sr * hop_s))
-        bounds = list(range(0, n, hop)) + [n]
+        bounds = [*list(range(0, n, hop)), n]
         labels: list[str] = []
         n_segs = max(0, len(bounds) - 1)
         for i in range(n_segs):
@@ -153,7 +153,7 @@ class MusicalStructureAnalyzer:
         self,
         gap_start: int,
         structure: MusicalStructure,
-    ) -> Optional[tuple[int, int]]:
+    ) -> tuple[int, int] | None:
         """Bestes Referenzsegment für Inpainting (§2.12).
 
         Gibt None zurück wenn:
@@ -204,7 +204,7 @@ class MusicalStructureAnalyzer:
 # Singleton + Convenience
 # ---------------------------------------------------------------------------
 
-_instance: Optional[MusicalStructureAnalyzer] = None
+_instance: MusicalStructureAnalyzer | None = None
 _lock = threading.Lock()
 
 
@@ -224,9 +224,9 @@ def analyze_musical_structure(audio: np.ndarray, sr: int) -> MusicalStructure:
 
 
 __all__ = [
-    "SegmentInfo",
     "MusicalStructure",
     "MusicalStructureAnalyzer",
-    "get_musical_structure_analyzer",
+    "SegmentInfo",
     "analyze_musical_structure",
+    "get_musical_structure_analyzer",
 ]

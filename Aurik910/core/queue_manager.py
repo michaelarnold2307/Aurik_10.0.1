@@ -28,10 +28,10 @@ class QueueItem:
     id:           str
     input_file:   str
     output_file:  str
-    settings:     Dict[str, Any]
+    settings:     dict[str, Any]
     status:       QueueStatus = QueueStatus.PENDING
     progress:     int         = 0
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 class QueueManager:
@@ -46,7 +46,7 @@ class QueueManager:
     """
 
     def __init__(self) -> None:
-        self._items: Dict[str, QueueItem] = {}
+        self._items: dict[str, QueueItem] = {}
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ #
@@ -57,7 +57,7 @@ class QueueManager:
         self,
         input_file: str,
         output_file: str,
-        settings: Optional[Dict[str, Any]] = None,
+        settings: dict[str, Any] | None = None,
     ) -> QueueItem:
         """Fügt eine neue Datei der Warteschlange hinzu.
 
@@ -84,7 +84,7 @@ class QueueManager:
         item_id: str,
         status: QueueStatus,
         progress: int = 0,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> bool:
         """Aktualisiert Status und Fortschritt eines Eintrags.
 
@@ -141,7 +141,7 @@ class QueueManager:
                 for item_id in to_remove:
                     del self._items[item_id]
 
-    def get_items(self) -> List[QueueItem]:
+    def get_items(self) -> list[QueueItem]:
         """Gibt alle Einträge in Einfügereihenfolge zurück.
 
         Returns:
@@ -150,7 +150,7 @@ class QueueManager:
         with self._lock:
             return list(self._items.values())
 
-    def get_item(self, item_id: str) -> Optional[QueueItem]:
+    def get_item(self, item_id: str) -> QueueItem | None:
         """Gibt einen einzelnen Eintrag zurück oder None.
 
         Args:
@@ -159,7 +159,7 @@ class QueueManager:
         with self._lock:
             return self._items.get(item_id)
 
-    def get_pending_items(self) -> List[QueueItem]:
+    def get_pending_items(self) -> list[QueueItem]:
         """Gibt alle wartenden (PENDING) Einträge zurück."""
         with self._lock:
             return [

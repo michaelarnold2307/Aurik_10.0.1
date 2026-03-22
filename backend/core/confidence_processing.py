@@ -4,19 +4,19 @@ ConfidenceBasedProcessing: Dynamische Anpassung und Rollback-Mechanismen.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
 import threading
+from collections.abc import Callable
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-_instance: Optional["ConfidenceBasedProcessing"] = None
+_instance: ConfidenceBasedProcessing | None = None
 _lock = threading.Lock()
 
 
-def get_confidence_processor(rollback_callback: Callable[[str], None] | None = None) -> "ConfidenceBasedProcessing":
+def get_confidence_processor(rollback_callback: Callable[[str], None] | None = None) -> ConfidenceBasedProcessing:
     """Get or create ConfidenceBasedProcessing singleton.
 
     Args:
@@ -51,6 +51,7 @@ class ConfidenceBasedProcessing:
             Adjusted strength value (0.0-1.0)
         """
         import math
+
         import numpy as np
 
         base_strength = float(base_strength)
@@ -81,6 +82,7 @@ class ConfidenceBasedProcessing:
             confidence: Confidence score (0.0-1.0)
         """
         import math
+
         import numpy as np
 
         confidence = float(confidence)

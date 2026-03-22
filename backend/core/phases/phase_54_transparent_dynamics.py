@@ -56,17 +56,16 @@ Version: 1.0.0
 Date: 16. Februar 2026
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 
 import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -224,10 +223,7 @@ class TransparentDynamicsV1(PhaseInterface):
 
         # Convert to mono for analysis (if stereo)
         is_stereo = audio.ndim == 2
-        if is_stereo:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio.copy()
+        audio_mono = np.mean(audio, axis=1) if is_stereo else audio.copy()
 
         logger.info(
             f"Transparent Dynamics: {material_type.value}, genre={genre_key}, "
@@ -262,10 +258,7 @@ class TransparentDynamicsV1(PhaseInterface):
             audio_mono = audio_mono * (0.95 / peak)
 
         # Convert back to stereo if needed
-        if is_stereo:
-            audio_out = np.column_stack([audio_mono, audio_mono])
-        else:
-            audio_out = audio_mono
+        audio_out = np.column_stack([audio_mono, audio_mono]) if is_stereo else audio_mono
 
         audio_out = np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0)
         audio_out = np.clip(audio_out, -1.0, 1.0)

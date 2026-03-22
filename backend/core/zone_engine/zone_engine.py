@@ -15,9 +15,9 @@ Autor: AI Team
 Datum: 8. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
 import numpy as np
 

@@ -1,6 +1,6 @@
 # Aurik 9 — Spec 05: Material-System
 
-> Definiert alle 17 Materialtypen, defektdichte-adaptive Verarbeitungsregeln,
+> Definiert alle 15 Materialtypen (+ 2 Multichannel → Downmix), defektdichte-adaptive Verarbeitungsregeln,
 > GP-Gedächtnis, Export, Sample-Rate-Strategie, Tonträgerketten-Erkennung.
 
 ---
@@ -49,11 +49,12 @@ SUPPORTED_MATERIALS = [
 | `wax_cylinder` | Extremrauschen, BW ≤ 5 kHz | phase_03, phase_06, phase_01, phase_29 | MOS ≥ 3.5 |
 | `wire_recording` | Jitter, Freq-Dropout | phase_12, phase_24, phase_03, phase_29 | MOS ≥ 3.6 |
 | `lacquer_disc` | Riss-Klicken, Substrat-Rauschen | phase_01, phase_09, phase_03, phase_29 | MOS ≥ 3.7 |
+| `streaming` | Dropouts, Codec-Artefakte, Bitrate-Varianz | phase_24, phase_23, phase_50 | MOS ≥ 4.1 |
 | `unknown` | Alle aktiviert | Alle Tier-1 | MOS ≥ 3.8 |
 
 ---
 
-## §6.3 DefectType-Vollkatalog (27 Defekte)
+## §6.3 DefectType-Vollkatalog (28 Defekte)
 
 ```python
 # core/defect_scanner.py — DefectType (Enum, 29 Werte)
@@ -106,6 +107,8 @@ RIAA_CURVE_ERROR  # Falsche oder historische Disc-Entzerrungskurve → phase_04 
                   # phase_04 wendet Inverse-Kurve der erkannten Variante an
 ALIASING          # Spiegelfrequenzen durch AA-Filter-Fehler → phase_03 + phase_23
 BIAS_ERROR        # Falscher Vormagnetisierungsstrom → phase_04 + phase_03 + phase_29
+# --- Spec §6.3 v9.10.57: Sibilanten-Überbetonung (ergibt 28 DefectTypes) ---
+SIBILANCE         # Zischlautüberbetonung (> 6 kHz) — De-Esser-Trigger (phase_19 + phase_43)
 ```
 
 **CLIPPING vs. SOFT_SATURATION — kritische Unterscheidung:**

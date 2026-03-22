@@ -46,11 +46,9 @@ Author: Aurik Development Team
 Version: 2.0.0 Professional
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 from typing import Any
 
@@ -58,6 +56,7 @@ import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -162,10 +161,7 @@ class DCOffsetRemoval(PhaseInterface):
         config = self.HP_CONFIG.get(material, self.HP_CONFIG[MaterialType.VINYL])
 
         # Measure DC offset before removal
-        if is_stereo:
-            dc_offset_before = [float(np.mean(audio[:, ch])) for ch in range(2)]
-        else:
-            dc_offset_before = [float(np.mean(audio))]
+        dc_offset_before = [float(np.mean(audio[:, ch])) for ch in range(2)] if is_stereo else [float(np.mean(audio))]
 
         # Measure subsonic energy before removal
         subsonic_energy_before = self._measure_subsonic_energy(audio, sample_rate, config["cutoff_hz"])

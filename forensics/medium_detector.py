@@ -113,6 +113,8 @@ class MediumDetectionResult:
     spectral_fingerprint: SpectralFingerprint
     evidence: list[str] = field(default_factory=list)
     """Laienverständliche Diagnose-Begründungen."""
+    medium_confidences: list[float] = field(default_factory=list)
+    """Per-Link-Konfidenz — gleiche Länge wie transfer_chain."""
 
     @property
     def chain_label(self) -> str:
@@ -121,6 +123,7 @@ class MediumDetectionResult:
     def as_dict(self) -> dict:
         return {
             "transfer_chain": self.transfer_chain,
+            "medium_confidences": self.medium_confidences,
             "is_multi_generation": self.is_multi_generation,
             "primary_material": self.primary_material,
             "confidence": self.confidence,
@@ -158,16 +161,64 @@ class MediumDetector:
     SHELLAC_EFFECTIVE_BW_MAX_HZ: float = 7_000.0   # real shellac: physical BW ≤ 7 kHz
     SHELLAC_NOISE_FLOOR_MIN_DB: float = -40.0       # shellac is always very noisy (> −40 dBFS)
     TAPE_ROLLOFF_MAX_HZ: float = 10_000.0
-    TAPE_SPEED_VARIATION_MIN: float = 0.4  # Hz std
+    # Calibrated to current wow/flutter proxy scale: real tape-digitized music often lands
+    # around 0.03–0.08 in this metric. 0.4 was too strict and suppressed tape→mp3 detection.
+    TAPE_SPEED_VARIATION_MIN: float = 0.02  # Hz std
     TAPE_NOISE_FLOOR_MAX_DB: float = -36.0  # lauter = Bandrauschen
     TAPE_EFFECTIVE_BW_MAX_HZ: float = 14_500.0      # tape: BW ≤ ~14 kHz; MP3 1990s: ≥ 15 kHz
     TAPE_NOISE_FLOOR_MIN_DB: float = -52.0           # tape always has some analog noise
+    TAPE_WOW_FLUTTER_MAX: float = 25.0               # reject unrealistically unstable pseudo-wow values
     # Tape-digitised recordings have physical BW ≤ 10–11 kHz.  A music track's 5th-percentile
     # frame energy is often > -45 dBFS even in a clean MP3 (quiet musical passages ≠ tape hiss).
     # Guard against this false "tape+mp3" inference by also requiring narrow actual bandwidth.
     TAPE_DIGITAL_BW_MAX_HZ: float = 13_500.0   # raised: 1970s cassette tape up to ~13.5 kHz         # tape+mp3 heuristic: eff_bw must be ≤ 11 kHz
     HF_ENERGY_THRESHOLD_FRACTION: float = 0.001  # < 0.1 % → kein HF
     MP3_KERBMUSTER_THZ: float = 16_000.0  # typischer MP3-Rolloff
+
+    @staticmethod
+    def _is_benign_codec_source(audio: np.ndarray, sr: int, fp: SpectralFingerprint) -> bool:
+        """Heuristic guard to prevent false analog-chain inference on clean digital sources."""
+        mono = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        if mono.ndim == 2:
+            mono = mono.mean(axis=0) if mono.shape[0] <= mono.shape[1] else mono.mean(axis=1)
+        if mono.size < 4096 or sr <= 0:
+            return False
+
+        abs_mono = np.abs(mono)
+        hard_clip_ratio = float(np.mean(abs_mono >= 0.999))
+        near_clip_ratio = float(np.mean(abs_mono >= 0.98))
+
+        dyn_window = max(1, int(sr * 0.4))
+        dyn_frames = mono.size // dyn_window
+        if dyn_frames >= 2:
+            dyn_blocks = mono[: dyn_frames * dyn_window].reshape(dyn_frames, dyn_window)
+            dyn_rms = np.sqrt(np.mean(dyn_blocks**2, axis=1) + 1e-12)
+            dyn_std_db = float(np.std(20.0 * np.log10(dyn_rms + 1e-12)))
+        else:
+            dyn_std_db = 0.0
+
+        n_fft = 4096
+        hop = 1024
+        window = np.hanning(n_fft).astype(np.float32)
+        flatness_values: list[float] = []
+        for start in range(0, mono.size - n_fft + 1, hop):
+            frame = mono[start : start + n_fft] * window
+            mag = np.abs(np.fft.rfft(frame)).astype(np.float64) + 1e-12
+            flatness_values.append(float(np.exp(np.mean(np.log(mag))) / np.mean(mag)))
+
+        if not flatness_values:
+            return False
+
+        flatness_median = float(np.median(flatness_values))
+        return (
+            hard_clip_ratio <= 1e-5
+            and near_clip_ratio <= 1e-4
+            and dyn_std_db >= 3.5
+            and flatness_median <= 1e-2
+            and fp.noise_floor_db <= -38.0
+            and fp.wow_flutter_index < 0.02
+            and fp.effective_bandwidth_hz >= 12_000.0
+        )
 
     def _compute_fingerprint(self, audio: np.ndarray, sr: int) -> SpectralFingerprint:
         """Berechnet den Pflicht-Spektralfingerabdruck (§6.7.1).
@@ -206,7 +257,8 @@ class MediumDetector:
             pitches = []
             for start in range(0, n - frame_size, frame_size):
                 frame = mono[start : start + frame_size].astype(np.float64)
-                env = np.abs(hilbert(frame))
+                analytic: np.ndarray = hilbert(frame)  # type: ignore[assignment]  # scipy stub returns Dispatchable
+                env = np.abs(analytic)
                 mean_e = float(np.mean(env))
                 if mean_e > 1e-6:
                     pitches.append(mean_e)
@@ -241,7 +293,7 @@ class MediumDetector:
         try:
             spec_bw = np.abs(np.fft.rfft(mono[: min(n, 65536)], n=65536))
             freqs_bw = np.fft.rfftfreq(65536, 1.0 / sr)
-            spec_db = 20 * np.log10(np.clip(spec_bw / max(spec_bw.max(), 1e-12), 1e-15, None))
+            spec_db = 20 * np.log10(np.clip(spec_bw / max(spec_bw.max(), 1e-12), 1e-15, np.inf))
             above_thresh = freqs_bw[spec_db > -60.0]
             eff_bw = float(above_thresh.max()) if len(above_thresh) > 0 else 0.0
         except Exception:
@@ -268,14 +320,20 @@ class MediumDetector:
             logger.debug("MediumDetector: SR=%d (erwartet 48000), arbeite trotzdem weiter", sr)
 
         fp = self._compute_fingerprint(audio, sr)
+        benign_codec_source = self._is_benign_codec_source(audio, sr, fp)
         chain: list[str] = []
         evidence: list[str] = []
         confidence_parts: list[float] = []
+        # chain_confidences tracks per-link confidence (same length as chain).
+        # Bonus confidence increments (e.g. tape noise) are folded into the last entry.
+        chain_confidences: list[float] = []
 
         # ── Shellac/Wachswalze (extremste Bandbreitenbegrenzung) ─────────
         # rolloff_95 alone is misleading: bass-heavy digital music can have 95 % of spectral
         # energy below 4.5 kHz. We require BOTH narrow effective bandwidth AND high noise floor.
         if (
+            not benign_codec_source
+            and
             fp.rolloff_95_hz < self.SHELLAC_ROLLOFF_MAX_HZ
             and fp.rolloff_95_hz > 0
             and fp.effective_bandwidth_hz < self.SHELLAC_EFFECTIVE_BW_MAX_HZ
@@ -283,6 +341,7 @@ class MediumDetector:
         ):
             chain.append("shellac")
             confidence_parts.append(0.80)
+            chain_confidences.append(0.80)
             evidence.append(
                 f"Shellac-Signatur: Rolloff {fp.rolloff_95_hz:.0f} Hz, "
                 f"eff. BW {fp.effective_bandwidth_hz:.0f} Hz, "
@@ -293,13 +352,17 @@ class MediumDetector:
         # Guard against 1990s/2000s MP3 files: digital files have effective BW ≥ 15 kHz
         # and a very quiet noise floor. Tape has limited BW and always carries analog noise.
         elif (
+            not benign_codec_source
+            and
             fp.rolloff_95_hz < self.TAPE_ROLLOFF_MAX_HZ
             and fp.wow_flutter_index > self.TAPE_SPEED_VARIATION_MIN
             and fp.effective_bandwidth_hz < self.TAPE_EFFECTIVE_BW_MAX_HZ
             and fp.noise_floor_db > self.TAPE_NOISE_FLOOR_MIN_DB
         ):
             chain.append("tape")
-            confidence_parts.append(0.75)
+            _tape_conf = 0.75
+            confidence_parts.append(_tape_conf)
+            chain_confidences.append(_tape_conf)
             evidence.append(
                 f"Kassetten-Signatur: Rolloff {fp.rolloff_95_hz:.0f} Hz, "
                 f"Wow/Flutter {fp.wow_flutter_index:.2f}, "
@@ -308,21 +371,27 @@ class MediumDetector:
             if fp.noise_floor_db > self.TAPE_NOISE_FLOOR_MAX_DB:
                 evidence.append(f"Starkes Bandrauschen ({fp.noise_floor_db:.1f} dBFS)")
                 confidence_parts.append(0.10)
+                # Fold bonus into the existing tape entry (no new chain link)
+                chain_confidences[-1] = min(1.0, chain_confidences[-1] + 0.10)
 
         # ── Vinyl (Crackle-Profil, mittlerer Rolloff, niedriger Rauschboden) ─
         elif (
+            not benign_codec_source
+            and
             self.TAPE_ROLLOFF_MAX_HZ <= fp.rolloff_95_hz < 18_000
             and fp.wow_flutter_index < 0.3
             and fp.noise_floor_db < -38.0
         ):
             chain.append("vinyl")
             confidence_parts.append(0.65)
+            chain_confidences.append(0.65)
             evidence.append(f"Vinyl-Profil: Rolloff {fp.rolloff_95_hz:.0f} Hz, ruhiger Rauschboden")
 
         # ── Digitaler Träger (CD/WAV) ────────────────────────────────────
         elif fp.rolloff_95_hz >= 18_000 and fp.hf_energy_above_16k > 0.01:
             chain.append("cd_digital")
             confidence_parts.append(0.70)
+            chain_confidences.append(0.70)
             evidence.append(f"Digitaler Träger: HF-Energie vorhanden ({fp.hf_energy_above_16k*100:.1f} %)")
 
         # ── Sekundäre MP3/Codec-Kette erkennen ──────────────────────────
@@ -338,9 +407,17 @@ class MediumDetector:
                 # liegen die leisen Frames (5. Perzentil) oft bei -30 bis -35 dBFS, obwohl
                 # kein Bandrauschen vorliegt. Nur echte Kassetten-Digitalisierungen haben
                 # zusätzlich eff_bw ≤ 11 kHz (physikalische Bandbreite der Kassette).
-                if fp.noise_floor_db > -45.0 and fp.effective_bandwidth_hz < self.TAPE_DIGITAL_BW_MAX_HZ:
+                tape_plus_codec = (
+                    not benign_codec_source
+                    and fp.noise_floor_db > -45.0
+                    and fp.effective_bandwidth_hz < self.TAPE_DIGITAL_BW_MAX_HZ
+                    and fp.rolloff_95_hz < self.TAPE_ROLLOFF_MAX_HZ
+                    and self.TAPE_SPEED_VARIATION_MIN < fp.wow_flutter_index < self.TAPE_WOW_FLUTTER_MAX
+                )
+                if tape_plus_codec:
                     chain = ["tape", "mp3_low"]
                     confidence_parts.extend([0.55, 0.20])
+                    chain_confidences = [0.55, 0.20]
                     evidence.append(
                         f"Kassette+MP3-Kette: kein HF ({fp.hf_energy_above_16k*100:.2f} %), "
                         f"Rauschboden {fp.noise_floor_db:.1f} dBFS, "
@@ -350,18 +427,21 @@ class MediumDetector:
                     bitrate_estimate = "mp3_low" if fp.effective_bandwidth_hz < 14_000 else "mp3_high"
                     chain = [bitrate_estimate]
                     confidence_parts.append(0.60)
+                    chain_confidences = [0.60]
                     evidence.append(f"MP3-Kette: kein HF, Bandbreite {fp.effective_bandwidth_hz:.0f} Hz")
             else:
                 # Sekundäre Codec-Stufe
                 bitrate = "mp3_low" if fp.effective_bandwidth_hz < 14_000 else "mp3_high"
                 chain.append(bitrate)
                 confidence_parts.append(0.20)
+                chain_confidences.append(0.20)
                 evidence.append(f"Sekundäre MP3-Kodierung erkannt (BW {fp.effective_bandwidth_hz:.0f} Hz)")
 
         # ── Fallback ─────────────────────────────────────────────────────
         if not chain:
             chain = ["unknown"]
             confidence_parts = [0.30]
+            chain_confidences = [0.30]
             evidence.append("Träger unbekannt — Standard-Prior wird verwendet")
 
         primary = chain[0]
@@ -383,6 +463,7 @@ class MediumDetector:
             confidence=confidence,
             spectral_fingerprint=fp,
             evidence=evidence,
+            medium_confidences=chain_confidences,
         )
 
     # ── Hilfsmethode ─────────────────────────────────────────────────────

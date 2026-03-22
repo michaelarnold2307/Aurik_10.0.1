@@ -1,5 +1,5 @@
-from dataclasses import asdict, dataclass, field
 import logging
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np

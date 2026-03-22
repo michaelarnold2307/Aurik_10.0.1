@@ -13,9 +13,9 @@ Beispiel Konflikte:
 - Wärme vs. Transparenz (Mid-Range warmth kann Clarity reduzieren)
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np

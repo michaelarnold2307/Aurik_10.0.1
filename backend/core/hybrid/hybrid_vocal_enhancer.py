@@ -21,9 +21,9 @@ Autor: Aurik 9.0 Team
 Version: 1.0
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np

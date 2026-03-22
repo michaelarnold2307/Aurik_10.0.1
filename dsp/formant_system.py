@@ -15,11 +15,12 @@ Version: 1.0.0
 Date: 9. Februar 2026
 """
 
+import warnings
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 from scipy import signal
-from scipy.signal import butter, sosfilt, lfilter
-from typing import Tuple, List, Dict, Optional
-import warnings
+from scipy.signal import butter, lfilter, sosfilt
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -44,7 +45,7 @@ class FormantTracker:
         self.frame_length_ms = frame_length_ms
         self.hop_length_ms = hop_length_ms
 
-    def track(self, audio: np.ndarray, sr: int) -> Tuple[np.ndarray, np.ndarray]:
+    def track(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Track formants over time using LPC analysis.
 
@@ -101,7 +102,7 @@ class FormantTracker:
         """
         return lfilter([1, -coeff], [1], audio)
 
-    def _extract_frames(self, audio: np.ndarray, frame_length: int, hop_length: int) -> List[np.ndarray]:
+    def _extract_frames(self, audio: np.ndarray, frame_length: int, hop_length: int) -> list[np.ndarray]:
         """
         Extract overlapping frames from audio.
         """
@@ -114,7 +115,7 @@ class FormantTracker:
 
         return frames
 
-    def _analyze_frame(self, frame: np.ndarray, sr: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _analyze_frame(self, frame: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Analyze single frame for formants using LPC.
 
@@ -186,7 +187,7 @@ class FormantTracker:
 
         return a
 
-    def _roots_to_formants(self, roots: np.ndarray, sr: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _roots_to_formants(self, roots: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Convert LPC polynomial roots to formant frequencies and bandwidths.
         """
@@ -250,8 +251,8 @@ class FormantCorrector:
         self.correction_strength = np.clip(correction_strength, 0.0, 1.0)
 
     def detect_drift(
-        self, formant_freqs: np.ndarray, reference_formants: Optional[np.ndarray] = None
-    ) -> Tuple[bool, Dict]:
+        self, formant_freqs: np.ndarray, reference_formants: np.ndarray | None = None
+    ) -> tuple[bool, dict]:
         """
         Detect formant drift.
 
@@ -302,7 +303,7 @@ class FormantCorrector:
         return has_drift, drift_info
 
     def correct(
-        self, audio: np.ndarray, sr: int, formant_freqs: np.ndarray, target_formants: Optional[np.ndarray] = None
+        self, audio: np.ndarray, sr: int, formant_freqs: np.ndarray, target_formants: np.ndarray | None = None
     ) -> np.ndarray:
         """
         Correct formant drift using formant shifting.
@@ -385,7 +386,7 @@ class FormantCorrector:
         """
         Apply notch filter (attenuation).
         """
-        nyquist = sr / 2
+        sr / 2
         Q = freq / bandwidth
 
         # Biquad notch filter
@@ -413,7 +414,7 @@ class FormantCorrector:
         """
         Apply peak filter (boost).
         """
-        nyquist = sr / 2
+        sr / 2
         Q = freq / bandwidth
         A = 10 ** (gain_db / 40)
 
@@ -459,7 +460,7 @@ class SingersFormantEnhancer:
         self.bandwidth_hz = bandwidth_hz
         self.gain_db = gain_db
 
-    def detect_singers_formant(self, formant_freqs: np.ndarray) -> Tuple[bool, float]:
+    def detect_singers_formant(self, formant_freqs: np.ndarray) -> tuple[bool, float]:
         """
         Detect if singer's formant is present.
 
@@ -500,8 +501,8 @@ class SingersFormantEnhancer:
         return has_singers_formant, strength
 
     def enhance(
-        self, audio: np.ndarray, sr: int, formant_freqs: Optional[np.ndarray] = None
-    ) -> Tuple[np.ndarray, Dict]:
+        self, audio: np.ndarray, sr: int, formant_freqs: np.ndarray | None = None
+    ) -> tuple[np.ndarray, dict]:
         """
         Enhance singer's formant.
 
@@ -613,7 +614,7 @@ class FormantSystem:
         self.singers_formant_enhancer = SingersFormantEnhancer()
         self.enhance_singers_formant = enhance_singers_formant
 
-    def process(self, audio: np.ndarray, sr: int) -> Tuple[np.ndarray, Dict]:
+    def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
         Full formant processing pipeline.
 
@@ -648,16 +649,13 @@ class FormantSystem:
             audio_mono = audio
 
         # Track formants
-        formant_freqs, formant_bws = self.tracker.track(audio_mono, sr)
+        formant_freqs, _formant_bws = self.tracker.track(audio_mono, sr)
 
         # Detect drift
         has_drift, drift_info = self.corrector.detect_drift(formant_freqs)
 
         # Correct drift if needed
-        if has_drift:
-            audio_corrected = self.corrector.correct(audio, sr, formant_freqs)
-        else:
-            audio_corrected = audio
+        audio_corrected = self.corrector.correct(audio, sr, formant_freqs) if has_drift else audio
 
         # Enhance singer's formant
         if self.enhance_singers_formant:
@@ -686,10 +684,10 @@ class FormantSystem:
         self,
         audio: np.ndarray,
         sr: int,
-        phoneme_segments: Optional[List] = None,
+        phoneme_segments: list | None = None,
         gender: str = "male",
         correction_strength: float = 0.25,
-    ) -> Tuple[np.ndarray, Dict]:
+    ) -> tuple[np.ndarray, dict]:
         """Phoneme-guided formant enhancement using per-vowel canonical targets.
 
         For each detected vowel-phoneme segment the method applies a gentle EQ
@@ -767,7 +765,7 @@ class FormantSystem:
         vowel_count = 0
 
         # ── Build frame→IPA map from optional segments ────────────────── #
-        frame_ipa: List[Optional[str]] = [None] * n_frames
+        frame_ipa: list[str | None] = [None] * n_frames
         if phoneme_segments is not None:
             for seg in phoneme_segments:
                 ipa = getattr(seg, "phoneme", None)
@@ -896,7 +894,7 @@ class VowelPhonemeFormantTargets:
     """
 
     # fmt: off
-    _IPA_TARGETS: Dict[str, Tuple[float, float, float, float, float, float]] = {
+    _IPA_TARGETS: dict[str, tuple[float, float, float, float, float, float]] = {
         # Close front /i/ — "heed"  (Peterson & Barney 1952, Table II)
         "i":   (270, 2290, 3010,  310, 2790, 3310),
         "iː":  (270, 2290, 3010,  310, 2790, 3310),
@@ -947,7 +945,7 @@ class VowelPhonemeFormantTargets:
     @classmethod
     def get_targets(
         cls, ipa_symbol: str, gender: str = "male"
-    ) -> Optional[Tuple[float, float, float]]:
+    ) -> tuple[float, float, float] | None:
         """Return canonical (F1, F2, F3) targets for an IPA vowel symbol.
 
         Args:
@@ -970,7 +968,7 @@ class VowelPhonemeFormantTargets:
     @classmethod
     def classify_from_formants(
         cls, f1_hz: float, f2_hz: float, gender: str = "male"
-    ) -> Optional[str]:
+    ) -> str | None:
         """Identify nearest vowel class from detected LPC F1/F2 values.
 
         Uses Euclidean distance in a normalized F1/F2 space
@@ -989,7 +987,7 @@ class VowelPhonemeFormantTargets:
         if f1_hz <= 0.0 or f2_hz <= 0.0:
             return None
 
-        best_key: Optional[str] = None
+        best_key: str | None = None
         best_dist = float("inf")
 
         n_f1 = (f1_hz - 200.0) / 700.0
@@ -1046,7 +1044,7 @@ class InstrumentFormantTargets:
     """
 
     # fmt: off
-    _INSTRUMENT_TARGETS: Dict[str, Tuple[float, float, float, float, float, float]] = {
+    _INSTRUMENT_TARGETS: dict[str, tuple[float, float, float, float, float, float]] = {
         # ── STRINGS (violin / viola / cello / contrabass) ────────────────────
         # McIntyre & Woodhouse 1978: A0 Helmholtz ~275 Hz, B1- wood ~450 Hz,
         # bridge hill ~2500 Hz (Cremer 1984)
@@ -1096,7 +1094,7 @@ class InstrumentFormantTargets:
     @classmethod
     def get_targets(
         cls, instrument: str
-    ) -> Optional[Tuple[float, float, float, float, float, float]]:
+    ) -> tuple[float, float, float, float, float, float] | None:
         """Return canonical (F1, F2, F3, Q1, Q2, Q3) for an instrument string.
 
         Args:
@@ -1109,7 +1107,7 @@ class InstrumentFormantTargets:
         return cls._INSTRUMENT_TARGETS.get(instrument.lower())
 
     @classmethod
-    def all_instruments(cls) -> List[str]:
+    def all_instruments(cls) -> list[str]:
         """Return sorted list of supported instrument type strings."""
         return sorted(cls._INSTRUMENT_TARGETS.keys())
 
@@ -1122,7 +1120,7 @@ def _instrument_guided_enhance(
     sr: int,
     instrument: str = "guitar",
     correction_strength: float = 0.25,
-) -> Tuple[np.ndarray, Dict]:
+) -> tuple[np.ndarray, dict]:
     """Instrument-specific formant enhancement toward physical resonance targets.
 
     Applies a gentle, frame-wise peak-EQ boost toward the canonical (F1, F2, F3)
@@ -1272,6 +1270,7 @@ FormantSystem.instrument_guided_enhance = _instrument_guided_enhance  # type: ig
 # CLI interface
 if __name__ == "__main__":
     import argparse
+
     import soundfile as sf
 
     parser = argparse.ArgumentParser(description="Formant System - Professional formant processing")

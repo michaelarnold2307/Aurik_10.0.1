@@ -19,7 +19,8 @@ import gc
 import logging
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ _MIN_FREE_MB_HARD: float = 1500.0        # immer mind. 1.5 GB frei halten
 # ---------------------------------------------------------------------------
 
 class _PluginEntry:
-    __slots__ = ("name", "size_gb", "unload_fn", "last_used_ts", "active")
+    __slots__ = ("active", "last_used_ts", "name", "size_gb", "unload_fn")
 
     def __init__(
         self,
@@ -60,11 +61,11 @@ class _PluginEntry:
 # Singleton
 # ---------------------------------------------------------------------------
 
-_instance: Optional["PluginLifecycleManager"] = None
+_instance: PluginLifecycleManager | None = None
 _singleton_lock = threading.Lock()
 
 
-def get_plugin_lifecycle_manager() -> "PluginLifecycleManager":
+def get_plugin_lifecycle_manager() -> PluginLifecycleManager:
     """Gibt den PluginLifecycleManager-Singleton zurück (Double-Checked Locking)."""
     global _instance
     if _instance is None:
@@ -87,8 +88,8 @@ class PluginLifecycleManager:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._entries: Dict[str, _PluginEntry] = {}
-        self._auto_evict_thread: Optional[threading.Thread] = None
+        self._entries: dict[str, _PluginEntry] = {}
+        self._auto_evict_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._start_auto_evict_monitor()
         logger.info("PluginLifecycleManager: initialisiert (RAM-Threshold %.0f %%)", _RAM_EVICT_THRESHOLD_PCT)
@@ -180,7 +181,7 @@ class PluginLifecycleManager:
         """Führt die eigentliche Eviction durch (LRU-Reihenfolge)."""
         with self._lock:
             # LRU-Sortierung: ältester Zugriff zuerst; aktive ausgenommen
-            candidates: List[_PluginEntry] = sorted(
+            candidates: list[_PluginEntry] = sorted(
                 [e for e in self._entries.values() if not e.active],
                 key=lambda e: e.last_used_ts,
             )
@@ -203,7 +204,7 @@ class PluginLifecycleManager:
                 gc.collect()
                 # Budget-Freigabe
                 try:
-                    from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import release as _release
                     _release(entry.name)
                 except ImportError:
                     pass

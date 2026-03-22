@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -14,21 +14,25 @@ logger = logging.getLogger(__name__)
 class SchlagerClassificationResult:
     """Ergebnis der Schlager-Klassifikation mit Beitrag jeder Erkennungsschicht."""
 
+    # Required fields — must be provided by all callers (including UV3 §Dach GlobalPlan-Prior)
     is_schlager: bool
     confidence: float
     genre_label: str
-    # Schicht-Beiträge
-    clap_score: float
-    accordion_score: float
-    harmonic_simplicity: float
-    rhythm_score: float
-    vocal_german_prior: float
-    melodic_repetition: float
-    # Subgenre
     subgenre: str
     bpm: float
-    key: str
-    reasoning: str
+    # Optional tier-score fields — default to 0.0 when reconstructed from GlobalPlan context
+    clap_score: float = 0.0
+    accordion_score: float = 0.0
+    harmonic_simplicity: float = 0.0
+    rhythm_score: float = 0.0
+    vocal_german_prior: float = 0.0
+    melodic_repetition: float = 0.0
+    key: str = ""
+    reasoning: str = ""
+
+
+#: Backward-compatible alias — UV3 and other callsites import as ``GenreResult``
+GenreResult = SchlagerClassificationResult
 
 
 class GermanSchlagerClassifier:
@@ -159,10 +163,7 @@ class GermanSchlagerClassifier:
         is_schlager = (n_active >= 3) and (confidence >= self.SCHLAGER_CONFIDENCE_THRESHOLD)
 
         # Genre-Label + Subgenre
-        if is_schlager:
-            genre_label = self._determine_genre_label(subgenre, bpm)
-        else:
-            genre_label = "Unbekannt"
+        genre_label = self._determine_genre_label(subgenre, bpm) if is_schlager else "Unbekannt"
 
         # Tonart (einfache Schätzung)
         key = self._estimate_key(mono, sr_a)
@@ -346,7 +347,7 @@ class GermanSchlagerClassifier:
             if len(audio) < sr:
                 return 0.35, "unknown", 120.0
 
-            tempo, beats = librosa.beat.beat_track(y=audio, sr=sr)
+            tempo, _beats = librosa.beat.beat_track(y=audio, sr=sr)
             bpm = float(tempo)
             if bpm <= 0:
                 return 0.35, "unknown", 120.0
@@ -478,7 +479,7 @@ class GermanSchlagerClassifier:
             if len(audio) < sr * min_duration_s:
                 return 0.35  # neutral bei kurzen Dateien
 
-            frame_len = int(sr * 1.0)  # 1-s-Frames  # noqa: F841
+            int(sr * 1.0)  # 1-s-Frames
             hop_len = int(sr * 0.5)  # 0.5-s-Hop
             n_mfcc = 20
             min_gap_frames = 16  # ≥ 8 s bei 0.5s-Hop
@@ -487,7 +488,7 @@ class GermanSchlagerClassifier:
             mfcc = np.nan_to_num(mfcc)
 
             T = mfcc.shape[1]
-            if T < min_gap_frames * 2:
+            if min_gap_frames * 2 > T:
                 return 0.35
 
             # SSM (Kosinus-Ähnlichkeit)
@@ -562,8 +563,14 @@ class GermanSchlagerClassifier:
             pos_total = float(np.mean(pos_scores)) if pos_scores else 0.35
 
             neg_scores: list[float] = []
-
-            neg_mean = 0.0  # neg_scores bleibt leer (kein separater Negativ-Durchlauf)
+            try:
+                neg_tag = clap.tag(audio, sr, text_queries=self.NON_SCHLAGER_NEGATIVE_PROMPTS[:3])
+                _neg_dict = neg_tag.genre_tags if hasattr(neg_tag, "genre_tags") else {}
+                for v in _neg_dict.values():
+                    neg_scores.append(float(v))
+            except Exception:
+                neg_scores = []
+            neg_mean = float(np.mean(neg_scores)) if neg_scores else 0.0  # Negativ-Prior via NON_SCHLAGER_NEGATIVE_PROMPTS
             clap_score = float(np.clip(pos_total - 0.5 * neg_mean, 0.0, 1.0))
             return float(np.nan_to_num(clap_score))
 
@@ -774,7 +781,7 @@ def get_restoration_profile(subgenre: str = "unknown") -> dict:
 
 
 # ---- Thread-sicherer Singleton (Double-Checked Locking, §3.2) ----
-_instance: Optional[GermanSchlagerClassifier] = None
+_instance: GermanSchlagerClassifier | None = None
 _lock = threading.Lock()
 
 

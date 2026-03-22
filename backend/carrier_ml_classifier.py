@@ -25,7 +25,7 @@ _warnings.warn(
     stacklevel=2,
 )
 
-from backend.core.medium_classifier import (  # noqa: F401, E402
+from backend.core.medium_classifier import (
     ClassificationResult,
     MediumClassifier,
     classify_medium,
@@ -83,10 +83,10 @@ def classify_carrier_ml(features: dict) -> dict:  # type: ignore[type-arg]
 
 __all__ = [
     "CarrierMLClassifier",
-    "MediumClassifier",
     "ClassificationResult",
-    "classify_medium",
+    "MediumClassifier",
     "classify_carrier_ml",
+    "classify_medium",
     "get_medium_classifier",
 ]
 

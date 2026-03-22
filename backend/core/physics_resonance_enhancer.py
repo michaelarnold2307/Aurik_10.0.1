@@ -107,7 +107,7 @@ DEFAULT_STRENGTH: float = 0.40    # default enhancement strength
 # Each entry: (f0_hz, Q, gain_db_at_strength_1)
 # gain is scaled by enhancement_strength at runtime
 
-_RESONANCES: Dict[str, List[Tuple[float, float, float]]] = {
+_RESONANCES: dict[str, list[tuple[float, float, float]]] = {
     "guitar": [
         (102.0,  8.0,  2.5),
         (195.0,  6.0,  2.0),
@@ -182,8 +182,8 @@ class ResonancePeakResult:
     q: float
     gain_db_nominal: float
     gain_db_applied: float     # after strength scaling
-    b_coeffs: Tuple[float, float, float]
-    a_coeffs: Tuple[float, float, float]
+    b_coeffs: tuple[float, float, float]
+    a_coeffs: tuple[float, float, float]
 
 
 @dataclass
@@ -202,7 +202,7 @@ class PhysicsResonanceResult:
     audio: np.ndarray
     instrument: str
     n_peaks: int
-    peaks: List[ResonancePeakResult] = field(default_factory=list)
+    peaks: list[ResonancePeakResult] = field(default_factory=list)
     enhancement_strength: float = 0.0
     passthrough: bool = False
 
@@ -212,7 +212,7 @@ class PhysicsResonanceResult:
 
 def _peak_eq_coeffs(
     f0_hz: float, q: float, gain_db: float, sr: int
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Compute biquad peaking-EQ coefficients (Audio-EQ-Cookbook / Zölzer).
 
     Args:
@@ -279,7 +279,7 @@ class PhysicsResonanceEnhancer:
         audio: np.ndarray,
         sr: int,
         instrument: str = "guitar",
-        enhancement_strength: Optional[float] = None,
+        enhancement_strength: float | None = None,
     ) -> PhysicsResonanceResult:
         """Apply instrument body resonance coloration to *audio*.
 
@@ -332,10 +332,7 @@ class PhysicsResonanceEnhancer:
                 if idx == 0:
                     peak_results = prs   # diagnostics from first channel
 
-            if audio.shape[0] <= 8:
-                out = np.stack(processed_channels, axis=0)
-            else:
-                out = np.stack(processed_channels, axis=1)
+            out = np.stack(processed_channels, axis=0) if audio.shape[0] <= 8 else np.stack(processed_channels, axis=1)
         else:
             out, peak_results = self._process_mono(
                 audio.astype(np.float32), sr, resonances, strength
@@ -363,12 +360,12 @@ class PhysicsResonanceEnhancer:
         self,
         mono: np.ndarray,
         sr: int,
-        resonances: List[Tuple[float, float, float]],
+        resonances: list[tuple[float, float, float]],
         strength: float,
-    ) -> Tuple[np.ndarray, List[ResonancePeakResult]]:
+    ) -> tuple[np.ndarray, list[ResonancePeakResult]]:
         """Apply cascaded biquad peaks to a single mono channel."""
         enhanced = mono.copy()
-        peak_results: List[ResonancePeakResult] = []
+        peak_results: list[ResonancePeakResult] = []
 
         for f0, q, gain_nominal in resonances:
             # Scale gain by strength, clamp to MAX_GAIN_DB
@@ -394,7 +391,7 @@ class PhysicsResonanceEnhancer:
 
 # ── Singleton (§3.2 Double-Checked Locking) ──────────────────────────────────
 
-_instance: Optional[PhysicsResonanceEnhancer] = None
+_instance: PhysicsResonanceEnhancer | None = None
 _lock = threading.Lock()
 
 
@@ -415,7 +412,7 @@ def enhance_physics_resonance(
     audio: np.ndarray,
     sr: int,
     instrument: str = "guitar",
-    enhancement_strength: Optional[float] = None,
+    enhancement_strength: float | None = None,
 ) -> PhysicsResonanceResult:
     """Convenience wrapper: apply body resonance coloration to *audio*.
 

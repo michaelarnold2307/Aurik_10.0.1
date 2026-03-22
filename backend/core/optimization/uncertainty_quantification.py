@@ -13,8 +13,8 @@ Version: 8.2
 Datum: 14. Februar 2026
 """
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -59,7 +59,7 @@ class MCDropoutModel(nn.Module):
     def _add_dropout_layers(self):
         """Recursively add dropout layers after each activation."""
         for name, module in self.base_model.named_children():
-            if isinstance(module, nn.ReLU) or isinstance(module, nn.LeakyReLU):
+            if isinstance(module, (nn.ReLU, nn.LeakyReLU)):
                 setattr(self.base_model, name, nn.Sequential(module, nn.Dropout(p=self.dropout_rate)))
             elif isinstance(module, nn.Sequential):
                 # Recursively process sequential modules
@@ -304,7 +304,7 @@ class EnsembleUncertainty:
 
     def _calculate_entropy(self, predictions: torch.Tensor) -> torch.Tensor:
         """Calculate predictive entropy."""
-        mean_pred = predictions.mean(dim=0)  # noqa: F841
+        predictions.mean(dim=0)
 
         # For regression, approximate with Gaussian entropy
         variance = predictions.var(dim=0)
@@ -451,7 +451,7 @@ class UncertaintyQuantifier:
         x = x.to(self.device)
 
         if self.method == "mc_dropout":
-            mean, std, samples = self.uq_model.predict_with_uncertainty(x)
+            mean, std, _samples = self.uq_model.predict_with_uncertainty(x)
 
             # Confidence based on inverse std
             confidence = 1.0 / (1.0 + std)

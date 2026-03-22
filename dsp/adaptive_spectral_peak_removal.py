@@ -3,8 +3,8 @@ adaptive_spectral_peak_removal.py - SOTA-konformes Spectral Peak Removal Modul f
 Dieses Modul ist jetzt mit DSPContract für Auditierbarkeit und SOTA-Konformität ausgestattet.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

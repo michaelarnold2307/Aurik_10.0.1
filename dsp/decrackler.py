@@ -1,5 +1,5 @@
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -241,7 +241,8 @@ class AiDebuzz:
         self.model = None
 
     def _debuzz_channel(self, x: np.ndarray) -> np.ndarray:
-        from scipy.signal import istft as _istft, stft as _stft
+        from scipy.signal import istft as _istft
+        from scipy.signal import stft as _stft
 
         x = np.nan_to_num(x.astype(np.float64), nan=0.0)
         noverlap = self._NPERSEG * 3 // 4

@@ -16,10 +16,11 @@ Version: 1.0
 Date: 2026-02-10
 """
 
+import logging
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from enum import Enum
-import logging
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -304,6 +305,9 @@ class ObjectiveScore:
     versa_score: float = 0.0
     """VERSA Score (normiert 0.0-1.0, höher=besser, §4.4)."""
 
+    cdpam_score: float = 0.0
+    """Legacy alias for VERSA migration compatibility (historically lower=better)."""
+
     dnsmos_score: float = 0.0
     """DNSMOS P.835 (1.0-5.0, higher=better, >3.5=good)."""
 
@@ -349,6 +353,14 @@ class ObjectiveScore:
     processing_time_sec: float = 0.0
     """Processing time in Sekunden."""
 
+    def __post_init__(self) -> None:
+        """Keep legacy cdpam/versa fields consistent for backward compatibility."""
+        if self.versa_score <= 0.0 and self.cdpam_score > 0.0:
+            # Legacy CDPAM distance (lower=better) to quality-like [0,1] score.
+            self.versa_score = float(np.clip(1.0 - self.cdpam_score, 0.0, 1.0))
+        elif self.cdpam_score <= 0.0 and self.versa_score > 0.0:
+            self.cdpam_score = float(np.clip(1.0 - self.versa_score, 0.0, 1.0))
+
     def to_dict(self) -> dict[str, Any]:
         """Konvertiere zu Dictionary."""
         return asdict(self)
@@ -377,7 +389,13 @@ class ObjectiveScorer:
     - Enhanced Metrics (SNR, THD, etc.)
     """
 
-    def __init__(self, enable_versa: bool = True, enable_dnsmos: bool = False, enable_musical_goals: bool = True):
+    def __init__(
+        self,
+        enable_versa: bool | None = None,
+        enable_dnsmos: bool = False,
+        enable_musical_goals: bool = True,
+        enable_cdpam: bool | None = None,
+    ):
         """
         Initialize ObjectiveScorer.
 
@@ -387,8 +405,13 @@ class ObjectiveScorer:
                            (16 kHz DNS-Challenge) und ist VERBOTEN als Musik-Metrik (§10.2).
                            Parameter bleibt aus Rückwärtskompatibilität erhalten, ist aber wirkungslos.
             enable_musical_goals: Enable Musical Goals scoring
+            enable_cdpam: Legacy alias (mapped to VERSA toggle for compatibility)
         """
+        if enable_versa is None:
+            enable_versa = True if enable_cdpam is None else bool(enable_cdpam)
+
         self.enable_versa = enable_versa
+        self.enable_cdpam = enable_versa  # Backward-compatible attribute alias
         self.enable_dnsmos = enable_dnsmos
         self.enable_musical_goals = enable_musical_goals
 
@@ -399,7 +422,7 @@ class ObjectiveScorer:
 
         if enable_versa:
             try:
-                from plugins.versa_plugin import get_versa_plugin  # noqa: PLC0415
+                from plugins.versa_plugin import get_versa_plugin
 
                 self.versa_plugin = get_versa_plugin()
                 logger.info("✓ VERSA Plugin loaded (§4.4, non-reference MOS)")
@@ -435,7 +458,7 @@ class ObjectiveScorer:
         # === 1. VERSA: non-reference MOS (§4.4 VERSA §4.4) ===
         if self.enable_versa and self.versa_plugin is not None:
             try:
-                import numpy as _np  # noqa: PLC0415
+                import numpy as _np
 
                 proc_arr = _np.asarray(audio, dtype=_np.float32)
                 if proc_arr.ndim == 2:
@@ -696,6 +719,7 @@ class MultiPassEngine:
         variants: list[ProcessingVariant],
         reference_audio: np.ndarray | None = None,
         process_func: Callable | None = None,
+        progress_callback=None,
     ) -> dict[str, Any]:
         """
         Process audio mit mehreren Varianten, wähle beste.
@@ -736,12 +760,26 @@ class MultiPassEngine:
         for variant in variants:
             try:
                 logger.info(f"  Processing with '{variant.name}' ({variant.strategy.value})...")
-                logger.debug(f"[MPASS] Starte Variante '{variant.name}' …", flush=True)
+                logger.debug(f"[MPASS] Starte Variante '{variant.name}' …")
+
+                # —— Emit variant start — real-time progress
+                _vi = variants.index(variant)
+                _vn = max(len(variants), 1)
+                if progress_callback is not None:
+                    try:
+                        _vpct = int(100 * _vi / _vn)
+                        progress_callback(
+                            _vpct,
+                            f"Variante {_vi + 1}/{_vn}: ’{variant.name}‘ wird bewertet …",
+                            0.0,
+                        )
+                    except Exception:
+                        pass
 
                 start_time = time.time()
                 processed_audio = process_func(audio, sample_rate, variant.config)
                 proc_time = time.time() - start_time
-                logger.debug(f"[MPASS] Variante '{variant.name}' fertig in {proc_time:.1f}s", flush=True)
+                logger.debug(f"[MPASS] Variante '{variant.name}' fertig in {proc_time:.1f}s")
 
                 processing_times[variant.name] = proc_time
 
@@ -755,6 +793,23 @@ class MultiPassEngine:
                 )
 
                 results.append({"audio": processed_audio, "variant": variant, "score": score})
+
+                # Emit score result for frontend variant-ranking display
+                if progress_callback is not None:
+                    try:
+                        _cpct = int(100 * (_vi + 1) / _vn)
+                        _mos_v = getattr(score, "mos", None)
+                        _score_str = (
+                            f"MOS {_mos_v:.2f}" if _mos_v is not None
+                            else f"Score {score.composite_score:.3f}"
+                        )
+                        progress_callback(
+                            _cpct,
+                            f"Variante {_vi + 1}/{_vn}: '{variant.name}' → {_score_str} ✓",
+                            proc_time,
+                        )
+                    except Exception:
+                        pass
 
                 logger.info(f"    → {score}")
 
@@ -800,19 +855,23 @@ class MultiPassEngine:
     def _derive_restore_mode(config: ProcessingConfig) -> str:
         """Map variant-level ProcessingConfig to a coarse UV3 restore mode.
 
-        This keeps variant intent effective in default Multi-Pass execution instead of
-        running every variant with the same hardcoded mode.
+        Mapping ensures each standard variant gets a distinct UV3 mode so that
+        Multi-Pass evaluation is actually comparing different processing depths:
+          - denoise < 0.10                              → "fast"        (naturalness_first)
+          - denoise ≤ 0.20                              → "balanced"    (conservative)
+          - denoise ≥ 0.60 / enh ≥ 0.65 / comp ≥ 5.0  → "maximum"     (aggressive)
+          - else                                        → "restoration" (balanced variant)
         """
-        # Very gentle profiles should use FAST path.
-        if config.denoise_strength <= 0.15 and config.click_removal_sensitivity <= 0.35 and config.compression_ratio <= 1.5:
+        # Near-zero denoise: treat as minimal/fast path.
+        if config.denoise_strength < 0.10:
             return "fast"
 
-        # Heavy profiles should use MAXIMUM path.
+        # Heavy profiles: use MAXIMUM path.
         if config.denoise_strength >= 0.60 or config.enhancement_strength >= 0.65 or config.compression_ratio >= 5.0:
             return "maximum"
 
-        # Mid profiles use BALANCED for better speed/quality trade-off.
-        if config.denoise_strength >= 0.45 or config.click_removal_sensitivity >= 0.70:
+        # Light-conservative profiles: use BALANCED (less than full restoration phases).
+        if config.denoise_strength <= 0.20:
             return "balanced"
 
         # Default profile: restoration quality path.
@@ -848,7 +907,6 @@ class MultiPassEngine:
                 "[MPASS] restore(mode=%s) auf %.0fs Excerpt …",
                 _restore_mode,
                 len(_eval_audio) / sample_rate,
-                flush=True,
             )
             result = self._restorer.restore(
                 audio=_eval_audio,

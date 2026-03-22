@@ -254,11 +254,8 @@ class StemBasedProcessor:
 
         out = audio + _BASS_GAIN * bass
 
-        # Peak-Normalisierung: verhindert Übersteuerung
-        peak = float(np.max(np.abs(out)))
-        if peak > 1.0:
-            out = out / peak
-
+        # §VERBOTEN: Peak-Normalisierung würde LUFS-Verhältnis zum Original verzerren.
+        # TruePeak-Schutz ausschließlich via hartem Clip (letzter Schritt nach NaN-Bereinigung).
         return np.clip(np.nan_to_num(out.astype(np.float32), nan=0.0), -1.0, 1.0)
 
     def _gentle_noise_reduction(self, audio: np.ndarray, sr: int) -> np.ndarray:

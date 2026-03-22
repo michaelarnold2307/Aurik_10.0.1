@@ -21,10 +21,10 @@ from __future__ import annotations
 import logging
 import math
 import os
-from pathlib import Path
 import sys
 import tempfile
 import threading
+from pathlib import Path
 
 import numpy as np
 
@@ -104,7 +104,7 @@ def _get_ml_model() -> object | None:
             return None
         # Globaler ML-Budget-Guard: verhindert kumulative OOM über alle Plugins.
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
             if not _try_alloc("AudioSR", _AUDIOSR_BUDGET_GB):
                 return None  # Budget erschöpft → DSP-Fallback
         except Exception:
@@ -115,7 +115,7 @@ def _get_ml_model() -> object | None:
             audiosr_pkg = str(_AUDIOSR_ROOT)
             if audiosr_pkg not in sys.path:
                 sys.path.insert(0, audiosr_pkg)
-            from audiosr.pipeline import build_model  # noqa: PLC0415
+            from audiosr.pipeline import build_model
 
             logger.info(
                 "AudioSR: Lade ML-Modell von %s (nur einmalig)...",
@@ -126,16 +126,16 @@ def _get_ml_model() -> object | None:
             logger.info("AudioSR: ML-Modell bereit (CPU, ddim_steps=50).")
             # PLM-Registrierung für LRU-basierte Auto-Eviction
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
                 _reg_plm("AudioSR", size_gb=_AUDIOSR_BUDGET_GB, unload_fn=unload_audiosr)
             except Exception:
                 pass
             return _ml_model
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _ml_model_failed = True  # Sentinel setzen -- kein Retry (§3.2)
             # Budget-Slot freigeben bei Ladefehler
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _release
                 _release("AudioSR")
             except Exception:
                 pass
@@ -157,8 +157,8 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
         if model is None:
             return None
 
-        from audiosr.pipeline import super_resolution  # noqa: PLC0415
-        import soundfile as sf  # noqa: PLC0415
+        import soundfile as sf
+        from audiosr.pipeline import super_resolution
 
         # Sicherstellen: float32, 1D oder [samples, ch] fuer soundfile
         audio_f32 = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -189,7 +189,7 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
         return np.clip(result, -1.0, 1.0)
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("AudioSR ML-Inferenz fehlgeschlagen: %s", exc)
         return None
 
@@ -201,14 +201,14 @@ def unload_audiosr() -> None:
     Aufruf: direkt nach der letzten AudioSR-Phase in der Pipeline.
     """
     global _ml_model, _ml_model_failed
-    import gc  # noqa: PLC0415
+    import gc
     with _ml_model_lock:
         if _ml_model is not None:
             _ml_model = None
             _ml_model_failed = False  # Reset: ermöglicht erneutes Laden bei Bedarf
             gc.collect()
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _release
                 _release("AudioSR")
             except Exception:
                 pass
@@ -405,13 +405,13 @@ class AudioSRPlugin:
         try:
             from math import gcd
 
-            from scipy.signal import resample_poly  # noqa: PLC0415
+            from scipy.signal import resample_poly
 
             g = gcd(tgt, src)
             return resample_poly(x, tgt // g, src // g).astype(np.float32)
         except ImportError:
             ratio = tgt / src
-            new_n = int(round(len(x) * ratio))
+            new_n = round(len(x) * ratio)
             idx = np.linspace(0, len(x) - 1, new_n)
             return np.interp(idx, np.arange(len(x)), x).astype(np.float32)
 
@@ -430,7 +430,7 @@ class AudioSRPlugin:
             target_sr : Ziel-Sample-Rate (Standard 48 000 Hz)
         """
         try:
-            import soundfile as sf  # noqa: PLC0415
+            import soundfile as sf
 
             audio, sr = sf.read(input_wav, dtype="float32", always_2d=True)
             audio = audio.T  # [channels, samples]

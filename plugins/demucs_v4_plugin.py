@@ -50,7 +50,7 @@ class DemucsV4Plugin:
             logger.warning("Demucs-Modell fehlt: %s — DSP-Fallback aktiv.", self._model_path)
             return
         # §EXP-GUARD: Manifest-Check — experimental=true → kein ONNX-Load, DSP-Fallback
-        import json as _json  # noqa: PLC0415
+        import json as _json
 
         _manifest_path = os.path.join(os.path.dirname(__file__), "..", "models", "manifest.json")
         try:
@@ -64,13 +64,13 @@ class DemucsV4Plugin:
                         "ONNX-Session nicht geladen, DSP-Fallback aktiv."
                     )
                     return  # self._session bleibt None → automatisch HPSS-Fallback
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass  # Manifest nicht lesbar → normaler Load
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("DemucsV4", size_gb=0.12):
                     logger.warning("DemucsV4: ML-Budget erschöpft — HPSS-Fallback.")
@@ -85,15 +85,15 @@ class DemucsV4Plugin:
             )
             logger.info("Demucs htdemucs_6s ONNX geladen: %s", self._model_path)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm("DemucsV4", size_gb=0.12, unload_fn=lambda s=self: setattr(s, "_session", None))
             except Exception:
                 pass
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Demucs ONNX-Ladefehler: %s — DSP-Fallback aktiv.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("DemucsV4")
             except Exception:
                 pass
@@ -119,10 +119,7 @@ class DemucsV4Plugin:
         elif audio.ndim == 2 and audio.shape[1] != 2:
             audio = np.stack([audio[:, 0], audio[:, 0]], axis=1)
 
-        if self._session is not None:
-            stems = self._infer_onnx(audio, sr)
-        else:
-            stems = self._hpss_fallback(audio, sr)
+        stems = self._infer_onnx(audio, sr) if self._session is not None else self._hpss_fallback(audio, sr)
 
         return stems
 
@@ -132,10 +129,7 @@ class DemucsV4Plugin:
         vocals = stems.get("vocals", audio)
         non_vocals = ["drums", "bass", "other", "guitar", "piano"]
         inst_arrays = [stems[k] for k in non_vocals if k in stems]
-        if inst_arrays:
-            instruments = np.mean(inst_arrays, axis=0)
-        else:
-            instruments = audio - vocals
+        instruments = np.mean(inst_arrays, axis=0) if inst_arrays else audio - vocals
         return vocals, instruments
 
     def process(self, audio, sr):
@@ -147,7 +141,7 @@ class DemucsV4Plugin:
     def _resample(self, audio: np.ndarray, sr_from: int, sr_to: int) -> np.ndarray:
         if sr_from == sr_to:
             return audio
-        from scipy.signal import resample_poly  # noqa: PLC0415
+        from scipy.signal import resample_poly
 
         g = math.gcd(sr_from, sr_to)
         up, down = sr_to // g, sr_from // g
@@ -219,7 +213,7 @@ class DemucsV4Plugin:
                         out_stems[name][start:end] += seg[: end - start]
                 else:
                     raise ValueError(f"Unerwartetes Output-Shape: {[o.shape for o in outputs]}")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug("Demucs Chunk %d Fehler: %s — DSP.", i, exc)
                 fb = self._hpss_fallback(chunk, _SR)
                 for k, v in fb.items():
@@ -235,7 +229,7 @@ class DemucsV4Plugin:
     def _hpss_fallback(audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:
         """HPSS-basierter Stem-Fallback bei fehlendem Modell."""
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             mono = audio[:, 0] if audio.ndim == 2 else audio
             H, P = librosa.effects.hpss(mono)
@@ -254,7 +248,7 @@ class DemucsV4Plugin:
                 "guitar": res * 0.5,
                 "piano": res * 0.3,
             }
-        except Exception:  # noqa: BLE001
+        except Exception:
             result = {k: audio.copy() for k in _STEMS}
             return result
 

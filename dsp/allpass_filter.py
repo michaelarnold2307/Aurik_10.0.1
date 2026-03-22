@@ -1,4 +1,5 @@
 import logging
+
 import numpy as np
 import numpy.typing as npt
 
@@ -69,7 +70,7 @@ class AllpassFilter:
         """
         from scipy.signal import sosfilt
 
-        r = float(self.a)  # Nutze a als Gütefaktor-Proxy  # noqa: F841
+        float(self.a)  # Nutze a als Gütefaktor-Proxy
         # Referenz-Sr für Frequenzlagen
         sr_ref = 44100
         Q = 0.707

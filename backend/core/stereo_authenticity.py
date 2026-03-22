@@ -25,7 +25,7 @@ _warnings.warn(
     stacklevel=2,
 )
 
-from backend.core.stereo_authenticity_invariant import (  # noqa: F401, E402
+from backend.core.stereo_authenticity_invariant import (
     StereoAuthenticitiyInvariant,
     StereoAuthResult,
     _is_mono_source,
@@ -36,7 +36,7 @@ from backend.core.stereo_authenticity_invariant import (  # noqa: F401, E402
 __all__ = [
     "StereoAuthResult",
     "StereoAuthenticitiyInvariant",
-    "get_stereo_authenticity_invariant",
-    "check_stereo_authenticity",
     "_is_mono_source",
+    "check_stereo_authenticity",
+    "get_stereo_authenticity_invariant",
 ]

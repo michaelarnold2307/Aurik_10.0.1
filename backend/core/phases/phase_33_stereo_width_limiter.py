@@ -71,11 +71,9 @@ Performance Target: <0.15× realtime
 Quality Target: 0.89 (Professional-Grade)
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 from typing import Any
 
@@ -83,6 +81,7 @@ import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -481,10 +480,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         mono = np.mean(audio, axis=1)
         mono_rms = np.sqrt(np.mean(mono**2))
 
-        if stereo_rms > 1e-10:
-            compatibility = mono_rms / stereo_rms
-        else:
-            compatibility = 1.0
+        compatibility = mono_rms / stereo_rms if stereo_rms > 1e-10 else 1.0
 
         return compatibility
 

@@ -9,7 +9,8 @@ Supports legacy context/fusion_engine constructor for backward compatibility.
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, List, Optional
+from collections.abc import Callable
+from typing import Any, List, Optional
 
 import numpy as np
 
@@ -19,17 +20,17 @@ from backend.core.fusion_engine import FusionEngine
 _FRAME_DURATION_S: float = 0.5
 
 # Strength multipliers for three-chain ensemble CONSERVATIVE / BALANCED / AGGRESSIVE
-_ENSEMBLE_STRENGTHS: List[float] = [0.6, 1.0, 1.4]
+_ENSEMBLE_STRENGTHS: list[float] = [0.6, 1.0, 1.4]
 
 # Mode → preferred chain of model keys (legacy context-based path)
-_MODE_CHAINS: dict[str, List[str]] = {
+_MODE_CHAINS: dict[str, list[str]] = {
     "tape":        ["deepfilternet_v3_ii", "resemble_enhance"],
     "vinyl":       ["resemble_enhance", "deepfilternet_v3_ii"],
     "digital":     ["deepfilternet_v3_ii"],
     "broadcast":   ["resemble_enhance", "deepfilternet_v3_ii"],
     "restoration": ["deepfilternet_v3_ii", "resemble_enhance"],
 }
-_DEFAULT_CHAIN: List[str] = ["deepfilternet_v3_ii", "resemble_enhance"]
+_DEFAULT_CHAIN: list[str] = ["deepfilternet_v3_ii", "resemble_enhance"]
 
 
 class EnsembleProcessor:
@@ -48,7 +49,7 @@ class EnsembleProcessor:
     #: Frame duration for OLA crossfade (§2.21)
     FRAME_DURATION_S: float = _FRAME_DURATION_S
 
-    def __init__(self, context: Any = None, fusion_engine: Optional[FusionEngine] = None) -> None:
+    def __init__(self, context: Any = None, fusion_engine: FusionEngine | None = None) -> None:
         self.context = context
         self.fusion_engine = fusion_engine
 
@@ -60,7 +61,7 @@ class EnsembleProcessor:
         self,
         audio: np.ndarray,
         sr: int = 48_000,
-        restoration_fn: Optional[Callable] = None,
+        restoration_fn: Callable | None = None,
         **kwargs: Any,
     ) -> np.ndarray:
         """Apply *restoration_fn* to *audio* and return a sanitised ndarray.
@@ -109,11 +110,11 @@ import threading as _threading
 
 _logger = _logging.getLogger(__name__)
 
-_ensemble_processor_instance: Optional["EnsembleProcessor"] = None
+_ensemble_processor_instance: EnsembleProcessor | None = None
 _ensemble_processor_lock = _threading.Lock()
 
 
-def get_ensemble_processor(context: Any = None, fusion_engine: Optional[FusionEngine] = None) -> "EnsembleProcessor":
+def get_ensemble_processor(context: Any = None, fusion_engine: FusionEngine | None = None) -> EnsembleProcessor:
     """Return the process-wide singleton EnsembleProcessor instance."""
     global _ensemble_processor_instance
     if _ensemble_processor_instance is None:
@@ -131,7 +132,7 @@ def process_ensemble(
     audio: np.ndarray,
     sr: int,
     material: str = "restoration",
-    restoration_fn: Optional[Callable] = None,
+    restoration_fn: Callable | None = None,
 ) -> np.ndarray:
     """Run a three-chain ensemble (CONSERVATIVE/BALANCED/AGGRESSIVE) on *audio*.
 
@@ -164,14 +165,14 @@ def process_ensemble(
     if restoration_fn is None:
         return np.clip(audio_f32, -1.0, 1.0)
 
-    candidates: List[np.ndarray] = []
+    candidates: list[np.ndarray] = []
     for strength in _ENSEMBLE_STRENGTHS:
         try:
             out = restoration_fn(audio_f32, sr, strength)
             out = np.asarray(out, dtype=np.float32)
             out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
             candidates.append(out)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _logger.debug("process_ensemble: strength=%.1f fehlgeschlagen: %s", strength, exc)
             candidates.append(audio_f32.copy())
 
@@ -183,7 +184,7 @@ def process_ensemble(
         return np.clip(candidates[0], -1.0, 1.0)
 
     # Simple weighted mean: weight by per-candidate RMS (higher quality → more weight)
-    weights: List[float] = []
+    weights: list[float] = []
     for c in candidates:
         rms = float(np.sqrt(np.mean(c ** 2)))
         weights.append(max(rms, 1e-9))

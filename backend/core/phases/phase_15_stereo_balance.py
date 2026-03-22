@@ -57,11 +57,9 @@ Performance Target: <0.15× realtime
 Quality Target: 0.88 (Professional-Grade)
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 from typing import Any
 
@@ -69,6 +67,7 @@ import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)

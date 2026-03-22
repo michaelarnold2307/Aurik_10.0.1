@@ -25,10 +25,10 @@ USAGE:
     # → {'era': '1980s', 'confidence': 0.93, 'probabilities': {...}}
 """
 
-from dataclasses import dataclass
 import logging
-from pathlib import Path
 import pickle
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -150,10 +150,7 @@ class EraFeatureExtractor:
         era_features = EraFeatures()
 
         # Convert to mono if stereo
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim > 1 else audio
 
         # 1. Bandwidth analysis
         era_features.bandwidth_low_hz = base_features.bandwidth_3db_low

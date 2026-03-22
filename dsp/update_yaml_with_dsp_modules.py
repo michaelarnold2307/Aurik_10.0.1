@@ -12,6 +12,7 @@ import os
 import re
 
 import yaml
+
 logger = logging.getLogger(__name__)
 
 YAML_PATH = "tests/sota/sota_dsp_module_list.yaml"

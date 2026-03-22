@@ -3,8 +3,11 @@ Main Window for AURIK Professional
 Professional audio restoration interface
 """
 
+import math as _math
 from pathlib import Path
 
+import numpy as np
+import soundfile as sf
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
@@ -27,8 +30,23 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-import soundfile as sf
-from backend.api.bridge import get_aurik_denker_class
+from scipy.signal import resample_poly as _resample_poly
+
+from backend.api.bridge import get_aurik_denker_class, get_aurik_denker_instance
+
+_TARGET_SR = 48_000
+
+
+def _resample_to_48k(audio: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
+    """Resamples audio to 48 kHz if needed. Accepts any input sample rate."""
+    if sr == _TARGET_SR:
+        return audio.astype(np.float32), sr
+    _gcd = _math.gcd(sr, _TARGET_SR)
+    _up, _dn = _TARGET_SR // _gcd, sr // _gcd
+    axis = 0 if audio.ndim > 1 else -1
+    resampled = _resample_poly(audio, _up, _dn, axis=axis).astype(np.float32)
+    return resampled, _TARGET_SR
+
 
 from ..core.preset_manager import Preset, PresetManager
 from ..core.queue_manager import QueueManager, QueueStatus
@@ -55,25 +73,28 @@ class ProcessingThread(QThread):
     def run(self):
         """Process audio in background"""
         try:
-            AurikDenkerClass = get_aurik_denker_class()
-            if AurikDenkerClass is None:
-                raise RuntimeError("AurikDenker backend class unavailable")
+            # §RELEASE_MUST: Singleton-Accessor — kein direktes AurikDenker()
+            denker = get_aurik_denker_instance()
+            if denker is None:
+                raise RuntimeError("AurikDenker-Instanz nicht verfügbar")
 
             self.progress.emit(10)
 
-            # Load audio
+            # Load audio — resample to 48 kHz (Aurik internal SR)
             audio, sr = sf.read(self.input_file)
+            audio, sr = _resample_to_48k(np.asarray(audio, dtype=np.float32), sr)
             self.progress.emit(20)
 
-            # Canonical entrypoint: restore through AurikDenker.
-            restorer = AurikDenkerClass()
+            # §RELEASE_MUST: Canonical entrypoint via AurikDenker.denke() — no UV3 bypass
+            # Mode: "Restoration" | "Studio 2026" only
+            mode = self.settings.get("processing_mode", "Restoration")
             self.progress.emit(30)
 
             # Process
-            result = restorer.denke(audio, sr, mode="quality")
+            result = denker.denke(audio, sr, mode=mode)
             self.progress.emit(80)
 
-            # Save
+            # Save at 48 kHz (internal processing SR)
             sf.write(self.output_file, result.audio, sr)
             self.progress.emit(100)
 
@@ -99,10 +120,11 @@ class BatchProcessingThread(QThread):
 
     def run(self):
         """Process all items in queue"""
-        AurikDenkerClass = get_aurik_denker_class()
-        if AurikDenkerClass is None:
+        # §RELEASE_MUST: Singleton-Accessor — kein direktes AurikDenker()
+        denker = get_aurik_denker_instance()
+        if denker is None:
             for item in [i for i in self.queue_manager.items if i.status == QueueStatus.PENDING]:
-                msg = "AurikDenker backend class unavailable"
+                msg = "AurikDenker-Instanz nicht verfügbar"
                 self.queue_manager.update_item_status(item.id, QueueStatus.FAILED, 0, msg)
                 self.item_error.emit(item.id, msg)
             self.all_finished.emit()
@@ -119,22 +141,24 @@ class BatchProcessingThread(QThread):
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 0)
                 self.item_started.emit(item.id)
 
-                # Load audio
+                # Load audio — resample to 48 kHz (Aurik internal SR)
                 audio, sr = sf.read(item.input_file)
+                audio, sr = _resample_to_48k(np.asarray(audio, dtype=np.float32), sr)
                 self.item_progress.emit(item.id, 20)
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 20)
 
-                # Canonical entrypoint: restore through AurikDenker.
-                restorer = AurikDenkerClass()
+                # §RELEASE_MUST: Canonical entrypoint via AurikDenker.denke() — no UV3 bypass
+                # Mode: "Restoration" | "Studio 2026" only
+                mode = item.settings.get("processing_mode", "Restoration")
                 self.item_progress.emit(item.id, 30)
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 30)
 
                 # Process
-                result = restorer.denke(audio, sr, mode="quality")
+                result = denker.denke(audio, sr, mode=mode)
                 self.item_progress.emit(item.id, 80)
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 80)
 
-                # Save
+                # Save at 48 kHz (internal processing SR)
                 sf.write(item.output_file, result.audio, sr)
                 self.item_progress.emit(item.id, 100)
 
@@ -206,7 +230,9 @@ class MainWindow(QMainWindow):
         self.statusBar.showMessage(t("status.ready"))
 
         # Progress bar in status bar
+        # §11.4: setRange(0, 10000) — setRange(0, 100) ist explizit verboten
         self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 10000)
         self.progress_bar.setMaximumWidth(200)
         self.progress_bar.hide()
         self.statusBar.addPermanentWidget(self.progress_bar)
@@ -242,35 +268,27 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(file_group)
 
-        # Medium selection
+        # Medium selection — §RELEASE_MUST: auto-detected by MediumClassifier, no manual override
         medium_group = QGroupBox(t("legacy.main.medium_type"))
         medium_layout = QVBoxLayout()
         medium_group.setLayout(medium_layout)
 
-        self.medium_combo = QComboBox()
-        self.medium_combo.addItem(t("legacy.medium.vinyl"), "VINYL")
-        self.medium_combo.addItem(t("legacy.medium.cassette"), "CASSETTE")
-        self.medium_combo.addItem(t("legacy.medium.dat"), "DAT")
-        self.medium_combo.addItem(t("legacy.medium.cd"), "CD")
-        self.medium_combo.addItem(t("legacy.medium.mp3"), "MP3")
-        self.medium_combo.addItem(t("legacy.medium.shellac"), "SHELLAC")
-        self.medium_combo.addItem(t("legacy.medium.wire"), "WIRE")
-        medium_layout.addWidget(self.medium_combo)
+        self.medium_combo = None  # §RELEASE_MUST: kein manueller Tonträger — MediumClassifier erkennt automatisch
+        medium_label = QLabel("🔍 Wird automatisch erkannt")
+        medium_label.setStyleSheet("color: #888888; font-style: italic;")
+        medium_layout.addWidget(medium_label)
 
         layout.addWidget(medium_group)
 
-        # Processing mode
+        # Processing mode — §RELEASE_MUST: one-button contract, only Restoration | Studio 2026
         mode_group = QGroupBox(t("legacy.main.processing_mode"))
         mode_layout = QVBoxLayout()
         mode_group.setLayout(mode_layout)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem(t("legacy.mode.gentle"), "GENTLE")
-        self.mode_combo.addItem(t("legacy.mode.balanced"), "BALANCED")
-        self.mode_combo.addItem(t("legacy.mode.aggressive"), "AGGRESSIVE")
-        self.mode_combo.addItem(t("legacy.mode.archive"), "ARCHIVE")
-        self.mode_combo.addItem(t("legacy.mode.mastering"), "MASTERING")
-        self.mode_combo.setCurrentIndex(1)  # Balanced
+        self.mode_combo.addItem("Restoration", "Restoration")
+        self.mode_combo.addItem("Studio 2026", "Studio 2026")
+        self.mode_combo.setCurrentIndex(0)  # Restoration (default)
         mode_layout.addWidget(self.mode_combo)
 
         layout.addWidget(mode_group)
@@ -388,40 +406,18 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(tabs)
 
-        # Musical Goals
+        # Musical Goals — §RELEASE_MUST: Vollautarker Bedienvertrag
+        # Manuelle Goal-Slider sind im Produktions-UI verboten (One-Button-Contract)
+        # 14 Goals werden automatisch durch AdaptiveGoalThresholds + MusicalGoalsChecker optimiert
         goals_group = QGroupBox(t("legacy.main.musical_goals"))
         goals_layout = QVBoxLayout()
         goals_group.setLayout(goals_layout)
 
-        self.goal_sliders = {}
-        goals = [
-            (t("legacy.main.goal.brillanz"), "brillanz", 0.87),
-            (t("legacy.main.goal.waerme"), "waerme", 0.82),
-            (t("legacy.main.goal.natuerlichkeit"), "natuerlichkeit", 0.85),
-            (t("legacy.main.goal.authentizitaet"), "authentizitaet", 0.88),
-            (t("legacy.main.goal.emotionalitaet"), "emotionalitaet", 0.83),
-            (t("legacy.main.goal.transparenz"), "transparenz", 0.89),
-            (t("legacy.main.goal.bass_kraft"), "bass_kraft", 0.75),
-        ]
-
-        for goal_name, goal_key, default_val in goals:
-            slider_layout = QHBoxLayout()
-            label = QLabel(goal_name)
-            label.setMinimumWidth(200)
-            slider = QSlider(Qt.Horizontal)
-            slider.setRange(0, 100)
-            slider.setValue(int(default_val * 100))
-            value_label = QLabel(f"{int(default_val * 100)}%")
-            value_label.setMinimumWidth(40)
-
-            slider.valueChanged.connect(lambda v, lbl=value_label: lbl.setText(f"{v}%"))
-
-            slider_layout.addWidget(label)
-            slider_layout.addWidget(slider)
-            slider_layout.addWidget(value_label)
-
-            goals_layout.addLayout(slider_layout)
-            self.goal_sliders[goal_key] = slider
+        self.goal_sliders = {}  # §RELEASE_MUST: keine manuellen Slider — automatisch optimiert
+        goals_info = QLabel("✅ 14 Musical Goals werden automatisch optimiert\n(Natürlichkeit, Authentizität, Brillanz, Wärme ...)")
+        goals_info.setStyleSheet("color: #888888; font-style: italic; padding: 4px;")
+        goals_info.setWordWrap(True)
+        goals_layout.addWidget(goals_info)
 
         layout.addWidget(goals_group)
 
@@ -509,11 +505,11 @@ class MainWindow(QMainWindow):
             # Start Ladeprozess (sendet 10, 40, 70, 90, 100)
             success_waveform = self.waveform_widget.load_audio(self.current_file)
             # Player laden (90%)
-            self.progress_bar.setValue(90)
+            self.progress_bar.setValue(9000)
             QApplication.processEvents()
             success_player = self.audio_player.load_audio(self.current_file)
             # Abschluss
-            self.progress_bar.setValue(100)
+            self.progress_bar.setValue(10000)
             QApplication.processEvents()
             self.progress_bar.hide()
             self.statusBar.showMessage(t("status.ready"))
@@ -561,19 +557,9 @@ class MainWindow(QMainWindow):
         if not output_file:
             return
 
-        # Get settings
-        medium_map = {
-            "VINYL": "VINYL",
-            "CASSETTE": "CASSETTE_TAPE",
-            "DAT": "DAT",
-            "CD": "CD",
-            "MP3": "MP3",
-            "SHELLAC": "SHELLAC_78RPM",
-            "WIRE": "WIRE_RECORDING",
-        }
-
+        # §RELEASE_MUST: Medium wird automatisch durch MediumClassifier erkannt
+        # §RELEASE_MUST: Mode nur "Restoration" | "Studio 2026"
         settings = {
-            "medium_type": medium_map[self.medium_combo.currentData()],
             "processing_mode": self.mode_combo.currentData(),
         }
 
@@ -591,8 +577,8 @@ class MainWindow(QMainWindow):
         self.processing_thread.start()
 
     def update_progress(self, value):
-        """Update progress bar"""
-        self.progress_bar.setValue(value)
+        """Update progress bar — scales 0-100 signal to internal 0-10000 range (§11.4)"""
+        self.progress_bar.setValue(max(100, min(10000, value * 100)))
 
     def on_processing_finished(self, message):
         """Handle processing completion"""
@@ -637,25 +623,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, t("dialog.no_files_title"), t("legacy.main.no_files_for_queue"))
             return
 
-        # Get current settings
-        from backend.api.bridge import get_medium_type_enum, get_processing_mode_enum
-
-        MediumType = get_medium_type_enum()
-        ProcessingMode = get_processing_mode_enum()
-
-        medium_map = {
-            "VINYL": MediumType.VINYL,
-            "CASSETTE": MediumType.CASSETTE,
-            "DAT": MediumType.DAT,
-            "CD": MediumType.CD,
-            "MP3": MediumType.MP3,
-            "SHELLAC": MediumType.SHELLAC,
-            "WIRE": MediumType.WIRE,
-        }
-
+        # §RELEASE_MUST: Medium wird automatisch durch MediumClassifier erkannt
+        # §RELEASE_MUST: Mode nur "Restoration" | "Studio 2026"
         settings = {
-            "medium_type": medium_map[self.medium_combo.currentData()],
-            "processing_mode": getattr(ProcessingMode, self.mode_combo.currentData()),
+            "processing_mode": self.mode_combo.currentData(),
         }
 
         # Choose output directory
@@ -750,25 +721,16 @@ class MainWindow(QMainWindow):
     def apply_preset(self, preset: Preset):
         """Apply preset to UI settings"""
 
-        # Map medium type
-        medium_map_reverse = {"VINYL": 0, "CASSETTE": 1, "DAT": 2, "CD": 3, "MP3": 4, "SHELLAC": 5, "WIRE": 6}
+        # §RELEASE_MUST: Medium wird automatisch erkannt — kein manuelles Setzen
+        # §RELEASE_MUST: Mode-Map: nur Restoration | Studio 2026
+        mode_map_reverse = {"Restoration": 0, "Studio 2026": 1}
 
-        # Map processing mode
-        mode_map_reverse = {"GENTLE": 0, "BALANCED": 1, "AGGRESSIVE": 2, "ARCHIVE": 3, "MASTERING": 4}
-
-        # Set medium type
-        if preset.medium_type in medium_map_reverse:
-            self.medium_combo.setCurrentIndex(medium_map_reverse[preset.medium_type])
-
-        # Set processing mode
-        if preset.processing_mode in mode_map_reverse:
+        # Set processing mode (only Restoration / Studio 2026)
+        if hasattr(preset, "processing_mode") and preset.processing_mode in mode_map_reverse:
             self.mode_combo.setCurrentIndex(mode_map_reverse[preset.processing_mode])
 
-        # Set musical goals
-        for goal_name, slider in self.goal_sliders.items():
-            if goal_name in preset.musical_goals:
-                value = int(preset.musical_goals[goal_name] * 100)
-                slider.setValue(value)
+        # §RELEASE_MUST: Musical Goals werden automatisch optimiert — keine manuellen Slider
+        # self.goal_sliders ist leer (One-Button-Contract)
 
         # Set enhancements
         for enhancement_name, checkbox in self.enhancement_checks.items():

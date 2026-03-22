@@ -246,14 +246,14 @@ def _try_cqtdiff_plus_plugin(audio: np.ndarray, start: int, end: int, sample_rat
     if gap_ms < 50.0:
         return None  # Kurze Lücken → DSP-Diffusion (NMF-β-Äquivalent)
     try:
-        import os as _os  # noqa: PLC0415
+        import os as _os
         import sys
 
         _plugins_dir = _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "plugins")
         if _plugins_dir not in sys.path:
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
-        from plugins.cqtdiff_plus_plugin import CQTdiffPlusPlugin  # noqa: PLC0415
+        from plugins.cqtdiff_plus_plugin import CQTdiffPlusPlugin
 
         plugin = CQTdiffPlusPlugin()
         result = plugin.inpaint(audio=audio, sr=sample_rate, gap_start=start, gap_end=end)
@@ -404,7 +404,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
             name="Diffusion Inpainting",
             category=PhaseCategory.RESTORATION,
             priority=9,  # CRITICAL
-            dependencies=["phase_24", "phase_50"],
+            dependencies=["phase_24_dropout_repair", "phase_50_spectral_repair"],
             estimated_time_factor=0.08,
             version="1.0.0",
             memory_requirement_mb=128,

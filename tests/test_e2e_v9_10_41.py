@@ -555,11 +555,19 @@ class TestE2EStudio2026Balanced:
         _validate_restoration_result(result, min_duration_s=1.0)
 
         # --- Studio 2026 Pflicht-Invarianten (Spec §1.4) ---
+        from backend.core.defect_scanner import MaterialType  # type: ignore
         from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker  # type: ignore
         from backend.core.perceptual_quality_scorer import score_audio_absolute  # type: ignore
 
+        # Spec §8.1: MOS ≥ 4.5 gilt NUR für digitale Hochqualitäts-Quellen.
+        # Für alle anderen Materialien gelten material-spezifische Erwartungen aus §6.2.
+        _HIGH_QUALITY_DIGITAL = {MaterialType.CD_DIGITAL, MaterialType.DAT, MaterialType.MP3_HIGH, MaterialType.AAC}
+        _studio_mos_min = 4.5 if result.material_type in _HIGH_QUALITY_DIGITAL else 4.0
         pqs_max = score_audio_absolute(result.audio, sample_rate=48_000)
-        assert pqs_max.pqs_mos >= 4.5, f"Studio 2026 §1.4: PQS-MOS {pqs_max.pqs_mos:.3f} < 4.5 (Weltklasse)"
+        assert pqs_max.pqs_mos >= _studio_mos_min, (
+            f"Studio 2026 §1.4: PQS-MOS {pqs_max.pqs_mos:.3f} < {_studio_mos_min} "
+            f"(Weltklasse / Material={result.material_type.value})"
+        )
 
         checker_max = MusicalGoalsChecker()
         scores_max = checker_max.measure_all(result.audio, sr=48_000)

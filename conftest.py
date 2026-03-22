@@ -219,6 +219,11 @@ collect_ignore.extend(
     ]
 )
 
+# Normalize legacy ignore file names for robust early collection filtering.
+_LEGACY_IGNORE_BASENAMES: set[str] = {
+    p.replace("\\", "/").split("/")[-1].lower() for p in collect_ignore
+}
+
 
 _HEAVY_TEST_PATH_HINTS: tuple[str, ...] = (
     "test_memory_leaks_v3.py",
@@ -232,6 +237,15 @@ _HEAVY_TEST_PATH_HINTS: tuple[str, ...] = (
     "test_v99_sota_plugins.py",
     "test_v99_plugins_extended.py",
     "test_v99_vocos_plugin.py",
+    "test_ml_era_detector.py",
+    "test_ml_medium_detector.py",
+    "test_ml_hybrid_validation.py",
+    "test_demucs_v4_plugin.py",
+    "test_gaps_integration.py",
+    "test_digital_restoration_specialist.py",
+    "test_phase31_ml_integration.py",
+    "test_signal_forensics_integration.py",
+    "test_unified_analyzer.py",
 )
 
 
@@ -251,13 +265,17 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
 def _is_heavy_test_item(item) -> bool:  # noqa: ANN001
     """Heuristic for tests that can trigger OOM/host instability.
 
-    Criteria:
-      1) Known heavy file paths.
-      2) Explicit long timeout markers (>= 300 s).
-      3) e2e marker.
+        Criteria:
+            1) Known heavy file paths.
+            2) Explicit ml/slow markers.
+            3) Explicit timeout markers (>= 30 s).
+            4) e2e marker.
     """
     path = str(getattr(item, "fspath", "")).replace("\\", "/").lower()
     if any(hint in path for hint in _HEAVY_TEST_PATH_HINTS):
+        return True
+
+    if item.get_closest_marker("ml") is not None or item.get_closest_marker("slow") is not None:
         return True
 
     timeout_marker = item.get_closest_marker("timeout")
@@ -269,9 +287,7 @@ def _is_heavy_test_item(item) -> bool:  # noqa: ANN001
         except (TypeError, ValueError):
             pass
 
-    return item.get_closest_marker("e2e") is not None or \
-        item.get_closest_marker("slow") is not None or \
-        item.get_closest_marker("ml") is not None
+    return item.get_closest_marker("e2e") is not None
 
 
 def pytest_collection_modifyitems(config, items) -> None:  # noqa: ANN001
@@ -280,21 +296,26 @@ def pytest_collection_modifyitems(config, items) -> None:  # noqa: ANN001
     This prevents hard machine crashes in default/local selective test runs.
     """
     run_heavy = bool(config.getoption("--run-heavy-tests"))
-    skip_reason = (
-        "Heavy ML/stress test is skipped by default for host stability. "
-        "Use --run-heavy-tests to execute it intentionally."
-    )
+    deselected: list = []
+    kept: list = []
 
     for item in items:
         if not _is_heavy_test_item(item):
+            kept.append(item)
             continue
 
         # Ensure heavy tests are visibly classified for marker-based selection.
         item.add_marker(pytest.mark.ml)
         item.add_marker(pytest.mark.slow)
 
-        if not run_heavy:
-            item.add_marker(pytest.mark.skip(reason=skip_reason))
+        if run_heavy:
+            kept.append(item)
+        else:
+            deselected.append(item)
+
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = kept
 
 
 def pytest_ignore_collect(collection_path, config):  # noqa: ANN001
@@ -307,4 +328,10 @@ def pytest_ignore_collect(collection_path, config):  # noqa: ANN001
         return False
 
     path = str(collection_path).replace("\\", "/").lower()
+    basename = path.split("/")[-1]
+
+    # Legacy/script-style tests must never be part of default collection.
+    if basename in _LEGACY_IGNORE_BASENAMES:
+        return True
+
     return any(hint in path for hint in _HEAVY_TEST_PATH_HINTS)

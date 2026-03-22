@@ -27,9 +27,10 @@ Date: 2026-02-17
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import contextlib
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -38,6 +39,7 @@ from backend.core.auto_musical_goal_setter import AutoMusicalGoalSetter, Musical
 from backend.core.causal_defect_graph import CausalDefectGraph
 from backend.core.defect_phase_mapper import DefectPhaseMapper
 from backend.core.defect_quality_report import DefectQualityReport, DefectQualityReporter
+from backend.core.defect_scanner import DefectAnalysisResult, DefectScanner, DefectType, MaterialType
 from backend.core.gap_reconstructor import GapReconstructor
 from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer
 from backend.core.medium_chain_model import PhysicalMediumChainModel
@@ -51,7 +53,6 @@ from backend.core.processing_modes import ProcessingMode
 from backend.core.provenance_audit import ProvenanceAudit
 from backend.core.quality_prediction import QualityAnalyzer, QualityEstimate
 from backend.core.self_learning_optimizer import SelfLearningOptimizer
-from backend.core.defect_scanner import DefectAnalysisResult, DefectScanner, DefectType, MaterialType
 
 logger = logging.getLogger(__name__)
 
@@ -185,30 +186,44 @@ class AutonomousRestorationEngine:
     # Öffentliche API
     # ------------------------------------------------------------------
 
-    def process(self, audio: np.ndarray, sample_rate: int) -> AutonomousRestorationResult:
+    def process(self, audio: np.ndarray, sample_rate: int, progress_callback=None, **kwargs) -> AutonomousRestorationResult:
         """
         Vollautomatische Restaurierung. Einzige Eingabe: Audio + Abtastrate.
 
         Args:
             audio: Eingabe-Audio als float32 numpy-Array (mono oder stereo).
             sample_rate: Abtastrate in Hz.
+            progress_callback: Optional callable(pct:int, msg:str, elapsed_s:float)
+            **kwargs: Denker context (global_plan, chain_info, defekt_hint, mode, material)
+                      forwarded to UV3 restore() in full-processing phase.
 
         Returns:
             AutonomousRestorationResult mit restauriertem Audio und vollständigem Protokoll.
         """
+        # Store Denker context for full-processing UV3 call (§Dach: context propagation)
+        _ctx_keys = ('global_plan', 'chain_info', 'defekt_hint', 'mode', 'material')
+        self._denker_context: dict = {k: v for k, v in kwargs.items() if k in _ctx_keys and v is not None}
         start_time = time.perf_counter()
         audit: list[dict[str, Any]] = []
+
+        def _p(pct: int, msg: str) -> None:
+            """Emit progress to the caller — pct is 0-100 within ARE's own scale."""
+            if progress_callback is not None:
+                with contextlib.suppress(Exception):
+                    progress_callback(pct, msg, time.perf_counter() - start_time)
 
         # ----------------------------------------------------------------
         # Phase 0: Validierung & Normalisierung
         # ----------------------------------------------------------------
+        _p(2, "Eingabe wird geprüft …")
         audio = self._validate_and_normalize_input(audio)
         audit.append({"phase": "input_validation", "shape": audio.shape, "sr": sample_rate})
 
         # ----------------------------------------------------------------
         # Phase 1: Qualität des Eingangssignals bestimmen (Baseline)
         # ----------------------------------------------------------------
-        logger.debug("[ENGINE] Phase 1: QualityAnalyzer …", flush=True)
+        logger.debug("[ENGINE] Phase 1: QualityAnalyzer …")
+        _p(7, "Eingangsqualität wird analysiert …")
         _t1 = time.perf_counter()
         # Analyse-Clips: max. 30 s (kein Audio-Output, nur Score)
         _clip30 = sample_rate * 30
@@ -216,13 +231,12 @@ class AutonomousRestorationEngine:
         quality_before_estimate: QualityEstimate = self._quality_analyzer.analyze_quality(_audio_clip, sample_rate)
         logger.debug(
             f"[ENGINE] Phase 1a fertig ({time.perf_counter()-_t1:.1f}s): level={quality_before_estimate.quality_level.value}",
-            flush=True,
         )
         # IAQS-Score für Rollback-Vergleich (0–1 × 100 = 0–100)
-        logger.debug("[ENGINE] Phase 1b: IAQS.score_as_float …", flush=True)
+        logger.debug("[ENGINE] Phase 1b: IAQS.score_as_float …")
         _t1b = time.perf_counter()
         quality_before = self._iaqs.score_as_float(_audio_clip, sample_rate) * 100
-        logger.debug(f"[ENGINE] Phase 1b fertig ({time.perf_counter()-_t1b:.1f}s): score={quality_before:.1f}", flush=True)
+        logger.debug(f"[ENGINE] Phase 1b fertig ({time.perf_counter()-_t1b:.1f}s): score={quality_before:.1f}")
         audit.append(
             {
                 "phase": "baseline_quality",
@@ -235,9 +249,10 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         # Phase 2: Forensische Defekt- und Material-Analyse (vollautomatisch)
         # ----------------------------------------------------------------
-        logger.debug("[ENGINE] Phase 2: Starte DefectScanner.scan() …", flush=True)
+        logger.debug("[ENGINE] Phase 2: Starte DefectScanner.scan() …")
+        _p(18, "Defekte und Material werden erkannt …")
         defect_result: DefectAnalysisResult = self._defect_scanner.scan(audio, sample_rate)
-        logger.debug(f"[ENGINE] Phase 2 fertig: material={defect_result.material_type.value}", flush=True)
+        logger.debug(f"[ENGINE] Phase 2 fertig: material={defect_result.material_type.value}")
         material = defect_result.material_type
         top_defects = defect_result.get_top_defects(n=5)
         audit.append(
@@ -257,13 +272,14 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         # Differenzierer #1: Kausale Defektgraph-Analyse
         # ----------------------------------------------------------------
-        logger.debug("[ENGINE] Diff#1: Kausale Defektgraph-Analyse …", flush=True)
+        logger.debug("[ENGINE] Diff#1: Kausale Defektgraph-Analyse …")
+        _p(26, "Kausale Defektreihenfolge wird analysiert …")
         _td1 = time.perf_counter()
         all_defects = defect_result.get_top_defects(n=15)
         causal_ordered = self._causal_graph.resolve_causal_order(all_defects)
         causal_explanation = self._causal_graph.explain(all_defects)
         phantom_defects = self._causal_graph.get_phantom_defects(all_defects)
-        logger.debug(f"[ENGINE] Diff#1 fertig ({time.perf_counter()-_td1:.1f}s)", flush=True)
+        logger.debug(f"[ENGINE] Diff#1 fertig ({time.perf_counter()-_td1:.1f}s)")
         audit.append(
             {
                 "phase": "causal_defect_graph",
@@ -280,7 +296,8 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         # Differenzierer #2: Physikalische Ketteninversion
         # ----------------------------------------------------------------
-        logger.debug("[ENGINE] Diff#2: Ketteninversion …", flush=True)
+        logger.debug("[ENGINE] Diff#2: Ketteninversion …")
+        _p(30, f"Signalkette wird invertiert [{material.value}] …")
         _td2 = time.perf_counter()
         if getattr(defect_result, "is_multi_generation", False):
             chain_result = self._chain_model.invert_chain_sequence(
@@ -293,7 +310,6 @@ class AutonomousRestorationEngine:
             chain_result = self._chain_model.invert_chain(audio, sample_rate, material, all_defects)
         logger.debug(
             f"[ENGINE] Diff#2 fertig ({time.perf_counter()-_td2:.1f}s): corrections={len(chain_result.corrections_applied)}, Δ={chain_result.spectral_change_db:.2f}dB",
-            flush=True,
         )
         audio = chain_result.audio  # Ab hier: kettenentzerrtes Audio
         audit.append(
@@ -314,7 +330,8 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         # Differenzierer #3: Semantische Lückenfüllung (GapReconstructor)
         # ----------------------------------------------------------------
-        logger.debug("[ENGINE] Diff#3: GapReconstructor …", flush=True)
+        logger.debug("[ENGINE] Diff#3: GapReconstructor …")
+        _p(34, "Lücken und Aussetzer werden erkannt …")
         _td3 = time.perf_counter()
         gap_result = self._gap_reconstructor.reconstruct(
             audio,
@@ -323,7 +340,6 @@ class AutonomousRestorationEngine:
         )
         logger.debug(
             f"[ENGINE] Diff#3 fertig ({time.perf_counter()-_td3:.1f}s): gaps_found={gap_result.gaps_found}, repaired={gap_result.gaps_repaired}",
-            flush=True,
         )
         audio = gap_result.audio  # Ab hier: Lücken-bereinigtes Audio
         audit.append(
@@ -345,13 +361,14 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         # Phase 3: Automatische musikalische Zielformulierung
         # ----------------------------------------------------------------
-        logger.debug("[ENGINE] Phase 3: GoalSetter …", flush=True)
+        logger.debug("[ENGINE] Phase 3: GoalSetter …")
+        _p(37, "Musikalische Restaurierungsziele werden berechnet …")
         _t3 = time.perf_counter()
         goal_profile: MusicalGoalProfile = self._goal_setter.compute_goals(
             defect_result=defect_result,
             quality_estimate=quality_before_estimate,
         )
-        logger.debug(f"[ENGINE] Phase 3 fertig ({time.perf_counter()-_t3:.1f}s)", flush=True)
+        logger.debug(f"[ENGINE] Phase 3 fertig ({time.perf_counter()-_t3:.1f}s)")
         audit.append(
             {
                 "phase": "goal_setting",
@@ -369,11 +386,12 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         # Phase 4: Processing-Varianten aufbauen (material- & defekt-adaptiv)
         # ----------------------------------------------------------------
-        logger.debug("[ENGINE] Phase 4: _build_variants …", flush=True)
+        logger.debug("[ENGINE] Phase 4: _build_variants …")
+        _p(40, "Restaurierungs-Varianten werden geplant …")
         _t4 = time.perf_counter()
         _audio_dur_s: float = len(audio) / max(float(sample_rate), 1.0)
         variants = self._build_variants(defect_result, goal_profile, audio_duration_s=_audio_dur_s)
-        logger.debug(f"[ENGINE] Phase 4 fertig ({time.perf_counter()-_t4:.1f}s): {len(variants)} Variante(n)", flush=True)
+        logger.debug(f"[ENGINE] Phase 4 fertig ({time.perf_counter()-_t4:.1f}s): {len(variants)} Variante(n)")
         audit.append(
             {
                 "phase": "variant_selection",
@@ -385,17 +403,20 @@ class AutonomousRestorationEngine:
         # ----------------------------------------------------------------
         # Phase 5: Multi-Pass – alle Varianten ausführen, beste wählen
         # ----------------------------------------------------------------
+        _top_defect_str = ", ".join(d.defect_type.value for d in causal_ordered[:3]) if causal_ordered else "unbekannt"
+        _p(42, f"Multi-Pass-Restaurierung: {len(variants)} Varianten · Defekte: {_top_defect_str} …")
         logger.debug(
             f"[ENGINE] Phase 5: Starte _multi_pass() mit {len(variants)} Variante(n): {[v.name for v in variants]} …",
-            flush=True,
         )
         best_audio, best_variant_name, pass_scores = self._multi_pass(
             audio=audio,
             sample_rate=sample_rate,
             variants=variants,
             goal_profile=goal_profile,
+            progress_callback=progress_callback,
         )
-        logger.debug(f"[ENGINE] Phase 5 fertig: winner={best_variant_name}", flush=True)
+        logger.debug(f"[ENGINE] Phase 5 fertig: winner={best_variant_name}")
+        _p(87, f"Qualitäts-Gate: Ergebnis '{best_variant_name}' wird geprüft …")
         audit.append(
             {
                 "phase": "multi_pass",
@@ -414,9 +435,9 @@ class AutonomousRestorationEngine:
         # Ohne diese Symmetrie erzeugt eine 225-s-Datei systematisch Falsch-Rollbacks.
         _qa_clip_samples = sample_rate * 30
         _best_clip = best_audio[:_qa_clip_samples] if len(best_audio) > _qa_clip_samples else best_audio
-        quality_after_estimate: QualityEstimate = self._quality_analyzer.analyze_quality(
+        self._quality_analyzer.analyze_quality(
             _best_clip, sample_rate
-        )  # noqa: F841
+        )
         # IAQS für Rollback-Vergleich (beide auf gleichem 30-s-Clip — identische Länge wie quality_before)
         quality_after = self._iaqs.score_as_float(_best_clip, sample_rate) * 100
         improvement = quality_after - quality_before
@@ -443,6 +464,8 @@ class AutonomousRestorationEngine:
                 }
             )
             logger.info("Quality-Gate: PASS | Δ=+%.2f (%.1f → %.1f)", improvement, quality_before, quality_after)
+
+        _p(92, f"Restaurierung abgeschlossen: '{best_variant_name}' …")
 
         # ----------------------------------------------------------------
         # Phase 7: Self-Learning-Update
@@ -708,6 +731,7 @@ class AutonomousRestorationEngine:
         sample_rate: int,
         variants: list[ProcessingVariant],
         goal_profile: MusicalGoalProfile,
+        progress_callback=None,
     ) -> tuple[np.ndarray, str, dict[str, float]]:
         """
         Führt alle Varianten aus und wählt die beste anhand objektiver Metriken.
@@ -722,11 +746,23 @@ class AutonomousRestorationEngine:
         )
         engine = MultiPassEngine(scorer=scorer)
 
+        # Scale callback: ARE 42-85% covers multi-pass variant loop (0-100 variant-internal).
+        # Full-pass (winner) gets the raw callback so UV3 phase names flow through.
+        _n_variants = max(len(variants), 1)
+
+        def _mp_cb(pct: int, msg: str, elapsed: float = 0.0) -> None:
+            if progress_callback is not None:
+                # variant-internal 0-100 → ARE-scale 42-85
+                scaled = 42 + int(43 * pct / 100)
+                with contextlib.suppress(Exception):
+                    progress_callback(scaled, msg, elapsed)
+
         try:
             result = engine.process_with_variants(
                 audio=audio,
                 sample_rate=sample_rate,
                 variants=variants,
+                progress_callback=_mp_cb,
             )
         except Exception as exc:
             logger.error("Multi-Pass fehlgeschlagen: %s — Passthrough.", exc)
@@ -761,12 +797,20 @@ class AutonomousRestorationEngine:
             import sys
 
             logger.info("Full-Processing (quick_mode=False) auf Gewinner '%s'...", best_name)
+            if progress_callback is not None:
+                with contextlib.suppress(Exception):
+                    progress_callback(85, f"Gewinner-Variante '{best_name}' wird final verarbeitet …", 0.0)
             _old = sys.stdout
             sys.stdout = io.StringIO()
             try:
+                # §Dach: Forward Denker context (global_plan, chain_info, defekt_hint, mode)
+                # to UV3 full-processing so that era/material/chain can influence phases.
+                _ctx = getattr(self, '_denker_context', {})
                 _full_result = engine._restorer.restore(
                     audio=audio,
                     sample_rate=sample_rate,
+                    progress_callback=progress_callback,
+                    **_ctx,
                 )
                 # restore() gibt RestorationResult zurück — Audio steckt in .audio
                 full_audio = _full_result.audio if hasattr(_full_result, "audio") else _full_result
@@ -784,8 +828,8 @@ class AutonomousRestorationEngine:
         """Schätzt SNR-Verbesserung in dB (Signal = processed, Noise = Differenz)."""
         try:
             # Shape normalisieren: beide auf Mono reduzieren
-            orig_mono = np.mean(original, axis=1) if original.ndim == 2 else original
-            proc_mono = np.mean(processed, axis=1) if processed.ndim == 2 else processed
+            orig_mono = np.mean(original, axis=0) if original.ndim == 2 else original
+            proc_mono = np.mean(processed, axis=0) if processed.ndim == 2 else processed
             # Ggf. Längen angleichen (restore() kann resampling verursachen)
             min_len = min(len(orig_mono), len(proc_mono))
             if min_len == 0:

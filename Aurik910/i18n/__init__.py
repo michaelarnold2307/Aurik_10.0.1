@@ -12,6 +12,7 @@ Verwendung:
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from typing import Any
 
@@ -51,10 +52,8 @@ def t(key: str, **kwargs: Any) -> str:
     lang_dict = _TRANSLATIONS.get(_language, _TRANSLATIONS["de"])
     text = lang_dict.get(key) or _TRANSLATIONS["de"].get(key, key)
     if kwargs:
-        try:
+        with contextlib.suppress(KeyError, ValueError):
             text = text.format(**kwargs)
-        except (KeyError, ValueError):
-            pass
     return text
 
 
@@ -140,7 +139,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "ui.tab_waveform": "Wellenform",
         "ui.tab_spectrogram": "Spektrogramm",
         "ui.ab_compare": "🎧  Vor / Nachher Vergleich",
-        "ui.app_title": "Aurik 9.10.51 für meinen lieben Freund Dieter Schönemann",
+        "ui.app_title": "Aurik 9.10.57 für meinen lieben Freund Dieter Schönemann",
         "ui.no_file_loaded": "Keine Datei geladen",
         "ui.no_analysis": "Noch keine Analyse",
         "ui.resource_header": "⚙️ System-Ressourcen & Verarbeitungs-Modus",
@@ -500,7 +499,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "ui.tab_waveform": "Waveform",
         "ui.tab_spectrogram": "Spectrogram",
         "ui.ab_compare": "🎧  Before / After Comparison",
-        "ui.app_title": "Aurik 9.10.51 for my dear friend Dieter Schoenemann",
+        "ui.app_title": "Aurik 9.10.57 for my dear friend Dieter Schoenemann",
         "ui.no_file_loaded": "No file loaded",
         "ui.no_analysis": "No analysis yet",
         "ui.resource_header": "⚙️ System Resources & Processing Mode",

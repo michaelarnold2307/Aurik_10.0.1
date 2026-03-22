@@ -4,8 +4,8 @@ Dieses Modul entfernt Brumm-/Summstörungen automatisch aus Audiosignalen per kl
 Alle Algorithmen sind nachvollziehbar, auditierbar und rollback-fähig.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

@@ -86,7 +86,7 @@ class CDErrorCorrection:
             n = len(y)
             # Dropout-Maske: Null-Runs oder Clipping
             silence = np.abs(y) < 1e-9
-            clipped = np.abs(y) >= 0.9999  # noqa: F841
+            np.abs(y) >= 0.9999
             dropout = silence.copy()
             # Label-Regionen
             in_gap = False

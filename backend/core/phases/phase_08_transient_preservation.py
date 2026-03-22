@@ -100,6 +100,7 @@ if __name__ == "__main__":
 else:
     from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -303,17 +304,14 @@ class TransientPreservationPhase(PhaseInterface):
             (onset_times, onset_strengths): Arrays of onset times (seconds) and their strengths
         """
         # Convert to mono for onset detection
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # STFT parameters
         hop_length = 512
         n_fft = 2048
 
         # Compute STFT
-        f, t, Zxx = signal.stft(mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
+        _f, _t, Zxx = signal.stft(mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
         magnitude = np.abs(Zxx)
 
         # Compute spectral flux (frame-to-frame spectral change)

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import math
 import threading
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -68,7 +68,7 @@ class HarmonicLatticeResult:
     instrument_tag: str = "unknown"
     lattice_score: float = 1.0
     needs_enforcement: bool = False
-    partials: list["PartialAnalysis"] = field(default_factory=list)
+    partials: list[PartialAnalysis] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         """Serialisierungsformat (§2.11)."""
@@ -302,12 +302,12 @@ def analyze_harmonic_lattice(
 
 __all__ = [
     "INHARMONICITY_PRIORS",
-    "MAX_PARTIALS",
     "MAX_CENT_DEVIATION",
-    "PartialAnalysis",
-    "HarmonicLatticeResult",
+    "MAX_PARTIALS",
     "HarmonicLatticeAnalyzer",
+    "HarmonicLatticeResult",
+    "PartialAnalysis",
+    "analyze_harmonic_lattice",
     "get_harmonic_lattice",
     "get_harmonic_lattice_analyzer",
-    "analyze_harmonic_lattice",
 ]

@@ -46,11 +46,11 @@ Autor: Aurik 9.0 Development Team / v9.15
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Set, Tuple
 
 import numpy as np
@@ -159,7 +159,7 @@ class PhaseGateLogEntry:
 
     phase_id: str
     action: str  # "passed" | "retry1" | "retry2" | "rollback"
-    goal_regressions: Dict[str, float]  # Ziel → Δ-Score
+    goal_regressions: dict[str, float]  # Ziel → Δ-Score
     strength_used: float
     timestamp: float = field(default_factory=time.time)
 
@@ -169,7 +169,7 @@ class PhaseGateResult:
     """Ergebnis der wrap_phase()-Operation."""
 
     audio: np.ndarray
-    scores_after: Dict[str, float]
+    scores_after: dict[str, float]
     log_entry: PhaseGateLogEntry
     rolled_back: bool
 
@@ -177,11 +177,11 @@ class PhaseGateResult:
 # ---------------------------------------------------------------------------
 # Singleton (§3.2)
 # ---------------------------------------------------------------------------
-_instance: Optional[PerPhaseMusicalGoalsGate] = None
+_instance: PerPhaseMusicalGoalsGate | None = None
 _lock = threading.Lock()
 
 
-def get_phase_gate() -> "PerPhaseMusicalGoalsGate":
+def get_phase_gate() -> PerPhaseMusicalGoalsGate:
     """Thread-sicherer Singleton-Accessor (Double-Checked Locking)."""
     global _instance
     if _instance is None:
@@ -196,7 +196,7 @@ def get_phase_gate() -> "PerPhaseMusicalGoalsGate":
 # ---------------------------------------------------------------------------
 
 
-def _measure_quick(audio: np.ndarray, sr: int) -> Dict[str, float]:
+def _measure_quick(audio: np.ndarray, sr: int) -> dict[str, float]:
     """
     Misst alle 14 Musical Goals auf einer 5-s-Stichprobe in ≤ 200 ms.
 
@@ -214,7 +214,7 @@ def _measure_quick(audio: np.ndarray, sr: int) -> Dict[str, float]:
     mono = audio[:, 0] if audio.ndim == 2 else audio
     mono = np.nan_to_num(mono, nan=0.0).astype(np.float32)
 
-    scores: Dict[str, float] = {}
+    scores: dict[str, float] = {}
 
     # ── Brillanz (HF-Energie > 8 kHz) ─────────────────────────────────
     try:
@@ -260,7 +260,7 @@ def _measure_quick(audio: np.ndarray, sr: int) -> Dict[str, float]:
         chroma = np.zeros(12, dtype=np.float32)
         for b, f in enumerate(spec_freqs):
             if 27.5 < f < 4186:
-                note = int(round(12.0 * math.log2(f / 440.0 + 1e-12))) % 12
+                note = round(12.0 * math.log2(f / 440.0 + 1e-12)) % 12
                 chroma[note] += spec_mag[b]
         if chroma.sum() > 1e-8:
             chroma /= chroma.sum()
@@ -341,8 +341,12 @@ def _measure_quick(audio: np.ndarray, sr: int) -> Dict[str, float]:
         crest_score = float(np.clip((crest_db - 2.0) / 12.0, 0.0, 1.0))
         # RMS-Varianz über 10ms-Frames (Ausdruck)
         hop_e = max(1, sr // 100)
-        rms_frames = np.array([float(np.sqrt(np.mean(mono[i : i + hop_e] ** 2) + 1e-12))
-                                for i in range(0, len(mono) - hop_e, hop_e)])
+        rms_frames = np.array(
+            [
+                float(np.sqrt(np.mean(mono[i : i + hop_e] ** 2) + 1e-12))
+                for i in range(0, len(mono) - hop_e, hop_e)
+            ]
+        )
         variance_score = float(np.clip(np.var(rms_frames) * 1000.0, 0.0, 1.0)) if len(rms_frames) > 2 else 0.5
         scores["emotionalitaet"] = float(np.clip(0.5 * crest_score + 0.5 * variance_score, 0.0, 1.0))
     except Exception:
@@ -391,8 +395,12 @@ def _measure_quick(audio: np.ndarray, sr: int) -> Dict[str, float]:
         # Proxy: RMS-Varianz über 400ms-Fenster (äquivalent zu LUFS-Profil-Korrelation)
         win_400ms = max(1, int(sr * 0.4))
         hop_400ms = win_400ms // 4
-        rms_400 = np.array([float(np.sqrt(np.mean(mono[i : i + win_400ms] ** 2) + 1e-12))
-                             for i in range(0, len(mono) - win_400ms, hop_400ms)])
+        rms_400 = np.array(
+            [
+                float(np.sqrt(np.mean(mono[i : i + win_400ms] ** 2) + 1e-12))
+                for i in range(0, len(mono) - win_400ms, hop_400ms)
+            ]
+        )
         if len(rms_400) > 2:
             # Gleichmäßige Variation über 400ms-Fenster = gute Mikro-Dynamik
             # (weder totales Limiting noch extreme Spitzen)
@@ -488,11 +496,12 @@ class PerPhaseMusicalGoalsGate:
         phase: Any,  # PhaseInterface-Instanz
         audio: np.ndarray,
         sr: int,
-        scores_before: Optional[Dict[str, float]] = None,
-        phase_kwargs: Optional[Dict[str, Any]] = None,
+        scores_before: dict[str, float] | None = None,
+        phase_kwargs: dict[str, Any] | None = None,
         restorability_score: float = 70.0,
-        applicable_goals: Optional[Set[str]] = None,
-    ) -> Tuple[np.ndarray, Dict[str, float], PhaseGateLogEntry]:
+        applicable_goals: set[str] | None = None,
+        initial_strength: float = 1.0,
+    ) -> tuple[np.ndarray, dict[str, float], PhaseGateLogEntry]:
         """
         Führt eine Phase aus und prüft Musical-Goals-Regression.
 
@@ -507,6 +516,11 @@ class PerPhaseMusicalGoalsGate:
                                  adaptiven REGRESSION_THRESHOLD (§2.29).
             applicable_goals: Aus GoalApplicabilityFilter — nur diese Ziele werden
                               geprüft. None = alle FAST_GOALS_SUBSET-Ziele.
+            initial_strength: Material-adaptive Initialstärke ∈ (0, 1.0] (§2.29/§2.31).
+                              1.0 = volle Stärke (Default). Niedrigere Werte aus
+                              _MATERIAL_PHASE_FACTORS schützen Vintage-Charakter
+                              (z.B. 0.25 für phase_22_tape_saturation bei shellac).
+                              Retry-Stärken skalieren relativ zur Initialstärke.
 
         Returns:
             (audio_out, scores_after, log_entry)
@@ -539,7 +553,7 @@ class PerPhaseMusicalGoalsGate:
         else:
             effective_goals = FAST_GOALS_SUBSET
 
-        # Phase ausführen + Regression prüfen
+        # Phase ausführen + Regression prüfen (§2.29: initial_strength statt immer 1.0)
         audio_out, scores_after, action, strength = self._run_with_retry(
             phase,
             audio,
@@ -550,6 +564,7 @@ class PerPhaseMusicalGoalsGate:
             threshold=threshold,
             effective_goals=effective_goals,
             sample_duration_s=_sample_dur,
+            initial_strength=max(0.0, min(1.0, initial_strength)),
         )
 
         # Rollback-Zähler
@@ -592,14 +607,15 @@ class PerPhaseMusicalGoalsGate:
         phase: Any,
         audio: np.ndarray,
         sr: int,
-        scores_before: Dict[str, float],
+        scores_before: dict[str, float],
         phase_id: str,
-        phase_kwargs: Optional[Dict[str, Any]] = None,
+        phase_kwargs: dict[str, Any] | None = None,
         *,
         threshold: float = REGRESSION_THRESHOLD_GOOD,
-        effective_goals: Optional[list] = None,
+        effective_goals: list | None = None,
         sample_duration_s: float = SAMPLE_DURATION_S,  # §9.7.3 phasen-adaptiv
-    ) -> Tuple[np.ndarray, Dict[str, float], str, float]:
+        initial_strength: float = 1.0,
+    ) -> tuple[np.ndarray, dict[str, float], str, float]:
         """
         Führt Phase aus, ggf. mit Retry bei Regression.
 
@@ -607,6 +623,8 @@ class PerPhaseMusicalGoalsGate:
             threshold: Adaptiver REGRESSION_THRESHOLD (§2.29).
             effective_goals: Subset aus FAST_GOALS_SUBSET, das geprüft wird.
             sample_duration_s: Stichprobenlänge (§9.7.3 phasen-adaptiv, 1.0–5.0 s).
+            initial_strength: Material-adaptive Initialstärke ∈ (0, 1.0] (§2.31).
+                1.0 = Default. Retry-Stärken skalieren relativ dazu wenn < 1.0.
 
         Returns:
             (audio_out, scores_after, action_label, strength_used)
@@ -615,16 +633,21 @@ class PerPhaseMusicalGoalsGate:
             phase_kwargs = {}
         if effective_goals is None:
             effective_goals = FAST_GOALS_SUBSET
-        # Erster Versuch mit normaler Stärke (strength=1.0)
-        audio_out = self._run_phase(phase, audio, 1.0, phase_kwargs)
+        initial_strength = max(0.01, min(1.0, initial_strength))
+        # Erster Versuch mit material-adaptiver Initialstärke (§2.29/§2.31)
+        audio_out = self._run_phase(phase, audio, initial_strength, phase_kwargs)
         scores_after = _measure_quick(_extract_sample(audio_out, sr, duration_s=sample_duration_s), sr)
 
         regression = self._max_regression(scores_before, scores_after, effective_goals)
         if regression <= threshold:
-            return audio_out, scores_after, "passed", 1.0
+            return audio_out, scores_after, "passed", initial_strength
 
+        # Retry-Stärken relativ zur Initialstärke skalieren (§2.29):
+        # initial_strength=1.0 → normale Retry-Folge [0.65, 0.50, ...]
+        # initial_strength<1.0 → proportional nach unten skaliert
+        retry_strengths = [s * initial_strength for s in _RETRY_STRENGTHS]
         # Retry-Schleife
-        for attempt, strength in enumerate(_RETRY_STRENGTHS):
+        for attempt, strength in enumerate(retry_strengths):
             action_label = f"retry{attempt + 1}"
             logger.debug(
                 "PMGG: %s Retry %d mit strength=%.2f (Regression=%.4f, threshold=%.3f)",
@@ -653,7 +676,7 @@ class PerPhaseMusicalGoalsGate:
         phase: Any,
         audio: np.ndarray,
         strength: float,
-        phase_kwargs: Optional[Dict[str, Any]] = None,
+        phase_kwargs: dict[str, Any] | None = None,
     ) -> np.ndarray:
         """Führt Phase aus; gibt bei Fehler das Original zurück."""
         if phase_kwargs is None:
@@ -677,10 +700,7 @@ class PerPhaseMusicalGoalsGate:
 
             # Länge sicherstellen
             if len(out) != len(audio):
-                if len(out) > len(audio):
-                    out = out[: len(audio)]
-                else:
-                    out = np.pad(out, (0, len(audio) - len(out)))
+                out = out[:len(audio)] if len(out) > len(audio) else np.pad(out, (0, len(audio) - len(out)))
 
             return out
         except Exception as exc:
@@ -689,9 +709,9 @@ class PerPhaseMusicalGoalsGate:
 
     @staticmethod
     def _max_regression(
-        before: Dict[str, float],
-        after: Dict[str, float],
-        goals: Optional[list] = None,
+        before: dict[str, float],
+        after: dict[str, float],
+        goals: list | None = None,
     ) -> float:
         """Maximale negative Differenz in Musical Goals (positiv = Regression)."""
         check_goals = goals if goals is not None else FAST_GOALS_SUBSET
@@ -721,10 +741,10 @@ def wrap_phase(
     phase: Any,
     audio: np.ndarray,
     sr: int,
-    scores_before: Optional[Dict[str, float]] = None,
+    scores_before: dict[str, float] | None = None,
     restorability_score: float = 70.0,
-    applicable_goals: Optional[Set[str]] = None,
-) -> Tuple[np.ndarray, Dict[str, float], PhaseGateLogEntry]:
+    applicable_goals: set[str] | None = None,
+) -> tuple[np.ndarray, dict[str, float], PhaseGateLogEntry]:
     """
     Convenience-Wrapper: Führt eine Phase aus mit Musical-Goals-Schutz.
 

@@ -4,22 +4,22 @@ ContextAwareGoalOptimizer: Adaptive, selbstlernende Optimierung nach individuell
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
 import threading
+from collections.abc import Callable
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 
-_instance: Optional["ContextAwareGoalOptimizer"] = None
+_instance: ContextAwareGoalOptimizer | None = None
 _lock_singleton = threading.Lock()
 
 
 def get_goal_optimizer(
     get_context: Callable[[], dict[str, Any]] | None = None,
     feedback_callback: Callable[[dict[str, float]], None] | None = None
-) -> "ContextAwareGoalOptimizer":
+) -> ContextAwareGoalOptimizer:
     """Get or create ContextAwareGoalOptimizer singleton.
 
     Args:

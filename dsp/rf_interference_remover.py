@@ -93,7 +93,7 @@ class RFInterferenceRemover:
         noverlap = nperseg // 2
 
         # Compute spectrogram
-        f, t, Sxx = signal.spectrogram(
+        f, _t, Sxx = signal.spectrogram(
             audio, fs=sr, nperseg=nperseg, noverlap=noverlap, window="hann", scaling="density"
         )
 
@@ -115,7 +115,7 @@ class RFInterferenceRemover:
         persistent_mask = time_presence > 0.9
 
         # Find local maxima in the spectrum
-        peaks, properties = signal.find_peaks(
+        peaks, _properties = signal.find_peaks(
             mean_spectrum_db,
             prominence=10.0,  # At least 10 dB above surrounding
             distance=max(1, int(50 / (sr / nperseg))),  # At least 50 Hz apart (minimum 1)

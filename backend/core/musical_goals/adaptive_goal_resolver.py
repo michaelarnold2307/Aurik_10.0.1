@@ -18,9 +18,8 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List
 
-
 #: Canonical goal names + accepted alias keys (incl. legacy hyphenated variants).
-GOAL_ALIASES: Dict[str, tuple[str, ...]] = {
+GOAL_ALIASES: dict[str, tuple[str, ...]] = {
     "bass_kraft":            ("bass_kraft", "bass-kraft"),
     "brillanz":              ("brillanz",),
     "waerme":                ("waerme",),
@@ -38,7 +37,7 @@ GOAL_ALIASES: Dict[str, tuple[str, ...]] = {
 }
 
 
-def resolve_adaptive_goal_thresholds(adaptive_goals_payload: Any) -> Dict[str, float]:
+def resolve_adaptive_goal_thresholds(adaptive_goals_payload: Any) -> dict[str, float]:
     """Extract canonical adaptive thresholds for all 14 musical goals from mixed payloads.
 
     Supported payload shapes:
@@ -56,11 +55,11 @@ def resolve_adaptive_goal_thresholds(adaptive_goals_payload: Any) -> Dict[str, f
         value could be resolved are included; missing goals must fall back to
         the static defaults in ``MusicalGoalsChecker.thresholds``.
     """
-    sources: List[Any] = [adaptive_goals_payload]
+    sources: list[Any] = [adaptive_goals_payload]
     if isinstance(adaptive_goals_payload, (tuple, list)):
         sources.extend(list(adaptive_goals_payload))
 
-    resolved: Dict[str, float] = {}
+    resolved: dict[str, float] = {}
 
     for canonical, aliases in GOAL_ALIASES.items():
         for src in sources:

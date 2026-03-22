@@ -6,10 +6,7 @@ import soundfile as sf
 def analyze_defects_features(audio, sr):
     defects = set()
     # Mono-Summe für Analyse
-    if audio.ndim > 1:
-        audio_mono = np.mean(audio, axis=1)
-    else:
-        audio_mono = audio
+    audio_mono = np.mean(audio, axis=1) if audio.ndim > 1 else audio
     # Knacken/Crackle (Vinyl/Shellac): hohe Amplitudenänderungen, Impulsdetektion
     crackle_events = np.sum(np.abs(np.diff(audio_mono)) > 0.5)
     if crackle_events > sr * 0.1:
@@ -19,10 +16,7 @@ def analyze_defects_features(audio, sr):
     nperseg = min(256, len(audio_mono)) if len(audio_mono) >= 2 else 2
     f, Pxx = signal.welch(audio_mono, sr, nperseg=nperseg)
     hiss_mask = f > 8000
-    if np.any(hiss_mask):
-        hiss_energy = np.mean(Pxx[hiss_mask])
-    else:
-        hiss_energy = 0
+    hiss_energy = np.mean(Pxx[hiss_mask]) if np.any(hiss_mask) else 0
     if hiss_energy > 0.01:
         defects.add("hiss")
     # Kompressionsartefakte (MP3): Fluktuationen im Spektrum, hohe Zero Crossing Rate
@@ -46,10 +40,7 @@ def analyze_defects_features(audio, sr):
         defects.add("clipping")
     # Brummen/Hum: Energie bei 50/60 Hz
     hum_mask = (f > 49) & (f < 61)
-    if np.any(hum_mask):
-        hum_energy = np.mean(Pxx[hum_mask])
-    else:
-        hum_energy = 0
+    hum_energy = np.mean(Pxx[hum_mask]) if np.any(hum_mask) else 0
     if hum_energy > 0.01:
         defects.add("hum")
     return defects

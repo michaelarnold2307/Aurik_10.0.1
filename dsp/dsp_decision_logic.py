@@ -1,5 +1,5 @@
-import logging
 import json
+import logging
 import os
 from typing import Any
 
@@ -16,6 +16,7 @@ dsp_decision_logic.py - Zentrale Entscheidungslogik für DSP- und KI-Modelle in 
 import numpy as np
 
 from .dsp_module_registry import DSPModuleRegistry
+
 logger = logging.getLogger(__name__)
 
 
@@ -278,9 +279,8 @@ class DSPDecisionLogic:
         elif "tape" in medium:
             if "automatic_dehum" in self.available_modules:
                 chain.append("automatic_dehum")
-        if "shellac" in medium:
-            if "shellac_declicker" in self.available_modules:
-                chain.append("shellac_declicker")
+        if "shellac" in medium and "shellac_declicker" in self.available_modules:
+            chain.append("shellac_declicker")
         if "clipping" in defects and "automatic_declipper" in self.available_modules:
             chain.append("automatic_declipper")
         if "noise" in defects and "sota_denoiser" in self.available_modules:
@@ -324,7 +324,7 @@ class DSPDecisionLogic:
         out_path = None
         if hasattr(self, "output_path_hint"):
             out_path = self.output_path_hint
-        passed, report = self.maximum_quality_control(audio, out, sr, out_path=out_path, policy=self.policy)
+        passed, _report = self.maximum_quality_control(audio, out, sr, out_path=out_path, policy=self.policy)
         if not passed:
             logger.info("[Audit] SOTA-Qualitätsziel nicht erreicht, Rollback auf Original.")
             return audio

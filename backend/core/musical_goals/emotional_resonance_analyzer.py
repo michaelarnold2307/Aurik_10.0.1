@@ -30,12 +30,13 @@ Dieser Analyzer erweitert die vorhandene EmotionalitaetMetric mit:
 **Date:** 13. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 
 import librosa
 import numpy as np
 import scipy.signal as signal
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -104,10 +105,7 @@ class EmotionalResonanceAnalyzer:
             EmotionalResonanceAnalysis
         """
         # Convert to mono for analysis
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Measure 5 factors
         vocal_warmth = self._measure_vocal_warmth(audio_mono, sr)
@@ -179,10 +177,7 @@ class EmotionalResonanceAnalyzer:
         peak = np.max(np.abs(audio))
         rms = np.sqrt(np.mean(audio**2))
 
-        if rms > 0:
-            dynamic_range_db = 20 * np.log10(peak / rms)
-        else:
-            dynamic_range_db = 0.0
+        dynamic_range_db = 20 * np.log10(peak / rms) if rms > 0 else 0.0
 
         # Normalize: Typical range 6-18 dB, 12 dB = 0.5
         macro_score = min(1.0, dynamic_range_db / 18.0)
@@ -198,10 +193,7 @@ class EmotionalResonanceAnalyzer:
         frame_mean = np.mean(frame_rms)
         frame_std = np.std(frame_rms)
 
-        if frame_mean > 0:
-            cv = frame_std / frame_mean
-        else:
-            cv = 0.0
+        cv = frame_std / frame_mean if frame_mean > 0 else 0.0
 
         # Normalize: Typical CV 0.1-0.6, 0.4 = 0.5
         micro_score = min(1.0, cv / 0.6)

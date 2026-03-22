@@ -188,7 +188,8 @@ class StreamingDenoiser:
         win_len = min(n_fft, n)
         hop = min(hop, max(1, win_len // 4))  # hop < win_len garantiert
 
-        from scipy.signal import istft as _istft, stft as _stft
+        from scipy.signal import istft as _istft
+        from scipy.signal import stft as _stft
 
         # 1. STFT — phasenkonsistente OLA-Analyse (kein np.fft.rfft)
         _, _, Zxx = _stft(

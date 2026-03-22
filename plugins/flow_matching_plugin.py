@@ -32,10 +32,10 @@ Datum: 20. Februar 2026
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -148,6 +148,7 @@ def _inpaint_diffwave_onnx(
     Returns:
         Audio mit inpainted Lücke, oder None bei Fehler.
     """
+    allocated = False
     try:
         import pathlib
 
@@ -162,15 +163,16 @@ def _inpaint_diffwave_onnx(
             return None
 
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
             if not _try_alloc("DiffWave-FlowMatch", size_gb=0.01):
                 return None
+            allocated = True
         except ImportError:
             pass
         sess = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
         try:
-            from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+            from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
             _reg_plm("DiffWave-FlowMatch", size_gb=0.01, unload_fn=lambda: None)
         except Exception:
@@ -191,14 +193,17 @@ def _inpaint_diffwave_onnx(
         result = audio.copy()
         result[gap_start:gap_end] = np.clip(inpainted_chunk, -1.0, 1.0)
         return result
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.debug("DiffWave ONNX Fallback fehlgeschlagen: %s", e)
-        try:
-            from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
-            _rel("DiffWave-FlowMatch")
-        except Exception:
-            pass
         return None
+    finally:
+        if allocated:
+            try:
+                from backend.core.ml_memory_budget import release as _rel
+
+                _rel("DiffWave-FlowMatch")
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +331,7 @@ class FlowMatchingPlugin:
 
             model = FlowAudioModel()
             return model.inpaint(audio, gap_start, gap_end, sr, n_steps=n_steps, conditioning=phrase_context)
-        except (ImportError, Exception) as e:  # noqa: BLE001
+        except (ImportError, Exception) as e:
             logger.debug("FlowAudio nicht verfügbar: %s", e)
             return None
 
@@ -345,7 +350,7 @@ class FlowMatchingPlugin:
 
             plugin = CQTdiffPlusPlugin()
             return plugin.inpaint(audio, gap_start, gap_end, sr, conditioning=phrase_context, n_steps=n_steps)
-        except (ImportError, Exception) as e:  # noqa: BLE001
+        except (ImportError, Exception) as e:
             logger.debug("CQTdiff+ nicht verfügbar: %s", e)
             return None
 

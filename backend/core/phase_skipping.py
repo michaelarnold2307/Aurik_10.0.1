@@ -12,12 +12,13 @@ Version: 1.0
 Date: 2026-02-08
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 from backend.core.defect_analysis import DefectAnalysis, SourceMedium
-import logging
+
 logger = logging.getLogger(__name__)
 
 

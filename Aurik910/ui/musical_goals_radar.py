@@ -1,18 +1,18 @@
 """
-Musical Goals Radar Chart Widget für Aurik 9
-Zeigt alle 14 musikalischen Qualitätsziele als Spinnen-/Radar-Diagramm.
+Musical Goals Bar Chart Widget für Aurik 9
+Zeigt alle 14 musikalischen Qualitätsziele als lesbares Balkendiagramm.
 
 Rein PyQt5-basiert (kein Matplotlib) — CPU-leicht, sofort responsiv.
-Vollständig laienfreundlich: Deutsche Labels, Farb-Kodierung, Tooltips.
+Vollständig laienfreundlich: Deutsche Labels, Farb-Kodierung, Prozentwerte, Tooltips.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Optional
 
-from PyQt5.QtCore import QPointF, QRectF, QSize, Qt
+from PyQt5.QtCore import QPointF, QRectF, QSize, Qt, QTimer
 from PyQt5.QtGui import (
     QBrush,
     QColor,
@@ -35,7 +35,7 @@ class GoalEntry:
     """Ein einzelnes Musical Goal mit allen relevanten Metadaten."""
 
     key: str  # interner Schlüssel
-    label: str  # Kurzbezeichnung (Deutsch, max. 12 Zeichen)
+    label: str  # Vollbezeichnung (Deutsch)
     threshold: float  # Pflicht-Schwellwert laut Spec
     score: float = 0.0  # aktueller Wert ∈ [0, 1]
     adaptive_threshold: float = -1.0  # adaptierter Schwellwert (–1 = nicht gesetzt)
@@ -45,68 +45,90 @@ class GoalEntry:
     adaptation_reason: str = ""  # Deutsch: Warum Schwellwert angepasst?
 
 
-# Standard-Goals gemäß §1.2 der Spec
+# Standard-Goals gemäß §1.2 der Spec — vollständige deutsche Bezeichnungen
 DEFAULT_GOALS: list[GoalEntry] = [
-    GoalEntry("brillanz", "Brillanz", 0.85),
-    GoalEntry("waerme", "Wärme", 0.80),
-    GoalEntry("natuerlichkeit", "Natürl.", 0.90),
-    GoalEntry("authentizitaet", "Authent.", 0.88),
-    GoalEntry("emotionalitaet", "Emotion.", 0.87),
-    GoalEntry("transparenz", "Transp.", 0.89),
-    GoalEntry("bass_kraft", "Bass-Kraft", 0.85),
-    GoalEntry("groove", "Groove", 0.88),
-    GoalEntry("spatial_depth", "Raumtiefe", 0.75),
-    GoalEntry("timbre_authentizitaet", "Timbre", 0.87),
-    GoalEntry("tonal_center", "Ton.Zentrum", 0.95),
-    GoalEntry("micro_dynamics", "Mikro-Dyn.", 0.92),
-    GoalEntry("separation_fidelity", "Separation", 0.82),
-    GoalEntry("artikulation", "Artikulat.", 0.85),
+    GoalEntry("brillanz",             "Brillanz",         0.85),
+    GoalEntry("waerme",               "Wärme",            0.80),
+    GoalEntry("natuerlichkeit",       "Natürlichkeit",    0.90),
+    GoalEntry("authentizitaet",       "Authentizität",    0.88),
+    GoalEntry("emotionalitaet",       "Emotionalität",    0.87),
+    GoalEntry("transparenz",          "Transparenz",      0.89),
+    GoalEntry("bass_kraft",           "Bass-Kraft",       0.85),
+    GoalEntry("groove",               "Groove",           0.88),
+    GoalEntry("spatial_depth",        "Raumtiefe",        0.75),
+    GoalEntry("timbre_authentizitaet","Timbre",           0.87),
+    GoalEntry("tonal_center",         "Tonales Zentrum",  0.95),
+    GoalEntry("micro_dynamics",       "Mikro-Dynamik",    0.92),
+    GoalEntry("separation_fidelity",  "Separation",       0.82),
+    GoalEntry("artikulation",         "Artikulation",     0.85),
 ]
 
 # Farb-Konstanten
-COLOR_PASS = QColor(76, 175, 80, 220)  # Grün — Ziel erfüllt
-COLOR_WARN = QColor(255, 193, 7, 220)  # Gelb — Ziel nah am Limit (< +0.04)
-COLOR_FAIL = QColor(244, 67, 54, 220)  # Rot   — Ziel unterschritten
-COLOR_NA = QColor(120, 130, 150, 120)  # Grau  — nicht anwendbar
-COLOR_THRESHOLD = QColor(255, 255, 255, 70)  # Weiß-halbtransparent — Schwellwert-Ring
-COLOR_FILL_PASS = QColor(76, 175, 80, 55)  # Füllung Haupt-Polygon
-COLOR_FILL_FAIL = QColor(244, 67, 54, 40)  # Füllung wenn ein Ziel fehlt
-COLOR_GRID = QColor(255, 255, 255, 18)  # Gitternetz
-COLOR_BG = QColor(15, 18, 30, 0)  # Hintergrund transparent
-COLOR_SYNTH = QColor(240, 147, 251, 200)  # Lila — synthesiert/ergänzt
+COLOR_PASS   = QColor(76, 175, 80, 220)    # Grün  — Ziel erfüllt
+COLOR_WARN   = QColor(255, 193, 7, 220)    # Gelb  — knapp am Limit (< +0.04)
+COLOR_FAIL   = QColor(244, 67, 54, 220)    # Rot   — Ziel unterschritten
+COLOR_NA     = QColor(100, 110, 130, 140)  # Grau  — nicht anwendbar
+COLOR_SYNTH  = QColor(220, 130, 240, 200)  # Lila  — era-authentisch ergänzt
+COLOR_BAR_BG = QColor(30, 38, 58, 180)     # Balken-Hintergrund
+COLOR_THRESH = QColor(255, 255, 255, 120)  # Schwellwert-Linie
+COLOR_TEXT   = QColor(190, 200, 218)       # Standard-Textfarbe
+COLOR_DIM    = QColor(120, 130, 150, 160)  # Gedimmter Text
+
+# Vollständige Farbpalette für Bar BG je nach Status
+_BAR_BG_PASS = QColor(76, 175, 80, 40)
+_BAR_BG_WARN = QColor(255, 193, 7, 35)
+_BAR_BG_FAIL = QColor(244, 67, 54, 35)
+_BAR_BG_NA   = QColor(60, 70, 90, 60)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Haupt-Widget
+# Haupt-Widget — Balkendiagramm statt Radar
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class MusicalGoalsRadarWidget(QWidget):
     """
-    14-Punkte Radar-Chart für Musical Goals.
+    Horizontales Balkendiagramm für die 14 Musical Goals.
 
-    Zeigt:
-    - Ausgefülltes Polygon der aktuellen Scores (grün/gelb/rot je nach Status)
-    - Strichliertes Polygon der (adaptiven) Schwellwerte
-    - Grau ausgeblendete Achsen für nicht-anwendbare Ziele
-    - (✦) Markierung an der Brillanz-Achse wenn EraAuthenticPerceptualCompletion aktiv
-    - Tooltips beim Hover über die Achsenpunkte (Deutsch, laienverständlich)
-    - Konzentrische Gitternetz-Ringe (0.25 / 0.50 / 0.75 / 1.0)
+    Zeigt pro Ziel:
+    - Vollständiger deutscher Name
+    - Farbiger Balken (Score-Länge) mit Schwellwert-Markierung
+    - Prozentwert als Zahl (lesbar)
+    - Status-Icon (✅ / ⚠ / ✗ / –)
+    - Farb-Kodierung: Grün/Gelb/Rot/Grau
+
+    Vor Restaurierung: freundliche Platzhaltermeldung.
+    Hover-Tooltips: erklären das Ziel auf Deutsch.
     """
+
+    # Geometry constants
+    _LABEL_W = 98    # px width of the goal name column
+    _SCORE_W = 34    # px width of the "87 %" score column
+    _ICON_W  = 18    # px width of status icon
+    _ROW_H   = 16    # px height per goal row
+    _ROW_GAP = 2     # px gap between rows
+    _PAD_X   = 8     # horizontal outer padding
+    _PAD_TOP = 28    # top padding (header)
+    _PAD_BOT = 22    # bottom padding (legend)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumSize(260, 300)
+        self.setMinimumSize(220, 260)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
         self.setAttribute(Qt.WA_OpaquePaintEvent, False)
 
-        # Arbeits-Kopie der Goals (wird per update_scores() befüllt)
         import copy
-
         self._goals: list[GoalEntry] = copy.deepcopy(DEFAULT_GOALS)
-        self._hovered_idx: int = -1  # Index des gehoverten Goals
-        self._show_legend: bool = True
+        self._hovered_idx: int = -1
+        self._has_data: bool = False  # False = vor erster Restaurierung
+
+        # Animation
+        self._anim_scores: dict[str, float] = {g.key: 0.0 for g in DEFAULT_GOALS}
+        self._target_scores: dict[str, float] = {g.key: 0.0 for g in DEFAULT_GOALS}
+        self._anim_timer: QTimer | None = None
+        self._anim_step: int = 0
+        self._ANIM_STEPS: int = 28  # 28 × 20 ms ≈ 560 ms
 
     # ──────────────────────────── Public API ──────────────────────────────
 
@@ -119,290 +141,312 @@ class MusicalGoalsRadarWidget(QWidget):
         synthesized_goals: set[str] | None = None,
         adaptation_reasons: dict[str, str] | None = None,
     ) -> None:
-        """
-        Aktualisiert alle Score-Werte und löst ein Neuzeichnen aus.
-
-        Args:
-            scores:              goal_key → Score ∈ [0, 1]
-            adaptive_thresholds: goal_key → adaptierter Schwellwert (optional)
-            applicable_goals:    Menge aktiver Ziele (None = alle aktiv)
-            inapplicable_reasons: goal_key → Deutsche Erklärung warum inaktiv
-            synthesized_goals:   Set von goal_keys mit synthetisierten Daten (✦)
-            adaptation_reasons:  goal_key → Deutsche Erklärung der Anpassung
-        """
+        """Aktualisiert alle Score-Werte und löst ein Neuzeichnen aus."""
         adaptive_thresholds = adaptive_thresholds or {}
-        applicable = applicable_goals  # None = alle anwendbar
+        applicable = applicable_goals
         inapplicable_reasons = inapplicable_reasons or {}
         synthesized = synthesized_goals or set()
         adapt_reasons = adaptation_reasons or {}
 
+        has_any = any(v > 0.001 for v in scores.values())
+        self._has_data = has_any
+
         for g in self._goals:
-            g.score = float(scores.get(g.key, 0.0))
             g.applicable = (applicable is None) or (g.key in applicable)
             g.inapplicable_reason = inapplicable_reasons.get(g.key, "")
             g.synthesized = g.key in synthesized
-            if g.key in adaptive_thresholds:
-                g.adaptive_threshold = float(adaptive_thresholds[g.key])
-            else:
-                g.adaptive_threshold = -1.0
+            g.adaptive_threshold = float(adaptive_thresholds[g.key]) if g.key in adaptive_thresholds else -1.0
             g.adaptation_reason = adapt_reasons.get(g.key, "")
+            self._target_scores[g.key] = float(scores.get(g.key, 0.0))
+            self._anim_scores[g.key] = g.score
 
-        self.update()  # Neuzeichnen anfordern
+        self._anim_step = 0
+        if self._anim_timer is not None:
+            self._anim_timer.stop()
+        self._anim_timer = QTimer(self)
+        self._anim_timer.timeout.connect(self._anim_tick)
+        self._anim_timer.start(20)
+
+    def _anim_tick(self) -> None:
+        """EaseOutCubic animation step."""
+        self._anim_step += 1
+        t_norm = self._anim_step / self._ANIM_STEPS
+        eased = 1.0 - (1.0 - min(t_norm, 1.0)) ** 3
+        done = self._anim_step >= self._ANIM_STEPS
+        for g in self._goals:
+            start = self._anim_scores[g.key]
+            target = self._target_scores[g.key]
+            g.score = target if done else start + (target - start) * eased
+        if done:
+            self._anim_timer.stop()
+            self._anim_timer = None
+        self.update()
 
     def reset(self) -> None:
-        """Setzt alle Scores auf 0 zurück (vor erster Restaurierung)."""
+        """Setzt alle Scores zurück (vor erster Restaurierung)."""
         import copy
-
         self._goals = copy.deepcopy(DEFAULT_GOALS)
+        self._has_data = False
         self.update()
 
     # ──────────────────────────── Geometrie ───────────────────────────────
 
-    def _center(self) -> QPointF:
-        # Vertikaler Mittelpunkt lässt unten 72 px für die Legende frei
-        legend_h = 72.0 if self._show_legend else 0.0
-        usable_h = self.height() - legend_h
-        return QPointF(self.width() / 2.0, usable_h / 2.0)
+    def _row_y(self, idx: int) -> float:
+        """Y-Koordinate der Oberkante von Zeile idx."""
+        return self._PAD_TOP + idx * (self._ROW_H + self._ROW_GAP)
 
-    def _radius(self) -> float:
-        margin = 50.0  # Platz für Labels außen
-        legend_h = 72.0 if self._show_legend else 0.0
-        usable_h = self.height() - legend_h
-        return min(self.width(), usable_h) / 2.0 - margin
-
-    def _angle_for(self, idx: int) -> float:
-        """Winkel (Grad) für Goal-Achse idx — Start oben, im Uhrzeigersinn."""
-        n = len(self._goals)
-        return -90.0 + idx * 360.0 / n
-
-    def _point_on_ring(self, idx: int, value: float) -> QPointF:
-        """Kartesischer Punkt auf Achse idx bei normalisiertem Wert value ∈ [0,1]."""
-        cx, cy = self._center().x(), self._center().y()
-        r = self._radius()
-        angle_rad = math.radians(self._angle_for(idx))
-        return QPointF(cx + value * r * math.cos(angle_rad), cy + value * r * math.sin(angle_rad))
+    def _bar_rect(self, idx: int) -> QRectF:
+        """Rechteck für den Balkenbereich (Hintergrund) von Zeile idx."""
+        x = self._PAD_X + self._ICON_W + self._LABEL_W + 4
+        bar_w = self.width() - x - self._SCORE_W - self._PAD_X
+        y = self._row_y(idx) + 2
+        return QRectF(x, y, max(bar_w, 40), self._ROW_H - 4)
 
     # ──────────────────────────── Zeichnen ───────────────────────────────
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
-        self._draw_grid(p)
-        self._draw_threshold_ring(p)
-        self._draw_score_polygon(p)
-        self._draw_axes(p)
-        self._draw_labels(p)
-        if self._show_legend:
-            self._draw_legend(p)
+        if not self._has_data:
+            self._draw_placeholder(p)
+        else:
+            self._draw_header(p)
+            self._draw_bars(p)
+            self._draw_footer_legend(p)
 
         p.end()
 
-    def _draw_grid(self, painter: QPainter) -> None:
-        """Konzentrische Gitter-Ringe bei 0.25, 0.50, 0.75, 1.00."""
-        n = len(self._goals)
-        cx, cy = self._center().x(), self._center().y()
-        self._radius()
-
-        pen = QPen(COLOR_GRID, 0.8, Qt.PenStyle.SolidLine)
-        painter.setPen(pen)
+    def _draw_placeholder(self, painter: QPainter) -> None:
+        """Zeigt Platzhaltertext wenn noch keine Restaurierung stattgefunden hat."""
+        w, h = float(self.width()), float(self.height())
+        # Sanfte Linie als Rahmen-Hint
+        painter.setPen(QPen(QColor(80, 100, 140, 60), 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(QRectF(4, 4, w - 8, h - 8), 8, 8)
 
-        for ring in (0.25, 0.50, 0.75, 1.00):
-            polygon = QPolygonF()
-            for i in range(n):
-                polygon.append(self._point_on_ring(i, ring))
-            painter.drawPolygon(polygon)
+        # Icon
+        font_icon = QFont("Segoe UI", 20)
+        painter.setFont(font_icon)
+        painter.setPen(QPen(QColor(80, 100, 140, 100)))
+        painter.drawText(QRectF(0, h / 2 - 54, w, 40), Qt.AlignmentFlag.AlignCenter, "🎵")
 
-    def _draw_threshold_ring(self, painter: QPainter) -> None:
-        """Gestrichelter Polygon-Ring für Schwellwerte (weiß, halbtransparent)."""
-        pen = QPen(COLOR_THRESHOLD, 1.6, Qt.PenStyle.DashLine)
-        pen.setDashPattern([4, 3])
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
+        # Haupttext
+        font_main = QFont("Segoe UI", 8, QFont.Weight.Bold)
+        painter.setFont(font_main)
+        painter.setPen(QPen(QColor(130, 150, 190, 180)))
+        painter.drawText(
+            QRectF(10, h / 2 - 14, w - 20, 22),
+            Qt.AlignmentFlag.AlignCenter,
+            "Noch nicht gemessen",
+        )
 
-        polygon = QPolygonF()
-        for i, g in enumerate(self._goals):
-            t = g.adaptive_threshold if g.adaptive_threshold >= 0 else g.threshold
-            t = max(0.0, min(1.0, t))
-            polygon.append(self._point_on_ring(i, t))
-        painter.drawPolygon(polygon)
+        # Subtext
+        font_sub = QFont("Segoe UI", 7)
+        painter.setFont(font_sub)
+        painter.setPen(QPen(QColor(100, 120, 160, 140)))
+        painter.drawText(
+            QRectF(10, h / 2 + 10, w - 20, 36),
+            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop,
+            "Nach der Restaurierung werden hier\nalle 14 Klangziele bewertet.",
+        )
 
-    def _draw_score_polygon(self, painter: QPainter) -> None:
-        """Ausgefülltes Polygon der aktuellen Scores mit Farbverlauf."""
-        polygon = QPolygonF()
-        all_pass = True
-        for i, g in enumerate(self._goals):
-            score = g.score if g.applicable else 0.0
-            t = g.adaptive_threshold if g.adaptive_threshold >= 0 else g.threshold
-            if g.applicable and score < t:
-                all_pass = False
-            polygon.append(self._point_on_ring(i, max(0.0, min(1.0, score))))
+        # Goal-Namen als gedimmte Vorschau
+        font_prev = QFont("Segoe UI", 6)
+        painter.setFont(font_prev)
+        painter.setPen(QPen(QColor(80, 95, 130, 80)))
+        names = [g.label for g in self._goals]
+        half = len(names) // 2
+        col_w = (w - 20) / 2
+        for col, chunk in enumerate([names[:half], names[half:]]):
+            for row, name in enumerate(chunk):
+                x = 10 + col * col_w
+                y = h / 2 + 48 + row * 10
+                painter.drawText(QRectF(x, y, col_w, 10), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"· {name}")
 
-        fill = COLOR_FILL_PASS if all_pass else COLOR_FILL_FAIL
-        painter.setBrush(QBrush(fill))
-        painter.setPen(QPen(COLOR_PASS if all_pass else COLOR_FAIL, 1.8))
-        painter.drawPolygon(polygon)
-
-        # Einzelne Punkte auf den Achsen
-        for i, g in enumerate(self._goals):
+    def _draw_header(self, painter: QPainter) -> None:
+        """Kopfzeile: Statusübersicht (✅ N  ⚠ N  ✗ N)."""
+        n_pass = n_warn = n_fail = n_na = 0
+        for g in self._goals:
             if not g.applicable:
-                c = COLOR_NA
+                n_na += 1
+                continue
+            t = g.adaptive_threshold if g.adaptive_threshold >= 0 else g.threshold
+            if g.score >= t + 0.04:
+                n_pass += 1
+            elif g.score >= t:
+                n_warn += 1
             else:
-                score = g.score
-                t = g.adaptive_threshold if g.adaptive_threshold >= 0 else g.threshold
-                if score >= t + 0.04:
-                    c = COLOR_PASS
-                elif score >= t:
-                    c = COLOR_WARN
-                else:
-                    c = COLOR_FAIL
-            # Synthesiert → lila übermalen
-            if g.synthesized:
-                c = COLOR_SYNTH
+                n_fail += 1
 
-            pt = self._point_on_ring(i, max(0.0, min(1.0, g.score if g.applicable else 0.0)))
-            dot_r = 5.0 if i != self._hovered_idx else 8.0
-            painter.setBrush(QBrush(c))
-            painter.setPen(QPen(c.lighter(140), 1.0))
-            painter.drawEllipse(pt, dot_r, dot_r)
-
-    def _draw_axes(self, painter: QPainter) -> None:
-        """Achsenlinien vom Zentrum zu den Ecken."""
-        cx, cy = self._center().x(), self._center().y()
-        center = QPointF(cx, cy)
-
-        for i, g in enumerate(self._goals):
-            end = self._point_on_ring(i, 1.0)
-            color = COLOR_NA if not g.applicable else QColor(255, 255, 255, 45)
-            pen = QPen(color, 0.8, Qt.PenStyle.SolidLine)
-            painter.setPen(pen)
-            painter.drawLine(center, end)
-
-    def _draw_labels(self, painter: QPainter) -> None:
-        """Label jeder Achse außerhalb des Rings — mit Qualitäts-Farbkodierung."""
-        r_label = self._radius() + 12.0
-
+        w = float(self.width())
         font = QFont("Segoe UI", 7, QFont.Weight.Bold)
         painter.setFont(font)
 
-        cx, cy = self._center().x(), self._center().y()
-        w, h = float(self.width()), float(self.height())
+        parts = [
+            (f"✅ {n_pass}", COLOR_PASS),
+            (f"⚠ {n_warn}", COLOR_WARN),
+            (f"✗ {n_fail}", COLOR_FAIL),
+        ]
+        if n_na > 0:
+            parts.append((f"– {n_na}", COLOR_NA))
 
-        for i, g in enumerate(self._goals):
-            angle_rad = math.radians(self._angle_for(i))
-            lx = cx + r_label * math.cos(angle_rad)
-            ly = cy + r_label * math.sin(angle_rad)
+        x = float(self._PAD_X)
+        y = 6.0
+        h_row = 18.0
+        for text, color in parts:
+            painter.setPen(QPen(color))
+            painter.drawText(QRectF(x, y, 52, h_row), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+            x += 52
 
-            # Farbwahl
+        # Thin separator line
+        painter.setPen(QPen(QColor(80, 100, 150, 60), 1))
+        painter.drawLine(QPointF(self._PAD_X, self._PAD_TOP - 4), QPointF(w - self._PAD_X, self._PAD_TOP - 4))
+
+    def _draw_bars(self, painter: QPainter) -> None:
+        """Zeichnet alle 14 Goal-Balken."""
+        font_label = QFont("Segoe UI", 6, QFont.Weight.Bold)
+        font_score = QFont("Segoe UI", 6)
+
+        for idx, g in enumerate(self._goals):
+            y = self._row_y(idx)
+            bar_rect = self._bar_rect(idx)
+            t = g.adaptive_threshold if g.adaptive_threshold >= 0 else g.threshold
+
+            # Determine status color
             if not g.applicable:
-                color = QColor(120, 130, 150, 160)
+                color = COLOR_NA
+                bar_bg = _BAR_BG_NA
             elif g.synthesized:
                 color = COLOR_SYNTH
+                bar_bg = QColor(200, 100, 230, 35)
+            elif g.score >= t + 0.04:
+                color = COLOR_PASS
+                bar_bg = _BAR_BG_PASS
+            elif g.score >= t:
+                color = COLOR_WARN
+                bar_bg = _BAR_BG_WARN
             else:
-                t = g.adaptive_threshold if g.adaptive_threshold >= 0 else g.threshold
-                if g.score >= t + 0.04:
-                    color = COLOR_PASS
-                elif g.score >= t:
-                    color = COLOR_WARN
-                else:
-                    color = COLOR_FAIL
+                color = COLOR_FAIL
+                bar_bg = _BAR_BG_FAIL
 
-            painter.setPen(QPen(color))
+            # Hover highlight
+            is_hovered = (idx == self._hovered_idx)
+            if is_hovered:
+                painter.setBrush(QBrush(QColor(255, 255, 255, 12)))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRoundedRect(
+                    QRectF(self._PAD_X, y - 1, self.width() - 2 * self._PAD_X, self._ROW_H + 2), 3, 3
+                )
 
-            # Textausrichtung je nach Position
-            text = g.label
+            # ── Status icon ──
+            icon = "✅" if g.score >= t + 0.04 else ("⚠" if g.score >= t else "✗") if g.applicable else "–"
             if g.synthesized:
-                text = f"{g.label}✦"
-            if not g.applicable:
-                text = f"({g.label})"
+                icon = "✦"
+            font_icon = QFont("Segoe UI", 6)
+            painter.setFont(font_icon)
+            painter.setPen(QPen(color))
+            painter.drawText(
+                QRectF(self._PAD_X, y, self._ICON_W, self._ROW_H),
+                Qt.AlignmentFlag.AlignCenter,
+                icon,
+            )
 
-            rect_w, rect_h = 76, 26
-            # Links/rechts/oben/unten ausrichten
-            cos_a = math.cos(angle_rad)
-            sin_a = math.sin(angle_rad)
-            if cos_a < -0.3:
-                tx = lx - rect_w
-            elif cos_a > 0.3:
-                tx = lx
-            else:
-                tx = lx - rect_w / 2.0
-            if sin_a < -0.3:
-                ty = ly - rect_h
-            elif sin_a > 0.3:
-                ty = ly
-            else:
-                ty = ly - rect_h / 2.0
+            # ── Goal name ──
+            painter.setFont(font_label)
+            label_color = color if g.applicable else COLOR_DIM
+            painter.setPen(QPen(label_color))
+            name_text = g.label if g.applicable else f"({g.label})"
+            painter.drawText(
+                QRectF(self._PAD_X + self._ICON_W, y, self._LABEL_W, self._ROW_H),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                name_text,
+            )
 
-            # Clamp an Widget-Grenzen (verhindert Abschneiden)
-            margin = 2.0
-            tx = max(margin, min(w - rect_w - margin, tx))
-            ty = max(margin, min(h - rect_h - 14.0 - margin, ty))
+            # ── Bar background ──
+            painter.setBrush(QBrush(bar_bg))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(bar_rect, 3, 3)
 
-            painter.drawText(QRectF(tx, ty, rect_w, rect_h), Qt.AlignmentFlag.AlignCenter, text)
+            # ── Bar fill ──
+            if g.applicable and g.score > 0.001:
+                fill_w = bar_rect.width() * min(1.0, g.score)
+                fill_rect = QRectF(bar_rect.x(), bar_rect.y(), fill_w, bar_rect.height())
+                fill_color = QColor(color)
+                fill_color.setAlpha(180)
+                painter.setBrush(QBrush(fill_color))
+                painter.drawRoundedRect(fill_rect, 3, 3)
 
-            # Score-Wert klein darunter/darüber
-            score_text = f"{g.score:.2f}" if g.applicable else "—"
-            font_small = QFont("Segoe UI", 6)
-            painter.setFont(font_small)
-            painter.setPen(QPen(color.lighter(120)))
-            painter.drawText(QRectF(tx, ty + 14, rect_w, 14), Qt.AlignmentFlag.AlignCenter, score_text)
-            painter.setFont(font)  # zurücksetzen
+            # ── Threshold marker (vertical line) ──
+            if g.applicable:
+                thresh_x = bar_rect.x() + bar_rect.width() * min(1.0, t)
+                painter.setPen(QPen(COLOR_THRESH, 1.5))
+                painter.drawLine(
+                    QPointF(thresh_x, bar_rect.y() - 1),
+                    QPointF(thresh_x, bar_rect.y() + bar_rect.height() + 1),
+                )
 
-    def _draw_legend(self, painter: QPainter) -> None:
-        """Kleine Legende unten links: Farbkodierung."""
-        x, y = 10.0, self.height() - 70.0
-        font = QFont("Segoe UI", 7)
+            # ── Score value ──
+            painter.setFont(font_score)
+            painter.setPen(QPen(color if g.applicable else COLOR_DIM))
+            score_str = f"{int(g.score * 100)} %" if g.applicable else "—"
+            score_x = bar_rect.x() + bar_rect.width() + 3
+            painter.drawText(
+                QRectF(score_x, y, self._SCORE_W, self._ROW_H),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                score_str,
+            )
+
+    def _draw_footer_legend(self, painter: QPainter) -> None:
+        """Legende am unteren Rand."""
+        y = float(self.height()) - self._PAD_BOT + 4
+        font = QFont("Segoe UI", 6)
         painter.setFont(font)
+
         items = [
-            (COLOR_PASS, "Ziel erfüllt"),
-            (COLOR_WARN, "Knapp am Limit"),
-            (COLOR_FAIL, "Ziel nicht erreicht"),
-            (COLOR_NA, "Nicht messbar"),
-            (COLOR_SYNTH, "Ergänzt (✦)"),
-            (COLOR_THRESHOLD, "Schwellwert"),
+            (COLOR_PASS, "Erfüllt"),
+            (COLOR_WARN, "Knapp"),
+            (COLOR_FAIL, "Nicht erreicht"),
+            (COLOR_THRESH, "Zielwert"),
         ]
+        x = float(self._PAD_X)
         for color, text in items:
+            # Color dot
             painter.setBrush(QBrush(color))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(QRectF(x, y, 8, 8))
-            painter.setPen(QPen(QColor(180, 190, 210)))
-            painter.drawText(
-                QRectF(x + 12, y - 1, 130, 12), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text
-            )
-            y += 11.0
+            painter.drawEllipse(QRectF(x, y + 2, 7, 7))
+            painter.setPen(QPen(QColor(160, 170, 190, 180)))
+            painter.drawText(QRectF(x + 10, y, 58, 12), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+            x += 66
 
     # ──────────────────────────── Tooltip / Hover ─────────────────────────
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        pos = QPointF(event.pos())
-        found = -1
-        best_dist = 25.0  # Pixel-Fangradius
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if not self._has_data:
+            super().mouseMoveEvent(event)
+            return
 
-        for i in range(len(self._goals)):
-            score = self._goals[i].score if self._goals[i].applicable else 0.0
-            pt = self._point_on_ring(i, max(0.0, min(1.0, score)))
-            dx = pos.x() - pt.x()
-            dy = pos.y() - pt.y()
-            dist = math.hypot(dx, dy)
-            if dist < best_dist:
-                best_dist = dist
-                found = i
+        py = float(event.pos().y())
+        found = -1
+        for idx in range(len(self._goals)):
+            row_y = self._row_y(idx)
+            if row_y <= py <= row_y + self._ROW_H:
+                found = idx
+                break
 
         if found != self._hovered_idx:
             self._hovered_idx = found
             self.update()
 
         if found >= 0:
-            g = self._goals[found]
-            QToolTip.showText(event.globalPos(), self._tooltip_text(g), self)
+            QToolTip.showText(event.globalPos(), self._tooltip_text(self._goals[found]), self)
         else:
             QToolTip.hideText()
 
         super().mouseMoveEvent(event)
 
-    def leaveEvent(self, event) -> None:  # noqa: N802
+    def leaveEvent(self, event) -> None:
         self._hovered_idx = -1
         self.update()
         super().leaveEvent(event)
@@ -410,11 +454,29 @@ class MusicalGoalsRadarWidget(QWidget):
     @staticmethod
     def _tooltip_text(g: GoalEntry) -> str:
         """Laienverständlicher Tooltip-Text für ein Goal."""
-        lines: list[str] = []
-        lines.append(f"<b>{g.label}</b>")
+        # Human-readable descriptions per goal
+        _DESCRIPTIONS: dict[str, str] = {
+            "brillanz":             "Helligkeit und Klarheit in den Höhen (Obertöne, Luftigkeit).",
+            "waerme":               "Wärme und Fülle im Bassbereich — angenehmes Klangfundament.",
+            "natuerlichkeit":       "Klingt die Aufnahme natürlich und unverarbeitet?",
+            "authentizitaet":       "Entspricht der Klang dem Original-Charakter der Aufnahme?",
+            "emotionalitaet":       "Transportiert die Restaurierung die emotionale Intensität?",
+            "transparenz":          "Sind alle Instrumente klar voneinander trennbar?",
+            "bass_kraft":           "Kraft und Tiefe im Bass inkl. fehlende Grundtöne.",
+            "groove":               "Rhythmisches Timing — keine Verschmierung von Transienten.",
+            "spatial_depth":        "Stereobreite und Raumtiefe (nur bei Stereo-Aufnahmen).",
+            "timbre_authentizitaet":"Klangfarbe der Instrumente — klingt die Oboe noch wie eine Oboe?",
+            "tonal_center":         "Tonart und Stimmung — kein Pitch-Shift durch die Restaurierung.",
+            "micro_dynamics":       "Lautstärke-Feinstruktur — Atemzüge, Pianissimo-Stellen.",
+            "separation_fidelity":  "Stimme und Instrumente bleiben getrennt (kein Matsch).",
+            "artikulation":         "Ansätze, Transienten und Konsonanten bleiben scharf.",
+        }
+        lines: list[str] = [f"<b>{g.label}</b>"]
+        if _desc := _DESCRIPTIONS.get(g.key, ""):
+            lines.append(f"<br><i>{_desc}</i>")
 
         if not g.applicable:
-            lines.append("<br><i>⚪ Nicht messbar für diese Aufnahme</i>")
+            lines.append("<br><br>⚪ <i>Nicht messbar für diese Aufnahme.</i>")
             if g.inapplicable_reason:
                 lines.append(f"<br>{g.inapplicable_reason}")
             return "".join(lines)
@@ -423,41 +485,38 @@ class MusicalGoalsRadarWidget(QWidget):
         score_pct = int(g.score * 100)
         thresh_pct = int(t_eff * 100)
 
-        # Status
         if g.score >= t_eff + 0.04:
-            status = "✅ Exzellent"
+            status = "✅ Exzellent — deutlich über dem Zielwert"
             color = "#4CAF50"
         elif g.score >= t_eff:
-            status = "🟡 Knapp erfüllt"
+            status = "🟡 Bestanden — knapp am Zielwert"
             color = "#FFC107"
         else:
-            status = "❌ Unter Ziel"
+            status = "❌ Unter Zielwert"
             color = "#F44336"
 
-        lines.append(f'<br><span style="color:{color}"><b>{status}</b></span>')
-        lines.append(f"<br>Score: <b>{score_pct} %</b>  |  Ziel: <b>{thresh_pct} %</b>")
+        lines.append(f'<br><br><span style="color:{color}"><b>{status}</b></span>')
+        lines.append(f"<br>Erreicht: <b>{score_pct} %</b> &nbsp;|&nbsp; Zielwert: <b>{thresh_pct} %</b>")
 
         if g.adaptive_threshold >= 0 and abs(g.adaptive_threshold - g.threshold) > 0.005:
             orig_pct = int(g.threshold * 100)
-            lines.append(f"<br><i>Ziel angepasst (Original: {orig_pct} %)</i>")
+            diff = int((g.adaptive_threshold - g.threshold) * 100)
+            sign = "+" if diff >= 0 else ""
+            lines.append(f"<br><i>Zielwert angepasst: {sign}{diff} % gegenüber Standard ({orig_pct} %)</i>")
         if g.adaptation_reason:
             lines.append(f"<br>{g.adaptation_reason}")
-
         if g.synthesized:
-            lines.append("<br>✦ <i>Frequenzbereich wurde era-authentisch ergänzt</i>")
+            lines.append("<br>✦ <i>Frequenzbereich wurde era-authentisch ergänzt.</i>")
 
         return "".join(lines)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
-        return QSize(380, 380)
+    def sizeHint(self) -> QSize:
+        total_h = self._PAD_TOP + len(DEFAULT_GOALS) * (self._ROW_H + self._ROW_GAP) + self._PAD_BOT
+        return QSize(300, total_h)
 
-    def minimumSizeHint(self) -> QSize:  # noqa: N802
-        return QSize(280, 280)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Hilfs-Funktion: RestorationResult → GoalEntry-Updates
-# ─────────────────────────────────────────────────────────────────────────────
+    def minimumSizeHint(self) -> QSize:
+        total_h = self._PAD_TOP + len(DEFAULT_GOALS) * (self._ROW_H + self._ROW_GAP) + self._PAD_BOT
+        return QSize(220, total_h)
 
 
 def apply_restoration_result(

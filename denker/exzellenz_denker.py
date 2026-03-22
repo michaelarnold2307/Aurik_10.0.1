@@ -11,10 +11,10 @@ Spec §1.2, §2.5, §2.29, §8.1 — v9.10.45
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Eager top-level import verhindert Import-Lock-Deadlock in langen Test-Läufen
 # (§3.4 Lazy Imports / Spec Threading-Invariante)
 try:
-    from backend.core.vocal_ai_enhancement import (  # noqa: E402
+    from backend.core.vocal_ai_enhancement import (
         EmotionPreservationMode,
         UnifiedVocalAIEnhancer,
     )
@@ -185,7 +185,7 @@ class ExzellenzDenker:
         # das entscheidet ob eine weitere Verarbeitungsrunde sinnvoll ist.
         versa_mos: float = 0.0
         try:
-            from plugins.versa_plugin import score_mos  # noqa: PLC0415
+            from plugins.versa_plugin import score_mos
 
             _mono = optimiertes_audio if optimiertes_audio.ndim == 1 else optimiertes_audio.mean(axis=-1)
             _mono = np.nan_to_num(_mono.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -203,7 +203,7 @@ class ExzellenzDenker:
                 )
             elif versa_mos >= 4.3:
                 improvements.append(f"VERSA MOS={versa_mos:.2f} ≥ 4.3 — Studioqualität erreicht")
-        except Exception as _ve:  # noqa: BLE001
+        except Exception as _ve:
             logger.debug("ExzellenzDenker: VERSA MOS nicht verfügbar: %s", _ve)
 
         # Schritt 2 — Musical Goals messen
@@ -219,11 +219,18 @@ class ExzellenzDenker:
             score = 0.0
             passed = 0
 
-        # Schritt 3 — Musical Goals Re-Pass bei Violations (max. 1 Runde, RT-Budget schonend)
+        # Schritt 3 — Musical Goals Re-Pass bei Violations (max. 3 Runden, degressive Intensität)
         _violations = [k for k, v in goals.items() if math.isfinite(v) and v < _GOAL_MIN] if goals else []
-        if _violations:
+        _MAX_RE_PASSES = 3
+        for _re_pass_i in range(1, _MAX_RE_PASSES + 1):
+            _violations = [k for k, v in goals.items() if math.isfinite(v) and v < _GOAL_MIN] if goals else []
+            if not _violations:
+                break
             try:
                 _opt_rp = self._get_optimizer(sr=sr, material=material)
+                # Degressive intensity: reduce harmonic boost + modulation each pass
+                _opt_rp._harm_boost_db *= max(0.3, 1.0 - 0.3 * _re_pass_i)
+                _opt_rp._modulation_strength *= max(0.3, 1.0 - 0.25 * _re_pass_i)
                 _rp_audio, _rp_result = _opt_rp.optimize(optimiertes_audio)
                 _rp_audio = np.clip(
                     np.nan_to_num(_rp_audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0),
@@ -239,19 +246,21 @@ class ExzellenzDenker:
                     score = float(np.mean(finite_vals)) if finite_vals else score
                     passed = _rp_passed
                     improvements.append(
-                        f"Re-Pass: {len(_violations)} Violations → {passed}/{len(goals)} Goals bestanden"
+                        f"Re-Pass {_re_pass_i}: {len(_violations)} Violations → {passed}/{len(goals)} Goals bestanden"
                     )
                     logger.info(
-                        "ExzellenzDenker Re-Pass: %d Violations korrigiert → %d/%d Goals",
-                        len(_violations), passed, len(goals),
+                        "ExzellenzDenker Re-Pass %d: %d Violations korrigiert → %d/%d Goals",
+                        _re_pass_i, len(_violations), passed, len(goals),
                     )
                 else:
                     logger.debug(
-                        "ExzellenzDenker Re-Pass: keine Verbesserung (%d→%d Goals), Original beibehalten",
-                        passed, _rp_passed,
+                        "ExzellenzDenker Re-Pass %d: keine Verbesserung (%d→%d Goals), abgebrochen",
+                        _re_pass_i, passed, _rp_passed,
                     )
+                    break  # No improvement → stop re-passing
             except Exception as _rp_exc:
-                logger.debug("ExzellenzDenker Re-Pass fehlgeschlagen: %s", _rp_exc)
+                logger.debug("ExzellenzDenker Re-Pass %d fehlgeschlagen: %s", _re_pass_i, _rp_exc)
+                break
 
         note = (
             f"Exzellenz-Optimierung abgeschlossen: Score {score:.3f}, "

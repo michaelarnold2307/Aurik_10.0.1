@@ -16,9 +16,9 @@ Date: 8. Februar 2026 | Bereinigt: 14. März 2026
 Phase: 2D.2.1 - Real-World Validation Testing
 """
 
-from dataclasses import dataclass
 import logging
 import warnings
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -377,7 +377,6 @@ class EnhancedMetrics:
 
         # Perceptual metrics (may be None if libraries unavailable)
         visqol_mos = self.compute_visqol(original, restored, sr=sr)
-        stoi_score = None  # STOI verboten für Musik (§10.2)
 
         # Authenticity metrics (Phase 2D.2.1 Task 3)
         breath_retention = None
@@ -477,7 +476,6 @@ class EnhancedMetrics:
 
         # Full metrics with clean reference
         visqol_mos = self.compute_visqol(original_clean, restored, sr=sr)
-        stoi_score = None  # STOI verboten für Musik (§10.2)
 
         # Authenticity metrics (Phase 2D.2.1 Task 3)
         breath_retention = None

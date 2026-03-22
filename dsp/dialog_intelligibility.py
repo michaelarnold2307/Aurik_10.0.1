@@ -193,7 +193,7 @@ class DialogIntelligibilityEnhancer:
             gain_db: Gain reduction (negative dB)
         """
         # Design notch filter
-        b, a = iirnotch(center_freq, q, sr)
+        b, _a = iirnotch(center_freq, q, sr)
 
         # Apply filter
         filtered = np.zeros_like(signal)
@@ -213,10 +213,7 @@ class DialogIntelligibilityEnhancer:
 
         Higher energy in this range = better intelligibility.
         """
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim == 2 else audio
 
         # Extract clarity range (2-6 kHz)
         nyquist = sr / 2

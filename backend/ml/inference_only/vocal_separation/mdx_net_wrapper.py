@@ -1,4 +1,5 @@
 import logging
+
 """
 MDX-Net Vocal Separator - HIPS Compliant Wrapper
 
@@ -39,7 +40,7 @@ class MDXNetSeparator:
     - Full auditability
     """
 
-    def __init__(self, model_path: str | None = None, sample_rate: int = 44100, device: str = None):
+    def __init__(self, model_path: str | None = None, sample_rate: int = 44100, device: str | None = None):
         """
         Initialize MDX-Net separator
 
@@ -61,7 +62,7 @@ class MDXNetSeparator:
 
         # HIPS tracking
         self.separation_count = 0
-        self.nebenwirkungen_log: List[Dict] = []
+        self.nebenwirkungen_log: list[dict] = []
 
     def _get_default_model_path(self) -> Path:
         """Get default MDX-Net model path"""
@@ -101,7 +102,7 @@ class MDXNetSeparator:
             logger.error(f"Failed to load MDX-Net model: {e}")
             return None
 
-    def separate(self, audio: np.ndarray, sr: int = None, return_stems: bool = True) -> Dict[str, np.ndarray]:
+    def separate(self, audio: np.ndarray, sr: int | None = None, return_stems: bool = True) -> dict[str, np.ndarray]:
         """
         Separate vocals from instrumental
 
@@ -168,7 +169,7 @@ class MDXNetSeparator:
 
         return result
 
-    def _fallback_separation(self, audio: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def _fallback_separation(self, audio: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
         Fallback spectral mask separation (when MDX-Net model unavailable)
 
@@ -201,7 +202,7 @@ class MDXNetSeparator:
 
         return vocals, instrumental
 
-    def _mdx_net_inference(self, audio: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def _mdx_net_inference(self, audio: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
         Actual MDX-Net inference
 
@@ -217,7 +218,7 @@ class MDXNetSeparator:
 
     def _assess_nebenwirkungen(
         self, original: np.ndarray, vocals: np.ndarray, instrumental: np.ndarray
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         HIPS Requirement: Assess separation nebenwirkungen
 

@@ -76,52 +76,6 @@ class CodecArtifactRemover:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "codec_artifact_remover",
-            "category": "digital_defects",
-            "version": "1.0.0",
-            "io": {
-                "channels": "mono|stereo",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {
-                    "pre_echo_threshold_db": -40.0,
-                    "spectral_hole_threshold_db": -50.0,
-                    "smoothing_strength": 0.6,
-                },
-                "safe_ranges": {
-                    "pre_echo_threshold_db": {"min": -60.0, "max": -20.0},
-                    "spectral_hole_threshold_db": {"min": -80.0, "max": -30.0},
-                    "smoothing_strength": {"min": 0.0, "max": 1.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.02,
-                "identity_budget": 0.97,
-                "spectral_change_budget": 0.03,
-                "temporal_change_budget": 0.05,
-                "compute_cost": 0.04,
-            },
-            "side_effects": [
-                {
-                    "risk": "Transient smearing bei zu starker Glättung",
-                    "expected_when": "smoothing_strength > 0.8",
-                    "severity": 0.3,
-                }
-            ],
-            "reports": {
-                "self_metrics": ["pre_echo_detected", "spectral_holes_found", "smoothing_applied"],
-                "confidence": 0.80,
-            },
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def detect_pre_echo(self, audio: np.ndarray, sample_rate: int) -> list[int]:
         """
@@ -217,7 +171,7 @@ class CodecArtifactRemover:
         # Compute STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = signal.stft(audio, sample_rate, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = signal.stft(audio, sample_rate, nperseg=nperseg, noverlap=noverlap)
 
         # Magnitude spectrum
         mag = np.abs(Zxx)
@@ -260,7 +214,7 @@ class CodecArtifactRemover:
         # Compute STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = signal.stft(audio, sample_rate, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = signal.stft(audio, sample_rate, nperseg=nperseg, noverlap=noverlap)
 
         # Fill holes
         for i in range(Zxx.shape[1]):  # Time frames
@@ -396,44 +350,6 @@ class PacketLossConcealer:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "packet_loss_concealer",
-            "category": "digital_defects",
-            "version": "1.0.0",
-            "io": {
-                "channels": "mono|stereo",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"gap_threshold_ms": 5.0, "interpolation_method": "cubic"},
-                "safe_ranges": {"gap_threshold_ms": {"min": 1.0, "max": 100.0}},
-            },
-            "budgets": {
-                "artifact_budget": 0.01,
-                "identity_budget": 0.98,
-                "spectral_change_budget": 0.02,
-                "temporal_change_budget": 0.05,
-                "compute_cost": 0.03,
-            },
-            "side_effects": [
-                {
-                    "risk": "Unnatural interpolation bei langen Gaps",
-                    "expected_when": "gap_length > 50ms",
-                    "severity": 0.4,
-                }
-            ],
-            "reports": {
-                "self_metrics": ["gaps_detected", "gaps_concealed", "total_gap_duration_ms"],
-                "confidence": 0.85,
-            },
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def detect_gaps(self, audio: np.ndarray, sample_rate: int) -> list[tuple[int, int]]:
         """
@@ -648,43 +564,6 @@ class JitterCorrector:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "jitter_corrector",
-            "category": "digital_defects",
-            "version": "1.0.0",
-            "io": {
-                "channels": "mono|stereo",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"jitter_threshold_ppm": 100.0, "correction_strength": 0.7},
-                "safe_ranges": {
-                    "jitter_threshold_ppm": {"min": 10.0, "max": 1000.0},
-                    "correction_strength": {"min": 0.0, "max": 1.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.01,
-                "identity_budget": 0.98,
-                "spectral_change_budget": 0.02,
-                "temporal_change_budget": 0.03,
-                "compute_cost": 0.02,
-            },
-            "side_effects": [
-                {"risk": "Minimal spectral coloration", "expected_when": "correction_strength > 0.8", "severity": 0.2}
-            ],
-            "reports": {
-                "self_metrics": ["jitter_detected", "jitter_level_ppm", "correction_applied"],
-                "confidence": 0.75,
-            },
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def detect_jitter(self, audio: np.ndarray, sample_rate: int) -> float:
         """

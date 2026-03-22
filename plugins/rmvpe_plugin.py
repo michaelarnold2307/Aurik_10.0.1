@@ -22,11 +22,11 @@ CPU-Only: CPUExecutionProvider, kein CUDA.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -137,10 +137,10 @@ class RmvpePlugin:
             logger.info("RMVPE ONNX nicht gefunden (%s) — pYIN-Fallback aktiv.", _ONNX_PATH)
             return
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("RMVPE", size_gb=0.03):
                     logger.warning("RMVPE: ML-Budget erschöpft — pYIN-Fallback.")
@@ -158,7 +158,7 @@ class RmvpePlugin:
             self._model_loaded = True
             logger.info("✅ RMVPE ONNX geladen: %s (§4.4 primärer Pitch-Tracker)", _ONNX_PATH.name)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "RMVPE",
@@ -170,7 +170,7 @@ class RmvpePlugin:
         except Exception as exc:
             logger.warning("RMVPE ONNX Ladefehler: %s — pYIN-Fallback aktiv.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("RMVPE")
             except Exception:
                 pass
@@ -209,7 +209,7 @@ class RmvpePlugin:
         Formel: mel = log(max(fb @ |STFT|^2, 1e-8))
         Filterbank: 128 Bänder, Hz↔Mel via f_mel = 2595·log10(1+f/700)
         """
-        from scipy.signal import stft as scipy_stft  # noqa: PLC0415
+        from scipy.signal import stft as scipy_stft
 
         n = len(mono_16k)
         if n < _FRAME_LEN:
@@ -244,9 +244,9 @@ class RmvpePlugin:
     def _analyze_onnx(self, mono_48k: np.ndarray, sr: int, voiced_threshold: float) -> RmvpeResult:
         """RMVPE ONNX-Inferenz: Mel → Salience-Map → F0."""
         assert self._session is not None
-        from math import gcd  # noqa: PLC0415
+        from math import gcd
 
-        from scipy.signal import resample_poly  # noqa: PLC0415
+        from scipy.signal import resample_poly
 
         # 48 kHz → 16 kHz
         g = gcd(sr, _MODEL_SR)
@@ -343,7 +343,7 @@ class RmvpePlugin:
         """
         # Tier-DSP-1: PESTO (chromagram CQT, Riou et al. ISMIR 2023)
         try:
-            from dsp.pesto_pitch import estimate_pitch as _pesto  # noqa: PLC0415
+            from dsp.pesto_pitch import estimate_pitch as _pesto
 
             pesto_r = _pesto(mono_48k, sr)
             if pesto_r.f0_mean > 0 and np.sum(pesto_r.voiced) > 3:
@@ -365,7 +365,7 @@ class RmvpePlugin:
             logger.debug("PESTO-Fallback fehlgeschlagen: %s — weiter mit pYIN", exc)
 
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             f0, voiced_flag, voiced_prob = librosa.pyin(
                 mono_48k,

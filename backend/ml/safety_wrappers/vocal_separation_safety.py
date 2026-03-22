@@ -13,12 +13,12 @@ Ensures all vocal separation operations comply with AURIK's normative policies:
 This wrapper validates HIPS compliance before/after separation.
 """
 
-from datetime import datetime
 import json
+import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict
 
-import logging
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class VocalSeparationSafetyWrapper:
         self.separation_count = 0
         self.violations_count = 0
 
-    def safe_separate(self, audio: np.ndarray, sr: int, **kwargs) -> Dict[str, np.ndarray]:
+    def safe_separate(self, audio: np.ndarray, sr: int, **kwargs) -> dict[str, np.ndarray]:
         """
         HIPS-compliant vocal separation with safety checks
 
@@ -145,7 +145,7 @@ class VocalSeparationSafetyWrapper:
 
         return stems
 
-    def _pre_separation_checks(self, audio: np.ndarray, sr: int) -> Dict[str, any]:
+    def _pre_separation_checks(self, audio: np.ndarray, sr: int) -> dict[str, any]:
         """
         HIPS Pre-Separation Checks:
         1. No clipping
@@ -348,7 +348,7 @@ class VocalSeparationSafetyWrapper:
 
         self._write_audit_log(log_entry)
 
-    def _write_audit_log(self, entry: Dict) -> None:
+    def _write_audit_log(self, entry: dict) -> None:
         """Write audit log entry (JSONL format)"""
         try:
             with open(self.audit_log_path, "a") as f:
@@ -356,7 +356,7 @@ class VocalSeparationSafetyWrapper:
         except Exception as e:
             logger.error(f"Failed to write audit log: {e}")
 
-    def get_compliance_report(self) -> Dict[str, any]:
+    def get_compliance_report(self) -> dict[str, any]:
         """
         Get HIPS compliance report
 

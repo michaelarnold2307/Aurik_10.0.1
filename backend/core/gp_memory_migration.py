@@ -11,6 +11,7 @@ Schema-Versionen:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import math
@@ -136,10 +137,8 @@ def save_gp_memory_file(path: pathlib.Path, data: dict[str, Any]) -> None:
         logger.debug("GP-Memory gespeichert: %s (%d Obs.)", path.name, len(valid_obs))
     except OSError as exc:
         logger.error("GP-Memory '%s' konnte nicht geschrieben werden: %s", path.name, exc)
-        try:
+        with contextlib.suppress(OSError):
             tmp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 def _backup_corrupted(path: pathlib.Path) -> None:

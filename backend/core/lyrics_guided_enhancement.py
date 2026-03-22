@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -244,8 +244,10 @@ class LyricsGuidedEnhancement:
         # [RELEASE_MUST] memory budget guard before InferenceSession (§2.37 Checkliste)
         _release_on_fail: object = None
         try:
-            from backend.core.ml_memory_budget import (  # noqa: PLC0415
+            from backend.core.ml_memory_budget import (
                 release as _ml_release,
+            )
+            from backend.core.ml_memory_budget import (
                 try_allocate as _try_alloc,
             )
 
@@ -254,7 +256,7 @@ class LyricsGuidedEnhancement:
                     "LyricsGuidedEnhancement: ML-Budget erschöpft (Whisper) — DSP-Fallback aktiv.",
                 )
                 return
-            _release_on_fail = lambda: _ml_release("lyrics_transcriber_whisper")  # noqa: E731
+            _release_on_fail = lambda: _ml_release("lyrics_transcriber_whisper")
         except ImportError:
             pass  # budget module absent → attempt load anyway
         _loaded = False
@@ -273,7 +275,7 @@ class LyricsGuidedEnhancement:
                 )
                 _loaded = True
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm(
                         "lyrics_transcriber_whisper",
@@ -308,8 +310,10 @@ class LyricsGuidedEnhancement:
         # [RELEASE_MUST] memory budget guard before InferenceSession (§2.37 Checkliste)
         _release_on_fail: object = None
         try:
-            from backend.core.ml_memory_budget import (  # noqa: PLC0415
+            from backend.core.ml_memory_budget import (
                 release as _ml_release,
+            )
+            from backend.core.ml_memory_budget import (
                 try_allocate as _try_alloc,
             )
 
@@ -318,7 +322,7 @@ class LyricsGuidedEnhancement:
                     "LyricsGuidedEnhancement: ML-Budget erschöpft (wav2vec2 Aligner) — DSP-Fallback aktiv.",
                 )
                 return
-            _release_on_fail = lambda: _ml_release("lyrics_aligner_wav2vec2")  # noqa: E731
+            _release_on_fail = lambda: _ml_release("lyrics_aligner_wav2vec2")
         except ImportError:
             pass  # budget module absent → attempt load anyway
         _loaded = False
@@ -337,7 +341,7 @@ class LyricsGuidedEnhancement:
                 )
                 _loaded = True
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                     _reg_plm(
                         "lyrics_aligner_wav2vec2",
@@ -409,7 +413,7 @@ class LyricsGuidedEnhancement:
             if logits.ndim != 3:
                 return words
             logits = logits[0]  # (T_frames, vocab_size)
-            n_frames, vocab_size = logits.shape
+            n_frames, _vocab_size = logits.shape
 
             # Frame duration at 16 kHz (wav2vec2 conv-fe downsamples by 320×)
             frames_per_sec = sr_16k / 320.0  # ≈ 50 frames/s
@@ -496,10 +500,7 @@ class LyricsGuidedEnhancement:
         _assert_no_lyrics_in_log(transcription.words)
         saliency = self._build_sample_saliency(transcription, n_samples, sr)
 
-        if audio.ndim == 2:
-            audio_out = audio * saliency[:, np.newaxis]
-        else:
-            audio_out = audio * saliency
+        audio_out = audio * saliency[:, np.newaxis] if audio.ndim == 2 else audio * saliency
 
         audio_out = np.clip(
             np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0),
@@ -793,14 +794,14 @@ def get_lyrics_guided_enhancement() -> LyricsGuidedEnhancement:
 
 
 __all__ = [
-    "WordTimestamp",
-    "LyricsTranscriptionResult",
-    "LyricsTranscriber",
     "ContentAwareProcessor",
-    "LyricsGuidedTimeline",
     "LyricsGuidedEnhancement",
-    "get_lyrics_transcriber",
+    "LyricsGuidedTimeline",
+    "LyricsTranscriber",
+    "LyricsTranscriptionResult",
+    "WordTimestamp",
     "get_content_aware_processor",
-    "get_lyrics_guided_timeline",
     "get_lyrics_guided_enhancement",
+    "get_lyrics_guided_timeline",
+    "get_lyrics_transcriber",
 ]

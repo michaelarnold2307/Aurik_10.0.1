@@ -3,7 +3,7 @@
 Gemäß §9.4 Anti-Parallelwelten: kein eigener Code, nur Re-Export.
 """
 
-from backend.core.epistemic_gate.ethics_engine import (  # noqa: F401
+from backend.core.epistemic_gate.ethics_engine import (
     AuthenticityConstraints,
     EpistemicDecision,
     EthicsEngine,
@@ -12,9 +12,9 @@ from backend.core.epistemic_gate.ethics_engine import (  # noqa: F401
 )
 
 __all__ = [
-    "EpistemicDecision",
-    "ProcessingMode",
     "AuthenticityConstraints",
-    "EthicsReport",
+    "EpistemicDecision",
     "EthicsEngine",
+    "EthicsReport",
+    "ProcessingMode",
 ]

@@ -4,7 +4,7 @@ SOTA-konforme Analyse- und Policy-Module für Musikrestaurierung
 
 import concurrent.futures
 import time
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -84,7 +84,7 @@ class PolicyManager:
         )
         return self.policy
 
-    def reset_policy(self) -> Dict[str, Any]:
+    def reset_policy(self) -> dict[str, Any]:
         # Setzt alle Policy-Zustände (außer Log) zurück
         for k in list(self.policy.keys()):
             if k != "_log":
@@ -112,7 +112,7 @@ class FeatureExtractor:
     ) -> dict:
         features = {}
 
-        def crepe_features() -> Dict[str, Any]:
+        def crepe_features() -> dict[str, Any]:
             try:
                 from plugins.fcpe_plugin import get_fcpe_plugin as _get_fcpe
 
@@ -127,7 +127,7 @@ class FeatureExtractor:
             except Exception:
                 return {"f0_median": -1.0, "f0_mean": -1.0, "f0_std": -1.0}
 
-        def librosa_features() -> Dict[str, Any]:
+        def librosa_features() -> dict[str, Any]:
             try:
                 import librosa
 
@@ -142,7 +142,7 @@ class FeatureExtractor:
                         "chroma_std": float(np.std(chroma)),
                         "key_chroma_cqt_mean": float(np.mean(key)),
                         "tempo_bpm": float(tempo),
-                        "beat_count": int(len(beats)),
+                        "beat_count": len(beats),
                         "mfcc_mean": float(np.mean(melody)),
                         "mfcc_std": float(np.std(melody)),
                     }
@@ -167,7 +167,7 @@ class FeatureExtractor:
                     "mfcc_std": -1.0,
                 }
 
-        def panns_features() -> Dict[str, Any]:
+        def panns_features() -> dict[str, Any]:
             try:
                 import os
                 import tempfile
@@ -226,7 +226,7 @@ class FeatureExtractor:
                 # Beat/Rhythmus
                 tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
                 features["tempo_bpm"] = float(tempo)
-                features["beat_count"] = int(len(beats))
+                features["beat_count"] = len(beats)
                 # Melodie-Contour
                 melody = librosa.feature.mfcc(y=y, sr=sr, n_fft=min(2048, len(y)))
                 features["mfcc_mean"] = float(np.mean(melody))
@@ -367,7 +367,7 @@ class FeatureExtractor:
 
             # Stage 1: Onset detection (transient detection)
             onset_env = librosa.onset.onset_strength(y=audio, sr=sr)
-            onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)  # noqa: F841
+            librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)
 
             # Stage 2: Statistical outlier detection (5σ threshold)
             threshold = np.mean(audio) + 5 * np.std(audio)
@@ -518,7 +518,7 @@ class FeatureExtractor:
             from scipy import signal as scipy_signal
 
             # Extract pitch using pyin (more robust than crepe for modulation)
-            f0, voiced_flag, voiced_probs = librosa.pyin(
+            f0, voiced_flag, _voiced_probs = librosa.pyin(
                 audio, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"), sr=sr
             )
 
@@ -656,9 +656,9 @@ class AnalysisEngineAdapter:
         instruments = []
 
         try:
-            from collections import Counter
             import os
             import tempfile
+            from collections import Counter
 
             import soundfile as sf
 

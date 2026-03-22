@@ -18,10 +18,10 @@ Referenz:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -290,7 +290,7 @@ class EmotionalArcPreservationMetric:
 # Thread-sicherer Singleton (Double-Checked Locking §3.2)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[EmotionalArcPreservationMetric] = None
+_instance: EmotionalArcPreservationMetric | None = None
 _lock = threading.Lock()
 
 

@@ -4,7 +4,9 @@ Automatisierte Erkennung und Audit-Log-Dokumentation von Artefakten und Bias im 
 """
 
 import logging
+
 import numpy as np
+
 logger = logging.getLogger(__name__)
 
 

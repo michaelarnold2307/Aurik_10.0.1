@@ -117,7 +117,7 @@ class TestWienerDereverb:
 
     def test_mono_processing(self):
         """Test processing mono signal."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.5)
 
@@ -132,7 +132,7 @@ class TestWienerDereverb:
 
     def test_stereo_processing(self):
         """Test processing stereo signal."""
-        sr = 16000
+        sr = 48000
         audio_mono = generate_test_signal(sr, duration=1.0)
         audio_stereo = np.column_stack([audio_mono, audio_mono * 0.9])
         audio_reverbed = apply_reverb(audio_stereo, sr, rt60=0.5)
@@ -146,7 +146,7 @@ class TestWienerDereverb:
 
     def test_reverb_reduction_metrics(self):
         """Test reverb reduction metrics."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.8)
 
@@ -159,7 +159,7 @@ class TestWienerDereverb:
 
     def test_no_reverb_preservation(self):
         """Test that clean audio is preserved."""
-        sr = 16000
+        sr = 48000
         audio_clean = generate_test_signal(sr, duration=0.5)
 
         wiener = WienerDereverb(reverb_time_estimate=0.5, strength=0.7)
@@ -184,7 +184,7 @@ class TestLateReflectionCanceller:
 
     def test_mono_processing(self):
         """Test processing mono signal."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.6)
 
@@ -199,7 +199,7 @@ class TestLateReflectionCanceller:
 
     def test_stereo_processing(self):
         """Test processing stereo signal."""
-        sr = 16000
+        sr = 48000
         audio_mono = generate_test_signal(sr, duration=1.0)
         audio_stereo = np.column_stack([audio_mono, audio_mono * 0.95])
         audio_reverbed = apply_reverb(audio_stereo, sr, rt60=0.6)
@@ -213,7 +213,7 @@ class TestLateReflectionCanceller:
 
     def test_reflection_detection(self):
         """Test reflection region detection."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0, freq=440.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.8)
 
@@ -226,7 +226,7 @@ class TestLateReflectionCanceller:
 
     def test_suppression_strength(self):
         """Test suppression strength affects output."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.7)
 
@@ -256,7 +256,7 @@ class TestSpectralTemporalAnalyzer:
 
     def test_analyze_clean_audio(self):
         """Test analyzing clean audio (no reverb)."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0, freq=440.0)
 
         analyzer = SpectralTemporalAnalyzer()
@@ -274,7 +274,7 @@ class TestSpectralTemporalAnalyzer:
 
     def test_analyze_reverbed_audio(self):
         """Test analyzing reverbed audio."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0, freq=440.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.8)
 
@@ -287,7 +287,7 @@ class TestSpectralTemporalAnalyzer:
 
     def test_analyze_stereo_audio(self):
         """Test analyzing stereo audio."""
-        sr = 16000
+        sr = 48000
         audio_mono = generate_test_signal(sr, duration=1.0)
         audio_stereo = np.column_stack([audio_mono, audio_mono * 0.9])
 
@@ -300,7 +300,7 @@ class TestSpectralTemporalAnalyzer:
 
     def test_rt60_estimation(self):
         """Test RT60 estimation."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=2.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.6)
 
@@ -336,7 +336,7 @@ class TestMultibandDereverb:
 
     def test_mono_processing(self):
         """Test processing mono signal."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0, freq=1000.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.5)
 
@@ -351,7 +351,7 @@ class TestMultibandDereverb:
 
     def test_stereo_processing(self):
         """Test processing stereo signal."""
-        sr = 16000
+        sr = 48000
         audio_mono = generate_test_signal(sr, duration=1.0)
         audio_stereo = np.column_stack([audio_mono, audio_mono * 0.9])
         audio_reverbed = apply_reverb(audio_stereo, sr, rt60=0.5)
@@ -365,7 +365,7 @@ class TestMultibandDereverb:
 
     def test_frequency_selective_processing(self):
         """Test that different bands are processed differently."""
-        sr = 16000
+        sr = 48000
 
         # Low frequency signal
         audio_low = generate_test_signal(sr, duration=1.0, freq=100.0)
@@ -417,7 +417,7 @@ class TestAdvancedDereverb:
 
     def test_analyze(self):
         """Test audio analysis."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.6)
 
@@ -430,7 +430,7 @@ class TestAdvancedDereverb:
 
     def test_process_minimal_reverb_skip(self):
         """Test that minimal reverb audio is skipped."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=0.5)
 
         dereverb = AdvancedDereverb(mode="balanced")
@@ -442,7 +442,7 @@ class TestAdvancedDereverb:
 
     def test_process_reverbed_audio_mono(self):
         """Test processing reverbed mono audio."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0, freq=880.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.7)
 
@@ -462,7 +462,7 @@ class TestAdvancedDereverb:
 
     def test_process_reverbed_audio_stereo(self):
         """Test processing reverbed stereo audio."""
-        sr = 16000
+        sr = 48000
         audio_mono = generate_test_signal(sr, duration=1.0)
         audio_stereo = np.column_stack([audio_mono, audio_mono * 0.95])
         audio_reverbed = apply_reverb(audio_stereo, sr, rt60=0.7)
@@ -476,7 +476,7 @@ class TestAdvancedDereverb:
 
     def test_mode_comparison(self):
         """Test that different modes produce different results."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.7)
 
@@ -501,7 +501,7 @@ class TestAdvancedDereverb:
 
     def test_three_stage_pipeline(self):
         """Test that all three stages are applied."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0, freq=1000.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.8)
 
@@ -527,7 +527,7 @@ class TestQualityGates:
 
     def test_no_extreme_clipping(self):
         """Test that processing doesn't introduce extreme clipping."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0) * 0.7
         audio_reverbed = apply_reverb(audio, sr, rt60=0.6)
 
@@ -540,7 +540,7 @@ class TestQualityGates:
 
     def test_energy_preservation(self):
         """Test that energy is reasonably preserved."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=1.0, freq=440.0)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.6)
 
@@ -557,7 +557,7 @@ class TestQualityGates:
 
     def test_stereo_field_preservation(self):
         """Test that stereo field is preserved."""
-        sr = 16000
+        sr = 48000
         audio_mono = generate_test_signal(sr, duration=1.0)
         audio_stereo = np.column_stack([audio_mono, audio_mono * 0.8])
         audio_reverbed = apply_reverb(audio_stereo, sr, rt60=0.6)
@@ -574,7 +574,7 @@ class TestQualityGates:
 
     def test_no_nan_or_inf(self):
         """Test that processing doesn't produce NaN or Inf values."""
-        sr = 16000
+        sr = 48000
         audio = generate_test_signal(sr, duration=0.5)
         audio_reverbed = apply_reverb(audio, sr, rt60=0.5)
 
@@ -586,7 +586,7 @@ class TestQualityGates:
 
     def test_reverb_reduction_effectiveness(self):
         """Test that reverb is actually reduced."""
-        sr = 16000
+        sr = 48000
         audio_clean = generate_test_signal(sr, duration=1.0)
         audio_reverbed = apply_reverb(audio_clean, sr, rt60=0.8)
 
@@ -613,7 +613,7 @@ class TestIntegration:
 
     def test_full_workflow(self):
         """Test complete de-reverb workflow."""
-        sr = 16000
+        sr = 48000
 
         # Generate test audio with strong reverb
         audio = generate_test_signal(sr, duration=1.5, freq=880.0)
@@ -638,7 +638,7 @@ class TestIntegration:
 
     def test_batch_processing(self):
         """Test processing multiple audio clips."""
-        sr = 16000
+        sr = 48000
         dereverb = AdvancedDereverb(mode="balanced")
 
         # Create multiple test clips

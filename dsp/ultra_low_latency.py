@@ -4,8 +4,8 @@ ultra_low_latency.py - Ultra-Low-Latency-DSPs für Aurik 6.0
 Dieses Modul stellt ultra-latenzoptimierte Varianten der wichtigsten DSPs bereit und ist jetzt mit DSPContract für Auditierbarkeit und SOTA-Konformität ausgestattet.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

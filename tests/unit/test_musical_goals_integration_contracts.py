@@ -64,6 +64,8 @@ class TestUnifiedRestorerWiringContracts:
 
 
 class TestUnifiedRestorerRuntimeIntegration:
+    @pytest.mark.ml
+    @pytest.mark.slow
     @pytest.mark.timeout(120)
     def test_05_restore_populates_goal_fields_minimal(self) -> None:
         """Echter Minimal-Restore: Goal-Felder muessen im Ergebnis gesetzt sein."""

@@ -52,8 +52,8 @@ import logging
 import time
 
 import numpy as np
-from scipy.ndimage import median_filter
 import scipy.signal as sig
+from scipy.ndimage import median_filter
 
 from .phase_interface import (
     PhaseCategory,

@@ -108,7 +108,7 @@ class SpectralRepair:
     def _process_mono(self, audio: npt.NDArray[np.float64], sr: int) -> npt.NDArray[np.float64]:
         """Process mono audio."""
         # STFT
-        f, t, Zxx = scipy.signal.stft(
+        f, _t, Zxx = scipy.signal.stft(
             audio, fs=sr, nperseg=self.config.fft_size, noverlap=self.config.fft_size - self.config.hop_size
         )
 
@@ -233,7 +233,7 @@ class SpectralRepair:
 
         # Extract reference spectrum
         ref_spec = Zxx[ref_start:ref_end, :]
-        ref_mag = np.abs(ref_spec).mean(axis=0)  # Average magnitude  # noqa: F841
+        np.abs(ref_spec).mean(axis=0)  # Average magnitude
         np.angle(ref_spec)
 
         # Synthesize missing content using harmonic decay model

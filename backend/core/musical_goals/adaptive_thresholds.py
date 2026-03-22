@@ -14,9 +14,9 @@ Beispiele:
 - Vinyl: Wärme=0.92, Bass-Kraft=0.88 (Charakter-Erhalt)
 """
 
-from dataclasses import dataclass
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 

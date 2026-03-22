@@ -94,29 +94,6 @@ class TapePrintThroughRemover:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "tape_print_through_remover",
-            "category": "tape_defects",
-            "version": "2.0.0",
-            "io": {
-                "channels": "mono|stereo",
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "True", "reason": "Immer aktiv"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {"max_delay_ms": 150.0, "attenuation_threshold_db": -40.0, "adaptive_strength": 0.7},
-                "safe_ranges": {
-                    "max_delay_ms": {"min": 10.0, "max": 500.0},
-                    "attenuation_threshold_db": {"min": -60.0, "max": -20.0},
-                    "adaptive_strength": {"min": 0.0, "max": 1.0},
-                },
-            },
-        }
 
     def detect_print_through(self, audio: np.ndarray, sample_rate: int) -> dict:
         """Detect pre- and post-echo via bidirectional cross-correlation (±600 ms).
@@ -404,56 +381,6 @@ class TapeAzimuthCorrector:
 
     def _log_contract(self):
         """Log DSPContract for auditability"""
-        contract = {  # noqa: F841
-            "id": "tape_azimuth_corrector",
-            "category": "tape_defects",
-            "version": "1.0.0",
-            "io": {
-                "channels": "stereo",  # Requires stereo
-                "sample_rates": [44100, 48000, 96000],
-                "latency_samples": 0,
-                "supports_offline": True,
-            },
-            "preconditions": [
-                {"if": "audio.ndim == 2", "reason": "Stereo erforderlich"},
-                {"if": "audio.dtype == float32|float64", "reason": "Floating point erforderlich"},
-            ],
-            "params": {
-                "defaults": {
-                    "correction_strength": 0.8,
-                    "phase_threshold_degrees": 10.0,
-                    "preserve_stereo_width": True,
-                },
-                "safe_ranges": {
-                    "correction_strength": {"min": 0.0, "max": 1.0},
-                    "phase_threshold_degrees": {"min": 1.0, "max": 45.0},
-                },
-            },
-            "budgets": {
-                "artifact_budget": 0.01,
-                "identity_budget": 0.98,
-                "spectral_change_budget": 0.02,
-                "temporal_change_budget": 0.05,
-                "compute_cost": 0.04,
-            },
-            "side_effects": [
-                {
-                    "risk": "Stereo width reduction bei Over-Correction",
-                    "expected_when": "correction_strength > 0.9",
-                    "severity": 0.3,
-                }
-            ],
-            "reports": {
-                "self_metrics": [
-                    "phase_error_detected",
-                    "max_phase_error_degrees",
-                    "correction_applied",
-                    "stereo_width_preserved",
-                ],
-                "confidence": 0.88,
-            },
-            "rollback": {"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
-        }
 
     def detect_phase_error(self, left: np.ndarray, right: np.ndarray, sample_rate: int) -> dict:
         """

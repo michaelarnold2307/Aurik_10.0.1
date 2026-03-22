@@ -2,7 +2,7 @@ import logging
 
 import numpy as np
 
-from policy.policy_engine import PolicyEngine
+from policy.policy_engine import PolicyEngine, VocalQualityChecker
 
 
 def test_policy_engine_extended_quality_gates():
@@ -73,3 +73,31 @@ def test_policy_engine_chain_authenticity_negative():
     assert "chain_authenticity" in result
     assert result["chain_authenticity"].get("authentic") is False
     logging.info("Negativer ChainAuthenticity-Test bestanden.")
+
+
+def test_vocal_quality_checker_uses_nested_vocal_scores():
+    checker = VocalQualityChecker()
+
+    result = checker.check(
+        {
+            "media_characteristics": {"vocal": True},
+            "vocal_scores": {
+                "authentizität": 0.89,
+                "klarheit": 0.91,
+                "expressivität": 0.88,
+            },
+        }
+    )
+
+    assert result["authentizität"] is True
+    assert result["klarheit"] is True
+    assert result["expressivität"] is True
+    assert "emotionalität" not in result
+
+
+def test_policy_engine_release_check_exposes_structured_status():
+    engine = PolicyEngine({"goal": "music_enhancement"})
+    result = engine.check_release()
+
+    assert "status" in result
+    assert result["status"] in {"release_ready", "blocked"}

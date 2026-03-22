@@ -107,7 +107,7 @@ class SpectralBandGapRepair:
         sr: int = 48000,
         instrument_tag: str = "unknown",
         confidence: float = 1.0,
-    ) -> "BandGapResult":
+    ) -> BandGapResult:
         """Repariert spektrale Bandlücken (HEAD_WEAR-Defekte).
 
         Args:
@@ -140,10 +140,7 @@ class SpectralBandGapRepair:
             )
 
         # Zu mono konvertieren für Analyse
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=0)
-        else:
-            mono = audio.copy()
+        mono = np.mean(audio, axis=0) if audio.ndim == 2 else audio.copy()
 
         # Lücken analysieren
         gaps = self._detect_band_gaps(mono, sr)
@@ -165,10 +162,7 @@ class SpectralBandGapRepair:
         audio_repaired = np.nan_to_num(audio_repaired, nan=0.0, posinf=0.0, neginf=0.0)
 
         # Spektrale Glattheit prüfen
-        if audio_repaired.ndim == 2:
-            check_mono = np.mean(audio_repaired, axis=0)
-        else:
-            check_mono = audio_repaired
+        check_mono = np.mean(audio_repaired, axis=0) if audio_repaired.ndim == 2 else audio_repaired
         flatness_ok = self._check_spectral_flatness(check_mono, sr)
 
         n_repaired = len(gaps)
@@ -195,7 +189,6 @@ class SpectralBandGapRepair:
             Liste von (freq_low_hz, freq_high_hz) Tupeln
         """
         n_fft = 2048
-        hop = 512
         if len(mono) < n_fft:
             return []
 
@@ -216,10 +209,7 @@ class SpectralBandGapRepair:
                 continue
 
             band_energy = np.mean(stft[mask] ** 2)
-            if band_energy <= 0.0:
-                energy_db = -120.0
-            else:
-                energy_db = 10.0 * math.log10(float(band_energy) + 1e-12)
+            energy_db = -120.0 if band_energy <= 0.0 else 10.0 * math.log10(float(band_energy) + 1e-12)
 
             band_width = f_hi - f_lo
             if energy_db <= self.GAP_ENERGY_THRESHOLD_DB and band_width >= self.MIN_GAP_WIDTH_HZ:
@@ -245,10 +235,7 @@ class SpectralBandGapRepair:
         n_fft = 2048
         audio_out = audio.copy().astype(np.float32)
 
-        if audio_out.ndim == 2:
-            channels = [audio_out[0], audio_out[1]]
-        else:
-            channels = [audio_out]
+        channels = [audio_out[0], audio_out[1]] if audio_out.ndim == 2 else [audio_out]
 
         for ch_idx, ch in enumerate(channels):
             if len(ch) < n_fft:
@@ -298,10 +285,7 @@ class SpectralBandGapRepair:
 
             channels[ch_idx] = ch_repaired
 
-        if audio_out.ndim == 2:
-            audio_out = np.stack(channels, axis=0)
-        else:
-            audio_out = channels[0]
+        audio_out = np.stack(channels, axis=0) if audio_out.ndim == 2 else channels[0]
 
         return audio_out
 
@@ -336,7 +320,7 @@ class SpectralBandGapRepair:
 # ---------------------------------------------------------------------------
 import threading
 
-_instance: Optional[SpectralBandGapRepair] = None
+_instance: SpectralBandGapRepair | None = None
 _lock = threading.Lock()
 
 

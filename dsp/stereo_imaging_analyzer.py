@@ -407,7 +407,7 @@ class StereoImagingFixer:
         noverlap = nperseg // 2
 
         # Compute STFTs
-        f, t, Zl = signal.stft(left, fs=sr, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zl = signal.stft(left, fs=sr, nperseg=nperseg, noverlap=noverlap)
         _, _, Zr = signal.stft(right, fs=sr, nperseg=nperseg, noverlap=noverlap)
 
         # Compute phase correlation per frequency band

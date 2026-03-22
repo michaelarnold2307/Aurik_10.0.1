@@ -3,9 +3,10 @@ Aurik 6.0 - Ethik-Engine & Originality Gate (Vorlage)
 Prüft, ob alle Verarbeitungsschritte den ethischen Leitplanken und der musikalischen Identität entsprechen.
 """
 
-import logging
 import json
+import logging
 from pathlib import Path
+
 logger = logging.getLogger(__name__)
 
 

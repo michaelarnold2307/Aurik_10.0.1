@@ -17,10 +17,10 @@ Datum: Februar 2026
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 import numpy as np
@@ -49,7 +49,7 @@ class RemasterResult:
     confidence: float
     noise_floor_db: float
     hf_rolloff_khz: float
-    evidence: List[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ class RemasterDetector:
         is_remaster = noise_floor_db < self.NOISE_FLOOR_THRESHOLD and hf_rolloff_khz > self.HF_ROLLOFF_THRESHOLD
 
         # ── Begründungen (Deutsch) ──────────────────────────────────────
-        evidence: List[str] = []
+        evidence: list[str] = []
         if noise_floor_db < self.NOISE_FLOOR_THRESHOLD:
             evidence.append(
                 f"Rauschboden {noise_floor_db:.1f} dBFS — typisch für digitale "
@@ -201,7 +201,7 @@ class RemasterDetector:
         hop_size = max(32, int(self.FRAME_HOP_S * sr))
         n = len(audio)
 
-        energies: List[float] = []
+        energies: list[float] = []
         i = 0
         while i + frame_size <= n:
             frame = audio[i : i + frame_size]
@@ -292,7 +292,7 @@ class RemasterDetector:
 # Singleton-Accessor (§3.2 — Thread-sicher via Double-Checked Locking)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[RemasterDetector] = None
+_instance: RemasterDetector | None = None
 _lock = threading.Lock()
 
 

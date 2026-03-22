@@ -15,9 +15,9 @@ Version: 2.0 (Magic Button Edition)
 Date: 2026-02-13
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
 logger = logging.getLogger(__name__)
 

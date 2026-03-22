@@ -177,9 +177,7 @@ class WowFlutterRemover:
         # SI-SDR-Gate entfernt — §4.4+§10.2: VERBOTEN (Speech-Trennungs-Metrik, kein Musik-Äquivalent)
         # SNR (Signal-to-Noise Ratio)
         snr = self._snr(processed, original)
-        if snr < snr_thresh:
-            return False
-        return True
+        return not snr < snr_thresh
 
     def _sisdr(self, audio: npt.NDArray[np.float64], reference: npt.NDArray[np.float64]) -> float:
         # §4.4+§10.2: SI-SDR ist eine Sprach-Trennungs-Metrik — VERBOTEN für Musikqualitätsbewertung.

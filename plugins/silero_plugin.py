@@ -35,7 +35,7 @@ class SileroPlugin:
             import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("SileroVAD", size_gb=0.11):
                     logger.warning("SileroVAD: ML-Budget erschöpft — Energie-Fallback.")
@@ -48,7 +48,7 @@ class SileroPlugin:
             self._session = ort.InferenceSession(path, sess_options=opts, providers=["CPUExecutionProvider"])
             logger.info("Silero VAD ONNX geladen: %s", path)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm("SileroVAD", size_gb=0.11, unload_fn=lambda s=self: setattr(s, "_session", None))
             except Exception:
@@ -56,7 +56,7 @@ class SileroPlugin:
         except Exception as exc:
             logger.warning("Silero Ladefehler: %s -- Energie-Fallback.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("SileroVAD")
             except Exception:
                 pass
@@ -96,11 +96,9 @@ class SileroPlugin:
         inp = chunk[None].astype(np.float32)
         try:
             out = self._session.run(None, {"input": inp})[0]  # [1,frames,999]
+            out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
             probs = out[0]  # [frames, 999]
-            if probs.shape[-1] > 1:
-                speech_prob = float(probs[:, 1:].max(axis=-1).mean())
-            else:
-                speech_prob = 0.5
+            speech_prob = float(probs[:, 1:].max(axis=-1).mean()) if probs.shape[-1] > 1 else 0.5
             return min(max(speech_prob, 0.0), 1.0)
         except Exception as exc:
             logger.debug("Silero VAD ONNX run Fehler: %s", exc)

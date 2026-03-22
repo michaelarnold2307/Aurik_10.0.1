@@ -18,12 +18,12 @@ Version: 1.0.0
 Date: 7. Februar 2026
 """
 
+import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import json
-import logging
 from pathlib import Path
 from typing import Any
 

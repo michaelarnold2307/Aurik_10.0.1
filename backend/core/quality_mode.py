@@ -12,8 +12,8 @@ Author: Aurik 9.0 Development Team
 Date: 15. Februar 2026
 """
 
-from enum import Enum
 import logging
+from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)

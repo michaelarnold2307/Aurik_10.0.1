@@ -173,7 +173,7 @@ class PsychoAcousticMetrics:
             Spectral flatness (0-1)
         """
         # Periodogram
-        f, psd = welch(audio, fs=self.sample_rate, nperseg=2048)
+        _f, psd = welch(audio, fs=self.sample_rate, nperseg=2048)
 
         # Geometric and arithmetic means
         geometric_mean = np.exp(np.mean(np.log(psd + 1e-10)))
@@ -225,7 +225,7 @@ class PsychoAcousticMetrics:
             Coherence score (0-1, higher = better)
         """
         # STFT
-        f, t, Zxx = stft(audio, fs=self.sample_rate, nperseg=2048)
+        _f, _t, Zxx = stft(audio, fs=self.sample_rate, nperseg=2048)
         magnitude = np.abs(Zxx)
 
         # Find spectral peaks (potential harmonics)

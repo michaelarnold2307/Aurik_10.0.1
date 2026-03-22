@@ -26,7 +26,7 @@ from backend.core.defect_scanner import DefectAnalysisResult, DefectScanner, Def
 @pytest.fixture
 def sample_rate():
     """Standard sample rate."""
-    return 44100
+    return 48000
 
 
 @pytest.fixture

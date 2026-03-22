@@ -17,15 +17,15 @@ Author: AURIK Team
 Date: 10. Februar 2026
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from enum import Enum
 import logging
 import queue
 import threading
 import time
-from typing import Any
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
 
 
 class MessagePriority(Enum):

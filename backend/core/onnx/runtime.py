@@ -5,11 +5,12 @@ Provides OptimizedONNXModel class for CPU-optimized ONNX inference
 with 1.5-2× speedup over PyTorch.
 """
 
+import contextlib
+import logging
+import time
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from pathlib import Path
-import time
 from typing import Any
 
 import numpy as np
@@ -94,6 +95,24 @@ class ONNXInferenceSession:
         if enable_profiling:
             sess_options.enable_profiling = True
 
+        # §2.37 / Checkliste: try_allocate() vor jedem InferenceSession-Load (RELEASE_MUST)
+        _session_name = f"ONNX_{self.model_path.stem}"
+        try:
+            from backend.core.ml_memory_budget import release as _ml_release
+            from backend.core.ml_memory_budget import try_allocate as _try_allocate
+
+            _model_size_gb = self.model_path.stat().st_size / (1024 ** 3) if self.model_path.exists() else 0.1
+            if not _try_allocate(_session_name, size_gb=_model_size_gb):
+                raise MemoryError(
+                    f"ML-Budget erschöpft — ONNX-Session '{self.model_path.name}' kann nicht geladen werden. "
+                    "Lösung: bitte andere ML-Modelle zuerst entladen."
+                )
+        except MemoryError:
+            raise
+        except Exception as _budget_exc:
+            logger.debug("ml_memory_budget nicht verfügbar: %s — Session wird ohne Budget geladen.", _budget_exc)
+            _ml_release = None  # type: ignore[assignment]
+
         try:
             self.session = ort.InferenceSession(str(self.model_path), sess_options, providers=self.providers)
 
@@ -109,6 +128,9 @@ class ONNXInferenceSession:
             logger.info(f"Providers: {self.session.get_providers()}")
 
         except Exception as e:
+            if _ml_release is not None:
+                with contextlib.suppress(Exception):
+                    _ml_release(_session_name)
             logger.error(f"Failed to initialize ONNX session: {e}")
             raise
 

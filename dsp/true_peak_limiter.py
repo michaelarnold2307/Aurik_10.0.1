@@ -199,19 +199,13 @@ class TruePeakLimiter:
             True Peak level in dBTP
         """
         # Upsample for inter-sample peak detection
-        audio_up, sr_up = self._upsample(audio, sr)
+        audio_up, _sr_up = self._upsample(audio, sr)
 
         # Find maximum absolute value
-        if audio_up.ndim == 1:
-            peak_linear = np.max(np.abs(audio_up))
-        else:
-            peak_linear = np.max(np.abs(audio_up))
+        peak_linear = np.max(np.abs(audio_up)) if audio_up.ndim == 1 else np.max(np.abs(audio_up))
 
         # Convert to dBTP
-        if peak_linear > 0:
-            true_peak_dbtp = 20 * np.log10(peak_linear)
-        else:
-            true_peak_dbtp = -np.inf
+        true_peak_dbtp = 20 * np.log10(peak_linear) if peak_linear > 0 else -np.inf
 
         return true_peak_dbtp
 

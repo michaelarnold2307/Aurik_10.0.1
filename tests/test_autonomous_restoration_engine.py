@@ -20,7 +20,12 @@ import tempfile
 import numpy as np
 import pytest
 
-from backend.core.auto_musical_goal_setter import AutoMusicalGoalSetter, MusicalGoalProfile
+from backend.core.auto_musical_goal_setter import (
+    AutoMusicalGoalSetter,
+    MusicalGoalProfile,
+    _MATERIAL_ADJUSTMENTS,
+    _MATERIAL_PQS_TARGETS,
+)
 from backend.core.processing_modes import ProcessingMode
 from backend.core.quality_prediction import QualityEstimate, QualityLevel
 from backend.core.self_learning_optimizer import ArmStats, SelfLearningOptimizer
@@ -128,6 +133,16 @@ class TestAutoMusicalGoalSetter:
         assert profile.target_brightness > 0.7, "Studio_2026 muss Brillanz anstreben"
         assert not profile.preserve_character, "Studio_2026 soll keinen Analogchar erhalten"
 
+    def test_studio_2026_prioritizes_authenticity_and_naturalness_on_digital_master(self):
+        """Studio-2026 soll auch bei Digital-Mastern hohe Natürlichkeit/Authentizität halten."""
+        setter = AutoMusicalGoalSetter(mode=ProcessingMode.STUDIO_2026)
+        profile = setter.compute_goals(
+            _make_defect_result(material=MaterialType.CD_DIGITAL),
+            _make_quality_estimate(score=75.0),
+        )
+        assert profile.target_authenticity >= 0.80
+        assert profile.target_naturalness >= 0.90
+
     def test_restoration_authenticity_never_below_0_70(self):
         """Restaurierungsmodus: Authentizität niemals unter 0.70."""
         setter = AutoMusicalGoalSetter(mode=ProcessingMode.RESTORATION)
@@ -220,6 +235,28 @@ class TestAutoMusicalGoalSetter:
                 assert (
                     -23.0 <= profile.target_lufs <= -8.0
                 ), f"LUFS {profile.target_lufs} außerhalb [-23, -8] für {material.value}/{mode.value}"
+
+    def test_all_material_types_have_explicit_policy(self):
+        """Jede MaterialType-Ausprägung muss explizite Vorgaben haben."""
+        all_materials = set(MaterialType)
+        assert set(_MATERIAL_ADJUSTMENTS.keys()) == all_materials
+        assert set(_MATERIAL_PQS_TARGETS.keys()) == all_materials
+
+    def test_all_material_types_generate_valid_profiles(self):
+        """Für alle Tonträgerarten wird ein valides Zielprofil erzeugt."""
+        setter = AutoMusicalGoalSetter(mode=ProcessingMode.RESTORATION)
+        quality_est = _make_quality_estimate(score=55.0)
+
+        for material in MaterialType:
+            profile = setter.compute_goals(
+                _make_defect_result(material=material),
+                quality_est,
+            )
+            assert isinstance(profile, MusicalGoalProfile)
+            assert profile.material == material.value
+            assert "PQS-Ziel(material)≥" in profile.rationale
+            assert 0.0 <= profile.denoise_strength <= 1.0
+            assert 0.0 <= profile.declip_strength <= 1.0
 
 
 # ===========================================================================

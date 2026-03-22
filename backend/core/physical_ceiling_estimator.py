@@ -8,10 +8,10 @@ aus Quell-SNR und Bandbreite.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -25,13 +25,13 @@ HEADROOM_THRESHOLD: float = 0.03  # < 3 % -> keine weiteren Iterationen
 class PhysicalCeilingResult:
     """Spec §2.33: Informationstheoretische Qualitaets-Obergrenzen."""
 
-    ceiling: Dict[str, float]
+    ceiling: dict[str, float]
     snr_profile_db: np.ndarray
     effective_bandwidth_hz: float
-    headroom_per_goal: Dict[str, float]
+    headroom_per_goal: dict[str, float]
     further_optimization_worthwhile: bool
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         """Serialisierung fuer Logging und API-Antworten (§2.22, §3.6)."""
         return {
             "ceiling": dict(self.ceiling),
@@ -86,7 +86,7 @@ class PhysicalCeilingEstimator:
         self,
         audio: np.ndarray,
         sr: int,
-        current_goal_scores: Dict[str, float],
+        current_goal_scores: dict[str, float],
         material: str = "unknown",
     ) -> PhysicalCeilingResult:
         """Schaetzt physikalische Qualitaetsdecke.
@@ -101,10 +101,7 @@ class PhysicalCeilingEstimator:
             PhysicalCeilingResult
         """
         audio = np.nan_to_num(np.asarray(audio, dtype=np.float32))
-        if audio.ndim == 2:
-            mono = audio.mean(axis=0)
-        else:
-            mono = audio.copy()
+        mono = audio.mean(axis=0) if audio.ndim == 2 else audio.copy()
 
         # 1. SNR pro Bark-Band
         snr_profile = self._compute_bark_snr(mono, sr)
@@ -122,7 +119,7 @@ class PhysicalCeilingEstimator:
                 ceiling[g] = 0.98
 
         # 4. Headroom + Flag
-        headroom: Dict[str, float] = {}
+        headroom: dict[str, float] = {}
         for g, ceil_v in ceiling.items():
             cur = current_goal_scores.get(g, 0.0)
             if not math.isfinite(cur):
@@ -183,7 +180,7 @@ class PhysicalCeilingEstimator:
         mono: np.ndarray,
         sr: int,
         material: str,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Musical-Goal-Ceiling-Mapping (Spec §2.33)."""
 
         def sigmoid(x: float) -> float:
@@ -247,7 +244,7 @@ class PhysicalCeilingEstimator:
 # Singleton + Convenience
 # ---------------------------------------------------------------------------
 
-_instance: Optional[PhysicalCeilingEstimator] = None
+_instance: PhysicalCeilingEstimator | None = None
 _lock = threading.Lock()
 
 
@@ -264,7 +261,7 @@ def get_physical_ceiling_estimator() -> PhysicalCeilingEstimator:
 def estimate_physical_ceiling(
     audio: np.ndarray,
     sr: int,
-    current_goal_scores: Dict[str, float],
+    current_goal_scores: dict[str, float],
     material: str = "unknown",
 ) -> PhysicalCeilingResult:
     """Convenience-Wrapper."""
@@ -272,9 +269,9 @@ def estimate_physical_ceiling(
 
 
 __all__ = [
+    "HEADROOM_THRESHOLD",
     "PhysicalCeilingEstimator",
     "PhysicalCeilingResult",
-    "get_physical_ceiling_estimator",
     "estimate_physical_ceiling",
-    "HEADROOM_THRESHOLD",
+    "get_physical_ceiling_estimator",
 ]

@@ -7,10 +7,10 @@ Speichert und verwaltet Restaurierungs-Presets lokal in
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
 import json
 import pathlib
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 
@@ -29,7 +29,7 @@ class Preset:
     name: str
     description: str
     category: PresetCategory
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
 
 
 class PresetManager:
@@ -39,7 +39,7 @@ class PresetManager:
     Werksseitige Presets sind schreibgeschützt.
     """
 
-    _FACTORY_PRESETS: List[Preset] = [
+    _FACTORY_PRESETS: list[Preset] = [
         Preset(
             "Standard-Restaurierung",
             "Konservative Restaurierung für alle Materialien — erhält den Original-Klang.",
@@ -78,15 +78,15 @@ class PresetManager:
         ),
     ]
 
-    def __init__(self, presets_dir: Optional[pathlib.Path] = None) -> None:
+    def __init__(self, presets_dir: pathlib.Path | None = None) -> None:
         self._dir = presets_dir or (pathlib.Path.home() / ".aurik" / "presets")
         self._dir.mkdir(parents=True, exist_ok=True)
 
     # ── Lesen ────────────────────────────────────────────────────────────────
 
-    def get_all_presets(self) -> List[Preset]:
+    def get_all_presets(self) -> list[Preset]:
         """Gibt alle Presets zurück (werksseitig + Nutzer-eigene)."""
-        presets: List[Preset] = list(self._FACTORY_PRESETS)
+        presets: list[Preset] = list(self._FACTORY_PRESETS)
         for p in sorted(self._dir.glob("*.json")):
             try:
                 data = json.loads(p.read_text(encoding="utf-8"))
@@ -107,7 +107,7 @@ class PresetManager:
                 pass
         return presets
 
-    def get_preset(self, name: str) -> Optional[Preset]:
+    def get_preset(self, name: str) -> Preset | None:
         """Sucht ein Preset nach exaktem Namen."""
         for p in self.get_all_presets():
             if p.name == name:
@@ -153,7 +153,7 @@ class PresetManager:
 
     # ── Import / Export ───────────────────────────────────────────────────────
 
-    def import_preset(self, path: pathlib.Path) -> Optional[Preset]:
+    def import_preset(self, path: pathlib.Path) -> Preset | None:
         """Importiert ein Preset aus einer JSON-Datei."""
         try:
             data = json.loads(path.read_text(encoding="utf-8"))

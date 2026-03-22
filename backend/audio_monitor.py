@@ -18,11 +18,11 @@ Version: 8.0
 Datum: 7. Februar 2026
 """
 
-from dataclasses import asdict, dataclass, field
 import json
 import logging
-from pathlib import Path
 import time
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
 
 import librosa
@@ -134,7 +134,7 @@ def compute_bark_spectrum(audio: np.ndarray, sr: int, n_bands: int = 24) -> list
         List[float]: Energie pro Bark-Band (dB)
     """
     # STFT berechnen
-    n_fft = 2048
+    n_fft = min(2048, max(32, 1 << int(np.floor(np.log2(max(1, len(audio)))))))
     hop_length = 512
     stft = np.abs(librosa.stft(audio, n_fft=n_fft, hop_length=hop_length))
     power = stft**2
@@ -180,7 +180,7 @@ def compute_f0_stats(audio: np.ndarray, sr: int, fmin: float = 50.0, fmax: float
     """
     try:
         # PYIN: Probabilistic YIN for pitch tracking
-        f0, voiced_flag, voiced_probs = librosa.pyin(audio, sr=sr, fmin=fmin, fmax=fmax, frame_length=2048)
+        f0, voiced_flag, _voiced_probs = librosa.pyin(audio, sr=sr, fmin=fmin, fmax=fmax, frame_length=2048)
 
         # Nur voiced frames berücksichtigen
         voiced_f0 = f0[voiced_flag]
@@ -430,7 +430,7 @@ class PermanentAudioMonitor:
 
         return final_score - baseline_score
 
-    def export_audit_report(self, output_dir: str = "./audits", formats: list[str] = None):
+    def export_audit_report(self, output_dir: str = "./audits", formats: list[str] | None = None):
         """
         Exportiert Audit-Report in verschiedenen Formaten.
 

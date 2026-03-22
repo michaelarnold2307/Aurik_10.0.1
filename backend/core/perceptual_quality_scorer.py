@@ -11,9 +11,9 @@ Referenz:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -26,7 +26,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Singleton-Pattern (§3.2)
-_instance: Optional["PerceptualQualityScorer"] = None
+_instance: PerceptualQualityScorer | None = None
 _lock = threading.Lock()
 
 

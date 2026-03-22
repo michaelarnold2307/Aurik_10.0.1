@@ -10,18 +10,19 @@
 | Modul | Datei | Zweck |
 |---|---|---|
 | `PerceptualEmbedder` | `backend/core/perceptual_embedder.py` | 256-dim L2-normalisierter Einbettungsraum |
-| `CausalDefectReasoner` | `backend/core/causal_defect_reasoner.py` | Bayesianisch: 27 DefectTypes → 14 Kausal-Ursachen |
+| `CausalDefectReasoner` | `backend/core/causal_defect_reasoner.py` | Bayesianisch: 28 DefectTypes → 14 Kausal-Ursachen |
 | `GPParameterOptimizer` | `backend/core/gp_parameter_optimizer.py` | RBF-GP + UCB + MOO Pareto-Front |
 | `PerceptualQualityScorer` | `backend/core/perceptual_quality_scorer.py` | Gammatone-NSIM+MCD+LUFS+MOS |
 | `MusicalGoalsChecker` | `backend/core/musical_goals/musical_goals_metrics.py` | 14 Qualitätsziele |
-| `MediumClassifier` | `backend/core/medium_classifier.py` | 17 Materialtypen (CLAP-ML + DSP) |
-| `DefectScanner` | `backend/core/defect_scanner.py` | 27 DefectType-Werte |
+| `MediumClassifier` | `backend/core/medium_classifier.py` | 15 Materialtypen + 2 Multichannel (CLAP-ML + DSP) |
+| `DefectScanner` | `backend/core/defect_scanner.py` | 28 DefectType-Werte |
 | `VocalAIEnhancement` | `backend/core/vocal_ai_enhancement.py` | VoiceGender (MALE/FEMALE/CHILD/ANDROGYNOUS) |
 | `FeedbackChain` | `backend/core/feedback_chain.py` | Iterative PQS-Qualitätsschleife |
 | `ExcellenceOptimizer` | `backend/core/excellence_optimizer.py` | GP-Params + MOO |
 | `UnifiedRestorerV3` | `backend/core/unified_restorer_v3.py` | Defect-First-Pipeline-Orchestrator |
 | `TransientDecoupledProcessing` | `backend/core/transient_decoupled_processor.py` | HPSS-Trennung allererster Schritt |
 | `HarmonicPreservationGuard` | `backend/core/harmonic_preservation_guard.py` | G_floor=0.85 an Harmonik-Bins |
+| `MusikalischerGlobalplanDienst` | `backend/core/musikalischer_globalplan.py` | Cross-Phase-Globalplan: 13 Ära-Profile × Genre-Modifikatoren, 17 Phase-Adjustments |
 | `PerPhaseMusicalGoalsGate` | `backend/core/per_phase_musical_goals_gate.py` | Rollback pro Phase |
 | `EraClassifier` | `plugins/era_classifier_plugin.py` | Ära 1890–2025 |
 | `GermanSchlagerClassifier` | `backend/core/genre_classifier.py` | 6-Schicht Zero-Shot |
@@ -55,7 +56,7 @@ sim = embedding.cosine_similarity(other)  # ∈ [-1, 1]
 ## §2.4 CausalDefectReasoner
 
 ```python
-# 14 Kausal-Ursachen (≠ 27 DefectTypes des DefectScanners):
+# 14 Kausal-Ursachen (≠ 28 DefectTypes des DefectScanners):
 #   tape_dropout, tape_hiss, vinyl_crackle, vinyl_warp,
 #   electrical_hum, head_misalignment, dc_offset, digital_clip,
 #   soft_saturation, head_wear, print_through,

@@ -14,10 +14,10 @@ Aurik 9.10.46 — Kanonische Implementierung (core/phases/phase_interface.py)
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass, field
-from enum import Enum, auto
 import logging
 import time
+from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -52,17 +52,17 @@ class PhaseMetadata:
     category: PhaseCategory  # Funktionale Kategorie
     priority: int  # 1 (niedrig) – 10 (hoch)
     version: str = "1.0.0"
-    dependencies: List[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
     estimated_time_factor: float = 0.05  # Anteil Verarbeitungszeit (0–1)
     memory_requirement_mb: int = 64
     is_cpu_intensive: bool = True
     is_io_intensive: bool = False
     quality_impact: float = 0.85  # Erwarteter Qualitätsbeitrag (0–1)
     description: str = ""
-    defect_types: List[str] = field(default_factory=list)
-    musical_goals: List[str] = field(default_factory=list)
+    defect_types: list[str] = field(default_factory=list)
+    musical_goals: list[str] = field(default_factory=list)
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "phase_id": self.phase_id,
             "name": self.name,
@@ -87,13 +87,13 @@ class PhaseResult:
     """Ergebnis einer Phase-Verarbeitung — immer NaN/Inf-frei und geclippt."""
 
     audio: np.ndarray  # Verarbeitetes Audio (float32, [-1,1])
-    modifications: Dict[str, Any] = field(default_factory=dict)
-    warnings: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    modifications: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     # metrics ist ein echtes Feld als Alias fuer metadata-Inhalte.
     # Wird es beim Konstruktor-Aufruf uebergeben, landet der Inhalt
     # in metadata (via __post_init__).
-    metrics: Dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
     execution_time_seconds: float = 0.0
     ml_used: bool = False
     quality_estimate: float = 1.0  # 0–1
@@ -114,7 +114,7 @@ class PhaseResult:
         elif self.metadata and not self.metrics:
             self.metrics = self.metadata
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "modifications": self.modifications,
             "warnings": self.warnings,
@@ -130,9 +130,9 @@ class PhaseResult:
 # ---------------------------------------------------------------------------
 def create_phase_result(
     audio: np.ndarray,
-    modifications: Optional[Dict[str, Any]] = None,
-    warnings: Optional[List[str]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    modifications: dict[str, Any] | None = None,
+    warnings: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
     execution_time_seconds: float = 0.0,
     ml_used: bool = False,
     quality_estimate: float = 1.0,
@@ -183,7 +183,7 @@ class PhaseInterface(abc.ABC):
         - Kein direktes Netzwerk-I/O
     """
 
-    def __init__(self, sample_rate: int = 48000, **kwargs) -> None:  # noqa: ARG002
+    def __init__(self, sample_rate: int = 48000, **kwargs) -> None:
         """Basisinitialisierung für alle Phasen.
 
         Args:
@@ -193,7 +193,7 @@ class PhaseInterface(abc.ABC):
                          aber akzeptiert, damit Subklassen **kwargs weiterreichen).
         """
         self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
-        self._name_override: Optional[str] = None
+        self._name_override: str | None = None
         # sample_rate für Subklassen verfügbar machen (ohne Pflicht es zu nutzen)
         self._sample_rate: int = sample_rate
 
@@ -212,7 +212,7 @@ class PhaseInterface(abc.ABC):
         self._sample_rate = value
 
     @property
-    def metadata(self) -> "PhaseMetadata":
+    def metadata(self) -> PhaseMetadata:
         """Gibt Phasen-Metadaten als Attribut zurück (delegiert an get_metadata())."""
         return self.get_metadata()
 
@@ -258,7 +258,7 @@ class PhaseInterface(abc.ABC):
         t0 = time.monotonic()
         try:
             result = self.process(audio, sample_rate, material_type, **kwargs)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._logger.warning(
                 "Phase %s fehlgeschlagen (%s) — Pass-Through",
                 self.get_metadata().phase_id,
@@ -289,7 +289,7 @@ class PhaseInterface(abc.ABC):
         """Erlaubt Subklassen self.name = '...' im __init__ zu setzen."""
         self._name_override = value
 
-    def validate_input(self, audio: np.ndarray) -> tuple[bool, Optional[str]]:
+    def validate_input(self, audio: np.ndarray) -> tuple[bool, str | None]:
         """Validiert Eingangs-Audio auf Korrektheits-Invarianten.
 
         Returns:

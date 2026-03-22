@@ -34,11 +34,11 @@ Date: 16. Februar 2026
 """
 
 import csv
-from dataclasses import dataclass
-from enum import Enum
 import logging
 import os
 import tempfile
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -131,14 +131,14 @@ class PolyphonicSpeedCurveEstimator:
 
     def _init_basicpitch(self) -> None:
         try:
-            from plugins.basicpitch_plugin import get_basicpitch_plugin  # noqa: PLC0415
+            from plugins.basicpitch_plugin import get_basicpitch_plugin
 
             self._bp = get_basicpitch_plugin()
             logger.info(
                 "PolyphonicSpeedCurveEstimator: BasicPitch geladen (model_loaded=%s)",
                 getattr(self._bp, "_model_loaded", False),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("BasicPitch nicht verfügbar (%s) — pYIN-Fallback aktiv", exc)
             self._bp = None
 
@@ -159,7 +159,7 @@ class PolyphonicSpeedCurveEstimator:
             return self._pyin_fallback(audio, sr)
         try:
             return self._estimate_polyphonic(audio, sr)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "PolyphonicSpeedCurveEstimator._estimate_polyphonic fehlgeschlagen (%s) — pYIN-Fallback",
                 exc,
@@ -168,9 +168,9 @@ class PolyphonicSpeedCurveEstimator:
 
     def _estimate_polyphonic(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """Core polyphonic consensus estimation."""
-        import math as _math  # noqa: PLC0415
+        import math as _math
 
-        from scipy.signal import savgol_filter  # noqa: PLC0415
+        from scipy.signal import savgol_filter
 
         mono = np.mean(audio, axis=1).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
         result = self._bp.analyze(mono, sr, max_polyphony=6)
@@ -285,7 +285,7 @@ class PolyphonicSpeedCurveEstimator:
 
     def _pyin_fallback(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """pYIN DSP fallback via WowFlutterFix._estimate_pitch_pyin."""
-        from backend.core.phases.phase_12_wow_flutter_fix import WowFlutterFix  # noqa: PLC0415
+        from backend.core.phases.phase_12_wow_flutter_fix import WowFlutterFix
 
         mono = np.mean(audio, axis=1).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
         return WowFlutterFix()._estimate_pitch_pyin(mono, sr)
@@ -320,17 +320,17 @@ class HybridWowFlutter:
     def _init_crepe(self) -> None:
         """Initialize FCPE/CREPE pitch plugin (lazy-loading, FCPE preferred)."""
         try:
-            from plugins.fcpe_plugin import get_fcpe_plugin  # noqa: PLC0415
+            from plugins.fcpe_plugin import get_fcpe_plugin
             self.crepe = get_fcpe_plugin()
             logger.info("FCPE pitch plugin loaded for wow/flutter detection (model=%s)", self.crepe.model_used)
             return
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.debug("FCPE-Plugin nicht verfügbar (%s) — CREPE-Fallback", e)
         try:
-            from plugins.crepe_plugin import get_crepe_plugin  # noqa: PLC0415
+            from plugins.crepe_plugin import get_crepe_plugin
             self.crepe = get_crepe_plugin()
             logger.info("CREPE plugin geladen für wow/flutter-Detektion")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Kein Pitch-ML-Plugin verfügbar (%s) — pYIN-Fallback", e)
             self.crepe = None
 
@@ -475,7 +475,7 @@ class HybridWowFlutter:
             f0 = np.nan_to_num(result.f0_hz.astype(np.float32))
             conf = np.clip(np.nan_to_num(result.voiced_prob.astype(np.float32)), 0.0, 1.0)
             return f0, conf
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("FCPE/CREPE Pitch-Inferenz fehlgeschlagen (%s) — pYIN Fallback", exc)
             return self._apply_pyin(audio, sample_rate)
 

@@ -77,9 +77,9 @@ import time
 from typing import Any
 
 import numpy as np
+import scipy.signal as signal
 from scipy.fft import rfft, rfftfreq
 from scipy.interpolate import CubicSpline
-import scipy.signal as signal
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 
@@ -413,7 +413,7 @@ class DropoutRepairPhase(PhaseInterface):
         # STFT
         nperseg = 2048
         noverlap = nperseg // 2
-        f, t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
 
         # Total spectral energy per frame
         energy_per_frame = np.sum(np.abs(Zxx) ** 2, axis=0)
@@ -597,7 +597,7 @@ class DropoutRepairPhase(PhaseInterface):
             sf.write(input_path, audio, self.sample_rate)
 
             # Process with AudioSR
-            returncode, stdout, stderr = plugin.process(
+            returncode, _stdout, _stderr = plugin.process(
                 input_path,
                 output_path,
                 quality="high",  # High quality for dropout repair
@@ -606,7 +606,7 @@ class DropoutRepairPhase(PhaseInterface):
 
             if returncode == 0 and os.path.exists(output_path):
                 # Read repaired audio
-                repaired, sr_read = sf.read(output_path)
+                repaired, _sr_read = sf.read(output_path)
 
                 # Update audio in-place
                 if len(repaired) == len(audio):
@@ -720,7 +720,7 @@ class DropoutRepairPhase(PhaseInterface):
 
             # Top-K Sinusoide aus Betragsspektrum (über Mittelwert selektiert)
             combined_mag = 0.5 * mag_bef + 0.5 * mag_aft
-            peak_idx = np.argsort(combined_mag)[-TOP_K:]  # noqa: F841
+            np.argsort(combined_mag)[-TOP_K:]
 
             # Phasen-Propagation: phi[n+1] = phi[n] + 2π*f*hop/sr (PGHI-Prinzip)
             # Anzahl Output-Frames

@@ -30,11 +30,11 @@ Autor: AI Team
 Datum: 8. Februar 2026
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -235,7 +235,7 @@ class AutoReprocessingEngine:
             passed, scores, violations = quality_validator(original, reprocessed, sr)
 
             # Calculate improvements
-            improvements = {goal: scores[goal] - baseline_scores.get(goal, 0.0) for goal in scores.keys()}
+            improvements = {goal: scores[goal] - baseline_scores.get(goal, 0.0) for goal in scores}
 
             # Record attempt
             attempt = ReprocessingAttempt(
@@ -280,7 +280,7 @@ class AutoReprocessingEngine:
         # All attempts exhausted
         if len(best_scores) > 0:
             # We have some improvements, return best result
-            avg_improvement = np.mean(list(best_scores[g] - baseline_scores.get(g, 0.0) for g in best_scores.keys()))
+            avg_improvement = np.mean([best_scores[g] - baseline_scores.get(g, 0.0) for g in best_scores])
 
             logger.warning(
                 f"Reprocessing did not pass all gates but achieved "
@@ -296,7 +296,7 @@ class AutoReprocessingEngine:
                 total_attempts=len(attempts),
                 strategy_used=best_strategy,
                 final_decision="partial_improvement",
-                improvements_achieved={g: best_scores[g] - baseline_scores.get(g, 0.0) for g in best_scores.keys()},
+                improvements_achieved={g: best_scores[g] - baseline_scores.get(g, 0.0) for g in best_scores},
             )
         else:
             # Complete failure, rollback to original
@@ -506,7 +506,7 @@ def create_reprocessing_report(result: ReprocessingResult, output_path: Path) ->
                 "parameters": a.parameters,
                 "quality_scores": a.quality_scores,
                 "improvements": a.improvements,
-                "violations": {k: v for k, v in a.violations.items()},
+                "violations": dict(a.violations.items()),
                 "success": a.success,
                 "notes": a.notes,
                 "timestamp": a.timestamp,

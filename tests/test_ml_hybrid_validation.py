@@ -25,7 +25,7 @@ from backend.core.phases.phase_12_wow_flutter_fix import WowFlutterFix
 from backend.core.phases.phase_20_reverb_reduction import ReverbReduction
 
 
-def create_test_audio(duration=3.0, sr=44100):
+def create_test_audio(duration=3.0, sr=48000):
     """Create test audio with synthetic defects"""
     t = np.linspace(0, duration, int(duration * sr))
 

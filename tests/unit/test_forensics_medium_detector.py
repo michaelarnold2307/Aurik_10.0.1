@@ -275,6 +275,46 @@ class TestMediumDetector:
         for key in expected_keys:
             assert key in d, f"Key {key} fehlt in as_dict()"
 
+    def test_25_benign_codec_guard_prevents_false_tape_mp3_chain(self, monkeypatch):
+        """Clean codec profile must not be forced into tape→mp3_low chain."""
+        detector = MediumDetector()
+        fp = SpectralFingerprint(
+            rolloff_95_hz=3200.0,
+            wow_flutter_index=180.0,
+            hf_energy_above_16k=0.0001,
+            noise_floor_db=-30.0,
+            effective_bandwidth_hz=13000.0,
+        )
+
+        monkeypatch.setattr(detector, "_compute_fingerprint", lambda _audio, _sr: fp)
+        monkeypatch.setattr(detector, "_is_benign_codec_source", lambda _audio, _sr, _fp: True)
+
+        audio = np.random.randn(48000).astype(np.float32) * 0.1
+        result = detector.detect(audio, sr=48000)
+
+        assert result.transfer_chain == ["mp3_low"]
+        assert result.primary_material == "mp3_low"
+
+    def test_26_tape_mp3_chain_requires_analog_evidence(self, monkeypatch):
+        """Tape→mp3_low chain must remain possible for genuine analog evidence."""
+        detector = MediumDetector()
+        fp = SpectralFingerprint(
+            rolloff_95_hz=7000.0,
+            wow_flutter_index=2.0,
+            hf_energy_above_16k=0.0001,
+            noise_floor_db=-32.0,
+            effective_bandwidth_hz=9000.0,
+        )
+
+        monkeypatch.setattr(detector, "_compute_fingerprint", lambda _audio, _sr: fp)
+        monkeypatch.setattr(detector, "_is_benign_codec_source", lambda _audio, _sr, _fp: False)
+
+        audio = np.random.randn(48000).astype(np.float32) * 0.1
+        result = detector.detect(audio, sr=48000)
+
+        assert result.transfer_chain == ["tape", "mp3_low"]
+        assert result.primary_material == "tape"
+
     def test_25_stereo_shape_2_N_conversion(self):
         """Stereo-Array shape (2, N) → korrekte Mono-Konversion."""
         np.random.seed(42)

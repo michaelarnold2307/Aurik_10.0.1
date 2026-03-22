@@ -21,10 +21,10 @@ UncertaintyQuantifier = PipelineUncertaintyEstimator
 get_uncertainty_quantifier = get_pipeline_uncertainty_estimator
 
 __all__ = [
-    "UncertaintyQuantifier",
-    "UncertaintyThresholds",
     "PipelineConfidence",
     "PipelineUncertaintyEstimator",
-    "get_uncertainty_quantifier",
+    "UncertaintyQuantifier",
+    "UncertaintyThresholds",
     "get_pipeline_uncertainty_estimator",
+    "get_uncertainty_quantifier",
 ]

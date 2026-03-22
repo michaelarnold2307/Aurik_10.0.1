@@ -13,10 +13,11 @@ Version: 2.0 (Magic Button Edition)
 Date: 2026-02-13
 """
 
+import logging
 from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Any
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -198,9 +199,8 @@ class ProcessingConfig:
             raise ValueError(f"compression_ratio must be in [1.0, 10.0], " f"got {self.compression_ratio}")
 
         # Validate LUFS range
-        if self.target_lufs is not None:
-            if not -30.0 <= self.target_lufs <= -5.0:
-                raise ValueError(f"target_lufs must be in [-30.0, -5.0], " f"got {self.target_lufs}")
+        if self.target_lufs is not None and not -30.0 <= self.target_lufs <= -5.0:
+            raise ValueError(f"target_lufs must be in [-30.0, -5.0], " f"got {self.target_lufs}")
 
         # Validate high freq boost
         if not -6.0 <= self.high_freq_boost_db <= 6.0:

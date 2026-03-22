@@ -475,7 +475,7 @@ class E2EOptimizationFramework:
 
         # Average losses
         avg_losses = {}
-        for key in epoch_losses[0].keys():
+        for key in epoch_losses[0]:
             avg_losses[key] = np.mean([l[key] for l in epoch_losses])
 
         return avg_losses
@@ -503,13 +503,13 @@ class E2EOptimizationFramework:
                 output_audio = self.forward_pass(input_audio)
 
                 # Compute loss
-                loss, loss_details = self.perceptual_loss(output_audio, target_audio, return_details=True)
+                _loss, loss_details = self.perceptual_loss(output_audio, target_audio, return_details=True)
 
                 val_losses.append(loss_details)
 
         # Average losses
         avg_losses = {}
-        for key in val_losses[0].keys():
+        for key in val_losses[0]:
             avg_losses[key] = np.mean([l[key] for l in val_losses])
 
         return avg_losses

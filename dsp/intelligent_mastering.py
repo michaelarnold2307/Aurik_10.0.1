@@ -119,10 +119,7 @@ class LUFSNormalizer:
             True peak in dBTP
         """
         # Upsample by 4x (simple linear interpolation)
-        if audio.ndim == 2:
-            upsampled = np.repeat(audio, 4, axis=0)
-        else:
-            upsampled = np.repeat(audio, 4, axis=0)
+        upsampled = np.repeat(audio, 4, axis=0) if audio.ndim == 2 else np.repeat(audio, 4, axis=0)
 
         # Find max absolute value
         true_peak = np.max(np.abs(upsampled))
@@ -212,10 +209,7 @@ class IntelligentEQ:
     def _analyze_spectrum(self, audio: np.ndarray, sr: int) -> dict:
         """Analyze spectral characteristics"""
         # FFT
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         fft = np.fft.rfft(audio_mono)
         freqs = np.fft.rfftfreq(len(audio_mono), 1 / sr)

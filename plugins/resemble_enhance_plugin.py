@@ -34,7 +34,8 @@ class ResembleEnhancePlugin:
             return
         # ML-Budget-Guard: Resemble-Enhance model.onnx ~722 MB
         try:
-            from backend.core.ml_memory_budget import release as _rel, try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _rel
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
             if not _try_alloc("ResembleEnhance", size_gb=0.72):
                 logger.warning("Resemble-Enhance: ML-Budget erschöpft — DSP-Fallback.")
@@ -49,7 +50,7 @@ class ResembleEnhancePlugin:
             self._session = ort.InferenceSession(path, sess_options=opts, providers=["CPUExecutionProvider"])
             logger.info("Resemble-Enhance ONNX geladen: %s", path)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm("ResembleEnhance", size_gb=0.72, unload_fn=lambda s=self: setattr(s, "_session", None))
             except Exception:
@@ -57,7 +58,7 @@ class ResembleEnhancePlugin:
         except Exception as exc:
             logger.warning("Resemble-Enhance Ladefehler: %s — DSP-Fallback.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _release
 
                 _release("ResembleEnhance")
             except Exception:
@@ -88,16 +89,10 @@ class ResembleEnhancePlugin:
 
         try:
             audio, sr = sf.read(input_path)
-            if audio.ndim == 2:
-                audio_mono = audio.mean(axis=1)
-            else:
-                audio_mono = audio
+            audio_mono = audio.mean(axis=1) if audio.ndim == 2 else audio
             result = self.enhance(audio_mono.astype(np.float32), sr)
             # Ergebnis zurück in Stereo konvertieren wenn nötig
-            if audio.ndim == 2:
-                result_out = np.stack([result, result], axis=1)
-            else:
-                result_out = result
+            result_out = np.stack([result, result], axis=1) if audio.ndim == 2 else result
             sf.write(output_path, result_out, sr)
             return (0, "OK", "")
         except Exception as e:
@@ -118,6 +113,9 @@ class ResembleEnhancePlugin:
         try:
             outs = self._session.run(None, {"mag": inp(mag), "cos": inp(cos), "sin": inp(sin_v)})
             om, oc, os_ = outs[0][0], outs[1][0], outs[2][0]
+            om = np.nan_to_num(om, nan=0.0, posinf=0.0, neginf=0.0)
+            oc = np.nan_to_num(oc, nan=0.0, posinf=0.0, neginf=0.0)
+            os_ = np.nan_to_num(os_, nan=0.0, posinf=0.0, neginf=0.0)
             out_spec = om * (oc + 1j * os_)
         except Exception as exc:
             logger.debug("Resemble-Enhance run Fehler: %s", exc)

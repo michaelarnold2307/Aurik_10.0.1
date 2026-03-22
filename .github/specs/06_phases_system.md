@@ -133,6 +133,9 @@ CAUSE_TO_PHASES = {
                                   "phase_50_spectral_repair"],
     "bias_error":                ["phase_04_eq_correction", "phase_03_denoise",
                                   "phase_06_frequency_restoration", "phase_29_tape_hiss_reduction"],
+    # Sibilanten (§6.3 v9.10.57):
+    "sibilance":                 ["phase_19_de_esser", "phase_43_ml_deesser",
+                                  "phase_42_vocal_enhancement"],
 }
 # PFLICHT: Jede neue Ursache → Eintrag hier UND in allen Material-Prior-Tabellen des DefectScanners.
 ```

@@ -5,11 +5,11 @@ Handles graceful degradation when ONNX inference fails or is unavailable.
 Ensures robust operation even when ONNX models have issues.
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)

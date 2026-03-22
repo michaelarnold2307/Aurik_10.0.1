@@ -8,9 +8,9 @@ SR-Invariante: assert sr == 48000 in compute_threshold().
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -233,7 +233,7 @@ class PsychoacousticMaskingModel:
     def apply_adaptive_gain(
         self,
         gain_mask: np.ndarray,
-        masking_result: "MaskingResult | np.ndarray",
+        masking_result: MaskingResult | np.ndarray,
     ) -> np.ndarray:
         """Skaliert gain_mask mit dem Masking-Modifier.
 
@@ -294,14 +294,14 @@ def compute_masking_threshold(audio: np.ndarray, sr: int) -> MaskingResult:
 
 
 __all__ = [
-    "PsychoacousticMaskingModel",
-    "MaskingResult",
-    "get_masking_model",
-    "get_psychoacoustic_masking_model",
-    "compute_masking_threshold",
-    "SILENCE_DB",
     "GAIN_FLOOR",
     "N_BARK",
+    "SILENCE_DB",
     "SILENCE_GAIN_MAX",
     "_MASKING_SLOPE_DB",
+    "MaskingResult",
+    "PsychoacousticMaskingModel",
+    "compute_masking_threshold",
+    "get_masking_model",
+    "get_psychoacoustic_masking_model",
 ]

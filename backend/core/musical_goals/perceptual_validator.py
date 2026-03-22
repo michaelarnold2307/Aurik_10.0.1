@@ -11,10 +11,11 @@ Impact: +1.5 Punkte - Perceptual Validation Guarantee
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime
 import json
 import logging
+import os
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -22,7 +23,7 @@ import numpy as np
 
 try:
     import librosa
-except ImportError:  # noqa: BLE001
+except ImportError:
     librosa = None  # type: ignore[assignment]
 
 try:
@@ -41,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 # Lokales AST-Modell-Verzeichnis — §13.3 bundled:true, kein HF-Download
 _AST_LOCAL_DIR: Path = Path(__file__).resolve().parent.parent.parent.parent / "models" / "ast_perceptual_base"
+_AST_ONNX_PATH: Path = Path(__file__).resolve().parent.parent.parent.parent / "models" / "ast" / "ast_model.onnx"
 
 
 @dataclass
@@ -113,6 +115,16 @@ class PerceptualValidator:
     6. A/B Test Samples sammeln für Retraining
     """
 
+    _GOAL_MAPPINGS: dict[str, list[int]] = {
+        "bass-kraft": [0, 10, 137],
+        "brillanz": [138, 310, 311],
+        "waerme": [137, 141],
+        "natuerlichkeit": [0, 1, 2],
+        "authentizitaet": [0, 1, 2],
+        "emotionalitaet": [137, 141, 310],
+        "transparenz": [0, 310, 311],
+    }
+
     def __init__(
         self,
         model_name: str = str(_AST_LOCAL_DIR),
@@ -133,14 +145,80 @@ class PerceptualValidator:
         self.ab_test_collection_rate = ab_test_collection_rate
         self.ab_test_storage_path = ab_test_storage_path or Path("data/ab_tests")
         self.ab_test_storage_path.mkdir(parents=True, exist_ok=True)
+        self.onnx_session = None
+        self._onnx_input_name: str | None = None
+        self._onnx_output_name: str | None = None
+        self.feature_extractor = None
+        self.model = None
 
+        # Preferred local model path:
+        # 1) ONNX bundle at models/ast/ast_model.onnx
+        # 2) HF local directory at models/ast_perceptual_base
+        if self._try_load_onnx_model():
+            self.device = None
+        else:
+            self.device = torch.device("cpu") if _TORCH_AVAILABLE and torch is not None else None
+            self._try_load_hf_model(model_name)
+
+        # Statistics
+        self.validation_count = 0
+        self.listening_test_requests = []
+        self.ab_test_samples = []
+
+    def _try_load_onnx_model(self) -> bool:
+        """Try loading bundled AST ONNX model (models/ast/ast_model.onnx)."""
+        if not _AST_ONNX_PATH.is_file():
+            return False
+        try:
+            from backend.core.ml_memory_budget import release, try_allocate
+            from backend.core.plugin_lifecycle_manager import register_plugin
+
+            if not try_allocate("ASTPerceptualONNX", 0.35):
+                logger.warning("AST ONNX wurde wegen ML-Budgetlimit nicht geladen — DSP-Fallback aktiviert")
+                return False
+
+            try:
+                import onnxruntime as ort
+
+                sess_opts = ort.SessionOptions()
+                sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                sess_opts.intra_op_num_threads = max(1, os.cpu_count() or 1)
+                sess_opts.inter_op_num_threads = 1
+                session = ort.InferenceSession(
+                    str(_AST_ONNX_PATH),
+                    sess_options=sess_opts,
+                    providers=["CPUExecutionProvider"],
+                )
+                self.onnx_session = session
+                self._onnx_input_name = session.get_inputs()[0].name
+                self._onnx_output_name = session.get_outputs()[0].name
+
+                def _unload() -> None:
+                    self.onnx_session = None
+                    self._onnx_input_name = None
+                    self._onnx_output_name = None
+                    release("ASTPerceptualONNX")
+
+                register_plugin("ASTPerceptualONNX", 0.35, _unload)
+                logger.info("AST ONNX Modell geladen: %s", _AST_ONNX_PATH)
+                return True
+            except Exception:
+                release("ASTPerceptualONNX")
+                raise
+        except Exception as exc:
+            logger.debug("AST ONNX nicht verfügbar: %s", exc)
+            self.onnx_session = None
+            self._onnx_input_name = None
+            self._onnx_output_name = None
+            return False
+
+    def _try_load_hf_model(self, model_name: str) -> None:
+        """Fallback to local HF directory model if ONNX is not available."""
         # Psychoakustisches Modell laden — §13.3 Invariante: ausschließlich lokal (kein HF-Hub)
         # TRANSFORMERS_OFFLINE + HF_HUB_OFFLINE: blockieren Netzwerkzugriff in _load_hf_model()
         # Thread + 8 s Timeout + shutdown(wait=False): schützt gegen stale file locks
         import concurrent.futures as _cf
         import os as _os
-
-        self.device = torch.device("cpu") if _TORCH_AVAILABLE and torch is not None else None
 
         try:
             if not _TORCH_AVAILABLE or torch is None:
@@ -148,6 +226,13 @@ class PerceptualValidator:
             # Lokales Modell-Verzeichnis prüfen — kein HF-Hub-Download (§13.3)
             if not Path(model_name).is_dir():
                 raise OSError(f"Modell-Verzeichnis {model_name!r} nicht gefunden — DSP-Fallback aktiviert")
+
+            from backend.core.ml_memory_budget import release, try_allocate
+            from backend.core.plugin_lifecycle_manager import register_plugin
+
+            if not try_allocate("ASTPerceptualHF", 0.35):
+                logger.warning("AST HF wurde wegen ML-Budgetlimit nicht geladen — DSP-Fallback aktiviert")
+                return
 
             def _load_hf_model() -> tuple:
                 _prev = _os.environ.get("TRANSFORMERS_OFFLINE", "")
@@ -174,28 +259,38 @@ class PerceptualValidator:
             _fut = _ex.submit(_load_hf_model)
             try:
                 self.feature_extractor, self.model = _fut.result(timeout=8.0)
+
+                def _unload_hf() -> None:
+                    self.feature_extractor = None
+                    self.model = None
+                    release("ASTPerceptualHF")
+
+                register_plugin("ASTPerceptualHF", 0.35, _unload_hf)
                 logger.info("Psychoakustisches Modell geladen: %s (CPU)", model_name)
             except _cf.TimeoutError:
                 logger.warning("Modell-Laden Timeout (8 s) — DSP-Fallback aktiviert")
                 self.feature_extractor = None
                 self.model = None
+                release("ASTPerceptualHF")
             except Exception as _load_err:
                 logger.warning("Modell-Laden Fehler: %s — DSP-Fallback", _load_err)
                 self.feature_extractor = None
                 self.model = None
+                release("ASTPerceptualHF")
             finally:
                 _ex.shutdown(wait=False)  # Hintergrund-Thread nicht blockierend beenden
 
-        except Exception as e:
-            logger.warning("Failed to load psychoacoustic model: %s", e)
-            logger.warning("Perceptual validation will use fallback heuristics")
+        except OSError as e:
+            # Expected: model directory not bundled yet — DSP fallback is the intended path.
+            # Log at DEBUG to avoid noise in startup logs.
+            logger.debug("PerceptualValidator: Modell nicht gefunden, DSP-Fallback aktiv (%s)", e)
             self.feature_extractor = None
             self.model = None
-
-        # Statistics
-        self.validation_count = 0
-        self.listening_test_requests = []
-        self.ab_test_samples = []
+        except Exception as e:
+            logger.warning("Failed to load psychoacoustic model: %s", e)
+            logger.debug("Perceptual validation will use fallback heuristics")
+            self.feature_extractor = None
+            self.model = None
 
     def validate_goal(
         self,
@@ -284,6 +379,15 @@ class PerceptualValidator:
         Returns:
             (psychoacoustic_score, confidence)
         """
+        if self.onnx_session is not None:
+            try:
+                _inp = self._prepare_ast_onnx_input(audio, sr)
+                _res = self.onnx_session.run([self._onnx_output_name], {self._onnx_input_name: _inp})[0]
+                logits = np.asarray(_res, dtype=np.float32)
+                return self._map_onnx_output_to_goal(logits, goal_name)
+            except Exception as e:
+                logger.debug("AST ONNX prediction failed: %s", e)
+
         if self.model is None:
             # Fallback: Heuristic-based scoring
             return self._heuristic_psychoacoustic_score(audio, sr, goal_name, metadata)
@@ -291,10 +395,7 @@ class PerceptualValidator:
         try:
             # Resample to model's expected sample rate (16kHz for AST)
             target_sr = 16000
-            if sr != target_sr:
-                audio_resampled = librosa.resample(audio, orig_sr=sr, target_sr=target_sr)
-            else:
-                audio_resampled = audio
+            audio_resampled = librosa.resample(audio, orig_sr=sr, target_sr=target_sr) if sr != target_sr else audio
 
             # Extract features
             inputs = self.feature_extractor(audio_resampled, sampling_rate=target_sr, return_tensors="pt")
@@ -329,20 +430,8 @@ class PerceptualValidator:
         # Get max probability als confidence
         confidence = float(probs.max())
 
-        # Goal-specific mapping (simplified)
-        # In reality würde jedes Goal eigene classifier heads haben
-        goal_mappings = {
-            "bass-kraft": [0, 10, 137],  # AudioSet classes related to bass
-            "brillanz": [138, 310, 311],  # High frequency content
-            "waerme": [137, 141],  # Warm, mellow sounds
-            "natuerlichkeit": [0, 1, 2],  # Natural sounds
-            "authentizitaet": [0, 1, 2],  # Similar to natuerlichkeit
-            "emotionalitaet": [137, 141, 310],  # Music, emotional content
-            "transparenz": [0, 310, 311],  # Clear, distinct sounds
-        }
-
         # Average probability für relevante classes
-        relevant_classes = goal_mappings.get(goal_name, [0])
+        relevant_classes = self._GOAL_MAPPINGS.get(goal_name, [0])
         relevant_probs = probs[0, relevant_classes]
         psychoacoustic_score = float(relevant_probs.mean())
 
@@ -350,6 +439,58 @@ class PerceptualValidator:
         psychoacoustic_score = np.clip(psychoacoustic_score * 2.0, 0.0, 1.0)
 
         return psychoacoustic_score, confidence
+
+    def _prepare_ast_onnx_input(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        """Build [1, 1024, 128] log-mel tensor for AST ONNX model."""
+        if librosa is None:
+            raise RuntimeError("librosa not available for AST ONNX preprocessing")
+        x = np.asarray(audio, dtype=np.float32)
+        if x.ndim > 1:
+            x = x.mean(axis=-1)
+        x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+        if sr != 16000:
+            x = librosa.resample(x, orig_sr=sr, target_sr=16000)
+
+        mel = librosa.feature.melspectrogram(
+            y=x,
+            sr=16000,
+            n_fft=1024,
+            hop_length=160,
+            win_length=400,
+            n_mels=128,
+            fmin=20,
+            fmax=8000,
+            power=2.0,
+        )
+        mel = librosa.power_to_db(np.maximum(mel, 1e-10), ref=np.max)
+        feat = mel.T  # [frames, 128]
+
+        target_frames = 1024
+        if feat.shape[0] < target_frames:
+            pad = np.zeros((target_frames - feat.shape[0], feat.shape[1]), dtype=np.float32)
+            feat = np.concatenate([feat.astype(np.float32), pad], axis=0)
+        else:
+            feat = feat[:target_frames].astype(np.float32)
+
+        mean = float(np.mean(feat))
+        std = float(np.std(feat) + 1e-6)
+        feat = (feat - mean) / std
+        return feat[np.newaxis, :, :].astype(np.float32)
+
+    def _map_onnx_output_to_goal(self, logits: np.ndarray, goal_name: str) -> tuple[float, float]:
+        """Map AST ONNX logits [1, 527] to (score, confidence)."""
+        if logits.ndim != 2 or logits.shape[0] != 1:
+            raise ValueError(f"Unexpected AST logits shape: {logits.shape}")
+        x = logits[0]
+        x = x - float(np.max(x))
+        ex = np.exp(x)
+        probs = ex / max(float(np.sum(ex)), 1e-12)
+
+        confidence = float(np.max(probs))
+        relevant_classes = self._GOAL_MAPPINGS.get(goal_name, [0])
+        score = float(np.mean(probs[relevant_classes]))
+        score = float(np.clip(score * 2.0, 0.0, 1.0))
+        return score, confidence
 
     def _heuristic_psychoacoustic_score(
         self, audio: np.ndarray, sr: int, goal_name: str, metadata: dict[str, Any]
@@ -430,10 +571,7 @@ class PerceptualValidator:
 
         # Critical goals always require higher scrutiny
         critical_goals = ["natuerlichkeit", "authentizitaet"]
-        if goal_name in critical_goals and confidence < 0.85:
-            return True
-
-        return False
+        return bool(goal_name in critical_goals and confidence < 0.85)
 
     def _create_listening_test_request(
         self,
@@ -553,7 +691,7 @@ class PerceptualValidator:
 
     def submit_listening_test_result(
         self, session_id: str, human_scores: dict[str, float], comments: str | None = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Submit menschliche listening test results.
 

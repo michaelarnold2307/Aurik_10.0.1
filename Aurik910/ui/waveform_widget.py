@@ -3,12 +3,12 @@ Waveform Display Widget using Matplotlib
 Real-time audio waveform visualization
 """
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
-from matplotlib.figure import Figure
 import numpy as np
 import soundfile as sf
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.figure import Figure
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from ..i18n import t
 
@@ -134,10 +134,7 @@ class WaveformCanvas(FigureCanvasQTAgg):
         self.axes.clear()
 
         # Convert to mono if stereo
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Create spectrogram
         self.axes.specgram(audio_mono, Fs=sr, cmap="viridis", scale="dB", mode="magnitude")

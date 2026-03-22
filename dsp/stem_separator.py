@@ -113,7 +113,7 @@ class SpectralStemSeparator:
         nperseg = min(2048, max(512, signal_length // 8))
         noverlap = nperseg // 2
 
-        f, t, Zxx = stft(audio_stereo, sample_rate, nperseg=nperseg, noverlap=noverlap)
+        f, _t, Zxx = stft(audio_stereo, sample_rate, nperseg=nperseg, noverlap=noverlap)
 
         # Frequency masks
         vocal_mask = self._create_freq_mask(f, self.vocal_freq_range)
@@ -406,7 +406,6 @@ class StemSeparator:
                 noverlap = nperseg * 3 // 4
                 _, _, Zxx = stft(mono, fs=sr, nperseg=nperseg, noverlap=noverlap)
                 mag = np.abs(Zxx)
-                np.exp(1j * np.angle(Zxx))
                 # Harmonisch: Median über Zeit (Spalten)
                 from scipy.ndimage import median_filter
 

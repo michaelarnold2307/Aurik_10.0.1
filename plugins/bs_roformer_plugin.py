@@ -18,11 +18,11 @@ Modell-Gewichte: ~/.aurik/models/bs_roformer/ (via ModelDownloader beim 1. Start
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -148,15 +148,24 @@ class BSRoFormerPlugin:
         self._torch_model = None  # torch.nn.Module (wenn ONNX nicht verfügbar)
         self._model_loaded: bool = False
         self._fallback_active: bool = False
+        self._onnx_quarantined: bool = False
         self._init_lock = threading.Lock()
         self._try_load_model()
+
+    @staticmethod
+    def _shape_rank(shape: list[int | str | None] | tuple[int | str | None, ...] | None) -> int:
+        """Return declared ONNX rank from metadata shape."""
+        if shape is None:
+            return 0
+        return len(shape)
 
     def _try_load_model(self) -> None:
         """Versucht MelBandRoformer-ONNX-Modell zu laden; aktiviert Fallback bei Fehler."""
         # ── ML-Budget-Check VOR dem Laden (§5.1 OOM-Schutz) ──────────────────
         _allocated = False
         try:
-            from backend.core.ml_memory_budget import release as _release, try_allocate  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate("MelBandRoformer", size_gb=0.90):
                 logger.warning("BSRoFormer: ML-Budget erschöpft — Fallback aktiv")
@@ -166,19 +175,41 @@ class BSRoFormerPlugin:
         except ImportError:
             pass  # budget-Modul optional
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             # Priorität: lokales melbandroformer_optimized.onnx (860 MB, §4.4)
             for model_path in (self._LOCAL_MBR, self.MODELS_DIR / "bs_roformer.onnx"):
                 if model_path.exists():
-                    self._session = ort.InferenceSession(
+                    session = ort.InferenceSession(
                         str(model_path),
                         providers=["CPUExecutionProvider"],
                     )
+                    input_meta = session.get_inputs()[0] if session.get_inputs() else None
+                    output_meta = session.get_outputs()[0] if session.get_outputs() else None
+                    in_rank = self._shape_rank(getattr(input_meta, "shape", None))
+                    out_rank = self._shape_rank(getattr(output_meta, "shape", None))
+                    if in_rank != 4 or out_rank not in (4, 5):
+                        logger.warning(
+                            "MelBandRoformer: Inkompatible ONNX-Signatur (in_rank=%s, out_rank=%s) bei %s — Fallback aktiv",
+                            in_rank,
+                            out_rank,
+                            model_path,
+                        )
+                        self._fallback_active = True
+                        self._onnx_quarantined = True
+                        if _allocated:
+                            try:
+                                from backend.core.ml_memory_budget import release as _release
+
+                                _release("MelBandRoformer")
+                            except ImportError:
+                                pass
+                        return
+                    self._session = session
                     self._model_loaded = True
                     logger.info("🎵 MelBandRoformer: ONNX-Modell geladen (%s)", model_path)
                     try:
-                        from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                        from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                         _reg_plm(
                             "MelBandRoformer",
@@ -192,7 +223,7 @@ class BSRoFormerPlugin:
             self._fallback_active = True
             if _allocated:
                 try:
-                    from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import release as _release
 
                     _release("MelBandRoformer")
                 except ImportError:
@@ -202,7 +233,7 @@ class BSRoFormerPlugin:
             self._fallback_active = True
             if _allocated:
                 try:
-                    from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import release as _release
 
                     _release("MelBandRoformer")
                 except ImportError:
@@ -212,7 +243,7 @@ class BSRoFormerPlugin:
             self._fallback_active = True
             if _allocated:
                 try:
-                    from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import release as _release
 
                     _release("MelBandRoformer")
                 except ImportError:
@@ -290,8 +321,8 @@ class BSRoFormerPlugin:
         sr = BSRoFormerPlugin._MBR_SR
         n_bands = BSRoFormerPlugin._MBR_BANDS
         f_nyq = sr / 2.0
-        hz_to_mel = lambda f: 2595.0 * np.log10(1.0 + f / 700.0)  # noqa: E731
-        mel_to_hz = lambda m: 700.0 * (10.0 ** (m / 2595.0) - 1.0)  # noqa: E731
+        hz_to_mel = lambda f: 2595.0 * np.log10(1.0 + f / 700.0)
+        mel_to_hz = lambda m: 700.0 * (10.0 ** (m / 2595.0) - 1.0)
         mel_pts = np.linspace(hz_to_mel(0.0), hz_to_mel(f_nyq), n_bands + 1)
         hz_pts = mel_to_hz(mel_pts)
         bin_pts = np.clip(
@@ -350,7 +381,7 @@ class BSRoFormerPlugin:
 
             # ── 2. STFT ──────────────────────────────────────────────────────
             win = np.hanning(_N).astype(np.float64)
-            from scipy.signal import stft as _stft  # noqa: PLC0415
+            from scipy.signal import stft as _stft
 
             _, _, Z = _stft(
                 audio_44,
@@ -379,10 +410,17 @@ class BSRoFormerPlugin:
             # ── 4. ONNX inference ────────────────────────────────────────────
             input_name = self._session.get_inputs()[0].name
             out = self._session.run(None, {input_name: X})[0]
-            # out: [1, 1, 3958, T, 2]
+            # out: expected [1, 1, 3958, T, 2], some exports emit [1, 3958, T, 2]
 
-            if out is None or out.ndim != 5:
+            if out is None or out.ndim not in (4, 5):
                 logger.warning("MelBandRoformer: Unerwarteter Output-Shape %s → Fallback", getattr(out, "shape", None))
+                return self._separate_fallback(audio, sr, requested_stems)
+
+            if out.ndim == 4:
+                out = out[:, np.newaxis, :, :, :]
+
+            if out.shape[0] < 1 or out.shape[1] < 1 or out.shape[-1] < 2:
+                logger.warning("MelBandRoformer: Ungueltiger Output-Shape %s → Fallback", getattr(out, "shape", None))
                 return self._separate_fallback(audio, sr, requested_stems)
 
             # ── 5. Reconstruct vocals complex STFT ───────────────────────────
@@ -390,7 +428,7 @@ class BSRoFormerPlugin:
             # Z_voc: [F=3958, T]
 
             # ── 6. ISTFT → vocals @ 44100 Hz ────────────────────────────────
-            from scipy.signal import istft as _istft  # noqa: PLC0415
+            from scipy.signal import istft as _istft
 
             n_orig_44 = len(audio_44)
             _, vocals_44 = _istft(
@@ -449,6 +487,16 @@ class BSRoFormerPlugin:
             )
         except Exception as exc:
             logger.warning("MelBandRoformer ONNX-Fehler: %s — Fallback aktiv", exc)
+            self._model_loaded = False
+            self._fallback_active = True
+            self._onnx_quarantined = True
+            self._session = None
+            try:
+                from backend.core.ml_memory_budget import release as _release
+
+                _release("MelBandRoformer")
+            except Exception:
+                pass
             return self._separate_fallback(audio, sr, requested_stems)
 
     # ------------------------------------------------------------------
@@ -469,7 +517,7 @@ class BSRoFormerPlugin:
         Funktioniert mit sr=48000; MDX23C-Plugin resampelt intern auf 44100 Hz.
         """
         try:
-            from plugins.mdx23c_plugin import _get_model  # noqa: PLC0415
+            from plugins.mdx23c_plugin import _get_model
 
             vocal_model = _get_model("vocals")
             inst_model = _get_model("inst")
@@ -546,7 +594,7 @@ class BSRoFormerPlugin:
         # --- DSP-Fallback: HPSS ---
         audio_1d = audio.mean(axis=0) if audio.ndim == 2 else audio
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             harmonic, percussive = librosa.effects.hpss(audio_1d, margin=3.0)
             harmonic = np.clip(harmonic, -1.0, 1.0).astype(np.float32)

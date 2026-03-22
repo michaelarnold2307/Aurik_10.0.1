@@ -6,9 +6,9 @@ Erkennt durch Restaurierung neu eingebrachte Artefakte im restaurierten Audio.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -38,7 +38,7 @@ class IADResult:
     n_nmf_clicks: int = 0
     n_pvoc_smearing: int = 0
     n_musical_noise: int = 0
-    artifact_mask: Optional[np.ndarray] = None
+    artifact_mask: np.ndarray | None = None
     total_contaminated_fraction: float = 0.0
     confidence: float = 1.0
 
@@ -230,7 +230,7 @@ class IntroducedArtifactDetector:
 # ---------------------------------------------------------------------------
 # Thread-sicherer Singleton (§3.2)
 # ---------------------------------------------------------------------------
-_instance: Optional[IntroducedArtifactDetector] = None
+_instance: IntroducedArtifactDetector | None = None
 _lock = threading.Lock()
 
 
@@ -259,7 +259,7 @@ __all__ = [
     "IADRegion",
     "IADResult",
     "IntroducedArtifactDetector",
+    "detect_introduced_artifacts",
     "get_iad",
     "get_introduced_artifact_detector",
-    "detect_introduced_artifacts",
 ]

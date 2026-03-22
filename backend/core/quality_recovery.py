@@ -20,9 +20,9 @@ Author: AURIK Team
 Date: 10. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np
@@ -660,7 +660,8 @@ class QualityRecoverySystem:
 
         # Start from a simple time-domain blend
         try:
-            from scipy.signal import istft as _istft, stft as _stft
+            from scipy.signal import istft as _istft
+            from scipy.signal import stft as _stft
 
             nperseg = 1024
             ORIG = original.astype(np.float32)

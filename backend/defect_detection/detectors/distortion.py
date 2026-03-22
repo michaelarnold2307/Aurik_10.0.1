@@ -76,9 +76,6 @@ class DistortionDetector(DefectDetector):
             harmonic_energies.append(harm_energy)
 
         # THD = sqrt(sum(harmonic_powers)) / fundamental_power
-        if fund_energy > 0 and harmonic_energies:
-            thd = np.sqrt(np.sum(harmonic_energies)) / fund_energy
-        else:
-            thd = 0.0
+        thd = np.sqrt(np.sum(harmonic_energies)) / fund_energy if fund_energy > 0 and harmonic_energies else 0.0
 
         return thd, harmonic_energies

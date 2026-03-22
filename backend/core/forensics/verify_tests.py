@@ -4,9 +4,10 @@ Quick verification of all Signal Forensics tests.
 Provides summary of test results without running full tests.
 """
 
+import logging
 import subprocess
 import sys
-import logging
+
 logger = logging.getLogger(__name__)
 
 

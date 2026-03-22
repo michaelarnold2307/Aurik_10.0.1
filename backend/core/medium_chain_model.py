@@ -37,8 +37,8 @@ CD / DIGITAL (1982–heute):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 
 import numpy as np
 from scipy import signal as sp_signal
@@ -278,7 +278,7 @@ class PhysicalMediumChainModel:
         audio_out = audio.copy()
 
         # 1. Pre-RIAA Kurvenkorrektur — wähle die wahrscheinlichste Kurve
-        curve_name, turnover_hi, turnover_lo, treble_db = self._detect_shellac_curve(audio, sr)
+        curve_name, turnover_hi, _turnover_lo, treble_db = self._detect_shellac_curve(audio, sr)
         audio_out = self._apply_recording_curve_inverse(audio_out, sr, turnover_hi, treble_db)
         corrections.append(f"pre_riaa_curve_inverse:{curve_name}")
 
@@ -489,7 +489,7 @@ class PhysicalMediumChainModel:
     def _apply_riaa_deemphasis(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """Wendet RIAA De-Emphasis an (kompensiert versehentliches pre-emphasis)."""
         # RIAA De-Emphasis via bilinearen Z-Transform der Zeitkonstanten
-        tau1, tau2, tau3 = self.RIAA_TIME_CONSTANTS  # 3180, 318, 75 μs
+        tau1, _tau2, tau3 = self.RIAA_TIME_CONSTANTS  # 3180, 318, 75 μs
         # Implementierung als zweistufiger Shelving-Filter
         # Basis: Hochpass ab 1/(2π·τ1) = 50 Hz, Lowpass ab 1/(2π·τ3) = 2122 Hz
         audio_out = self._apply_hf_shelf_boost(audio, sr, 1 / (2 * np.pi * tau3), -13.7)

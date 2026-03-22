@@ -31,6 +31,9 @@ from backend.core.forensics.ml_medium_detector import train_ml_detector_from_dat
 from backend.core.forensics.unified_analyzer import UnifiedForensicAnalyzer
 
 
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
+
+
 @pytest.fixture(scope="module")
 def full_analyzer():
     """Create analyzer with all detectors (schnell: 2 Samples/Klasse, 2-fold CV)."""

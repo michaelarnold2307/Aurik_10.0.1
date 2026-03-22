@@ -27,11 +27,9 @@ Author: Aurik Development Team
 Version: 2.0.0 Professional ML-Hybrid
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import tempfile
 import time
 
@@ -39,6 +37,7 @@ import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 # ML-Hybrid Support
@@ -233,14 +232,12 @@ class TapeHissReductionPhase(PhaseInterface):
 
         # Process each channel
         audio_processed = np.zeros_like(audio)
-        hiss_reduction_per_band = []
 
         for ch in range(channels):
             channel = audio[:, ch] if is_stereo else audio
 
             # STFT-OMLSA-Verarbeitung (HF-selektiv)
             processed = self._process_channel_omlsa(channel, sample_rate, hf_low, hf_high, material)
-            hiss_reduction_per_band = []  # Metriken auf Kanal-Ebene  # noqa: F841
 
             if is_stereo:
                 audio_processed[:, ch] = processed
@@ -341,7 +338,7 @@ class TapeHissReductionPhase(PhaseInterface):
         alpha_n = 0.85
         b_min = 1.66
         hop_s = float(t_arr[1] - t_arr[0]) if T > 1 else 0.01
-        M = max(15, int(round(1.5 / hop_s)))
+        M = max(15, round(1.5 / hop_s))
 
         # Geglättete Leistung (nur HF-Bins)
         P_hat = magnitude**2
@@ -490,13 +487,13 @@ class TapeHissReductionPhase(PhaseInterface):
             sf.write(input_path, audio, sample_rate)
 
             # Process with DeepFilterNet
-            returncode, stdout, stderr = plugin.process(
+            returncode, _stdout, _stderr = plugin.process(
                 input_path, output_path, post_filter=True  # Enable post-filter for smooth HF reduction
             )
 
             if returncode == 0 and os.path.exists(output_path):
                 # Read refined audio
-                refined, sr_read = sf.read(output_path)
+                refined, _sr_read = sf.read(output_path)
 
                 # Blend strategy: Keep <2kHz from original, use ML for >2kHz
                 if refined.shape == audio.shape:

@@ -6,8 +6,8 @@ ITU-R BS.1770-4 compliant LUFS metering, True Peak detection,
 Phase Correlation, and Spectrum Analysis for professional audio workflows.
 """
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 import scipy.signal
@@ -141,10 +141,7 @@ class LUFSMeter:
         mean_square = np.sum(ms_per_channel * channel_weights) / np.sum(channel_weights)
 
         # Convert to LUFS
-        if mean_square > 0:
-            lufs = -0.691 + 10 * np.log10(mean_square)
-        else:
-            lufs = -np.inf
+        lufs = -0.691 + 10 * np.log10(mean_square) if mean_square > 0 else -np.inf
 
         # Compute gated loudness if requested
         if gating:

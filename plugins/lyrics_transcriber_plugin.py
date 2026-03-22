@@ -23,11 +23,11 @@ Spec-Referenzen: §2.36, §3.2 (Singleton DCL), §3.1 (NaN-Guard), §13.3 (offli
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -114,7 +114,7 @@ class LyricsTranscriber:
           3. DSP-Energie-Segmentierung (kein ML, stiller Fallback)
         """
         try:
-            import onnxruntime as ort  # noqa: F401 (optional)
+            import onnxruntime as ort
 
             # Ladereihenfolge: tiny → base → DSP
             if self.MODEL_PATH.exists():
@@ -136,7 +136,7 @@ class LyricsTranscriber:
                 return
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("WhisperTiny", size_gb=0.41):
                     logger.warning("WhisperTiny: ML-Budget erschöpft — DSP-Fallback.")
@@ -151,7 +151,7 @@ class LyricsTranscriber:
             self._session_loaded = True
             logger.info("✅ %s ONNX geladen (%s, §2.36)", label, model_path.name)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "WhisperTiny",
@@ -164,7 +164,7 @@ class LyricsTranscriber:
         except Exception as exc:
             logger.info("Whisper-ONNX nicht verfügbar — DSP-Energie-Fallback aktiv: %s", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("WhisperTiny")
             except Exception:
                 pass
@@ -227,6 +227,8 @@ class LyricsTranscriber:
             input_name = self._session.get_inputs()[0].name  # type: ignore[union-attr]
             outputs = self._session.run(None, {input_name: mel})  # type: ignore[union-attr]
             encoder_out = outputs[0] if outputs else None
+            if encoder_out is not None:
+                encoder_out = np.nan_to_num(encoder_out, nan=0.0, posinf=0.0, neginf=0.0)
         except Exception as exc:
             logger.debug("Whisper-Encoder fehlgeschlagen: %s", exc)
 
@@ -364,10 +366,7 @@ class LyricsTranscriber:
 
         # Pad/Truncate auf target_frames
         T = log_mel.shape[1]
-        if T < target_frames:
-            log_mel = np.pad(log_mel, ((0, 0), (0, target_frames - T)))
-        else:
-            log_mel = log_mel[:, :target_frames]
+        log_mel = np.pad(log_mel, ((0, 0), (0, target_frames - T))) if target_frames > T else log_mel[:, :target_frames]
 
         return log_mel[np.newaxis].astype(np.float32)  # [1, 80, 3000]
 

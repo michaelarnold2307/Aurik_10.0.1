@@ -14,8 +14,8 @@ Side-Effects (Pumping, Breathing, unnatürlicher Sound) und bewahren
 musikalische Mikro-Nuancen, die Audio lebendig machen.
 """
 
-from dataclasses import asdict, dataclass, field
 import logging
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import librosa
@@ -345,10 +345,7 @@ class TransparentDynamicsProcessor:
                 window_rms = np.sqrt(np.mean(window**2))
                 rms_windows.append(20 * np.log10(window_rms + 1e-8))
 
-        if len(rms_windows) > 0:
-            dynamic_range_db = peak_db - np.min(rms_windows)
-        else:
-            dynamic_range_db = 0.0
+        dynamic_range_db = peak_db - np.min(rms_windows) if len(rms_windows) > 0 else 0.0
 
         return {
             "peak_db": float(peak_db),
@@ -574,10 +571,7 @@ class MicroDynamicsEnhancer:
         mean_rms = np.mean(rms_values)
         std_rms = np.std(rms_values)
 
-        if mean_rms > 1e-8:
-            coeff_variation = std_rms / mean_rms
-        else:
-            coeff_variation = 0.0
+        coeff_variation = std_rms / mean_rms if mean_rms > 1e-08 else 0.0
 
         # Normalize to 0-1 (typical range 0.1-1.0)
         micro_dynamics_score = np.clip(coeff_variation, 0, 1)

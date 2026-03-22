@@ -75,7 +75,7 @@ class RumbleFilter:
     - Deep-Learning-Inferenz (ONNX/Torch) als Option
     """
 
-    def __init__(self, cutoff: float = 20.0, order: int = 4, model_path: str = None):
+    def __init__(self, cutoff: float = 20.0, order: int = 4, model_path: str | None = None):
         self.cutoff = cutoff
         self.order = order
         self.model_path = model_path

@@ -9,10 +9,10 @@ Min. 3 Segmente (Dateien < 25 s werden nicht geprueft).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 import numpy as np
@@ -40,9 +40,9 @@ class TemporalCoherenceResult:
     sigma: float  # Standardabweichung sigma(MOS)
     mean_mos: float  # Mittlere PQS-MOS ueber alle Segmente
     n_segments: int  # Anzahl ausgewerteter Segmente
-    segment_scores: List[float] = field(default_factory=list)  # MOS pro Segment
+    segment_scores: list[float] = field(default_factory=list)  # MOS pro Segment
     skipped: bool = False  # True wenn Datei zu kurz (< 25 s)
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     message: str = ""  # Laienverständliche Zusammenfassung (Deutsch)
 
     @property
@@ -98,7 +98,7 @@ class TemporalQualityCoherenceMetric:
 
         seg_len = int(SEGMENT_DURATION_S * sr)
         hop_len = int(SEGMENT_HOP_S * sr)
-        scores: List[float] = []
+        scores: list[float] = []
         i = 0
         while i + seg_len <= len(audio):
             seg = audio[i : i + seg_len]
@@ -172,7 +172,7 @@ class TemporalQualityCoherenceMetric:
 # Singleton
 # ---------------------------------------------------------------------------
 
-_instance: Optional[TemporalQualityCoherenceMetric] = None
+_instance: TemporalQualityCoherenceMetric | None = None
 _lock = threading.Lock()
 
 
@@ -195,14 +195,14 @@ def measure_temporal_coherence(audio: np.ndarray, sr: int) -> TemporalCoherenceR
 get_temporal_quality_coherence = get_temporal_coherence_metric
 
 __all__ = [
-    "TemporalQualityCoherenceMetric",
-    "TemporalCoherenceResult",
-    "get_temporal_coherence_metric",
-    "get_temporal_quality_coherence",
-    "measure_temporal_coherence",
-    "TEMPORAL_CONSISTENCY_THRESHOLD",
-    "SIGMA_THRESHOLD",
     "MIN_FILE_DURATION_S",
     "SEGMENT_DURATION_S",
     "SEGMENT_HOP_S",
+    "SIGMA_THRESHOLD",
+    "TEMPORAL_CONSISTENCY_THRESHOLD",
+    "TemporalCoherenceResult",
+    "TemporalQualityCoherenceMetric",
+    "get_temporal_coherence_metric",
+    "get_temporal_quality_coherence",
+    "measure_temporal_coherence",
 ]

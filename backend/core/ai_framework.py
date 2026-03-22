@@ -19,11 +19,11 @@ WICHTIG: Keine Dummys/Mocks - nur reale, funktionsfähige Implementierungen.
 Pure Open Source reicht NICHT aus - Eigenentwicklung ist in allen Bereichen essenziell.
 """
 
+import logging
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 from typing import Any
-import warnings
 
 import numpy as np
 
@@ -191,10 +191,7 @@ class UnifiedDefectDetector:
             DefectDetectionResult with all detected defects
         """
         # Ensure mono for analysis
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Multi-method detection
         defects = {}
@@ -616,10 +613,7 @@ class UnifiedDefectDetector:
     ) -> RestorationMode:
         """Recommend restoration mode based on analysis."""
         # Compute average severity
-        if severity:
-            avg_severity = np.mean(list(severity.values()))
-        else:
-            avg_severity = 0.0
+        avg_severity = np.mean(list(severity.values())) if severity else 0.0
 
         # Recommend based on severity
         if avg_severity < 0.2:
@@ -719,10 +713,7 @@ class UnifiedAudioRestorer:
         from scipy import signal
 
         # Detect clicks
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Find clicks
         envelope = np.abs(signal.hilbert(audio_mono))
@@ -765,7 +756,7 @@ class UnifiedAudioRestorer:
         from scipy import signal
 
         # STFT
-        f, t, Zxx = signal.stft(audio, self.sr, nperseg=2048)
+        _f, _t, Zxx = signal.stft(audio, self.sr, nperseg=2048)
         magnitude = np.abs(Zxx)
         phase = np.angle(Zxx)
 
@@ -825,10 +816,7 @@ class UnifiedAudioRestorer:
         from scipy import interpolate, signal
 
         # Detect dropouts
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         envelope = np.abs(signal.hilbert(audio_mono))
         threshold = np.percentile(envelope, 5)

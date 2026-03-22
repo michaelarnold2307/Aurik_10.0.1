@@ -8,8 +8,8 @@ AURIK v8.0 UPDATE:
 """
 
 import logging
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import numpy as np
 
@@ -47,6 +47,13 @@ class QualityControl:
         # NaN/Inf-Guard am Eingang (§3.1)
         reference = np.nan_to_num(reference, nan=0.0, posinf=0.0, neginf=0.0)
         candidate = np.nan_to_num(candidate, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Correlation is undefined for constant signals.
+        if reference.size == 0 or candidate.size == 0:
+            return None
+        if np.std(reference) == 0.0 or np.std(candidate) == 0.0:
+            return None
+
         score = float(np.corrcoef(reference, candidate)[0, 1])
         # NaN/Inf-Guard am Ausgang
         score = float(np.nan_to_num(score, nan=0.0, posinf=0.0, neginf=0.0))
@@ -473,7 +480,7 @@ class QualityGates:
 
             try:
                 # Run comprehensive quality assessment
-                ml_results = self._metrics_manager.assess_quality(audio_temp_path, output_dir=tempfile.mkdtemp())
+                self._metrics_manager.assess_quality(audio_temp_path, output_dir=tempfile.mkdtemp())
 
                 # §4.4: CDPAM deaktiviert — verboten als Musikmetrik
                 results["cdpam_score"] = None
@@ -487,7 +494,7 @@ class QualityGates:
                 results["dnsmos_check"] = True  # immer bestanden (Metrik deaktiviert)
 
                 # §4.4+§10.2: NISQA deaktiviert — Sprach-Metrik verboten für Musikrestaurierung
-                _nisqa_mos = 0.0  # DEAKTIVIERT §10.2  # noqa: F841
+                _nisqa_mos = 0.0  # DEAKTIVIERT §10.2
                 results["nisqa_mos"] = None
                 results["nisqa_check"] = True  # immer bestanden (Metrik deaktiviert)
 
@@ -597,10 +604,7 @@ class QualityGates:
                 if harmonic_idx < len(spectrum):
                     harmonic_power += float(spectrum[harmonic_idx] ** 2)
 
-            if fundamental_power > 0:
-                thd = np.sqrt(harmonic_power) / np.sqrt(fundamental_power)
-            else:
-                thd = 0.0
+            thd = np.sqrt(harmonic_power) / np.sqrt(fundamental_power) if fundamental_power > 0 else 0.0
         else:
             thd = 0.0
 

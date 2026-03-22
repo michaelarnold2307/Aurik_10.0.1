@@ -25,12 +25,12 @@ Invarianten (§3.1, §3.2, §3.7 Aurik-Spec):
     - Alle öffentlichen Methoden vollständig typisiert (PEP 484)
 """
 
-from dataclasses import dataclass, field
 import hashlib
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -125,7 +125,7 @@ class CrepePlugin:
     def _load_model(self) -> None:
         """ONNX-Session laden oder stumm auf DSP-Fallback wechseln."""
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             if not _CREPE_ONNX_PATH.exists():
                 logger.debug(
@@ -135,7 +135,7 @@ class CrepePlugin:
                 return
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("CREPE", size_gb=0.10):
                     logger.warning("CREPE: ML-Budget erschöpft — pYIN-Fallback.")
@@ -157,8 +157,16 @@ class CrepePlugin:
                 "🎵 CREPE ONNX geladen: %s",
                 _CREPE_ONNX_PATH.name,
             )
+            # Warmup-Inference: erste ONNX-Inferenz ist langsam (JIT/Graph-Optimierung).
+            # Ein Dummy-Run mit kleinem Batch eliminiert den 13s→6s Kaltstart-Nachteil.
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                _dummy = np.zeros((1, _FRAME_LENGTH), dtype=np.float32)
+                self._session.run(["classifier"], {"input": _dummy})
+                logger.debug("CREPE ONNX warmup inference completed")
+            except Exception:
+                pass
+            try:
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "CREPE",
@@ -167,7 +175,7 @@ class CrepePlugin:
                 )
             except Exception:
                 pass
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("CREPE-ONNX nicht verfügbar (%s) — pYIN-Fallback aktiv", exc)
 
     def analyze(self, audio: np.ndarray, sr: int) -> CrepeResult:
@@ -211,7 +219,10 @@ class CrepePlugin:
     def _analyze_onnx(self, audio: np.ndarray, sr: int) -> CrepeResult:
         """CREPE-Inferenz via onnxruntime (CPUExecutionProvider)."""
         try:
-            import scipy.signal as sps  # noqa: PLC0415
+            import onnxruntime as ort
+            import scipy.signal as sps
+
+            assert isinstance(self._session, ort.InferenceSession)
 
             # 1) Resample auf 16 kHz
             if sr != _CREPE_SR:
@@ -297,7 +308,7 @@ class CrepePlugin:
                 model_used="crepe_onnx",
             )
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("CREPE-ONNX-Inferenz fehlgeschlagen (%s) — Wechsel zu pYIN", exc)
             return self._analyze_pyin(audio, sr)
 
@@ -307,7 +318,7 @@ class CrepePlugin:
         Post-2018-Fallback gem. §4.2 (erlaubt).
         """
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             # pYIN: max. 30 s (O(N) per Frame mit librosa-Optimierung; Pytest-Budget)
             seg_len = min(len(audio), int(sr * 30.0))
@@ -329,7 +340,7 @@ class CrepePlugin:
                 model_used="dsp_pyin",
                 details={"segment_len_s": seg_len / sr},
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("pYIN-Fallback fehlgeschlagen (%s) — leeres Ergebnis", exc)
             return CrepeResult(
                 f0_hz=np.zeros(1, dtype=np.float32),
@@ -377,7 +388,7 @@ def unload_crepe() -> None:
                 pass
             _instance = None
     try:
-        from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415
+        from backend.core.ml_memory_budget import release as _release
 
         _release("CREPE")
     except Exception:
@@ -414,4 +425,4 @@ def analyze_pitch(
 # ---------------------------------------------------------------------------
 # Rückwärtskompatible Aliase (alte Klassen-/Funktionsnamen aus Docker-Version)
 # ---------------------------------------------------------------------------
-CREPEPlugin = CrepePlugin  # noqa: N816  (war: class CREPEPlugin in Docker-Version)
+CREPEPlugin = CrepePlugin

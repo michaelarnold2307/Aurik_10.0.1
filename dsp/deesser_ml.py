@@ -10,8 +10,8 @@ Spektrale De-Esser Implementierung:
 """
 
 import numpy as np
-from scipy.signal import istft, stft
 import soundfile as sf
+from scipy.signal import istft, stft
 
 
 class MLDeEsser:
@@ -86,7 +86,7 @@ class MLDeEsser:
 
         def _deess_mono(ch: np.ndarray) -> np.ndarray:
             ch = ch.astype(np.float64)
-            _, times, Zxx = stft(ch, fs=sr, window="hann", nperseg=nperseg, noverlap=noverlap)
+            _, _times, Zxx = stft(ch, fs=sr, window="hann", nperseg=nperseg, noverlap=noverlap)
             freqs_stft = np.fft.rfftfreq(nperseg, 1.0 / sr)
             sib_mask = (freqs_stft >= self.sibilant_low_hz) & (freqs_stft <= self.sibilant_high_hz)
             total_energy = np.sum(np.abs(Zxx) ** 2, axis=0) + 1e-12

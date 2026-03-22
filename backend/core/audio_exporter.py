@@ -20,10 +20,10 @@ Features:
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import threading
-from typing import Any, Optional
 import warnings
+from pathlib import Path
+from typing import Any, Optional
 
 import numpy as np
 import soundfile as sf
@@ -52,7 +52,7 @@ def _apply_dither_16bit(audio: np.ndarray) -> np.ndarray:
     n = audio.shape[0]
 
     try:
-        from scipy.signal import lfilter as _lfilter  # noqa: PLC0415
+        from scipy.signal import lfilter as _lfilter
 
         # POW-r Type 3 noise-shaping FIR (9 taps, calibrated ~44.1–48 kHz).
         # Coefficients from Wannamaker et al. 1992, Table B (noise shaping weights).
@@ -87,11 +87,11 @@ def _apply_dither_16bit(audio: np.ndarray) -> np.ndarray:
         return (np.round(np.clip(dithered, -1.0, 1.0) * 32767.0) / 32767.0).astype(np.float32)
 
 
-_instance: Optional["AudioExporter"] = None
+_instance: AudioExporter | None = None
 _lock = threading.Lock()
 
 
-def get_audio_exporter() -> "AudioExporter":
+def get_audio_exporter() -> AudioExporter:
     """Get or create AudioExporter singleton.
 
     Returns:
@@ -173,7 +173,7 @@ class AudioExporter:
         # normalize=True still audibly raises level in legacy workflows.
         if normalize:
             try:
-                import pyloudnorm as _pyln  # noqa: PLC0415
+                import pyloudnorm as _pyln
 
                 _meter = _pyln.Meter(sr)  # ITU-R BS.1770-4
                 _lufs_target = -14.0  # EBU R128 Streaming-Standard
@@ -213,10 +213,7 @@ class AudioExporter:
                 audio_export = audio_export.astype(np.float32)
 
         # Determine subtype
-        if format_info["lossy"]:
-            subtype = format_info["subtype"]
-        else:
-            subtype = self.BIT_DEPTHS.get(bit_depth, "PCM_16")
+        subtype = format_info["subtype"] if format_info["lossy"] else self.BIT_DEPTHS.get(bit_depth, "PCM_16")
 
         # Export based on format
         try:

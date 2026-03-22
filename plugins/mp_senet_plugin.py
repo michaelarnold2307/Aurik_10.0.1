@@ -30,11 +30,11 @@ CPU-Only: CPUExecutionProvider.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -106,10 +106,10 @@ class MpSenetPlugin:
             )
             return
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("MP-SENet", size_gb=0.04):
                     logger.warning("MP-SENet: ML-Budget erschöpft — DSP-Fallback.")
@@ -127,7 +127,7 @@ class MpSenetPlugin:
             self._model_loaded = True
             logger.info("✅ MP-SENet ONNX geladen (%s, §4.4 — DCCRN/FullSubNet+ Nachfolger)", _ONNX_PATH.name)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "MP-SENet",
@@ -139,7 +139,7 @@ class MpSenetPlugin:
         except Exception as exc:
             logger.warning("MP-SENet ONNX nicht ladbar: %s — OMLSA-DSP-Fallback aktiv.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("MP-SENet")
             except Exception:
                 pass
@@ -197,7 +197,7 @@ class MpSenetPlugin:
 
     def _stft(self, mono: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
         """Berechnet STFT. Returns (complex_spec [freq, T], phases, n_orig)."""
-        from scipy.signal import stft as scipy_stft  # noqa: PLC0415
+        from scipy.signal import stft as scipy_stft
 
         n_orig = len(mono)
         _, _, Z = scipy_stft(
@@ -211,7 +211,7 @@ class MpSenetPlugin:
 
     def _istft(self, Z: np.ndarray, n_orig: int) -> np.ndarray:
         """Inverse STFT mit PGHI-Phasenkonsistenz (§4.4 Spec)."""
-        from scipy.signal import istft as scipy_istft  # noqa: PLC0415
+        from scipy.signal import istft as scipy_istft
 
         _, x = scipy_istft(
             Z.astype(np.complex128),
@@ -233,8 +233,8 @@ class MpSenetPlugin:
         assert self._session is not None
         try:
             Z, _, n_orig = self._stft(mono)
-            mag = np.abs(Z).astype(np.float32)  # [freq, T]
-            phase = np.angle(Z).astype(np.float32)  # [freq, T]
+            np.abs(Z).astype(np.float32)  # [freq, T]
+            np.angle(Z).astype(np.float32)  # [freq, T]
 
             # Input: Real + Imag getrennt → [1, 2, freq, T]
             real_part = Z.real[np.newaxis, np.newaxis]  # [1, 1, freq, T]
@@ -274,7 +274,8 @@ class MpSenetPlugin:
             4. ISTFT + PGHI-Phasenkonsistenz
         """
         try:
-            from scipy.signal import istft as scipy_istft, stft as scipy_stft  # noqa: PLC0415
+            from scipy.signal import istft as scipy_istft
+            from scipy.signal import stft as scipy_stft
 
             n_orig = len(mono)
             window_size = min(_WIN, n_orig)
@@ -307,7 +308,7 @@ class MpSenetPlugin:
                 # MMSE-LSA Gain (OMLSA)
                 v = snr_prio / (1.0 + snr_prio) * snr_post
                 v = np.clip(v, 1e-10, 700.0)
-                from scipy.special import expn  # noqa: PLC0415
+                from scipy.special import expn
 
                 gain = np.exp(0.5 * expn(1, v)) * np.maximum(v, 1e-10) / (snr_post + 1e-15)
                 gain = np.clip(gain, G_floor, 1.0)

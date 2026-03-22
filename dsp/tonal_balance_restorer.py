@@ -12,8 +12,8 @@ Diese Module garantieren nicht nur defekt-freie Audio, sondern musikalische Exze
 durch intelligente Tonal Balance und Clarity Restoration.
 """
 
-from dataclasses import asdict, dataclass, field
 import logging
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import librosa

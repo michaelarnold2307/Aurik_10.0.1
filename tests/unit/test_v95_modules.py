@@ -112,7 +112,7 @@ def benchmark_report(tmp_path_factory) -> tuple[RestorationBenchmark, BenchmarkR
 class TestPhase55DiffusionInpainting:
 
     def test_metadata_phase_id(self, phase55):
-        assert phase55.metadata.phase_id == "phase_55"
+        assert phase55.metadata.phase_id == "phase_55_diffusion_inpainting"
 
     def test_metadata_quality_impact(self, phase55):
         assert phase55.metadata.quality_impact >= 0.5
@@ -360,6 +360,7 @@ class TestCPUPipeline:
 # ===========================================================================
 
 
+@pytest.mark.slow
 class TestRestorationBenchmark:
 
     def test_reference_scores_keys(self):
@@ -1224,6 +1225,7 @@ class TestExcellenceOptimizerUseMert:
         assert out.shape == audio.shape
 
 
+@pytest.mark.slow
 class TestExcellenceBenchmark:
     """ExcellenceBenchmark Basisvalidierung."""
 

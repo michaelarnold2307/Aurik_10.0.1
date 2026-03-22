@@ -19,13 +19,13 @@ Version: 1.0.0
 Date: 8. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
 import numpy as np
-from scipy.fft import fft, fftfreq
 import scipy.signal as signal
+from scipy.fft import fft, fftfreq
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +268,7 @@ class SemanticAudioAnalyzer:
         instruments = []
 
         # Compute STFT
-        f, t, Zxx = signal.stft(audio, sr, nperseg=2048)
+        f, _t, Zxx = signal.stft(audio, sr, nperseg=2048)
         power = np.abs(Zxx) ** 2
 
         # 1. Vocals detection (formant structure + harmonic energy)
@@ -534,7 +534,7 @@ class SemanticAudioAnalyzer:
     def _compute_onset_envelope(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """Compute onset strength envelope."""
         # Compute STFT
-        f, t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=1536)
+        _f, _t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=1536)
 
         # Spectral flux (frame-to-frame change)
         spec_diff = np.diff(np.abs(Zxx), axis=1)
@@ -690,10 +690,7 @@ class SemanticAudioAnalyzer:
                     return True
 
         # Preserve for highly transient content
-        if content_char in [ContentCharacter.HIGHLY_TRANSIENT, ContentCharacter.TRANSIENT]:
-            return True
-
-        return False
+        return content_char in [ContentCharacter.HIGHLY_TRANSIENT, ContentCharacter.TRANSIENT]
 
     def _should_enhance_clarity(
         self,
@@ -707,9 +704,8 @@ class SemanticAudioAnalyzer:
 
         # Enhance if vocals are present
         for inst in instruments:
-            if inst.instrument in [InstrumentType.VOCALS, InstrumentType.SPEECH]:
-                if inst.confidence > 0.4:
-                    return True
+            if inst.instrument in [InstrumentType.VOCALS, InstrumentType.SPEECH] and inst.confidence > 0.4:
+                return True
 
         return False
 
@@ -724,10 +720,7 @@ class SemanticAudioAnalyzer:
             return True
 
         # Reduce for synths (can be harsh)
-        if dominant == InstrumentType.SYNTH:
-            return True
-
-        return False
+        return dominant == InstrumentType.SYNTH
 
     # ========================================================================
     # MODE-SPECIFIC NOTES

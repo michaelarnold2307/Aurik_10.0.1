@@ -18,10 +18,10 @@ Version: 8.0
 Datum: 7. Februar 2026
 """
 
-from collections import defaultdict
-from dataclasses import dataclass, field
 import json
 import logging
+from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 

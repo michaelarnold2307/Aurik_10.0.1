@@ -1,6 +1,7 @@
 """
 ConfidenceEngine: Berechnet Confidence-Werte für jedes Processing-Modul.
 """
+import contextlib
 
 
 class ConfidenceEngine:
@@ -41,10 +42,8 @@ class ConfidenceEngine:
             # Artefakt-Penalty
             artifact = out.get("artifact_score", None)
             if artifact is not None:
-                try:
+                with contextlib.suppress(TypeError, ValueError):
                     conf *= max(0.0, 1.0 - float(artifact))
-                except (TypeError, ValueError):
-                    pass
             # Latenz-Penalty
             if not out.get("latency_ok", True):
                 conf *= 0.8

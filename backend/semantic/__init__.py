@@ -46,12 +46,12 @@ from backend.semantic.semantic_audio_analyzer import (
 )
 
 __all__ = [
-    "SemanticAudioAnalyzer",
-    "SemanticProfile",
+    "ContentCharacter",
     "InstrumentPresence",
     "InstrumentType",
-    "ContentCharacter",
     "ProcessingStrategy",
+    "SemanticAudioAnalyzer",
+    "SemanticProfile",
     "analyze_semantic_content",
 ]
 

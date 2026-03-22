@@ -22,8 +22,10 @@ try:
     import librosa
 except ImportError:
     librosa = None  # type: ignore
-from scipy import signal
 import logging
+
+from scipy import signal
+
 logger = logging.getLogger(__name__)
 
 

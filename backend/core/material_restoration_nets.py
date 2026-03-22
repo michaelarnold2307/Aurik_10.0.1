@@ -37,10 +37,10 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 import importlib
 import logging
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -214,10 +214,7 @@ def _vinyl_decrackle(audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, i
     n_removed = 0
     kernel = 3
 
-    if result.ndim == 1:
-        channels = [result]
-    else:
-        channels = [result[ch] for ch in range(result.shape[0])]
+    channels = [result] if result.ndim == 1 else [result[ch] for ch in range(result.shape[0])]
 
     cleaned_channels = []
     for ch in channels:

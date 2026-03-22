@@ -288,10 +288,7 @@ class TreatmentRecommender:
             return True
 
         # Distortion is subjective, needs verification
-        if defect.type == DefectType.DISTORTION and defect.severity > 0.5:
-            return True
-
-        return False
+        return bool(defect.type == DefectType.DISTORTION and defect.severity > 0.5)
 
     def _create_no_treatment(self, defect: DefectInstance) -> TreatmentRecommendation:
         """Create a placeholder for defects with no treatment."""

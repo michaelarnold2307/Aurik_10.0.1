@@ -17,13 +17,14 @@ USAGE:
     # Returns: Dict mit 30+ Features als numpy arrays
 """
 
+import logging
 from dataclasses import dataclass, field
 
 import librosa
 import numpy as np
 from scipy import signal as scipy_signal
 from scipy.stats import kurtosis, skew
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -185,27 +186,31 @@ class FeatureExtractor:
 
     def _extract_spectral_features(self, audio: np.ndarray, sr: int, features: AudioFeatures) -> AudioFeatures:
         """Extrahiert spektrale Features."""
+        # Clamp n_fft to the next-lower power of 2 that fits in the signal —
+        # prevents librosa from zero-padding and issuing UserWarning.
+        safe_n_fft = min(self.n_fft, max(32, 1 << int(np.floor(np.log2(max(1, len(audio)))))))
+
         # Spectral Centroid
-        centroid = librosa.feature.spectral_centroid(y=audio, sr=sr, n_fft=self.n_fft, hop_length=self.hop_length)[0]
+        centroid = librosa.feature.spectral_centroid(y=audio, sr=sr, n_fft=safe_n_fft, hop_length=self.hop_length)[0]
         features.spectral_centroid_mean = np.mean(centroid)
         features.spectral_centroid_std = np.std(centroid)
 
         # Spectral Rolloff
-        rolloff = librosa.feature.spectral_rolloff(y=audio, sr=sr, n_fft=self.n_fft, hop_length=self.hop_length)[0]
+        rolloff = librosa.feature.spectral_rolloff(y=audio, sr=sr, n_fft=safe_n_fft, hop_length=self.hop_length)[0]
         features.spectral_rolloff_mean = np.mean(rolloff)
         features.spectral_rolloff_std = np.std(rolloff)
 
         # Spectral Flux (energy difference between frames)
-        S = np.abs(librosa.stft(audio, n_fft=self.n_fft, hop_length=self.hop_length))
+        S = np.abs(librosa.stft(audio, n_fft=safe_n_fft, hop_length=self.hop_length))
         flux = np.sqrt(np.sum(np.diff(S, axis=1) ** 2, axis=0))
         features.spectral_flux_mean = np.mean(flux)
 
         # Spectral Flatness
-        flatness = librosa.feature.spectral_flatness(y=audio, n_fft=self.n_fft, hop_length=self.hop_length)[0]
+        flatness = librosa.feature.spectral_flatness(y=audio, n_fft=safe_n_fft, hop_length=self.hop_length)[0]
         features.spectral_flatness_mean = np.mean(flatness)
 
         # Spectral Contrast
-        contrast = librosa.feature.spectral_contrast(y=audio, sr=sr, n_fft=self.n_fft, hop_length=self.hop_length)
+        contrast = librosa.feature.spectral_contrast(y=audio, sr=sr, n_fft=safe_n_fft, hop_length=self.hop_length)
         features.spectral_contrast_mean = np.mean(contrast, axis=1)
 
         return features
@@ -242,13 +247,16 @@ class FeatureExtractor:
 
     def _extract_harmonic_features(self, audio: np.ndarray, sr: int, features: AudioFeatures) -> AudioFeatures:
         """Extrahiert harmonische Features."""
+        # Clamp n_fft so librosa never zero-pads short segments.
+        safe_n_fft = min(self.n_fft, max(32, 1 << int(np.floor(np.log2(max(1, len(audio)))))))
+
         # MFCC (Mel-Frequency Cepstral Coefficients)
-        mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=self.n_mfcc, n_fft=self.n_fft, hop_length=self.hop_length)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=self.n_mfcc, n_fft=safe_n_fft, hop_length=self.hop_length)
         features.mfcc_mean = np.mean(mfcc, axis=1)
         features.mfcc_std = np.std(mfcc, axis=1)
 
         # Chroma Features
-        chroma = librosa.feature.chroma_stft(y=audio, sr=sr, n_fft=self.n_fft, hop_length=self.hop_length)
+        chroma = librosa.feature.chroma_stft(y=audio, sr=sr, n_fft=safe_n_fft, hop_length=self.hop_length)
         features.chroma_mean = np.mean(chroma, axis=1)
 
         return features

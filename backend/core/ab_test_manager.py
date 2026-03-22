@@ -19,12 +19,12 @@ Migration::
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
 import warnings
+from collections.abc import Callable
 
 # Re-export kanonische Symbole für Backward-Compatibility
-from backend.core.ab_compare_manager import (  # noqa: F401
+from backend.core.ab_compare_manager import (
     ABCompareManager,
     ABDiff,
     ABSession,

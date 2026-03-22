@@ -1,5 +1,5 @@
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -90,7 +90,6 @@ class VinylEmulation:
             return audio
         # -- 1. RIAA-ähnliche HF-Bedämpfung (Tiefpasscharakter, 75µs Zeitkonstante) --
         tau_hf = 75e-6  # RIAA 75µs HF-Pol (~2122Hz)
-        tau_lf = 3180e-6  # RIAA LF 50Hz Bass-Roll-out  # noqa: F841
         k_hf = 2.0 * sr * tau_hf
         b_hf = np.array([1.0 / (k_hf + 1.0), 1.0 / (k_hf + 1.0)])
         a_hf = np.array([1.0, (1.0 - k_hf) / (k_hf + 1.0)])
@@ -103,10 +102,7 @@ class VinylEmulation:
             y = lfilter(b_hf, a_hf, ch.astype(np.float64))
             return lfilter(b_hp, a_hp, y)
 
-        if audio.ndim == 1:
-            out = _color(audio)
-        else:
-            out = np.stack([_color(ch) for ch in audio], axis=0)
+        out = _color(audio) if audio.ndim == 1 else np.stack([_color(ch) for ch in audio], axis=0)
         # -- 2. Rauschen (weißes, bandpassgefiltertes Vinyl-Rauschen) --
         if self.noise_level > 0.0:
             rng = np.random.default_rng(seed=42)

@@ -25,11 +25,11 @@ Autor: AI Team
 Datum: 8. Februar 2026
 """
 
-from dataclasses import dataclass
 import logging
-from pathlib import Path
 import sys
 import threading
+from dataclasses import dataclass
+from pathlib import Path
 
 import librosa
 import librosa.core.constantq  # CQT/VQT-Pfad — von chroma_cqt ausgelöst
@@ -67,7 +67,7 @@ def _warm_up_librosa() -> None:
     # stft → löst librosa.core.spectrum + librosa.util auf
     try:
         librosa.stft(_dummy_short, n_fft=512, hop_length=128)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("librosa warm-up stft: %s", exc)
 
     # feature-Submodule einzeln auflösen
@@ -86,14 +86,14 @@ def _warm_up_librosa() -> None:
     ]:
         try:
             _call(*_args, **_kwargs)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("librosa warm-up %s: %s", getattr(_call, "__name__", _call), exc)
 
     # util-Attribute explizit auflösen (alle lazy-loader-Ziele)
     for _attr in ("MAX_MEM_BLOCK", "pad_center", "frame", "expand_to", "normalize", "valid_audio", "fix_length"):
         try:
             getattr(librosa.util, _attr)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("librosa warm-up util.%s: %s", _attr, exc)
 
     logger.debug("librosa warm-up: alle Submodule aufgelöst (Deadlock-Fix)")
@@ -113,17 +113,17 @@ def _get_crepe():
     Umgebungsvariable AURIK_DISABLE_CREPE=1 deaktiviert CREPE (z.B. in
     Hypothesis-Fuzzing-Tests, wo ONNX-Inferenz den 30s-Timeout auslösen kann).
     """
-    import os  # noqa: PLC0415
+    import os
 
     if os.environ.get("AURIK_DISABLE_CREPE", "").strip() == "1":
         return None
     try:
         if str(_PLUGINS_DIR) not in sys.path:
             sys.path.insert(0, str(_PLUGINS_DIR.parent))
-        from plugins.crepe_plugin import get_crepe_plugin  # noqa: PLC0415
+        from plugins.crepe_plugin import get_crepe_plugin
 
         return get_crepe_plugin()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -132,10 +132,10 @@ def _get_versa():
     try:
         if str(_PLUGINS_DIR.parent) not in sys.path:
             sys.path.insert(0, str(_PLUGINS_DIR.parent))
-        from plugins.versa_plugin import get_versa_plugin  # noqa: PLC0415
+        from plugins.versa_plugin import get_versa_plugin
 
         return get_versa_plugin()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -287,7 +287,12 @@ class BassKraftMetric:
         try:
             crepe = _get_crepe()
             if crepe is not None:
-                result = crepe.analyze(audio, sr)
+                # Limit to 10 s — bass characteristics are stationary; avoids
+                # multi-minute ONNX inference on long tracks.  Reduced from 30 s
+                # to stay within per-goal performance budget (< 5 s target).
+                _max_bass_samples = int(sr * 10)
+                _bass_seg = audio[:_max_bass_samples] if len(audio) > _max_bass_samples else audio
+                result = crepe.analyze(_bass_seg, sr)
                 # Anteil voiced Frames im Bassbereich 20–120 Hz
                 bass_mask_f0 = (result.f0_hz >= 20) & (result.f0_hz <= 120) & (result.voiced_prob > 0.45)
                 n_total = max(1, len(result.f0_hz))
@@ -299,13 +304,13 @@ class BassKraftMetric:
                 )
             else:
                 raise RuntimeError("CREPE nicht verfügbar")
-        except Exception:  # noqa: BLE001 — pYIN-Fallback
+        except Exception:
             try:
                 seg_len = min(len(audio), int(sr * 2.0))
                 f0, _, voiced_probs = librosa.pyin(audio[:seg_len], fmin=20, fmax=250, sr=sr)
                 bass_voiced = np.sum((f0 >= 20) & (f0 <= 120) & (voiced_probs > 0.7))
                 bass_harmonic_strength = float(bass_voiced / max(1, len(f0)))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 bass_harmonic_strength = 0.5
 
         # Virtual Pitch / Missing Fundamental (Spec §8.1: Oberton-Analyse 120–500 Hz)
@@ -410,6 +415,7 @@ class BrillanzMetric:
     - HF Energy (8-20 kHz)
     - Spectral Centroid
     - Brightness Score
+    - v9.12 Hybrid: Referenz-bewusste HF-Präservierungs-Gewichtung
 
     Threshold: 0.85
     """
@@ -417,8 +423,33 @@ class BrillanzMetric:
     def __init__(self, threshold: float = 0.85) -> None:
         self.threshold = threshold
 
-    def measure(self, audio: np.ndarray, sr: int) -> float:
-        """Measure brillanz score (0.0 - 1.0)."""
+    def measure(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> float:
+        """Measure brillanz score (0.0 - 1.0).
+
+        Args:
+            audio:     Processed audio signal.
+            sr:        Sample rate.
+            reference: Optional original audio for preservation-weighted scoring.
+        """
+        score = self._measure_absolute(audio, sr)
+        if reference is None:
+            return score
+
+        # --- Hybrid v9.12: Reference-aware HF preservation ---
+        ref_score = self._measure_absolute(reference, sr)
+        # Preservation bonus: if restoration preserved or improved brillanz
+        if ref_score > 0.01:
+            preservation = score / (ref_score + 1e-10)
+            # preservation > 1.0 = improved, 1.0 = preserved, < 1.0 = degraded
+            # Mild penalty for degradation, mild bonus for improvement (capped)
+            pres_factor = float(np.clip(preservation, 0.5, 1.1))
+            # Blend: 80% absolute score + 20% preservation-weighted
+            score = 0.80 * score + 0.20 * (score * pres_factor)
+            score = float(np.clip(score, 0.0, 1.0))
+        return score
+
+    def _measure_absolute(self, audio: np.ndarray, sr: int) -> float:
+        """Core absolute brillanz measurement (ISO 226 weighted)."""
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
 
@@ -494,6 +525,7 @@ class WaermeMetric:
     - Mid Energy (200-2000 Hz)
     - Harmonic Warmth (2nd/3rd harmonics)
     - Low-Mid Presence (200-500 Hz)
+    - v9.12 Hybrid: Referenz-bewusst + optionale MERT-Harmonizität
 
     Threshold: 0.80
     """
@@ -501,8 +533,49 @@ class WaermeMetric:
     def __init__(self, threshold: float = 0.80) -> None:
         self.threshold = threshold
 
-    def measure(self, audio: np.ndarray, sr: int) -> float:
-        """Measure wärme score (0.0 - 1.0)."""
+    def measure(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> float:
+        """Measure wärme score (0.0 - 1.0).
+
+        Args:
+            audio:     Processed audio signal.
+            sr:        Sample rate.
+            reference: Optional original audio for preservation-weighted scoring
+                       and MERT-harmonicity hybrid refinement.
+        """
+        score = self._measure_absolute(audio, sr)
+        if reference is None:
+            return score
+
+        # --- Hybrid v9.12: Reference-aware warmth preservation ---
+        ref_score = self._measure_absolute(reference, sr)
+        if ref_score > 0.01:
+            preservation = score / (ref_score + 1e-10)
+            pres_factor = float(np.clip(preservation, 0.5, 1.1))
+            score = 0.80 * score + 0.20 * (score * pres_factor)
+
+        # --- Optional MERT harmonicity refinement (v9.12 hybrid) ---
+        # If MERT plugin is already loaded, use its harmonicity for H2/H4 validation
+        try:
+            from plugins.mert_plugin import get_mert_plugin
+
+            mert = get_mert_plugin()
+            if mert is not None and hasattr(mert, "_session") and mert._session is not None:
+                analysis = mert.analyze(audio, sr)
+                # MERT harmonicity refines warmth: weight 10% (gentle blend)
+                mert_warmth = float(np.clip(analysis.harmonicity, 0.0, 1.0))
+                score = 0.90 * score + 0.10 * mert_warmth
+                logger.debug(
+                    "WaermeMetric MERT-hybrid: harmonicity=%.3f, blended_score=%.3f",
+                    analysis.harmonicity,
+                    score,
+                )
+        except Exception:
+            pass  # MERT not loaded or unavailable — DSP-only path
+
+        return float(np.clip(score, 0.0, 1.0))
+
+    def _measure_absolute(self, audio: np.ndarray, sr: int) -> float:
+        """Core absolute wärme measurement (ISO 226 weighted)."""
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
 
@@ -589,7 +662,7 @@ class WaermeMetric:
             f0 = float(freqs[bass_idx[int(np.argmax(mag[bass_mask]))]])
 
             def _peak_amp(freq: float, _mag: np.ndarray = mag, _bw: float = bin_w) -> float:
-                center = int(round(freq / _bw))
+                center = round(freq / _bw)
                 lo = max(0, center - 2)
                 hi = min(len(_mag) - 1, center + 2)
                 return float(np.max(_mag[lo : hi + 1]))
@@ -663,7 +736,12 @@ class NatuerlichkeitMetric:
         try:
             crepe = _get_crepe()
             if crepe is not None:
-                cr = crepe.analyze(audio, sr)
+                # Limit to 10 s — voicing characteristics are stationary; avoids
+                # multi-minute ONNX inference on long tracks.  Reduced from 30 s
+                # to stay within per-goal performance budget (< 5 s target).
+                _max_nat_samples = int(sr * 10)
+                _nat_seg = audio[:_max_nat_samples] if len(audio) > _max_nat_samples else audio
+                cr = crepe.analyze(_nat_seg, sr)
                 voiced_clear = float(np.mean(cr.voiced_prob > 0.60))
                 unvoiced_clear = float(np.mean(cr.voiced_prob < 0.20))
                 ambiguous = 1.0 - voiced_clear - unvoiced_clear
@@ -687,7 +765,7 @@ class NatuerlichkeitMetric:
                         voiced_clear,
                         unvoiced_clear,
                     )
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         # Final score — adaptiv gewichtet (CREPE nur bei klarer Stimmcharakteristik)
@@ -749,7 +827,7 @@ class AuthentizitaetMetric:
             try:
                 chroma_current = librosa.feature.chroma_cqt(y=_audio_f32, sr=sr)
                 chroma_reference = librosa.feature.chroma_cqt(y=_ref_f32, sr=sr)
-            except Exception:  # noqa: BLE001  numba UFuncNoLoopError fallback
+            except Exception:
                 chroma_current = librosa.feature.chroma_stft(y=_audio_f32, sr=sr)
                 chroma_reference = librosa.feature.chroma_stft(y=_ref_f32, sr=sr)
 
@@ -782,7 +860,7 @@ class AuthentizitaetMetric:
             try:
                 versa = _get_versa()
                 if versa is not None:
-                    import numpy as _np  # noqa: PLC0415
+                    import numpy as _np
 
                     res = versa.score(audio, sr)
                     # MOS [1,5] → Similarity [0,1]
@@ -794,7 +872,7 @@ class AuthentizitaetMetric:
                         res.mos,
                         versa_similarity,
                     )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
             # Final score: VERSA 40 %, Chroma 35 %, Formant 25 %
@@ -808,7 +886,7 @@ class AuthentizitaetMetric:
             # Fallback: chroma_stft (pure numpy/scipy, no numba dependency).
             try:
                 chroma = librosa.feature.chroma_cqt(y=audio, sr=sr)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 chroma = librosa.feature.chroma_stft(y=audio, sr=sr)
             chroma_std = np.std(chroma)
             # Low variance = consistent spectrum = authentic
@@ -973,13 +1051,15 @@ class GrooveMetric:
     Misst, ob Restaurierungsoperationen den musikalischen Groove
     (Swing, Rubato, intentionale Timing-Varianz) erhalten haben.
 
-    Algorithmus:
-        1. Onset-Detektion (``librosa.onset.onset_detect``) auf dem Signal.
-        2. Inter-Onset-Intervalle (IOI) berechnen.
-        3. Variationskoeffizient (CV) der IOI liefert Timing-Natürlichkeit.
-        4. DTW-Proxy (0.5 × IOI-StdDev) → Score via Schwellwert-Mapping.
+    Algorithmus (Hybrid v9.12):
+        **Mit Referenz (Original):** Echtes Sakoe-Chiba-DTW via
+        ``dsp.dtw_groove.DtwGrooveMeasurer`` — Spectral-Flux-Onset-Detection
+        + DTW-Alignment + RMS-Abweichung (Pflicht ≤ 8 ms).
 
-    Pflicht-Invariante: DTW-Proxy ≤ 8 ms RMS (Aurik-Spec §8.1).
+        **Ohne Referenz (Einzelsignal):** IOI-basierte Groove-Qualitäts-
+        Schätzung — CV der Inter-Onset-Intervalle + DTW-Proxy.
+
+    Pflicht-Invariante: DTW RMS ≤ 8 ms (Aurik-Spec §8.1, §8.2-6).
 
     Threshold: ≥ 0.88
     """
@@ -988,16 +1068,22 @@ class GrooveMetric:
         self.threshold = threshold
         self._max_acceptable_dtw_ms: float = 8.0
 
-    def measure(self, audio: np.ndarray, sr: int) -> float:
+    def measure(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> float:
         """Berechnet Groove-Score ∈ [0, 1].
 
         Args:
-            audio: Audio-Signal (mono/stereo, float32).
-            sr:    Abtastrate in Hz.
+            audio:     Audio-Signal (mono/stereo, float32).
+            sr:        Abtastrate in Hz.
+            reference: Optionales Original-Audio. Wenn vorhanden, wird echtes
+                       DTW via ``dsp.dtw_groove`` statt IOI-Proxy verwendet.
 
         Returns:
             Groove-Score ∈ [0.0, 1.0].
         """
+        # --- True DTW path (when reference available) ---
+        if reference is not None:
+            return self._measure_with_dtw(audio, reference, sr)
+
         if audio.ndim > 1:
             audio = np.mean(audio, axis=1)
         audio = np.nan_to_num(audio, nan=0.0)
@@ -1049,6 +1135,33 @@ class GrooveMetric:
             np.clip(score, 0.0, 1.0)
         )  # v9.11: kein Floor — schlechter Groove-Erhalt muss messbar sein (war: clip(0.88,...) → blind)
 
+    def _measure_with_dtw(
+        self, audio: np.ndarray, reference: np.ndarray, sr: int
+    ) -> float:
+        """True DTW groove measurement via dsp.dtw_groove (v9.12 Hybrid).
+
+        Uses Sakoe-Chiba conditioned DTW on spectral-flux onsets for
+        precise onset alignment instead of IOI-proxy approximation.
+
+        Falls back to IOI-proxy if DTW module unavailable or fails.
+        """
+        try:
+            from dsp.dtw_groove import get_groove_measurer
+
+            measurer = get_groove_measurer(sr=sr)
+            result = measurer.measure(reference, audio, sr=sr)
+            logger.debug(
+                "GrooveMetric DTW-hybrid: rms=%.2f ms, score=%.3f, onsets=%d/%d",
+                result.dtw_rms_ms,
+                result.groove_score,
+                result.n_onsets_original,
+                result.n_onsets_restored,
+            )
+            return float(np.clip(result.groove_score, 0.0, 1.0))
+        except Exception as exc:
+            logger.debug("GrooveMetric DTW-hybrid fallback to IOI-proxy: %s", exc)
+            return self.measure(audio, sr, reference=None)
+
     def compare(self, original: np.ndarray, processed: np.ndarray, sr: int) -> tuple[float, float]:
         """Vergleicht Groove: Original vs. Restauriert.
 
@@ -1064,15 +1177,25 @@ class GrooveMetric:
         processed = np.nan_to_num(processed, nan=0.0)
 
         try:
-            o_t = librosa.onset.onset_detect(y=original, sr=sr, hop_length=512, backtrack=True, units="time")
-            p_t = librosa.onset.onset_detect(y=processed, sr=sr, hop_length=512, backtrack=True, units="time")
-            min_len = min(len(o_t), len(p_t), 200)
-            if min_len < 2:
+            from dsp.dtw_groove import get_groove_measurer
+
+            measurer = get_groove_measurer(sr=sr)
+            result = measurer.measure(original, processed, sr=sr)
+            dtw_rms_ms = result.dtw_rms_ms
+            if result.n_onsets_original < 2 or result.n_onsets_restored < 2:
                 return self.measure(processed, sr), 0.0
-            dtw_rms_ms = float(np.sqrt(np.mean((o_t[:min_len] - p_t[:min_len]) ** 2))) * 1000.0
         except Exception as exc:
-            logger.debug("GrooveMetric.compare Fallback: %s", exc)
-            dtw_rms_ms = 0.0
+            logger.debug("GrooveMetric.compare DTW fallback: %s", exc)
+            # Legacy naive alignment fallback
+            try:
+                o_t = librosa.onset.onset_detect(y=original, sr=sr, hop_length=512, backtrack=True, units="time")
+                p_t = librosa.onset.onset_detect(y=processed, sr=sr, hop_length=512, backtrack=True, units="time")
+                min_len = min(len(o_t), len(p_t), 200)
+                if min_len < 2:
+                    return self.measure(processed, sr), 0.0
+                dtw_rms_ms = float(np.sqrt(np.mean((o_t[:min_len] - p_t[:min_len]) ** 2))) * 1000.0
+            except Exception:
+                dtw_rms_ms = 0.0
 
         if dtw_rms_ms <= 2.0:
             groove_score = 1.0
@@ -1167,16 +1290,73 @@ class SpatialDepthMetric:
         iacc = float(np.max(np.abs(xcorr)))
         return float(np.clip(iacc, 0.0, 1.0))
 
-    def measure(self, audio: np.ndarray, sr: int) -> float:
+    def measure(self, audio: np.ndarray, sr: int, *, reference: np.ndarray | None = None) -> float:
         """Berechnet Spatial-Depth-Score ∈ [0, 1].
 
+        When *reference* (original before restoration) is provided, computes a
+        preservation-aware score: 80 % absolute quality + 20 % spatial-preservation
+        penalty.  Penalises IACC drift, stereo-width drift and S/M-ratio drift
+        between original and restored signal.
+
         Args:
-            audio: Mono (1-D) oder Stereo ([N, 2]), float32.
-            sr:    Abtastrate.
+            audio:     Mono (1-D) oder Stereo ([N, 2]), float32.
+            sr:        Abtastrate.
+            reference: Optional original audio (same shape).
 
         Returns:
             Spatial-Depth-Score ∈ [0.0, 1.0].
         """
+        abs_score = self._measure_absolute(audio, sr)
+
+        if reference is None:
+            return abs_score
+
+        # --- Reference-aware preservation scoring ---
+        ref_feats = self._spatial_features(reference, sr)
+        res_feats = self._spatial_features(audio, sr)
+
+        if ref_feats is None or res_feats is None:
+            return abs_score  # mono on either side → absolute only
+
+        # Drift penalties: penalise large changes in spatial characteristics
+        iacc_drift = abs(res_feats["iacc"] - ref_feats["iacc"])
+        width_drift = abs(res_feats["correlation"] - ref_feats["correlation"])
+        sm_drift = abs(res_feats["s_m_ratio"] - ref_feats["s_m_ratio"])
+
+        # Each drift mapped to [0, 1] penalty via sigmoid-like scaling
+        iacc_penalty = min(1.0, iacc_drift / 0.15)    # > 0.15 drift = full penalty
+        width_penalty = min(1.0, width_drift / 0.20)   # > 0.20 drift = full penalty
+        sm_penalty = min(1.0, sm_drift / 0.15)         # > 0.15 drift = full penalty
+
+        preservation = 1.0 - 0.50 * iacc_penalty - 0.30 * width_penalty - 0.20 * sm_penalty
+        preservation = float(np.clip(preservation, 0.0, 1.0))
+
+        # Blend: 80 % absolute quality, 20 % preservation
+        score = 0.80 * abs_score + 0.20 * preservation
+        return float(np.clip(score, 0.0, 1.0))
+
+    def _spatial_features(self, audio: np.ndarray, sr: int) -> dict[str, float] | None:
+        """Extract raw spatial features (IACC, L/R correlation, S/M ratio).
+
+        Returns None for mono signals.
+        """
+        audio = np.nan_to_num(audio, nan=0.0)
+        if audio.ndim == 1 or (audio.ndim == 2 and (audio.shape[0] == 1 or audio.shape[1] == 1)):
+            return None
+        if audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2:
+            audio = audio.T
+        left, right = audio[:, 0], audio[:, 1]
+
+        iacc = self._compute_iacc(left, right, max_lag_ms=1.0, sr=sr)
+        correlation = float(np.clip(np.corrcoef(left, right)[0, 1], -1.0, 1.0))
+        side = (left - right) / 2.0
+        mid = (left + right) / 2.0
+        s_m_ratio = float(np.mean(side**2)) / (float(np.mean(mid**2)) + 1e-12)
+
+        return {"iacc": iacc, "correlation": correlation, "s_m_ratio": s_m_ratio}
+
+    def _measure_absolute(self, audio: np.ndarray, sr: int) -> float:
+        """Absolute spatial-depth score without reference comparison."""
         audio = np.nan_to_num(audio, nan=0.0)
 
         # [1,N] channels-first mono → shape[0]==1
@@ -1191,15 +1371,12 @@ class SpatialDepthMetric:
 
         # 0. IACC — Phantom-Center-Stabilität (Blauert 1997) — Hauptmetrik
         iacc = self._compute_iacc(left, right, max_lag_ms=1.0, sr=sr)
-        # IACC ∈ [0,1]: ideal stereo range ≈ [0.3, 0.8].
-        # Score: if IACC < 0.70 → phantom-center collapse risk (Blauert);
-        # if IACC > 0.90 → nearly mono (too little spatial depth)
         if iacc < self.IACC_COLLAPSE_THRESHOLD:
-            iacc_score = float(iacc / self.IACC_COLLAPSE_THRESHOLD) * 0.60  # heavily penalised
+            iacc_score = float(iacc / self.IACC_COLLAPSE_THRESHOLD) * 0.60
         elif iacc <= 0.90:
-            iacc_score = 1.0  # good stereo imaging
+            iacc_score = 1.0
         else:
-            iacc_score = max(0.50, 1.0 - (iacc - 0.90) / 0.10 * 0.5)  # approaching mono
+            iacc_score = max(0.50, 1.0 - (iacc - 0.90) / 0.10 * 0.5)
 
         # 1. Stereo Width (L/R Pearson correlation)
         correlation = float(np.clip(np.corrcoef(left, right)[0, 1], -1.0, 1.0))
@@ -1517,7 +1694,7 @@ class TonalCenterMetric:
             import librosa  # type: ignore[import]
 
             return librosa.feature.chroma_stft(y=audio_mono, sr=sr, hop_length=2048, n_chroma=12).astype(np.float32)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         # DSP-Fallback
         n_fft = min(4096, len(audio_mono))
@@ -1531,7 +1708,7 @@ class TonalCenterMetric:
             for bi, f in enumerate(freqs[1:], 1):
                 if f < 20 or f > 8000:
                     continue
-                pc = int(round(12.0 * np.log2(f / 16.352 + 1e-10))) % 12
+                pc = round(12.0 * np.log2(f / 16.352 + 1e-10)) % 12
                 chroma[pc, t] += psd[bi]
         col_max = chroma.max(axis=0, keepdims=True) + 1e-10
         return chroma / col_max
@@ -1853,7 +2030,7 @@ class ArticulationMetric:
         return self._reference_free(audio_mono, sr)
 
     def _reference_based(self, restored: np.ndarray, reference: np.ndarray, sr: int) -> float:
-        """Referenzbasierter Modus: Transient-Shape-Korrelation + Attack-Time."""
+        """Referenzbasierter Modus: Transient-Shape-Korrelation + Attack-Time + Overtone-Shape."""
         win_samples = max(4, int(sr * self.FRAME_SIZE_MS / 1000.0))
         hop_samples = max(2, int(sr * self.HOP_MS / 1000.0))
         min_len = min(len(restored), len(reference))
@@ -1880,7 +2057,13 @@ class ArticulationMetric:
         onsets_rest = self._detect_onsets(env_rest)
         attack_score = self._attack_time_score(onsets_ref, onsets_rest, hop_samples, sr)
 
-        score = float(0.65 * transient_corr + 0.35 * attack_score)
+        # --- Hybrid v9.12: MFCC Overtone-Shape at transient windows ---
+        overtone_score = self._transient_mfcc_correlation(
+            reference[:min_len], restored[:min_len], sr, onsets_ref, hop_samples
+        )
+
+        # Weighted: 55% transient shape + 25% attack time + 20% overtone consistency
+        score = float(0.55 * transient_corr + 0.25 * attack_score + 0.20 * overtone_score)
         return float(np.clip(score, 0.0, 1.0))
 
     def _reference_free(self, audio: np.ndarray, sr: int) -> float:
@@ -1918,6 +2101,103 @@ class ArticulationMetric:
         # werden — sauberes restauriertes Material wird nicht bestraft.
         score = float(np.clip(cv * 2.5, 0.75, 1.0))
         return score
+
+    def _transient_mfcc_correlation(
+        self,
+        reference: np.ndarray,
+        restored: np.ndarray,
+        sr: int,
+        onset_frames: np.ndarray,
+        hop_samples: int,
+    ) -> float:
+        """MFCC correlation specifically at transient windows (v9.12 Hybrid).
+
+        Computes 13-coefficient MFCC around each detected onset in both
+        reference and restored audio, then measures Pearson correlation
+        of the MFCC vectors. This captures overtone-shape consistency
+        at attack points — a dimension not covered by amplitude-envelope
+        correlation alone.
+
+        Returns:
+            Score ∈ [0, 1]. 1.0 = overtone structure perfectly preserved at transients.
+        """
+        if len(onset_frames) == 0:
+            return 1.0
+
+        n_fft = min(2048, len(reference))
+        if n_fft < 256:
+            return 1.0
+
+        # Extract short MFCC snapshots around each onset
+        win_samples = n_fft
+        correlations: list[float] = []
+        max_onsets = min(len(onset_frames), 16)  # Cap for performance
+
+        for onset_idx in onset_frames[:max_onsets]:
+            center = int(onset_idx) * hop_samples
+            start = max(0, center - win_samples // 4)
+            end = min(min(len(reference), len(restored)), start + win_samples)
+            if end - start < 256:
+                continue
+
+            seg_ref = reference[start:end].astype(np.float32)
+            seg_rest = restored[start:end].astype(np.float32)
+
+            # Quick 13-MFCC via FFT + Mel-filter + DCT
+            mfcc_ref = self._quick_mfcc(seg_ref, sr, n_fft=end - start)
+            mfcc_rest = self._quick_mfcc(seg_rest, sr, n_fft=end - start)
+
+            if mfcc_ref is None or mfcc_rest is None:
+                continue
+
+            # Pearson over 13 MFCC coefficients
+            std_r = np.std(mfcc_ref)
+            std_d = np.std(mfcc_rest)
+            if std_r < 1e-10 or std_d < 1e-10:
+                correlations.append(1.0)
+                continue
+
+            r = float(np.corrcoef(mfcc_ref, mfcc_rest)[0, 1])
+            if not np.isfinite(r):
+                r = 0.0
+            correlations.append(float(np.clip((r + 1.0) / 2.0, 0.0, 1.0)))
+
+        if not correlations:
+            return 1.0
+        return float(np.clip(np.mean(correlations), 0.0, 1.0))
+
+    @staticmethod
+    def _quick_mfcc(audio: np.ndarray, sr: int, n_fft: int = 2048) -> np.ndarray | None:
+        """Lightweight 13-coefficient MFCC for a single segment (no librosa dependency)."""
+        if len(audio) < 64:
+            return None
+        n_fft = min(n_fft, len(audio))
+        win = np.hanning(n_fft).astype(np.float32)
+        mag = np.abs(np.fft.rfft(audio[:n_fft] * win))
+        power = mag**2 + 1e-10
+
+        # 20-band Mel filterbank
+        n_mels = 20
+        freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+        mel_min = 2595 * np.log10(1 + 80 / 700)
+        mel_max = 2595 * np.log10(1 + min(sr / 2, 8000) / 700)
+        mel_pts = np.linspace(mel_min, mel_max, n_mels + 2)
+        hz_pts = 700 * (10 ** (mel_pts / 2595) - 1)
+
+        mel_energies = np.zeros(n_mels, dtype=np.float32)
+        for m in range(n_mels):
+            left, center, right = hz_pts[m], hz_pts[m + 1], hz_pts[m + 2]
+            for k, f in enumerate(freqs):
+                if left <= f <= center and (center - left) > 1e-6:
+                    mel_energies[m] += power[k] * (f - left) / (center - left)
+                elif center < f <= right and (right - center) > 1e-6:
+                    mel_energies[m] += power[k] * (right - f) / (right - center)
+
+        log_mel = np.log(mel_energies + 1e-10)
+        from scipy.fftpack import dct as sp_dct
+
+        mfcc = sp_dct(log_mel, norm="ortho")[:13]
+        return np.nan_to_num(mfcc, nan=0.0)
 
     def _energy_envelope(self, audio: np.ndarray, win: int, hop: int) -> np.ndarray:
         """Berechnet RMS-Einhüllende mit kurzen Frames."""
@@ -2069,11 +2349,24 @@ class MusicalGoalsChecker:
         elif reference is not None and reference.ndim == 2 and reference.shape[0] == 1:
             reference = reference[0]
 
+        import time as _time
+
+        _t_all_start = _time.perf_counter()
         for goal_name, metric in self.metrics.items():
-            if goal_name in ("authentizitaet", "timbre_authentizitaet") and reference is not None:
+            _t0 = _time.perf_counter()
+            if goal_name in ("authentizitaet", "timbre_authentizitaet", "groove", "brillanz", "waerme", "artikulation", "spatial_depth") and reference is not None:
                 scores[goal_name] = metric.measure(audio, sr, reference=reference)
             else:
                 scores[goal_name] = metric.measure(audio, sr)
+            _dt = _time.perf_counter() - _t0
+            if _dt > 5.0:
+                logger.warning("measure_all: goal=%s took %.1f s", goal_name, _dt)
+            else:
+                logger.debug("measure_all: goal=%s %.3f s", goal_name, _dt)
+        logger.info(
+            "measure_all: 14 goals completed in %.1f s",
+            _time.perf_counter() - _t_all_start,
+        )
 
         # Key ist "artikulation" (konsistent mit goal_priority_protocol, goal_applicability_filter)
         return scores

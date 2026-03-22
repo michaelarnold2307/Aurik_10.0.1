@@ -1,9 +1,10 @@
+import logging
 from typing import Any
 
 import numpy as np
-from scipy.signal import find_peaks, hamming
 import soundfile as sf
-import logging
+from scipy.signal import find_peaks, hamming
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,7 +70,7 @@ class RuleBasedGenderDetector:
             frame = audio[i : i + frame_size] * hamming(frame_size)
             spectrum = np.abs(np.fft.rfft(frame))
             freqs = np.fft.rfftfreq(frame_size, 1 / sr)
-            peaks, props = find_peaks(spectrum, height=np.max(spectrum) * 0.3)
+            peaks, _props = find_peaks(spectrum, height=np.max(spectrum) * 0.3)
             total += 1
             if len(peaks) > 0:
                 pitches.append(freqs[peaks[0]])

@@ -16,11 +16,11 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 
-_instance: Optional["ChainOptimizer"] = None
+_instance: ChainOptimizer | None = None
 _lock = threading.Lock()
 
 
-def get_chain_optimizer(compute_budget: float = 1.0) -> "ChainOptimizer":
+def get_chain_optimizer(compute_budget: float = 1.0) -> ChainOptimizer:
     """Get or create ChainOptimizer singleton.
 
     Args:

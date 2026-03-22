@@ -1,5 +1,5 @@
-from dataclasses import asdict, dataclass, field
 import logging
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
@@ -54,7 +54,7 @@ class SpectralArtifactDetector:
     - Quality-Gate und Logging integriert
     """
 
-    def __init__(self, artifact_threshold: float = 0.15, model_path: str = None, threshold: float = 0.95):
+    def __init__(self, artifact_threshold: float = 0.15, model_path: str | None = None, threshold: float = 0.95):
         self.artifact_threshold = artifact_threshold
         self.model_path = model_path
         self.model = self._load_model(model_path)
@@ -122,7 +122,7 @@ class SpectralArtifactDetector:
             self._audit_log(result, sr if "sr" in locals() else None)
             return result
 
-    def _audit_log(self, result: dict[str, Any], sr: int = None):
+    def _audit_log(self, result: dict[str, Any], sr: int | None = None):
         logger.debug("ArtifactDetector: Audit-Log: %s | SR: %s", result, sr)
 
     def detect(self, audio: np.ndarray) -> dict:

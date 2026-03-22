@@ -27,10 +27,10 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -88,7 +88,7 @@ class PhraseContext:
     audio_context: np.ndarray
     chroma_mean: np.ndarray  # shape (12,), float32
     tempo_bpm: float
-    beat_positions: List[int]  # Sample-Positionen
+    beat_positions: list[int]  # Sample-Positionen
     phrase_start_s: float
     phrase_end_s: float
     gap_start_s: float
@@ -120,7 +120,7 @@ class PhraseBoundary:
 # Singleton
 # ---------------------------------------------------------------------------
 
-_instance: Optional[MusicalPhraseContextExtractor] = None
+_instance: MusicalPhraseContextExtractor | None = None
 _lock = threading.Lock()
 
 
@@ -145,7 +145,7 @@ class MusicalPhraseContextExtractor:
     """
 
     def __init__(self) -> None:
-        self._madmom_available: Optional[bool] = None
+        self._madmom_available: bool | None = None
         logger.debug("MusicalPhraseContextExtractor initialisiert.")
 
     # ------------------------------------------------------------------
@@ -343,7 +343,7 @@ class MusicalPhraseContextExtractor:
         bpm = 60.0 / (peak_lag * hop_s)
         return float(np.clip(bpm, 40.0, 240.0))
 
-    def _estimate_beats(self, audio: np.ndarray, sr: int, tempo_bpm: float) -> List[int]:
+    def _estimate_beats(self, audio: np.ndarray, sr: int, tempo_bpm: float) -> list[int]:
         """Schätzt Beat-Positionen in Samples.
 
         Madmom (RNN) wenn verfügbar, sonst Gleichabstand aus Tempo.
@@ -360,7 +360,7 @@ class MusicalPhraseContextExtractor:
 
         # Fallback: Gleichabstand
         beat_period = 60.0 / max(tempo_bpm, 1.0) * sr
-        beats: List[int] = []
+        beats: list[int] = []
         pos = 0.0
         while pos < len(audio):
             beats.append(int(pos))
@@ -371,15 +371,15 @@ class MusicalPhraseContextExtractor:
         self,
         audio: np.ndarray,
         sr: int,
-        beat_samples: List[int],
+        beat_samples: list[int],
         tempo_bpm: float,
-    ) -> List[int]:
+    ) -> list[int]:
         """Erkennt Phrasen-Grenzen via harmonischen und dynamischen Sprüngen.
 
         Returns:
             Sortierte Sample-Positionen der Phrasen-Grenzen (inkl. 0 und len(audio))
         """
-        boundaries: List[int] = [0]
+        boundaries: list[int] = [0]
 
         # Min. Phrasen-Länge in Samples
         min_phrase_samples = int(MIN_PHRASE_DURATION_S * sr)
@@ -388,7 +388,7 @@ class MusicalPhraseContextExtractor:
         frame_s = 2.0
         frame_samples = int(frame_s * sr)
         n_frames = max(1, len(audio) // frame_samples)
-        chroma_frames: List[np.ndarray] = []
+        chroma_frames: list[np.ndarray] = []
         for i in range(n_frames):
             seg = audio[i * frame_samples : (i + 1) * frame_samples]
             chroma_frames.append(self._compute_chroma(seg, sr))
@@ -419,11 +419,11 @@ class MusicalPhraseContextExtractor:
 
     def _find_phrase_for_gap(
         self,
-        boundaries: List[int],
+        boundaries: list[int],
         gap_start: int,
         gap_end: int,
         n: int,
-    ) -> Optional[Tuple[int, int]]:
+    ) -> tuple[int, int] | None:
         """Findet die Phrase, die die Dropout-Lücke enthält."""
         for i in range(len(boundaries) - 1):
             p_start = boundaries[i]
@@ -438,11 +438,11 @@ class MusicalPhraseContextExtractor:
 
     def _find_neighbor_phrase(
         self,
-        boundaries: List[int],
+        boundaries: list[int],
         p_start: int,
         p_end: int,
         n: int,
-    ) -> Optional[Tuple[int, int]]:
+    ) -> tuple[int, int] | None:
         """Gibt eine benachbarte Phrase zurück (Vorgänger oder Nachfolger)."""
         for i in range(len(boundaries) - 1):
             if boundaries[i] == p_start:
@@ -477,7 +477,7 @@ class MusicalPhraseContextExtractor:
             if f <= 0:
                 continue
             midi = 12.0 * math.log2(f / a4) + 69.0
-            chroma_bin = int(round(midi)) % N_CHROMA
+            chroma_bin = round(midi) % N_CHROMA
             chroma[chroma_bin] += float(spec[i])
 
         norm = float(np.linalg.norm(chroma))
@@ -578,22 +578,22 @@ get_phrase_context_extractor = get_phrase_extractor
 get_musical_phrase_context_extractor = get_phrase_extractor
 
 __all__ = [
-    "PhraseBoundary",
-    "PhraseContext",
-    "MusicalPhraseContextExtractor",
-    "get_musical_phrase_context_extractor",
-    "get_phrase_extractor",
-    "get_phrase_context_extractor",
-    "extract_phrase_context",
-    # Modul-Konstanten (Spec §2.12)
-    "MIN_FILE_DURATION_S",
-    "MAX_CONTEXT_DURATION_S",
-    "MIN_PHRASE_DURATION_S",
-    "MIN_PHRASE_BEATS",
-    "MAX_GAP_DURATION_MS",
-    "GAP_FRACTION_THRESHOLD",
-    "GAP_PHRASE_RATIO_MAX",
-    "N_CHROMA",
     "CHROMA_JUMP_THRESHOLD",
     "ENERGY_DELTA_DB",
+    "GAP_FRACTION_THRESHOLD",
+    "GAP_PHRASE_RATIO_MAX",
+    "MAX_CONTEXT_DURATION_S",
+    "MAX_GAP_DURATION_MS",
+    # Modul-Konstanten (Spec §2.12)
+    "MIN_FILE_DURATION_S",
+    "MIN_PHRASE_BEATS",
+    "MIN_PHRASE_DURATION_S",
+    "N_CHROMA",
+    "MusicalPhraseContextExtractor",
+    "PhraseBoundary",
+    "PhraseContext",
+    "extract_phrase_context",
+    "get_musical_phrase_context_extractor",
+    "get_phrase_context_extractor",
+    "get_phrase_extractor",
 ]

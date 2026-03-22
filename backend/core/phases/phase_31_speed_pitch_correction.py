@@ -211,7 +211,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
 
         # ML-Hybrid Mode Routing (v3.0)
         quality_mode = kwargs.get("quality_mode", "balanced")
-        use_ml_hybrid = ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "maximum"]
+        use_ml_hybrid = ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "quality", "maximum"]
 
         # Step 1: Robuste Pitch-Detektion (ML-Hybrid oder pYIN)
         if use_ml_hybrid:
@@ -386,10 +386,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
         import librosa
 
         # Mono + erste 5 s
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1).astype(np.float32)
-        else:
-            audio_mono = audio.astype(np.float32)
+        audio_mono = np.mean(audio, axis=1).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
 
         analysis_samples = min(len(audio_mono), int(5 * self.sample_rate))
         segment = np.nan_to_num(audio_mono[:analysis_samples], nan=0.0)
@@ -516,7 +513,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
     def _phase_vocoder_mono(self, audio: np.ndarray, ratio: float, nperseg: int, noverlap: int) -> np.ndarray:
         """Phase Vocoder for mono signal."""
         # STFT
-        f, t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
 
         # Frequency shift
         magnitude = np.abs(Zxx)
@@ -574,7 +571,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
         try:
             import librosa
 
-            f0, voiced_flag, voiced_prob = librosa.pyin(
+            f0, voiced_flag, _voiced_prob = librosa.pyin(
                 y.astype(np.float32),
                 fmin=float(librosa.note_to_hz("C2")),
                 fmax=float(librosa.note_to_hz("C7")),
@@ -607,7 +604,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             grain_len = i_e - i_s
             if grain_len <= 0:
                 in_pos += hop
-                out_pos += int(round(hop * ratio))
+                out_pos += round(hop * ratio)
                 frame_idx += 1
                 continue
 
@@ -620,7 +617,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             g_len_out = o_e - o_s
             if g_len_out <= 0:
                 in_pos += hop
-                out_pos += int(round(hop * ratio))
+                out_pos += round(hop * ratio)
                 frame_idx += 1
                 continue
 
@@ -635,7 +632,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             weight_buf[o_s:o_e] += win
 
             in_pos += hop
-            out_pos += int(round(hop * ratio))
+            out_pos += round(hop * ratio)
             frame_idx += 1
 
         safe_w = np.maximum(weight_buf[:n_in], 1e-8)

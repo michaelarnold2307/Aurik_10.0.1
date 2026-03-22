@@ -7,7 +7,53 @@ direkt importieren. Alle Core-Zugriffe laufen über diese Datei.
 
 Verwendung im Frontend::
 
-    from backend.api.bridge import get_quality_mode, get_restorer_classes, get_defect_scanner
+    from backend.api.bridge import export_guard, get_aurik_denker_instance
+    from backend.api.bridge import get_defect_scanner, get_quality_mode
+    from backend.api.bridge import get_musical_goals_checker, get_mushra_evaluator
+    from backend.api.bridge import get_perceptual_quality_scorer
+    from backend.api.bridge import get_ml_memory_budget_status
+
+Öffentliche API (vollständig)::
+
+    # Defect-Cache (FIFO, 64 Einträge, Thread-sicher)
+    cache_defect_result, get_cached_defect_result, clear_defect_cache
+
+    # Enums / Konfigurationsklassen
+    get_quality_mode, get_medium_type_enum, get_processing_mode_enum
+
+    # Kern-Einstiegspunkte
+    get_restorer_classes, get_aurik_denker_class, get_aurik_denker_instance
+
+    # Analyse / Klassifikation
+    get_defect_scanner, get_defect_type
+    get_medium_classifier_fn, get_era_classifier_fn, get_genre_classifier_fn
+    get_restorability_estimator_class, get_carrier_forensics_fn
+    get_audio_file_validator
+
+    # Qualitätsbewertung
+    get_musical_goals_checker          # MusicalGoalsChecker-Klasse (§8.1)
+    get_adaptive_goals_fn              # get_adaptive_goals_and_config (§2.31)
+    get_mushra_evaluator               # MushraEvaluator-Singleton (§8.1.1 OQS)
+    get_perceptual_quality_scorer      # PerceptualQualityScorer-Singleton (§8.1 PQS)
+
+    # Infrastruktur / Pipeline
+    get_plugin_lifecycle_manager       # PLM-Singleton (LRU-Eviction §2.37)
+    get_ml_memory_budget_status        # Budget-Statusdict (§2.37)
+    get_pipeline_health_state_enum, normalize_pipeline_health_state
+    resolve_pipeline_fail_reason
+
+    # Audio-Verarbeitung (Hilfsmittel)
+    get_audio_exporter_class           # None wenn Modul fehlt
+    get_stem_remix_balancer_fn         # StemRemixBalancer.balance_remix (§1.5)
+    get_clipping_classifier            # ClippingClassifier-Singleton (§6.3)
+    get_lyrics_guided_enhancement_fn   # LyricsGuidedEnhancement (§2.36)
+    get_cleanup_after_file_fn          # PLM.cleanup_after_file
+
+    # NaN/Inf-Guard + Export-Absicherung
+    export_guard
+
+    # Hintergrund-Vorwärmung
+    warmup_models_background
 
 Referenz: Spec 08 §11 Softwareschichten-Architektur.
 """
@@ -21,12 +67,65 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 if TYPE_CHECKING:
+    from backend.core.defect_scanner import DefectScanner as _DefectScanner
+    from backend.core.mushra_evaluator import MushraEvaluator as _MushraEvaluator
+    from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker as _MusicalGoalsChecker
+    from backend.core.perceptual_quality_scorer import PerceptualQualityScorer as _PQS
     from backend.core.performance_guard import QualityMode as _QualityMode
+    from backend.core.plugin_lifecycle_manager import PluginLifecycleManager as _PLM
     from backend.core.unified_restorer_v3 import RestorationConfig as _RestorationConfig
     from backend.core.unified_restorer_v3 import UnifiedRestorerV3 as _UnifiedRestorerV3
-    from backend.core.defect_scanner import DefectScanner as _DefectScanner
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Öffentliche API — explizite Export-Liste
+# ---------------------------------------------------------------------------
+
+__all__ = [
+    # Defect-Cache
+    "cache_defect_result",
+    "clear_defect_cache",
+    # NaN/Inf-Guard
+    "export_guard",
+    "get_adaptive_goals_fn",
+    # Audio-Verarbeitung (Hilfsmittel)
+    "get_audio_exporter_class",
+    "get_audio_file_validator",
+    "get_aurik_denker_class",
+    "get_aurik_denker_instance",
+    "get_cached_defect_result",
+    "get_carrier_forensics_fn",
+    "get_cleanup_after_file_fn",
+    "get_clipping_classifier",
+    # Analyse / Klassifikation
+    "get_defect_scanner",
+    "get_defect_type",
+    "get_era_classifier_fn",
+    "get_genre_classifier_fn",
+    "get_lyrics_guided_enhancement_fn",
+    "get_medium_classifier_fn",
+    "get_medium_type_enum",
+    "get_ml_memory_budget_status",
+    "get_mushra_evaluator",
+    # Qualitätsbewertung (§8.1)
+    "get_musical_goals_checker",
+    "get_perceptual_quality_scorer",
+    "get_pipeline_health_state_enum",
+    # Infrastruktur / Speicher-Management (§2.37)
+    "get_plugin_lifecycle_manager",
+    "get_processing_mode_enum",
+    # Enums / Konfigurationsklassen
+    "get_quality_mode",
+    "get_restorability_estimator_class",
+    # Kern-Einstiegspunkte
+    "get_restorer_classes",
+    "get_stem_remix_balancer_fn",
+    "normalize_pipeline_health_state",
+    "resolve_pipeline_fail_reason",
+    # Hintergrund-Vorwärmung
+    "warmup_models_background",
+]
 
 # ---------------------------------------------------------------------------
 # Defect-Scan-Cache  (Thread-sicher, Prozess-Lebensdauer, RAM-only)
@@ -53,13 +152,13 @@ def cache_defect_result(file_path: str, result: object) -> None:
     logger.debug("bridge: DefectScan cached for '%s'", file_path)
 
 
-def get_cached_defect_result(file_path: str) -> Optional[object]:
+def get_cached_defect_result(file_path: str) -> object | None:
     """Gibt einen gecachten DefectScanner-Befund zurück oder ``None``."""
     with _defect_cache_lock:
         return _defect_cache.get(file_path)
 
 
-def clear_defect_cache(file_path: Optional[str] = None) -> None:
+def clear_defect_cache(file_path: str | None = None) -> None:
     """Löscht einen oder alle Einträge aus dem DefectScan-Cache."""
     with _defect_cache_lock:
         if file_path is not None:
@@ -199,13 +298,19 @@ def get_carrier_forensics_fn():
     return _analyze_carrier_forensics
 
 
-def get_audio_exporter_class() -> type:
+def get_audio_exporter_class() -> type | None:
     """Gibt ``AudioExporter``-Klasse zurück (lazy import).
 
-    Fallback falls nicht verfügbar: ``None`` — Code muss ``sf.write`` nutzen.
+    Gibt ``None`` zurück wenn ``backend.core.audio_exporter`` nicht verfügbar
+    ist — Aufrufer muss dann ``soundfile.write()`` als Fallback verwenden.
+    Spec §11.3: Kein Hard-Fail bei optionalen Export-Modulen.
     """
-    from backend.core.audio_exporter import AudioExporter  # type: ignore[import]
-    return AudioExporter
+    try:
+        from backend.core.audio_exporter import AudioExporter  # type: ignore[import]
+        return AudioExporter
+    except ImportError:
+        logger.debug("bridge: AudioExporter nicht verfügbar — sf.write als Fallback")
+        return None
 
 
 def get_lyrics_guided_enhancement_fn():
@@ -225,6 +330,38 @@ def get_cleanup_after_file_fn():
     """Gibt ``cleanup_after_file``-Funktion zurück (lazy import)."""
     from backend.core.plugin_lifecycle_manager import cleanup_after_file  # type: ignore[import]
     return cleanup_after_file
+
+
+def get_pipeline_health_state_enum() -> type:
+    """Gibt ``PipelineHealthState``-Enum zurück (lazy import)."""
+    from backend.core.pipeline_health_state import PipelineHealthState  # type: ignore[import]
+
+    return PipelineHealthState
+
+
+def normalize_pipeline_health_state(raw):
+    """Normalisiert Pipeline-Health-State auf kanonische Enum-Werte (lazy import)."""
+    from backend.core.pipeline_health_state import normalize_pipeline_health_state as _normalize  # type: ignore[import]
+
+    return _normalize(raw)
+
+
+def resolve_pipeline_fail_reason(
+    *,
+    typed_fail_reason=None,
+    metadata: dict | None = None,
+    stage_notes: dict | None = None,
+    fail_reasons: list[dict] | None = None,
+) -> str:
+    """Löst ``fail_reason`` aus typed Feld, Metadata und Stage-Notes auf (lazy import)."""
+    from backend.core.pipeline_health_state import resolve_fail_reason as _resolve  # type: ignore[import]
+
+    return _resolve(
+        typed_fail_reason=typed_fail_reason,
+        metadata=metadata,
+        stage_notes=stage_notes,
+        fail_reasons=fail_reasons,
+    )
 
 
 def get_stem_remix_balancer_fn():
@@ -251,6 +388,149 @@ def get_clipping_classifier():
     """
     from backend.core.clipping_detection import get_clipping_classifier as _get  # type: ignore[import]
     return _get()
+
+
+# ---------------------------------------------------------------------------
+# Qualitätsbewertung  (Musical Goals, PQS, OQS/MUSHRA — §8.1)
+# ---------------------------------------------------------------------------
+
+
+def get_musical_goals_checker() -> type:
+    """Gibt ``MusicalGoalsChecker``-Klasse zurück (lazy import, §8.1).
+
+    Die zurückgegebene **Klasse** kann instanziiert werden::
+
+        checker = get_musical_goals_checker()()
+        scores = checker.measure_all(audio, sr)  # Dict[str, float]
+
+    14 Musical Goals mit AMRB-kalibrierten Schwellwerten (§8.1).
+    Adaptive Schwellwerte via ``get_adaptive_goals_fn()`` — nicht statisch!
+    """
+    from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker  # type: ignore[import]
+    return MusicalGoalsChecker
+
+
+def get_adaptive_goals_fn():
+    """Gibt ``get_adaptive_goals_and_config``-Funktion zurück (lazy import, §2.31).
+
+    Signatur::
+
+        get_adaptive_goals_and_config(
+            audio: np.ndarray,
+            sr: int,
+        ) -> tuple[AdaptiveGoalThresholds, dict, MaterialQualityAssessment]
+
+    **Pflicht vor jeder Restaurierung**: statische Schwellwerte sind verboten
+    als alleinige Entscheidungsbasis (§2.31 AdaptiveGoalThresholds).
+    Schwellwerte werden material-, ära- und restorability-adaptiv skaliert.
+    """
+    from backend.core.musical_goals.adaptive_goals_system import (  # type: ignore[import]
+        get_adaptive_goals_and_config,
+    )
+    return get_adaptive_goals_and_config
+
+
+def get_mushra_evaluator():
+    """Gibt den ``MushraEvaluator``-Singleton zurück (lazy import, §8.1.1 OQS).
+
+    OQS = algorithmische PEAQ-Approximation (kein ITU-R-MUSHRA).
+    In externen Berichten stets „OQS (algorithmisch)" schreiben.
+
+    Schwellwerte::
+
+        OQS ≥ 91  → Excellent (A)
+        OQS ≥ 80  → Good (B)  — Pflicht für jede neue Phase / jedes Plugin
+        OQS ≥ 60  → Fair (C)
+
+    Verwendung::
+
+        evaluator = get_mushra_evaluator()
+        result = evaluator.evaluate(audio, sr)
+        assert result.oqs >= 80, f"OQS unter Good-Schwelle: {result.oqs}"
+    """
+    from backend.core.mushra_evaluator import get_mushra_evaluator as _get  # type: ignore[import]
+    return _get()
+
+
+def get_perceptual_quality_scorer():
+    """Gibt den ``PerceptualQualityScorer``-Singleton zurück (lazy import, §8.1 PQS).
+
+    Prüft **alle vier PQS-Metriken** — nie nur MOS allein (§8.1)::
+
+        PQS MOS            ≥ 3.8 (generell) / ≥ 4.5 (nur cd_digital/dat/mp3_high/aac)
+        PQS NSIM           ≥ 0.70
+        MCD (dB)           ≤ 8.0
+        Spectral Coherence ≥ 0.60
+
+    ABSOLUT VERBOTEN als Musikmetrik: PESQ, DNSMOS, NISQA, STOI, CDPAM.
+
+    Verwendung::
+
+        pqs = get_perceptual_quality_scorer()
+        result = pqs.score(audio, sr)
+        assert result.mos >= 3.8, f"PQS MOS zu niedrig: {result.mos}"
+    """
+    from backend.core.perceptual_quality_scorer import (  # type: ignore[import]
+        get_perceptual_quality_scorer as _get,
+    )
+    return _get()
+
+
+# ---------------------------------------------------------------------------
+# Infrastruktur / Speicher-Management  (PLM + ML-Budget §2.37)
+# ---------------------------------------------------------------------------
+
+
+def get_plugin_lifecycle_manager():
+    """Gibt den ``PluginLifecycleManager``-Singleton zurück (lazy import, §2.37).
+
+    Der PLM ist **Schicht 2** des zweischichtigen OOM-Schutzsystems:
+
+    - **Schicht 1**: ``ml_memory_budget.try_allocate()`` — logisch
+    - **Schicht 2**: ``PluginLifecycleManager`` — physisch (LRU-Eviction)
+
+    RAM-Trigger: 82 % Systemauslastung → LRU-Eviction bis < 70 % oder
+    ≥ 1,5 GB frei. Monitoring-Thread alle 10 Sekunden.
+
+    Verwendung::
+
+        plm = get_plugin_lifecycle_manager()
+        plm.register("MeinPlugin", size_gb=0.10, unload_fn=lambda: ...)
+        plm.set_active("MeinPlugin", True)   # schützt vor Eviction
+
+    VERBOTEN: ``plm.try_allocate()`` — Methode existiert nicht!
+    Verwende stattdessen ``ml_memory_budget.try_allocate()``.
+    """
+    from backend.core.plugin_lifecycle_manager import (  # type: ignore[import]
+        get_plugin_lifecycle_manager as _get,
+    )
+    return _get()
+
+
+def get_ml_memory_budget_status() -> dict:
+    """Gibt den aktuellen ML-Speicherbudget-Status als Dict zurück (lazy import, §2.37).
+
+    Rückgabe-Keys (Beispiel)::
+
+        {
+            "budget_gb": 10.7,
+            "allocated_gb": 3.2,
+            "free_gb": 7.5,
+            "plugins": {"fcpe": 0.12, "panns": 0.44, ...},
+        }
+
+    Das Budget wird automatisch auf ``RAM/3, capped [4–12 GB]`` gesetzt.
+    Auf 32-GB-System: ≈ 10.7 GB (Cap: 12 GB).
+
+    WARNUNG: Fehlt ``psutil``, sind physische RAM-Checks deaktiviert —
+    ``psutil`` muss im AppImage gebündelt sein.
+    """
+    try:
+        from backend.core.ml_memory_budget import get_status  # type: ignore[import]
+        return get_status()
+    except Exception as _e:
+        logger.debug("bridge: ml_memory_budget.get_status() nicht verfügbar: %s", _e)
+        return {"max_gb": 0.0, "allocated_gb": 0.0, "free_gb": 0.0, "models": {}}
 
 
 # ---------------------------------------------------------------------------
@@ -288,24 +568,27 @@ def warmup_models_background() -> None:
     als Daemon-Thread gestartet — aus ``ModernMainWindow.__init__`` via
     ``QTimer.singleShot(2000, ...)``. Fehler werden nur geloggt, kein Absturz.
 
+    Der Caller (QTimer) steuert das Timing — kein zusätzliches sleep().
+    Warmup berührt keinerlei UI-Objekte (kein GUI-Zugriff aus dem Thread).
+
     Plugin-Reihenfolge spiegelt §4.4-Priorisierung:
-    Tier-1-Primär-Plugins zuerst, Fallbacks danach.
+    Tier-1-Primär-Plugins zuerst (VAD/Pitch/Tagging), Fallbacks danach.
     """
     import importlib
-    import time
 
-    time.sleep(2)  # App-Fenster soll sichtbar sein bevor Last beginnt
     _plugins = [
-        # Tier-1 Primär-Plugins (§9.7.4 — Pflicht-Vorwärmen)
-        ("plugins.fcpe_plugin",                 "get_fcpe_plugin"),    # Pitch-Tracking Primär (§4.4)
-        ("plugins.beats_plugin",                "get_beats_plugin"),   # Audio-Tagging Primär
-        ("plugins.sgmse_plugin",                "get_sgmse_plugin"),   # Dereverb/Denoising Primär
-        ("plugins.silero_plugin",               "get_silero_vad"),     # VAD (~1 MB, ultraschnell)
-        ("backend.core.noise_reduction",        "get_noise_reducer"),  # DeepFilterNet v3.II Breitrauschen
+        # Tier-1 Primär-Plugins (§9.7.4 — Pflicht-Vorwärmen, §4.4-Reihenfolge)
+        ("plugins.silero_plugin",               "get_silero_vad"),       # VAD (~1 MB, ultraschnell — zuerst)
+        ("plugins.fcpe_plugin",                 "get_fcpe_plugin"),      # Pitch-Tracking Primär (§4.4)
+        ("plugins.beats_plugin",                "get_beats_plugin"),     # Audio-Tagging Primär (§4.4)
+        ("plugins.sgmse_plugin",                "get_sgmse_plugin"),     # Dereverb/Denoising Primär
+        ("backend.core.noise_reduction",        "get_noise_reducer"),    # DeepFilterNet v3.II Breitrauschen
+        # Stem-Separation Primärpfad (§4.4 — BS-RoFormer > HTDemucs)
+        ("plugins.bs_roformer_plugin",          "get_bs_roformer_plugin"),  # Gesang Primär (860 MB — lazy)
+        ("plugins.htdemucs_plugin",             "get_htdemucs_plugin"),  # Instrumental Primär
         # Fallback-Plugins (nach Bedarf)
-        ("plugins.panns_plugin",                "get_panns_plugin"),   # Audio-Tagging Fallback
-        ("plugins.crepe_plugin",                "get_crepe_plugin"),   # Pitch-Tracking Fallback
-        ("plugins.rmvpe_plugin",                "get_rmvpe_plugin"),   # Pitch-Tracking Backup
+        ("plugins.panns_plugin",                "get_panns_plugin"),     # Audio-Tagging Fallback
+        ("plugins.crepe_plugin",                "get_crepe_plugin"),     # Pitch-Tracking Fallback
     ]
     logger.info("bridge: Warmup gestartet (%d Plugins) …", len(_plugins))
     for _mod, _accessor in _plugins:
@@ -318,3 +601,24 @@ def warmup_models_background() -> None:
         except Exception as _e:
             logger.debug("bridge: %s.%s übersprungen: %s", _mod, _accessor, _e)
     logger.info("bridge: Warmup abgeschlossen")
+
+
+# ---------------------------------------------------------------------------
+# Startup model check  (§9.x — via Bridge, nie direkt aus UI)
+# ---------------------------------------------------------------------------
+
+
+def get_startup_check_result():
+    """Return startup model-availability check result via bridge (never import core directly).
+
+    Returns the result object from ``backend.core.startup_model_check.get_startup_check_result``
+    or ``None`` on import failure.
+    """
+    try:
+        from backend.core.startup_model_check import (  # type: ignore[import]
+            get_startup_check_result as _fn,
+        )
+
+        return _fn()
+    except Exception:
+        return None

@@ -56,14 +56,30 @@
 		{
 			"label": "pytest: Vollsuite (2 Worker, Terminal — NICHT für Test Explorer)",
 			"type": "shell",
-			"command": "\"${workspaceFolder}/.venv_aurik/bin/python\" -m pytest tests -n 2 --dist=loadfile --override-ini=\"addopts=--strict-markers --import-mode=importlib\" --timeout=60 --tb=short -q --disable-warnings --no-header --maxfail=5",
+			"command": "\"${workspaceFolder}/.venv_aurik/bin/python\" -m pytest tests -n 2 --dist=loadfile --override-ini=\"addopts=--strict-markers --import-mode=importlib\" --timeout=60 --tb=line -q --disable-warnings --no-header --maxfail=3 -x",
 			"args": [],
 			"isBackground": false,
-			"problemMatcher": ["$pytest"],
+			"problemMatcher": [],
 			"group": "test",
 			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated",
+				"reveal": "never",
+				"panel": "shared",
+				"clear": true,
+				"group": "tests"
+			}
+		},
+		// ── 3b. VOLLSUITE STABIL: seriell, minimale UI-Last (empfohlen bei VS-Code-Crash) ─
+		{
+			"label": "pytest: Vollsuite STABIL (seriell, low-overhead)",
+			"type": "shell",
+			"command": "\"${workspaceFolder}/.venv_aurik/bin/python\" -m pytest tests -p no:xdist --override-ini=\"addopts=--strict-markers --import-mode=importlib\" --timeout=45 --tb=line -q --disable-warnings --no-header --maxfail=3 -x",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"reveal": "never",
+				"panel": "shared",
 				"clear": true,
 				"group": "tests"
 			}
@@ -80,6 +96,70 @@
 			"presentation": {
 				"reveal": "always",
 				"panel": "dedicated",
+				"clear": true,
+				"group": "tests"
+			}
+		},
+		// ── 4b. CHUNK A: Unit + Musical Goals (stabil, schnell) ───────────
+		{
+			"label": "pytest: Chunk A (unit + musical_goals)",
+			"type": "shell",
+			"command": "\"${workspaceFolder}/.venv_aurik/bin/python\" -m pytest tests/unit tests/musical_goals -p no:xdist --override-ini=\"addopts=--strict-markers --import-mode=importlib\" --timeout=30 --tb=line -q --disable-warnings --no-header --maxfail=5",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"reveal": "never",
+				"panel": "shared",
+				"clear": true,
+				"group": "tests"
+			}
+		},
+		// ── 4c. CHUNK B: Integration + Normative + Regression ─────────────
+		{
+			"label": "pytest: Chunk B (integration + normative + regression)",
+			"type": "shell",
+			"command": "\"${workspaceFolder}/.venv_aurik/bin/python\" -m pytest tests/integration tests/normative tests/regression -p no:xdist -m \"not e2e and not ml\" --override-ini=\"addopts=--strict-markers --import-mode=importlib\" --timeout=45 --tb=line -q --disable-warnings --no-header --maxfail=5",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"reveal": "never",
+				"panel": "shared",
+				"clear": true,
+				"group": "tests"
+			}
+		},
+		// ── 4d. CHUNK C: Restliche Tests ohne ML/E2E (Top-Level) ──────────
+		{
+			"label": "pytest: Chunk C (restliche tests/, ohne unit+goals+integration)",
+			"type": "shell",
+			"command": "\"${workspaceFolder}/.venv_aurik/bin/python\" -m pytest tests -p no:xdist -m \"not e2e and not ml\" --override-ini=\"addopts=--strict-markers --import-mode=importlib\" --timeout=45 --tb=line -q --disable-warnings --no-header --maxfail=5 --ignore=tests/unit --ignore=tests/musical_goals --ignore=tests/integration --ignore=tests/normative --ignore=tests/regression",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"reveal": "never",
+				"panel": "shared",
+				"clear": true,
+				"group": "tests"
+			}
+		},
+		// ── 4e. CHUNK HEAVY: ML/Slow/E2E nur bewusst manuell ──────────────
+		{
+			"label": "pytest: Chunk HEAVY (ml/slow/e2e, manuell)",
+			"type": "shell",
+			"command": "\"${workspaceFolder}/.venv_aurik/bin/python\" -m pytest tests -p no:xdist -m \"ml or slow or e2e\" --run-heavy-tests --override-ini=\"addopts=--strict-markers --import-mode=importlib\" --timeout=90 --tb=line -q --disable-warnings --no-header --maxfail=3 -x",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
 				"clear": true,
 				"group": "tests"
 			}

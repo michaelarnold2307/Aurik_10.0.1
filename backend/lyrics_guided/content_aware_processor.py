@@ -19,9 +19,9 @@ Version: 1.0.0
 Date: 8. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
 import numpy as np
 
@@ -183,10 +183,7 @@ class LyricsAligner:
             return []
 
         # Convert to mono
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
         logger.info(f"Aligning lyrics for {len(audio_mono)/sr:.2f}s audio (language={language})")
 
@@ -292,10 +289,7 @@ class ContentAwareProcessor:
             LyricsGuidedTimeline with processing instructions
         """
         # Convert to mono for analysis
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
         duration = len(audio_mono) / sr
 

@@ -60,18 +60,18 @@ Version: 2.0.0 (Professional)
 Quality Impact: 0.75 → 0.94 (+25%)
 """
 
+import logging
 import os
 import sys
-
-
 import time
 
 import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -280,7 +280,7 @@ class MultibandCompressionPhase(PhaseInterface):
         attack_ms: float,
         release_ms: float,
         makeup_db: float,
-        upward_config: tuple = None,
+        upward_config: tuple | None = None,
         is_stereo: bool = False,
     ) -> tuple[np.ndarray, dict]:
         """
@@ -411,10 +411,7 @@ class MultibandCompressionPhase(PhaseInterface):
             20 * np.log10(np.mean(gain_downward[gain_downward < 1.0]) + 1e-10) if np.any(gain_downward < 1.0) else 0.0
         )
 
-        if upward_config is not None:
-            max_upward_db = 20 * np.log10(np.max(gain_upward) + 1e-10)
-        else:
-            max_upward_db = 0.0
+        max_upward_db = 20 * np.log10(np.max(gain_upward) + 1e-10) if upward_config is not None else 0.0
 
         metrics = {
             "character": character,
@@ -429,7 +426,7 @@ class MultibandCompressionPhase(PhaseInterface):
         return compressed, metrics
 
     def _compress_multiband_mono(
-        self, audio: np.ndarray, sample_rate: int, comp_config: dict, upward_config: dict = None
+        self, audio: np.ndarray, sample_rate: int, comp_config: dict, upward_config: dict | None = None
     ) -> tuple[np.ndarray, dict]:
         """Multi-Band Compression für Mono."""
         # Split in 4 Bänder
@@ -472,7 +469,7 @@ class MultibandCompressionPhase(PhaseInterface):
         return compressed_audio, band_metrics
 
     def _compress_multiband_stereo(
-        self, audio: np.ndarray, sample_rate: int, comp_config: dict, upward_config: dict = None
+        self, audio: np.ndarray, sample_rate: int, comp_config: dict, upward_config: dict | None = None
     ) -> tuple[np.ndarray, dict]:
         """Multi-Band Compression für Stereo (Linked)."""
         # Split in 4 Bänder

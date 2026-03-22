@@ -31,13 +31,14 @@ Autor: AURIK Phase 2.0 - Psychoakustische Exzellenz
 Datum: 13. Februar 2026
 """
 
-from dataclasses import dataclass
+import logging
 import warnings
+from dataclasses import dataclass
 
 import librosa
 import numpy as np
 from scipy import signal
-import logging
+
 logger = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -345,10 +346,7 @@ class MicrodynamicsAnalyzer:
         # Score diversity (coefficient of variation)
         # High CV = diverse (good)
         # Optimal: CV > 0.5
-        if strength_cv > 0.5:
-            diversity_score = 1.0
-        else:
-            diversity_score = strength_cv / 0.5
+        diversity_score = 1.0 if strength_cv > 0.5 else strength_cv / 0.5
 
         # Combined score (equal weighting)
         transient_score = 0.5 * density_score + 0.5 * diversity_score

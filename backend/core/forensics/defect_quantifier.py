@@ -17,8 +17,8 @@ Author: AURIK Team
 Date: 11. Februar 2026
 """
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 
 import numpy as np
 from scipy import signal

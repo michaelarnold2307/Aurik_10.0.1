@@ -63,7 +63,7 @@ _MIN_FREE_MB_HARD: float = 1536.0
 # Internal state (thread-safe)
 # ---------------------------------------------------------------------------
 _lock = threading.Lock()
-_allocated: Dict[str, float] = {}   # model_name → GB currently allocated
+_allocated: dict[str, float] = {}   # model_name → GB currently allocated
 _total_gb: float = 0.0              # sum of _allocated.values()
 
 
@@ -89,7 +89,7 @@ def _preflight_system_memory(required_mb: float) -> bool:
         return True
 
     try:
-        from backend.core.plugin_lifecycle_manager import evict_stale_plugins  # noqa: PLC0415
+        from backend.core.plugin_lifecycle_manager import evict_stale_plugins
 
         evict_stale_plugins(required_mb=required_with_margin)
     except Exception:

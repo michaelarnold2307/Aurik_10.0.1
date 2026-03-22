@@ -44,7 +44,7 @@ class AiSpeakerEnhancement:
         # ML-Inferenz (wenn Modell vorhanden)
         if self.model is not None:
             try:
-                import onnxruntime as ort  # noqa: PLC0415,F401
+                import onnxruntime as ort
 
                 x = audio.astype(np.float32)[None, :]
                 ort_inputs = {self.model.get_inputs()[0].name: x}

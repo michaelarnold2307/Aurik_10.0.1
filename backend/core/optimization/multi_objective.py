@@ -12,11 +12,11 @@ Version: 8.2
 Datum: 14. Februar 2026
 """
 
+import json
+import logging
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
-import json
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -55,11 +55,11 @@ class Individual:
 
         better_in_all = all(
             self.objectives.get(obj, float("inf")) <= other.objectives.get(obj, float("inf"))
-            for obj in self.objectives.keys()
+            for obj in self.objectives
         )
         strictly_better_in_one = any(
             self.objectives.get(obj, float("inf")) < other.objectives.get(obj, float("inf"))
-            for obj in self.objectives.keys()
+            for obj in self.objectives
         )
 
         return better_in_all and strictly_better_in_one
@@ -248,7 +248,7 @@ class NSGAII:
 
         eta = 20  # Distribution index
 
-        for param_name in parent1.parameters.keys():
+        for param_name in parent1.parameters:
             p1_val = parent1.parameters[param_name]
             p2_val = parent2.parameters[param_name]
 
@@ -287,10 +287,7 @@ class NSGAII:
                 delta = param_max - param_min
                 rand = np.random.random()
 
-                if rand < 0.5:
-                    delta_q = (2 * rand) ** (1 / (eta + 1)) - 1
-                else:
-                    delta_q = 1 - (2 * (1 - rand)) ** (1 / (eta + 1))
+                delta_q = (2 * rand) ** (1 / (eta + 1)) - 1 if rand < 0.5 else 1 - (2 * (1 - rand)) ** (1 / (eta + 1))
 
                 mutated_value = value + delta_q * delta
                 mutated_value = np.clip(mutated_value, param_min, param_max)

@@ -15,19 +15,19 @@ Version: 8.1
 Datum: 14. Februar 2026
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass
 import json
 import logging
-from pathlib import Path
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import optuna
+import yaml
 from optuna.pruners import MedianPruner
 from optuna.samplers import TPESampler
-import yaml
 
 logger = logging.getLogger(__name__)
 

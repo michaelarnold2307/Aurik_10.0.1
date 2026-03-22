@@ -17,7 +17,6 @@ import json
 import logging
 import os
 import sys
-
 from typing import Any
 
 import numpy as np
@@ -113,9 +112,13 @@ def analyse(audio: np.ndarray, sr: int) -> dict[str, Any]:
 
 def policy_engine(analysis_result: dict[str, Any]) -> list[dict[str, Any]]:
     """Gibt die Verarbeitungskette basierend auf Analyse zurück."""
-    from backend.ml_policy_engine import run_policy_engine
-
-    return run_policy_engine(analysis_result)
+    try:
+        from policy.ml_policy_engine import MLModelPolicyEngine
+        engine = MLModelPolicyEngine()
+        return engine.select_processing_chain(analysis_result)
+    except Exception as exc:
+        logger.warning("ML-Policy-Engine nicht verfügbar: %s — Fallback-Kette", exc)
+        return [{"phase": "restaurierung"}, {"phase": "reparatur"}, {"phase": "remastering"}]
 
 
 def restaurierung(audio: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
@@ -164,7 +167,7 @@ def rekonstruktion(audio: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
     logger.info("[5] Rekonstruktion...")
     audio, sr = ensure_sr(audio, sr, 48000)
     plugin = DemucsV4Plugin()
-    vocals, instruments = plugin.separate_vocals(audio, sr)
+    vocals, _instruments = plugin.separate_vocals(audio, sr)
     audio = vocals
     # NaN/Inf-Guard am Ausgang (§3.1)
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -257,13 +260,13 @@ def main(importfile_path: str, out_path: str) -> None:
     logger.info("AURIK RESTAURIERUNG - REPARATUR - REKONSTRUKTION - REMASTERING")
     logger.info("──────────────────────────────────────────────────────────────\n")
     logger.info("Vorbereitung\n────────────")
-    logger.info("[1] Importiere Datei … ", end="")
-    audio, sr, metadata = load_importfile(importfile_path)
+    logger.info("[1] Importiere Datei …")
+    audio, sr, _metadata = load_importfile(importfile_path)
     logger.info("✔️")
 
     # Tiefenanalyse erhält Audio, sr, medium
     logger.info("\nAnalyse\n───────")
-    logger.info("[3] Song-Analyse … ", end="")
+    logger.info("[3] Song-Analyse …")
     analysis_result = analyse(audio, sr)
     logger.info("✔️")
     logger.info("[Analyse-Ergebnisse]")
@@ -337,7 +340,7 @@ def main(importfile_path: str, out_path: str) -> None:
         logger.info(f"    {k}: {v}")
 
     logger.info("\nVerarbeitung\n────────────")
-    logger.info("[4] Policy-Engine wählt Maßnahmenkette … ", end="")
+    logger.info("[4] Policy-Engine wählt Maßnahmenkette …")
     chain = policy_engine(analysis_result)
     logger.info("✔️")
     logger.info("[5] Starte Restaurierungsschritte:")
@@ -409,12 +412,11 @@ def main(importfile_path: str, out_path: str) -> None:
             dsps = chain[step_idx].get("dsps", [])
             models = chain[step_idx].get("models", [])
             logger.info(
-                f"    • Maßnahme: {step} (DSP: {', '.join(dsps) if dsps else '-'} | KI: {', '.join(models) if models else '-'}) … ",
-                end="",
+                f"    • Maßnahme: {step} (DSP: {', '.join(dsps) if dsps else '-'} | KI: {', '.join(models) if models else '-'}) …"
             )
         else:
             step = chain[step_idx]
-            logger.info(f"    • Maßnahme: {step.capitalize()} … ", end="")
+            logger.info(f"    • Maßnahme: {step.capitalize()} …")
         # --- Audit-Trail: Schrittstart ---
         audit_entry = {"step": step, "index": step_idx, "status": "started"}
         # --- Adaptive Parameteroptimierung ---
@@ -433,7 +435,7 @@ def main(importfile_path: str, out_path: str) -> None:
                 step = chain[step_idx]
                 dsps = []
                 models = []
-                logger.info(f"    • Maßnahme: {step.capitalize()} … ", end="")
+                logger.info(f"    • Maßnahme: {step.capitalize()} …")
             # --- Audit-Trail: Schrittstart ---
             audit_entry = {"step": step, "index": step_idx, "status": "started"}
             # --- Maßnahmenausführung ---
@@ -449,7 +451,7 @@ def main(importfile_path: str, out_path: str) -> None:
                 audio = MultibandCompressor().process(audio, sr)
                 audio = HarmonicExciter(amount=0.3).process(audio, sr)
                 audio = TargetSoundMatcher(reference_audio=None).process(audio, sr)
-                audio = StereoWidener(width=1.2).process(audio, sr)
+                audio = StereoWidener().widen(audio, sr, width=1.2)
                 audio = IntelligentLimiter(ceiling=-1.0).process(audio, sr)
                 # Artefakterkennung nach Remastering
                 artifacts = SpectralArtifactDetector().detect(audio)

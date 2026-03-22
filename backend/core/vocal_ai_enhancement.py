@@ -17,9 +17,9 @@ Date: 15. Februar 2026
 Version: 1.0.0
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -78,9 +78,9 @@ class VoiceCharacteristics:
     """Erkannte Stimm-Charakteristika."""
 
     gender: VoiceGender
-    age_group: Optional[VoiceAgeGroup] = None
+    age_group: VoiceAgeGroup | None = None
     fundamental_freq: float = 0.0  # Hz (F0)
-    formants: List[float] = field(default_factory=list)  # F1, F2, F3, F4
+    formants: list[float] = field(default_factory=list)  # F1, F2, F3, F4
     breathiness: float = 0.0  # 0-1
     vocal_effort: float = 0.0  # 0-1 (whisper to shout)
     emotional_intensity: float = 0.0  # 0-1
@@ -99,9 +99,9 @@ class VocalEnhancementResult:
     breath_preserved_ratio: float  # 0-1 (1=vollständig erhalten)
     emotion_preservation_score: float  # 0-1 (1=perfekt erhalten)
     formant_preservation_score: float  # 0-1 (1=identisch)
-    processing_applied: List[str]
+    processing_applied: list[str]
     quality_improvement: float
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 # ============================================================
@@ -229,7 +229,7 @@ class GenderDetector:
 
         return 0.0  # No pitch detected
 
-    def _detect_formants(self, audio: np.ndarray) -> List[float]:
+    def _detect_formants(self, audio: np.ndarray) -> list[float]:
         """
         Detect formants using LPC (Linear Predictive Coding).
 
@@ -243,7 +243,6 @@ class GenderDetector:
         # Spectral-Peak-basierte Formant-Schätzung (vereinfacht); order ist
         # hier nur für Frame-Kontext relevant — Produktion nutzt FormantTracker.
         # §4.4: Mindestordnung 16 (Burg-Methode via formant_tracker.py)
-        order = 16  # §4.4-konform: min. 16 Koeffizienten  # noqa: F841
 
         # Split into frames
         frame_size = int(0.025 * self.sr)  # 25ms
@@ -309,7 +308,7 @@ class GenderDetector:
                     pks, _ = _fp(sp_valid, distance=int(300 * len(sp_valid) / 5000))
                     world_formants = [float(fq_valid[p]) for p in pks[:4]]
                     # Kreuzvalidierung: WORLD-Wert bevorzugt wenn Abweichung > 15 %
-                    validated: List[float] = []
+                    validated: list[float] = []
                     for i_f, lpc_f in enumerate(lpc_formants):
                         if i_f < len(world_formants):
                             world_f = world_formants[i_f]
@@ -329,12 +328,12 @@ class GenderDetector:
                         else:
                             validated.append(lpc_f)
                     return validated
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug("WORLD-Quervalidierung fehlgeschlagen (%s) — LPC-Ergebnis wird genutzt", exc)
 
         return lpc_formants
 
-    def _classify_gender(self, f0: float, formants: List[float]) -> Tuple[VoiceGender, float]:
+    def _classify_gender(self, f0: float, formants: list[float]) -> tuple[VoiceGender, float]:
         """Classify gender based on F0 and formants."""
         if f0 == 0 or len(formants) == 0:
             return VoiceGender.UNKNOWN, 0.0
@@ -421,10 +420,7 @@ class GenderDetector:
         f0s = [self._detect_f0(chunk) for chunk in chunks if len(chunk) > 1000]
         f0s = [f0 for f0 in f0s if f0 > 0]
 
-        if len(f0s) > 1:
-            pitch_variation = np.std(f0s) / (np.mean(f0s) + 1e-10)
-        else:
-            pitch_variation = 0.0
+        pitch_variation = np.std(f0s) / (np.mean(f0s) + 1e-10) if len(f0s) > 1 else 0.0
 
         # Dynamic range
         dynamic_range = np.max(np.abs(audio)) - np.min(np.abs(audio))
@@ -470,7 +466,7 @@ class GenderDetector:
         peak_ratio = float(np.percentile(ratios, 95))
         return float(min(1.0, peak_ratio * 8))
 
-    def _estimate_age_group(self, f0: float, formants: List[float], gender: VoiceGender) -> Optional[VoiceAgeGroup]:
+    def _estimate_age_group(self, f0: float, formants: list[float], gender: VoiceGender) -> VoiceAgeGroup | None:
         """Estimate age group based on voice characteristics."""
         if f0 == 0:
             return None
@@ -549,9 +545,9 @@ class GenderAwareDeEsser:
     def process(
         self,
         audio: np.ndarray,
-        characteristics: Optional[VoiceCharacteristics] = None,
+        characteristics: VoiceCharacteristics | None = None,
         emotion_mode: EmotionPreservationMode = EmotionPreservationMode.BALANCED,
-    ) -> Tuple[np.ndarray, float]:
+    ) -> tuple[np.ndarray, float]:
         """
         Gender-aware de-essing.
 
@@ -587,7 +583,7 @@ class GenderAwareDeEsser:
 
         return processed, reduction_db
 
-    def _apply_deessing(self, audio: np.ndarray, params: Dict) -> Tuple[np.ndarray, float]:
+    def _apply_deessing(self, audio: np.ndarray, params: dict) -> tuple[np.ndarray, float]:
         """Apply frequency-specific compression for de-essing."""
         # Extract sibilance band
         freq_low, freq_high = params["freq_range"]
@@ -648,7 +644,7 @@ class BreathPreservingProcessor:
 
     def process(
         self, audio: np.ndarray, characteristics: VoiceCharacteristics, preservation_ratio: float = 0.7
-    ) -> Tuple[np.ndarray, float]:
+    ) -> tuple[np.ndarray, float]:
         """
         Process breath with preservation.
 
@@ -683,7 +679,7 @@ class BreathPreservingProcessor:
 
         return processed, preservation_ratio
 
-    def _detect_breath_regions(self, audio: np.ndarray, characteristics: VoiceCharacteristics) -> List[Tuple[int, int]]:
+    def _detect_breath_regions(self, audio: np.ndarray, characteristics: VoiceCharacteristics) -> list[tuple[int, int]]:
         """Detect breath regions."""
         # High-pass filter for breath (>1kHz)
         sos = signal.butter(4, 1000, "high", fs=self.sr, output="sos")
@@ -718,8 +714,8 @@ class BreathPreservingProcessor:
         return regions
 
     def _classify_breath_artistic(
-        self, audio: np.ndarray, breath_mask: List[Tuple[int, int]], characteristics: VoiceCharacteristics
-    ) -> Dict[Tuple[int, int], bool]:
+        self, audio: np.ndarray, breath_mask: list[tuple[int, int]], characteristics: VoiceCharacteristics
+    ) -> dict[tuple[int, int], bool]:
         """
         Classify if breath is artistic (keep) or disturbing (reduce).
 
@@ -995,7 +991,7 @@ if __name__ == "__main__":
     logger.debug(f"Emotion Preservation: {result.emotion_preservation_score:.1%}")
     logger.debug(f"Formant Preservation: {result.formant_preservation_score:.1%}")
     logger.debug(f"Quality Improvement: {result.quality_improvement:+.2f}")
-    logger.debug(f"\nProcessing Applied:")
+    logger.debug("\nProcessing Applied:")
     for proc in result.processing_applied:
         logger.debug(f"  ✓ {proc}")
 

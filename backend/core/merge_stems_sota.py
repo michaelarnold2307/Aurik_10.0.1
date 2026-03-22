@@ -1,7 +1,21 @@
 from __future__ import annotations
 
-from aurik6.analysis.analysis_and_modules import FeatureExtractor, PolicyManager
 import logging
+
+
+class FeatureExtractor:
+    """Stub replacing aurik6.analysis FeatureExtractor (results are unused in merge logic)."""
+
+    def extract(self, audio, sr, reference=None, policy_manager=None):
+        return {}
+
+
+class PolicyManager:
+    """Stub replacing aurik6.analysis PolicyManager (policy dict is queried directly)."""
+
+    def __init__(self, policy: dict) -> None:
+        self.policy = policy
+
 import threading
 from typing import Any, Optional
 
@@ -10,11 +24,11 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-_instance: Optional["MergeStemsSOTA"] = None
+_instance: MergeStemsSOTA | None = None
 _lock = threading.Lock()
 
 
-def get_stem_merger(spectral_weight: float = 0.7, phase_align: bool = True, loudness_match: bool = True) -> "MergeStemsSOTA":
+def get_stem_merger(spectral_weight: float = 0.7, phase_align: bool = True, loudness_match: bool = True) -> MergeStemsSOTA:
     """Get or create MergeStemsSOTA singleton.
 
     Args:
@@ -60,7 +74,7 @@ class MergeStemsSOTA:
         extractor = FeatureExtractor()
         # 1. Optional: Phasenkohärenz herstellen
         stems_proc = self._phase_align_stems(stems) if self.phase_align else stems
-        features1 = extractor.extract(  # noqa: F841
+        extractor.extract(
             np.stack(stems_proc).sum(axis=0),
             sr,
             reference,
@@ -70,7 +84,7 @@ class MergeStemsSOTA:
             return np.asarray(np.stack(stems_proc).sum(axis=0).astype(stems[0].dtype))
         # 2. Optional: Lautheitsabgleich
         stems_proc = self._loudness_match(stems_proc) if self.loudness_match else stems_proc
-        features2 = extractor.extract(  # noqa: F841
+        extractor.extract(
             np.stack(stems_proc).sum(axis=0),
             sr,
             reference,
@@ -80,7 +94,7 @@ class MergeStemsSOTA:
             return np.asarray(np.stack(stems_proc).sum(axis=0).astype(stems[0].dtype))
         # 3. Spektrale Gewichtung und Summierung
         merged = self._spectral_weighted_sum(stems_proc)
-        features3 = extractor.extract(merged, sr, reference, policy_manager=policy_manager)  # noqa: F841
+        extractor.extract(merged, sr, reference, policy_manager=policy_manager)
         if any(v.get("action") == "bypass" for v in policy.values() if isinstance(v, dict)):
             return np.asarray(merged.astype(stems[0].dtype))
         # 4. Clipping vermeiden

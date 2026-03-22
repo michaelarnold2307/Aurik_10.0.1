@@ -53,10 +53,7 @@ class AdaptiveAutocorrelation:
         max_lag = kwargs.get("max_lag", self.max_lag)
         result = np.correlate(y, y, mode="full")
         mid = len(result) // 2
-        if max_lag is not None:
-            result = result[mid : mid + max_lag]
-        else:
-            result = result[mid:]
+        result = result[mid:mid + max_lag] if max_lag is not None else result[mid:]
         if self.normalize:
             result = result / np.max(np.abs(result))
         return result

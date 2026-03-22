@@ -25,11 +25,12 @@ Verwendung:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import logging
 import time
+from dataclasses import dataclass, field
 
 import numpy as np
-import logging
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -349,7 +350,7 @@ class GapReconstructor:
         if is_mono:
             audio = audio[:, np.newaxis]
 
-        n_samples, n_channels = audio.shape
+        _n_samples, n_channels = audio.shape
         cfg = self.config
         sr = sample_rate
 

@@ -27,14 +27,14 @@ Aktivierung: automatisch wenn Nutzer ≥ 2 Dateien aus gleichem Ordner verarbeit
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import json
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -94,14 +94,14 @@ class ArtistSignature:
     artist_id: str
     voice_gender: str = "UNKNOWN"
     voice_age_group: str = "ADULT"
-    formant_profile: Dict[str, float] = field(default_factory=dict)
+    formant_profile: dict[str, float] = field(default_factory=dict)
     vibrato_rate_hz: float = 5.5
     vibrato_depth_cent: float = 30.0
     breathiness_ratio: float = 0.05
     spectral_envelope: np.ndarray = field(
         default_factory=lambda: np.ones(SPECTRAL_ENVELOPE_DIM, dtype=np.float32) / SPECTRAL_ENVELOPE_DIM
     )
-    instrument_tags: List[str] = field(default_factory=list)
+    instrument_tags: list[str] = field(default_factory=list)
     confidence: float = 0.0
     n_files_analyzed: int = 0
     last_updated: str = ""
@@ -132,7 +132,7 @@ class ArtistSignature:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ArtistSignature":
+    def from_dict(cls, data: dict) -> ArtistSignature:
         """Deserialisiert aus JSON-Dict."""
         envelope = np.asarray(
             data.get("spectral_envelope", [1.0 / SPECTRAL_ENVELOPE_DIM] * SPECTRAL_ENVELOPE_DIM),
@@ -171,8 +171,8 @@ class VoiceCharacteristics:
     vibrato_rate_hz: float = 5.5
     vibrato_depth_cent: float = 30.0
     breathiness_ratio: float = 0.05
-    spectral_envelope: Optional[np.ndarray] = None
-    instrument_tags: List[str] = field(default_factory=list)
+    spectral_envelope: np.ndarray | None = None
+    instrument_tags: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.spectral_envelope is None:
@@ -183,7 +183,7 @@ class VoiceCharacteristics:
 # Singleton
 # ---------------------------------------------------------------------------
 
-_instance: Optional[ArtistSignatureStore] = None
+_instance: ArtistSignatureStore | None = None
 _lock = threading.Lock()
 
 
@@ -212,14 +212,14 @@ class ArtistSignatureStore:
 
     def __init__(self) -> None:
         SIGNATURES_DIR.mkdir(parents=True, exist_ok=True)
-        self._cache: Dict[str, ArtistSignature] = {}
+        self._cache: dict[str, ArtistSignature] = {}
         logger.debug("ArtistSignatureStore initialisiert (Pfad: %s)", SIGNATURES_DIR)
 
     # ------------------------------------------------------------------
     # Öffentliche API
     # ------------------------------------------------------------------
 
-    def detect_session(self, file_paths: List[Path]) -> str:
+    def detect_session(self, file_paths: list[Path]) -> str:
         """Erzeugt Session-ID aus dem gemeinsamen Ordnerpfad.
 
         Session = SHA256[:8] des Ordnerpfads (des ersten Files).
@@ -237,7 +237,7 @@ class ArtistSignatureStore:
         h = hashlib.sha256(str(folder).encode("utf-8")).hexdigest()[:8]
         return h
 
-    def load(self, artist_id: str) -> Optional[ArtistSignature]:
+    def load(self, artist_id: str) -> ArtistSignature | None:
         """Lädt Signatur aus Cache oder Disk.
 
         Args:
@@ -398,7 +398,7 @@ class ArtistSignatureStore:
                 logger.warning("Signatur-Löschen fehlgeschlagen: %s", exc)
         return False
 
-    def list_all(self) -> List[str]:
+    def list_all(self) -> list[str]:
         """Listet alle vorhandenen Signatur-IDs auf.
 
         Returns:
@@ -437,7 +437,7 @@ def get_signature_store() -> ArtistSignatureStore:
     return _instance
 
 
-def load_artist_signature(artist_id: str) -> Optional[ArtistSignature]:
+def load_artist_signature(artist_id: str) -> ArtistSignature | None:
     """Convenience: Künstler-Signatur laden.
 
     Args:

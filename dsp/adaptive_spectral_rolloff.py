@@ -5,8 +5,8 @@ Dieses Modul implementiert klassisches Spectral Rolloff (SOTA-Maximum, keine ML/
 Es berechnet adaptiv die Rolloff-Frequenz und ist mit vollständigem DSPContract und Auditierbarkeit ausgestattet.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
@@ -195,10 +195,7 @@ class AdaptiveSpectralRolloff:
             threshold = roll_percent * total_energy
             cumulative = np.cumsum(spectrum)
             rolloff_bin = np.where(cumulative >= threshold)[0]
-            if len(rolloff_bin) > 0:
-                freq = rolloff_bin[0] * sr / n_fft
-            else:
-                freq = 0.0
+            freq = rolloff_bin[0] * sr / n_fft if len(rolloff_bin) > 0 else 0.0
             rolloff.append(freq)
         return np.array(rolloff)
 

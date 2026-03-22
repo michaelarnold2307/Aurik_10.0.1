@@ -34,11 +34,11 @@ CPU-Only: CPUExecutionProvider.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -104,14 +104,17 @@ class SGMSEPlusPlugin:
     def _try_load(self) -> None:
         """Lädt SGMSE+ TorchScript; sonst WPE-Fallback."""
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
         except Exception:
             _try_alloc = None
 
         if _TS_PATH.exists():
             try:
-                import torch  # noqa: PLC0415
+                import os as _os
 
+                import torch
+
+                torch.set_num_threads(_os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
                 if _try_alloc is not None and not _try_alloc("SGMSE+", size_gb=0.12):
                     logger.warning("SGMSE+: ML-Budget erschöpft — WPE-DSP-Fallback.")
                 else:
@@ -120,7 +123,7 @@ class SGMSEPlusPlugin:
                     self._model_loaded = True
                     logger.info("✅ SGMSE+ TorchScript geladen (%s)", _TS_PATH.name)
                     try:
-                        from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                        from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                         _reg_plm(
                             "SGMSE+",
@@ -135,7 +138,7 @@ class SGMSEPlusPlugin:
             except Exception as exc:
                 logger.warning("SGMSE+ TorchScript nicht ladbar: %s — WPE-DSP-Fallback aktiv.", exc)
                 try:
-                    from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import release as _rel
                     _rel("SGMSE+")
                 except Exception:
                     pass
@@ -204,7 +207,7 @@ class SGMSEPlusPlugin:
 
     def _stft(self, mono: np.ndarray) -> tuple[np.ndarray, int]:
         """STFT → Complex Spectrogram."""
-        from scipy.signal import stft as scipy_stft  # noqa: PLC0415
+        from scipy.signal import stft as scipy_stft
 
         n_orig = len(mono)
         _, _, Z = scipy_stft(
@@ -218,7 +221,7 @@ class SGMSEPlusPlugin:
 
     def _istft(self, Z: np.ndarray, n_orig: int) -> np.ndarray:
         """Inverse STFT."""
-        from scipy.signal import istft as scipy_istft  # noqa: PLC0415
+        from scipy.signal import istft as scipy_istft
 
         _, x = scipy_istft(
             Z.astype(np.complex128),
@@ -269,7 +272,7 @@ class SGMSEPlusPlugin:
         """SGMSE+ TorchScript-Inferenz: score [B,2,F,T] aus STFT-Features."""
         assert self._ts_model is not None
         try:
-            import torch  # noqa: PLC0415
+            import torch
 
             Z, n_orig = self._stft(mono)
             x_t = np.stack([Z.real, Z.imag], axis=0)[np.newaxis].astype(np.float32)
@@ -300,7 +303,7 @@ class SGMSEPlusPlugin:
     def _wpe_fallback(self, mono: np.ndarray, sr: int) -> np.ndarray:
         """WPE-Dereverberation als Fallback (wpe_plugin, §4.4)."""
         try:
-            from plugins.wpe_plugin import get_wpe_plugin  # noqa: PLC0415
+            from plugins.wpe_plugin import get_wpe_plugin
 
             plugin = get_wpe_plugin()
             result = plugin.enhance(mono, sr)
@@ -337,8 +340,7 @@ def enhance_sgmse(audio: np.ndarray, sr: int, sigma: float = 0.5) -> SgmseResult
 # ---------------------------------------------------------------------------
 # Backward-Kompatibilität: WPE-Exporte aus wpe_plugin re-exportieren
 # ---------------------------------------------------------------------------
-# ruff: noqa: F401
-from plugins.wpe_plugin import (  # noqa: F401, E402
+from plugins.wpe_plugin import (
     SGMSEPlugin,
     SgmsePlugin,
     WpePlugin,
@@ -352,16 +354,16 @@ from plugins.wpe_plugin import (  # noqa: F401, E402
 )
 
 __all__ = [
+    "SGMSEPlugin",
     # Neue SGMSE+-Implementierung
     "SGMSEPlusPlugin",
+    "SgmsePlugin",
     "SgmseResult",
-    "get_sgmse_plus_plugin",
-    "enhance_sgmse",
     # Backward-Kompatibilität (WPE-Basis)
     "WpePlugin",
-    "SgmsePlugin",
-    "SGMSEPlugin",
-    "get_wpe_plugin",
-    "get_sgmse_plugin",
     "enhance",
+    "enhance_sgmse",
+    "get_sgmse_plugin",
+    "get_sgmse_plus_plugin",
+    "get_wpe_plugin",
 ]

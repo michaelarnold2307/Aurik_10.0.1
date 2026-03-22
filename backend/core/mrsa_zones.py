@@ -136,29 +136,34 @@ def synthesize_zone(
     Returns:
         float32 mono array (length ≈ n_original).
     """
-    win, hop = zone.eff_win, zone.eff_hop
-    # PGHI-Approximation: Phase-Velocity-Continuation (zeitliche Phasenkonsistenz)
-    mag = np.abs(modified_stft)
-    phase = np.angle(zone.stft)  # Original-Phase beibehalten (passthrough-sicher)
-
-    # Verwende modifizierte Magnitude + original Phase (konservative PGHI-Näherung)
-    stft_consistent = mag * np.exp(1j * phase)
-
+    _win, hop = zone.eff_win, zone.eff_hop
     # Infer actual nperseg from STFT shape (handles short-signal truncation in analyze_zones)
     # STFT shape is (F, T) where F = nperseg // 2 + 1
     n_fft_bins = zone.stft.shape[0]
     effective_win = (n_fft_bins - 1) * 2
     effective_noverlap = min(effective_win - hop, effective_win - 1)
-    _, audio_rec = _signal.istft(
-        stft_consistent,
-        fs=48000,
-        window="hann",
-        nperseg=effective_win,
-        noverlap=effective_noverlap,
-        boundary=True,
-    )
-    # Länge auf Original trimmen / zero-pad
-    audio_rec = np.asarray(audio_rec, dtype=np.float32)
+
+    # PGHI phase reconstruction (§4.5 — modifiziertes STFT erfordert PGHI)
+    try:
+        from dsp.pghi import pghi_reconstruct_from_stft
+
+        audio_rec = pghi_reconstruct_from_stft(
+            modified_stft, sr=48000, win_size=effective_win, hop=hop
+        )
+    except Exception:
+        # Fallback: Phase-Velocity-Continuation (conservative PGHI approximation)
+        mag = np.abs(modified_stft)
+        phase = np.angle(zone.stft)  # Original-Phase beibehalten
+        stft_consistent = mag * np.exp(1j * phase)
+        _, audio_rec = _signal.istft(
+            stft_consistent,
+            fs=48000,
+            window="hann",
+            nperseg=effective_win,
+            noverlap=effective_noverlap,
+            boundary=True,
+        )
+        audio_rec = np.asarray(audio_rec, dtype=np.float32)
     if len(audio_rec) >= n_original:
         audio_rec = audio_rec[:n_original]
     else:
@@ -266,13 +271,13 @@ def get_mrsa_zones() -> dict[str, Any]:
 
 
 __all__ = [
+    "CROSSFADE_MS",
     "ZONES",
     "ZONE_ORDER",
-    "CROSSFADE_MS",
     "ZoneSTFT",
     "analyze_zones",
-    "synthesize_zone",
-    "merge_zones",
-    "get_zone_mask",
     "get_mrsa_zones",
+    "get_zone_mask",
+    "merge_zones",
+    "synthesize_zone",
 ]

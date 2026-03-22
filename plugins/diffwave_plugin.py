@@ -37,9 +37,9 @@ class DiffwavePlugin:
             import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
-                if not _try_alloc("DiffWave", size_gb=0.01):
+                if not _try_alloc("DiffWave", size_gb=0.012):
                     logger.warning("DiffWave: ML-Budget erschöpft — DSP-Fallback.")
                     return
             except Exception:
@@ -50,15 +50,15 @@ class DiffwavePlugin:
             self._session = ort.InferenceSession(path, sess_options=opts, providers=["CPUExecutionProvider"])
             logger.info("DiffWave ONNX geladen: %s", path)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
-                _reg_plm("DiffWave", size_gb=0.01, unload_fn=lambda s=self: setattr(s, "_session", None))
+                _reg_plm("DiffWave", size_gb=0.012, unload_fn=lambda s=self: setattr(s, "_session", None))
             except Exception:
                 pass
         except Exception as exc:
             logger.warning("DiffWave Ladefehler: %s — DSP-Fallback.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("DiffWave")
             except Exception:
                 pass
@@ -69,6 +69,14 @@ class DiffwavePlugin:
         audio = np.nan_to_num(audio.astype(np.float32))
         mono = audio.mean(axis=1) if audio.ndim == 2 else audio
         n = len(mono)
+
+        # Early exit for near-silent signals — diffusion/NMF would inject noise into silence
+        if float(np.sqrt(np.mean(mono ** 2))) < 1e-4:
+            result = mono.copy()
+            if audio.ndim == 2:
+                result = np.stack([result, result], axis=1)
+            return result.astype(np.float32)
+
         m22 = _resamp(mono, sr, _SR)
         # Maske auf interne SR skalieren (Nearest-Neighbor)
         mask22: np.ndarray | None = None
@@ -80,10 +88,7 @@ class DiffwavePlugin:
                 tgt_idx = np.clip((src_idx * scale).astype(int), 0, m22_len - 1)
                 mask22 = np.zeros(m22_len, dtype=bool)
                 mask22[tgt_idx] = True
-        if self._session:
-            out = self._diffuse(m22, mask22)
-        else:
-            out = _nmf_inpaint(m22, mask22, _SR)
+        out = self._diffuse(m22, mask22) if self._session else _nmf_inpaint(m22, mask22, _SR)
         result = _resamp(out, _SR, sr)[:n]
         if audio.ndim == 2:
             result = np.stack([result, result], axis=1)
@@ -112,6 +117,7 @@ class DiffwavePlugin:
                             "spectrogram": mel_in,
                         },
                     )[0]  # [1,1,16384]
+                    out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
                     audio_in = out[:, 0:1, :] if out.ndim == 3 else out
                 except Exception as exc:
                     logger.debug("DiffWave step %d Fehler: %s", step, exc)
@@ -146,10 +152,7 @@ def _mel_spec(mono, sr, n_mels=80, n_fft=1024, hop=256, T=64):
             fb[m - 1, k] = (r - k) / (r - c + 1e-8)
     mel = np.dot(fb, mag)
     # Normalisiere auf T Frames
-    if mel.shape[1] >= T:
-        mel = mel[:, :T]
-    else:
-        mel = np.pad(mel, ((0, 0), (0, T - mel.shape[1])))
+    mel = mel[:, :T] if mel.shape[1] >= T else np.pad(mel, ((0, 0), (0, T - mel.shape[1])))
     return 10.0 * np.log10(mel + 1e-9).astype(np.float32)
 
 
@@ -173,6 +176,10 @@ def _nmf_inpaint(mono: np.ndarray, mask: np.ndarray | None, sr: int = 22050) -> 
     idx = np.where(mask)[0]
     if len(idx) == 0:
         return mono
+
+    # Early exit for near-silent signals — NMF+Griffin-Lim would inject noise
+    if float(np.sqrt(np.mean(mono ** 2))) < 1e-4:
+        return mono.copy()
 
     x = mono.copy().astype(np.float32)
     len(mono)
@@ -278,68 +285,79 @@ def get_diffwave_plugin() -> DiffwavePlugin:
 
 
 def inpaint(audio: np.ndarray, gap_start: int, gap_end: int, sr: int, n_steps: int = 50) -> np.ndarray:
-    """Füllt eine Lücke im Audio-Signal per DSP-Interpolation.
+    """Fills a gap in the audio signal using DiffWave ONNX (primary) or DSP interpolation (fallback).
 
-    Verwendet zunächst DiffWave-ONNX (falls verfügbar) mit korrekter
-    Masken-Koordinatenkorrektur über korrekte Resampling-Verhältnisse.
-    Fallback: Lineare + kubische Interpolation (scipy).
+    Routes through DiffwavePlugin.inpaint() with a binary mask, which uses the ONNX model
+    when available (models/diffwave/diffwave_model.onnx + .onnx.data).  Falls back to
+    cubic/linear interpolation (DSP) if the plugin session is unavailable.
 
     Args:
-        audio:      Input-Audio (1D mono oder 2D stereo [C, N])
-        gap_start:  Startprobe der Lücke (inklusiv, Originalsr)
-        gap_end:    Endprobe der Lücke (exklusiv, Originalsr)
-        sr:         Sample-Rate in Hz
-        n_steps:    Diffusions-Schritte (derzeit nicht verwendet)
+        audio:      Input audio (1-D mono or 2-D shape [samples, channels]).
+        gap_start:  First sample of the gap (inclusive, in *sr* domain).
+        gap_end:    First sample after the gap (exclusive, in *sr* domain).
+        sr:         Sample rate in Hz.
+        n_steps:    Diffusion steps forwarded to the plugin (default 50).
 
     Returns:
-        Audio same shape wie Eingabe, Lücke interpoliert.
+        Audio with the same shape as input and the gap region reconstructed.
     """
-    if audio.ndim == 2:
-        channels = [inpaint(audio[c], gap_start, gap_end, sr, n_steps) for c in range(audio.shape[0])]
-        return np.stack(channels, axis=0)
-
-    audio = np.nan_to_num(audio.astype(np.float32))
-    n = len(audio)
+    audio = np.nan_to_num(np.asarray(audio, dtype=np.float32))
+    n = audio.shape[0]
     safe_start = max(0, int(gap_start))
     safe_end = min(n, int(gap_end))
 
     if safe_start >= safe_end:
         return audio.copy()
 
-    result = audio.copy()
+    # ── Primary path: DiffWave ONNX via plugin ────────────────────────────────
+    try:
+        plugin = get_diffwave_plugin()
+        mask = np.zeros(n, dtype=bool)
+        mask[safe_start:safe_end] = True
+        plugin_result = plugin.inpaint(audio, sr=sr, mask=mask, n_steps=n_steps)
+        if plugin_result is not None and np.isfinite(plugin_result).all():
+            return np.clip(plugin_result, -1.0, 1.0).astype(np.float32)
+    except Exception as _e:
+        logger.debug("DiffWave plugin inpaint fehlgeschlagen, DSP-Fallback: %s", _e)
 
-    # DSP-Interpolation der Lücke
+    # ── Fallback: DSP cubic/linear interpolation ──────────────────────────────
+    if audio.ndim == 2:
+        channels = [_dsp_interp_fill(audio[:, c], safe_start, safe_end) for c in range(audio.shape[1])]
+        result = np.stack(channels, axis=1)
+        return np.clip(result, -1.0, 1.0).astype(np.float32)
+    return _dsp_interp_fill(audio, safe_start, safe_end)
+
+
+def _dsp_interp_fill(mono: np.ndarray, safe_start: int, safe_end: int) -> np.ndarray:
+    """DSP cubic/linear interpolation fallback for a single mono gap."""
+    n = len(mono)
+    result = mono.copy()
     gap_len = safe_end - safe_start
-
-    # Kontext-Samples für Interpolation sammeln (bis zu 2048 bds.)
     ctx_len = min(2048, max(64, gap_len))
     pre_start = max(0, safe_start - ctx_len)
     post_end = min(n, safe_end + ctx_len)
-
     good_before = np.arange(pre_start, safe_start)
     good_after = np.arange(safe_end, post_end)
     good_idx = np.concatenate([good_before, good_after])
     gap_idx = np.arange(safe_start, safe_end)
-
     if len(good_idx) >= 2:
         try:
             from scipy.interpolate import interp1d
 
             f = interp1d(
                 good_idx,
-                audio[good_idx],
+                mono[good_idx],
                 kind="cubic" if len(good_idx) >= 4 else "linear",
                 bounds_error=False,
-                fill_value=(audio[good_idx[0]], audio[good_idx[-1]]),
+                fill_value=(float(mono[good_idx[0]]), float(mono[good_idx[-1]])),
             )
             interp_vals = f(gap_idx).astype(np.float32)
         except Exception:
-            pre_val = float(audio[safe_start - 1]) if safe_start > 0 else 0.0
-            post_val = float(audio[safe_end]) if safe_end < n else 0.0
+            pre_val = float(mono[safe_start - 1]) if safe_start > 0 else 0.0
+            post_val = float(mono[safe_end]) if safe_end < n else 0.0
             interp_vals = np.linspace(pre_val, post_val, gap_len).astype(np.float32)
     else:
         interp_vals = np.zeros(gap_len, dtype=np.float32)
-
     result[safe_start:safe_end] = np.clip(interp_vals, -1.0, 1.0)
     return result
 

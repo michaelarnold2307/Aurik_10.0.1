@@ -493,10 +493,7 @@ class VocalSaturation:
         harmonic_energy = np.sum(spectrum[len(spectrum) // 10 :] ** 2)
 
         # THD ratio
-        if fundamental_energy > 0:
-            thd = np.sqrt(harmonic_energy / fundamental_energy)
-        else:
-            thd = 0.0
+        thd = np.sqrt(harmonic_energy / fundamental_energy) if fundamental_energy > 0 else 0.0
 
         return thd
 

@@ -20,9 +20,9 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -158,7 +158,7 @@ class PerceptualAttentionModel:
         self,
         base_gain: np.ndarray,
         saliency_map: np.ndarray,
-        lyrics_saliency: Optional[np.ndarray] = None,
+        lyrics_saliency: np.ndarray | None = None,
     ) -> np.ndarray:
         """Multipliziert Gain-Maske mit Salienz-Gewichten (bounds-sicher).
 
@@ -257,7 +257,7 @@ class PerceptualAttentionModel:
 
 # ---- Thread-sicherer Singleton ----
 
-_instance: Optional[PerceptualAttentionModel] = None
+_instance: PerceptualAttentionModel | None = None
 _lock = threading.Lock()
 
 

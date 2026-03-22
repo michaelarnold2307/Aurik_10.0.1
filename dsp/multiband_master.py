@@ -93,10 +93,7 @@ class MultibandMasterCompressor:
             return np.clip(out, -1.0, 1.0)
 
         try:
-            if audio.ndim == 1:
-                result = _process_ch(audio)
-            else:
-                result = np.stack([_process_ch(ch) for ch in audio], axis=0)
+            result = _process_ch(audio) if audio.ndim == 1 else np.stack([_process_ch(ch) for ch in audio], axis=0)
             return result.astype(audio.dtype)
         except Exception:
             return audio

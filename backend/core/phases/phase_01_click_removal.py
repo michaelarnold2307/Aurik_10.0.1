@@ -423,13 +423,13 @@ class ClickRemovalPhase(PhaseInterface):
             sf.write(input_path, audio, sample_rate)
 
             # Process with DeepFilterNet
-            returncode, stdout, stderr = plugin.process(
+            returncode, _stdout, _stderr = plugin.process(
                 input_path, output_path, post_filter=True  # Enable post-filter for better quality
             )
 
             if returncode == 0 and os.path.exists(output_path):
                 # Read repaired audio
-                repaired, sr_read = sf.read(output_path)
+                repaired, _sr_read = sf.read(output_path)
 
                 # Update audio in-place
                 if len(repaired) == len(audio):
@@ -519,7 +519,7 @@ class ClickRemovalPhase(PhaseInterface):
             # Extract click region (with context)
             ctx_start = max(0, start - 50)
             ctx_end = min(len(audio), end + 50)
-            context = audio[ctx_start:ctx_end]  # noqa: F841
+            audio[ctx_start:ctx_end]
 
             # Feature extraction
             click_region = audio[start : end + 1]
@@ -563,10 +563,7 @@ class ClickRemovalPhase(PhaseInterface):
             # Classify as digital or analog click
             # Digital clicks: Sharp edges, abrupt changes
             # Analog clicks: Softer, more gradual
-            if duration <= 5 and click_amplitude > 0.7:
-                click_type = "digital"
-            else:
-                click_type = "analog"
+            click_type = "digital" if duration <= 5 and click_amplitude > 0.7 else "analog"
 
             classified.append({"type": click_type, "start": start, "end": end, "severity": severity})
 

@@ -97,6 +97,7 @@ if __name__ == "__main__":
 else:
     from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -250,10 +251,7 @@ class HarmonicRestorationPhase(PhaseInterface):
         hf_energy_before = self._measure_hf_energy(audio, params["target_range_hz"])
         hf_energy_after = self._measure_hf_energy(restored, params["target_range_hz"])
 
-        if hf_energy_before > 0:
-            hf_enhancement_db = 20 * np.log10(hf_energy_after / (hf_energy_before + 1e-10))
-        else:
-            hf_enhancement_db = 0.0
+        hf_enhancement_db = 20 * np.log10(hf_energy_after / (hf_energy_before + 1e-10)) if hf_energy_before > 0 else 0.0
 
         # Calculate THD (Total Harmonic Distortion)
         thd_percent = self._calculate_thd(audio, restored)
@@ -298,10 +296,7 @@ class HarmonicRestorationPhase(PhaseInterface):
             List of missing harmonic orders (e.g., [2, 3, 5])
         """
         # Convert to mono for analysis
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # FFT
         fft_size = min(16384, len(mono))
@@ -460,10 +455,7 @@ class HarmonicRestorationPhase(PhaseInterface):
         Measure RMS energy in frequency range.
         """
         # Convert to mono
-        if audio.ndim == 2:
-            mono = np.mean(audio, axis=1)
-        else:
-            mono = audio
+        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Band-pass filter
         nyquist = self.sample_rate / 2
@@ -499,10 +491,7 @@ class HarmonicRestorationPhase(PhaseInterface):
             rms_original = np.sqrt(np.mean(original**2))
             rms_harmonics = np.sqrt(np.mean(harmonics**2))
 
-        if rms_original > 0:
-            thd = (rms_harmonics / rms_original) * 100.0
-        else:
-            thd = 0.0
+        thd = rms_harmonics / rms_original * 100.0 if rms_original > 0 else 0.0
 
         return thd
 

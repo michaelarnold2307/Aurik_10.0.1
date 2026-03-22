@@ -239,7 +239,7 @@ class PANNsPerceptualLoss(nn.Module):
         details = {}
 
         # Compute distance in each feature space
-        for key in output_features.keys():
+        for key in output_features:
             output_feat = output_features[key]
             target_feat = target_features[key]
 

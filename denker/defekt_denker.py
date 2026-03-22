@@ -16,10 +16,10 @@ Type-Annotations nach §3.7.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -162,7 +162,7 @@ class DefektDenker:
 
                 self._scanner = DefectScanner()
                 logger.info("DefektDenker: DefectScanner geladen.")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("DefektDenker: DefectScanner nicht verfügbar (%s).", exc)
 
             # --- CausalDefectReasoner ---
@@ -171,7 +171,7 @@ class DefektDenker:
 
                 self._reasoner = CausalDefectReasoner()
                 logger.info("DefektDenker: CausalDefectReasoner geladen.")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("DefektDenker: CausalDefectReasoner nicht verfügbar (%s).", exc)
 
             self._loaded = True
@@ -187,14 +187,14 @@ class DefektDenker:
         *,
         material: str = "unknown",
         validate_audio: bool = True,
-    ) -> DefektBericht:
+    ) -> DefektErgebnis:
         """Erkennt und klassifiziert Defekte im Audio-Signal.
 
         Algorithmus:
             1. NaN/Inf-Bereinigung der Eingabe (§3.1)
             2. DefectScanner.scan() → DefectAnalysisResult (23 DefectTypes)
             3. CausalDefectReasoner.reason() → RestorationPlan
-            4. Strukturierung zu DefektBericht
+            4. Strukturierung zu DefektBericht → Konvertierung in DefektErgebnis
 
         Args:
             audio:          Eingabe-Audio, float32/64.
@@ -203,7 +203,9 @@ class DefektDenker:
             validate_audio: NaN/Inf-Bereinigung durchführen.
 
         Returns:
-            DefektBericht mit Defekten, Ursachen und Restaurierungsplan.
+            DefektErgebnis (Kompatibilitäts-Alias) mit Defekten, Ursachen und
+            Restaurierungsplan.  Interne Verarbeitung erfolgt via DefektBericht;
+            aurik_denker.py unterstützt beide Feldnamen über getattr-Fallback.
         """
         assert sr == 48000, f"DefektDenker.analysiere() erwartet sr=48000 Hz, erhalten: {sr} Hz"
         if validate_audio:
@@ -218,7 +220,7 @@ class DefektDenker:
             try:
                 scan_result = self._scanner.scan(audio, sample_rate=sr)
                 defect_scores = self._extract_scores(scan_result)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("DefektDenker: scan() fehlgeschlagen (%s).", exc)
 
         # Step 2: Causal Reasoning
@@ -231,10 +233,10 @@ class DefektDenker:
                     audio=audio,
                     sr=sr,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("DefektDenker: reason() fehlgeschlagen (%s).", exc)
 
-        return self._to_bericht(defect_scores, plan, material)
+        return DefektErgebnis.from_bericht(self._to_bericht(defect_scores, plan, material))
 
     def scan_nur(
         self,
@@ -256,7 +258,7 @@ class DefektDenker:
         try:
             result = self._scanner.scan(audio, sample_rate=sr)
             return self._extract_scores(result)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("DefektDenker: scan_nur() fehlgeschlagen (%s).", exc)
             return {}
 
@@ -305,10 +307,7 @@ class DefektDenker:
             reasoning_raw = str(getattr(plan, "reasoning", ""))
         else:
             # Fallback: most severe defect becomes primary cause
-            if defect_scores:
-                primary = max(defect_scores, key=lambda k: defect_scores[k])
-            else:
-                primary = "unknown"
+            primary = max(defect_scores, key=lambda k: defect_scores[k]) if defect_scores else "unknown"
             confidence = 0.3
             phases = [
                 "phase_01_click_removal",

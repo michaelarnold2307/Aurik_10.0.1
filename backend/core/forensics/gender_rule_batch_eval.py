@@ -1,10 +1,11 @@
 import csv
+import logging
 import os
 
-from gender_rule_based import RuleBasedGenderDetector
 import matplotlib.pyplot as plt
 import numpy as np
-import logging
+from gender_rule_based import RuleBasedGenderDetector
+
 logger = logging.getLogger(__name__)
 
 

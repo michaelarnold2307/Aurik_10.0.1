@@ -133,8 +133,9 @@ def _wpe_stft(
 def _wpe_nara(mono: np.ndarray, sr: int) -> np.ndarray | None:
     """nara_wpe-Bibliothek als Tier-1 (falls installiert)."""
     try:
-        from nara_wpe.utils import istft as nwpe_istft, stft as nwpe_stft  # noqa: PLC0415
-        from nara_wpe.wpe import wpe  # noqa: PLC0415
+        from nara_wpe.utils import istft as nwpe_istft
+        from nara_wpe.utils import stft as nwpe_stft
+        from nara_wpe.wpe import wpe
 
         Y = nwpe_stft(mono, size=_N_FFT, shift=_HOP)  # [T, K]
         Y_e = wpe(Y.T[..., np.newaxis])  # [K, T, 1]

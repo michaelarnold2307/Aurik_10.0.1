@@ -18,14 +18,14 @@ Version: 9.0.0
 Date: 2026-02-15
 """
 
+import logging
+import multiprocessing as mp
+import time
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
-import multiprocessing as mp
 from multiprocessing import Manager, Pool
-import time
 from typing import Any
 
 import numpy as np
@@ -151,10 +151,10 @@ class AdaptiveCoreScheduler:
             self.manager = Manager()
             self.memory_pool = {
                 "audio_buffers": [
-                    np.zeros(int(60 * 44100 * 2), dtype=np.float32) for _ in range(self.num_cores)  # 60s Stereo max
+                    np.zeros((60 * 44100 * 2), dtype=np.float32) for _ in range(self.num_cores)  # 60s Stereo max
                 ],
                 "fft_buffers": [np.zeros(2**16, dtype=np.complex128) for _ in range(self.num_cores)],  # 64K FFT
-                "temp_arrays": [np.zeros(int(10 * 44100), dtype=np.float32) for _ in range(self.num_cores)],  # 10s Temp
+                "temp_arrays": [np.zeros((10 * 44100), dtype=np.float32) for _ in range(self.num_cores)],  # 10s Temp
             }
             logger.info(f"Memory Pool initialized: {self.MEMORY_POOL_SIZE_MB} MB pre-allocated")
         except Exception as e:
@@ -165,7 +165,7 @@ class AdaptiveCoreScheduler:
         self,
         phase_id: str,
         function: Callable,
-        dependencies: list[str] = None,
+        dependencies: list[str] | None = None,
         estimated_time: float = 1.0,
         min_memory_mb: int = 100,
     ) -> None:
@@ -265,7 +265,7 @@ class AdaptiveCoreScheduler:
         current_audio = audio.copy()
 
         # Execution Loop
-        with Pool(processes=self.num_cores) as pool:  # noqa: F841
+        with Pool(processes=self.num_cores):
             while len(self.completed_phases) < len(self.phases):
                 # Finde Phasen, die jetzt ausgeführt werden können
                 ready_phases = self.get_ready_phases()

@@ -181,17 +181,14 @@ class TestPhonemeDetectorInitialization:
         assert isinstance(device, torch.device)
         assert device.type == "cpu"
 
-    @pytest.mark.skipif(
-        not TRANSFORMERS_AVAILABLE or not torch.cuda.is_available(), reason="Requires torch/transformers and CUDA"
-    )
     def test_device_property_gpu(self):
-        """Test device property (GPU mode)"""
+        """Test device property in GPU mode request (CPU-only runtime policy)."""
         config = DetectionConfig(use_gpu=True)
         detector = PhonemeDetector(config)
 
         device = detector.device
         assert isinstance(device, torch.device)
-        assert device.type == "cuda"
+        assert device.type == "cpu"
 
 
 @pytest.mark.skipif(not TRANSFORMERS_AVAILABLE, reason="Requires torch/transformers")

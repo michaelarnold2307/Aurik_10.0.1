@@ -1,0 +1,33 @@
+"""
+Noise Reduction Facade — Routes to DeepFilterNet v3.II Plugin.
+
+Provides ``get_noise_reducer()`` as bridge-compatible accessor (§9.7.4).
+Delegates to ``plugins.deepfilternet_v3_ii_plugin.get_deepfilternet_plugin()``.
+
+Author: Aurik Development Team
+Version: 9.10.57
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from plugins.deepfilternet_v3_ii_plugin import DeepFilterNetV3Plugin
+
+logger = logging.getLogger(__name__)
+
+try:
+    from plugins.deepfilternet_v3_ii_plugin import get_deepfilternet_plugin as _get_dfn
+    _AVAILABLE = True
+except ImportError:
+    _AVAILABLE = False
+    logger.debug("noise_reduction: DeepFilterNet plugin not available — DSP fallback only")
+
+
+def get_noise_reducer() -> "DeepFilterNetV3Plugin | None":
+    """Return the DeepFilterNet v3.II singleton, or None if unavailable."""
+    if not _AVAILABLE:
+        return None
+    return _get_dfn()

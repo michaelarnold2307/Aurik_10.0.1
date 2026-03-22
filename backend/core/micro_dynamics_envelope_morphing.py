@@ -7,10 +7,10 @@ Stellt origales Mikro-Dynamik-Profil im restaurierten Signal wieder her.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -146,10 +146,7 @@ class MicroDynamicsEnvelopeMorphing:
             ce = min(end, n)
             if start < n:
                 # Lineare Interpolation zu naechstem Frame
-                if k + 1 < n_frames:
-                    nxt_gain = 10.0 ** (G_smooth[k + 1] / 20.0)
-                else:
-                    nxt_gain = linear_gain
+                nxt_gain = 10.0 ** (G_smooth[k + 1] / 20.0) if k + 1 < n_frames else linear_gain
                 ramp = np.linspace(linear_gain, nxt_gain, ce - start, dtype=np.float32)
                 gain_envelope[start:ce] = ramp
 
@@ -208,9 +205,7 @@ class MicroDynamicsEnvelopeMorphing:
         G = np.zeros(n_frames, dtype=np.float32)
         for k in range(n_frames):
             lo, lr = L_orig[k], L_rest[k]
-            if not (math.isfinite(lo) and math.isfinite(lr)):
-                G[k] = 0.0
-            elif lo < self.MIN_LEVEL_LUFS:
+            if not (math.isfinite(lo) and math.isfinite(lr)) or lo < self.MIN_LEVEL_LUFS:
                 G[k] = 0.0
             else:
                 G[k] = float(np.clip(lo - lr, -max_gain, max_gain))
@@ -248,7 +243,7 @@ class MicroDynamicsEnvelopeMorphing:
 # Singleton + Convenience
 # ---------------------------------------------------------------------------
 
-_instance: Optional[MicroDynamicsEnvelopeMorphing] = None
+_instance: MicroDynamicsEnvelopeMorphing | None = None
 _lock = threading.Lock()
 
 
@@ -288,15 +283,15 @@ def compute_lufs_profile(audio: np.ndarray, sr: int = 48000) -> np.ndarray:
 
 
 __all__ = [
-    "MicroDynamicsEnvelopeMorphing",
-    "MorphResult",
-    "get_mdem",
-    "morph_micro_dynamics",
-    "compute_lufs_profile",
     # Modul-Level-Konstanten:
     "FRAME_SIZE_SAMPLES",
     "HOP_SIZE_SAMPLES",
     "MAX_GAIN_LU",
     "MIN_LEVEL_LUFS",
     "PEARSON_TARGET",
+    "MicroDynamicsEnvelopeMorphing",
+    "MorphResult",
+    "compute_lufs_profile",
+    "get_mdem",
+    "morph_micro_dynamics",
 ]

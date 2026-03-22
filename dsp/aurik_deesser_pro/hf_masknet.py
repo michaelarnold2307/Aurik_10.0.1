@@ -42,9 +42,7 @@ def accept(metrics: dict[str, float]) -> bool:
         return False
     if metrics["res"] > 0.95:
         return False
-    if metrics["sharp"] < 0.80:
-        return False
-    return True
+    return not metrics["sharp"] < 0.8
 
 
 def auto_abort(before: AudioArray, after: AudioArray, sr: int) -> dict[str, float]:
@@ -125,9 +123,7 @@ def should_use_ml(
         return False
     if not dsp_at_limit(before, after, sr):
         return False
-    if not low_formant_overlap(stft, band_bins, t):
-        return False
-    return True
+    return low_formant_overlap(stft, band_bins, t)
 
 
 from collections.abc import Sequence
@@ -226,6 +222,7 @@ class HFTextureDataset(Dataset[torch.Tensor]):
 
 import torch
 import torch.nn as nn
+
 logger = logging.getLogger(__name__)
 
 

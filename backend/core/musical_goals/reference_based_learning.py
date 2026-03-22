@@ -19,11 +19,11 @@ Architecture:
     Profile → Personalized Goal Targets
 """
 
+import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import json
-import logging
 from pathlib import Path
 from typing import Any
 

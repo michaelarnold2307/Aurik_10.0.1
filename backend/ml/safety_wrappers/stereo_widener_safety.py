@@ -233,10 +233,7 @@ def detect_hollow_artifacts(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     side_energy_in_band = np.mean(side_spectrum[mid_band] ** 2)
 
     # Hollow sound: mid scooped, side dominant
-    if mid_energy_in_band > 0:
-        ratio = side_energy_in_band / mid_energy_in_band
-    else:
-        ratio = 10.0
+    ratio = side_energy_in_band / mid_energy_in_band if mid_energy_in_band > 0 else 10.0
 
     # High ratio = hollowness
     has_artifacts = ratio > 3.0

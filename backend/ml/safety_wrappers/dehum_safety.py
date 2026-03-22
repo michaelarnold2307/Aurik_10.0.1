@@ -79,10 +79,7 @@ def detect_hum(
                 candidate_energies.append(0.0)
 
         # Choose stronger candidate
-        if candidate_energies[0] > candidate_energies[1]:
-            fundamental_hz = 50
-        else:
-            fundamental_hz = 60
+        fundamental_hz = 50 if candidate_energies[0] > candidate_energies[1] else 60
 
     # Find harmonics
     max_harmonic = int(sr / 2 / fundamental_hz)  # Up to Nyquist
@@ -439,7 +436,7 @@ class DeHumSafety(BaseSafetyWrapper):
 
         # 2. Check bass preservation
         has_bass_before, bass_ratio_before = check_bass_content(original, sr)
-        has_bass_after, bass_ratio_after = check_bass_content(processed, sr)
+        _has_bass_after, bass_ratio_after = check_bass_content(processed, sr)
 
         metrics["bass_ratio_before"] = bass_ratio_before
         metrics["bass_ratio_after"] = bass_ratio_after

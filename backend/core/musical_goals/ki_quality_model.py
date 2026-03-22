@@ -20,8 +20,8 @@ Status: PRODUKTIONSREIF ✅
 """
 
 import logging
-from typing import Any
 import warnings
+from typing import Any
 
 import numpy as np
 from scipy import fft, signal
@@ -273,10 +273,7 @@ class KIQualityAnalyzer:
                     harmonic_power_sum += spectrum[harmonic_idx] ** 2
 
             # THD berechnen
-            if fundamental_power > 0:
-                thd = np.sqrt(harmonic_power_sum) / np.sqrt(fundamental_power)
-            else:
-                thd = 0.5
+            thd = np.sqrt(harmonic_power_sum) / np.sqrt(fundamental_power) if fundamental_power > 0 else 0.5
 
             # Normalisiere: >0.2 (20%) wird auf 1.0 gecapped
             thd_normalized = np.clip(thd / 0.2, 0.0, 1.0)

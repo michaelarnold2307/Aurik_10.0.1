@@ -3,8 +3,8 @@ Adaptive Intermodulation Remover DSP-Modul für Aurik 6.0 (SOTA-Maximum)
 Klassische adaptive Intermodulationsstörungs-Entfernung mit automatischer Parameteroptimierung (SOTA-Maximum).
 """
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np

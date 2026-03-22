@@ -5,8 +5,8 @@ Verwendet numpy für die Berechnung.
 """
 
 import logging
-import numpy as np
 
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +52,7 @@ class AdaptiveSpectralCentroid:
                     frame = y[i : i + n_fft]
                     magnitude = np.abs(np.fft.rfft(frame))
                     freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
-                    if np.sum(magnitude) > 0:
-                        centroid = np.sum(freqs * magnitude) / np.sum(magnitude)
-                    else:
-                        centroid = 0.0
+                    centroid = np.sum(freqs * magnitude) / np.sum(magnitude) if np.sum(magnitude) > 0 else 0.0
                     centroids.append(centroid)
                 centroids = np.array(centroids)
             self._audit_log("success", "Spektralzentrum-Berechnung erfolgreich")

@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from backend.core.export_workflow import export_audio, export_audit_log
+from backend.core.export_workflow import _evaluate_export_quality_gate, export_audio, export_audit_log
 
 
 @pytest.fixture
@@ -207,3 +207,45 @@ def test_export_audit_log_complex_entries(temp_export_dir):
         content = f.read()
     assert "restoration" in content
     assert "denoise" in content
+
+
+def test_quality_gate_normalizes_plain_fail_reason():
+    """Quality-gate payload without structured fail_reasons is normalized deterministically."""
+    quality_gate = {
+        "passed": False,
+        "fail_reason": "PQS unter Mindestschwelle",
+        "required_gates": ["musical_goals", "pqs", "oqs"],
+    }
+
+    passed, fail_reason, degradation_status, fail_reasons = _evaluate_export_quality_gate(quality_gate)
+
+    assert passed is False
+    assert fail_reason == "PQS unter Mindestschwelle"
+    assert degradation_status == "blocked"
+    assert isinstance(fail_reasons, list)
+    assert len(fail_reasons) == 1
+    assert fail_reasons[0]["error_code"] == "QUALITY_GATE_FAILED"
+    assert fail_reasons[0]["severity"] == "blocked"
+
+
+def test_quality_gate_prefers_structured_error_code_when_fail_reason_missing():
+    """When fail_reason is absent, first structured error code becomes primary fail reason."""
+    quality_gate = {
+        "passed": False,
+        "fail_reasons": [
+            {
+                "component": "quality_gate",
+                "error_code": "PQS_GATE_FAILED",
+                "severity": "blocked",
+                "exc_msg": "PQS unter Mindestschwelle",
+            }
+        ],
+    }
+
+    passed, fail_reason, degradation_status, fail_reasons = _evaluate_export_quality_gate(quality_gate)
+
+    assert passed is False
+    assert fail_reason == "PQS_GATE_FAILED"
+    assert degradation_status == "blocked"
+    assert isinstance(fail_reasons, list)
+    assert fail_reasons[0]["error_code"] == "PQS_GATE_FAILED"

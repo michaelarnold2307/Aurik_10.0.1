@@ -46,11 +46,9 @@ Author: Aurik Development Team
 Version: 2.0.0 Professional
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 from typing import Any
 
@@ -58,6 +56,7 @@ import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -274,11 +273,8 @@ class SurfaceNoiseProfiling(PhaseInterface):
         eps = 1e-10
 
         # Fensterbreite ≈1.5s oder mind. 15 Frames
-        if T > 1 and len(t_arr) > 1:
-            hop_s = float(t_arr[1] - t_arr[0])
-        else:
-            hop_s = 0.01
-        M = max(15, int(round(1.5 / hop_s)))
+        hop_s = float(t_arr[1] - t_arr[0]) if T > 1 and len(t_arr) > 1 else 0.01
+        M = max(15, round(1.5 / hop_s))
 
         # Geglättete Leistung P_hat (F × T)
         P_hat = magnitude**2

@@ -1,5 +1,115 @@
 # Aurik 9 — Changelog
 
+## Version 9.10.63 — DefectScanner Anti-False-Positive-Härtung (Mär 2026)
+
+### Zusammenfassung
+
+- **Problem**: Drei Detektoren des DefectScanner erzeugten False Positives auf sauberem / tonalem Audio:
+  - `_detect_clicks`: Threshold `sensitivity × percentile(99.5)` fiel bei Sinuswellen in die normale Diff-Verteilung → 59 % aller Samples als "Click-Kandidaten" markiert
+  - `_detect_crackle`: Brillante / HF-reiche Signale (Obertöne, Cymbal-ähnlich) lösten den HP-Envelope-Detektor aus trotz Kurtosis ≈ 1.5
+  - `_detect_compression_artifacts`: Rein tonale Signale (alle Energie in wenigen Bins) hatten natürlich niedriges SFM → falsch als Codec-Artefakt erkannt
+
+- **Fix**:
+  - **Clicks**: Outlier-robuster Threshold: `max(percentile(99.9), median × 5)` — Clicks müssen ≥ 5× den Median-Diff übersteigen. Zusätzlich Width-Filter (≤ 0.15 ms, ~7 Samples) und Location-Cap (max. 50). Grouping-Window von 10 ms auf 1 ms reduziert.
+  - **Crackle**: Kurtosis < 4.0 → `kurtosis_discount = 0.0` (Hard-Cap, severity → 0). Borderline 4.0–6.0 linear skaliert. Confidence auf 0.3 bei klar tonalem HF.
+  - **Compression**: Spectral-Concentration-Check: > 80 % Energie in < 5 % der Frequenz-Bins → Narrowband-Discount (bis 0.05×). Confidence 0.3 bei Narrowband-Signalen.
+
+### Geänderte Dateien
+
+- `backend/core/defect_scanner.py` — `_detect_clicks`, `_detect_crackle`, `_detect_compression_artifacts`
+- `tests/unit/test_defect_scanner_anti_fp.py` — **NEU**: 14 Anti-FP Unit-Tests (Clicks, Crackle, Compression)
+- `CHANGELOG.md`
+
+---
+
+## Version 9.10.62 — AST-Perceptual-Validator: ONNX-Pfad integriert (Mär 2026)
+
+### Zusammenfassung
+
+- **Root-Cause**: Der PerceptualValidator erwartete ausschließlich das HuggingFace-Layout unter `models/ast_perceptual_base/`. Vorhandene lokale ONNX-Artefakte unter `models/ast/ast_model.onnx(+.data)` wurden nicht genutzt.
+- **Fix**: `PerceptualValidator` lädt nun zusätzlich einen ONNX-Backend-Pfad (`models/ast/ast_model.onnx`) mit `CPUExecutionProvider`, falls das HF-Layout nicht verfügbar ist.
+- **Inference**: ONNX-Frontend wurde ergänzt (Mel-Spektrogramm 128 Bins, 1024 Frames, Softmax-Postprocessing), damit Goal-Mapping auf den 527 Logits direkt genutzt werden kann.
+- **Manifest**: `models/manifest.json` enthält jetzt den Eintrag `ast_perceptual_onnx` inklusive `.onnx.data`-Metadaten.
+
+### Geänderte Dateien
+
+- `backend/core/musical_goals/perceptual_validator.py` — ONNX-Loader + Inferenzpfad
+- `models/manifest.json` — AST-ONNX Modellregistrierung
+- `CHANGELOG.md`
+
+---
+
+## Version 9.10.61 — Fix: Analog-Ketten-Pass-Through-Block (Tape → MP3 nicht als "sauber" einstufen) (Mär 2026)
+
+### Zusammenfassung
+
+- **Root-Cause**: `_should_skip_excellence_for_clean_digital()` prüfte nur `primary_medium = chain[-1]` (= `"mp3_low"` für Kette `tape → mp3_low`). `original_medium = "tape"` wurde ignoriert → die gesamte Restaurierungskette wurde übersprungen, obwohl das Original eine Bandaufnahme ist.
+- **Symptom**: Elke Best (Tape→MP3): DefectScanner detektiert `head_misalignment` severity 0.51, aber alle Phasen werden übersprungen (`Restaurierung übersprungen für saubere Digitalquelle`). Nur VERSA MOS=4.568 gemessen.
+- **Fix**: In `_should_skip_excellence_for_clean_digital()` wird jetzt `chain_info["original_medium"]` geprüft. Ist der Ursprung analog (`tape`, `reel_tape`, `vinyl`, `shellac`, `cassette`, `phonograph`, `wax_cylinder`), blockiert der Guard den Pass-Through zwingend.
+- **Betroffene Datei**: `denker/aurik_denker.py`
+
+### Geänderte Dateien
+- `denker/aurik_denker.py` — Analog-Ursprungs-Guard in `_should_skip_excellence_for_clean_digital()`
+- `CHANGELOG.md`
+
+---
+
+## Version 9.10.60 — ML-Routing: quality-Mode aktiviert ML-Phasen (Mär 2026)
+
+### Zusammenfassung
+
+- **Root-Cause**: `QualityMode.QUALITY` (value `"quality"`, 5×RT) wurde von Phase 03, 06, 12 und 31 fälschlicherweise wie `"fast"` behandelt — ML war nur für `"balanced"` (3×RT) und `"maximum"` (8×RT) aktiv. Da "Restoration"-Modus intern `QualityMode.QUALITY` verwendet, wurden **keine Denoising- oder Pitch-ML-Modelle geladen** trotz höherem RT-Budget.
+- **Fix Phase 03** (`phase_03_denoise.py`): `quality_mode in ["balanced", "maximum"]` → `["balanced", "quality", "maximum"]`; "quality" und "maximum" verwenden nun `DenoiseStrategy.HYBRID` (OMLSA + Resemble Enhance).
+- **Fix Phase 06** (`phase_06_frequency_restoration.py`): Gleiche Erweiterung für AudioSR-Integration.
+- **Fix Phase 12** (`phase_12_wow_flutter_fix.py`): "quality" → ML-Hybrid wie "balanced"; korrigierter Strategy-Kommentar.
+- **Fix Phase 31** (`phase_31_speed_pitch_correction.py`): "quality" aktiviert ML Pitch-Detektion (CREPE).
+- **Keine Änderung** an `phase_20_reverb_reduction.py` — war bereits korrekt (`"quality"` bereits enthalten).
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|---|---|
+| `backend/core/phases/phase_03_denoise.py` | quality→HYBRID DenoiseStrategy |
+| `backend/core/phases/phase_06_frequency_restoration.py` | quality→ML AudioSR |
+| `backend/core/phases/phase_12_wow_flutter_fix.py` | quality→ML-Hybrid + Kommentar |
+| `backend/core/phases/phase_31_speed_pitch_correction.py` | quality→ML CREPE |
+
+---
+
+## Version 9.10.59 — Short-Clip-Gate RMS-Threshold Refinement (Mär 2026)
+
+### Zusammenfassung
+
+- **§2.31–§2.34 Adaptive Qualitätsziele**: RMS-Schwelle im Short-Clip-Gate von `rms >= 1e-4` (−80 dBFS, zu permissiv) auf `rms <= 0.001` (−60 dBFS, echte Stille) korrigiert. **Auswirkung**: Kurzes Rausch-Audio (z.B. 5s Noise @ RMS 0.14) wird nicht mehr fälschlicherweise als "benign silence" übersprungen → **ML-Phasen werden jetzt für degradiertes Audio aktiviert**, was die Beschwerde "Es werden keine ML-Modelle eingesetzt" löst.
+- **`_should_skip_excellence_for_clean_digital()` (Zeile 325)**: Bedingung geändert: `rms >= 1e-4 and rms <= 0.001` → `rms <= 0.001` (nur echte Stille überspringen). Englisches Kommentar hinzugefügt, dass dieses Gate für kurze digitale Clip-Optimierung gedacht ist, nicht für DSP-generiertes Rauschen.
+- **Warning-Logging**: Wenn Skip-Decision getroffen wird, warnt Logger mit Hinweis "Set mode='studio2026' to force restoration".
+- **Test**: `test_aurik_denker_short_clip_gate_rms_threshold()` in `tests/integration/test_aurik_denker_e2e.py` überprüft Grenzfälle: RMS > 0.001 → kein Skip, RMS ≤ 0.001 → Skip. Boundary-Fall RMS = 0.001 explizit validiert.
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+| --- | --- |
+| `denker/aurik_denker.py` | Zeile 325: RMS-Kondition + Logging refinement |
+| `tests/integration/test_aurik_denker_e2e.py` | Neuer Test `test_aurik_denker_short_clip_gate_rms_threshold()` (3 Assertions) |
+
+### Spec-Referenz
+
+- §2.31–§2.34: Adaptive Qualitätsziele — Material-, ära- und restorability-adaptiv Schwellen skalieren. Statische Schwellwerte verboten.
+- §2.2: AurikDenker als kanonischer PFLICHT-Einstiegspunkt. Restaurierung darf nicht willkürlich übersprungen werden.
+
+### Git-Commit Empfehlung
+
+```
+Fix: Short-Clip-Gate RMS-Threshold (ML-Modelle für Rausch-Audio)
+
+- RMS-Schwelle von 0.0001 (-80 dBFS) zu 0.001 (-60 dBFS)
+- Verhindert falsche "benign silence" Klassifikation für degradiertes Audio
+- ML-Phasen werden jetzt für realistische Rausch-Samples aktiviert
+- Integration-Test mit Boundary-Cases
+```
+
+---
+
 ## Version 9.10.58 — Vocos 48 kHz nativ: Zero-Resampling-Vocoder (Mär 2026)
 
 ### Zusammenfassung

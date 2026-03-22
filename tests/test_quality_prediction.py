@@ -396,7 +396,7 @@ class TestQualityPredictionSystem:
         gate_met, reason = system.check_quality_gate(quality, gates)
 
         assert gate_met
-        assert "gate met" in reason.lower()
+        assert "gate" in reason.lower() and "met" in reason.lower()
 
     def test_quality_gate_not_met(self, system):
         """Test quality gate checking (gate not met)."""

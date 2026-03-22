@@ -43,10 +43,7 @@ def select_channel_or_sum(scores: dict[str, float], threshold: float = 0.20) -> 
     try:
         score_L = scores.get("L", 0.0)
         score_R = scores.get("R", 0.0)
-        if abs(score_L - score_R) >= threshold:
-            result = "L" if score_L < score_R else "R"
-        else:
-            result = "mono_sum"
+        result = ("L" if score_L < score_R else "R") if abs(score_L - score_R) >= threshold else "mono_sum"
         _audit_log("success", f"Kanalwahl: {result} (L={score_L:.3f}, R={score_R:.3f})")
         return result
     except Exception as e:

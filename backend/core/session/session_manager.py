@@ -29,13 +29,13 @@ Author: AI Team
 Date: 8. Februar 2026
 """
 
+import json
+import logging
+import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-import json
-import logging
 from pathlib import Path
-import shutil
 from typing import Any
 
 logger = logging.getLogger(__name__)

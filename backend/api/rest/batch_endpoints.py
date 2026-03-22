@@ -4,13 +4,13 @@ Migriert von Flask (Port 5000) zu FastAPI (Port 8000) mit Batch-IDs
 """
 
 import logging
-from pathlib import Path
 import threading
-from typing import Any
 import uuid
+from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 import soundfile as sf
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 
 # Setup Router
 router = APIRouter(prefix="/batch", tags=["batch"])

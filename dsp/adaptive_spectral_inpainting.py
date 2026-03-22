@@ -4,8 +4,8 @@ Dieses Modul implementiert klassisches Spectral Inpainting (SOTA-Maximum, keine 
 Es interpoliert maskierte Spektrogrammwerte adaptiv und ist mit vollständigem DSPContract und Auditierbarkeit ausgestattet.
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 
 import numpy as np
 

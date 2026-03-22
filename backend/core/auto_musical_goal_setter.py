@@ -36,14 +36,14 @@ Date: 2026-02-17
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import logging
 import math
+from dataclasses import asdict, dataclass
 from typing import Any
 
+from backend.core.defect_scanner import DefectAnalysisResult, DefectType, MaterialType
 from backend.core.processing_modes import ProcessingMode
 from backend.core.quality_prediction import QualityEstimate
-from backend.core.defect_scanner import DefectAnalysisResult, DefectType, MaterialType
 
 logger = logging.getLogger(__name__)
 
@@ -133,41 +133,41 @@ class MusicalGoalProfile:
 # Mode-Templates
 # ---------------------------------------------------------------------------
 
-_RESTORATION_BASE = dict(
-    target_snr_db=42.0,
-    target_dynamic_range_db=14.0,
-    target_lufs=-16.0,
-    target_authenticity=0.90,
-    target_naturalness=0.88,
-    target_clarity=0.80,
-    target_warmth=0.75,
-    target_brightness=0.55,
-    denoise_strength=0.30,
-    declip_strength=0.45,
-    click_sensitivity=0.55,
-    dereverb_strength=0.15,
-    preserve_character=True,
-    preserve_breaths=True,
-    preserve_room_tone=True,
-)
+_RESTORATION_BASE = {
+    "target_snr_db": 42.0,
+    "target_dynamic_range_db": 14.0,
+    "target_lufs": -16.0,
+    "target_authenticity": 0.90,
+    "target_naturalness": 0.88,
+    "target_clarity": 0.80,
+    "target_warmth": 0.75,
+    "target_brightness": 0.55,
+    "denoise_strength": 0.30,
+    "declip_strength": 0.45,
+    "click_sensitivity": 0.55,
+    "dereverb_strength": 0.15,
+    "preserve_character": True,
+    "preserve_breaths": True,
+    "preserve_room_tone": True,
+}
 
-_STUDIO_2026_BASE = dict(
-    target_snr_db=58.0,
-    target_dynamic_range_db=9.0,
-    target_lufs=-14.0,
-    target_authenticity=0.55,
-    target_naturalness=0.72,
-    target_clarity=0.95,
-    target_warmth=0.45,
-    target_brightness=0.88,
-    denoise_strength=0.70,
-    declip_strength=0.75,
-    click_sensitivity=0.80,
-    dereverb_strength=0.45,
-    preserve_character=False,
-    preserve_breaths=True,
-    preserve_room_tone=False,
-)
+_STUDIO_2026_BASE = {
+    "target_snr_db": 58.0,
+    "target_dynamic_range_db": 9.0,
+    "target_lufs": -14.0,
+    "target_authenticity": 0.88,
+    "target_naturalness": 0.90,
+    "target_clarity": 0.95,
+    "target_warmth": 0.60,
+    "target_brightness": 0.88,
+    "denoise_strength": 0.70,
+    "declip_strength": 0.75,
+    "click_sensitivity": 0.80,
+    "dereverb_strength": 0.45,
+    "preserve_character": False,
+    "preserve_breaths": True,
+    "preserve_room_tone": False,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -176,74 +176,175 @@ _STUDIO_2026_BASE = dict(
 
 # Jedes Material hat Deltas auf die Basis-Targets.
 # Positive Werte erhöhen den Zielwert, negative senken ihn.
+# Die Werte sind auf die material-spezifischen Ziele aus Spec §6.2 abgestimmt.
 _MATERIAL_ADJUSTMENTS: dict[MaterialType, dict[str, float]] = {
-    MaterialType.SHELLAC: dict(
-        target_snr_db=-5.0,  # Shellac ist inhärent rauschreich — realistischere Erwartung
-        target_authenticity=+0.08,
-        target_warmth=+0.12,
-        target_brightness=-0.10,
-        denoise_strength=+0.20,
-        click_sensitivity=+0.25,
-        declip_strength=-0.10,
-    ),
-    MaterialType.VINYL: dict(
-        target_snr_db=-2.0,
-        target_authenticity=+0.05,
-        target_warmth=+0.08,
-        target_brightness=-0.05,
-        denoise_strength=+0.10,
-        click_sensitivity=+0.15,
-    ),
-    MaterialType.TAPE: dict(
-        target_snr_db=-3.0,
-        target_authenticity=+0.06,
-        target_warmth=+0.10,
-        denoise_strength=+0.12,
-        dereverb_strength=+0.10,
-    ),
-    MaterialType.REEL_TAPE: dict(
-        target_snr_db=0.0,
-        target_authenticity=+0.04,
-        target_warmth=+0.06,
-        denoise_strength=+0.08,
-    ),
-    MaterialType.CD_DIGITAL: dict(
-        target_snr_db=+5.0,
-        target_authenticity=-0.05,
-        target_naturalness=+0.05,
-        target_brightness=+0.05,
-        denoise_strength=-0.10,
-        click_sensitivity=-0.10,
-    ),
-    MaterialType.STREAMING: dict(
-        target_snr_db=+3.0,
-        target_authenticity=-0.08,
-        target_brightness=+0.08,
-        denoise_strength=-0.05,
-        declip_strength=+0.10,  # Codec-Artefakte reparieren
-    ),
-    MaterialType.MP3_LOW: dict(
-        target_snr_db=-4.0,
-        target_brightness=-0.10,
-        denoise_strength=+0.05,
-        declip_strength=+0.20,  # Starke Codec-Reparatur
-        dereverb_strength=-0.05,
-    ),
-    MaterialType.MP3_HIGH: dict(
-        target_snr_db=+1.0,
-        declip_strength=+0.10,
-    ),
-    MaterialType.MINIDISC: dict(
-        target_snr_db=-2.0,
-        declip_strength=+0.15,
-        target_brightness=-0.05,
-    ),
-    MaterialType.DAT: dict(
-        target_snr_db=+4.0,
-        target_naturalness=+0.04,
-        denoise_strength=-0.05,
-    ),
-    MaterialType.UNKNOWN: dict(),  # Keine Anpassung
+    MaterialType.WAX_CYLINDER: {
+        "target_snr_db": -8.0,
+        "target_authenticity": +0.10,
+        "target_naturalness": -0.04,
+        "target_clarity": -0.08,
+        "target_warmth": +0.10,
+        "target_brightness": -0.20,
+        "denoise_strength": +0.28,
+        "declip_strength": -0.12,
+        "click_sensitivity": +0.20,
+        "dereverb_strength": -0.05,
+    },
+    MaterialType.SHELLAC: {
+        "target_snr_db": -5.0,  # Shellac ist inhärent rauschreich — realistischere Erwartung
+        "target_authenticity": +0.08,
+        "target_warmth": +0.12,
+        "target_brightness": -0.10,
+        "denoise_strength": +0.20,
+        "click_sensitivity": +0.25,
+        "declip_strength": -0.10,
+    },
+    MaterialType.LACQUER_DISC: {
+        "target_snr_db": -6.0,
+        "target_authenticity": +0.08,
+        "target_naturalness": -0.03,
+        "target_clarity": -0.05,
+        "target_warmth": +0.10,
+        "target_brightness": -0.14,
+        "denoise_strength": +0.22,
+        "declip_strength": -0.08,
+        "click_sensitivity": +0.24,
+        "dereverb_strength": -0.02,
+    },
+    MaterialType.WIRE_RECORDING: {
+        "target_snr_db": -7.0,
+        "target_authenticity": +0.08,
+        "target_naturalness": -0.04,
+        "target_clarity": -0.07,
+        "target_warmth": +0.06,
+        "target_brightness": -0.16,
+        "denoise_strength": +0.24,
+        "declip_strength": +0.05,
+        "click_sensitivity": +0.14,
+        "dereverb_strength": -0.04,
+    },
+    MaterialType.VINYL: {
+        "target_snr_db": -2.0,
+        "target_authenticity": +0.05,
+        "target_warmth": +0.08,
+        "target_brightness": -0.05,
+        "denoise_strength": +0.10,
+        "click_sensitivity": +0.15,
+    },
+    MaterialType.TAPE: {
+        "target_snr_db": -3.0,
+        "target_authenticity": +0.06,
+        "target_warmth": +0.10,
+        "denoise_strength": +0.12,
+        "dereverb_strength": +0.10,
+    },
+    MaterialType.REEL_TAPE: {
+        "target_snr_db": 0.0,
+        "target_authenticity": +0.04,
+        "target_warmth": +0.06,
+        "denoise_strength": +0.08,
+    },
+    MaterialType.DAT: {
+        "target_snr_db": +4.0,
+        "target_authenticity": -0.02,
+        "target_naturalness": +0.04,
+        "target_clarity": +0.04,
+        "target_brightness": +0.04,
+        "denoise_strength": -0.05,
+        "click_sensitivity": -0.08,
+    },
+    MaterialType.CD_DIGITAL: {
+        "target_snr_db": +5.0,
+        "target_authenticity": -0.05,
+        "target_naturalness": +0.05,
+        "target_clarity": +0.04,
+        "target_brightness": +0.05,
+        "denoise_strength": -0.10,
+        "click_sensitivity": -0.10,
+    },
+    MaterialType.MP3_LOW: {
+        "target_snr_db": -4.0,
+        "target_authenticity": -0.06,
+        "target_naturalness": -0.04,
+        "target_clarity": -0.05,
+        "target_brightness": -0.10,
+        "denoise_strength": +0.05,
+        "declip_strength": +0.20,  # Starke Codec-Reparatur
+        "dereverb_strength": -0.05,
+    },
+    MaterialType.MP3_HIGH: {
+        "target_snr_db": +1.0,
+        "target_authenticity": -0.03,
+        "target_clarity": +0.03,
+        "target_brightness": +0.02,
+        "denoise_strength": -0.05,
+        "declip_strength": +0.10,
+    },
+    MaterialType.AAC: {
+        "target_snr_db": +2.0,
+        "target_authenticity": -0.04,
+        "target_naturalness": +0.02,
+        "target_clarity": +0.04,
+        "target_brightness": +0.05,
+        "denoise_strength": -0.05,
+        "declip_strength": +0.12,
+    },
+    MaterialType.MINIDISC: {
+        "target_snr_db": -2.0,
+        "target_authenticity": -0.03,
+        "target_clarity": +0.02,
+        "declip_strength": +0.15,
+        "target_brightness": -0.05,
+    },
+    MaterialType.STREAMING: {
+        "target_snr_db": +3.0,
+        "target_authenticity": -0.08,
+        "target_clarity": +0.05,
+        "target_brightness": +0.08,
+        "denoise_strength": -0.05,
+        "declip_strength": +0.10,  # Codec-Artefakte reparieren
+    },
+    MaterialType.QUADROPHONY: {
+        "target_snr_db": +1.0,
+        "target_authenticity": +0.03,
+        "target_naturalness": +0.02,
+        "target_clarity": +0.03,
+        "target_brightness": -0.02,
+        "denoise_strength": -0.05,
+        "click_sensitivity": -0.04,
+    },
+    MaterialType.AMBISONIC: {
+        "target_snr_db": +2.0,
+        "target_authenticity": +0.04,
+        "target_naturalness": +0.03,
+        "target_clarity": +0.04,
+        "target_brightness": -0.02,
+        "denoise_strength": -0.06,
+        "click_sensitivity": -0.05,
+    },
+    MaterialType.UNKNOWN: {},  # Keine Anpassung
+}
+
+
+# §6.2 Referenzwerte für material-spezifische Mindest-MOS-Erwartung.
+_MATERIAL_PQS_TARGETS: dict[MaterialType, float] = {
+    MaterialType.WAX_CYLINDER: 3.5,
+    MaterialType.SHELLAC: 3.8,
+    MaterialType.LACQUER_DISC: 3.7,
+    MaterialType.WIRE_RECORDING: 3.6,
+    MaterialType.VINYL: 4.0,
+    MaterialType.TAPE: 4.2,
+    MaterialType.REEL_TAPE: 4.3,
+    MaterialType.DAT: 4.5,
+    MaterialType.CD_DIGITAL: 4.5,
+    MaterialType.MP3_LOW: 3.9,
+    MaterialType.MP3_HIGH: 4.2,
+    MaterialType.AAC: 4.2,
+    MaterialType.MINIDISC: 4.0,
+    MaterialType.STREAMING: 4.1,  # §6.2: Dropouts, Codec-Artefakte, Bitrate-Varianz
+    MaterialType.QUADROPHONY: 4.1,
+    MaterialType.AMBISONIC: 4.1,
+    MaterialType.UNKNOWN: 3.8,
 }
 
 
@@ -300,6 +401,8 @@ class AutoMusicalGoalSetter:
                 params[key] = params[key] + delta
         if adjustments:
             rationale_parts.append(f"Material-Korrekturen: {list(adjustments.keys())}")
+        target_mos = _MATERIAL_PQS_TARGETS.get(material, _MATERIAL_PQS_TARGETS[MaterialType.UNKNOWN])
+        rationale_parts.append(f"PQS-Ziel(material)≥{target_mos:.1f}")
 
         # ----------------------------------------------------------------
         # Schritt 2: Defekt-Severity skalieren

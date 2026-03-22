@@ -1,4 +1,5 @@
 import logging
+
 """
 Demucs v5 (Hybrid Transformer) Vocal Separator - HIPS Compliant Wrapper
 
@@ -77,7 +78,7 @@ class DemucsV5Separator:
 
         # HIPS tracking
         self.separation_count = 0
-        self.nebenwirkungen_log: List[Dict] = []
+        self.nebenwirkungen_log: list[dict] = []
 
     def _get_default_model_path(self) -> Path:
         """Get default Demucs model path"""
@@ -116,7 +117,7 @@ class DemucsV5Separator:
             logger.error(f"Failed to load Demucs model: {e}")
             return None
 
-    def separate(self, audio: np.ndarray, sr: int | None = None, stems: List[str] = None) -> Dict[str, np.ndarray]:
+    def separate(self, audio: np.ndarray, sr: int | None = None, stems: list[str] | None = None) -> dict[str, np.ndarray]:
         """
         Separate audio into stems
 
@@ -187,15 +188,15 @@ class DemucsV5Separator:
 
         return separated_stems
 
-    def _demucs_inference(self, audio: np.ndarray, stems: List[str]) -> Dict[str, np.ndarray]:
+    def _demucs_inference(self, audio: np.ndarray, stems: list[str]) -> dict[str, np.ndarray]:
         """
         Actual Demucs inference
 
         Uses demucs.apply.apply_model for segmented processing.
         """
         try:
-            from demucs.apply import apply_model
             import torch
+            from demucs.apply import apply_model
 
             # Convert to torch tensor — §9.5: ausschließlich CPU
             audio_torch = torch.from_numpy(audio).float()  # kein .cuda() — §9.5
@@ -228,7 +229,7 @@ class DemucsV5Separator:
             logger.error(f"Demucs inference failed: {e}. Using fallback.")
             return self._fallback_separation(audio, stems)
 
-    def _fallback_separation(self, audio: np.ndarray, stems: List[str]) -> Dict[str, np.ndarray]:
+    def _fallback_separation(self, audio: np.ndarray, stems: list[str]) -> dict[str, np.ndarray]:
         """
         Fallback separation when Demucs unavailable
 
@@ -266,9 +267,9 @@ class DemucsV5Separator:
             elif stem in ["bass", "other"]:
                 # Placeholder: return low-pass filtered audio for bass
                 if stem == "bass":
-                    _cutoff = 250  # Hz (reserved for future filter)  # noqa: F841
+                    _cutoff = 250  # Hz (reserved for future filter)
                 else:
-                    _cutoff = 8000  # Hz (reserved for future filter)  # noqa: F841
+                    _cutoff = 8000  # Hz (reserved for future filter)
 
                 filtered_stereo = []
                 for channel in audio:
@@ -280,7 +281,7 @@ class DemucsV5Separator:
 
         return separated
 
-    def _assess_nebenwirkungen(self, original: np.ndarray, separated_stems: Dict[str, np.ndarray]) -> Dict[str, float]:
+    def _assess_nebenwirkungen(self, original: np.ndarray, separated_stems: dict[str, np.ndarray]) -> dict[str, float]:
         """
         HIPS Requirement: Assess separation nebenwirkungen
 

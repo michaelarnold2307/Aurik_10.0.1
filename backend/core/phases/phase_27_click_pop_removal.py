@@ -34,11 +34,9 @@ Author: Aurik Development Team
 Version: 3.0.0 AR-Residual
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 from typing import Any
 
@@ -46,6 +44,7 @@ import numpy as np
 from scipy import interpolate
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -268,7 +267,7 @@ class ClickPopRemoval(PhaseInterface):
                 # Graceful Degradation: Diese Ordnung überspringen
                 continue
 
-        return sorted(list(all_detections))
+        return sorted(all_detections)
 
     def _classify_clicks(
         self, audio: np.ndarray, click_locations: list[int], config: dict[str, Any]

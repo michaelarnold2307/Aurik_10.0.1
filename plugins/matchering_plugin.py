@@ -33,7 +33,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 _lock = threading.Lock()
-_inst: "MatcheringPlugin | None" = None
+_inst: MatcheringPlugin | None = None
 
 
 class MatcheringPlugin:

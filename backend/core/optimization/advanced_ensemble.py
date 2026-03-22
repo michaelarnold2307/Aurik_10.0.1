@@ -13,9 +13,9 @@ Version: 8.2
 Datum: 14. Februar 2026
 """
 
-from dataclasses import dataclass
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -189,7 +189,7 @@ class DynamicEnsembleSelector(nn.Module):
         scores = self.selector(features)
 
         # Select top-k
-        top_k_values, top_k_indices = torch.topk(scores, self.k_select, dim=1)
+        _top_k_values, top_k_indices = torch.topk(scores, self.k_select, dim=1)
 
         # Create selection mask
         mask = torch.zeros_like(scores)

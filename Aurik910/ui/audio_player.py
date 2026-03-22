@@ -6,6 +6,8 @@ Real-time audio playback with before/after comparison
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+import soundfile as sf
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QComboBox,
@@ -17,9 +19,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-import numpy as np
-import soundfile as sf
-from backend.api.bridge import get_aurik_denker_class
+
+from backend.api.bridge import get_aurik_denker_class, get_aurik_denker_instance
 
 from ..i18n import t
 
@@ -51,33 +52,38 @@ class AudioPreviewThread(QThread):
         """Process preview audio"""
         try:
             import numpy as np
-            AurikDenkerClass = get_aurik_denker_class()
-            if AurikDenkerClass is None:
-                raise RuntimeError("AurikDenker backend class unavailable")
+            # §2.2 No-Competing-Instances: Singleton-Zugriff statt direkter Instanziierung
+            denker = get_aurik_denker_instance()
+            if denker is None:
+                raise RuntimeError("AurikDenker nicht verfügbar — Backend-Import fehlgeschlagen.")
 
             self.progress.emit(10)
 
-            # Load audio
+            # Load audio — resample to 48 kHz (Aurik internal SR)
             audio, sr = sf.read(self.input_file)
+            audio = np.asarray(audio, dtype=np.float32)
+            if sr != 48_000:
+                import math as _math
+
+                from scipy.signal import resample_poly as _rp
+                _gcd = _math.gcd(sr, 48_000)
+                audio = _rp(audio, 48_000 // _gcd, sr // _gcd,
+                            axis=0 if audio.ndim > 1 else -1).astype(np.float32)
+                sr = 48_000
             self.progress.emit(30)
 
-            # Canonical entrypoint: preview processing through AurikDenker.
-            restorer = AurikDenkerClass()
             self.progress.emit(50)
 
             # Process (first 30 seconds for preview)
             max_samples = int(30 * sr)
-            if len(audio) > max_samples:
-                audio_preview = audio[:max_samples]
-            else:
-                audio_preview = audio
+            audio_preview = audio[:max_samples] if len(audio) > max_samples else audio
 
             # Mono sicherstellen
             if audio_preview.ndim > 1:
                 audio_preview = np.mean(audio_preview, axis=1)
             audio_preview = audio_preview.astype(np.float32)
 
-            result = restorer.denke(audio_preview, sr, mode="quality")
+            result = denker.denke(audio_preview, sr, mode="quality")
             self.progress.emit(90)
 
             # V3 gibt RestorationResult zurück — .audio enthält das Audio-Array

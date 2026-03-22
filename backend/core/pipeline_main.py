@@ -73,19 +73,25 @@ class AurikAutonomousPipeline:
         os.makedirs("logs", exist_ok=True)
         logger.info("AurikAutonomousPipeline bereit | Modus: %s", mode.value)
 
-    def process(self, audio: np.ndarray, sample_rate: int) -> AutonomousRestorationResult:
+    def process(self, audio: np.ndarray, sample_rate: int, progress_callback=None, **kwargs) -> AutonomousRestorationResult:
         """
         Vollautomatische Restaurierung.
 
         Args:
             audio:       Eingabe-Audio (float32 numpy-Array, mono oder stereo).
             sample_rate: Abtastrate in Hz.
+            progress_callback: Optional callable(pct:int, msg:str, elapsed_s:float)
+            **kwargs:    Additional context from Denker (global_plan, chain_info,
+                         defekt_hint, mode, material) — forwarded to engine.
 
         Returns:
             AutonomousRestorationResult mit restauriertem Audio, vollständigem
             Protokoll und allen Qualitätsmetriken.
         """
-        result = self._engine.process(audio, sample_rate)
+        if progress_callback is not None:
+            result = self._engine.process(audio, sample_rate, progress_callback=progress_callback)
+        else:
+            result = self._engine.process(audio, sample_rate)
         self._session_results.append(result)
         self._append_audit(result)
 

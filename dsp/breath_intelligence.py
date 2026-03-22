@@ -275,10 +275,7 @@ class BreathDetector:
         freqs = np.fft.rfftfreq(n_fft, 1 / sr)
 
         # Weighted mean
-        if np.sum(spectrum) > 0:
-            centroid = np.sum(freqs * spectrum) / np.sum(spectrum)
-        else:
-            centroid = 0.0
+        centroid = np.sum(freqs * spectrum) / np.sum(spectrum) if np.sum(spectrum) > 0 else 0.0
 
         return centroid
 

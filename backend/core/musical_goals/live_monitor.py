@@ -2,8 +2,8 @@
 LiveMonitor für musikalische Ziele: Echtzeit-Tracking und Feedback.
 """
 
-from collections.abc import Callable
 import threading
+from collections.abc import Callable
 
 
 class MusicalGoalsLiveMonitor:

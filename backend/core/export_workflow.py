@@ -12,16 +12,86 @@ und Multi-Version Support für professionelle Workflows.
 Version: 2.0.0
 """
 
+import json
+import logging
+import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
-import json
-import os
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
-import logging
+
+from backend.core.pipeline_health_state import (
+    PipelineHealthState,
+    pipeline_health_from_fail_reasons,
+    primary_fail_reason_from_fail_reasons,
+)
+
 logger = logging.getLogger(__name__)
+
+
+def _evaluate_export_quality_gate(
+    quality_gate: dict | None,
+) -> tuple[bool | None, str | None, str | None, list[dict[str, str]]]:
+    """Evaluate quality gate without blocking export.
+
+    Expected schema:
+        {
+            "passed": bool,
+            "fail_reason": str | None,
+            "fail_reasons": list[dict] | None,
+            "required_gates": list[str] | None,
+        }
+    """
+    if quality_gate is None:
+        return None, None, None, []
+    passed = bool(quality_gate.get("passed", False))
+    if passed:
+        return True, None, PipelineHealthState.OK.value, []
+
+    raw_fail_reasons = quality_gate.get("fail_reasons") or []
+    normalized_fail_reasons: list[dict[str, str]] = []
+    if isinstance(raw_fail_reasons, list):
+        for entry in raw_fail_reasons:
+            if not isinstance(entry, dict):
+                continue
+            normalized_fail_reasons.append(
+                {
+                    "component": str(entry.get("component", "quality_gate") or "quality_gate"),
+                    "error_code": str(entry.get("error_code", "QUALITY_GATE_FAILED") or "QUALITY_GATE_FAILED"),
+                    "severity": str(entry.get("severity", "blocked") or "blocked"),
+                    "exc_type": str(entry.get("exc_type", "") or ""),
+                    "exc_msg": str(entry.get("exc_msg", entry.get("message", "")) or ""),
+                }
+            )
+
+    fail_reason = str(quality_gate.get("fail_reason") or "").strip()
+    if not fail_reason:
+        fail_reason = primary_fail_reason_from_fail_reasons(
+            normalized_fail_reasons,
+            default="Unbekannter Quality-Gate-Fehler",
+        )
+    if not normalized_fail_reasons:
+        normalized_fail_reasons = [
+            {
+                "component": "quality_gate",
+                "error_code": "QUALITY_GATE_FAILED",
+                "severity": "blocked",
+                "exc_type": "",
+                "exc_msg": fail_reason,
+            }
+        ]
+    degradation_status = pipeline_health_from_fail_reasons(normalized_fail_reasons).value
+    required = quality_gate.get("required_gates") or []
+    required_str = ", ".join(str(x) for x in required) if required else "nicht angegeben"
+    logger.warning(
+        "Quality gate failed -> best-effort export continues. reason=%s required_gates=%s degradation=%s",
+        fail_reason,
+        required_str,
+        degradation_status,
+    )
+    return False, fail_reason, degradation_status, normalized_fail_reasons
 
 
 @dataclass
@@ -41,6 +111,11 @@ class ExportMetadata:
     sample_rate: int | None = None
     bit_depth: int | None = None
     channels: int | None = None
+    export_strategy: str = "best_effort"
+    quality_gate_passed: bool | None = None
+    quality_gate_fail_reason: str | None = None
+    quality_gate_degradation_status: str | None = None
+    quality_gate_fail_reasons: list[dict[str, str]] | None = None
 
 
 SUPPORTED_FORMATS = {
@@ -62,6 +137,7 @@ def export_audio(
     filename: str,
     format: str = "wav",
     metadata: ExportMetadata | None = None,
+    quality_gate: dict | None = None,
     output_dir: str = "export",
 ) -> str:
     """
@@ -73,6 +149,7 @@ def export_audio(
         filename: Base filename (without extension)
         format: Export format ('wav', 'flac', 'aiff', 'caf', 'ogg')
         metadata: Optional metadata to embed
+        quality_gate: Optional quality gate payload; non-blocking and documented in metadata
         output_dir: Output directory
 
     Returns:
@@ -84,6 +161,10 @@ def export_audio(
     """
     if format not in SUPPORTED_FORMATS:
         raise ValueError(f"Format '{format}' not supported. " f"Supported: {', '.join(SUPPORTED_FORMATS.keys())}")
+
+    gate_passed, gate_fail_reason, gate_degradation_status, gate_fail_reasons = _evaluate_export_quality_gate(
+        quality_gate
+    )
 
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
@@ -102,6 +183,10 @@ def export_audio(
     metadata.sample_rate = sr
     metadata.bit_depth = 24  # Default to 24-bit for quality
     metadata.channels = audio.shape[1] if audio.ndim == 2 else 1
+    metadata.quality_gate_passed = gate_passed
+    metadata.quality_gate_fail_reason = gate_fail_reason
+    metadata.quality_gate_degradation_status = gate_degradation_status
+    metadata.quality_gate_fail_reasons = gate_fail_reasons
 
     try:
         # Write audio file
@@ -122,8 +207,9 @@ def export_multi_version(
     audio: np.ndarray,
     sr: int,
     base_filename: str,
-    formats: list[str] = None,
+    formats: list[str] | None = None,
     metadata: ExportMetadata | None = None,
+    quality_gate: dict | None = None,
     output_dir: str = "export",
 ) -> dict[str, str]:
     """
@@ -140,6 +226,7 @@ def export_multi_version(
         base_filename: Base filename (without extension)
         formats: List of formats to export (default: ['wav', 'flac'])
         metadata: Optional metadata
+        quality_gate: Optional quality gate payload; blocks export if failed
         output_dir: Output directory
 
     Returns:
@@ -151,7 +238,15 @@ def export_multi_version(
     results = {}
     for fmt in formats:
         try:
-            path = export_audio(audio, sr, base_filename, format=fmt, metadata=metadata, output_dir=output_dir)
+            path = export_audio(
+                audio,
+                sr,
+                base_filename,
+                format=fmt,
+                metadata=metadata,
+                quality_gate=quality_gate,
+                output_dir=output_dir,
+            )
             results[fmt] = path
         except Exception as e:
             logger.debug(f"⚠️ Export failed for format '{fmt}': {e}")

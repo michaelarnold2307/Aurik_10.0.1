@@ -27,13 +27,13 @@ Referenzen:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import logging
 import math
-from pathlib import Path
 import threading
 import time
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -59,7 +59,7 @@ _N_RANDOM_CANDIDATES = 512  # Zufällige Kandidaten für UCB-Suche
 # Pareto-Objectives (§2.5 Spec 03) — 14 Musical Goals
 # ---------------------------------------------------------------------------
 
-PARETO_OBJECTIVES: List[str] = [
+PARETO_OBJECTIVES: list[str] = [
     "brillanz",
     "waerme",
     "natuerlichkeit",
@@ -84,7 +84,7 @@ PARETO_OBJECTIVES: List[str] = [
 # Format: {name: (low, high, mode)}
 # mode: "float" | "int" | "log" (log-uniform sampling)
 
-PARAMETER_SPACE: Dict[str, Tuple[float, float, str]] = {
+PARAMETER_SPACE: dict[str, tuple[float, float, str]] = {
     "noise_reduction_strength": (0.05, 0.95, "float"),
     "harmonic_boost_db": (0.0, 6.0, "float"),  # §2.5: max +6 dB harmonisch
     "ola_crossfade_ms": (5.0, 60.0, "float"),
@@ -98,7 +98,7 @@ PARAMETER_SPACE: Dict[str, Tuple[float, float, str]] = {
 }
 
 # Material-spezifische Default-Parameter (Initialstartpunkt)
-MATERIAL_DEFAULTS: Dict[str, Dict[str, float]] = {
+MATERIAL_DEFAULTS: dict[str, dict[str, float]] = {
     "tape": {
         "noise_reduction_strength": 0.60,
         "harmonic_boost_db": 1.0,
@@ -144,13 +144,13 @@ MATERIAL_DEFAULTS: Dict[str, Dict[str, float]] = {
 class ParameterProposal:
     """Vorschlag des GP-Optimierers."""
 
-    parameters: Dict[str, Any]  # {param_name: wert}
+    parameters: dict[str, Any]  # {param_name: wert}
     expected_quality: float  # GP-Posterior μ(x*)
     uncertainty: float  # GP-Posterior σ(x*)
     ucb_value: float  # μ + κ·σ
     from_memory: bool = False  # Aus Material-Gedächtnis
     iteration: int = 0  # Optimierungsiteration
-    param_names: List[str] = field(default_factory=list)
+    param_names: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -167,11 +167,11 @@ class ParameterProposal:
 class MemoryEntry:
     """Ein Eintrag im GP-Gedächtnis."""
 
-    params_normalized: List[float]  # normierter Parametervektor [0,1]^d
+    params_normalized: list[float]  # normierter Parametervektor [0,1]^d
     score: float  # Qualitätsscore [0,1] oder MOS o.ä.
     material: str
     timestamp: float = field(default_factory=time.time)
-    goal_scores: Dict[str, float] = field(default_factory=dict)  # 14 Musical Goals (§2.5)
+    goal_scores: dict[str, float] = field(default_factory=dict)  # 14 Musical Goals (§2.5)
 
 
 # ---------------------------------------------------------------------------
@@ -219,10 +219,10 @@ class GaussianProcess:
         self.noise_var = noise_var
         self.length = length
         self.amplitude = amplitude
-        self._X: Optional[np.ndarray] = None  # (n, d)
-        self._y: Optional[np.ndarray] = None  # (n,)
-        self._L: Optional[np.ndarray] = None  # Cholesky-Faktor
-        self._alpha: Optional[np.ndarray] = None  # L^{-T} L^{-1} y
+        self._X: np.ndarray | None = None  # (n, d)
+        self._y: np.ndarray | None = None  # (n,)
+        self._L: np.ndarray | None = None  # Cholesky-Faktor
+        self._alpha: np.ndarray | None = None  # L^{-T} L^{-1} y
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> None:
         """GP an Beobachtungen (X, y) anpassen."""
@@ -245,7 +245,7 @@ class GaussianProcess:
         self._L = L
         self._alpha = scipy.linalg.cho_solve((L, True), y)
 
-    def predict(self, X_star: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def predict(self, X_star: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
         Posteriore Vorhersage für X_star.
 
@@ -281,11 +281,11 @@ class GaussianProcess:
 # ---------------------------------------------------------------------------
 
 
-def _param_names_sorted(space: Dict = PARAMETER_SPACE) -> List[str]:
+def _param_names_sorted(space: dict = PARAMETER_SPACE) -> list[str]:
     return sorted(space.keys())
 
 
-def _normalize_params(params: Dict[str, float], space: Dict = PARAMETER_SPACE) -> np.ndarray:
+def _normalize_params(params: dict[str, float], space: dict = PARAMETER_SPACE) -> np.ndarray:
     """Parameter-Dict → normierter Vektor [0,1]^d."""
     names = _param_names_sorted(space)
     v = []
@@ -304,7 +304,7 @@ def _normalize_params(params: Dict[str, float], space: Dict = PARAMETER_SPACE) -
     return np.clip(np.array(v, dtype=np.float64), 0.0, 1.0)
 
 
-def _denormalize_params(vec: np.ndarray, space: Dict = PARAMETER_SPACE) -> Dict[str, Any]:
+def _denormalize_params(vec: np.ndarray, space: dict = PARAMETER_SPACE) -> dict[str, Any]:
     """Normierter Vektor → Parameter-Dict."""
     names = _param_names_sorted(space)
     result = {}
@@ -317,7 +317,7 @@ def _denormalize_params(vec: np.ndarray, space: Dict = PARAMETER_SPACE) -> Dict[
         else:
             raw = lo + x * (hi - lo)
         if mode == "int":
-            result[name] = int(round(raw))
+            result[name] = round(raw)
         else:
             result[name] = round(raw, 4)
     return result
@@ -371,7 +371,7 @@ def _memory_path(material: str) -> Path:
     return _MEMORY_DIR / f"{material}.json"
 
 
-def _load_memory(material: str) -> List[MemoryEntry]:
+def _load_memory(material: str) -> list[MemoryEntry]:
     path = _memory_path(material)
     if not path.exists():
         return []
@@ -409,7 +409,7 @@ def _load_memory(material: str) -> List[MemoryEntry]:
         return []
 
 
-def _save_memory(material: str, entries: List[MemoryEntry]) -> None:
+def _save_memory(material: str, entries: list[MemoryEntry]) -> None:
     path = _memory_path(material)
     try:
         raw = [
@@ -455,19 +455,19 @@ class GPParameterOptimizer:
 
     def __init__(
         self,
-        parameter_space: Dict = None,
+        parameter_space: dict | None = None,
         noise_var: float = _NOISE_VAR,
         kappa: float = _UCB_KAPPA,
-        rng_seed: Optional[int] = None,
+        rng_seed: int | None = None,
     ):
         self._space = parameter_space or PARAMETER_SPACE
         self._gp = GaussianProcess(noise_var=noise_var)
         self._kappa = kappa
         self._rng = np.random.default_rng(rng_seed)
-        self._session_X: List[np.ndarray] = []
-        self._session_y: List[float] = []
+        self._session_X: list[np.ndarray] = []
+        self._session_y: list[float] = []
         self._dim = len(_param_names_sorted(self._space))
-        self._iterations: Dict[str, int] = {}
+        self._iterations: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Öffentliche API
@@ -477,8 +477,8 @@ class GPParameterOptimizer:
         self,
         material: str = "unknown",
         n_init: int = 5,
-        embedding: Optional[np.ndarray] = None,
-        era_warmstart: Optional[Dict[str, float]] = None,
+        embedding: np.ndarray | None = None,
+        era_warmstart: dict[str, float] | None = None,
     ) -> ParameterProposal:
         """
         Schlägt die nächsten zu testenden Parameter vor.
@@ -503,8 +503,8 @@ class GPParameterOptimizer:
 
         # Gedächtnis laden
         memory = _load_memory(material)
-        all_X: List[np.ndarray] = []
-        all_y: List[float] = []
+        all_X: list[np.ndarray] = []
+        all_y: list[float] = []
 
         for entry in memory:
             if len(entry.params_normalized) == self._dim:
@@ -594,8 +594,8 @@ class GPParameterOptimizer:
         material: str = "unknown",
         n_candidates: int = 5,
         n_init: int = 5,
-        era_warmstart: Optional[Dict[str, float]] = None,
-    ) -> List[ParameterProposal]:
+        era_warmstart: dict[str, float] | None = None,
+    ) -> list[ParameterProposal]:
         """True multi-objective Pareto-front proposals over 14 Musical Goals (§2.5).
 
         Uses one GP per Musical Goal objective. Samples *_N_RANDOM_CANDIDATES*
@@ -685,7 +685,7 @@ class GPParameterOptimizer:
             pareto_indices, pred_means, n_c
         )
 
-        proposals: List[ParameterProposal] = []
+        proposals: list[ParameterProposal] = []
         it = self._iterations.get(material, 0)
         for sel_idx in selected_indices:
             params = _denormalize_params(candidates[sel_idx], self._space)
@@ -718,11 +718,11 @@ class GPParameterOptimizer:
         material: str,
         n_c: int,
         n_init: int,
-        memory: List[MemoryEntry],
-        era_warmstart: Optional[Dict[str, float]],
-    ) -> List[ParameterProposal]:
+        memory: list[MemoryEntry],
+        era_warmstart: dict[str, float] | None,
+    ) -> list[ParameterProposal]:
         """UCB kappa-diversity fallback when insufficient MOO goal_scores data."""
-        proposals: List[ParameterProposal] = []
+        proposals: list[ParameterProposal] = []
         all_X = [np.array(e.params_normalized) for e in memory if len(e.params_normalized) == self._dim]
         all_y = [e.score for e in memory if len(e.params_normalized) == self._dim]
         kappa_values = [0.5, 1.0, 2.0, 3.0, 4.5][:n_c]
@@ -787,7 +787,7 @@ class GPParameterOptimizer:
         pareto_indices: np.ndarray,
         pred_means: np.ndarray,
         n_select: int,
-    ) -> List[int]:
+    ) -> list[int]:
         """Select n_select diverse representatives from Pareto front via crowding distance.
 
         Args:
@@ -824,10 +824,10 @@ class GPParameterOptimizer:
 
     def update(
         self,
-        parameters: Dict[str, Any],
+        parameters: dict[str, Any],
         score: float,
         material: str = "unknown",
-        goal_scores: Optional[Dict[str, float]] = None,
+        goal_scores: dict[str, float] | None = None,
     ) -> None:
         """
         Aktualisiert das GP-Gedächtnis mit einem neuen Datenpunkt.
@@ -850,7 +850,7 @@ class GPParameterOptimizer:
             return
 
         # Validierung goal_scores
-        clean_goals: Dict[str, float] = {}
+        clean_goals: dict[str, float] = {}
         if goal_scores:
             for obj in PARETO_OBJECTIVES:
                 val = goal_scores.get(obj)
@@ -878,7 +878,7 @@ class GPParameterOptimizer:
             material, score, len(clean_goals), len(memory),
         )
 
-    def best_known_parameters(self, material: str) -> Optional[Dict[str, Any]]:
+    def best_known_parameters(self, material: str) -> dict[str, Any] | None:
         """Gibt die Parameter mit dem bisher höchsten Score zurück."""
         memory = _load_memory(material)
         if not memory:
@@ -898,7 +898,7 @@ class GPParameterOptimizer:
     # Intern
     # ------------------------------------------------------------------
 
-    def _random_or_default(self, material: str, n_obs: int) -> Tuple[Dict[str, Any], float, float]:
+    def _random_or_default(self, material: str, n_obs: int) -> tuple[dict[str, Any], float, float]:
         """Zufälliger oder Default-Parameter-Satz für Exploration."""
         if n_obs == 0:
             # Erster Aufruf: Material-Defaults
@@ -919,7 +919,7 @@ class GPParameterOptimizer:
 # Convenience-Funktion
 # ---------------------------------------------------------------------------
 
-_optimizer: Optional[GPParameterOptimizer] = None
+_optimizer: GPParameterOptimizer | None = None
 _optimizer_lock = threading.Lock()
 
 
@@ -942,7 +942,7 @@ def propose_parameters(
 
 
 def record_quality(
-    parameters: Dict[str, Any],
+    parameters: dict[str, Any],
     score: float,
     material: str = "unknown",
 ) -> None:

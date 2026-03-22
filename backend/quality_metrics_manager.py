@@ -22,8 +22,8 @@ Verwendung:
 
 import json
 import logging
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -67,6 +67,7 @@ class QualityMetricsManager:
             enable_all: Wenn False, Plugins lazy initialisieren
         """
         self._versa = None
+        self._cdpam = None  # Backward-compatible private alias
         self._visqol = None
 
         if enable_all:
@@ -77,6 +78,7 @@ class QualityMetricsManager:
         try:
             if _VERSA_IMPORT_OK and _get_versa_plugin_fn is not None:
                 self._versa = _get_versa_plugin_fn()
+                self._cdpam = self._versa
                 logger.info("✓ VERSA Plugin loaded (§4.4 CDPAM-Nachfolger)")
         except Exception as e:
             logger.warning("VERSA Plugin nicht verfügbar: %s — PQS-DSP Fallback.", e)
@@ -97,6 +99,7 @@ class QualityMetricsManager:
         """Lazy-load VERSA plugin (§4.4 CDPAM-Nachfolger)."""
         if self._versa is None and _VERSA_IMPORT_OK and _get_versa_plugin_fn is not None:
             self._versa = _get_versa_plugin_fn()
+            self._cdpam = self._versa
         return self._versa
 
     # Backward-Kompatibilität
@@ -150,7 +153,7 @@ class QualityMetricsManager:
         #    Ergebnis erscheint weiterhin unter Key "cdpam" für Backward-Kompatibilität.
         if "cdpam" in metrics:
             try:
-                import soundfile as _sf  # noqa: PLC0415
+                import soundfile as _sf
 
                 audio_np_v, sr_v = _sf.read(audio_file, always_2d=False)
                 audio_np_v = audio_np_v.astype(np.float32)
@@ -249,8 +252,20 @@ class QualityMetricsManager:
         output_path.mkdir(parents=True, exist_ok=True)
 
         try:
-            visqol_json = output_path / "visqol_scores.json"
-            visqol_scores = self.visqol.calculate(reference_file, degraded_file, str(visqol_json), mode=mode)
+            import soundfile as _sf
+
+            ref_audio, ref_sr = _sf.read(reference_file, always_2d=False)
+            deg_audio, deg_sr = _sf.read(degraded_file, always_2d=False)
+            ref_audio = np.asarray(ref_audio, dtype=np.float32)
+            deg_audio = np.asarray(deg_audio, dtype=np.float32)
+            if ref_audio.ndim == 2:
+                ref_audio = ref_audio.mean(axis=1)
+            if deg_audio.ndim == 2:
+                deg_audio = deg_audio.mean(axis=1)
+            target_sr = int(ref_sr) if int(ref_sr) > 0 else int(deg_sr)
+
+            visqol_mos = self.visqol.score(ref_audio, deg_audio, sr=target_sr)
+            visqol_scores = {"ViSQOL_MOS": visqol_mos}
 
             mos_raw = visqol_scores.get("ViSQOL_MOS", 0.0)
             # NaN/Inf-Guard (§3.1)

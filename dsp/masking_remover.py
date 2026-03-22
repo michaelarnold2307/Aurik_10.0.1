@@ -33,12 +33,20 @@ class MaskingRemover:
         try:
             if not isinstance(audio, np.ndarray) or audio.size == 0 or sr <= 0:
                 raise ValueError("Ungültige Eingabe für MaskingRemover")
-            f, t, Zxx = stft(audio, fs=sr, nperseg=1024)
+            _f, _t, Zxx = stft(audio, fs=sr, nperseg=1024)
             mag = np.abs(Zxx)
             mag_mean = np.mean(mag, axis=1, keepdims=True)
             mag_enh = mag_mean + self.contrast * (mag - mag_mean)
-            Zxx_enh = mag_enh * np.exp(1j * np.angle(Zxx))
-            _, audio_out = istft(Zxx_enh, fs=sr, nperseg=1024)
+            mag_enh = np.clip(mag_enh, 0.0, None)
+            # PGHI phase reconstruction (§4.5 — modifiziertes Betragsspektrum erfordert PGHI)
+            try:
+                from dsp.pghi import pghi_reconstruct
+
+                audio_out = pghi_reconstruct(mag_enh, sr=sr, win_size=1024, hop=512)
+            except Exception:
+                import librosa
+
+                audio_out = librosa.griffinlim(mag_enh, n_iter=32, hop_length=512, win_length=1024, n_fft=1024)
             audio_out = audio_out[: len(audio)]
             # ML-Inferenz via ONNX (wenn Modell geladen)
             if self.model is not None:

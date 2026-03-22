@@ -1,12 +1,12 @@
 import logging
-import requests
 from typing import Optional
 
+import requests
 
 logger = logging.getLogger(__name__)
 
 
-def dccrn_infer_wav(wav_path: str, api_url: str = "http://localhost:8501/infer/") -> Optional[str]:
+def dccrn_infer_wav(wav_path: str, api_url: str = "http://localhost:8501/infer/") -> str | None:
     """Infer DCCRN denoising via REST API.
 
     Args:

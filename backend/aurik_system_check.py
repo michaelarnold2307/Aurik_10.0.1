@@ -1,4 +1,5 @@
 import logging
+
 """
 Aurik 6.0 – SOTA-System- und Plugin-Check
 
@@ -43,7 +44,7 @@ except Exception as e:
 
 # SOTA-Plugin- und Health-Check
 plugin_dir = os.path.join("Aurik_Standalone", "plugins")
-failed: List[str] = []
+failed: list[str] = []
 for f in glob.glob(os.path.join(plugin_dir, "*.py")):
     mod = os.path.splitext(os.path.basename(f))[0]
     if mod == "__init__":

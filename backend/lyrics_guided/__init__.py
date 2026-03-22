@@ -66,25 +66,25 @@ from backend.lyrics_guided.lyrics_aligner import (
 )
 
 __all__ = [
+    # Content-Aware Processor
+    "ContentAwareProcessor",
+    "ContentSegment",
+    "ContentType",
+    # Integrated Vocal Processor
+    "IntegratedVocalProcessor",
+    "IntegratedVocalSegment",
+    "IntegratedVocalTimeline",
     # Lyrics Aligner
     "LyricsAligner",
     "LyricsAlignment",
-    "WordAlignment",
-    "PhonemeAlignment",
-    # Content-Aware Processor
-    "ContentAwareProcessor",
     "LyricsGuidedTimeline",
-    "ContentSegment",
-    "ContentType",
-    "ProcessingIntent",
     "LyricsSegment",
-    "create_lyrics_guided_timeline",
-    # Integrated Vocal Processor
-    "IntegratedVocalProcessor",
-    "IntegratedVocalTimeline",
-    "IntegratedVocalSegment",
+    "PhonemeAlignment",
+    "ProcessingIntent",
     "VocalProcessingMode",
+    "WordAlignment",
     "create_integrated_vocal_timeline",
+    "create_lyrics_guided_timeline",
 ]
 
 __version__ = "1.0.0"

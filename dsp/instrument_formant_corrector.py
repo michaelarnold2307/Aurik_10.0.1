@@ -68,7 +68,7 @@ MAX_BOOST_DB: float = 3.0
 # DTW downsample limit (frames) to stay within performance budget
 DTW_MAX_FRAMES: int = 1000
 # LPC formant frequency filter range for instruments (wider than vocals)
-INSTRUMENT_FREQ_RANGE: Tuple[float, float] = (50.0, 8000.0)
+INSTRUMENT_FREQ_RANGE: tuple[float, float] = (50.0, 8000.0)
 
 
 # ── Result dataclass ─────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ class InstrumentDriftResult:
     dtw_distance: float
     correction_strength: float
     f1_target_hz: float
-    details: Dict = field(default_factory=dict)
+    details: dict = field(default_factory=dict)
 
 
 # ── DTW helpers ───────────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ class InstrumentDriftResult:
 
 def _dtw_distance_and_path(
     seq_a: np.ndarray, seq_b: np.ndarray
-) -> Tuple[float, List[Tuple[int, int]]]:
+) -> tuple[float, list[tuple[int, int]]]:
     """Compute DTW distance and warp path between two 1-D sequences.
 
     Uses a vectorized DP cost matrix (Sakoe & Chiba 1978).
@@ -151,7 +151,7 @@ def _dtw_distance_and_path(
     dtw_dist = float(dp[n, m]) / (n + m)
 
     # Traceback
-    path: List[Tuple[int, int]] = []
+    path: list[tuple[int, int]] = []
     i, j = n, m
     while i > 0 and j > 0:
         path.append((i - 1, j - 1))
@@ -263,7 +263,7 @@ class InstrumentFormantDriftCorrector:
 
     def _detect_drift(
         self, f1_tracked: np.ndarray, f1_target: float
-    ) -> Tuple[bool, np.ndarray, float, float, float]:
+    ) -> tuple[bool, np.ndarray, float, float, float]:
         """Detect sustained drift in *f1_tracked* relative to *f1_target*.
 
         Returns:
@@ -323,7 +323,7 @@ class InstrumentFormantDriftCorrector:
         f1_target: float,
         f2_target: float,
         drift_mask: np.ndarray,
-    ) -> Tuple[np.ndarray, int]:
+    ) -> tuple[np.ndarray, int]:
         """Apply per-frame peak-EQ nudge toward target F1/F2 for drifted frames.
 
         Returns:
@@ -379,7 +379,7 @@ class InstrumentFormantDriftCorrector:
         audio: np.ndarray,
         sr: int,
         instrument: str = "guitar",
-        correction_strength: Optional[float] = None,
+        correction_strength: float | None = None,
     ) -> InstrumentDriftResult:
         """Detect and correct instrument formant drift.
 
@@ -418,7 +418,7 @@ class InstrumentFormantDriftCorrector:
         if row is None:
             return _passthrough(f"unknown instrument '{instrument}'")
 
-        f1_tgt, f2_tgt, f3_tgt, q1, q2, q3 = row
+        f1_tgt, f2_tgt, _f3_tgt, _q1, _q2, _q3 = row
 
         # Promote to mono for tracking
         is_stereo = audio.ndim == 2
@@ -458,10 +458,7 @@ class InstrumentFormantDriftCorrector:
             orig_mono = np.mean(audio, axis=0) if audio.shape[0] < audio.shape[1] else np.mean(audio, axis=1)
             ratio = np.where(np.abs(orig_mono) > eps, mono_corrected / (orig_mono + eps), 1.0)
             ratio = np.clip(ratio, 0.5, 2.0)
-            if audio.shape[0] < audio.shape[1]:
-                out = audio * ratio[np.newaxis, :]
-            else:
-                out = audio * ratio[:, np.newaxis]
+            out = audio * ratio[np.newaxis, :] if audio.shape[0] < audio.shape[1] else audio * ratio[:, np.newaxis]
         else:
             out = mono_corrected
 
@@ -492,7 +489,7 @@ class InstrumentFormantDriftCorrector:
 
 # ── Singleton (§3.2 Double-Checked Locking) ──────────────────────────────────
 
-_instance: Optional[InstrumentFormantDriftCorrector] = None
+_instance: InstrumentFormantDriftCorrector | None = None
 _lock = threading.Lock()
 
 
@@ -513,7 +510,7 @@ def correct_instrument_formant_drift(
     audio: np.ndarray,
     sr: int,
     instrument: str = "guitar",
-    correction_strength: Optional[float] = None,
+    correction_strength: float | None = None,
 ) -> InstrumentDriftResult:
     """Convenience wrapper: correct instrument formant drift in *audio*.
 

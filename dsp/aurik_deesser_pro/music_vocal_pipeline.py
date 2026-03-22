@@ -1,5 +1,6 @@
 # --- Stimmtyp-Profile (empirisch, anpassbar) ---
 import logging
+
 VOCAL_PROFILES = {
     "female": {
         "s_band": (7000.0, 11000.0),
@@ -74,19 +75,18 @@ deesser_contract = DSPContract(
     rollback={"strategy": "wet_to_zero|snapshot_restore", "supports_partial": True},
 )
 
-from dataclasses import dataclass
 import json
 import os
+from dataclasses import dataclass
 from typing import Any
 
 import librosa
 import numpy as np
 import numpy.typing as npt
-from scipy.signal import firwin, lfilter
 import torch
+from scipy.signal import firwin, lfilter
 
 from dsp.artifact_bias_detection import detect_bias, detect_clipping, detect_dc_offset
-
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class SibilantEvent:
     end: int
 
 
-def analyze_track(audio: npt.NDArray[np.float32], sr: int = 48000, gender: str = None) -> VocalProfile:
+def analyze_track(audio: npt.NDArray[np.float32], sr: int = 48000, gender: str | None = None) -> VocalProfile:
     """
     Analysiert das Audiosignal und wählt das passende Stimmtyp-Profil (gender: 'female', 'male', 'child').
     Fallback: bisherige spektrale Analyse, falls kein gender angegeben.
@@ -292,7 +292,7 @@ def process_vocals(
     audio: npt.NDArray[np.float32],
     sr: int = 48000,
     model_path: str | None = None,
-    gender: str = None,
+    gender: str | None = None,
 ) -> npt.NDArray[np.float32]:
     """
     Optional: Übergib gender ('female', 'male', 'child') für gezielte Profilwahl.

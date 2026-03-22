@@ -13,10 +13,10 @@ Type-Annotations nach §3.7.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 from typing import Any, List
 
 import numpy as np
@@ -121,7 +121,7 @@ class TontraegerDenker:
 
                         self._detector = MediumDetector()
                         logger.info("TontraegerDenker: MediumDetector geladen.")
-                    except Exception as exc:  # noqa: BLE001
+                    except Exception as exc:
                         logger.warning(
                             "TontraegerDenker: MediumDetector nicht verfügbar (%s). " "Fallback auf 'unknown'.",
                             exc,
@@ -188,7 +188,7 @@ class TontraegerDenker:
             else:
                 raw = {"material_type": str(getattr(raw_result, "primary_material", "unknown")),
                        "confidence": float(getattr(raw_result, "confidence", 0.5))}
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("TontraegerDenker: detect() fehlgeschlagen (%s). Fallback.", exc)
             return self._fallback_result()
 
@@ -209,7 +209,7 @@ class TontraegerDenker:
             confidence = 0.5
         confidence = max(0.0, min(1.0, confidence))
 
-        detected_media_raw: List[tuple] = raw.get("detected_media", [])
+        detected_media_raw: list[tuple] = raw.get("detected_media", [])
         chain = [m for m, _ in detected_media_raw] if detected_media_raw else []
         chain_detected = len(chain) > 1
 

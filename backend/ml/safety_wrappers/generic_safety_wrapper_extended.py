@@ -11,14 +11,16 @@ Version: 1.0.0
 Date: 8. Februar 2026
 """
 
-from collections.abc import Callable
-
 # Import Musical Goals integration
 import sys
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 import scipy.signal as signal
+
+from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
+from backend.core.musical_goals.processing_modes import PROCESSING_MODE_CONFIGS, ProcessingMode
 
 from .safety_wrapper_template import (
     BaseSafetyWrapper,
@@ -28,9 +30,6 @@ from .safety_wrapper_template import (
     compute_spectral_centroid,
     validate_audio_basic,
 )
-
-from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
-from backend.core.musical_goals.processing_modes import PROCESSING_MODE_CONFIGS, ProcessingMode
 
 # ============================================================================
 # GENERIC DYNAMICS SAFETY WRAPPER

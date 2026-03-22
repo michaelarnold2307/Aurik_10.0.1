@@ -67,8 +67,8 @@ import time
 from typing import Any
 
 import numpy as np
-from scipy.fft import rfft, rfftfreq
 import scipy.signal as signal
+from scipy.fft import rfft, rfftfreq
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 
@@ -323,10 +323,7 @@ class HumRemovalPhase(PhaseInterface):
             List of detected fundamental frequencies
         """
         # Convert to mono for analysis
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # FFT analysis (4 seconds or full audio)
         fft_size = min(len(audio_mono), int(4 * self.sample_rate))
@@ -387,13 +384,13 @@ class HumRemovalPhase(PhaseInterface):
             sf.write(input_path, audio, sample_rate)
 
             # Process with DeepFilterNet
-            returncode, stdout, stderr = plugin.process(
+            returncode, _stdout, _stderr = plugin.process(
                 input_path, output_path, post_filter=True  # Enable post-filter for artifact smoothing
             )
 
             if returncode == 0 and os.path.exists(output_path):
                 # Read refined audio
-                refined, sr_read = sf.read(output_path)
+                refined, _sr_read = sf.read(output_path)
 
                 # Update audio in-place
                 if refined.shape == audio.shape:
@@ -431,10 +428,7 @@ class HumRemovalPhase(PhaseInterface):
             List of harmonic frequencies (only those actually present)
         """
         # Convert to mono
-        if audio.ndim == 2:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # FFT
         fft_size = min(len(audio_mono), int(4 * self.sample_rate))

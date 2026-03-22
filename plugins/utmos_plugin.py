@@ -8,10 +8,11 @@ Referenz:
     Saeki et al. (2022): "UTMOS: UTokyo-SaruLab System for VoiceMOS Challenge 2022"
     IS 2022. https://arxiv.org/abs/2204.02152
 
-STAAT-Entscheidungsmatrix (§4.4 Aurik-Spec):
+SOTA-Entscheidungsmatrix (§4.4 Aurik-Spec):
     Primär:   UTMOS (für Musik-MOS ohne Referenz)
               + VERSA (Chang 2024) als Ergänzung
-    Fallback: CDPAM → PQS-DSP (Gammatone+NSIM, musik-orientiert)
+    Fallback: PQS-DSP (Gammatone+NSIM, musik-orientiert)
+    VERBOTEN: CDPAM (Sprachkorpus-Training, §4.4)
 
 ⚠ VERBOTENE Sprach-Metriken (niemals für Musik verwenden):
     DNSMOS (P.835): Sprach-Corpus — systematisch falsch für Musik
@@ -24,10 +25,10 @@ Modell-Gewichte: ~/.aurik/models/utmos/ (via ModelDownloader)
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -148,7 +149,7 @@ class UTMOSPlugin:
         """Lädt UTMOS-Modell: erst ONNX-SOTA, dann lokale PyTorch-Folds, dann DSP."""
         # 1. Versuch: ONNX-Modell (SOTA-Upgrade unter ~/.aurik/)
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             model_path = self.MODELS_DIR / "utmos.onnx"
             if model_path.exists():
@@ -184,39 +185,42 @@ class UTMOSPlugin:
         """
         # Globaler ML-Budget-Guard: ~0.8 GB pro Fold (1 Fold nach Optimierung).
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+            from backend.core.ml_memory_budget import try_allocate as _try_alloc
             if not _try_alloc("UTMOSv2", 0.8 * self._N_FOLDS):
                 logger.warning("UTMOSv2: ML-Budget erschöpft — PQS-DSP-Fallback aktiv.")
                 return False
         except Exception:
             pass  # Budget-Modul nicht verfügbar — weiter
         try:
-            import sys as _sys  # noqa: PLC0415
+            import os as _os
+            import sys as _sys
 
-            import torch  # noqa: PLC0415
+            import torch
 
+            torch.set_num_threads(_os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
             utmosv2_root = str(self._LOCAL_UTMOSV2_DIR)
             if utmosv2_root not in _sys.path:
                 _sys.path.insert(0, utmosv2_root)
 
             # utmosv2-Paket testen
             try:
-                import utmosv2  # noqa: PLC0415, F401
-                from utmosv2._settings import configure_defaults  # noqa: PLC0415
-                from utmosv2.utils import get_model as _get_model  # noqa: PLC0415
+                import utmosv2
+                from utmosv2._settings import configure_defaults
+                from utmosv2.utils import get_model as _get_model
 
                 # Patch: get_ssl_output_shape akzeptiert nur hartcodierte HF-Namen,
                 # nicht lokale Verzeichnispfade. Wir erweitern es so, dass bei einem
                 # lokalen Verzeichnis der hidden_size aus config.json gelesen wird.
                 try:
-                    import json as _json  # noqa: PLC0415
-                    import utmosv2.model.ssl as _ssl_mod  # noqa: PLC0415
+                    import json as _json
+
+                    import utmosv2.model.ssl as _ssl_mod
 
                     _orig_ssl_shape = _ssl_mod.get_ssl_output_shape
 
                     def _local_aware_ssl_shape(name: str) -> tuple[int, int]:
                         """Extend get_ssl_output_shape to handle local directory paths."""
-                        import pathlib as _pl  # noqa: PLC0415
+                        import pathlib as _pl
                         p = _pl.Path(name)
                         if p.is_dir():
                             cfg_f = p / "config.json"
@@ -249,7 +253,7 @@ class UTMOSPlugin:
 
                 if _use_package and _get_model and configure_defaults:
                     try:
-                        import importlib as _importlib  # noqa: PLC0415
+                        import importlib as _importlib
                         # configure_defaults(cfg) erwartet ein Config-Objekt (SimpleNamespace | ModuleType).
                         # Das UTMOSv2-Trainingsconfig-Modul dient als Config — es ist ein ModuleType,
                         # das alle Parameter als Modul-Attribute bereitstellt.
@@ -320,7 +324,7 @@ class UTMOSPlugin:
                 )
                 # PLM-Registrierung für LRU-basierte Auto-Eviction
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
                     _unload_fn = globals().get("unload_utmos")
                     if _unload_fn is not None:
                         _reg_plm("UTMOSv2", size_gb=0.8 * self._N_FOLDS, unload_fn=_unload_fn)
@@ -365,7 +369,7 @@ class UTMOSPlugin:
             ValueError: Falls sr != 48000
         """
         assert sr == 48000, f"UTMOS: SR muss 48000 Hz sein, erhalten: {sr}"
-        import math  # noqa: PLC0415
+        import math
 
         audio_f32 = np.asarray(audio, dtype=np.float32)
         audio_f32 = np.nan_to_num(audio_f32, nan=0.0, posinf=0.0, neginf=0.0)
@@ -421,7 +425,7 @@ class UTMOSPlugin:
             outputs = self._session.run(None, {input_name: feat})
 
             if outputs and outputs[0] is not None:
-                raw_mos = float(np.squeeze(outputs[0]))
+                raw_mos = float(np.squeeze(np.nan_to_num(outputs[0], nan=0.0, posinf=0.0, neginf=0.0)))
                 # Musik-Bias-Korrektur: UTMOS unterschätzt Musik systematisch
                 mos = raw_mos + self.MUSIC_BIAS
                 return (
@@ -444,7 +448,7 @@ class UTMOSPlugin:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _compute_x2_melspecs(audio_16k: np.ndarray, cfg: object) -> "torch.Tensor":
+    def _compute_x2_melspecs(audio_16k: np.ndarray, cfg: object) -> torch.Tensor:
         """Compute multi-scale mel-spectrogram tensor for UTMOSv2 spec branch.
 
         SSLMultiSpecExtModelV2.forward expects x2 of shape
@@ -459,8 +463,8 @@ class UTMOSPlugin:
         Returns:
             Tensor of shape (1, 8, 1, 512, 512).
         """
-        import torch  # noqa: PLC0415
-        import torchaudio  # noqa: PLC0415
+        import torch
+        import torchaudio
 
         SR = 16_000
         num_frames: int = cfg.dataset.spec_frames.num_frames  # type: ignore[union-attr]  # 2
@@ -540,14 +544,14 @@ class UTMOSPlugin:
               b) Lokale Kopie von facebook/wav2vec2-base im HuggingFace-Cache
         """
         try:
-            import torch  # noqa: PLC0415
+            import torch
 
             audio_16k = self._resample_to_16k(audio, sr)
             fold_scores: list[float] = []
 
             for model_or_state, cfg in self._fold_models:
                 try:
-                    import torch.nn as nn  # noqa: PLC0415
+                    import torch.nn as nn
 
                     if isinstance(model_or_state, nn.Module):
                         # SSLMultiSpecExtModelV2.forward(x1, x2, d) — 3 Argumente:
@@ -694,7 +698,7 @@ class UTMOSPlugin:
         try:
             from math import gcd
 
-            from scipy.signal import resample_poly  # noqa: PLC0415
+            from scipy.signal import resample_poly
 
             ratio_num, ratio_den = 16000, sr
             common = gcd(ratio_num, ratio_den)
@@ -727,7 +731,7 @@ def unload_utmos() -> None:
 
     Aufruf: nach der letzten MOS-Bewertung in der Pipeline.
     """
-    import gc  # noqa: PLC0415
+    import gc
     if _instance is not None:
         _instance._fold_models.clear()
         _instance._session = None
@@ -735,7 +739,7 @@ def unload_utmos() -> None:
         _instance._fallback_active = True
         gc.collect()
         try:
-            from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _rel
             _rel("UTMOSv2")
         except Exception:
             pass

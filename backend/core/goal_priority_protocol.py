@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import threading
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -138,10 +138,10 @@ def check_iteration_abort(
 
 
 __all__ = [
-    "GoalPriorityProtocol",
     "ConflictResolutionResult",
+    "GoalPriorityProtocol",
     "IterationAbortResult",
+    "check_iteration_abort",
     "get_goal_priority_protocol",
     "resolve_goal_conflict",
-    "check_iteration_abort",
 ]

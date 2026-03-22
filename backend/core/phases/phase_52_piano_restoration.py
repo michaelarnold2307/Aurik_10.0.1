@@ -58,17 +58,16 @@ Version: 1.0.0
 Date: 16. Februar 2026
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 
 import numpy as np
 from scipy import signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 try:
@@ -254,10 +253,7 @@ class PianoRestorationV1(PhaseInterface):
 
         # Convert to mono for analysis (if stereo)
         is_stereo = audio.ndim == 2
-        if is_stereo:
-            audio_mono = np.mean(audio, axis=1)
-        else:
-            audio_mono = audio.copy()
+        audio_mono = np.mean(audio, axis=1) if is_stereo else audio.copy()
 
         logger.info(f"Piano Restoration: {material_type.value}, config={config}")
 
@@ -284,10 +280,7 @@ class PianoRestorationV1(PhaseInterface):
             audio_mono = self._restore_dynamics(audio_mono, expansion_ratio=config["dynamics_expansion"])
 
         # Dry/wet mix
-        if is_stereo:
-            original_mono = np.mean(audio, axis=1)
-        else:
-            original_mono = audio.copy()
+        original_mono = np.mean(audio, axis=1) if is_stereo else audio.copy()
 
         audio_mono = config["mix"] * audio_mono + (1.0 - config["mix"]) * original_mono
 
@@ -297,10 +290,7 @@ class PianoRestorationV1(PhaseInterface):
             audio_mono = audio_mono * (0.95 / peak)
 
         # Convert back to stereo if needed
-        if is_stereo:
-            audio_out = np.column_stack([audio_mono, audio_mono])
-        else:
-            audio_out = audio_mono
+        audio_out = np.column_stack([audio_mono, audio_mono]) if is_stereo else audio_mono
 
         audio_out = np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0)
         audio_out = np.clip(audio_out, -1.0, 1.0)
@@ -438,7 +428,7 @@ class PianoRestorationV1(PhaseInterface):
         noverlap = nperseg // 2
 
         # STFT
-        f, t, Zxx = signal.stft(audio, fs=self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        f, _t, Zxx = signal.stft(audio, fs=self.sample_rate, nperseg=nperseg, noverlap=noverlap)
 
         # Enhance harmonic content (boost overtones)
         # Focus on piano string body (100-2000 Hz)

@@ -18,10 +18,10 @@ Version: 9.0.0
 Date: 2026-02-15
 """
 
-from dataclasses import dataclass, field
-from enum import Enum
 import logging
 import time
+from dataclasses import dataclass, field
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +345,8 @@ class PerformanceGuard:
         # Musikalische Exzellenz — Priorität 1 (§MusEx-P1): niemals überspringen.
         # Doppelter Schutz: Priority-Dict UND Namens-Set verhindern Skip.
         # RT×3-Kompatibilität garantiert: alle Excellence-Phasen < 15 ms/s (§9.5).
-        if phase_id in self.MUSICAL_EXCELLENCE_PHASES:
+        short_id = self._normalize_phase_id(phase_id)
+        if short_id in self.MUSICAL_EXCELLENCE_PHASES:
             logger.debug(
                 f"🎵 Phase '{phase_id}' ist Musikalische-Exzellenz-Phase (§MusEx-P1) "
                 f"— wird niemals übersprungen (RT×3 Budget: {self.RT3_EXCELLENCE_BUDGET:.1f}×)"
@@ -363,7 +364,7 @@ class PerformanceGuard:
         )
 
         # Skip-Kriterien basierend auf Phase Priority
-        phase_priority = self.PHASE_PRIORITIES.get(phase_id, 5)  # Default: Medium
+        phase_priority = self.PHASE_PRIORITIES.get(short_id, 5)  # Default: Medium
 
         # Skip-Thresholds relativ zum aktiven Budget.
         if phase_priority <= 3:  # LOW Priority
@@ -484,9 +485,22 @@ class PerformanceGuard:
         else:
             return PerformanceStatus.OPTIMAL
 
+    @staticmethod
+    def _normalize_phase_id(phase_id: str) -> str:
+        """Strip 'phase_XX_' prefix to match PHASE_PRIORITIES short keys.
+
+        E.g. 'phase_01_click_removal' → 'click_removal',
+             'phase_03_denoise' → 'denoise',
+             'click_removal' → 'click_removal' (unchanged).
+        """
+        import re
+        m = re.match(r"^phase_\d+_(.*)", phase_id)
+        return m.group(1) if m else phase_id
+
     def _is_phase_critical(self, phase_id: str) -> bool:
         """Prüft ob Phase kritisch für Quality ist."""
-        priority = self.PHASE_PRIORITIES.get(phase_id, 5)
+        short = self._normalize_phase_id(phase_id)
+        priority = self.PHASE_PRIORITIES.get(short, 5)
         return priority >= 9  # Priority ≥ 9 = CRITICAL
 
     def _calculate_quality_degradation(self) -> float:
@@ -501,7 +515,7 @@ class PerformanceGuard:
 
         # Summiere Priorities der geskippten Phasen
         total_priority = sum(self.PHASE_PRIORITIES.values())
-        skipped_priority = sum(self.PHASE_PRIORITIES.get(phase_id, 5) for phase_id in self.skipped_phases)
+        skipped_priority = sum(self.PHASE_PRIORITIES.get(self._normalize_phase_id(pid), 5) for pid in self.skipped_phases)
 
         # Degradation = Anteil der geskippten Priority
         degradation = skipped_priority / total_priority if total_priority > 0 else 0

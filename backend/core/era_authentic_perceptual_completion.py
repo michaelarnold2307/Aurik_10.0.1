@@ -7,9 +7,9 @@ Synthetisiert aera-authentische HF-Ergaenzung fuer bandbreitenbegrenzte Quellen.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
+from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 import numpy as np
@@ -17,7 +17,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-ERA_BRILLANZ_CEILING: Dict[int, float] = {
+ERA_BRILLANZ_CEILING: dict[int, float] = {
     1920: 0.72,
     1940: 0.78,
     1950: 0.80,
@@ -28,7 +28,7 @@ ERA_BRILLANZ_CEILING: Dict[int, float] = {
 }
 
 
-def _get_era_ceiling(decade: Optional[int]) -> float:
+def _get_era_ceiling(decade: int | None) -> float:
     """Gibt den BrillanzMetric-Ceiling fuer ein Jahrzehnt zurueck."""
     if decade is None:
         return 0.98
@@ -44,7 +44,7 @@ class EraCompletionResult:
     """Spec §2.35"""
 
     applied: bool
-    era_decade: Optional[int]
+    era_decade: int | None
     brillanz_ceiling: float
     source_bandwidth_hz: float
     completion_bandwidth_hz: float
@@ -52,7 +52,7 @@ class EraCompletionResult:
     message: str
     audio: np.ndarray = field(repr=False)
 
-    def as_dict(self) -> Dict[str, object]:
+    def as_dict(self) -> dict[str, object]:
         """Serialisierungsformat f\u00fcr Logging und API."""
         return {
             "applied": self.applied,
@@ -77,14 +77,14 @@ class EraAuthenticPerceptualCompletion:
         6. Verifikation: BrillanzMetric <= ERA_BRILLANZ_CEILING
     """
 
-    ERA_BRILLANZ_CEILING: Dict[int, float] = ERA_BRILLANZ_CEILING
+    ERA_BRILLANZ_CEILING: dict[int, float] = ERA_BRILLANZ_CEILING
     SOURCE_BW_THRESHOLD_HZ: float = 10000.0
 
     def is_applicable(
         self,
         audio: np.ndarray,
         sr: int,
-        goal_applicability: Optional[object] = None,
+        goal_applicability: object | None = None,
     ) -> bool:
         """True wenn Quell-Bandbreite < 10 kHz UND BrillanzMetric anwendbar."""
         # Pruefe BrillanzMetric Applicability via inapplicable oder applicable
@@ -106,8 +106,8 @@ class EraAuthenticPerceptualCompletion:
         self,
         audio: np.ndarray,
         sr: int,
-        era: Optional[int] = None,
-        anchor: Optional[np.ndarray] = None,
+        era: int | None = None,
+        anchor: np.ndarray | None = None,
     ) -> EraCompletionResult:
         """Spec §2.35: Erzeugt era-authentisch ergaenztes Audio. NaN/Inf-sicher."""
         # inf-sicher: erst nan_to_num, dann clip — verhindert Overflow in FFT
@@ -200,7 +200,7 @@ class EraAuthenticPerceptualCompletion:
         self,
         mono: np.ndarray,
         sr: int,
-        era: Optional[int],
+        era: int | None,
         ceiling: float,
     ) -> np.ndarray:
         """HF-Ergaenzung: harmonische Extrapolation + era-typisches Rauschen."""
@@ -252,7 +252,7 @@ class EraAuthenticPerceptualCompletion:
 # Singleton + Convenience
 # ---------------------------------------------------------------------------
 
-_instance: Optional[EraAuthenticPerceptualCompletion] = None
+_instance: EraAuthenticPerceptualCompletion | None = None
 _lock = threading.Lock()
 
 
@@ -269,22 +269,22 @@ def get_era_completion() -> EraAuthenticPerceptualCompletion:
 def complete_era_authentic(
     audio: np.ndarray,
     sr: int,
-    era: Optional[int] = None,
-    anchor: Optional[np.ndarray] = None,
+    era: int | None = None,
+    anchor: np.ndarray | None = None,
 ) -> EraCompletionResult:
     """Convenience-Wrapper."""
     return get_era_completion().complete(audio, sr, era, anchor)
 
 
 __all__ = [
+    "ERA_BRILLANZ_CEILING",
     "EraAuthenticPerceptualCompletion",
     "EraCompletionResult",
-    "ERA_BRILLANZ_CEILING",
-    "get_era_completion",
+    "apply_era_authentic_completion",
     "complete_era_authentic",
     # Spec-konforme Alias-Namen (§2.35, §3.2)
     "get_era_authentic_perceptual_completion",
-    "apply_era_authentic_completion",
+    "get_era_completion",
 ]
 
 # Spec-konforme Alias-Namen (§2.35, §3.2)

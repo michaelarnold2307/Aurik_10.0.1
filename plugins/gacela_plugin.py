@@ -40,7 +40,7 @@ from typing import Any
 import numpy as np
 
 try:
-    import torch as _torch_mod  # Only for type hints at module level  # noqa: F401
+    import torch as _torch_mod  # Only for type hints at module level
 except ImportError:
     _torch_mod = None  # type: ignore[assignment]
 
@@ -73,28 +73,28 @@ _MD: int = 32
 #   nfilter aus ConvTranspose2d in-ch: [128→256→128→64→32→1]
 #   2700 = (16+16+4) × 75 = 36 × 75; enc H×W = 5×15
 
-_BE_PARAMS: dict = dict(
-    nfilter=[_MD, 2 * _MD, _MD, _MD // 2],  # [32, 64, 32, 16]
-    shape=[[5, 5], [5, 5], [5, 5], [5, 5]],
-    stride=[2, 2, 2, 2],
-    data_size=2,
-    border_scale=1,
-    width_full=None,
-)
+_BE_PARAMS: dict = {
+    "nfilter": [_MD, 2 * _MD, _MD, _MD // 2],  # [32, 64, 32, 16]
+    "shape": [[5, 5], [5, 5], [5, 5], [5, 5]],
+    "stride": [2, 2, 2, 2],
+    "data_size": 2,
+    "border_scale": 1,
+    "width_full": None,
+}
 
-_GEN_PARAMS: dict = dict(
-    stride=[2, 2, 2, 2, 2],
+_GEN_PARAMS: dict = {
+    "stride": [2, 2, 2, 2, 2],
     # Aus Checkpoint: conv[0].weight [128,256,4,4]→in=128,out=256; conv[0].bias[256] ✓
     # nfilter beschreibt OUTPUT-Kanäle je Schicht (vor den ResBlöcken)
-    nfilter=[256, 128, 64, _MD, 1],  # verifiziert aus Checkpoint
-    shape=[[4, 4], [4, 4], [8, 8], [8, 8], [8, 8]],
-    padding=[[1, 1], [1, 1], [3, 3], [3, 3], [3, 3]],
-    residual_blocks=2,
-    full=256 * _MD,  # 8 192 = Linear-out; 8192/128=64=8×8
-    in_conv_shape=[8, 8],  # verifiziert: 8192/128=64 ✓
-    data_size=2,
-    borders=_BE_PARAMS,
-)
+    "nfilter": [256, 128, 64, _MD, 1],  # verifiziert aus Checkpoint
+    "shape": [[4, 4], [4, 4], [8, 8], [8, 8], [8, 8]],
+    "padding": [[1, 1], [1, 1], [3, 3], [3, 3], [3, 3]],
+    "residual_blocks": 2,
+    "full": 256 * _MD,  # 8 192 = Linear-out; 8192/128=64=8×8
+    "in_conv_shape": [8, 8],  # verifiziert: 8192/128=64 ✓
+    "data_size": 2,
+    "borders": _BE_PARAMS,
+}
 
 # 2700 = (16 enc_L + 16 enc_R + 4 noise) × (5 × 15) = 36 × 75
 _GEN_IN_SHAPE: int = 2_700
@@ -111,9 +111,9 @@ _CKPT_ORDER: list[str] = [
 # ── Hilfsfunktionen ──────────────────────────────────────────────────────────
 
 
-def _time_average(tensor: "Any", factor: int) -> "Any":  # type: ignore[return]
+def _time_average(tensor: Any, factor: int) -> Any:  # type: ignore[return]
     """Temporales Mitteln: [B, C, H, W] → [B, C, H, W//factor]."""
-    import torch  # noqa: F401 — lokal importiert, damit DSP-Pfad torch-frei bleibt
+    import torch
 
     B, C, H, W = tensor.shape
     W2 = W // factor
@@ -166,7 +166,8 @@ class GacelaPlugin:
     def _try_load(self) -> None:
         """Lädt GACELA-Checkpoint; setzt _model_ready=True bei Erfolg."""
         try:
-            from backend.core.ml_memory_budget import try_allocate, release as _release  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
                 logger.info("GACELA: ML-Budget erschöpft — DSP-Fallback aktiv.")
@@ -175,13 +176,14 @@ class GacelaPlugin:
         except ImportError:
             pass
         try:
-            import torch  # noqa — optional dependency
+            import torch
+            torch.set_num_threads(os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
 
             # GACELA-Modell-Paket in sys.path aufnehmen
             if _MDL_ROOT not in sys.path:
                 sys.path.insert(0, _MDL_ROOT)
 
-            import librosa  # noqa — optional
+            import librosa
             from model.borderEncoder import BorderEncoder  # type: ignore[import]
             from model.generator import Generator  # type: ignore[import]
             from tifresi.stft import GaussTruncTF  # type: ignore[import]
@@ -224,7 +226,7 @@ class GacelaPlugin:
             self._model_ready = True
             logger.info("GACELA: ML-Modell bereit (MODEL_SR=%d Hz).", MODEL_SR)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
                 _reg_plm(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB, unload_fn=_unload_gacela)
             except Exception:
                 pass
@@ -236,7 +238,7 @@ class GacelaPlugin:
             )
             self._model_ready = False
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                from backend.core.ml_memory_budget import release as _release
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -422,7 +424,7 @@ def _unload_gacela() -> None:
     try:
         import gc
         gc.collect()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 

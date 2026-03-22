@@ -25,9 +25,9 @@ Author: AI Team
 Date: 8. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 
 import librosa
 import numpy as np
@@ -586,11 +586,7 @@ class EdgeCaseHandler:
 
         # Check if matches any known combo
         active_set = set(active)
-        for combo in known_combos:
-            if active_set.issubset(combo) or combo.issubset(active_set):
-                return False  # Matches known pattern
-
-        return True  # Unusual combination
+        return all(not (active_set.issubset(combo) or combo.issubset(active_set)) for combo in known_combos)  # Unusual combination
 
     # =========================================================================
     # 3. Medium-Mix Detection

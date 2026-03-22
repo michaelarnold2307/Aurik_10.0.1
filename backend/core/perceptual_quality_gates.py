@@ -4,8 +4,8 @@ PerceptualQualityGates: Integration von ViSQOL (--audio), CDPAM (§4.4-konforme 
 Automatisches Reprocessing und Multi-Pass-Optimierung.
 """
 
-from collections.abc import Callable
 import logging
+from collections.abc import Callable
 from typing import Dict
 
 import numpy as np
@@ -18,10 +18,9 @@ class PerceptualQualityGates:
 
     Integriert:
     - ViSQOL v3 (--audio mode, MOS 1.0–5.0)
-    - CDPAM (Cross-Domain Perceptual Audio Metrics)
 
-    Verboten:
-    - NISQA, DNSMOS, PESQ, STOI (§10.2: Sprach-Metriken)
+    Verboten (§4.4+§10.2):
+    - NISQA, DNSMOS, PESQ, STOI, ViSQOL --speech, CDPAM
     """
 
     def __init__(self, reprocess_callback: Callable[[], None]) -> None:
@@ -30,12 +29,13 @@ class PerceptualQualityGates:
         Args:
             reprocess_callback: Callback-Funktion für Reprocessing bei Failure.
         """
-        # NISQA/DNSMOS entfernt — verboten §4.4+§10.2 (Sprach-Metriken)
-        self.thresholds: Dict[str, float] = {"ViSQOL": 3.5, "CDPAM": 0.7}
+        # NISQA/DNSMOS/CDPAM entfernt — verboten §4.4+§10.2 (Sprach-Metriken / CDPAM)
+        # Nur ViSQOL --audio (nicht --speech!) ist erlaubt.
+        self.thresholds: dict[str, float] = {"ViSQOL": 3.5}
         self.reprocess_callback = reprocess_callback
         logger.info("PerceptualQualityGates initialized with thresholds: %s", self.thresholds)
 
-    def evaluate(self, metrics: Dict[str, float]) -> bool:
+    def evaluate(self, metrics: dict[str, float]) -> bool:
         """Evaluiert Metriken gegen Schwellwerte.
 
         Args:

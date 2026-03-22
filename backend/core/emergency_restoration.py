@@ -28,10 +28,10 @@ Version: 1.0
 Date: 2026-02-10
 """
 
-from dataclasses import dataclass, field
-from enum import Enum
 import logging
 import threading
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Optional
 
 import numpy as np
@@ -265,7 +265,7 @@ class DamageAnalyzer:
         from scipy import signal
 
         # Compute STFT
-        f, t, Zxx = signal.stft(audio, fs=sample_rate, nperseg=1024)
+        f, _t, Zxx = signal.stft(audio, fs=sample_rate, nperseg=1024)
 
         # Power spectrum
         power = np.abs(Zxx) ** 2
@@ -640,7 +640,7 @@ if __name__ == "__main__":
 
 
 # Singleton-Instanz (§3.2)
-_instance_er: Optional[EmergencyRestorationEngine] = None
+_instance_er: EmergencyRestorationEngine | None = None
 _lock_er = threading.Lock()
 
 

@@ -13,12 +13,12 @@ Version: 8.2
 Datum: 14. Februar 2026
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass
 import json
 import logging
-from pathlib import Path
 import random
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import torch

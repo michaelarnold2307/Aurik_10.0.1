@@ -10,10 +10,10 @@ Referenz: OWASP Top 10 A03 (Injection), A01 (Broken Access Control).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import os
 import pathlib
+from dataclasses import dataclass, field
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -279,7 +279,7 @@ class AudioFileValidator:
 
 import threading
 
-_instance: Optional[AudioFileValidator] = None
+_instance: AudioFileValidator | None = None
 _lock = threading.Lock()
 
 

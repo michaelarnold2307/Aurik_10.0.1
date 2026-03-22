@@ -32,7 +32,7 @@ from dsp.tonal_balance_restorer import (
 @pytest.fixture
 def sample_rate():
     """Standard sample rate for tests"""
-    return 44100
+    return 48000
 
 
 @pytest.fixture

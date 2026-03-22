@@ -3,8 +3,8 @@ Adaptive Fundamental Detection DSP-Modul für Aurik 6.0 (SOTA-Maximum)
 Einfache Grundtonerkennung per Autokorrelation (klassische DSP, SOTA-Maximum).
 """
 
-from dataclasses import asdict, dataclass
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np

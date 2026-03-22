@@ -7,10 +7,10 @@ Component 0.9.5: Real-Time Musical Goals Visualization
 Impact: +0.5 Punkte - User Transparency
 """
 
-from dataclasses import asdict, dataclass
-from datetime import datetime
 import json
 import logging
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 

@@ -25,10 +25,10 @@ Anwendung in Aurik:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -197,7 +197,7 @@ class LAIONCLAPPlugin:
         """Lädt CLAP: erst ONNX-SOTA, dann lokales PyTorch-Checkpoint, dann DSP."""
         # 1. Versuch: ONNX-Modell (SOTA-Upgrade unter ~/.aurik/)
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             audio_enc_path = self.MODELS_DIR / "audio_encoder.onnx"
             text_emb_path = self.MODELS_DIR / "text_embeddings.npy"
@@ -207,8 +207,10 @@ class LAIONCLAPPlugin:
                 _onnx_budget_ok = True
                 _ml_release_onnx = None
                 try:
-                    from backend.core.ml_memory_budget import (  # noqa: PLC0415
+                    from backend.core.ml_memory_budget import (
                         release as _ml_release_onnx,
+                    )
+                    from backend.core.ml_memory_budget import (
                         try_allocate as _try_alloc_onnx,
                     )
 
@@ -238,7 +240,7 @@ class LAIONCLAPPlugin:
                 )
                 # PLM-Registrierung (Schicht 2) nach erfolgreichem Load
                 try:
-                    from backend.core.plugin_lifecycle_manager import (  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import (
                         get_plugin_lifecycle_manager as _get_plm_onnx,
                     )
 
@@ -325,7 +327,7 @@ class LAIONCLAPPlugin:
             True wenn Checkpoint erfolgreich geladen.
         """
         try:
-            import sys as _sys  # noqa: PLC0415
+            import sys as _sys
 
             clap_src = str(self._LOCAL_CLAP_DIR / "src")
             if clap_src not in _sys.path:
@@ -337,7 +339,7 @@ class LAIONCLAPPlugin:
             # hat die Funktion intern noch nicht. Wir legen einen harmlosen
             # No-Op-Stub an, der die Decorator-/Direkt-Aufruf-Signatur
             # vollständig abdeckt.
-            import torch as _torch  # noqa: PLC0415
+            import torch as _torch
 
             if not hasattr(_torch.library, "register_fake"):
 
@@ -349,7 +351,7 @@ class LAIONCLAPPlugin:
                 logger.debug("LAION-CLAP: torch.library.register_fake Shim installiert (torch %s)", _torch.__version__)
             # ───────────────────────────────────────────────────────────
 
-            import laion_clap  # noqa: PLC0415
+            import laion_clap
 
             ckpt_path = self._LOCAL_CLAP_DIR / self._LOCAL_CLAP_CKPT
             if not ckpt_path.exists():
@@ -358,7 +360,7 @@ class LAIONCLAPPlugin:
 
             # Globaler ML-Budget-Guard: ~2.2 GB für LAION-CLAP.
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("LAION-CLAP", 2.2):
                     return False  # Budget erschöpft → PANNs-DSP-Fallback
@@ -373,7 +375,7 @@ class LAIONCLAPPlugin:
             # soll NUR aus lokalem Cache laden — kein HuggingFace-Hub-Download.
             # HF_HUB_CACHE wird auf models/.hf_staging/hub/ gesetzt, das
             # Symlinks auf models/roberta-base/ enthält (§13.3 Out-of-Box-Pflicht).
-            import os as _os  # noqa: PLC0415
+            import os as _os
 
             _hf_offline_orig = _os.environ.get("TRANSFORMERS_OFFLINE")
             _hf_hub_cache_orig = _os.environ.get("HF_HUB_CACHE")
@@ -416,7 +418,7 @@ class LAIONCLAPPlugin:
             # (position_embeddings [514,768] vs model [512,768]) before loading.
             # Only the audio-branch weights are used for audio embeddings.
             try:
-                from laion_clap.clap_module.factory import load_state_dict as _load_sd  # noqa: PLC0415
+                from laion_clap.clap_module.factory import load_state_dict as _load_sd
 
                 _state = _load_sd(str(ckpt_path), skip_params=True)
                 # Drop keys whose shapes differ from the current model so that
@@ -429,7 +431,7 @@ class LAIONCLAPPlugin:
                     _state.pop(_k, None)
                 model.model.load_state_dict(_state, strict=False)
                 logger.debug("LAION-CLAP: Checkpoint geladen (shape-inkompatible Text-Keys übersprungen)")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # Fallback: bibliothekseigener Load
                 model.load_ckpt(str(ckpt_path))
             model.eval()
@@ -442,7 +444,7 @@ class LAIONCLAPPlugin:
             )
             # PLM-Registrierung für LRU-basierte Auto-Eviction
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _unload_fn = globals().get("unload_laion_clap")
                 if _unload_fn is not None:
@@ -585,7 +587,7 @@ class LAIONCLAPPlugin:
             4. Softmax × 100 → Scores ∈ [0, 1]
         """
         try:
-            import torch  # noqa: PLC0415
+            import torch
 
             audio_f32 = audio.astype(np.float32)
             if audio_f32.ndim > 1:
@@ -596,10 +598,7 @@ class LAIONCLAPPlugin:
             # Tags für Text-Embeddings aufbauen
             all_tags = list(INSTRUMENT_TAGS) + list(GENRE_TAGS) + list(MATERIAL_TAGS)
             # text_queries ergänzen
-            if text_queries:
-                query_tags = text_queries
-            else:
-                query_tags = all_tags
+            query_tags = text_queries or all_tags
 
             with torch.no_grad():
                 # Audio-Embedding (laion_clap erwartet Liste von 1D-Arrays @ 48kHz)
@@ -673,7 +672,7 @@ class LAIONCLAPPlugin:
         harmonicity = float(np.clip(peak_e / (np.mean(spec) + 1e-12) / 50.0, 0.0, 1.0))
 
         # Percussion-Indikator: schnelle Energieänderungen
-        frames = [spec for _ in range(8)]  # vereinfacht  # noqa: F841
+        [spec for _ in range(8)]  # vereinfacht
         onset_density = 0.3  # Schätzwert
 
         # Instrument-Scores (heuristisch)
@@ -771,7 +770,7 @@ def unload_laion_clap() -> None:
 
     Aufruf: nach dem Tag-Matching / Analyse zu Beginn der Pipeline.
     """
-    import gc  # noqa: PLC0415
+    import gc
 
     if _instance is not None:
         _instance._clap_model = None
@@ -779,7 +778,7 @@ def unload_laion_clap() -> None:
         _instance._model_loaded = False
         gc.collect()
         try:
-            from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _rel
 
             _rel("LAION-CLAP")
         except Exception:

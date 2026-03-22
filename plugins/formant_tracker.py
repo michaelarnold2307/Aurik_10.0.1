@@ -30,11 +30,11 @@ References:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
@@ -143,10 +143,10 @@ class FormantTracker:
             )
             return
         try:
-            import onnxruntime as ort  # noqa: PLC0415
+            import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("DeepFormants", size_gb=0.05):
                     logger.warning("DeepFormants: ML-Budget erschöpft — LPC-Fallback.")
@@ -164,7 +164,7 @@ class FormantTracker:
             self._deepformants_loaded = True
             logger.info("✅ DeepFormants ONNX geladen — §4.4 primärer Formant-Tracker.")
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm(
                     "DeepFormants",
@@ -178,7 +178,7 @@ class FormantTracker:
         except Exception as exc:
             logger.debug("DeepFormants ONNX nicht ladbar: %s — LPC-Burg-Fallback.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("DeepFormants")
             except Exception:
                 pass
@@ -242,7 +242,7 @@ class FormantTracker:
         mono_16k = self._resample_if_needed(mono, sample_rate, _DEEPFORMANTS_SR)
 
         # Log-Mel Spectrogram
-        from scipy.signal import stft as scipy_stft  # noqa: PLC0415
+        from scipy.signal import stft as scipy_stft
 
         _, _, Z = scipy_stft(
             mono_16k.astype(np.float64),
@@ -255,7 +255,7 @@ class FormantTracker:
 
         # Mel-Filterbank (128 Bänder)
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
 
             mel_basis = librosa.filters.mel(
                 sr=_DEEPFORMANTS_SR,
@@ -430,7 +430,7 @@ class FormantTracker:
             from librosa.core.audio import _burg as _librosa_burg  # type: ignore[import]
 
             lpc = _librosa_burg(frame.astype(np.float64), order=order)
-            return np.array([1.0] + list(-lpc), dtype=np.float64)
+            return np.array([1.0, *list(-lpc)], dtype=np.float64)
         except (ImportError, AttributeError):
             pass
 
@@ -440,7 +440,7 @@ class FormantTracker:
         if n < order + 1:
             return None
         # Autocorrelation
-        a = np.zeros(order + 1, dtype=np.float64)  # noqa: F841
+        np.zeros(order + 1, dtype=np.float64)
         k_vec = np.zeros(order, dtype=np.float64)
         e = float(np.dot(x, x))
         if e < 1e-30:

@@ -40,17 +40,16 @@ Author: Aurik Development Team
 Version: 2.0.0 Professional
 """
 
+import logging
 import os
 import sys
-
-
-import logging
 import time
 
 import numpy as np
 from scipy import ndimage, signal
 
 from backend.core.defect_scanner import MaterialType
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -165,8 +164,6 @@ class CompressionPhase(PhaseInterface):
             "sample_rate": sample_rate,
             "version": "2.0.0",
         }
-
-        is_stereo = audio.ndim == 2  # noqa: F841
 
         # Split into bands
         bands = self._split_bands(audio, sample_rate)

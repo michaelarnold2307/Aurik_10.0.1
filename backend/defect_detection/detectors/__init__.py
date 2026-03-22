@@ -16,13 +16,13 @@ from backend.defect_detection.detectors.rumble import RumbleDetector
 from backend.defect_detection.detectors.stereo_imbalance import StereoImbalanceDetector
 
 __all__ = [
-    "ClippingDetector",
-    "ClicksDetector",
     "BroadbandNoiseDetector",
-    "HumDetector",
-    "DistortionDetector",
-    "RumbleDetector",
-    "HFRolloffDetector",
-    "StereoImbalanceDetector",
+    "ClicksDetector",
+    "ClippingDetector",
     "DCOffsetDetector",
+    "DistortionDetector",
+    "HFRolloffDetector",
+    "HumDetector",
+    "RumbleDetector",
+    "StereoImbalanceDetector",
 ]

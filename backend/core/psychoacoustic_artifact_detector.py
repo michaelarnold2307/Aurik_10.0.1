@@ -8,9 +8,10 @@ Implementierte Metriken (scipy-only, kein Deep Learning):
     - musical_transparency:  Spektrale Flachheit (Wiener-Entropie) als Transparenz-Proxy
 """
 
+from dataclasses import asdict, dataclass
+
 import numpy as np
 import scipy.signal
-from dataclasses import asdict, dataclass
 
 
 @dataclass

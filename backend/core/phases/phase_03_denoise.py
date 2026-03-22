@@ -244,14 +244,15 @@ class DenoisePhase(PhaseInterface):
                 )
 
         # ML-Hybrid only if resources available and quality mode permits
-        use_ml_hybrid = ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "maximum"] and not use_lightweight
+        # "quality" (5×RT) and "maximum" (8×RT) both use full ML-Hybrid; "balanced" (3×RT) uses adaptive
+        use_ml_hybrid = ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "quality", "maximum"] and not use_lightweight
 
         if use_ml_hybrid:
             try:
                 logger.info(f"Phase 03 ML-Hybrid: mode={quality_mode}, material={material_type}")
 
                 # Configure ML denoiser strategy
-                if quality_mode == "maximum":
+                if quality_mode in ["quality", "maximum"]:
                     strategy = DenoiseStrategy.HYBRID  # Full OMLSA + Resemble
                 else:  # balanced
                     strategy = DenoiseStrategy.ADAPTIVE  # Smart: OMLSA only if clean, else hybrid
@@ -284,7 +285,7 @@ class DenoisePhase(PhaseInterface):
 
                 # Generate warnings
                 warnings = []
-                if not ml_result.resemble_applied and quality_mode == "maximum":
+                if not ml_result.resemble_applied and quality_mode in ["quality", "maximum"]:
                     warnings.append("Resemble Enhance unavailable, OMLSA-only result")
                 if ml_result.quality_estimate < 0.7:
                     warnings.append(
@@ -426,7 +427,7 @@ class DenoisePhase(PhaseInterface):
             noise_mag = self._estimate_noise_imcra(magnitude, t)
 
         # Schritt 2: OMLSA Gain (Cohen 2003)
-        G_omlsa, p_speech = self._compute_omlsa_gain(magnitude, noise_mag, params)
+        G_omlsa, _p_speech = self._compute_omlsa_gain(magnitude, noise_mag, params)
 
         # Schritt 3: Multi-Band Gate
         gain_multiband = self._apply_multiband_gate(G_omlsa, f, params["bands"])
@@ -476,6 +477,20 @@ class DenoisePhase(PhaseInterface):
             )
         except Exception as _pmm_exc:
             logger.debug("PsychoacousticMaskingModel nicht verfügbar: %s", _pmm_exc)
+
+        # §8.2 Energy-Preservation Guard: mindestens 20 % Energie erhalten
+        # (verhindert Fast-Stille auf sauberem Material durch aggressive Masking/OMLSA-Kaskade)
+        _e_in = float(np.sum(audio.astype(np.float64) ** 2))
+        _e_out = float(np.sum(audio_filtered.astype(np.float64) ** 2))
+        if _e_in > 1e-6 and _e_out / _e_in < 0.20:
+            _target_ratio = 0.25  # etwas über Schwelle
+            _blend = max(0.0, min(1.0, (_target_ratio * _e_in / max(_e_out, 1e-12)) ** 0.5))
+            # blend = sqrt(target_energy / current_energy) — skaliert Output hoch
+            # Aber sicherer: Mischung mit Original
+            _alpha = 1.0 - (_e_out / _e_in) / _target_ratio  # 0…1
+            audio_filtered = ((1.0 - _alpha) * audio_filtered + _alpha * audio).astype(np.float32)
+            audio_filtered = np.clip(audio_filtered, -1.0, 1.0)
+            logger.info("Energy-Preservation Guard: e_ratio=%.3f → blended with alpha=%.3f", _e_out / _e_in, _alpha)
 
         # Statistiken
         reduction_db = self._measure_noise_reduction(audio, audio_filtered)
@@ -789,8 +804,8 @@ if __name__ == "__main__":
     audio_with_noise = np.column_stack([audio_with_noise, audio_with_noise * 0.95])
 
     logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
-    logger.debug(f"Content: 440 Hz tone + harmonics + drum transient")
-    logger.debug(f"Noise: Broadband high-frequency hiss (tape characteristic)")
+    logger.debug("Content: 440 Hz tone + harmonics + drum transient")
+    logger.debug("Noise: Broadband high-frequency hiss (tape characteristic)")
 
     # Test with different materials
     materials = ["tape", "vinyl", "cd_digital"]
@@ -804,7 +819,7 @@ if __name__ == "__main__":
         result = phase.process(audio_with_noise.copy(), material_type=material)
 
         if result.success:
-            logger.debug(f"✅ Processing Complete!")
+            logger.debug("✅ Processing Complete!")
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
@@ -815,7 +830,7 @@ if __name__ == "__main__":
             logger.debug(f"   Adaptive Tracking: {result.metadata['adaptive_noise_tracking']}")
             logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
         else:
-            logger.debug(f"❌ Processing Failed!")
+            logger.debug("❌ Processing Failed!")
 
     logger.debug(f"\n{'='*80}")
     logger.debug("✅ Professional Denoise v2.0 Test Complete!")
@@ -823,4 +838,4 @@ if __name__ == "__main__":
     logger.debug(f"Algorithm: {result.metadata['algorithm']}")
     logger.debug(f"Scientific Reference: {result.metadata['scientific_ref']}")
     logger.debug(f"Benchmark: {result.metadata['benchmark']}")
-    logger.debug(f"Quality Impact: 0.93 (Professional-Grade)")
+    logger.debug("Quality Impact: 0.93 (Professional-Grade)")

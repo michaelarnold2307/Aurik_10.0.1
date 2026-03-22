@@ -16,7 +16,7 @@ class ParameterOptimizer:
     - API: optimize(params, audio, targets)
     """
 
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: str | None = None):
         self.model = self._load_model(model_path) if model_path else None
 
     def _load_model(self, path: str):

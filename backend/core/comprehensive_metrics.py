@@ -17,9 +17,9 @@ Metrik-Kategorien:
 Keine Dummys/Mocks - nur reale, wissenschaftlich fundierte Implementierungen.
 """
 
-from dataclasses import asdict, dataclass
 import logging
 import warnings
+from dataclasses import asdict, dataclass
 
 import numpy as np
 from scipy import fft, signal
@@ -430,16 +430,13 @@ class ComprehensiveMetricsCalculator:
             return np.array([0.0]), np.array([0.0]), np.zeros((1, 1), dtype=np.complex64)
 
         seg = max(1, min(int(nperseg), x.size))
-        if noverlap is None:
-            ov = min(seg // 2, seg - 1)
-        else:
-            ov = min(int(noverlap), seg - 1)
+        ov = min(seg // 2, seg - 1) if noverlap is None else min(int(noverlap), seg - 1)
 
         return signal.stft(x, self.sr, nperseg=seg, noverlap=ov)
 
     def _compute_spectral_features(self, audio: np.ndarray) -> tuple[float, float, float, float]:
         """Spektrale Merkmale: Flatness, Centroid, Rolloff, Flux (vektorisiert)."""
-        f, t, Zxx = self._safe_stft(audio, nperseg=2048)
+        f, _t, Zxx = self._safe_stft(audio, nperseg=2048)
         magnitude = np.abs(Zxx)  # shape: (freq_bins, time_frames)
 
         # Spektrale Flatness — vektorisiert (kein Python-Loop)
@@ -514,10 +511,7 @@ class ComprehensiveMetricsCalculator:
 
         peaks, _ = signal.find_peaks(autocorr[1:], height=0.3)
 
-        if len(peaks) > 0:
-            tonality = float(autocorr[peaks[0] + 1])
-        else:
-            tonality = 0.0
+        tonality = float(autocorr[peaks[0] + 1]) if len(peaks) > 0 else 0.0
 
         return float(np.clip(tonality, 0, 1))
 
@@ -553,7 +547,7 @@ class ComprehensiveMetricsCalculator:
         threshold = 5 * np.std(filtered)
         clicks, _ = signal.find_peaks(np.abs(filtered), height=threshold, distance=int(0.001 * self.sr))
 
-        return int(len(clicks))
+        return len(clicks)
 
     def _detect_clipping(self, audio: np.ndarray) -> float:
         """Percentage of clipped samples."""
@@ -800,7 +794,7 @@ class ComprehensiveMetricsCalculator:
         noverlap = min(1536, int(0.75 * nperseg), nperseg - 1)
 
         # Onset detection via spectral flux
-        f, t, Zxx = self._safe_stft(audio, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = self._safe_stft(audio, nperseg=nperseg, noverlap=noverlap)
         magnitude = np.abs(Zxx)
 
         # Spectral flux
@@ -866,10 +860,7 @@ class ComprehensiveMetricsCalculator:
         # Regularity = strength of first peak
         peaks, _ = signal.find_peaks(autocorr[10:100], height=0.2)
 
-        if len(peaks) > 0:
-            regularity = float(autocorr[peaks[0] + 10])
-        else:
-            regularity = 0.3
+        regularity = float(autocorr[peaks[0] + 10]) if len(peaks) > 0 else 0.3
 
         return float(np.clip(regularity, 0, 1))
 
@@ -1090,7 +1081,7 @@ class ComprehensiveMetricsCalculator:
         loudness_factor = np.clip(rms / 0.3, 0, 1)
 
         # Spectral flux
-        f, t, Zxx = self._safe_stft(audio, nperseg=2048)
+        _f, _t, Zxx = self._safe_stft(audio, nperseg=2048)
         magnitude = np.abs(Zxx)
         flux_values = []
         for i in range(1, magnitude.shape[1]):
@@ -1236,7 +1227,7 @@ class ComprehensiveMetricsCalculator:
     def _compute_perceived_surprise(self, audio: np.ndarray) -> float:
         """Perceived surprise (high spectral flux + transients)."""
         # Spectral flux
-        f, t, Zxx = self._safe_stft(audio, nperseg=2048)
+        _f, _t, Zxx = self._safe_stft(audio, nperseg=2048)
         magnitude = np.abs(Zxx)
         flux_values = []
         for i in range(1, magnitude.shape[1]):

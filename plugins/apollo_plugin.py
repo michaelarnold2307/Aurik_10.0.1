@@ -27,10 +27,10 @@ Modell-Gewichte: ~/.aurik/models/apollo/ (via ModelDownloader)
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -131,7 +131,8 @@ class ApolloPlugin:
     def _try_load_model(self) -> None:
         """Lädt Apollo TorchScript-Modell; aktiviert DSP-Fallback bei Fehler."""
         try:
-            from backend.core.ml_memory_budget import try_allocate, release as _release  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
                 logger.info("Apollo: ML-Budget erschöpft — DSP-Fallback aktiv.")
@@ -140,8 +141,11 @@ class ApolloPlugin:
         except ImportError:
             pass  # Budget-Modul fehlt → load trotzdem versuchen
         try:
-            import torch  # noqa: PLC0415
+            import os as _os
 
+            import torch
+
+            torch.set_num_threads(_os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
             model_path = self.MODELS_DIR / self._MODEL_FILENAME
             if model_path.exists():
                 self._torch_model = torch.jit.load(
@@ -151,7 +155,7 @@ class ApolloPlugin:
                 self._model_loaded = True
                 logger.info("🟡 Apollo TorchScript geladen: %s", model_path.name)
                 try:
-                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                    from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
                     _reg_plm(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB, unload_fn=_unload_apollo)
                 except Exception:
                     pass
@@ -165,7 +169,7 @@ class ApolloPlugin:
             logger.debug("torch nicht verfügbar — Apollo DSP-Fallback aktiv")
             self._fallback_active = True
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                from backend.core.ml_memory_budget import release as _release
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -173,7 +177,7 @@ class ApolloPlugin:
             logger.warning("Apollo Modell-Lade-Fehler: %s — DSP-Fallback", exc)
             self._fallback_active = True
             try:
-                from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                from backend.core.ml_memory_budget import release as _release
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -267,8 +271,8 @@ class ApolloPlugin:
             4. NaN-Guard + Clip [-1, 1]
         """
         try:
-            import torch  # noqa: PLC0415
-            import torchaudio  # noqa: PLC0415
+            import torch
+            import torchaudio
 
             # 1. Resample 48000 → 44100
             t = torch.from_numpy(audio).float().unsqueeze(0).unsqueeze(0)  # [1,1,T]
@@ -414,7 +418,7 @@ def _unload_apollo() -> None:
     try:
         import gc
         gc.collect()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 

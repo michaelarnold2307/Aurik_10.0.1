@@ -31,12 +31,12 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 import logging
 import os
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 import numpy as np
 import scipy.signal as sig
@@ -310,10 +310,7 @@ class CPUPipeline:
             for ch in processed_channels
         ]
 
-        if audio.ndim == 1:
-            result = trimmed[0].astype(np.float32)
-        else:
-            result = np.stack(trimmed, axis=0).astype(np.float32)
+        result = trimmed[0].astype(np.float32) if audio.ndim == 1 else np.stack(trimmed, axis=0).astype(np.float32)
 
         total_time = time.perf_counter() - t0
 

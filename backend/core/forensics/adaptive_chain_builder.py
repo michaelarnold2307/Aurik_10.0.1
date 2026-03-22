@@ -16,8 +16,8 @@ Features:
 - Parameter Inference
 """
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core.forensics.unified_analyzer import UnifiedForensicAnalysis
@@ -399,7 +399,7 @@ class AdaptiveChainBuilder:
                 # Disable low-confidence modules in non-aggressive mode
                 if not aggressive:
                     # Check if module addresses a low-confidence defect
-                    for defect in forensic_analysis.defects_detected.keys():
+                    for defect in forensic_analysis.defects_detected:
                         if defect in module.reason:
                             confidence = forensic_analysis.defect_confidences.get(defect, 0.0)
                             if confidence < 0.3:

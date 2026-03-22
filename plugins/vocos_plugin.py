@@ -13,12 +13,12 @@ CPU-Only: CPUExecutionProvider — kein CUDA.
 Out-of-the-Box: Kein Download beim ersten Start.
 """
 
-from dataclasses import dataclass, field
 import logging
 import math
-from math import gcd
 import os
 import threading
+from dataclasses import dataclass, field
+from math import gcd
 
 import numpy as np
 from scipy.signal import istft, resample_poly, stft
@@ -139,7 +139,8 @@ class VocosPlugin:
         # ── ML-Budget-Check VOR dem Laden (§5.1 OOM-Schutz) ──────────────────
         _allocated = False
         try:
-            from backend.core.ml_memory_budget import try_allocate, release as _release  # noqa: PLC0415
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
             if not try_allocate("Vocos", size_gb=0.12):
                 logger.warning("Vocos: ML-Budget erschöpft — Griffin-Lim-Fallback")
                 return
@@ -179,7 +180,7 @@ class VocosPlugin:
                 logger.info("Vocos 24 kHz ONNX geladen: %s", path)
             # ── PLM-Registrierung (LRU-Tracking, §5.1 OOM-Schutz) ─────────────────
             try:
-                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager
                 _self_ref = self
 
                 def _vocos_unload() -> None:
@@ -187,7 +188,7 @@ class VocosPlugin:
                     _self_ref._model_loaded = False
                     _self_ref._fallback_mode = "griffin_lim_fallback"
                     try:
-                        from backend.core.ml_memory_budget import release as _ml_release  # noqa: PLC0415
+                        from backend.core.ml_memory_budget import release as _ml_release
                         _ml_release("Vocos")
                     except ImportError:
                         pass
@@ -199,7 +200,7 @@ class VocosPlugin:
             logger.warning("Vocos ONNX Fehler: %s — Griffin-Lim-Fallback.", exc)
             if _allocated:
                 try:
-                    from backend.core.ml_memory_budget import release as _release  # noqa: PLC0415, F811
+                    from backend.core.ml_memory_budget import release as _release
                     _release("Vocos")
                 except ImportError:
                     pass

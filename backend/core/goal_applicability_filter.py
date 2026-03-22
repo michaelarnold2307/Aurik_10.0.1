@@ -7,10 +7,10 @@ Filtert physikalisch nicht messbare Musical Goals heraus.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from dataclasses import dataclass
 from typing import Dict, FrozenSet, Optional
 
 import numpy as np
@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 class GoalApplicabilityResult:
     """Spec §2.32"""
 
-    applicable: FrozenSet[str]
-    inapplicable: FrozenSet[str]
-    reasons: Dict[str, str]
+    applicable: frozenset[str]
+    inapplicable: frozenset[str]
+    reasons: dict[str, str]
 
-    def as_dict(self) -> Dict[str, object]:
+    def as_dict(self) -> dict[str, object]:
         """Serialisierungsformat f\u00fcr Logging und API."""
         return {
             "applicable": sorted(self.applicable),
@@ -35,7 +35,7 @@ class GoalApplicabilityResult:
         }
 
 
-_ALWAYS_APPLICABLE: FrozenSet[str] = frozenset(
+_ALWAYS_APPLICABLE: frozenset[str] = frozenset(
     {
         "natuerlichkeit",
         "authentizitaet",
@@ -46,7 +46,7 @@ _ALWAYS_APPLICABLE: FrozenSet[str] = frozenset(
     }
 )
 
-_ALL_GOALS: FrozenSet[str] = frozenset(
+_ALL_GOALS: frozenset[str] = frozenset(
     {
         "brillanz",
         "waerme",
@@ -85,15 +85,15 @@ class GoalApplicabilityFilter:
         SeparationFidelityMetric: Mono oder <2 Instrumente
     """
 
-    ALWAYS_APPLICABLE: FrozenSet[str] = _ALWAYS_APPLICABLE
+    ALWAYS_APPLICABLE: frozenset[str] = _ALWAYS_APPLICABLE
 
     def evaluate(
         self,
-        audio: Optional[np.ndarray] = None,
+        audio: np.ndarray | None = None,
         sr: int = 48000,
         material: str = "unknown",
-        era_decade: Optional[int] = None,
-        panns_tags: Optional[Dict[str, float]] = None,
+        era_decade: int | None = None,
+        panns_tags: dict[str, float] | None = None,
         audiosr_available: bool = False,
     ) -> GoalApplicabilityResult:
         """Spec §2.32: Wertet aus, welche Goals anwendbar sind.
@@ -109,7 +109,7 @@ class GoalApplicabilityFilter:
         Returns:
             GoalApplicabilityResult
         """
-        inapplicable: Dict[str, str] = {}
+        inapplicable: dict[str, str] = {}
 
         # Audio-Basis-Analysen
         duration_s = 0.0
@@ -207,7 +207,7 @@ class GoalApplicabilityFilter:
 # Singleton + Convenience
 # ---------------------------------------------------------------------------
 
-_instance: Optional[GoalApplicabilityFilter] = None
+_instance: GoalApplicabilityFilter | None = None
 _lock = threading.Lock()
 
 
@@ -222,11 +222,11 @@ def get_goal_filter() -> GoalApplicabilityFilter:
 
 
 def evaluate_goal_applicability(
-    audio: Optional[np.ndarray] = None,
+    audio: np.ndarray | None = None,
     sr: int = 48000,
     material: str = "unknown",
-    era_decade: Optional[int] = None,
-    panns_tags: Optional[Dict[str, float]] = None,
+    era_decade: int | None = None,
+    panns_tags: dict[str, float] | None = None,
     audiosr_available: bool = False,
 ) -> GoalApplicabilityResult:
     """Convenience-Funktion."""
@@ -241,21 +241,21 @@ def evaluate_goal_applicability(
 
 
 # ── Öffentliche Aliase (Spec §2.32 — ohne führenden Unterstrich) ────────────
-ALL_GOALS: FrozenSet[str] = _ALL_GOALS
-ALWAYS_APPLICABLE: FrozenSet[str] = _ALWAYS_APPLICABLE
+ALL_GOALS: frozenset[str] = _ALL_GOALS
+ALWAYS_APPLICABLE: frozenset[str] = _ALWAYS_APPLICABLE
 
 # Spec-konformer Funktionsname-Alias (§3.2)
 get_goal_applicability_filter = get_goal_filter
 """Alias für get_goal_filter() — Spec-konformer Name (§3.2)."""
 
 __all__ = [
-    "GoalApplicabilityFilter",
-    "GoalApplicabilityResult",
     "ALL_GOALS",
     "ALWAYS_APPLICABLE",
+    "_ALL_GOALS",
+    "_ALWAYS_APPLICABLE",
+    "GoalApplicabilityFilter",
+    "GoalApplicabilityResult",
+    "evaluate_goal_applicability",
     "get_goal_applicability_filter",
     "get_goal_filter",
-    "evaluate_goal_applicability",
-    "_ALWAYS_APPLICABLE",
-    "_ALL_GOALS",
 ]

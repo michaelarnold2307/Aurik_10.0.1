@@ -5,9 +5,9 @@ Quantizes FP32 ONNX models to INT8 with minimal quality loss (<1%).
 Uses dynamic quantization (no calibration data needed).
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from pathlib import Path
 from typing import Any
 

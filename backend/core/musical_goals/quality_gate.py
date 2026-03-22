@@ -38,11 +38,11 @@ Autor: AI Team
 Datum: 8. Februar 2026
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -577,10 +577,7 @@ class MusicalGoalsQualityGate:
             return True
 
         # Check if brillanz is low but required
-        if baseline.get("brillanz", 0) < 0.30 and baseline.get("brillanz", 0) < 1.0:
-            return True
-
-        return False
+        return bool(baseline.get("brillanz", 0) < 0.3 and baseline.get("brillanz", 0) < 1.0)
 
     def _check_spectrum_conflicts(
         self, audio: np.ndarray, sr: int, baseline: dict[str, float], mode: ProcessingMode
@@ -860,7 +857,7 @@ class EnhancedQualityGate:
         """Lazy load VERSA plugin (§4.4 CDPAM-Nachfolger)."""
         if self._versa_plugin is None:
             try:
-                from plugins.versa_plugin import get_versa_plugin  # noqa: PLC0415
+                from plugins.versa_plugin import get_versa_plugin
 
                 self._versa_plugin = get_versa_plugin()
                 logger.info("VERSA plugin loaded (§4.4)")
@@ -939,8 +936,8 @@ class EnhancedQualityGate:
             versa = self._get_versa_plugin()
             if versa is not None:
                 try:
-                    import numpy as _np  # noqa: PLC0415
-                    import soundfile as sf  # noqa: PLC0415
+                    import numpy as _np
+                    import soundfile as sf
 
                     audio_arr, sr_v = sf.read(str(audio_path), always_2d=False)
                     audio_arr = _np.asarray(audio_arr, dtype=_np.float32)

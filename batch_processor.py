@@ -37,9 +37,9 @@ try:
 except ImportError:
     from core.defect_scanner import MaterialType  # Legacy-Pfad Fallback
 try:
-    from denker.aurik_denker import AurikDenker
+    from denker.aurik_denker import get_aurik_denker as _get_aurik_denker
 except ImportError:
-    AurikDenker = None  # type: ignore[assignment,misc]
+    _get_aurik_denker = None  # type: ignore[assignment,misc]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -147,20 +147,17 @@ class BatchProcessor:
             logger.info(f"Processing: {input_file.name}")
             audio_data, file_sr = sf.read(str(input_file))
 
-            if AurikDenker is not None:
-                denker = AurikDenker()
-                mode = (config or {}).pop("mode", "restoration")
-                denker_result = denker.denke(audio_data, file_sr, mode=mode)
-                restorer_result = denker_result
-                restored_audio = denker_result.audio
-            else:
-                # Letzter Fallback: UV3 direkt (nur wenn AurikDenker nicht importierbar)
-                from backend.core.unified_restorer_v3 import UnifiedRestorerV3  # noqa: PLC0415
-                restorer = UnifiedRestorerV3()
-                restorer_result = restorer.restore(
-                    audio_data, sample_rate=file_sr, material=material, **(config if config else {})
+            if _get_aurik_denker is None:
+                raise RuntimeError(
+                    "AurikDenker nicht verfügbar — Backend-Import fehlgeschlagen. "
+                    "Installation prüfen: denker/aurik_denker.py muss ladbar sein."
                 )
-                restored_audio = restorer_result.audio
+            # §2.2 Canonical Singleton-Einstiegspunkt (No-Competing-Instances-Protokoll)
+            denker = _get_aurik_denker()
+            mode = (config or {}).pop("mode", "restoration")
+            denker_result = denker.denke(audio_data, file_sr, mode=mode)
+            restorer_result = denker_result
+            restored_audio = denker_result.audio
 
             sf.write(str(output_file), restored_audio, file_sr)
 

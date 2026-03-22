@@ -15,16 +15,17 @@ Autor: AI Team
 Datum: 8. Februar 2026
 """
 
+import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-import json
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import yaml
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -310,7 +311,7 @@ class ConductEnforcer:
                 )
 
         # === 8. LISTENER CONSENSUS CHECK (Warning only) ===
-        listener_consensus_threshold = (  # noqa: F841
+        (
             self.rules.get("principles", {}).get("hoerer_konsens", {}).get("listener_consensus_threshold", 0.70)
         )
 

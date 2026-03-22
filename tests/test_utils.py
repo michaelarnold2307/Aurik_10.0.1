@@ -383,7 +383,10 @@ def generate_audio_by_quality(
 
     spec = MATERIAL_QUALITY_SPECS[quality_level]
     n_samples = int(sr * duration)
-    rng = np.random.default_rng(seed=hash(quality_level) % 2**32)
+    # §AMRB-Seeding-Invariante: MD5-basierter Seed — kein hash() (prozessabhängig ohne PYTHONHASHSEED)
+    import hashlib as _hl
+    _seed = int(_hl.md5(str(quality_level).encode()).hexdigest()[:8], 16)
+    rng = np.random.default_rng(seed=_seed)
 
     # Basiston: Mehrere Sinus-Komponenten (vereinfachtes Musiksignal)
     t = np.linspace(0, duration, n_samples, endpoint=False)
@@ -435,7 +438,10 @@ def generate_medium_specific_audio(
 
     spec = MEDIUM_SPECIFIC_THRESHOLDS[medium_type]
     n_samples = int(sr * duration)
-    rng = np.random.default_rng(seed=hash(medium_type) % 2**32)
+    # §AMRB-Seeding-Invariante: MD5-basierter Seed — kein hash() (prozessabhängig ohne PYTHONHASHSEED)
+    import hashlib as _hl
+    _seed = int(_hl.md5(str(medium_type).encode()).hexdigest()[:8], 16)
+    rng = np.random.default_rng(seed=_seed)
 
     # Basiston
     t = np.linspace(0, duration, n_samples, endpoint=False)

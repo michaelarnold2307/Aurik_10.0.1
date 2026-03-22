@@ -21,9 +21,9 @@ Autor: AURIK AI Team
 Datum: 12. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np
@@ -164,10 +164,7 @@ class MaterialQualityAnalyzer:
             MaterialQualityAssessment mit allen Metriken
         """
         # Ensure mono for analysis
-        if audio.ndim > 1:
-            audio_mono = np.mean(audio, axis=0)
-        else:
-            audio_mono = audio
+        audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
         # 1. Analyze Medium Chain
         medium_chain, generation_count = self._analyze_medium_chain(medium_detection)
@@ -179,7 +176,7 @@ class MaterialQualityAnalyzer:
         dynamic_range_db = self._measure_dynamic_range(audio_mono)
 
         # 2.5 Extract Defects from Forensics (ML-basiert, 98%+ Recall)
-        defect_count, defects_severity_score = self._extract_defects_from_forensics(forensic_analysis)
+        _defect_count, defects_severity_score = self._extract_defects_from_forensics(forensic_analysis)
 
         # 3. Calculate Overall Degradation Score
         degradation_score = self._calculate_degradation_score(
@@ -395,10 +392,7 @@ class MaterialQualityAnalyzer:
         rms = np.sqrt(np.mean(audio**2))
         peak = np.max(np.abs(audio))
 
-        if rms > 0:
-            dr_db = 20 * np.log10(peak / rms)
-        else:
-            dr_db = 0.0
+        dr_db = 20 * np.log10(peak / rms) if rms > 0 else 0.0
 
         return float(dr_db)
 

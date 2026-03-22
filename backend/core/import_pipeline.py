@@ -18,11 +18,11 @@ from backend.core.forensics.analysis_and_modules import FeatureExtractor, Policy
 logger = logging.getLogger(__name__)
 
 
-_instance: Optional["ImportPipeline"] = None
+_instance: ImportPipeline | None = None
 _lock = threading.Lock()
 
 
-def get_import_pipeline(policy_template: dict[str, Any] | None = None) -> "ImportPipeline":
+def get_import_pipeline(policy_template: dict[str, Any] | None = None) -> ImportPipeline:
     """Get or create ImportPipeline singleton.
 
     Args:

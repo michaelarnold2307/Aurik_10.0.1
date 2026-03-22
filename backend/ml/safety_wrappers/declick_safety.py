@@ -175,7 +175,7 @@ def compute_transient_density(audio: np.ndarray, sr: int) -> float:
     hop_length = 512
 
     # Compute STFT
-    f, t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=2048 - hop_length)
+    _f, _t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=2048 - hop_length)
 
     # Spectral flux (change in spectrum)
     mag = np.abs(Zxx)
@@ -394,8 +394,8 @@ class DeClickSafety(BaseSafetyWrapper):
             return PostCheckResult(passed=False, quality_score=0.0, issues=issues)
 
         # 1. Check click reduction
-        has_clicks_before, count_before, _ = detect_clicks(original, sr)
-        has_clicks_after, count_after, _ = detect_clicks(processed, sr)
+        _has_clicks_before, count_before, _ = detect_clicks(original, sr)
+        _has_clicks_after, count_after, _ = detect_clicks(processed, sr)
 
         metrics["clicks_before"] = count_before
         metrics["clicks_after"] = count_after

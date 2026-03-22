@@ -30,8 +30,8 @@ Autor: Aurik v8.0 - Psychoacoustic Core
 Lizenz: Proprietär
 """
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.interpolate import interp1d

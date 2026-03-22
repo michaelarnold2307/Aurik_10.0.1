@@ -28,11 +28,11 @@ Author: AI Team
 Date: 8. Februar 2026
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np

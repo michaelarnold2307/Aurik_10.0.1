@@ -18,13 +18,13 @@ Invarianten:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hashlib
 import json
 import logging
 import math
 import pathlib
 import threading
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -41,10 +41,10 @@ class SessionState:
     session_id: str
     material: str
     n_files: int = 0
-    best_params: Dict[str, float] = field(default_factory=dict)
+    best_params: dict[str, float] = field(default_factory=dict)
     best_score: float = 0.0
-    scores: List[float] = field(default_factory=list)
-    all_params: List[Dict[str, float]] = field(default_factory=list)
+    scores: list[float] = field(default_factory=list)
+    all_params: list[dict[str, float]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -77,13 +77,13 @@ class BatchSessionLearner:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._sessions: Dict[str, SessionState] = {}
+        self._sessions: dict[str, SessionState] = {}
 
     # ----------------------------------------------------------------
     # Public API
     # ----------------------------------------------------------------
 
-    def start_session(self, file_paths: List[pathlib.Path]) -> str:
+    def start_session(self, file_paths: list[pathlib.Path]) -> str:
         """Erstellt oder lädt Session. Gibt session_id zurück.
 
         Args:
@@ -118,7 +118,7 @@ class BatchSessionLearner:
         self,
         session_id: str,
         material: str,
-    ) -> Optional[Dict[str, float]]:
+    ) -> dict[str, float] | None:
         """GP-Warm-Start-Parameter für nächste Datei oder None.
 
         Gibt die bisher besten Parameter der Session zurück,
@@ -149,7 +149,7 @@ class BatchSessionLearner:
         self,
         session_id: str,
         material: str,
-        params: Dict[str, float],
+        params: dict[str, float],
         score: float,
     ) -> None:
         """Aktualisiert Session-State nach Restaurierung einer Datei.
@@ -231,7 +231,7 @@ class BatchSessionLearner:
             existing_best = 0.0
             if memory_path.exists():
                 try:
-                    with open(memory_path, "r", encoding="utf-8") as fh:
+                    with open(memory_path, encoding="utf-8") as fh:
                         data = json.load(fh)
                     obs = data.get("observations", [])
                     if obs:
@@ -252,7 +252,7 @@ class BatchSessionLearner:
                 }
                 try:
                     if memory_path.exists():
-                        with open(memory_path, "r", encoding="utf-8") as fh:
+                        with open(memory_path, encoding="utf-8") as fh:
                             data = json.load(fh)
                     else:
                         data = {"observations": [], "version": 1}
@@ -271,7 +271,7 @@ class BatchSessionLearner:
         except Exception as exc:
             logger.debug("BatchSession finalize fehlgeschlagen: %s", exc)
 
-    def _detect_session_id(self, file_paths: List[pathlib.Path]) -> str:
+    def _detect_session_id(self, file_paths: list[pathlib.Path]) -> str:
         """SHA256[:8] des gemeinsamen Eltern-Ordnerpfads."""
         if not file_paths:
             return "default"
@@ -295,13 +295,13 @@ class BatchSessionLearner:
         except Exception as exc:
             logger.debug("BatchSession-Persistenz fehlgeschlagen: %s", exc)
 
-    def _load_state(self, session_id: str) -> Optional[SessionState]:
+    def _load_state(self, session_id: str) -> SessionState | None:
         """Lädt persistierten Session-State oder None."""
         path = self.SESSION_DIR / f"{session_id}.json"
         if not path.exists():
             return None
         try:
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
             return SessionState(
                 session_id=data.get("session_id", session_id),
@@ -319,7 +319,7 @@ class BatchSessionLearner:
 # Thread-sicherer Singleton (Double-Checked Locking §3.2)
 # ---------------------------------------------------------------------------
 
-_instance: Optional[BatchSessionLearner] = None
+_instance: BatchSessionLearner | None = None
 _lock = threading.Lock()
 
 

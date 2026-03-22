@@ -27,11 +27,11 @@ class ModelReloadResult:
     name: str
 
 
-_instance: Optional["ModelManager"] = None
+_instance: ModelManager | None = None
 _lock = threading.Lock()
 
 
-def get_model_manager() -> "ModelManager":
+def get_model_manager() -> ModelManager:
     """Get or create ModelManager singleton.
 
     Returns:
@@ -116,7 +116,7 @@ class ModelManager:
             if not self.audit_log:
                 return ""
             output = io.StringIO()
-            keys = sorted({k for entry in self.audit_log for k in entry.keys()})
+            keys = sorted({k for entry in self.audit_log for k in entry})
             writer = csv.DictWriter(output, fieldnames=keys)
             writer.writeheader()
             for entry in self.audit_log:
@@ -135,7 +135,7 @@ class ModelManager:
                 ),
                 "feedback": [f for f in self.user_feedback if f.get("model") == name],
             }
-            for name in self.models.keys()
+            for name in self.models
         }
 
     def register_model(self, name: str, model_obj: Any, metadata: dict[str, Any]) -> None:

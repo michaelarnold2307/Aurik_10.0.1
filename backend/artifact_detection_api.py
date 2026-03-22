@@ -1,8 +1,8 @@
 # REST-API für Deep-Learning Artefakt-Detection in Aurik
 # FastAPI, Batch & Echtzeit
 
-from fastapi import FastAPI, File, UploadFile
 import soundfile as sf
+from fastapi import FastAPI, File, UploadFile
 
 from plugins.artifact_detection_plugin import ArtifactDetectionPlugin
 

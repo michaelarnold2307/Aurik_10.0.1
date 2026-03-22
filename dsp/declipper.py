@@ -95,7 +95,8 @@ class Declipper:
         Invarianten: NaN/Inf-frei, Ausgang ∈ [−1, 1].
         """
 
-        from scipy.signal import istft as _istft, stft as _stft
+        from scipy.signal import istft as _istft
+        from scipy.signal import stft as _stft
 
         x = np.nan_to_num(x.copy().astype(np.float64), nan=0.0, posinf=1.0, neginf=-1.0)
         clip_mask = np.abs(x) >= self._CLIP_THRESH

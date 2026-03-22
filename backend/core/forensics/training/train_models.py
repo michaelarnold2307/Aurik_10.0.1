@@ -19,11 +19,11 @@ Author: AURIK Team
 Date: 11. Februar 2026
 """
 
-from dataclasses import dataclass
 import json
 import logging
-from pathlib import Path
 import time
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -344,9 +344,9 @@ class ForensicsTrainingPipeline:
         start_time = time.time()
 
         # Train models
-        medium_detector, medium_report = self.train_medium_detector(save_models)
-        era_detector, era_report = self.train_era_detector(save_models)
-        defect_detector, defect_report = self.train_defect_detector(save_models)
+        medium_detector, _medium_report = self.train_medium_detector(save_models)
+        era_detector, _era_report = self.train_era_detector(save_models)
+        defect_detector, _defect_report = self.train_defect_detector(save_models)
 
         total_time = time.time() - start_time
 

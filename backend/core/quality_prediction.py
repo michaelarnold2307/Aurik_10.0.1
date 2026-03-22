@@ -16,9 +16,9 @@ Author: AURIK Team
 Date: 10. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np
@@ -245,10 +245,7 @@ class QualityAnalyzer:
         peak = np.max(np.abs(audio))
         noise_floor = np.percentile(np.abs(audio), 10)
 
-        if noise_floor > 1e-10:
-            dr_db = 20 * np.log10(peak / noise_floor)
-        else:
-            dr_db = 100.0
+        dr_db = 20 * np.log10(peak / noise_floor) if noise_floor > 1e-10 else 100.0
 
         return float(np.clip(dr_db, 0, 120))
 
@@ -274,10 +271,7 @@ class QualityAnalyzer:
         harmonic_power = np.sum(power[harmonic_mask])
 
         # THD
-        if fundamental_power > 0:
-            thd = 100 * harmonic_power / fundamental_power
-        else:
-            thd = 0.0
+        thd = 100 * harmonic_power / fundamental_power if fundamental_power > 0 else 0.0
 
         return float(np.clip(thd, 0, 100))
 
@@ -446,16 +440,10 @@ class QualityAnalyzer:
 
         # Low cutoff (first bin > noise floor)
         valid = power > noise_floor * 3
-        if np.any(valid):
-            low_cutoff = freqs[np.argmax(valid)]
-        else:
-            low_cutoff = 20.0
+        low_cutoff = freqs[np.argmax(valid)] if np.any(valid) else 20.0
 
         # High cutoff (last bin > noise floor)
-        if np.any(valid):
-            high_cutoff = freqs[len(valid) - np.argmax(valid[::-1]) - 1]
-        else:
-            high_cutoff = sr / 2
+        high_cutoff = freqs[len(valid) - np.argmax(valid[::-1]) - 1] if np.any(valid) else sr / 2
 
         return (float(low_cutoff), float(high_cutoff))
 
@@ -870,25 +858,24 @@ class QualityPredictionSystem:
         Returns:
             (gate_met, reason)
         """
-        # Check SNR gate
-        if "snr_db" in target_gates:
-            if current_quality.snr_db >= target_gates["snr_db"]:
-                return (True, f"SNR gate met: {current_quality.snr_db:.1f} >= {target_gates['snr_db']:.1f} dB")
+        failures: list[str] = []
 
-        # Check clarity gate
-        if "clarity" in target_gates:
-            if current_quality.clarity >= target_gates["clarity"]:
-                return (True, f"Clarity gate met: {current_quality.clarity:.2f} >= {target_gates['clarity']:.2f}")
+        if "snr_db" in target_gates and current_quality.snr_db < target_gates["snr_db"]:
+            failures.append(f"SNR {current_quality.snr_db:.1f} < {target_gates['snr_db']:.1f} dB")
 
-        # Check overall score gate
-        if "overall_score" in target_gates:
-            if current_quality.overall_score >= target_gates["overall_score"]:
-                return (
-                    True,
-                    f"Overall gate met: {current_quality.overall_score:.1f} >= {target_gates['overall_score']:.1f}",
-                )
+        if "clarity" in target_gates and current_quality.clarity < target_gates["clarity"]:
+            failures.append(f"Clarity {current_quality.clarity:.2f} < {target_gates['clarity']:.2f}")
 
-        return (False, "Quality gates not met, continue processing")
+        if "overall_score" in target_gates and current_quality.overall_score < target_gates["overall_score"]:
+            failures.append(f"Overall {current_quality.overall_score:.1f} < {target_gates['overall_score']:.1f}")
+
+        if failures:
+            return (False, "Quality gates not met, continue processing")
+
+        if target_gates:
+            return (True, "All quality gates met")
+
+        return (False, "No quality gates configured")
 
 
 # === Convenience Functions ===

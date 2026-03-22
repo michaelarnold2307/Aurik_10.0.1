@@ -24,8 +24,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
-from pathlib import Path
 import threading
+from pathlib import Path
 
 import numpy as np
 
@@ -141,7 +141,7 @@ class PANNsPlugin:
             import onnxruntime as ort
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc  # noqa: PLC0415
+                from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
                 if not _try_alloc("PANNs", size_gb=0.66):
                     logger.warning("PANNs: ML-Budget erschöpft — Spektral-Fallback.")
@@ -158,7 +158,7 @@ class PANNsPlugin:
                 self._ONNX_PATH.name,
             )
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm  # noqa: PLC0415
+                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
                 _reg_plm("PANNs", size_gb=0.66, unload_fn=lambda s=self: setattr(s, "_session", None))
             except Exception:
@@ -170,7 +170,7 @@ class PANNsPlugin:
             )
             self._session = None
             try:
-                from backend.core.ml_memory_budget import release as _rel  # noqa: PLC0415
+                from backend.core.ml_memory_budget import release as _rel
                 _rel("PANNs")
             except Exception:
                 pass
@@ -200,10 +200,7 @@ class PANNsPlugin:
         # Stereo → Mono
         if audio.ndim == 2:
             # [channels, samples] oder [samples, channels]
-            if audio.shape[0] <= 8:
-                audio = audio.mean(axis=0)
-            else:
-                audio = audio.mean(axis=1)
+            audio = audio.mean(axis=0) if audio.shape[0] <= 8 else audio.mean(axis=1)
 
         audio = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -219,7 +216,7 @@ class PANNsPlugin:
                     sr // g,
                 ).astype(np.float32)
             except Exception:
-                n_out = max(1, int(round(len(audio) * self._MODEL_SR / sr)))
+                n_out = max(1, round(len(audio) * self._MODEL_SR / sr))
                 audio = np.interp(
                     np.linspace(0, len(audio) - 1, n_out),
                     np.arange(len(audio)),

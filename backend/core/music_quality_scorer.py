@@ -36,8 +36,8 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 
