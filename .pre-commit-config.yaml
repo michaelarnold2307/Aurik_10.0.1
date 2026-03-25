@@ -81,7 +81,7 @@ repos:
     rev: v0.15.5
     hooks:
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix=false]
+        args: [--fix]
       - id: ruff-format
           # ruff-format als Black-Alternative (nur für zusätzliche Prüfungen)
 
@@ -151,8 +151,8 @@ repos:
       - id: bandit
         args:
           - --recursive
-          - --level=medium
-          - --severity=medium
+          - --severity-level=medium
+          - --confidence-level=medium
           - --exclude=tests,benchmarks,scripts
           - --skip=B101,B311,B603,B607
         files: ^(core|dsp|plugins|backend|denker)/
@@ -202,7 +202,7 @@ repos:
     hooks:
       - id: no-production-stubs
         name: "⚠️ Keine NotImplementedError-Stubs in Produktion"
-        entry: python -m pytest tests/normative/test_no_production_stubs.py -x -q
+        entry: .venv_aurik/bin/python -m pytest tests/normative/test_no_production_stubs.py -x -q
         language: system
         pass_filenames: false
         files: ^(core|dsp|plugins|backend|denker)/.*\.py$
@@ -210,7 +210,7 @@ repos:
       - id: musical-goals-thresholds
         name: "🎵 Musical-Goals-Schwellwerte unverandert"
         entry: >-
-          python -c "
+          .venv_aurik/bin/python -c "
           from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker;
           c = MusicalGoalsChecker();
           assert len(c.thresholds) == 14, f'Erwartet 14 Goals, erhalten {len(c.thresholds)}';
