@@ -22,12 +22,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
-from pathlib import Path
 import time
-from typing import Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 import soundfile as sf
 from tqdm import tqdm
@@ -227,8 +226,8 @@ class BatchProcessor:
         print("BATCH PROCESSING SUMMARY")
         print("=" * 80)
         print(f"Total Files:   {len(results)}")
-        print(f"Successful:    {len(successful)} ({len(successful)/len(results)*100:.1f}%)")
-        print(f"Failed:        {len(failed)} ({len(failed)/len(results)*100:.1f}%)")
+        print(f"Successful:    {len(successful)} ({len(successful) / len(results) * 100:.1f}%)")
+        print(f"Failed:        {len(failed)} ({len(failed) / len(results) * 100:.1f}%)")
         print(f"Total Time:    {total_time:.1f}s")
         print(f"Average Time:  {avg_time:.1f}s per file")
         print()

@@ -412,9 +412,7 @@ class LyricsAligner:
 
         # Get MFA models for this language
         if language not in self.MFA_MODELS:
-            raise ValueError(
-                f"Language '{language}' not supported for MFA. " f"Supported: {list(self.MFA_MODELS.keys())}"
-            )
+            raise ValueError(f"Language '{language}' not supported for MFA. Supported: {list(self.MFA_MODELS.keys())}")
 
         models = self.MFA_MODELS[language]
         logger.info(f"Running MFA phoneme-level alignment for {models['name']}...")
@@ -678,7 +676,10 @@ if __name__ == "__main__":
         for phoneme in word.phonemes[:3]:  # Show first 3
             logger.info(
                 "        \u2022 %s (%s): %.2fs - %.2fs",
-                phoneme.phoneme, phoneme.phoneme_type, phoneme.start_time, phoneme.end_time,
+                phoneme.phoneme,
+                phoneme.phoneme_type,
+                phoneme.start_time,
+                phoneme.end_time,
             )
         if len(word.phonemes) > 3:
             logger.info(f"        ... and {len(word.phonemes) - 3} more")

@@ -45,9 +45,9 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
+from dataclasses import dataclass, field
 
 import numpy as np
 import scipy.signal as spsig

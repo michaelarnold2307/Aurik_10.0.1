@@ -13,10 +13,10 @@ Tests cover:
 """
 
 import os
-from pathlib import Path
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest

@@ -4,8 +4,8 @@ Phase 2.3 Real-World Validation - Minimal Version
 Tests all 6 Phase 2.3 components on real audio files
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
@@ -80,16 +80,16 @@ print("=" * 60)
 total = len(results)
 success = sum(1 for r in results if r.get("success", False))
 print(f"Total tests: {total}")
-print(f"Successful:  {success} ({success/total*100:.1f}%)")
-print(f"Failed:      {total-success} ({(total-success)/total*100:.1f}%)")
+print(f"Successful:  {success} ({success / total * 100:.1f}%)")
+print(f"Failed:      {total - success} ({(total - success) / total * 100:.1f}%)")
 
 # Per-system stats
 print("\nPer-System Stats:")
-for system_name in systems.keys():
+for system_name in systems:
     sys_results = [r for r in results if r["system"] == system_name]
     sys_success = sum(1 for r in sys_results if r.get("success", False))
     sys_total = len(sys_results)
     if sys_total > 0:
-        print(f"  {system_name:8s}: {sys_success}/{sys_total} ({sys_success/sys_total*100:.0f}%)")
+        print(f"  {system_name:8s}: {sys_success}/{sys_total} ({sys_success / sys_total * 100:.0f}%)")
 
 print("\n✅ Validation complete!")

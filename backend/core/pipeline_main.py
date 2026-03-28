@@ -73,7 +73,9 @@ class AurikAutonomousPipeline:
         os.makedirs("logs", exist_ok=True)
         logger.info("AurikAutonomousPipeline bereit | Modus: %s", mode.value)
 
-    def process(self, audio: np.ndarray, sample_rate: int, progress_callback=None, **kwargs) -> AutonomousRestorationResult:
+    def process(
+        self, audio: np.ndarray, sample_rate: int, progress_callback=None, **kwargs
+    ) -> AutonomousRestorationResult:
         """
         Vollautomatische Restaurierung.
 

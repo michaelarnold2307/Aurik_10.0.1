@@ -54,12 +54,10 @@ class Individual:
             return False
 
         better_in_all = all(
-            self.objectives.get(obj, float("inf")) <= other.objectives.get(obj, float("inf"))
-            for obj in self.objectives
+            self.objectives.get(obj, float("inf")) <= other.objectives.get(obj, float("inf")) for obj in self.objectives
         )
         strictly_better_in_one = any(
-            self.objectives.get(obj, float("inf")) < other.objectives.get(obj, float("inf"))
-            for obj in self.objectives
+            self.objectives.get(obj, float("inf")) < other.objectives.get(obj, float("inf")) for obj in self.objectives
         )
 
         return better_in_all and strictly_better_in_one
@@ -567,7 +565,7 @@ if __name__ == "__main__":
 
     logger.debug(f"\nPareto front has {len(pareto_front)} solutions:")
     for i, ind in enumerate(pareto_front[:5]):  # Show first 5
-        logger.debug(f"\nSolution {i+1}:")
+        logger.debug(f"\nSolution {i + 1}:")
         logger.debug(f"  Parameters: {ind.parameters}")
         logger.debug(f"  Objectives: {ind.objectives}")
 

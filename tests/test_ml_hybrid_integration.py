@@ -34,11 +34,11 @@ import time
 import numpy as np
 import pytest
 
-from backend.core.quality_mode import QualityMode, QualityModeConfig
 from backend.core.defect_scanner import MaterialType
 from backend.core.phases.phase_09_crackle_removal import CrackleRemovalPhase
 from backend.core.phases.phase_18_noise_gate import NoiseGate
 from backend.core.phases.phase_23_spectral_repair import SpectralRepair
+from backend.core.quality_mode import QualityMode, QualityModeConfig
 
 
 def create_test_signal(duration: float = 2.0, sample_rate: int = 44100) -> np.ndarray:

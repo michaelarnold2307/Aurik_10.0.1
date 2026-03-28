@@ -112,7 +112,7 @@ class TestImport:
 
     def test_01_import_phase56_module(self):
         """Phase-56-Modul lässt sich importieren."""
-        from backend.core.phases import phase_56_spectral_band_gap_repair as m  # noqa: F401
+        from backend.core.phases import phase_56_spectral_band_gap_repair as m
 
         assert m is not None
 

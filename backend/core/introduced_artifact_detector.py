@@ -72,12 +72,17 @@ class IntroducedArtifactDetector:
     # Unterhalb dieser Schwelle ist das Residuum zu leise für eine wahrnehmbare Halluzination.
     HALLUCINATION_MIN_RMS: float = 0.032
 
+    @staticmethod
+    def _sanitize_audio(audio: np.ndarray) -> np.ndarray:
+        """Convert input to finite float32 safely without overflow warnings."""
+        arr64 = np.asarray(audio, dtype=np.float64)
+        arr64 = np.nan_to_num(arr64, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.clip(arr64, -1.0, 1.0).astype(np.float32, copy=False)
+
     def detect(self, original: np.ndarray, restored: np.ndarray, sr: int) -> IADResult:
         """Erkennt durch Restaurierung eingebrachte Artefakte."""
-        original = np.nan_to_num(np.asarray(original, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
-        restored = np.nan_to_num(np.asarray(restored, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
-        original = np.clip(original, -1.0, 1.0)
-        restored = np.clip(restored, -1.0, 1.0)
+        original = self._sanitize_audio(original)
+        restored = self._sanitize_audio(restored)
         orig_mono = original if original.ndim == 1 else original.mean(axis=0)
         rest_mono = restored if restored.ndim == 1 else restored.mean(axis=0)
         min_len = min(len(orig_mono), len(rest_mono))

@@ -155,9 +155,7 @@ def train_e2e_optimization(
         pin_memory=False,  # §9.5 CPU-only — pin_memory nur bei CUDA relevant
     )
 
-    val_loader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=False
-    )
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=False)
 
     # Initialize framework
     framework = E2EOptimizationFramework(sr=48000, device=device, checkpoint_dir=output_path / "checkpoints")
@@ -168,9 +166,9 @@ def train_e2e_optimization(
     best_val_loss = float("inf")
 
     for epoch in range(1, epochs + 1):
-        logger.info(f"\n{'='*80}")
+        logger.info(f"\n{'=' * 80}")
         logger.info(f"Epoch {epoch}/{epochs}")
-        logger.info(f"{'='*80}")
+        logger.info(f"{'=' * 80}")
 
         # Train
         train_metrics = framework.train_epoch(train_loader, epoch)

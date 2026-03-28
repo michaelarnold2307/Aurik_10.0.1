@@ -505,9 +505,9 @@ if __name__ == "__main__":
     logger.debug(f"Status: {'✅ PASSED' if analysis.passed else '❌ FAILED'}")
     logger.debug("")
     logger.debug("Harmonic Distribution:")
-    logger.debug(f"  Even Harmonics (2f,4f,6f):  {analysis.even_harmonics_ratio*100:.2f}% (optimal: 3-8%)")
-    logger.debug(f"  Odd Harmonics (3f,5f,7f):   {analysis.odd_harmonics_ratio*100:.2f}% (optimal: <1%)")
-    logger.debug(f"  Total THD:                  {analysis.total_thd*100:.2f}%")
+    logger.debug(f"  Even Harmonics (2f,4f,6f):  {analysis.even_harmonics_ratio * 100:.2f}% (optimal: 3-8%)")
+    logger.debug(f"  Odd Harmonics (3f,5f,7f):   {analysis.odd_harmonics_ratio * 100:.2f}% (optimal: <1%)")
+    logger.debug(f"  Total THD:                  {analysis.total_thd * 100:.2f}%")
     logger.debug("")
     logger.debug("Character Scores:")
     logger.debug(f"  Warmth (Even):              {analysis.warmth_score:.3f}")
@@ -537,5 +537,7 @@ if __name__ == "__main__":
         output_path = audio_path.replace(".wav", "_enhanced.wav")
         sf.write(output_path, enhanced, sr)
         logger.debug(f"✅ Enhanced audio saved: {output_path}")
-        logger.debug(f"   Even Harmonics: {report['even_harmonics_before']:.2f}% → {report['even_harmonics_after']:.2f}%")
+        logger.debug(
+            f"   Even Harmonics: {report['even_harmonics_before']:.2f}% → {report['even_harmonics_after']:.2f}%"
+        )
         logger.debug(f"   Warmth Improvement: +{report['warmth_improvement']:.3f}")

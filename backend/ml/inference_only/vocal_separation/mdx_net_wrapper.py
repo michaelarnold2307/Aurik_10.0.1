@@ -16,11 +16,9 @@ HIPS Compliance:
 """
 
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import librosa
 import numpy as np
-import torch
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +72,7 @@ class MDXNetSeparator:
         model_path = model_dir / "mdx_net_vocal_v2.onnx"
         if not model_path.exists():
             logger.warning(
-                f"MDX-Net model not found at {model_path}. " "Please download from: https://github.com/kuielab/mdx-net"
+                f"MDX-Net model not found at {model_path}. Please download from: https://github.com/kuielab/mdx-net"
             )
 
         return model_path
@@ -136,7 +134,7 @@ class MDXNetSeparator:
 
         # HIPS: Log separation attempt
         self.separation_count += 1
-        logger.info(f"MDX-Net separation #{self.separation_count}: " f"shape={audio.shape}, sr={self.sample_rate}")
+        logger.info(f"MDX-Net separation #{self.separation_count}: shape={audio.shape}, sr={self.sample_rate}")
 
         # Actual separation (placeholder)
         if self.model is None:
@@ -264,6 +262,7 @@ class MDXNetSeparator:
             # Simplified: cross-correlation peak
             xcorr = np.correlate(audio[0], audio[1], mode="valid")
             return np.max(np.abs(xcorr)) / (np.linalg.norm(audio[0]) * np.linalg.norm(audio[1]) + 1e-10)
+
         # NaN/Inf-Guard
         phase_original = phase_correlation(original)
         phase_recombined = phase_correlation(recombined)

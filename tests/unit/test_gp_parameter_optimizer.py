@@ -8,29 +8,28 @@ NaN-Guard in update(), Singleton, propose(), propose_pareto(), forget(), normali
 from __future__ import annotations
 
 import math
-import tempfile
+
 import numpy as np
 import pytest
 
 np.random.seed(1)
 
 from backend.core.gp_parameter_optimizer import (
+    MATERIAL_DEFAULTS,
     PARAMETER_SPACE,
     PARETO_OBJECTIVES,
-    MATERIAL_DEFAULTS,
     GaussianProcess,
     GPParameterOptimizer,
     MemoryEntry,
     ParameterProposal,
-    _normalize_params,
     _denormalize_params,
+    _normalize_params,
     _param_names_sorted,
     _rbf_kernel,
     get_optimizer,
     propose_parameters,
     record_quality,
 )
-
 
 # ---------------------------------------------------------------------------
 # Klasse 1: Import und Konstanten
@@ -66,7 +65,7 @@ class TestNormalization:
     def test_06_normalize_within_bounds(self):
         params = {"noise_reduction_strength": 0.5}
         vec = _normalize_params(params, PARAMETER_SPACE)
-        assert 0.0 <= vec.min() and vec.max() <= 1.0
+        assert vec.min() >= 0.0 and vec.max() <= 1.0
 
     def test_07_normalize_low_bound_gives_near_zero(self):
         lo, hi, mode = PARAMETER_SPACE["noise_reduction_strength"]
@@ -223,8 +222,7 @@ class TestPropose:
         prop = self.opt.propose(material="tape")
         for name, (lo, hi, mode) in PARAMETER_SPACE.items():
             if name in prop.parameters:
-                assert lo <= prop.parameters[name] <= hi, \
-                    f"{name}: {prop.parameters[name]} not in [{lo}, {hi}]"
+                assert lo <= prop.parameters[name] <= hi, f"{name}: {prop.parameters[name]} not in [{lo}, {hi}]"
 
     def test_29_all_materials_propose_without_error(self):
         for mat in ["tape", "vinyl", "shellac", "digital", "unknown"]:
@@ -384,10 +382,20 @@ class TestParetoObjectives:
 
     def test_45_pareto_objectives_contains_all_14_goals(self):
         expected = {
-            "brillanz", "waerme", "natuerlichkeit", "authentizitaet",
-            "emotionalitaet", "transparenz", "bass_kraft", "groove",
-            "spatial_depth", "tonal_center", "micro_dynamics",
-            "timbre_authentizitaet", "separation_fidelity", "artikulation",
+            "brillanz",
+            "waerme",
+            "natuerlichkeit",
+            "authentizitaet",
+            "emotionalitaet",
+            "transparenz",
+            "bass_kraft",
+            "groove",
+            "spatial_depth",
+            "tonal_center",
+            "micro_dynamics",
+            "timbre_authentizitaet",
+            "separation_fidelity",
+            "artikulation",
         }
         assert set(PARETO_OBJECTIVES) == expected
 
@@ -417,63 +425,72 @@ class TestParetoObjectives:
 class TestUpdateWithGoalScores:
     def test_49_update_accepts_goal_scores(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=1)
         prop = opt.propose(material="tape")
         # Should not raise
-        opt.update(prop.parameters, score=0.85, material="tape",
-                   goal_scores=_make_goal_scores(0))
+        opt.update(prop.parameters, score=0.85, material="tape", goal_scores=_make_goal_scores(0))
 
     def test_50_update_goal_scores_persisted(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=2)
         prop = opt.propose(material="tape")
         goals = _make_goal_scores(1)
         opt.update(prop.parameters, score=0.80, material="tape", goal_scores=goals)
         from backend.core.gp_parameter_optimizer import _load_memory
+
         memory = _load_memory("tape")
         assert len(memory) >= 1
         assert len(memory[-1].goal_scores) == 14
 
     def test_51_update_filters_nan_goal_scores(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=3)
         prop = opt.propose(material="vinyl")
         bad_goals = {"brillanz": float("nan"), "waerme": 0.85}
         # Should not raise
-        opt.update(prop.parameters, score=0.75, material="vinyl",
-                   goal_scores=bad_goals)
+        opt.update(prop.parameters, score=0.75, material="vinyl", goal_scores=bad_goals)
         from backend.core.gp_parameter_optimizer import _load_memory
+
         memory = _load_memory("vinyl")
         assert "brillanz" not in memory[-1].goal_scores  # NaN gefiltert
         assert memory[-1].goal_scores.get("waerme") == pytest.approx(0.85)
 
     def test_52_update_filters_inf_goal_scores(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=4)
         prop = opt.propose(material="shellac")
-        opt.update(prop.parameters, score=0.70, material="shellac",
-                   goal_scores={"groove": float("inf"), "bass_kraft": 0.88})
+        opt.update(
+            prop.parameters, score=0.70, material="shellac", goal_scores={"groove": float("inf"), "bass_kraft": 0.88}
+        )
         from backend.core.gp_parameter_optimizer import _load_memory
+
         memory = _load_memory("shellac")
         assert "groove" not in memory[-1].goal_scores
         assert "bass_kraft" in memory[-1].goal_scores
 
     def test_53_update_no_goal_scores_still_works(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=5)
         prop = opt.propose(material="digital")
         opt.update(prop.parameters, score=0.90, material="digital")
         from backend.core.gp_parameter_optimizer import _load_memory
+
         memory = _load_memory("digital")
         assert isinstance(memory[-1].goal_scores, dict)
 
     def test_54_update_goal_scores_only_pareto_keys_kept(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=6)
         prop = opt.propose(material="tape")
@@ -481,6 +498,7 @@ class TestUpdateWithGoalScores:
         goals = {**_make_goal_scores(2), "unknown_key": 0.99}
         opt.update(prop.parameters, score=0.82, material="tape", goal_scores=goals)
         from backend.core.gp_parameter_optimizer import _load_memory
+
         memory = _load_memory("tape")
         assert "unknown_key" not in memory[-1].goal_scores
 
@@ -488,9 +506,9 @@ class TestUpdateWithGoalScores:
 class TestProposeParetaMOO:
     """Tests für echten Pareto-Front MOO mit 14 separaten GPs."""
 
-    def _populate_memory(self, opt: GPParameterOptimizer, material: str,
-                         n: int, tmp_path, monkeypatch) -> None:
+    def _populate_memory(self, opt: GPParameterOptimizer, material: str, n: int, tmp_path, monkeypatch) -> None:
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         rng = np.random.default_rng(99)
         for i in range(n):
@@ -504,6 +522,7 @@ class TestProposeParetaMOO:
 
     def test_55_pareto_moo_returns_list(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=10)
         self._populate_memory(opt, "tape", 8, tmp_path, monkeypatch)
@@ -513,6 +532,7 @@ class TestProposeParetaMOO:
 
     def test_56_pareto_moo_max_5_candidates(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=11)
         self._populate_memory(opt, "vinyl", 8, tmp_path, monkeypatch)
@@ -521,6 +541,7 @@ class TestProposeParetaMOO:
 
     def test_57_pareto_moo_proposals_are_ParameterProposal(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=12)
         self._populate_memory(opt, "shellac", 8, tmp_path, monkeypatch)
@@ -530,6 +551,7 @@ class TestProposeParetaMOO:
 
     def test_58_pareto_moo_parameters_in_bounds(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=13)
         self._populate_memory(opt, "tape", 8, tmp_path, monkeypatch)
@@ -537,11 +559,11 @@ class TestProposeParetaMOO:
         for p in proposals:
             for name, val in p.parameters.items():
                 lo, hi, mode = PARAMETER_SPACE[name]
-                assert lo - 1e-6 <= float(val) <= hi + 1e-6, \
-                    f"{name}={val} out of [{lo}, {hi}]"
+                assert lo - 1e-6 <= float(val) <= hi + 1e-6, f"{name}={val} out of [{lo}, {hi}]"
 
     def test_59_pareto_moo_expected_quality_finite(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=14)
         self._populate_memory(opt, "digital", 8, tmp_path, monkeypatch)
@@ -553,6 +575,7 @@ class TestProposeParetaMOO:
 
     def test_60_pareto_moo_from_memory_true(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=15)
         self._populate_memory(opt, "tape", 8, tmp_path, monkeypatch)
@@ -562,6 +585,7 @@ class TestProposeParetaMOO:
     def test_61_pareto_moo_fallback_without_goal_scores(self, tmp_path, monkeypatch):
         """Fallback (UCB-Kappa) wenn Gedächtnis keine goal_scores hat."""
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=16)
         # Update ohne goal_scores → kein MOO-Gedächtnis
@@ -576,6 +600,7 @@ class TestProposeParetaMOO:
     def test_62_pareto_moo_cold_start_fallback(self, tmp_path, monkeypatch):
         """Cold-Start (0 Einträge) liefert mindestens 1 Vorschlag."""
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=17)
         proposals = opt.propose_pareto(material="tape", n_candidates=3, n_init=5)
@@ -583,6 +608,7 @@ class TestProposeParetaMOO:
 
     def test_63_pareto_moo_n_candidates_1(self, tmp_path, monkeypatch):
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=18)
         self._populate_memory(opt, "tape", 8, tmp_path, monkeypatch)
@@ -592,15 +618,14 @@ class TestProposeParetaMOO:
     def test_64_pareto_diverse_proposals_not_identical(self, tmp_path, monkeypatch):
         """Pareto-Kandidaten sind nicht alle identisch (Diversität durch Crowding)."""
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=19)
         self._populate_memory(opt, "tape", 12, tmp_path, monkeypatch)
         proposals = opt.propose_pareto(material="tape", n_candidates=5)
         if len(proposals) >= 2:
             p0 = proposals[0].parameters
-            at_least_one_different = any(
-                proposals[k].parameters != p0 for k in range(1, len(proposals))
-            )
+            at_least_one_different = any(proposals[k].parameters != p0 for k in range(1, len(proposals)))
             assert at_least_one_different, "Alle Pareto-Kandidaten sind identisch"
 
     def test_65_crowding_distance_select_returns_correct_count(self):
@@ -621,6 +646,7 @@ class TestProposeParetaMOO:
     def test_67_pareto_dominance_filters_dominated(self, tmp_path, monkeypatch):
         """Pareto-Kandidaten aus echtem MOO sind nicht gegenseitig dominiert."""
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=20)
         self._populate_memory(opt, "tape", 10, tmp_path, monkeypatch)
@@ -632,8 +658,10 @@ class TestProposeParetaMOO:
     def test_68_memory_serialization_roundtrip_goal_scores(self, tmp_path, monkeypatch):
         """goal_scores werden korrekt auf Disk geschrieben und gelesen."""
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         from backend.core.gp_parameter_optimizer import _load_memory, _save_memory
+
         goals = _make_goal_scores(42)
         entry = MemoryEntry(
             params_normalized=[0.5] * 10,
@@ -651,9 +679,12 @@ class TestProposeParetaMOO:
     def test_69_backward_compatible_memory_without_goal_scores(self, tmp_path, monkeypatch):
         """Alte Gedächtnis-Einträge ohne goal_scores-Feld laden ohne Fehler."""
         import json
+
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         from backend.core.gp_parameter_optimizer import _load_memory
+
         old_entry = {"params": [0.5] * 10, "score": 0.77, "ts": 1700000000.0}
         path = tmp_path / "oldmat.json"
         path.write_text(json.dumps([old_entry]))
@@ -665,6 +696,7 @@ class TestProposeParetaMOO:
     def test_70_pareto_n_candidates_clamped_to_5(self, tmp_path, monkeypatch):
         """n_candidates > 5 wird auf 5 geclampt."""
         import backend.core.gp_parameter_optimizer as gp_mod
+
         monkeypatch.setattr(gp_mod, "_MEMORY_DIR", tmp_path)
         opt = GPParameterOptimizer(rng_seed=21)
         self._populate_memory(opt, "tape", 8, tmp_path, monkeypatch)

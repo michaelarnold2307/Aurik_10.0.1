@@ -53,23 +53,26 @@ for _mod in ["plotly", "plotly.express", "plotly.graph_objects", "plotly.subplot
     sys.modules[_mod] = _m
 
 
-def _make_args() -> "types.SimpleNamespace":
+def _make_args() -> types.SimpleNamespace:
     """Erstellt Konfigurations-Namespace, der das hydra-args-Objekt simuliert."""
+
     def make_ns(d: dict) -> types.SimpleNamespace:
         ns = types.SimpleNamespace()
         for k, v in d.items():
             setattr(ns, k, make_ns(v) if isinstance(v, dict) else v)
         return ns
 
-    return make_ns({
-        "sample_rate": 22050,
-        "audio_len": 65536,
-        "cqt": {"binsoct": 64, "numocts": 7, "use_norm": False},
-        "unet_STFT": {"depth": 5},
-    })
+    return make_ns(
+        {
+            "sample_rate": 22050,
+            "audio_len": 65536,
+            "cqt": {"binsoct": 64, "numocts": 7, "use_norm": False},
+            "unet_STFT": {"depth": 5},
+        }
+    )
 
 
-def _load_ema_weights(model: "torch.nn.Module", checkpoint_path: str) -> "torch.nn.Module":
+def _load_ema_weights(model: torch.nn.Module, checkpoint_path: str) -> torch.nn.Module:
     """Lädt EMA-Gewichte aus dem Checkpoint.
 
     Der Checkpoint speichert 171 EMA-Tensoren (in model.parameters()-Reihenfolge)
@@ -83,19 +86,18 @@ def _load_ema_weights(model: "torch.nn.Module", checkpoint_path: str) -> "torch.
     Returns:
         Modell mit geladenen EMA-Gewichten
     """
-    import torch  # noqa: PLC0415
+    import torch
 
     ckpt = torch.load(checkpoint_path, map_location="cpu")
-    ema_weights = ckpt["ema_weights"]   # list[Tensor], len=171
-    orig_model_sd = ckpt["model"]       # OrderedDict, len=181
+    ema_weights = ckpt["ema_weights"]  # list[Tensor], len=171
+    orig_model_sd = ckpt["model"]  # OrderedDict, len=181
 
     # Baue State-Dict: Parameter aus EMA, Puffer aus Original
     param_names = [name for name, _ in model.named_parameters()]
     buffer_names = {name for name, _ in model.named_buffers()}
 
     assert len(param_names) == len(ema_weights), (
-        f"EMA-Zähler ({len(ema_weights)}) passt nicht zur Parameteranzahl "
-        f"({len(param_names)})"
+        f"EMA-Zähler ({len(ema_weights)}) passt nicht zur Parameteranzahl ({len(param_names)})"
     )
 
     state_dict: dict = {}
@@ -115,12 +117,11 @@ def main() -> None:
     # ------------------------------------------------------------------
     if not CHECKPOINT.exists():
         raise FileNotFoundError(
-            f"Checkpoint nicht gefunden: {CHECKPOINT}\n"
-            "Erwartet in: models/cqtdiff/src/models/cqt_weights.pt"
+            f"Checkpoint nicht gefunden: {CHECKPOINT}\nErwartet in: models/cqtdiff/src/models/cqt_weights.pt"
         )
 
     try:
-        import torch  # noqa: PLC0415
+        import torch
     except ImportError as e:
         raise ImportError(f"torch nicht verfügbar: {e}") from e
 
@@ -130,7 +131,7 @@ def main() -> None:
     print(f"Lade Checkpoint: {CHECKPOINT} (EMA step 319999)")
     args = _make_args()
 
-    from src.models.unet_cqt import Unet_CQT  # type: ignore[import]  # noqa: PLC0415
+    from src.models.unet_cqt import Unet_CQT  # type: ignore[import]
 
     model = Unet_CQT(args, "cpu")
     model.eval()
@@ -156,11 +157,11 @@ def main() -> None:
 
         def forward(self, x_noisy: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
             sigma = sigma.view(-1, 1)  # [B, 1]
-            sd2 = self.sigma_data ** 2
-            c_skip = sd2 / (sigma ** 2 + sd2)
-            c_out = sigma * self.sigma_data / (sigma ** 2 + sd2).sqrt()
-            c_in = 1.0 / (sigma ** 2 + sd2).sqrt()
-            c_noise = sigma.log() / 4.0          # [B, 1]
+            sd2 = self.sigma_data**2
+            c_skip = sd2 / (sigma**2 + sd2)
+            c_out = sigma * self.sigma_data / (sigma**2 + sd2).sqrt()
+            c_in = 1.0 / (sigma**2 + sd2).sqrt()
+            c_noise = sigma.log() / 4.0  # [B, 1]
 
             x_in = c_in * x_noisy
             raw_out = self.inner(x_in, c_noise)  # [B, 65536]
@@ -209,7 +210,7 @@ def main() -> None:
     with torch.no_grad():
         out_val = loaded(dummy_x2, dummy_sigma2)
 
-    import numpy as np  # noqa: PLC0415
+    import numpy as np
 
     assert out_val.shape == (1, audio_len), f"Validierungs-Shape fehlerhaft: {out_val.shape}"
     assert np.isfinite(out_val.numpy()).all(), "NaN/Inf in TorchScript-Ausgabe!"
@@ -219,7 +220,7 @@ def main() -> None:
 
     print(f"✓ Lade-Validierung OK — Max-Diff: {diff:.2e}")
     print(f"\n✓ Exportiert: {OUTPUT_PT}")
-    print(f"  Nächster Schritt: Aurik starten — CQTdiff wird automatisch geladen.")
+    print("  Nächster Schritt: Aurik starten — CQTdiff wird automatisch geladen.")
 
 
 if __name__ == "__main__":

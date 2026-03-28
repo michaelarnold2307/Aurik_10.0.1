@@ -50,6 +50,7 @@ class ArtifactDetectionPlugin:
             self.model.eval()
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
+
                 _self = self
                 _reg_plm(
                     self._BUDGET_NAME,
@@ -61,6 +62,7 @@ class ArtifactDetectionPlugin:
         elif _TORCH_AVAILABLE:
             try:
                 from backend.core.ml_memory_budget import release as _release
+
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -69,6 +71,7 @@ class ArtifactDetectionPlugin:
         """TorchScript-Modell laden — nur wenn torch verfügbar."""
         try:
             import os as _os
+
             torch.set_num_threads(_os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
             return torch.jit.load(path, map_location="cpu")  # CPU-only
         except Exception as exc:
@@ -81,7 +84,7 @@ class ArtifactDetectionPlugin:
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
         mono = audio.flatten() if audio.ndim > 1 else audio
         mono = np.clip(mono, -1.0, 1.0)
-        rms = float(np.sqrt(np.mean(mono ** 2)) + 1e-10)
+        rms = float(np.sqrt(np.mean(mono**2)) + 1e-10)
         rms = np.nan_to_num(rms, nan=0.0, posinf=0.0, neginf=0.0)
         peak = float(np.max(np.abs(mono)))
         peak = np.nan_to_num(peak, nan=0.0, posinf=0.0, neginf=0.0)

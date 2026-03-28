@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, TypedDict
+from typing import Any, TypedDict
 
 import numpy as np
 
@@ -68,9 +68,9 @@ class AdaptiveController:
 
     def _adaptive_feedback_loop(self, feedback: dict[str, object]) -> dict:
         # Beispiel: Integration von User-Feedback, Blindtests, Expertenbewertungen
-        user_score = feedback.get("user_score", None)
-        expert_score = feedback.get("expert_score", None)
-        blindtest_score = feedback.get("blindtest_score", None)
+        user_score = feedback.get("user_score")
+        expert_score = feedback.get("expert_score")
+        blindtest_score = feedback.get("blindtest_score")
         loop = {
             "user_score": user_score,
             "expert_score": expert_score,

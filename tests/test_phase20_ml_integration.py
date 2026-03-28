@@ -110,7 +110,9 @@ def test_phase20_ml_routing():
     print("-" * 80)
 
     try:
-        result_balanced = phase.process(reverbed_audio, sample_rate, material=MaterialType.VINYL, quality_mode="balanced")
+        result_balanced = phase.process(
+            reverbed_audio, sample_rate, material=MaterialType.VINYL, quality_mode="balanced"
+        )
         print("✓ BALANCED mode completed")
         print(f"  Algorithm: {result_balanced.metadata.get('algorithm', 'N/A')}")
         print(f"  ML Hybrid: {result_balanced.metadata.get('ml_hybrid', False)}")

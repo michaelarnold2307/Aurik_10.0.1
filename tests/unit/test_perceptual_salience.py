@@ -13,7 +13,6 @@ Validations:
 
 from __future__ import annotations
 
-
 import numpy as np
 
 from backend.core.defect_scanner import DefectAnalysisResult, DefectScore, DefectType, MaterialType

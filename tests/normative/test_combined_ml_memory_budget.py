@@ -13,7 +13,6 @@ These tests are purely configuration / contract checks — no ML model loading o
 
 from __future__ import annotations
 
-import importlib
 import math
 import threading
 
@@ -40,20 +39,20 @@ _MAX_BUDGET_GB = 12.0
 # Threshold adjusted to 3.5 GB to accommodate Lazy-Load requirement semantics (§2.37).
 _LAZY_THRESHOLD_GB = 3.5
 _LAZY_MODEL_SIZES: dict[str, float] = {
-    "AudioSR": 7.0,   # plugins/audiosr_plugin.py  _AUDIOSR_BUDGET_GB
-    "MERT":    3.7,   # plugins/mert_plugin.py     MERT full checkpoint
+    "AudioSR": 7.0,  # plugins/audiosr_plugin.py  _AUDIOSR_BUDGET_GB
+    "MERT": 3.7,  # plugins/mert_plugin.py     MERT full checkpoint
 }
 
 # Non-lazy core models always allocatable on any supported system.
 # Values sourced from each plugin's try_allocate call (plugins/*.py).
 _CORE_ALWAYS_ACTIVE: dict[str, float] = {
     "DeepFilterNetV3": 0.15,
-    "BanquetVinyl":    0.80,
-    "DemucsV4":        0.12,
-    "BasicPitch":      0.12,
-    "UVR_MDXNet":      1.20,
-    "DiffWave":        0.012,
-    "MERT-ONNX":       0.18,
+    "BanquetVinyl": 0.80,
+    "DemucsV4": 0.12,
+    "BasicPitch": 0.12,
+    "UVR_MDXNet": 1.20,
+    "DiffWave": 0.012,
+    "MERT-ONNX": 0.18,
 }
 
 _MINIMUM_SYSTEM_BUDGET_GB = _MIN_BUDGET_GB  # 16 GB system → budget ~ 5.3, clamped to 4.0
@@ -118,7 +117,7 @@ def test_lazy_models_exceed_minimum_budget_individually() -> None:
 
     This validates the lazy-load requirement: if a model fits easily into the
     minimum budget, it doesn't need lazy loading for robustness.
-    
+
     Threshold: 3.5 GB (allows ~3.7 GB MERT + core stack ≤ 4.0 GB minimum budget).
     """
     for name, gb in _LAZY_MODEL_SIZES.items():
@@ -254,7 +253,8 @@ def test_all_known_lazy_plugins_are_correctly_sized() -> None:
     # Import actual constants to verify they haven't been silently changed.
     try:
         from plugins.audiosr_plugin import _AUDIOSR_BUDGET_GB  # type: ignore[import]
-        assert _AUDIOSR_BUDGET_GB == _LAZY_MODEL_SIZES["AudioSR"], (
+
+        assert _LAZY_MODEL_SIZES["AudioSR"] == _AUDIOSR_BUDGET_GB, (
             f"AudioSR budget mismatch: plugin declares {_AUDIOSR_BUDGET_GB} GB, "
             f"test expects {_LAZY_MODEL_SIZES['AudioSR']} GB"
         )
@@ -263,6 +263,7 @@ def test_all_known_lazy_plugins_are_correctly_sized() -> None:
 
     try:
         import plugins.mert_plugin as _mp  # type: ignore[import]
+
         # MERT full checkpoint is 3.7 GB per register call
         mert_size = 3.7
         assert math.isclose(mert_size, _LAZY_MODEL_SIZES["MERT"], abs_tol=0.1), (

@@ -25,19 +25,19 @@ import numpy as np
 import pytest
 
 from backend.core.musikalischer_globalplan import (
+    _ERA_PROFILES,
+    _GENRE_MODIFIERS,
     MusikalischerGlobalplanDienst,
-    StilbewussterRestaurierungsplan,
     MusikalischesPortrait,
-    erstelle_globalplan,
-    get_musikalischer_globalplan_dienst,
-    _estimate_warmth,
+    StilbewussterRestaurierungsplan,
+    _build_semantic_description,
     _estimate_brightness,
     _estimate_dynamic_range,
     _estimate_mood,
+    _estimate_warmth,
     _nearest_era_profile,
-    _build_semantic_description,
-    _ERA_PROFILES,
-    _GENRE_MODIFIERS,
+    erstelle_globalplan,
+    get_musikalischer_globalplan_dienst,
 )
 
 SR = 48000
@@ -77,6 +77,7 @@ def dienst():
 # 1. Singleton
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_singleton_gleiche_instanz(self):
         a = get_musikalischer_globalplan_dienst()
@@ -91,7 +92,7 @@ class TestSingleton:
         def _get():
             try:
                 instances.append(get_musikalischer_globalplan_dienst())
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 errors.append(exc)
 
         threads = [threading.Thread(target=_get) for _ in range(10)]
@@ -111,6 +112,7 @@ class TestSingleton:
 # ---------------------------------------------------------------------------
 # 2. Rückgabe-Typen und Felder
 # ---------------------------------------------------------------------------
+
 
 class TestRueckgabeTypen:
     def test_plan_ist_dataclass(self, dienst, mono_sine):
@@ -172,6 +174,7 @@ class TestRueckgabeTypen:
 # ---------------------------------------------------------------------------
 # 3. Phase-Adjustments
 # ---------------------------------------------------------------------------
+
 
 class TestPhaseAdjustments:
     EXPECTED_PHASES = [
@@ -244,6 +247,7 @@ class TestPhaseAdjustments:
 # 4. Hint-Parameter (Überschreiben von Klassifikatoren)
 # ---------------------------------------------------------------------------
 
+
 class TestHints:
     def test_hint_decade_ueberschreibt_erkennung(self, dienst, mono_sine):
         plan = dienst.erstelle_plan(mono_sine, SR, hint_decade=1940)
@@ -272,6 +276,7 @@ class TestHints:
 # ---------------------------------------------------------------------------
 # 5. NaN/Inf-Robustheit
 # ---------------------------------------------------------------------------
+
 
 class TestNaNRobustheit:
     def test_nan_input_kein_crash(self, dienst):
@@ -303,6 +308,7 @@ class TestNaNRobustheit:
 # 6. Mono / Stereo
 # ---------------------------------------------------------------------------
 
+
 class TestMonoStereo:
     def test_mono_2d_shape(self, dienst, mono_sine):
         audio_2d = mono_sine[np.newaxis, :]
@@ -323,32 +329,35 @@ class TestMonoStereo:
 # 7. Ära-Profil-Mapping
 # ---------------------------------------------------------------------------
 
+
 class TestEraProfil:
-    @pytest.mark.parametrize("decade,expected_nr_max", [
-        (1890, 0.60),
-        (1920, 0.65),
-        (1940, 0.75),
-        (1960, 0.85),
-        (1990, 1.00),
-    ])
+    @pytest.mark.parametrize(
+        "decade,expected_nr_max",
+        [
+            (1890, 0.60),
+            (1920, 0.65),
+            (1940, 0.75),
+            (1960, 0.85),
+            (1990, 1.00),
+        ],
+    )
     def test_nr_sinkt_fuer_aeltere_aufnahmen(self, dienst, mono_sine, decade, expected_nr_max):
         plan = dienst.erstelle_plan(mono_sine, SR, hint_decade=decade)
         nr = plan.phase_adjustments["phase_03_denoise"]["aggressiveness"]
-        assert nr <= expected_nr_max, (
-            f"NR für {decade}er zu aggressiv: {nr:.3f} > {expected_nr_max}"
-        )
+        assert nr <= expected_nr_max, f"NR für {decade}er zu aggressiv: {nr:.3f} > {expected_nr_max}"
 
-    @pytest.mark.parametrize("decade,expected_hf_min", [
-        (1890, 3.0),
-        (1930, 6.0),
-        (1960, 12.0),
-        (1990, 18.0),
-    ])
+    @pytest.mark.parametrize(
+        "decade,expected_hf_min",
+        [
+            (1890, 3.0),
+            (1930, 6.0),
+            (1960, 12.0),
+            (1990, 18.0),
+        ],
+    )
     def test_hf_ceiling_waechst_mit_aeea(self, dienst, mono_sine, decade, expected_hf_min):
         plan = dienst.erstelle_plan(mono_sine, SR, hint_decade=decade)
-        assert plan.hf_ceiling_khz >= expected_hf_min, (
-            f"HF-Deckel für {decade}er zu niedrig: {plan.hf_ceiling_khz}"
-        )
+        assert plan.hf_ceiling_khz >= expected_hf_min, f"HF-Deckel für {decade}er zu niedrig: {plan.hf_ceiling_khz}"
 
     def test_preserve_grain_aktiv_fuer_pre_1930(self, dienst, mono_sine):
         plan = dienst.erstelle_plan(mono_sine, SR, hint_decade=1920)
@@ -362,6 +371,7 @@ class TestEraProfil:
 # ---------------------------------------------------------------------------
 # 8. Genre-Modifikatoren
 # ---------------------------------------------------------------------------
+
 
 class TestGenreModifikatoren:
     def test_schlager_erhoeht_warme(self, dienst, mono_sine):
@@ -386,6 +396,7 @@ class TestGenreModifikatoren:
 # 9. DSP-Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 class TestDSPHilfsfunktionen:
     def test_warmth_im_bereich(self, mono_sine):
         w = _estimate_warmth(mono_sine, SR)
@@ -407,12 +418,15 @@ class TestDSPHilfsfunktionen:
         b = _estimate_brightness(np.zeros(32, dtype=np.float32), SR)
         assert np.isfinite(b)
 
-    @pytest.mark.parametrize("genre,bpm,expected_keyword", [
-        ("schlager", 90, "schwungvoll"),
-        ("schlager", 60, "melancholisch"),
-        ("jazz", 120, "improvisi"),
-        ("klassik", 80, "romantisch"),
-    ])
+    @pytest.mark.parametrize(
+        "genre,bpm,expected_keyword",
+        [
+            ("schlager", 90, "schwungvoll"),
+            ("schlager", 60, "melancholisch"),
+            ("jazz", 120, "improvisi"),
+            ("klassik", 80, "romantisch"),
+        ],
+    )
     def test_mood_enthaelt_keyword(self, mono_sine, genre, bpm, expected_keyword):
         # Warmth und brightness aus echtem Signal ableiten
         mono = mono_sine
@@ -434,9 +448,14 @@ class TestDSPHilfsfunktionen:
     def test_era_profiles_vollstaendig(self):
         """Alle definierten ERA-Profile haben die Pflichtfelder."""
         required = {
-            "nr_aggressiveness", "harmonic_restore", "hf_ceiling_khz",
-            "presence_boost", "stereo_width", "warmth_target",
-            "authenticity_weight", "nr_preserves_grain",
+            "nr_aggressiveness",
+            "harmonic_restore",
+            "hf_ceiling_khz",
+            "presence_boost",
+            "stereo_width",
+            "warmth_target",
+            "authenticity_weight",
+            "nr_preserves_grain",
         }
         for decade, profile in _ERA_PROFILES.items():
             missing = required - set(profile.keys())
@@ -453,6 +472,7 @@ class TestDSPHilfsfunktionen:
 # 10. SR-Invariante
 # ---------------------------------------------------------------------------
 
+
 class TestSRInvariante:
     def test_falscher_sr_wirft_assertion(self, dienst, mono_sine):
         with pytest.raises(AssertionError, match="48000"):
@@ -462,6 +482,7 @@ class TestSRInvariante:
 # ---------------------------------------------------------------------------
 # 11. plan_version
 # ---------------------------------------------------------------------------
+
 
 class TestPlanVersion:
     def test_plan_version_vorhanden(self, dienst, mono_sine):
@@ -473,6 +494,7 @@ class TestPlanVersion:
 # ---------------------------------------------------------------------------
 # 12. Chain-aware NR-Cap
 # ---------------------------------------------------------------------------
+
 
 class TestChainAwareNRCap:
     def test_tape_mp3_chain_caps_nr_aggressiveness(self, dienst, mono_sine):

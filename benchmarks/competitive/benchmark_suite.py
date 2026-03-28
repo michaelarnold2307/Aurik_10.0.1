@@ -41,10 +41,9 @@ Manuelle Nutzung (nicht für CI):
 import argparse
 import json
 import logging
-from pathlib import Path
 import sys
 import time
-from typing import Dict, List
+from pathlib import Path
 
 import numpy as np
 import psutil
@@ -228,8 +227,8 @@ class CompetitiveBenchmark:
 
     def benchmark_aurik(self, audio_path: str, reference_path: str) -> dict:
         """Benchmark AURIK v8."""
-        from orchestrator_and_cli import process_audio_with_musical_goals
         import soundfile as sf
+        from orchestrator_and_cli import process_audio_with_musical_goals
 
         logger.info(f"Benchmarking AURIK on {audio_path}")
 
@@ -434,7 +433,7 @@ def main():
     benchmark = CompetitiveBenchmark(args.test_set)
 
     # Run benchmark
-    logger.info(f"Starting competitive benchmark...")
+    logger.info("Starting competitive benchmark...")
     benchmark.run_full_benchmark(competitors=args.competitor)
 
     # Save results

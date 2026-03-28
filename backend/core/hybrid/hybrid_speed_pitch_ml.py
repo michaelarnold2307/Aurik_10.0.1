@@ -136,6 +136,7 @@ class HybridSpeedPitch:
         """Initialize FCPE/CREPE plugin (FCPE bevorzugt, CREPE als Fallback)."""
         try:
             from plugins.fcpe_plugin import get_fcpe_plugin
+
             self.crepe = get_fcpe_plugin()
             logger.info("FCPE plugin loaded for Phase 31 speed/pitch detection (model=%s)", self.crepe.model_used)
             return
@@ -143,6 +144,7 @@ class HybridSpeedPitch:
             logger.debug("FCPE nicht verfügbar (%s) — CREPE-Fallback", e)
         try:
             from plugins.crepe_plugin import CREPEPlugin
+
             self.crepe = CREPEPlugin()
             logger.info("CREPE plugin loaded for Phase 31 speed/pitch detection")
         except Exception as e:

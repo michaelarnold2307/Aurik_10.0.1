@@ -20,11 +20,10 @@ Kettenerkennung (§6.7.2):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
-from typing import Optional
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -60,10 +59,13 @@ class SpectralFingerprint:
     def __contains__(self, item: object) -> bool:
         """Unterstützt 'key in fingerprint'-Syntax für Tests."""
         return item in (
-            "rolloff_95_hz", "rolloff_95_percent_hz",
+            "rolloff_95_hz",
+            "rolloff_95_percent_hz",
             "wow_flutter_index",
-            "hf_energy_above_16k", "hf_energy_above_16khz_percent",
-            "noise_floor_db", "effective_bandwidth_hz",
+            "hf_energy_above_16k",
+            "hf_energy_above_16khz_percent",
+            "noise_floor_db",
+            "effective_bandwidth_hz",
         )
 
     def as_dict(self) -> dict:
@@ -158,20 +160,22 @@ class MediumDetector:
     # Shellac requires narrow ACTUAL bandwidth AND high noise floor (not just rolloff_95).
     # rolloff_95 alone triggers false positives for bass-heavy digital music where 95 % of
     # spectral energy lies below 4.5 kHz even in a modern MP3.
-    SHELLAC_EFFECTIVE_BW_MAX_HZ: float = 7_000.0   # real shellac: physical BW ≤ 7 kHz
-    SHELLAC_NOISE_FLOOR_MIN_DB: float = -40.0       # shellac is always very noisy (> −40 dBFS)
+    SHELLAC_EFFECTIVE_BW_MAX_HZ: float = 7_000.0  # real shellac: physical BW ≤ 7 kHz
+    SHELLAC_NOISE_FLOOR_MIN_DB: float = -40.0  # shellac is always very noisy (> −40 dBFS)
     TAPE_ROLLOFF_MAX_HZ: float = 10_000.0
     # Calibrated to current wow/flutter proxy scale: real tape-digitized music often lands
     # around 0.03–0.08 in this metric. 0.4 was too strict and suppressed tape→mp3 detection.
     TAPE_SPEED_VARIATION_MIN: float = 0.02  # Hz std
     TAPE_NOISE_FLOOR_MAX_DB: float = -36.0  # lauter = Bandrauschen
-    TAPE_EFFECTIVE_BW_MAX_HZ: float = 14_500.0      # tape: BW ≤ ~14 kHz; MP3 1990s: ≥ 15 kHz
-    TAPE_NOISE_FLOOR_MIN_DB: float = -52.0           # tape always has some analog noise
-    TAPE_WOW_FLUTTER_MAX: float = 25.0               # reject unrealistically unstable pseudo-wow values
+    TAPE_EFFECTIVE_BW_MAX_HZ: float = 14_500.0  # tape: BW ≤ ~14 kHz; MP3 1990s: ≥ 15 kHz
+    TAPE_NOISE_FLOOR_MIN_DB: float = -52.0  # tape always has some analog noise
+    TAPE_WOW_FLUTTER_MAX: float = 25.0  # reject unrealistically unstable pseudo-wow values
     # Tape-digitised recordings have physical BW ≤ 10–11 kHz.  A music track's 5th-percentile
     # frame energy is often > -45 dBFS even in a clean MP3 (quiet musical passages ≠ tape hiss).
     # Guard against this false "tape+mp3" inference by also requiring narrow actual bandwidth.
-    TAPE_DIGITAL_BW_MAX_HZ: float = 13_500.0   # raised: 1970s cassette tape up to ~13.5 kHz         # tape+mp3 heuristic: eff_bw must be ≤ 11 kHz
+    TAPE_DIGITAL_BW_MAX_HZ: float = (
+        13_500.0  # raised: 1970s cassette tape up to ~13.5 kHz         # tape+mp3 heuristic: eff_bw must be ≤ 11 kHz
+    )
     HF_ENERGY_THRESHOLD_FRACTION: float = 0.001  # < 0.1 % → kein HF
     MP3_KERBMUSTER_THZ: float = 16_000.0  # typischer MP3-Rolloff
 
@@ -333,8 +337,7 @@ class MediumDetector:
         # energy below 4.5 kHz. We require BOTH narrow effective bandwidth AND high noise floor.
         if (
             not benign_codec_source
-            and
-            fp.rolloff_95_hz < self.SHELLAC_ROLLOFF_MAX_HZ
+            and fp.rolloff_95_hz < self.SHELLAC_ROLLOFF_MAX_HZ
             and fp.rolloff_95_hz > 0
             and fp.effective_bandwidth_hz < self.SHELLAC_EFFECTIVE_BW_MAX_HZ
             and fp.noise_floor_db > self.SHELLAC_NOISE_FLOOR_MIN_DB
@@ -353,8 +356,7 @@ class MediumDetector:
         # and a very quiet noise floor. Tape has limited BW and always carries analog noise.
         elif (
             not benign_codec_source
-            and
-            fp.rolloff_95_hz < self.TAPE_ROLLOFF_MAX_HZ
+            and fp.rolloff_95_hz < self.TAPE_ROLLOFF_MAX_HZ
             and fp.wow_flutter_index > self.TAPE_SPEED_VARIATION_MIN
             and fp.effective_bandwidth_hz < self.TAPE_EFFECTIVE_BW_MAX_HZ
             and fp.noise_floor_db > self.TAPE_NOISE_FLOOR_MIN_DB
@@ -377,8 +379,7 @@ class MediumDetector:
         # ── Vinyl (Crackle-Profil, mittlerer Rolloff, niedriger Rauschboden) ─
         elif (
             not benign_codec_source
-            and
-            self.TAPE_ROLLOFF_MAX_HZ <= fp.rolloff_95_hz < 18_000
+            and self.TAPE_ROLLOFF_MAX_HZ <= fp.rolloff_95_hz < 18_000
             and fp.wow_flutter_index < 0.3
             and fp.noise_floor_db < -38.0
         ):
@@ -392,7 +393,7 @@ class MediumDetector:
             chain.append("cd_digital")
             confidence_parts.append(0.70)
             chain_confidences.append(0.70)
-            evidence.append(f"Digitaler Träger: HF-Energie vorhanden ({fp.hf_energy_above_16k*100:.1f} %)")
+            evidence.append(f"Digitaler Träger: HF-Energie vorhanden ({fp.hf_energy_above_16k * 100:.1f} %)")
 
         # ── Sekundäre MP3/Codec-Kette erkennen ──────────────────────────
         has_mp3_signature = (
@@ -419,7 +420,7 @@ class MediumDetector:
                     confidence_parts.extend([0.55, 0.20])
                     chain_confidences = [0.55, 0.20]
                     evidence.append(
-                        f"Kassette+MP3-Kette: kein HF ({fp.hf_energy_above_16k*100:.2f} %), "
+                        f"Kassette+MP3-Kette: kein HF ({fp.hf_energy_above_16k * 100:.2f} %), "
                         f"Rauschboden {fp.noise_floor_db:.1f} dBFS, "
                         f"eff. BW {fp.effective_bandwidth_hz:.0f} Hz"
                     )
@@ -481,7 +482,7 @@ class MediumDetector:
 # Singleton + Convenience
 # ---------------------------------------------------------------------------
 
-_instance: Optional[MediumDetector] = None
+_instance: MediumDetector | None = None
 _lock = threading.Lock()
 
 

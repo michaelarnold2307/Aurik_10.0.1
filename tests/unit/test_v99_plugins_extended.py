@@ -490,7 +490,8 @@ class TestMetricsPlugins:
     def test_01_dnsmos_absent_or_skipped(self):
         """§4.4: dnsmos_plugin darf NICHT importierbar sein (Sprach-Corpus 16 kHz, kein Musik)."""
         try:
-            import plugins.dnsmos_plugin  # noqa: F401
+            pass
+
             pytest.fail("plugins.dnsmos_plugin ist noch vorhanden — §4.4 verbietet es (Sprach-MOS)")
         except ModuleNotFoundError:
             pass  # Korrekt: Plugin ist entfernt
@@ -498,7 +499,8 @@ class TestMetricsPlugins:
     def test_02_nisqa_absent_or_skipped(self):
         """§4.4: nisqa_plugin darf NICHT importierbar sein (Sprach-CNN, kein Musik-Training)."""
         try:
-            import plugins.nisqa_plugin  # noqa: F401
+            pass
+
             pytest.fail("plugins.nisqa_plugin ist noch vorhanden — §4.4 verbietet es (Sprach-Metrik)")
         except ModuleNotFoundError:
             pass  # Korrekt: Plugin ist entfernt
@@ -506,7 +508,8 @@ class TestMetricsPlugins:
     def test_03_pesq_absent_or_skipped(self):
         """§4.4: pesq_plugin darf NICHT importierbar sein (Telefonband 300–3400 Hz, kein Musik)."""
         try:
-            import plugins.pesq_plugin  # noqa: F401
+            pass
+
             pytest.fail("plugins.pesq_plugin ist noch vorhanden — §4.4 verbietet es (Telefonband-PESQ)")
         except ModuleNotFoundError:
             pass  # Korrekt: Plugin ist entfernt
@@ -614,9 +617,9 @@ class TestPluginsIntegration:
     ALL_PLUGINS = [
         ("plugins.artifact_detection_plugin", "ArtifactDetectionPlugin"),
         ("plugins.breath_detector", "BreathDetector"),
-        ("plugins.versa_plugin", "VersaPlugin"),           # §4.4: ersetzt CDPAM
+        ("plugins.versa_plugin", "VersaPlugin"),  # §4.4: ersetzt CDPAM
         ("plugins.crepe_plugin", "CREPEPlugin"),
-        ("plugins.mp_senet_plugin", "MpSenetPlugin"),       # §4.4: ersetzt DCCRN + FullSubNet+
+        ("plugins.mp_senet_plugin", "MpSenetPlugin"),  # §4.4: ersetzt DCCRN + FullSubNet+
         ("plugins.deepfilternet_v3_ii_plugin", "DeepFilterNetV3IIPlugin"),
         ("plugins.demucs_v4_plugin", "DemucsV4Plugin"),
         # dnsmos_plugin/nisqa_plugin/pesq_plugin: §4.4 verboten, Plugins nicht vorhanden

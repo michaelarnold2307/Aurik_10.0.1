@@ -59,6 +59,7 @@ class DiffwavePlugin:
             logger.warning("DiffWave Ladefehler: %s — DSP-Fallback.", exc)
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("DiffWave")
             except Exception:
                 pass
@@ -71,7 +72,7 @@ class DiffwavePlugin:
         n = len(mono)
 
         # Early exit for near-silent signals — diffusion/NMF would inject noise into silence
-        if float(np.sqrt(np.mean(mono ** 2))) < 1e-4:
+        if float(np.sqrt(np.mean(mono**2))) < 1e-4:
             result = mono.copy()
             if audio.ndim == 2:
                 result = np.stack([result, result], axis=1)
@@ -178,7 +179,7 @@ def _nmf_inpaint(mono: np.ndarray, mask: np.ndarray | None, sr: int = 22050) -> 
         return mono
 
     # Early exit for near-silent signals — NMF+Griffin-Lim would inject noise
-    if float(np.sqrt(np.mean(mono ** 2))) < 1e-4:
+    if float(np.sqrt(np.mean(mono**2))) < 1e-4:
         return mono.copy()
 
     x = mono.copy().astype(np.float32)

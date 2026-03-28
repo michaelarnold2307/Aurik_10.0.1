@@ -4,8 +4,8 @@ Tests für Perceptual Validation System.
 Component 0.9.2: Perceptual Validation System
 """
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -48,7 +48,9 @@ def validator_with_ab_tests():
     """Create PerceptualValidator with A/B test collection."""
     with tempfile.TemporaryDirectory() as tmpdir:
         validator = PerceptualValidator(
-            confidence_threshold=0.7, ab_test_collection_rate=1.0, ab_test_storage_path=Path(tmpdir)  # Always collect
+            confidence_threshold=0.7,
+            ab_test_collection_rate=1.0,
+            ab_test_storage_path=Path(tmpdir),  # Always collect
         )
         yield validator
 

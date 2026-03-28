@@ -31,6 +31,7 @@ def _sine(freq: float, duration_s: float = 2.0, sr: int = SR, amp: float = 0.5) 
 def _noise_band(lo_hz: float, hi_hz: float, duration_s: float = 2.0, sr: int = SR, amp: float = 0.5) -> np.ndarray:
     """Bandpass noise via Butterworth filter."""
     import scipy.signal as ss
+
     rng = np.random.default_rng(0)
     white = rng.standard_normal(int(duration_s * sr)).astype(np.float32)
     sos = ss.butter(6, [lo_hz / (sr / 2), hi_hz / (sr / 2)], btype="band", output="sos")
@@ -41,6 +42,7 @@ def _noise_band(lo_hz: float, hi_hz: float, duration_s: float = 2.0, sr: int = S
 
 def _make_phase():
     from backend.core.phases.phase_19_de_esser import DeEsserPhase
+
     return DeEsserPhase(gender="male")
 
 
@@ -72,10 +74,7 @@ def breathy_vocal_mono():
     bin_lo = int(2000 * n / SR)
     bin_hi = int(5000 * n / SR)
     rng = np.random.default_rng(7)
-    spectrum[bin_lo:bin_hi] = (
-        rng.standard_normal(bin_hi - bin_lo)
-        + 1j * rng.standard_normal(bin_hi - bin_lo)
-    )
+    spectrum[bin_lo:bin_hi] = rng.standard_normal(bin_hi - bin_lo) + 1j * rng.standard_normal(bin_hi - bin_lo)
     audio = np.fft.irfft(spectrum).astype(np.float32)[:n]
     peak = np.max(np.abs(audio)) + 1e-8
     return (audio / peak * 0.8).astype(np.float32)
@@ -184,6 +183,7 @@ class TestBreahinessGuardInProcess:
 
     def _run(self, audio, sr=SR):
         from backend.core.phases.phase_19_de_esser import DeEsserPhase, MaterialType
+
         p = DeEsserPhase(gender="female")
         return p.process(audio, sr, material=MaterialType.TAPE)
 
@@ -198,6 +198,7 @@ class TestBreahinessGuardInProcess:
     def test_breathiness_ratio_in_stats(self, breathy_vocal_mono):
         """After process(), stats must contain 'breathiness_ratio' key."""
         from backend.core.phases.phase_19_de_esser import DeEsserPhase, MaterialType
+
         p = DeEsserPhase(gender="male")
         result = p.process(breathy_vocal_mono, SR, material=MaterialType.TAPE)
         assert result.success
@@ -206,6 +207,7 @@ class TestBreahinessGuardInProcess:
 
     def test_clean_vocal_breathiness_ratio_low(self, clean_vocal_mono):
         from backend.core.phases.phase_19_de_esser import DeEsserPhase, MaterialType
+
         p = DeEsserPhase(gender="female")
         p.process(clean_vocal_mono, SR, material=MaterialType.TAPE)
         ratio = p.stats.get("breathiness_ratio", -1.0)
@@ -254,9 +256,7 @@ class TestBreahinessGuardInProcess:
         assert breathy_ratio > clean_ratio, (
             f"Breathy ratio ({breathy_ratio:.3f}) must exceed clean ratio ({clean_ratio:.3f})"
         )
-        assert breathy_ratio > 0.30, (
-            f"Breathy signal must trigger guard (ratio={breathy_ratio:.3f} must be > 0.30)"
-        )
+        assert breathy_ratio > 0.30, f"Breathy signal must trigger guard (ratio={breathy_ratio:.3f} must be > 0.30)"
 
     def test_silence_input_no_crash(self, silence):
         result = self._run(silence)

@@ -24,12 +24,12 @@ Aktivierung (in CAUSE_TO_PHASES):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import os
-from pathlib import Path
 import threading
 import time
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -139,7 +139,8 @@ class CQTdiffPlusPlugin:
         Interface:  forward(x_noisy: (1,65536), sigma: (1,1)) → (1,65536)
         """
         try:
-            from backend.core.ml_memory_budget import release as _release, try_allocate
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
                 logger.info("CQTdiff+: ML-Budget erschöpft — Fallback aktiv.")

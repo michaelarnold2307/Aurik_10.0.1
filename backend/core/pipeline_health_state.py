@@ -33,11 +33,7 @@ def pipeline_health_from_fail_reasons(fail_reasons: list[dict[str, Any]] | None)
     def _norm(value: Any) -> str:
         return str(value or "").strip().lower()
 
-    severities = {
-        _norm(entry.get("severity"))
-        for entry in reasons
-        if isinstance(entry, dict)
-    }
+    severities = {_norm(entry.get("severity")) for entry in reasons if isinstance(entry, dict)}
     if "blocked" in severities:
         return PipelineHealthState.BLOCKED
     if severities & {"critical", "critical_degraded"}:
@@ -53,9 +49,7 @@ def pipeline_health_from_fail_reasons(fail_reasons: list[dict[str, Any]] | None)
     }
 
     normalized_codes = {
-        str(entry.get("error_code", "")).strip().upper()
-        for entry in reasons
-        if isinstance(entry, dict)
+        str(entry.get("error_code", "")).strip().upper() for entry in reasons if isinstance(entry, dict)
     }
     if normalized_codes & blocked_codes:
         return PipelineHealthState.BLOCKED

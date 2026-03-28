@@ -25,10 +25,10 @@ Anwendung in Aurik:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -220,6 +220,8 @@ class LAIONCLAPPlugin:
                 try:
                     from backend.core.ml_memory_budget import (
                         release as _ml_release_onnx,
+                    )
+                    from backend.core.ml_memory_budget import (
                         try_allocate as _try_alloc_onnx,
                     )
 

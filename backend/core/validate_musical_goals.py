@@ -10,14 +10,13 @@ All checkers follow a consistent .check() → bool interface.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List
 
 import numpy as np
 
 # ---------------------------------------------------------------------------
 # VoiceMatchChecker
 # ---------------------------------------------------------------------------
+
 
 class VoiceMatchChecker:
     """Ensure processed vocal characteristics match the original.
@@ -50,6 +49,7 @@ class VoiceMatchChecker:
 # ---------------------------------------------------------------------------
 # FormantGuard
 # ---------------------------------------------------------------------------
+
 
 class FormantGuard:
     """Ensure formant frequencies are preserved within tolerance.
@@ -86,6 +86,7 @@ class FormantGuard:
 # MixBalanceChecker
 # ---------------------------------------------------------------------------
 
+
 class MixBalanceChecker:
     """Detect significant stem-level LUFS imbalances.
 
@@ -115,6 +116,7 @@ class MixBalanceChecker:
 # ---------------------------------------------------------------------------
 # PitchContourChecker
 # ---------------------------------------------------------------------------
+
 
 class PitchContourChecker:
     """Verify that the pitch contour shape is preserved (Pearson ≥ 0.70)."""
@@ -147,6 +149,7 @@ class PitchContourChecker:
 # ---------------------------------------------------------------------------
 # ArtifactChecker
 # ---------------------------------------------------------------------------
+
 
 class ArtifactChecker:
     """Container for specialised artifact-checking sub-classes."""
@@ -182,13 +185,11 @@ class ArtifactChecker:
 
         def check(self, quality_estimate: float, speedup: float) -> bool:
             """Return True when both gates pass."""
-            return (
-                float(quality_estimate) >= self.quality_threshold
-                and float(speedup) >= self.speedup_threshold
-            )
+            return float(quality_estimate) >= self.quality_threshold and float(speedup) >= self.speedup_threshold
 
 
 # Convenience functions for policy_engine.py compatibility
+
 
 def check_quality_gates(
     audio: np.ndarray,

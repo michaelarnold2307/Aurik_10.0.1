@@ -121,7 +121,11 @@ class DialogIntelligibilityEnhancer:
         # Stage 2: Nasality reduction (800-1200 Hz notch)
         if abs(self.nasality_reduction_db) > 0.1:
             result = self._apply_notch_filter(
-                result, sr, center_freq=1000.0, q=2.0, gain_db=self.nasality_reduction_db  # Nasality center
+                result,
+                sr,
+                center_freq=1000.0,
+                q=2.0,
+                gain_db=self.nasality_reduction_db,  # Nasality center
             )
 
         # Stage 3: Presence boost (3-5 kHz)
@@ -265,9 +269,9 @@ if __name__ == "__main__":
     enhanced, metrics = enhancer.process(audio, sr)
 
     logger.info("Dialog Intelligibility Enhancement applied:")
-    logger.info("  Clarity Improvement: %.1f dB", metrics['improvement_db'])
-    logger.info("  Presence Boost: %.1f dB", metrics['presence_boost_db'])
-    logger.info("  Consonant Boost: %.1f dB", metrics['consonant_boost_db'])
+    logger.info("  Clarity Improvement: %.1f dB", metrics["improvement_db"])
+    logger.info("  Presence Boost: %.1f dB", metrics["presence_boost_db"])
+    logger.info("  Consonant Boost: %.1f dB", metrics["consonant_boost_db"])
 
     # Save result
     sf.write("enhanced_dialog.wav", enhanced, sr)

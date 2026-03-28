@@ -20,22 +20,20 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from plugins.vocos_plugin import (
+    _HOP_48K,
+    _MEL_SR_24K,
+    _MEL_SR_44K,
+    _MEL_SR_48K,
+    _MODEL_44K,
+    _MODEL_48K,
+    _N_FFT_48K,
+    _N_MELS_48K,
+    _WIN_48K,
     AURIK_SR,
     MEL_SR_22K,
-    MEL_SR_44K,
     VocosPlugin,
     VocosResult,
     get_vocos_plugin,
-    _MEL_SR_48K,
-    _MEL_SR_44K,
-    _MEL_SR_24K,
-    _N_MELS_48K,
-    _N_FFT_48K,
-    _HOP_48K,
-    _WIN_48K,
-    _MODEL_48K,
-    _MODEL_44K,
-    _MODEL_24K,
 )
 
 # ---------------------------------------------------------------------------
@@ -256,7 +254,6 @@ class TestVocosPluginComputeMel(unittest.TestCase):
 
 
 class TestVocosPluginMatchLength(unittest.TestCase):
-
     def test_22_match_length_pad(self):
         """Zu kurzes Audio wird mit Nullen auf Ziellänge aufgefüllt."""
         x = np.ones(100, np.float32)
@@ -378,7 +375,6 @@ class TestVocosPluginFallback(unittest.TestCase):
 
 
 class TestVocosPluginPqsMos(unittest.TestCase):
-
     def setUp(self):
         self.plugin = VocosPlugin.__new__(VocosPlugin)
         self.plugin._prefer_sr = MEL_SR_22K
@@ -414,7 +410,6 @@ class TestVocosPluginPqsMos(unittest.TestCase):
 
 
 class TestVocosSingleton(unittest.TestCase):
-
     def test_singleton_same_object(self):
         """get_vocos_plugin() gibt immer dieselbe Instanz zurück."""
         import plugins.vocos_plugin as vmod
@@ -488,7 +483,7 @@ class TestVocosPlugin48kHz(unittest.TestCase):
 
     def test_49_priority_48k_before_44k(self):
         """48kHz-Pfad liegt im Dateisystem vor 44kHz-Pfad (Priority-Reihenfolge)."""
-        import plugins.vocos_plugin as vmod
+
         # Priorität: 48k → 44k → 24k (Spec §2.37)
         self.assertIn("48khz", _MODEL_48K)
         self.assertNotIn("48", _MODEL_44K)
@@ -557,8 +552,7 @@ class TestVocosPlugin48kHz(unittest.TestCase):
         mel = np.zeros((1, 128, T), dtype=np.float32)
         audio = sess.run(None, {"mel": mel})[0]
         expected = (T - G + 1) * hop
-        self.assertEqual(audio.shape[1], expected,
-                         f"Ausgabelänge {audio.shape[1]} != erwartet {expected}")
+        self.assertEqual(audio.shape[1], expected, f"Ausgabelänge {audio.shape[1]} != erwartet {expected}")
 
     def test_54_vocode_prefers_48k_when_loaded(self):
         """Nach _try_load(48kHz) zeigt active_backend 'vocos_onnx'."""

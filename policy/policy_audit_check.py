@@ -1,13 +1,13 @@
-from glob import glob
 import json
 import os
+from glob import glob
 
 import yaml
 
 POLICY_OVERVIEW = os.path.join(os.path.dirname(__file__), "dsp_policy_contracts_overview.yaml")
 AUDIT_DIR = "."
 
-with open(POLICY_OVERVIEW, "r") as f:
+with open(POLICY_OVERVIEW) as f:
     overview = yaml.safe_load(f)
 
 policies = overview.get("policies", [])
@@ -29,10 +29,10 @@ for policy in policies:
     failed_audits = []
     for afile in audit_files:
         if afile.endswith(".yaml"):
-            with open(afile, "r") as af:
+            with open(afile) as af:
                 arep = yaml.safe_load(af)
         else:
-            with open(afile, "r") as af:
+            with open(afile) as af:
                 arep = json.load(af)
         # Policy-Block und Qualitätsziele auslesen
         qrep = arep.get("policy", {}).get("quality", {})

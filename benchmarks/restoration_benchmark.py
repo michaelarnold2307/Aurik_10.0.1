@@ -41,12 +41,11 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import json
 import logging
-from pathlib import Path
 import time
-from typing import Dict, List, Optional, Tuple
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -373,10 +372,10 @@ class RestorationBenchmark:
 
     def print_summary(self, report: BenchmarkReport) -> None:
         """Gibt formatierte Zusammenfassung auf stdout aus."""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  AURIK RESTORATION BENCHMARK v{report.aurik_version}")
         print(f"  Zeitstempel: {report.timestamp}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         print("\n📊 TESTERGEBNISSE:\n")
         for r in report.test_results:

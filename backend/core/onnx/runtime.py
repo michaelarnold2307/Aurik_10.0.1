@@ -101,7 +101,7 @@ class ONNXInferenceSession:
             from backend.core.ml_memory_budget import release as _ml_release
             from backend.core.ml_memory_budget import try_allocate as _try_allocate
 
-            _model_size_gb = self.model_path.stat().st_size / (1024 ** 3) if self.model_path.exists() else 0.1
+            _model_size_gb = self.model_path.stat().st_size / (1024**3) if self.model_path.exists() else 0.1
             if not _try_allocate(_session_name, size_gb=_model_size_gb):
                 raise MemoryError(
                     f"ML-Budget erschöpft — ONNX-Session '{self.model_path.name}' kann nicht geladen werden. "
@@ -191,7 +191,7 @@ class ONNXInferenceSession:
             self.total_inference_time += inference_time
 
             if profile:
-                logger.info(f"Inference time: {inference_time*1000:.2f} ms")
+                logger.info(f"Inference time: {inference_time * 1000:.2f} ms")
 
             return outputs
 
@@ -357,9 +357,4 @@ class OptimizedONNXModel:
         self.session.reset_stats()
 
     def __repr__(self) -> str:
-        return (
-            f"OptimizedONNXModel("
-            f"model={self.model_path.name}, "
-            f"type={self.model_type}, "
-            f"status={self.status.value})"
-        )
+        return f"OptimizedONNXModel(model={self.model_path.name}, type={self.model_type}, status={self.status.value})"

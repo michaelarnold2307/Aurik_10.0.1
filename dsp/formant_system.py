@@ -16,11 +16,10 @@ Date: 9. Februar 2026
 """
 
 import warnings
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from scipy import signal
-from scipy.signal import butter, lfilter, sosfilt
+from scipy.signal import lfilter
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -290,7 +289,7 @@ class FormantCorrector:
             max_drift = np.max(np.abs(drift))
             mean_drift = np.mean(np.abs(drift))
 
-            drift_info[f"F{i+1}"] = {
+            drift_info[f"F{i + 1}"] = {
                 "reference_hz": ref_freq,
                 "max_drift_hz": max_drift,
                 "mean_drift_hz": mean_drift,
@@ -500,9 +499,7 @@ class SingersFormantEnhancer:
 
         return has_singers_formant, strength
 
-    def enhance(
-        self, audio: np.ndarray, sr: int, formant_freqs: np.ndarray | None = None
-    ) -> tuple[np.ndarray, dict]:
+    def enhance(self, audio: np.ndarray, sr: int, formant_freqs: np.ndarray | None = None) -> tuple[np.ndarray, dict]:
         """
         Enhance singer's formant.
 
@@ -720,25 +717,19 @@ class FormantSystem:
             English Vowels"
         """
         assert sr == 48000, f"SR muss 48000 Hz sein, erhalten: {sr}"
-        audio = np.nan_to_num(
-            np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
-        )
+        audio = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
 
         # ── Stereo: recurse per channel ──────────────────────────────── #
         if audio.ndim == 2:
             if audio.shape[0] <= 32:  # (channels, samples) format
                 channels = [
-                    self.phoneme_guided_enhance(
-                        audio[i], sr, phoneme_segments, gender, correction_strength
-                    )[0]
+                    self.phoneme_guided_enhance(audio[i], sr, phoneme_segments, gender, correction_strength)[0]
                     for i in range(audio.shape[0])
                 ]
                 result = np.stack(channels)
             else:  # (samples, channels) format
                 channels = [
-                    self.phoneme_guided_enhance(
-                        audio[:, i], sr, phoneme_segments, gender, correction_strength
-                    )[0]
+                    self.phoneme_guided_enhance(audio[:, i], sr, phoneme_segments, gender, correction_strength)[0]
                     for i in range(audio.shape[1])
                 ]
                 result = np.column_stack(channels)
@@ -786,9 +777,7 @@ class FormantSystem:
             ipa = frame_ipa[fi]
             if ipa is None:
                 # DSP fallback: classify vowel from F1/F2 position
-                ipa = VowelPhonemeFormantTargets.classify_from_formants(
-                    f1_det, f2_det, gender
-                )
+                ipa = VowelPhonemeFormantTargets.classify_from_formants(f1_det, f2_det, gender)
             if ipa is None:
                 continue
 
@@ -815,9 +804,7 @@ class FormantSystem:
                 boost_db = min(2.0, deviation / 200.0 * 2.0)
                 frame_mod = _apply_peak_eq_frame(frame_mod, sr, f_tgt, bw, boost_db)
 
-            enhanced[start_s:end_s] = (
-                (1.0 - strength) * frame_audio + strength * frame_mod
-            )
+            enhanced[start_s:end_s] = (1.0 - strength) * frame_audio + strength * frame_mod
             vowel_count += 1
 
         enhanced = np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0)
@@ -841,9 +828,7 @@ class FormantSystem:
 # ── Module-level helper (used by phoneme_guided_enhance) ────────────────────
 
 
-def _apply_peak_eq_frame(
-    audio: np.ndarray, sr: int, freq: float, bandwidth: float, gain_db: float
-) -> np.ndarray:
+def _apply_peak_eq_frame(audio: np.ndarray, sr: int, freq: float, bandwidth: float, gain_db: float) -> np.ndarray:
     """Apply a biquad peak EQ to a short audio frame (DSP helper).
 
     Args:
@@ -943,9 +928,7 @@ class VowelPhonemeFormantTargets:
     # fmt: on
 
     @classmethod
-    def get_targets(
-        cls, ipa_symbol: str, gender: str = "male"
-    ) -> tuple[float, float, float] | None:
+    def get_targets(cls, ipa_symbol: str, gender: str = "male") -> tuple[float, float, float] | None:
         """Return canonical (F1, F2, F3) targets for an IPA vowel symbol.
 
         Args:
@@ -966,9 +949,7 @@ class VowelPhonemeFormantTargets:
         return (row[0], row[1], row[2])
 
     @classmethod
-    def classify_from_formants(
-        cls, f1_hz: float, f2_hz: float, gender: str = "male"
-    ) -> str | None:
+    def classify_from_formants(cls, f1_hz: float, f2_hz: float, gender: str = "male") -> str | None:
         """Identify nearest vowel class from detected LPC F1/F2 values.
 
         Uses Euclidean distance in a normalized F1/F2 space
@@ -1092,9 +1073,7 @@ class InstrumentFormantTargets:
     # fmt: on
 
     @classmethod
-    def get_targets(
-        cls, instrument: str
-    ) -> tuple[float, float, float, float, float, float] | None:
+    def get_targets(cls, instrument: str) -> tuple[float, float, float, float, float, float] | None:
         """Return canonical (F1, F2, F3, Q1, Q2, Q3) for an instrument string.
 
         Args:
@@ -1113,6 +1092,7 @@ class InstrumentFormantTargets:
 
 
 # ── FormantSystem.instrument_guided_enhance (monkey-patched in) ───────────────
+
 
 def _instrument_guided_enhance(
     self: "FormantSystem",
@@ -1179,7 +1159,7 @@ def _instrument_guided_enhance(
 
     # Frame parameters (25 ms / 10 ms hop)
     frame_len = int(0.025 * sr)
-    hop_len   = int(0.010 * sr)
+    hop_len = int(0.010 * sr)
 
     # Track formants (LPC-based)
     try:
@@ -1196,9 +1176,9 @@ def _instrument_guided_enhance(
         }
 
     total_frames = len(formant_freqs)
-    n_samples    = len(audio_mono)
-    enhanced     = audio_mono.copy()
-    frames_done  = 0
+    n_samples = len(audio_mono)
+    enhanced = audio_mono.copy()
+    frames_done = 0
 
     # Per-frame EQ toward instrument resonance targets
     for fi in range(total_frames):
@@ -1228,7 +1208,7 @@ def _instrument_guided_enhance(
         frame_mod = _apply_peak_eq_frame(frame_mod, sr, f3_tgt, bw3, boost_f3)
 
         # Blend
-        enhanced[t0:t1] = (1.0 - correction_strength) * frame + correction_strength * frame_mod[:t1 - t0]
+        enhanced[t0:t1] = (1.0 - correction_strength) * frame + correction_strength * frame_mod[: t1 - t0]
         frames_done += 1
 
     # Apply to stereo by re-mixing
@@ -1251,7 +1231,10 @@ def _instrument_guided_enhance(
 
     logger.debug(
         "instrument_guided_enhance: instrument=%s, frames=%d/%d, strength=%.2f",
-        instrument, frames_done, total_frames, correction_strength,
+        instrument,
+        frames_done,
+        total_frames,
+        correction_strength,
     )
 
     return out, {
@@ -1298,22 +1281,22 @@ if __name__ == "__main__":
     logger.info("=" * 70)
     logger.info("")
     logger.info("[Formant Tracking]")
-    logger.info("  Formants tracked: %d", report['formant_tracking']['n_formants'])
-    logger.info("  Frames analyzed:  %d", report['formant_tracking']['n_frames'])
+    logger.info("  Formants tracked: %d", report["formant_tracking"]["n_formants"])
+    logger.info("  Frames analyzed:  %d", report["formant_tracking"]["n_frames"])
 
     logger.info("")
     logger.info("[Drift Detection]")
-    logger.info("  Has drift: %s", report['drift_detection']['has_drift'])
+    logger.info("  Has drift: %s", report["drift_detection"]["has_drift"])
     if report["drift_detection"]["has_drift"]:
         for formant, info in report["drift_detection"]["drift_info"].items():
             if info["needs_correction"]:
-                logger.info("  %s: %.1f Hz drift (corrected)", formant, info['max_drift_hz'])
+                logger.info("  %s: %.1f Hz drift (corrected)", formant, info["max_drift_hz"])
 
     if "has_singers_formant" in report["singers_formant"]:
         logger.info("")
         logger.info("[Singer's Formant]")
-        logger.info("  Detected: %s", report['singers_formant']['has_singers_formant'])
-        logger.info("  Enhancement: %.1f dB", report['singers_formant']['gain_applied_db'])
+        logger.info("  Detected: %s", report["singers_formant"]["has_singers_formant"])
+        logger.info("  Enhancement: %.1f dB", report["singers_formant"]["gain_applied_db"])
 
     logger.info("=" * 70)
 

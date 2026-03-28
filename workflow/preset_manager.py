@@ -7,7 +7,7 @@ Preset Manager für Aurik Workflow
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
 class PresetManager:
@@ -15,17 +15,17 @@ class PresetManager:
         self.preset_dir = preset_dir
         self.preset_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_preset(self, name: str, settings: Dict[str, Any]) -> Path:
+    def save_preset(self, name: str, settings: dict[str, Any]) -> Path:
         path = self.preset_dir / f"{name}.json"
         with open(path, "w") as f:
             json.dump(settings, f, indent=2)
         return path
 
-    def load_preset(self, name: str) -> Dict[str, Any]:
+    def load_preset(self, name: str) -> dict[str, Any]:
         path = self.preset_dir / f"{name}.json"
         if not path.exists():
             raise FileNotFoundError(f"Preset {name} nicht gefunden")
-        with open(path, "r") as f:
+        with open(path) as f:
             return json.load(f)
 
     def list_presets(self) -> list:

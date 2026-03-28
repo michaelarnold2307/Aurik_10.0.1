@@ -379,7 +379,7 @@ class ModelDownloader:
                             progress_callback(sota_name, 1.0)
                 except (urllib.error.URLError, OSError) as exc:
                     logger.info(
-                        "Download fehlgeschlagen (%s) — Standard-Modell bleibt aktiv. " "Fehler: %s",
+                        "Download fehlgeschlagen (%s) — Standard-Modell bleibt aktiv. Fehler: %s",
                         sota_name,
                         exc,
                     )

@@ -14,8 +14,8 @@ Usage:
 import argparse
 import json
 import logging
-from pathlib import Path
 import random
+from pathlib import Path
 
 import librosa
 import soundfile as sf
@@ -75,7 +75,7 @@ class BlindTestGenerator:
                 a_label, b_label = "test", "baseline"
 
             # Create test pair
-            test_id = f"ab_{generated+1:03d}"
+            test_id = f"ab_{generated + 1:03d}"
 
             # Copy files with neutral names
             a_out = ab_dir / f"{test_id}_A.wav"
@@ -153,7 +153,7 @@ class BlindTestGenerator:
             x_matches = "A" if x_is_a else "B"
 
             # Create test triple
-            test_id = f"abx_{generated+1:03d}"
+            test_id = f"abx_{generated + 1:03d}"
 
             # Copy files with neutral names
             a_out = abx_dir / f"{test_id}_A.wav"
@@ -213,7 +213,7 @@ class BlindTestGenerator:
         generated = 0
 
         for test_file in test_files[:count]:
-            test_id = f"rating_{generated+1:03d}"
+            test_id = f"rating_{generated + 1:03d}"
 
             # Copy file with neutral name
             out_file = rating_dir / f"{test_id}.wav"

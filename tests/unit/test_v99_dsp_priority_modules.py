@@ -16,9 +16,9 @@ Konventionen:
 
 import math
 import sys
-import pytest
 
 import numpy as np
+import pytest
 from scipy.signal import stft as scipy_stft
 
 sys.path.insert(0, ".")
@@ -1379,10 +1379,12 @@ class TestDSPPriorityIntegration:
 class TestVowelPhonemeFormantTargets:
     def test_01_import(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         assert VowelPhonemeFormantTargets is not None
 
     def test_02_get_targets_male_i(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         t = VowelPhonemeFormantTargets.get_targets("i", "male")
         assert t is not None
         f1, f2, f3 = t
@@ -1393,6 +1395,7 @@ class TestVowelPhonemeFormantTargets:
 
     def test_03_get_targets_female_i(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         t = VowelPhonemeFormantTargets.get_targets("i", "female")
         assert t is not None
         f1_f, f2_f, _ = t
@@ -1403,6 +1406,7 @@ class TestVowelPhonemeFormantTargets:
 
     def test_04_get_targets_child_scaling(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         t_c = VowelPhonemeFormantTargets.get_targets("a", "child")
         t_f = VowelPhonemeFormantTargets.get_targets("a", "female")
         assert t_c is not None and t_f is not None
@@ -1411,12 +1415,14 @@ class TestVowelPhonemeFormantTargets:
 
     def test_05_get_targets_nonvowel_returns_none(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         assert VowelPhonemeFormantTargets.get_targets("s", "male") is None
         assert VowelPhonemeFormantTargets.get_targets("p", "male") is None
         assert VowelPhonemeFormantTargets.get_targets("xyz", "male") is None
 
     def test_06_get_targets_all_ipa_finite(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         for sym in ("i", "e", "a", "o", "u", "ɪ", "ɛ", "æ", "ɑ", "ə", "ʊ"):
             for gender in ("male", "female", "child"):
                 t = VowelPhonemeFormantTargets.get_targets(sym, gender)
@@ -1425,29 +1431,34 @@ class TestVowelPhonemeFormantTargets:
 
     def test_07_classify_from_formants_i_region(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         # /i/ region: F1 low, F2 high
         vowel = VowelPhonemeFormantTargets.classify_from_formants(270, 2290, "male")
         assert vowel in ("i", "iː", "ɪ")
 
     def test_08_classify_from_formants_a_region(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         # /a/ region: F1 high, F2 mid
         vowel = VowelPhonemeFormantTargets.classify_from_formants(700, 1220, "male")
         assert vowel in ("a", "aː", "ɑ", "ɑː")
 
     def test_09_classify_from_formants_u_region(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         # /u/ region: F1 low, F2 low
         vowel = VowelPhonemeFormantTargets.classify_from_formants(300, 870, "male")
         assert vowel in ("u", "uː", "ʊ")
 
     def test_10_classify_invalid_formants_returns_none(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         assert VowelPhonemeFormantTargets.classify_from_formants(0, 0, "male") is None
         assert VowelPhonemeFormantTargets.classify_from_formants(-100, 1000, "male") is None
 
     def test_11_vowel_space_coverage(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         # All 5 cardinal vowel regions should map to distinct best symbols
         results = set()
         for f1, f2 in [(270, 2290), (700, 1220), (300, 870), (620, 1780), (420, 800)]:
@@ -1458,6 +1469,7 @@ class TestVowelPhonemeFormantTargets:
 
     def test_12_long_short_pairs_same_targets(self):
         from dsp.formant_system import VowelPhonemeFormantTargets
+
         # "i" and "iː" should have identical targets
         t1 = VowelPhonemeFormantTargets.get_targets("i", "male")
         t2 = VowelPhonemeFormantTargets.get_targets("iː", "male")
@@ -1470,33 +1482,39 @@ class TestVowelPhonemeFormantTargets:
 class TestFormantSystemPhonemeGuided:
     def test_01_method_exists(self):
         from dsp.formant_system import FormantSystem
+
         fs = FormantSystem()
         assert hasattr(fs, "phoneme_guided_enhance")
 
     def test_02_returns_tuple(self):
         from dsp.formant_system import FormantSystem
+
         fs = FormantSystem()
         result = fs.phoneme_guided_enhance(AUDIO_SINE, SR)
         assert isinstance(result, tuple) and len(result) == 2
 
     def test_03_output_shape_mono(self):
         from dsp.formant_system import FormantSystem
+
         audio_out, _ = FormantSystem().phoneme_guided_enhance(AUDIO_SINE, SR)
         assert audio_out.shape == AUDIO_SINE.shape
 
     def test_04_output_finite_mono(self):
         from dsp.formant_system import FormantSystem
+
         audio_out, _ = FormantSystem().phoneme_guided_enhance(AUDIO_SINE, SR)
         assert np.isfinite(audio_out).all()
 
     def test_05_output_clipped(self):
         from dsp.formant_system import FormantSystem
+
         loud = AUDIO_SINE * 3.0
         audio_out, _ = FormantSystem().phoneme_guided_enhance(loud, SR)
         assert np.max(np.abs(audio_out)) <= 1.0
 
     def test_06_with_phoneme_segments(self):
         from dataclasses import dataclass
+
         from dsp.formant_system import FormantSystem
 
         @dataclass
@@ -1506,30 +1524,27 @@ class TestFormantSystemPhonemeGuided:
             end_time: float
 
         segs = [FakeSeg("i", 0.0, 0.2), FakeSeg("a", 0.2, 0.5)]
-        audio_out, report = FormantSystem().phoneme_guided_enhance(
-            AUDIO_SINE, SR, phoneme_segments=segs, gender="male"
-        )
+        audio_out, report = FormantSystem().phoneme_guided_enhance(AUDIO_SINE, SR, phoneme_segments=segs, gender="male")
         assert np.isfinite(audio_out).all()
         assert "vowel_segments_processed" in report
 
     def test_07_gender_female(self):
         from dsp.formant_system import FormantSystem
-        audio_out, report = FormantSystem().phoneme_guided_enhance(
-            AUDIO_SINE, SR, gender="female"
-        )
+
+        audio_out, report = FormantSystem().phoneme_guided_enhance(AUDIO_SINE, SR, gender="female")
         assert np.isfinite(audio_out).all()
         assert report.get("gender") == "female"
 
     def test_08_correction_strength_zero_is_passthrough(self):
         from dsp.formant_system import FormantSystem
-        audio_out, _ = FormantSystem().phoneme_guided_enhance(
-            AUDIO_SINE, SR, correction_strength=0.0
-        )
+
+        audio_out, _ = FormantSystem().phoneme_guided_enhance(AUDIO_SINE, SR, correction_strength=0.0)
         # At strength=0 the output must equal the input (identity)
         assert np.allclose(audio_out, np.clip(AUDIO_SINE, -1.0, 1.0), atol=1e-5)
 
     def test_09_stereo_shape_preserved(self):
         from dsp.formant_system import FormantSystem
+
         stereo = np.column_stack([AUDIO_SINE, AUDIO_SINE * 0.9])
         audio_out, _ = FormantSystem().phoneme_guided_enhance(stereo, SR)
         assert audio_out.shape == stereo.shape
@@ -1537,6 +1552,7 @@ class TestFormantSystemPhonemeGuided:
 
     def test_10_report_contains_stats(self):
         from dsp.formant_system import FormantSystem
+
         _, report = FormantSystem().phoneme_guided_enhance(AUDIO_SINE, SR)
         assert "vowel_segments_processed" in report
         assert "total_frames" in report
@@ -1544,12 +1560,14 @@ class TestFormantSystemPhonemeGuided:
 
     def test_11_silence_no_crash(self):
         from dsp.formant_system import FormantSystem
+
         audio_out, _ = FormantSystem().phoneme_guided_enhance(AUDIO_SILENCE, SR)
         assert isinstance(audio_out, np.ndarray)
         assert np.isfinite(audio_out).all()
 
     def test_12_noise_no_crash(self):
         from dsp.formant_system import FormantSystem
+
         audio_out, _ = FormantSystem().phoneme_guided_enhance(AUDIO_NOISE, SR)
         assert np.isfinite(audio_out).all()
 
@@ -1560,41 +1578,48 @@ class TestFormantSystemPhonemeGuided:
 class TestPlosiveBurstPreserver:
     def test_01_import(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         assert PlosiveBurstPreserver is not None
 
     def test_02_instantiate(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         assert PlosiveBurstPreserver() is not None
 
     def test_03_restore_returns_result(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         result = PlosiveBurstPreserver().restore(AUDIO_SINE, SR, AUDIO_SINE)
         assert result is not None
 
     def test_04_result_audio_finite(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         r = PlosiveBurstPreserver().restore(AUDIO_SINE, SR, AUDIO_SINE)
         assert np.isfinite(r.audio).all()
 
     def test_05_result_audio_shape(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         r = PlosiveBurstPreserver().restore(AUDIO_SINE, SR, AUDIO_SINE)
         assert r.audio.shape == AUDIO_SINE.shape
 
     def test_06_result_audio_clipped(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         r = PlosiveBurstPreserver().restore(AUDIO_SINE, SR, AUDIO_SINE)
         assert np.max(np.abs(r.audio)) <= 1.0
 
     def test_07_plosive_burst_detected(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         # Synthesize a plosive-like burst: silence → sharp energy spike → decay
         n = SR
         plosive = np.zeros(n, dtype=np.float32)
         onset = int(0.1 * SR)
         burst_len = int(0.005 * SR)  # 5 ms burst
-        plosive[onset: onset + burst_len] = 0.8
-        plosive[onset + burst_len: onset + burst_len + int(0.02 * SR)] = (
+        plosive[onset : onset + burst_len] = 0.8
+        plosive[onset + burst_len : onset + burst_len + int(0.02 * SR)] = (
             np.exp(-np.linspace(0, 5, int(0.02 * SR))) * 0.3
         ).astype(np.float32)
         # Compressed version (burst attenuated)
@@ -1604,22 +1629,26 @@ class TestPlosiveBurstPreserver:
 
     def test_08_silence_no_crash(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         r = PlosiveBurstPreserver().restore(AUDIO_SILENCE, SR, AUDIO_SILENCE)
         assert np.isfinite(r.audio).all()
 
     def test_09_noise_no_crash(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         r = PlosiveBurstPreserver().restore(AUDIO_NOISE, SR, AUDIO_NOISE * 0.8)
         assert np.isfinite(r.audio).all()
 
     def test_10_blend_zero_equals_processed(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         processed = AUDIO_SINE * 0.7
         r = PlosiveBurstPreserver().restore(AUDIO_SINE, SR, processed, blend=0.0)
         assert np.allclose(r.audio, np.clip(processed, -1.0, 1.0), atol=1e-5)
 
     def test_11_result_dataclass_shape(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver, PlosiveBurstResult
+
         r = PlosiveBurstPreserver().restore(AUDIO_SINE, SR, AUDIO_SINE)
         assert isinstance(r, PlosiveBurstResult)
         assert isinstance(r.n_bursts_detected, int)
@@ -1628,17 +1657,20 @@ class TestPlosiveBurstPreserver:
 
     def test_12_singleton_accessor(self):
         from backend.core.consonant_enhancement import get_plosive_preserver
+
         p1 = get_plosive_preserver()
         p2 = get_plosive_preserver()
         assert p1 is p2
 
     def test_13_convenience_function(self):
         from backend.core.consonant_enhancement import preserve_plosive_transients
+
         r = preserve_plosive_transients(AUDIO_SINE, SR, AUDIO_SINE * 0.8)
         assert np.isfinite(r.audio).all()
 
     def test_14_stereo_support(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         stereo = np.column_stack([AUDIO_SINE, AUDIO_SINE * 0.9])
         stereo_proc = stereo * 0.7
         r = PlosiveBurstPreserver().restore(stereo, SR, stereo_proc)
@@ -1646,6 +1678,7 @@ class TestPlosiveBurstPreserver:
 
     def test_15_nan_input_handled(self):
         from backend.core.consonant_enhancement import PlosiveBurstPreserver
+
         audio_nan = AUDIO_SINE.copy()
         audio_nan[100] = np.nan
         r = PlosiveBurstPreserver().restore(audio_nan, SR, AUDIO_SINE)
@@ -1662,6 +1695,7 @@ class TestInstrumentFormantTargets:
 
     def _cls(self):
         from dsp.formant_system import InstrumentFormantTargets
+
         return InstrumentFormantTargets
 
     # ── 1. Basis-Lookup ───────────────────────────────────────────────────────
@@ -1723,6 +1757,7 @@ class TestInstrumentFormantTargets:
     def test_09_all_instruments_finite(self):
         """Alle Targets enthalten ausschließlich endliche Werte."""
         import math
+
         cls = self._cls()
         for name in cls.all_instruments():
             row = cls.get_targets(name)
@@ -1780,6 +1815,7 @@ class TestFormantSystemInstrumentGuided:
 
     def _fs(self):
         from dsp.formant_system import FormantSystem
+
         return FormantSystem(enhance_singers_formant=False)
 
     # ── Methoden-Existenz & Rückgabetyp ──────────────────────────────────────
@@ -1812,9 +1848,7 @@ class TestFormantSystemInstrumentGuided:
     def test_06_strength_zero_is_identity(self):
         """correction_strength=0.0 darf das Audio nicht verändern."""
         fs = self._fs()
-        out, _ = fs.instrument_guided_enhance(
-            AUDIO_SINE, SR, instrument="guitar", correction_strength=0.0
-        )
+        out, _ = fs.instrument_guided_enhance(AUDIO_SINE, SR, instrument="guitar", correction_strength=0.0)
         np.testing.assert_allclose(out, np.clip(AUDIO_SINE, -1.0, 1.0), atol=1e-5)
 
     def test_07_unknown_instrument_passthrough(self):
@@ -1833,8 +1867,7 @@ class TestFormantSystemInstrumentGuided:
     def test_09_report_dict_keys(self):
         fs = self._fs()
         _, report = fs.instrument_guided_enhance(AUDIO_SINE, SR, instrument="brass")
-        for key in ("instrument", "frames_processed", "total_frames",
-                    "correction_strength", "f_targets_hz"):
+        for key in ("instrument", "frames_processed", "total_frames", "correction_strength", "f_targets_hz"):
             assert key in report, f"Schlüssel '{key}' fehlt im Report"
 
     def test_10_report_instrument_string(self):
@@ -1862,6 +1895,7 @@ class TestFormantSystemInstrumentGuided:
     def test_14_all_supported_instruments_no_crash(self):
         """Alle bekannten Instrumente dürfen keinen Fehler werfen."""
         from dsp.formant_system import InstrumentFormantTargets
+
         fs = self._fs()
         for name in InstrumentFormantTargets.all_instruments():
             out, report = fs.instrument_guided_enhance(AUDIO_SINE, SR, instrument=name)
@@ -1871,9 +1905,7 @@ class TestFormantSystemInstrumentGuided:
     def test_15_strength_clamped_to_030(self):
         """Überhöhte correction_strength wird auf 0.30 begrenzt."""
         fs = self._fs()
-        _, report = fs.instrument_guided_enhance(
-            AUDIO_SINE, SR, instrument="guitar", correction_strength=0.99
-        )
+        _, report = fs.instrument_guided_enhance(AUDIO_SINE, SR, instrument="guitar", correction_strength=0.99)
         assert report["correction_strength"] <= 0.30
 
 
@@ -1882,6 +1914,7 @@ class TestFormantSystemInstrumentGuided:
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Synthetische Signale für Attack-Type-Tests ────────────────────────────────
+
 
 def _make_pick_signal(sr: int = SR) -> np.ndarray:
     """Kurzer Nadelimpuls (< 5 ms) → hohes HF, schneller Anstieg (PICK)."""
@@ -1910,7 +1943,7 @@ def _make_strike_signal(sr: int = SR) -> np.ndarray:
     """Breitband-Rauschen mit sehr scharfem Onset (< 2 ms) → STRIKE."""
     audio = np.zeros(sr // 4, dtype=np.float32)
     rng = np.random.default_rng(0)
-    audio[:int(0.040 * sr)] = rng.uniform(-0.9, 0.9, int(0.040 * sr)).astype(np.float32)
+    audio[: int(0.040 * sr)] = rng.uniform(-0.9, 0.9, int(0.040 * sr)).astype(np.float32)
     return audio
 
 
@@ -1919,27 +1952,36 @@ class TestAttackTypeClassifier:
 
     def _clf(self):
         from backend.core.attack_type_classifier import AttackTypeClassifier
+
         return AttackTypeClassifier()
 
     # ── 1. Grundstruktur & Import ─────────────────────────────────────────────
 
     def test_01_import_and_instantiate(self):
         from backend.core.attack_type_classifier import AttackTypeClassifier
+
         clf = AttackTypeClassifier()
         assert clf is not None
 
     def test_02_dataclass_fields(self):
         from backend.core.attack_type_classifier import AttackTypeResult
+
         r = AttackTypeResult(
-            attack_type="pick", confidence=0.9, onset_sample=100,
-            spectral_centroid=0.6, spectral_flatness=0.2,
-            zcr=0.1, rise_time_ms=3.0, features={},
+            attack_type="pick",
+            confidence=0.9,
+            onset_sample=100,
+            spectral_centroid=0.6,
+            spectral_flatness=0.2,
+            zcr=0.1,
+            rise_time_ms=3.0,
+            features={},
         )
         assert r.attack_type == "pick"
         assert r.confidence == 0.9
 
     def test_03_classify_returns_result(self):
         from backend.core.attack_type_classifier import AttackTypeResult
+
         clf = self._clf()
         r = clf.classify(AUDIO_SINE, SR)
         assert isinstance(r, AttackTypeResult)
@@ -2044,39 +2086,36 @@ class TestAttackTypeClassifier:
         bow_audio = _make_bow_signal()
         r = clf.classify(bow_audio, SR)
         # Bogen-Onset ist langsam — rise time muss deutlich größer als pick sein
-        assert r.rise_time_ms > 20.0, (
-            f"Bow-Signal: rise_time={r.rise_time_ms:.1f}ms < 20 ms erwartet"
-        )
+        assert r.rise_time_ms > 20.0, f"Bow-Signal: rise_time={r.rise_time_ms:.1f}ms < 20 ms erwartet"
 
     def test_20_strike_signal_high_flatness(self):
         """Breitband-Rauschen mit scharfem Onset: spectral_flatness soll > 0.3 sein."""
         clf = self._clf()
         strike_audio = _make_strike_signal()
         r = clf.classify(strike_audio, SR)
-        assert r.spectral_flatness > 0.30, (
-            f"Strike-Signal: flatness={r.spectral_flatness:.3f} < 0.30 erwartet"
-        )
+        assert r.spectral_flatness > 0.30, f"Strike-Signal: flatness={r.spectral_flatness:.3f} < 0.30 erwartet"
 
     def test_21_pick_centroid_higher_than_bow_centroid(self):
         """Pick-Signal hat höheren Spektralzentroid als Bow-Signal."""
         clf = self._clf()
         r_pick = clf.classify(_make_pick_signal(), SR)
-        r_bow  = clf.classify(_make_bow_signal(), SR)
+        r_bow = clf.classify(_make_bow_signal(), SR)
         assert r_pick.spectral_centroid > r_bow.spectral_centroid, (
-            f"Pick centroid={r_pick.spectral_centroid:.3f} soll > "
-            f"Bow centroid={r_bow.spectral_centroid:.3f}"
+            f"Pick centroid={r_pick.spectral_centroid:.3f} soll > Bow centroid={r_bow.spectral_centroid:.3f}"
         )
 
     # ── 5. Singleton & Convenience-Funktion ───────────────────────────────────
 
     def test_22_singleton_returns_same_instance(self):
         from backend.core.attack_type_classifier import get_attack_type_classifier
+
         c1 = get_attack_type_classifier()
         c2 = get_attack_type_classifier()
         assert c1 is c2
 
     def test_23_convenience_function(self):
-        from backend.core.attack_type_classifier import classify_attack_type, AttackTypeResult
+        from backend.core.attack_type_classifier import AttackTypeResult, classify_attack_type
+
         r = classify_attack_type(AUDIO_SINE, SR)
         assert isinstance(r, AttackTypeResult)
 
@@ -2099,6 +2138,7 @@ class TestAttackTypeClassifier:
 # TestInstrumentFormantDriftCorrector  (Schritt 3 – DTW Formant-Drift)
 # ════════════════════════════════════════════════════════════════════════════
 
+
 class TestInstrumentFormantDriftCorrector:
     """≥ 20 Unit-Tests for dsp.instrument_formant_corrector."""
 
@@ -2107,6 +2147,7 @@ class TestInstrumentFormantDriftCorrector:
     @staticmethod
     def _corrector(**kwargs):
         from dsp.instrument_formant_corrector import InstrumentFormantDriftCorrector
+
         return InstrumentFormantDriftCorrector(**kwargs)
 
     @staticmethod
@@ -2117,19 +2158,30 @@ class TestInstrumentFormantDriftCorrector:
     # ── 01: Import & instantiation ─────────────────────────────────────────
 
     def test_01_import(self):
-        import dsp.instrument_formant_corrector  # noqa: F401
+        pass
 
     def test_02_instantiate(self):
         c = self._corrector()
         assert c is not None
 
     def test_03_result_dataclass_fields(self):
-        from dsp.instrument_formant_corrector import InstrumentDriftResult
         import dataclasses
+
+        from dsp.instrument_formant_corrector import InstrumentDriftResult
+
         fields = {f.name for f in dataclasses.fields(InstrumentDriftResult)}
-        expected = {"audio", "instrument", "drift_detected", "n_frames_corrected",
-                    "total_frames", "mean_drift_hz", "max_drift_hz", "dtw_distance",
-                    "correction_strength", "f1_target_hz"}
+        expected = {
+            "audio",
+            "instrument",
+            "drift_detected",
+            "n_frames_corrected",
+            "total_frames",
+            "mean_drift_hz",
+            "max_drift_hz",
+            "dtw_distance",
+            "correction_strength",
+            "f1_target_hz",
+        }
         assert expected.issubset(fields)
 
     # ── 02: Output shape & dtype ───────────────────────────────────────────
@@ -2191,9 +2243,9 @@ class TestInstrumentFormantDriftCorrector:
 
     # ── 05: All 9 supported instruments no-crash ─────────────────────────
 
-    @pytest.mark.parametrize("instr", [
-        "strings", "guitar", "brass", "keys", "bass", "drums", "percussion", "synth", "woodwinds"
-    ])
+    @pytest.mark.parametrize(
+        "instr", ["strings", "guitar", "brass", "keys", "bass", "drums", "percussion", "synth", "woodwinds"]
+    )
     def test_12_all_instruments_no_crash(self, instr):
         c = self._corrector()
         audio = self._make_sine(220.0)
@@ -2246,8 +2298,7 @@ class TestInstrumentFormantDriftCorrector:
 
     def test_20_correction_strength_stored(self):
         c = self._corrector()
-        result = c.correct(self._make_sine(220.0), SR, instrument="guitar",
-                           correction_strength=0.15)
+        result = c.correct(self._make_sine(220.0), SR, instrument="guitar", correction_strength=0.15)
         assert abs(result.correction_strength - 0.15) < 1e-6
 
     def test_21_f1_target_positive_known_instrument(self):
@@ -2264,6 +2315,7 @@ class TestInstrumentFormantDriftCorrector:
 
     def test_23_singleton_same_instance(self):
         from dsp.instrument_formant_corrector import get_instrument_formant_drift_corrector
+
         a = get_instrument_formant_drift_corrector()
         b = get_instrument_formant_drift_corrector()
         assert a is b
@@ -2272,13 +2324,16 @@ class TestInstrumentFormantDriftCorrector:
 
     def test_24_convenience_returns_result(self):
         from dsp.instrument_formant_corrector import (
-            correct_instrument_formant_drift, InstrumentDriftResult,
+            InstrumentDriftResult,
+            correct_instrument_formant_drift,
         )
+
         result = correct_instrument_formant_drift(self._make_sine(220.0), SR, instrument="guitar")
         assert isinstance(result, InstrumentDriftResult)
 
     def test_25_convenience_audio_finite(self):
         from dsp.instrument_formant_corrector import correct_instrument_formant_drift
+
         result = correct_instrument_formant_drift(self._make_sine(330.0), SR, instrument="keys")
         assert np.all(np.isfinite(result.audio))
 
@@ -2286,12 +2341,14 @@ class TestInstrumentFormantDriftCorrector:
 
     def test_26_dtw_identical_zero_distance(self):
         from dsp.instrument_formant_corrector import _dtw_distance_and_path
+
         seq = np.array([200.0, 210.0, 205.0, 200.0])
         dist, path = _dtw_distance_and_path(seq, seq)
         assert dist < 1e-6
 
     def test_27_dtw_constant_offset_positive_distance(self):
         from dsp.instrument_formant_corrector import _dtw_distance_and_path
+
         seq_a = np.array([200.0, 200.0, 200.0, 200.0])
         seq_b = np.array([400.0, 400.0, 400.0, 400.0])
         dist, _ = _dtw_distance_and_path(seq_a, seq_b)
@@ -2299,6 +2356,7 @@ class TestInstrumentFormantDriftCorrector:
 
     def test_28_dtw_path_nonempty_for_nonempty_input(self):
         from dsp.instrument_formant_corrector import _dtw_distance_and_path
+
         seq = np.linspace(100.0, 500.0, 20)
         dist, path = _dtw_distance_and_path(seq, seq[::-1])
         assert len(path) > 0
@@ -2315,6 +2373,7 @@ class TestInstrumentFormantDriftCorrector:
 
     def test_30_strength_ceiling_clamped(self):
         from dsp.instrument_formant_corrector import MAX_CORRECTION_STRENGTH
+
         c = self._corrector(correction_strength=1.0)
         assert c.correction_strength <= MAX_CORRECTION_STRENGTH
 
@@ -2322,6 +2381,7 @@ class TestInstrumentFormantDriftCorrector:
 # ════════════════════════════════════════════════════════════════════════════
 # TestSubStemProcessor  (Schritt 4 – Sub-Stem-Verarbeitung)
 # ════════════════════════════════════════════════════════════════════════════
+
 
 class TestSubStemProcessor:
     """≥ 25 Unit-Tests for backend.core.sub_stem_processor."""
@@ -2331,6 +2391,7 @@ class TestSubStemProcessor:
     @staticmethod
     def _proc(**kwargs):
         from backend.core.sub_stem_processor import SubStemProcessor
+
         return SubStemProcessor(**kwargs)
 
     @staticmethod
@@ -2341,25 +2402,27 @@ class TestSubStemProcessor:
     # ── 01: Import & instantiation ────────────────────────────────────────
 
     def test_01_import(self):
-        import backend.core.sub_stem_processor  # noqa: F401
+        pass
 
     def test_02_instantiate(self):
         p = self._proc()
         assert p is not None
 
     def test_03_result_dataclass_fields(self):
-        from backend.core.sub_stem_processor import SubStemResult
         import dataclasses
+
+        from backend.core.sub_stem_processor import SubStemResult
+
         fields = {f.name for f in dataclasses.fields(SubStemResult)}
-        assert {"audio", "instrument", "n_bands", "bands",
-                "processing_strength", "passthrough"}.issubset(fields)
+        assert {"audio", "instrument", "n_bands", "bands", "processing_strength", "passthrough"}.issubset(fields)
 
     def test_04_band_result_dataclass_fields(self):
-        from backend.core.sub_stem_processor import SubStemBandResult
         import dataclasses
+
+        from backend.core.sub_stem_processor import SubStemBandResult
+
         fields = {f.name for f in dataclasses.fields(SubStemBandResult)}
-        assert {"label", "low_hz", "high_hz", "eq_gain_db",
-                "nr_reduction_db", "rms_in", "rms_out"}.issubset(fields)
+        assert {"label", "low_hz", "high_hz", "eq_gain_db", "nr_reduction_db", "rms_in", "rms_out"}.issubset(fields)
 
     # ── 02: Output shape & numerical sanity ──────────────────────────────
 
@@ -2409,10 +2472,21 @@ class TestSubStemProcessor:
 
     # ── 04: All 10 supported instruments no-crash ─────────────────────
 
-    @pytest.mark.parametrize("instr", [
-        "guitar", "keys", "piano", "drums", "percussion",
-        "brass", "strings", "woodwinds", "bass", "synth",
-    ])
+    @pytest.mark.parametrize(
+        "instr",
+        [
+            "guitar",
+            "keys",
+            "piano",
+            "drums",
+            "percussion",
+            "brass",
+            "strings",
+            "woodwinds",
+            "bass",
+            "synth",
+        ],
+    )
     def test_12_all_instruments_no_crash(self, instr):
         p = self._proc()
         audio = self._sine(220.0)
@@ -2478,13 +2552,13 @@ class TestSubStemProcessor:
 
     def test_22_processing_strength_stored(self):
         p = self._proc()
-        result = p.process(self._sine(), SR, instrument="guitar",
-                           processing_strength=0.20)
+        result = p.process(self._sine(), SR, instrument="guitar", processing_strength=0.20)
         if not result.passthrough:
             assert abs(result.processing_strength - 0.20) < 1e-5
 
     def test_23_strength_ceiling_respected(self):
         from backend.core.sub_stem_processor import SubStemProcessor
+
         p = SubStemProcessor(processing_strength=2.0)
         assert p.processing_strength <= SubStemProcessor.MAX_STRENGTH
 
@@ -2499,6 +2573,7 @@ class TestSubStemProcessor:
 
     def test_25_singleton_same_instance(self):
         from backend.core.sub_stem_processor import get_sub_stem_processor
+
         a = get_sub_stem_processor()
         b = get_sub_stem_processor()
         assert a is b
@@ -2506,12 +2581,14 @@ class TestSubStemProcessor:
     # ── 10: Convenience function ──────────────────────────────────────
 
     def test_26_convenience_returns_result(self):
-        from backend.core.sub_stem_processor import process_sub_stems, SubStemResult
+        from backend.core.sub_stem_processor import SubStemResult, process_sub_stems
+
         result = process_sub_stems(self._sine(), SR, instrument="guitar")
         assert isinstance(result, SubStemResult)
 
     def test_27_convenience_audio_finite(self):
         from backend.core.sub_stem_processor import process_sub_stems
+
         result = process_sub_stems(self._sine(330.0), SR, instrument="bass")
         assert np.all(np.isfinite(result.audio))
 
@@ -2519,17 +2596,19 @@ class TestSubStemProcessor:
 
     def test_28_lr4_lowpass_attenuates_high(self):
         from backend.core.sub_stem_processor import _lr4_lowpass
+
         t = np.linspace(0, 1.0, SR, endpoint=False, dtype=np.float32)
         high = np.sin(2 * np.pi * 8000.0 * t)
         filtered = _lr4_lowpass(high, SR, cutoff_hz=500.0)
-        assert float(np.sqrt(np.mean(filtered ** 2))) < 0.01
+        assert float(np.sqrt(np.mean(filtered**2))) < 0.01
 
     def test_29_lr4_highpass_attenuates_low(self):
         from backend.core.sub_stem_processor import _lr4_highpass
+
         t = np.linspace(0, 1.0, SR, endpoint=False, dtype=np.float32)
         low = np.sin(2 * np.pi * 50.0 * t)
         filtered = _lr4_highpass(low, SR, cutoff_hz=2000.0)
-        assert float(np.sqrt(np.mean(filtered ** 2))) < 0.01
+        assert float(np.sqrt(np.mean(filtered**2))) < 0.01
 
     def test_30_stereo_channels_independent(self):
         """Stereo output must not collapse channels to mono."""
@@ -2541,12 +2620,13 @@ class TestSubStemProcessor:
             # first channel should have higher RMS than second
             ch0_rms = float(np.sqrt(np.mean(result.audio[0] ** 2)))
             ch1_rms = float(np.sqrt(np.mean(result.audio[1] ** 2)))
-            assert ch0_rms > ch1_rms * 0.5   # channels still distinguishable
+            assert ch0_rms > ch1_rms * 0.5  # channels still distinguishable
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # TestPhysicsResonanceEnhancer  (Schritt 5 – Physics Biquad Body Resonance)
 # ════════════════════════════════════════════════════════════════════════════
+
 
 class TestPhysicsResonanceEnhancer:
     """≥ 30 Unit-Tests for backend.core.physics_resonance_enhancer."""
@@ -2556,6 +2636,7 @@ class TestPhysicsResonanceEnhancer:
     @staticmethod
     def _enh(**kwargs):
         from backend.core.physics_resonance_enhancer import PhysicsResonanceEnhancer
+
         return PhysicsResonanceEnhancer(**kwargs)
 
     @staticmethod
@@ -2566,25 +2647,27 @@ class TestPhysicsResonanceEnhancer:
     # ── 01: Import & instantiation ────────────────────────────────────────
 
     def test_01_import(self):
-        import backend.core.physics_resonance_enhancer  # noqa: F401
+        pass
 
     def test_02_instantiate(self):
         e = self._enh()
         assert e is not None
 
     def test_03_result_dataclass_fields(self):
-        from backend.core.physics_resonance_enhancer import PhysicsResonanceResult
         import dataclasses
+
+        from backend.core.physics_resonance_enhancer import PhysicsResonanceResult
+
         fields = {f.name for f in dataclasses.fields(PhysicsResonanceResult)}
-        assert {"audio", "instrument", "n_peaks", "peaks",
-                "enhancement_strength", "passthrough"}.issubset(fields)
+        assert {"audio", "instrument", "n_peaks", "peaks", "enhancement_strength", "passthrough"}.issubset(fields)
 
     def test_04_peak_result_dataclass_fields(self):
-        from backend.core.physics_resonance_enhancer import ResonancePeakResult
         import dataclasses
+
+        from backend.core.physics_resonance_enhancer import ResonancePeakResult
+
         fields = {f.name for f in dataclasses.fields(ResonancePeakResult)}
-        assert {"f0_hz", "q", "gain_db_nominal", "gain_db_applied",
-                "b_coeffs", "a_coeffs"}.issubset(fields)
+        assert {"f0_hz", "q", "gain_db_nominal", "gain_db_applied", "b_coeffs", "a_coeffs"}.issubset(fields)
 
     # ── 02: Output shape & numerical sanity ──────────────────────────────
 
@@ -2597,14 +2680,14 @@ class TestPhysicsResonanceEnhancer:
     def test_06_stereo_ch_samples_shape(self):
         e = self._enh()
         mono = self._sine()
-        stereo = np.stack([mono, mono * 0.8], axis=0)   # (2, samples)
+        stereo = np.stack([mono, mono * 0.8], axis=0)  # (2, samples)
         result = e.enhance(stereo, SR, instrument="guitar")
         assert result.audio.shape == stereo.shape
 
     def test_07_stereo_samples_ch_shape(self):
         e = self._enh()
         mono = self._sine()
-        stereo = np.stack([mono, mono * 0.8], axis=1)   # (samples, 2)
+        stereo = np.stack([mono, mono * 0.8], axis=1)  # (samples, 2)
         result = e.enhance(stereo, SR, instrument="guitar")
         assert result.audio.shape == stereo.shape
 
@@ -2623,8 +2706,7 @@ class TestPhysicsResonanceEnhancer:
 
     def test_10_strength_zero_is_passthrough(self):
         e = self._enh()
-        result = e.enhance(self._sine(), SR, instrument="guitar",
-                           enhancement_strength=0.0)
+        result = e.enhance(self._sine(), SR, instrument="guitar", enhancement_strength=0.0)
         assert result.passthrough is True
 
     def test_11_unknown_instrument_passthrough(self):
@@ -2641,10 +2723,21 @@ class TestPhysicsResonanceEnhancer:
 
     # ── 04: All 10 instruments no-crash ──────────────────────────────
 
-    @pytest.mark.parametrize("instr", [
-        "guitar", "keys", "piano", "brass", "drums", "percussion",
-        "strings", "woodwinds", "bass", "synth",
-    ])
+    @pytest.mark.parametrize(
+        "instr",
+        [
+            "guitar",
+            "keys",
+            "piano",
+            "brass",
+            "drums",
+            "percussion",
+            "strings",
+            "woodwinds",
+            "bass",
+            "synth",
+        ],
+    )
     def test_13_all_instruments_no_crash(self, instr):
         e = self._enh()
         result = e.enhance(self._sine(220.0), SR, instrument=instr)
@@ -2695,6 +2788,7 @@ class TestPhysicsResonanceEnhancer:
 
     def test_21_gain_applied_le_ceiling(self):
         from backend.core.physics_resonance_enhancer import MAX_GAIN_DB
+
         e = self._enh(enhancement_strength=1.0)
         result = e.enhance(self._sine(), SR, instrument="guitar")
         for pk in result.peaks:
@@ -2726,8 +2820,7 @@ class TestPhysicsResonanceEnhancer:
 
     def test_25_strength_stored(self):
         e = self._enh()
-        result = e.enhance(self._sine(), SR, instrument="guitar",
-                           enhancement_strength=0.30)
+        result = e.enhance(self._sine(), SR, instrument="guitar", enhancement_strength=0.30)
         if not result.passthrough:
             assert abs(result.enhancement_strength - 0.30) < 1e-5
 
@@ -2736,15 +2829,14 @@ class TestPhysicsResonanceEnhancer:
         e = self._enh()
         t = np.linspace(0, 2.0, SR * 2, endpoint=False, dtype=np.float32)
         # Flat spectrum: equal energy at all frequencies
-        audio = np.sum([np.sin(2 * np.pi * f * t) * 0.01 for f in range(50, 4000, 10)],
-                       axis=0).astype(np.float32)
+        audio = np.sum([np.sin(2 * np.pi * f * t) * 0.01 for f in range(50, 4000, 10)], axis=0).astype(np.float32)
         result = e.enhance(audio, SR, instrument="guitar", enhancement_strength=0.80)
         # Energy at ~102 Hz bin should be higher in result than input
-        fft_in  = np.abs(np.fft.rfft(audio))
+        fft_in = np.abs(np.fft.rfft(audio))
         fft_out = np.abs(np.fft.rfft(result.audio))
-        freqs   = np.fft.rfftfreq(len(audio), 1.0 / SR)
+        freqs = np.fft.rfftfreq(len(audio), 1.0 / SR)
         idx_102 = int(np.argmin(np.abs(freqs - 102.0)))
-        assert fft_out[idx_102] >= fft_in[idx_102] * 0.99   # at least preserved
+        assert fft_out[idx_102] >= fft_in[idx_102] * 0.99  # at least preserved
 
     # ── 08: Wrong SR raises ───────────────────────────────────────────
 
@@ -2757,6 +2849,7 @@ class TestPhysicsResonanceEnhancer:
 
     def test_28_singleton_same_instance(self):
         from backend.core.physics_resonance_enhancer import get_physics_resonance_enhancer
+
         a = get_physics_resonance_enhancer()
         b = get_physics_resonance_enhancer()
         assert a is b
@@ -2765,13 +2858,16 @@ class TestPhysicsResonanceEnhancer:
 
     def test_29_convenience_returns_result(self):
         from backend.core.physics_resonance_enhancer import (
-            enhance_physics_resonance, PhysicsResonanceResult,
+            PhysicsResonanceResult,
+            enhance_physics_resonance,
         )
+
         result = enhance_physics_resonance(self._sine(), SR, instrument="guitar")
         assert isinstance(result, PhysicsResonanceResult)
 
     def test_30_convenience_audio_finite(self):
         from backend.core.physics_resonance_enhancer import enhance_physics_resonance
+
         result = enhance_physics_resonance(self._sine(330.0), SR, instrument="brass")
         assert np.all(np.isfinite(result.audio))
 
@@ -2780,6 +2876,7 @@ class TestPhysicsResonanceEnhancer:
     def test_31_peak_eq_coeffs_stable(self):
         """Biquad IIR must be stable: all poles inside unit circle."""
         from backend.core.physics_resonance_enhancer import _peak_eq_coeffs
+
         b, a = _peak_eq_coeffs(440.0, 8.0, 3.0, SR)
         poles = np.roots(a)
         assert np.all(np.abs(poles) < 1.0 + 1e-6)
@@ -2787,11 +2884,13 @@ class TestPhysicsResonanceEnhancer:
     def test_32_peak_eq_coeffs_unity_at_strength_zero(self):
         """gain_db=0 biquad must be numerically unity (passthrough)."""
         from backend.core.physics_resonance_enhancer import _peak_eq_coeffs
+
         b, a = _peak_eq_coeffs(440.0, 8.0, 0.0, SR)
         # Apply to impulse — output should equal input
         imp = np.zeros(512, dtype=np.float64)
         imp[0] = 1.0
         import scipy.signal as _sig
+
         out = _sig.lfilter(b, a, imp)
         assert abs(float(out[0]) - 1.0) < 1e-5
         assert np.all(np.abs(out[1:]) < 1e-5)

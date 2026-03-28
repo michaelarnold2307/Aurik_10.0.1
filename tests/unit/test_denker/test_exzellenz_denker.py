@@ -390,6 +390,4 @@ class TestExzellenzErgebnisVersaMos:
         with patch("plugins.versa_plugin.score_mos", return_value=fake):
             result = get_exzellenz_denker().optimiere(_sine(0.5), 48000)
         if result.versa_mos > 0.0:
-            assert 1.0 <= result.versa_mos <= 5.0, (
-                f"versa_mos={result.versa_mos} außerhalb MOS-Bereich [1, 5]"
-            )
+            assert 1.0 <= result.versa_mos <= 5.0, f"versa_mos={result.versa_mos} außerhalb MOS-Bereich [1, 5]"

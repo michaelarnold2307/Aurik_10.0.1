@@ -1302,6 +1302,18 @@ class UnifiedRestorerV3:
             )
         material_type = defect_result.material_type
 
+        # §9.1c Perceptual-Salience-Annotation: weight defect severities by
+        # psychoacoustic masking (Fastl & Zwicker 2007).  Masked defects get
+        # reduced severity → less processing → fewer artifacts.
+        try:
+            from backend.core.perceptual_salience import get_perceptual_salience_estimator
+
+            _pse = get_perceptual_salience_estimator()
+            defect_result = _pse.annotate_defect_scores(audio, sample_rate, defect_result)
+            logger.info("§9.1c PerceptualSalience: defect severities salience-adjusted")
+        except Exception as _pse_exc:
+            logger.debug("PerceptualSalienceEstimator nicht verfügbar: %s", _pse_exc)
+
         _cb(10, "Defekte werden kartiert …")
         _saliency_map = None
         try:
@@ -1524,6 +1536,12 @@ class UnifiedRestorerV3:
             restorability_score=_pmgg_restorability_score,
         )
         logger.info(f"Selected {len(selected_phases)} phases based on defects")
+
+        # §2.8 Vocal-Chain: vocal_gender in RestorationContext injizieren
+        # → wird automatisch via _profiled_phase_call in ALLE Phase-kwargs aufgenommen
+        _vg = getattr(self, "_detected_vocal_gender", None)
+        if _vg and _vg != "unknown":
+            self._restoration_context["vocal_gender"] = _vg
 
         # Step 2.5: Apply Phase Skipping (intelligent filtering)
         _enable_phase_skipping = bool(self.phase_skipper)
@@ -3118,11 +3136,38 @@ class UnifiedRestorerV3:
 
         _cb(98, "Ergebnis wird finalisiert…")
 
+        # Post-restoration defect assessment for UI and reporting accuracy.
+        # Without this re-scan, RestorationResult.defect_scores would still reflect
+        # the pre-restoration scanner snapshot and cause false "remaining defects"
+        # in the frontend after processing has finished.
+        _result_defect_scores: dict[DefectType, float] = {
+            dt: defect_result.scores[dt].severity for dt in DefectType if dt in defect_result.scores
+        }
+        _post_defect_result = None
+        try:
+            _post_defect_result = self.defect_scanner.scan(restored_audio, sample_rate, material_type)
+            if _post_defect_result is not None:
+                _result_defect_scores = {
+                    dt: _post_defect_result.scores[dt].severity for dt in DefectType if dt in _post_defect_result.scores
+                }
+                logger.info(
+                    "DefectScanner post-scan completed: pre_top=%d, post_top=%d",
+                    len(defect_result.get_top_defects(5)),
+                    len(_post_defect_result.get_top_defects(5)),
+                )
+            else:
+                logger.warning("DefectScanner post-scan returned None — using pre-restoration defect scores in result")
+        except Exception as _post_scan_exc:
+            logger.warning(
+                "DefectScanner post-scan failed (%s) — using pre-restoration defect scores in result",
+                _post_scan_exc,
+            )
+
         result = RestorationResult(
             audio=restored_audio,
             config=self.config,
             material_type=material_type,
-            defect_scores={dt: defect_result.scores[dt].severity for dt in DefectType if dt in defect_result.scores},
+            defect_scores=_result_defect_scores,
             phases_executed=executed_phases,
             phases_skipped=skipped_phases,
             deferred_phases=deferred_phases,  # §2.38 KMV: RT-skipped phases for Stage 2
@@ -3149,6 +3194,14 @@ class UnifiedRestorerV3:
                     "top_defects": [
                         {"type": s.defect_type.value, "severity": s.severity} for s in defect_result.get_top_defects(5)
                     ],
+                    "post_restoration_top_defects": (
+                        [
+                            {"type": s.defect_type.value, "severity": s.severity}
+                            for s in _post_defect_result.get_top_defects(5)
+                        ]
+                        if _post_defect_result is not None
+                        else None
+                    ),
                     "causal_plan": {
                         "primary_cause": _causal_plan.primary_cause if _causal_plan else None,
                         "confidence": round(_causal_plan.confidence, 4) if _causal_plan else None,
@@ -6373,6 +6426,26 @@ class UnifiedRestorerV3:
         drums_detected = panns("Drum", 0.50) or panns("Percussion", 0.50)
         piano_detected = panns("Piano", 0.50) or panns("Keyboard (musical)", 0.50)
 
+        # §2.8 Vocal-Chain: Einmalige Gender-Detektion für alle nachfolgenden Vocal-Phasen
+        # Ergebnis wird auf self gespeichert und in _restoration_context injiziert,
+        # sodass Phase 19/42/43 das erkannte Geschlecht via kwargs erhalten.
+        self._detected_vocal_gender = "unknown"
+        if vocals_detected and audio is not None:
+            try:
+                from backend.core.vocal_ai_enhancement import GenderDetector as _GenderDet
+
+                _mono_for_gender = audio.mean(axis=1) if audio.ndim == 2 else audio
+                _voice_chars = _GenderDet(sample_rate=sr).detect(_mono_for_gender)
+                self._detected_vocal_gender = _voice_chars.gender.value
+                logger.info(
+                    "§2.8 Vocal Gender: %s (F0=%.1f Hz, confidence=%.2f)",
+                    self._detected_vocal_gender,
+                    _voice_chars.fundamental_freq,
+                    _voice_chars.confidence,
+                )
+            except Exception as _gd_exc:
+                logger.debug("Gender-Detektion fehlgeschlagen: %s", _gd_exc)
+
         selected: list[str] = []
 
         # ════════════════════════════════════════════════════════════════════
@@ -7800,6 +7873,38 @@ class UnifiedRestorerV3:
             self.phase_metadata[pid]["dependencies"] for pid in selected_phases if pid in self.phase_metadata
         )
 
+        # §Psychoacoustic: Pre-compute masking threshold once for all phases.
+        # Computed on the FULL mono signal (left channel for stereo) — pure DSP (no ML),
+        # cost < 0.5 s even for 3-minute audio (<<DefectScanner budget of 4 s).
+        # A 5 s centre-sample would misrepresent the time-varying masking curve used by
+        # phase_03 and phase_29 for sections outside that window (constant extrapolation).
+        # masking_scalar ∈ [0.4, 1.0]: MEDIAN gain_modifier across Bark bands and frames
+        # (median is more robust to loud transients than mean).
+        # 0.4 = fully masked content, 1.0 = no masking headroom consumed.
+        _masking_result = None
+        _masking_result_r = None  # right channel (stereo only)
+        _masking_scalar: float = 1.0
+        try:
+            from backend.core.psychoacoustic_masking_model import compute_masking_threshold as _cmt
+
+            _ma = audio if audio.ndim == 1 else audio[:, 0]
+            _masking_result = _cmt(_ma.astype(np.float32), sample_rate)
+            # Right channel: only for stereo, computed independently — avoids cross-channel
+            # masking error for asymmetric recordings (e.g. violin hard-left, cello hard-right).
+            if audio.ndim == 2 and audio.shape[1] >= 2:
+                _masking_result_r = _cmt(audio[:, 1].astype(np.float32), sample_rate)
+            _gm_median = float(np.median(_masking_result.gain_modifier))
+            _masking_scalar = float(np.clip(0.4 + _gm_median * 0.6, 0.4, 1.0))
+            logger.debug(
+                "§Psychoacoustic: masking_scalar=%.3f (gain_modifier_median=%.3f, silence=%.1f%%, stereo=%s)",
+                _masking_scalar,
+                _gm_median,
+                100.0 * float(np.mean(_masking_result.silence_frames)),
+                _masking_result_r is not None,
+            )
+        except Exception as _pmm_pre_exc:
+            logger.debug("§Psychoacoustic: Masking-Pre-Compute fehlgeschlagen: %s", _pmm_pre_exc)
+
         # §7.6 / §9.1: Defect-Locations für gezielte Phasenverarbeitung extrahieren
         # + maximale Severity für adaptive Chunk-Größe
         _defect_locations: dict[str, list[tuple[float, float]]] = {}
@@ -7933,6 +8038,9 @@ class UnifiedRestorerV3:
                         max_defect_severity=_max_defect_severity,
                         quality_mode=_quality_mode_value,  # Pass quality mode for ML routing
                         repaired_gap_samples=_repaired_gap_samples,  # §11.7a: RekonstruktionsDenker gaps
+                        masking_result=_masking_result,  # §Psychoacoustic: pre-computed MaskingResult (L/mono), opt-in
+                        masking_result_r=_masking_result_r,  # §Psychoacoustic: pre-computed MaskingResult (R channel, None if mono)
+                        masking_scalar=_masking_scalar,  # §Psychoacoustic: global audibility scalar ∈ [0.4, 1.0]
                     )
                     future_map[future] = (phase_id, phase_start)
                 for future in as_completed(future_map):
@@ -8126,6 +8234,21 @@ class UnifiedRestorerV3:
                             except Exception:
                                 _combined_strength = _mat_strength
 
+                            # §Psychoacoustic: reduce processing strength where defects are
+                            # partially masked — the ear cannot detect what is below the masking
+                            # threshold, so less-aggressive processing preserves more character.
+                            # Timing phases (phase_12, phase_31) are excluded — wet/dry blend
+                            # does not apply there and pitch correction must never be clipped.
+                            _MASK_TIMING = frozenset({"phase_12_wow_flutter_fix", "phase_31_speed_pitch_correction"})
+                            if _masking_scalar < 1.0 and phase_id not in _MASK_TIMING:
+                                _combined_strength = _combined_strength * (0.7 + 0.3 * _masking_scalar)
+                                logger.debug(
+                                    "§Psychoacoustic masking: %s strength clamped to %.3f (masking_scalar=%.3f)",
+                                    phase_id,
+                                    _combined_strength,
+                                    _masking_scalar,
+                                )
+
                             _pmgg_audio_out, _pmgg_scores_curr, _pmgg_entry = _pmgg_gate.wrap_phase(
                                 _phase_for_exec,
                                 current_audio,
@@ -8147,6 +8270,9 @@ class UnifiedRestorerV3:
                                         else None
                                     ),
                                     "repaired_gap_samples": _repaired_gap_samples,  # §11.7a
+                                    "masking_result": _masking_result,  # §Psychoacoustic: pre-computed MaskingResult (L/mono), opt-in
+                                    "masking_result_r": _masking_result_r,  # §Psychoacoustic: pre-computed MaskingResult (R channel, None if mono)
+                                    "masking_scalar": _masking_scalar,  # §Psychoacoustic: global audibility scalar ∈ [0.4, 1.0]
                                 },
                                 restorability_score=_pmgg_restorability_score,  # §2.29 normativ
                                 applicable_goals=applicable_goals,  # §2.32 normativ
@@ -8219,6 +8345,9 @@ class UnifiedRestorerV3:
                                 max_defect_severity=_max_defect_severity,
                                 quality_mode=_quality_mode_value,
                                 repaired_gap_samples=_repaired_gap_samples,  # §11.7a
+                                masking_result=_masking_result,  # §Psychoacoustic: pre-computed MaskingResult (L/mono), opt-in
+                                masking_result_r=_masking_result_r,  # §Psychoacoustic: pre-computed MaskingResult (R channel, None if mono)
+                                masking_scalar=_masking_scalar,  # §Psychoacoustic: global audibility scalar ∈ [0.4, 1.0]
                             )
                             result = _normalize_phase_result(result)
                             if result.success:

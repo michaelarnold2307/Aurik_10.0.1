@@ -36,9 +36,9 @@ Date: 2026-02-17
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import logging
 import math
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from backend.core.defect_scanner import DefectAnalysisResult, DefectType, MaterialType

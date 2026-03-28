@@ -171,6 +171,7 @@ class RmvpePlugin:
             logger.warning("RMVPE ONNX Ladefehler: %s — pYIN-Fallback aktiv.", exc)
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("RMVPE")
             except Exception:
                 pass

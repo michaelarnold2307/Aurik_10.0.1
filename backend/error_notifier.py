@@ -3,6 +3,7 @@
 Stellt `setup_error_notifier()` bereit, das von `backend/logging_config.py`
 benötigt wird. Keine externe Netzwerkverbindung — reine lokale Protokollierung.
 """
+
 from __future__ import annotations
 
 import logging

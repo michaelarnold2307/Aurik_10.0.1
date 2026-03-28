@@ -16,8 +16,8 @@ class PolicyManager:
     def __init__(self, policy: dict) -> None:
         self.policy = policy
 
+
 import threading
-from typing import Any, Optional
 
 import numpy as np
 
@@ -28,7 +28,9 @@ _instance: MergeStemsSOTA | None = None
 _lock = threading.Lock()
 
 
-def get_stem_merger(spectral_weight: float = 0.7, phase_align: bool = True, loudness_match: bool = True) -> MergeStemsSOTA:
+def get_stem_merger(
+    spectral_weight: float = 0.7, phase_align: bool = True, loudness_match: bool = True
+) -> MergeStemsSOTA:
     """Get or create MergeStemsSOTA singleton.
 
     Args:

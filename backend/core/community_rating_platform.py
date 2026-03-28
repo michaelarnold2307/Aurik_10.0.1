@@ -5,7 +5,6 @@ backend/core/community_rating_platform.py — Community rating aggregator
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
 
 
 class CommunityRatingPlatform:
@@ -23,10 +22,7 @@ class CommunityRatingPlatform:
         if not self._ratings:
             return {}
         keys = self._ratings[0].keys()
-        return {
-            k: sum(r.get(k, 0.0) for r in self._ratings) / len(self._ratings)
-            for k in keys
-        }
+        return {k: sum(r.get(k, 0.0) for r in self._ratings) / len(self._ratings) for k in keys}
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +32,7 @@ import threading as _threading
 
 _community_rating_platform_instance = None
 _community_rating_platform_lock = _threading.Lock()
+
 
 def get_community_rating_platform() -> CommunityRatingPlatform:
     """Return the process-wide singleton CommunityRatingPlatform instance."""

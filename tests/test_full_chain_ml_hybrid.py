@@ -22,8 +22,8 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import json
-from pathlib import Path
 import time
+from pathlib import Path
 
 import librosa
 import numpy as np

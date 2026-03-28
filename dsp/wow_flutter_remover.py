@@ -108,9 +108,9 @@ class WowFlutterRemover:
                 return _r.f0_hz.astype(np.float64)
             except Exception:
                 pass
-        # Fallback: Autokorrelation (vereinfachte Schätzung)
-        # OPTIMIZATION: Increased hop size for performance (50ms instead of 10ms)
-        # Wow/Flutter is slow (<10Hz), so 50ms resolution is sufficient
+            # Fallback: Autokorrelation (vereinfachte Schätzung)
+            # OPTIMIZATION: Increased hop size for performance (50ms instead of 10ms)
+            # Wow/Flutter is slow (<10Hz), so 50ms resolution is sufficient
             frame_size = int(0.04 * self.sr)  # 40ms frame
             hop = int(0.05 * self.sr)  # 50ms hop (was 10ms) = 5x faster
             f0 = []

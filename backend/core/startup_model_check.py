@@ -29,20 +29,22 @@ logger = logging.getLogger(__name__)
 _MANIFEST_PATH: Path = Path(__file__).parent.parent.parent / "models" / "manifest.json"
 
 # Primär-Modelle: direkt im Kern-Pipeline-Pfad, ihr Fehlen > deutlicher Qualitätsverlust
-_PRIMARY_MODEL_NAMES: frozenset[str] = frozenset({
-    "deepfilternet_v3",
-    "deepfilternet_dec",
-    "deepfilternet_erb_dec",
-    "rmvpe",
-    "silero_vad",
-    "beats_iter3",
-    "panns",
-    "versa_mos",
-    "sgmse_plus",
-    "htdemucs_ft",
-    "apollo",
-    "vocos_mel_44khz",
-})
+_PRIMARY_MODEL_NAMES: frozenset[str] = frozenset(
+    {
+        "deepfilternet_v3",
+        "deepfilternet_dec",
+        "deepfilternet_erb_dec",
+        "rmvpe",
+        "silero_vad",
+        "beats_iter3",
+        "panns",
+        "versa_mos",
+        "sgmse_plus",
+        "htdemucs_ft",
+        "apollo",
+        "vocos_mel_44khz",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +179,7 @@ def check_models(app_root: Path | None = None) -> ModelCheckResult:
         mode = "DEGRADED_ML"
         all_ok = False
 
-    is_critical = (mode == "DSP_ONLY")
+    is_critical = mode == "DSP_ONLY"
 
     # Deutschsprachige Nutzer-Meldung
     user_title_de = ""

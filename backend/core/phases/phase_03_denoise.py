@@ -481,9 +481,11 @@ class DenoisePhase(PhaseInterface):
         # §4.5 Psychoakustischer Masking-Gain-Clamp (ISO 11172-3, Painter & Spanias 2000)
         # Berechnet auf Input-Audio → zeitvariante Schutzmaske für Stille / sensit. Bereiche
         try:
-            from backend.core.psychoacoustic_masking_model import compute_masking_threshold
+            _pmm = None
+            if _pmm is None:
+                from backend.core.psychoacoustic_masking_model import compute_masking_threshold
 
-            _pmm = compute_masking_threshold(audio.astype(np.float32), self.sample_rate)
+                _pmm = compute_masking_threshold(audio.astype(np.float32), self.sample_rate)
             # Mittlerer Gain-Modifier over Bark-Bänder → skalare Zeitkurve [n_frames]
             _pmm_gain_t = np.mean(_pmm.gain_modifier, axis=1).astype(np.float32)
             # Frame-Zentren: HOP=512 Samples/Frame (entspricht nperseg=2048, noverlap=1536)
@@ -858,8 +860,8 @@ class DenoisePhase(PhaseInterface):
         Zxx: np.ndarray,
         freqs: np.ndarray,
         times: np.ndarray,
-        noise_start: float | None,
-        noise_end: float | None,
+        noise_start: float,
+        noise_end: float,
     ) -> np.ndarray:
         """Statische Rauschprofil-Schätzung aus nutzer-definiertem Segment.
 

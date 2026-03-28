@@ -7,11 +7,11 @@ against normative CI gate tests in tests/normative/.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
 import json
-from pathlib import Path
 import re
-from typing import Iterable
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from collections.abc import Iterable
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC_PATH = ROOT / ".github" / "copilot-instructions.md"
@@ -93,9 +93,7 @@ def build_report() -> dict:
     coverage_items: list[CoverageItem] = []
     for item in release_must_items:
         tests = _match_tests(item)
-        coverage_items.append(
-            CoverageItem(release_must=item, matched_tests=tests, covered=bool(tests))
-        )
+        coverage_items.append(CoverageItem(release_must=item, matched_tests=tests, covered=bool(tests)))
 
     total = len(coverage_items)
     covered = sum(1 for item in coverage_items if item.covered)

@@ -61,11 +61,11 @@ def remap_state_dict(orig_sd: dict) -> dict:
     new_sd: dict = {}
     for k, v in orig_sd.items():
         if k.startswith("stack."):
-            new_k = "input_stack." + k[len("stack."):]
+            new_k = "input_stack." + k[len("stack.") :]
         elif k.startswith("decoder._layers."):
-            new_k = "net.encoder_layers." + k[len("decoder._layers."):]
+            new_k = "net.encoder_layers." + k[len("decoder._layers.") :]
         elif k.startswith("dense_out."):
-            new_k = "output_proj." + k[len("dense_out."):]
+            new_k = "output_proj." + k[len("dense_out.") :]
         else:
             new_k = k  # norm.*, cent_table — unverändert
         new_sd[new_k] = v
@@ -87,23 +87,27 @@ def main() -> None:
     mel_cfg = config["mel"]
     model_cfg = config["model"]
 
-    input_channel: int = model_cfg["input_channel"]   # 128
-    n_chans: int = model_cfg["n_chans"]               # 512
-    n_layers: int = model_cfg["n_layers"]             # 6
-    out_dims: int = model_cfg["out_dims"]             # 360
-    f0_min: float = model_cfg["f0_min"]               # 32.7
-    f0_max: float = model_cfg["f0_max"]               # 1975.5
+    input_channel: int = model_cfg["input_channel"]  # 128
+    n_chans: int = model_cfg["n_chans"]  # 512
+    n_layers: int = model_cfg["n_layers"]  # 6
+    out_dims: int = model_cfg["out_dims"]  # 360
+    f0_min: float = model_cfg["f0_min"]  # 32.7
+    f0_max: float = model_cfg["f0_max"]  # 1975.5
     # n_heads: 512 / 64 = 8 (FastAttention default dim_head=64)
     n_heads: int = n_chans // 64
 
     logger.info(
         "Architektur: input_channels=%d  hidden=%d  layers=%d  heads=%d  out_dims=%d",
-        input_channel, n_chans, n_layers, n_heads, out_dims,
+        input_channel,
+        n_chans,
+        n_layers,
+        n_heads,
+        out_dims,
     )
 
     # Modell aufbauen (CFNaiveMelPE = selbe Architektur, andere Key-Namen)
     # Direktimport aus models.py (umgeht __init__ mit pretty_midi-Abhängigkeit)
-    import importlib.util as _ilu  # noqa: PLC0415
+    import importlib.util as _ilu
 
     def _load_mod(name: str, path: Path):
         spec = _ilu.spec_from_file_location(name, path)
@@ -163,7 +167,7 @@ def main() -> None:
     OUTPUT_ONNX.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Exportiere nach %s …", OUTPUT_ONNX)
 
-    import onnx  # noqa: PLC0415
+    import onnx
 
     torch.onnx.export(
         model,
@@ -172,7 +176,7 @@ def main() -> None:
         input_names=["mel"],
         output_names=["salience"],
         dynamic_axes={
-            "mel":      {0: "batch", 1: "time"},
+            "mel": {0: "batch", 1: "time"},
             "salience": {0: "batch", 1: "time"},
         },
         opset_version=17,
@@ -189,34 +193,36 @@ def main() -> None:
 
     # Config speichern (für fcpe_plugin.py)
     cfg_out = {
-        "mel_sr":       mel_cfg["sampling_rate"],   # 16000
-        "mel_n_fft":    mel_cfg["n_fft"],           # 1024
-        "mel_hop_size": mel_cfg["hop_size"],        # 160
-        "mel_num_mels": mel_cfg["num_mels"],        # 128
-        "mel_fmin":     mel_cfg["fmin"],            # 0
-        "mel_fmax":     mel_cfg["fmax"],            # 8000
-        "mel_win_size": mel_cfg["win_size"],        # 1024
-        "f0_min":       f0_min,                     # 32.7
-        "f0_max":       f0_max,                     # 1975.5
-        "out_dims":     out_dims,                   # 360
-        "threshold":    model_cfg["threshold"],     # 0.05
+        "mel_sr": mel_cfg["sampling_rate"],  # 16000
+        "mel_n_fft": mel_cfg["n_fft"],  # 1024
+        "mel_hop_size": mel_cfg["hop_size"],  # 160
+        "mel_num_mels": mel_cfg["num_mels"],  # 128
+        "mel_fmin": mel_cfg["fmin"],  # 0
+        "mel_fmax": mel_cfg["fmax"],  # 8000
+        "mel_win_size": mel_cfg["win_size"],  # 1024
+        "f0_min": f0_min,  # 32.7
+        "f0_max": f0_max,  # 1975.5
+        "out_dims": out_dims,  # 360
+        "threshold": model_cfg["threshold"],  # 0.05
     }
     CONFIG_JSON.write_text(json.dumps(cfg_out, indent=2))
     logger.info("Config gespeichert: %s", CONFIG_JSON)
 
     # Onnxruntime-Verifikation
     try:
-        import onnxruntime as ort  # noqa: PLC0415
+        import onnxruntime as ort
 
-        sess = ort.InferenceSession(
-            str(OUTPUT_ONNX), providers=["CPUExecutionProvider"]
-        )
+        sess = ort.InferenceSession(str(OUTPUT_ONNX), providers=["CPUExecutionProvider"])
         dummy_np = np.zeros((1, 64, input_channel), dtype=np.float32)
         [ort_out] = sess.run(["salience"], {"mel": dummy_np})
         assert ort_out.shape == (1, 64, out_dims), f"ORT shape: {ort_out.shape}"
-        logger.info("OnnxRuntime-Test OK: output shape %s, min=%.4f max=%.4f",
-                    ort_out.shape, float(ort_out.min()), float(ort_out.max()))
-    except Exception as exc:  # noqa: BLE001
+        logger.info(
+            "OnnxRuntime-Test OK: output shape %s, min=%.4f max=%.4f",
+            ort_out.shape,
+            float(ort_out.min()),
+            float(ort_out.max()),
+        )
+    except Exception as exc:
         logger.warning("OnnxRuntime-Test fehlgeschlagen (nicht kritisch): %s", exc)
 
     logger.info("✅ FCPE ONNX Export erfolgreich → %s", OUTPUT_ONNX)

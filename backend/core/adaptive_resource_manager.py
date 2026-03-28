@@ -11,7 +11,6 @@ import logging
 import multiprocessing as mp
 import threading
 import time
-from typing import Optional
 
 try:
     import psutil
@@ -40,7 +39,14 @@ def get_resource_manager() -> AdaptiveResourceManager:
 
 
 class AdaptiveResourceManager:
-    def __init__(self, min_cores: int = 2, max_cores: int | None = None, check_interval: float = 2.0, cpu_threshold: int = 80, memory_threshold: int = 78) -> None:
+    def __init__(
+        self,
+        min_cores: int = 2,
+        max_cores: int | None = None,
+        check_interval: float = 2.0,
+        cpu_threshold: int = 80,
+        memory_threshold: int = 78,
+    ) -> None:
         self.system_cores = mp.cpu_count()
         self.max_cores = max_cores or self.system_cores
         self.min_cores = min_cores
@@ -92,6 +98,7 @@ class AdaptiveResourceManager:
 
     def _monitor_loop(self) -> None:
         import gc as _gc
+
         stop_event = getattr(self, "_stop_event", None)
         while self.running:
             cpu_usage = self.get_cpu_usage()
@@ -112,9 +119,15 @@ class AdaptiveResourceManager:
             if memory_usage > self.memory_threshold:
                 try:
                     from backend.core.plugin_lifecycle_manager import evict_stale_plugins
+
                     n_evicted = evict_stale_plugins()
                     if n_evicted > 0:
-                        logger.info("ARM: RAM %.1f%% > %d%% threshold — evicted %d plugin(s)", memory_usage, self.memory_threshold, n_evicted)
+                        logger.info(
+                            "ARM: RAM %.1f%% > %d%% threshold — evicted %d plugin(s)",
+                            memory_usage,
+                            self.memory_threshold,
+                            n_evicted,
+                        )
                 except Exception as evict_exc:
                     logger.debug("ARM: eviction check failed: %s", evict_exc)
                 _gc.collect()

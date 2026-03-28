@@ -12,8 +12,8 @@ End-to-End Tests vom Audio-Eingang bis zur Verarbeitungskette:
 6. Full Pipeline: Audio → Analysis → Chain → Validation
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest

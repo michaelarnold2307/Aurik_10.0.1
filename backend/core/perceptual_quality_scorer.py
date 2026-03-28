@@ -14,7 +14,6 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -94,9 +93,8 @@ class PerceptualQualityScorer:
         """
         if sr != 48000:
             import logging
-            logging.getLogger(__name__).debug(
-                "score_audio: SR=%d (erwartet 48000) — weiterverarbeitung trotzdem", sr
-            )
+
+            logging.getLogger(__name__).debug("score_audio: SR=%d (erwartet 48000) — weiterverarbeitung trotzdem", sr)
 
         # Auf gleiche Länge bringen
         min_len = min(len(reference), len(degraded))
@@ -119,10 +117,12 @@ class PerceptualQualityScorer:
 
         # MOS-Mapping (§2.6 Spec-Formel: W_NSIM=0.40, W_MCD=0.30, W_LUFS=0.15, W_COH=0.15)
         # Für identische Signale: nsim=1, mcd_db=0, coh=1 → z=1.0 → MOS≈4.97
-        z = (self.W_NSIM * nsim
-             + self.W_MCD * (1.0 - np.clip(mcd_db, 0.0, 50.0) / 50.0)  # invertiert: 0 dB → 1.0
-             + self.W_COH * coh
-             + self.W_LUFS * 1.0)  # LUFS-Komponente neutral (keine Referenz-LUFS nötig)
+        z = (
+            self.W_NSIM * nsim
+            + self.W_MCD * (1.0 - np.clip(mcd_db, 0.0, 50.0) / 50.0)  # invertiert: 0 dB → 1.0
+            + self.W_COH * coh
+            + self.W_LUFS * 1.0
+        )  # LUFS-Komponente neutral (keine Referenz-LUFS nötig)
         mos = 1.0 + 4.0 / (1.0 + np.exp(-8.0 * (z - 0.5)))
         mos = np.clip(mos, 1.0, 5.0)
 
@@ -132,7 +132,9 @@ class PerceptualQualityScorer:
         coh = np.nan_to_num(coh, nan=0.6)
         mos = np.nan_to_num(mos, nan=3.5)
 
-        return PQSResult(mos=float(mos), nsim=float(nsim), mcd_db=float(mcd_db), spectral_coherence=float(coh), referenced=True)
+        return PQSResult(
+            mos=float(mos), nsim=float(nsim), mcd_db=float(mcd_db), spectral_coherence=float(coh), referenced=True
+        )
 
     def score_absolute(self, audio: np.ndarray, sr: int) -> PQSResult:
         """Alias für score_audio_absolute() — Rückwärtskompatibilität (§2.6)."""
@@ -146,6 +148,7 @@ class PerceptualQualityScorer:
         """
         if sr != 48000:
             import logging
+
             logging.getLogger(__name__).debug(
                 "score_audio_absolute: SR=%d (erwartet 48000) — weiterverarbeitung trotzdem", sr
             )
@@ -181,8 +184,11 @@ class PerceptualQualityScorer:
         flatness = np.nan_to_num(flatness, nan=0.5)
 
         return PQSResult(
-            mos=float(mos), nsim=float(nsim), mcd_db=float(mcd_db),
-            spectral_coherence=float(1.0 - flatness), referenced=False
+            mos=float(mos),
+            nsim=float(nsim),
+            mcd_db=float(mcd_db),
+            spectral_coherence=float(1.0 - flatness),
+            referenced=False,
         )
 
 

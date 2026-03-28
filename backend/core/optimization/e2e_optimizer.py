@@ -471,7 +471,7 @@ class E2EOptimizationFramework:
             epoch_losses.append(losses)
 
             if batch_idx % 100 == 0:
-                logger.info(f"Epoch {epoch}, Batch {batch_idx}: " f"Loss = {losses['total_perceptual_loss']:.4f}")
+                logger.info(f"Epoch {epoch}, Batch {batch_idx}: Loss = {losses['total_perceptual_loss']:.4f}")
 
         # Average losses
         avg_losses = {}

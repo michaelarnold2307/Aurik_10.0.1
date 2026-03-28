@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,9 @@ def get_model_manager() -> ModelManager:
 
 
 class ModelManager:
-    def register_adaptive_plugins(self, sibilantnet: Any, breathnet: Any, voicehealthnet: Any, languagenet: Any) -> None:
+    def register_adaptive_plugins(
+        self, sibilantnet: Any, breathnet: Any, voicehealthnet: Any, languagenet: Any
+    ) -> None:
         self.register_model("sibilantnet", sibilantnet, {"type": "sibilant", "adaptive": True})
         self.register_model("breathnet", breathnet, {"type": "breath", "adaptive": True})
         self.voicehealthnet = voicehealthnet

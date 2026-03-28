@@ -15,6 +15,7 @@ Testet:
 from __future__ import annotations
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 import pytest
 

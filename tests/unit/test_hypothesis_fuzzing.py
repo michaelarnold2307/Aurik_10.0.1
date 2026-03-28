@@ -15,7 +15,8 @@ import numpy as np
 import pytest
 
 try:
-    from hypothesis import HealthCheck, assume, given, settings, strategies as st
+    from hypothesis import HealthCheck, given, settings
+    from hypothesis import strategies as st
 
     HYPOTHESIS_AVAILABLE = True
 except ImportError:
@@ -104,8 +105,10 @@ class TestMusicalGoalsFuzzing:
         audio = np.clip(audio, -1.0, 1.0)
 
         try:
-            from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
             import os
+
+            from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
+
             # CREPE-ONNX kann bei hypothesis-Fuzzing in den 30s-Timeout laufen → CREPE deaktivieren
             os.environ.setdefault("AURIK_DISABLE_CREPE", "1")
             checker = MusicalGoalsChecker()
@@ -126,8 +129,10 @@ class TestMusicalGoalsFuzzing:
         audio[n // 2] = 1.0
 
         try:
-            from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
             import os
+
+            from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
+
             os.environ.setdefault("AURIK_DISABLE_CREPE", "1")
             checker = MusicalGoalsChecker()
             scores = checker.measure_all(audio, sr=48000)
@@ -567,7 +572,9 @@ class TestIADFuzzing:
             from backend.core.introduced_artifact_detector import IADResult, get_iad
         except ImportError:
             pytest.skip("IntroducedArtifactDetector nicht importierbar")
-        raw = np.random.randn(4800).astype(np.float32) * (scale if math.isfinite(scale) else 0.3)
+        # Keep fuzz intent (extreme values) but avoid test-side overflow warnings.
+        safe_scale = float(np.clip(scale if math.isfinite(scale) else 0.3, -1.0e6, 1.0e6))
+        raw = np.random.randn(4800).astype(np.float32) * safe_scale
         raw[0] = float("nan")
         raw[-1] = float("inf")
         iad = get_iad()

@@ -827,7 +827,7 @@ class TestGrooveMetricNoReferenceCalibration:
         for k in range(n_beats):
             t = k * ioi_s + rng.uniform(-jitter_s, jitter_s)
             i = int(t * self.SR)
-            if 0 <= i and i + 2400 < n:
+            if i >= 0 and i + 2400 < n:
                 audio[i : i + 2400] += 0.8 * np.exp(-np.arange(2400) * 0.003).astype(np.float32)
         return np.clip(audio, -1.0, 1.0)
 
@@ -1087,7 +1087,6 @@ class TestTransparenzMetricV913Calibration:
         Regression: alter Nenner 22 lieferte 0.636 für 22 dB Kontrast.
         """
         import librosa
-
 
         audio = self._broadband_audio()
         contrast = librosa.feature.spectral_contrast(y=audio, sr=self.SR, n_fft=2048, hop_length=512)

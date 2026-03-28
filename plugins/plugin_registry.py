@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 _PLUGIN_DIR = os.path.dirname(__file__)
 _KNOWN: list[str] = [
-    fname[:-3]
-    for fname in os.listdir(_PLUGIN_DIR)
-    if fname.endswith("_plugin.py") and not fname.startswith("_")
+    fname[:-3] for fname in os.listdir(_PLUGIN_DIR) if fname.endswith("_plugin.py") and not fname.startswith("_")
 ]
 _cache: dict[str, Any] = {}
 _lock = threading.Lock()

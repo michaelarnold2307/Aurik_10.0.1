@@ -137,6 +137,7 @@ class BanquetVinylPlugin:
             self._model_ok = False
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("BanquetVinyl")
             except Exception:
                 pass

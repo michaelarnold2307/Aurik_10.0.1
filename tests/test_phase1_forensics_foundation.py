@@ -2,8 +2,8 @@
 Quick validation test für Phase 1 Signal Forensics Foundation
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 

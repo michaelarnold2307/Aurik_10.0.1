@@ -9,7 +9,6 @@ weighted average or adaptive signal-level fusion.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, List, Optional
 
 import numpy as np
 
@@ -81,6 +80,7 @@ import threading as _threading
 
 _fusion_engine_instance = None
 _fusion_engine_lock = _threading.Lock()
+
 
 def get_fusion_engine() -> FusionEngine:
     """Return the process-wide singleton FusionEngine instance."""

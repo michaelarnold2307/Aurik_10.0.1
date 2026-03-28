@@ -8,8 +8,8 @@ Testet:
 - TonalBalanceRestorer (unified API)
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -733,7 +733,7 @@ class TestPerformance:
         assert elapsed < audio_duration * 10
 
         print(f"\nProcessing time: {elapsed:.3f}s for {audio_duration:.1f}s audio")
-        print(f"Real-time factor: {elapsed/audio_duration:.2f}×")
+        print(f"Real-time factor: {elapsed / audio_duration:.2f}×")
 
 
 if __name__ == "__main__":

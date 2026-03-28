@@ -21,19 +21,18 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
 try:
-    import librosa
+    pass
 
     _LIBROSA_OK = True
 except ImportError:
     _LIBROSA_OK = False
 
 try:
-    from plugins.crepe_plugin import get_crepe_plugin as _get_crepe
+    pass
 
     _CREPE_OK = True
 except Exception:
@@ -180,9 +179,7 @@ class SpectralBandGapRepair:
     # Private Hilfsmethoden
     # ------------------------------------------------------------------
 
-    def _detect_band_gaps(
-        self, mono: np.ndarray, sr: int
-    ) -> list[tuple[float, float]]:
+    def _detect_band_gaps(self, mono: np.ndarray, sr: int) -> list[tuple[float, float]]:
         """Erkennt Frequenzband-Lücken via 1/6-Okt.-Energieanalyse.
 
         Returns:

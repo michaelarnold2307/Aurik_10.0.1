@@ -9,6 +9,7 @@ import math
 import threading
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 
 from backend.core.goal_applicability_filter import (

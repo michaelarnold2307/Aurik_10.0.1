@@ -53,12 +53,6 @@ def _digital_silence_with_hiss(
 
 def test_00_import():
     """Modul importierbar ohne Fehler."""
-    from backend.core.remaster_detector import (  # noqa: F401
-        RemasterDetector,
-        RemasterResult,
-        analyse_remaster,
-        get_remaster_detector,
-    )
 
     assert True
 

@@ -184,6 +184,7 @@ class MatplotlibWaveformWidget(QWidget):
     Das feature-reiche WaveformWidget mit Defekt-Overlay, Lyrics-Timeline und
     Custom-Painter ist in modern_window.py definiert.
     """
+
     progress = pyqtSignal(int)  # Fortschrittssignal (0-100)
 
     def __init__(self, parent=None):
@@ -276,7 +277,7 @@ class MatplotlibWaveformWidget(QWidget):
             self.progress.emit(40)
             # Simulierte Schrittweite für große Dateien (optional sleep für Demo)
             # import time; time.sleep(0.1)
-            self.canvas.plot_waveform(audio, sr, title=t("legacy.waveform.waveform_file", file=filepath.split('/')[-1]))
+            self.canvas.plot_waveform(audio, sr, title=t("legacy.waveform.waveform_file", file=filepath.split("/")[-1]))
             self.progress.emit(70)
             # Noch ein Schritt für "Player laden" (wird im MainWindow gemacht)
             self.progress.emit(90)

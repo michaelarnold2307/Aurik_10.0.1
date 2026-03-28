@@ -26,6 +26,7 @@ import numpy as np
 
 try:
     import matchering as _mg
+
     _MATCHERING_AVAILABLE = True
 except ImportError:
     _mg = None  # type: ignore[assignment]
@@ -47,7 +48,7 @@ class MatcheringPlugin:
     N_FFT = 4096
     HOP = 1024
     SMOOTH_BANDS = 43  # ~1/6 oct at 48 kHz
-    MAX_EQ_DB = 8.0    # Matchering uses up to 8 dB internally
+    MAX_EQ_DB = 8.0  # Matchering uses up to 8 dB internally
 
     def process(
         self,
@@ -154,8 +155,8 @@ class MatcheringPlugin:
             mean_r = np.mean(np.abs(Zr), axis=1) + 1e-9
             ratio = np.clip(mean_r / mean_t, 1.0 / max_g, max_g)
             ratio = uniform_filter1d(ratio, size=self.SMOOTH_BANDS)
-            rms_t = float(np.sqrt(np.mean(tc ** 2)) + 1e-9)
-            rms_r = float(np.sqrt(np.mean(rc ** 2)) + 1e-9)
+            rms_t = float(np.sqrt(np.mean(tc**2)) + 1e-9)
+            rms_r = float(np.sqrt(np.mean(rc**2)) + 1e-9)
             g_rms = float(np.clip(rms_r / rms_t, 0.1, 10.0))
             Zout = Zt * ratio[:, np.newaxis] * g_rms
             _, out = istft(Zout, fs=sr, window=win, nperseg=self.N_FFT, noverlap=self.N_FFT - self.HOP)

@@ -90,7 +90,9 @@ class MaterialSpecificOptimizer:
     Optimizes hyperparameters for specific source materials using Bayesian Optimization.
     """
 
-    def __init__(self, material_type: str, storage_path: Path | None = None, n_trials: int = 100, n_jobs: int = 4) -> None:
+    def __init__(
+        self, material_type: str, storage_path: Path | None = None, n_trials: int = 100, n_jobs: int = 4
+    ) -> None:
         """
         Initialize optimizer for specific material type.
 
@@ -474,9 +476,9 @@ class MultiMaterialOptimizer:
         results = {}
 
         for material in self.material_types:
-            logger.info(f"\n{'='*80}")
+            logger.info(f"\n{'=' * 80}")
             logger.info(f"Optimizing {material}")
-            logger.info(f"{'='*80}\n")
+            logger.info(f"{'=' * 80}\n")
 
             optimizer = self.optimizers[material]
             dataset = datasets.get(material, [])

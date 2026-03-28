@@ -30,8 +30,8 @@ import time
 import numpy as np
 import pytest
 
-from backend.core.performance_guard import QualityMode
 from backend.core.defect_scanner import MaterialType
+from backend.core.performance_guard import QualityMode
 from backend.core.unified_restorer_v3 import RestorationConfig, UnifiedRestorerV3
 
 # =============================================================================
@@ -138,7 +138,7 @@ def test_tier1_phase_selection():
     # Wir prüfen stattdessen, dass mindestens 1 Tier-1-Phase ausgewaehlt wurde.
     tier1_in_selection = [p for p in selected_phases if any(k in p for k in ("bass", "vocal", "drums"))]
     assert len(tier1_in_selection) >= 1, (
-        f"Mindestens 1 Tier-1-Phase muss ausgewaehlt werden. " f"Ausgewaehlt: {tier1_in_selection}"
+        f"Mindestens 1 Tier-1-Phase muss ausgewaehlt werden. Ausgewaehlt: {tier1_in_selection}"
     )
 
     print("\n✅ Phase selection logic: PASS")
@@ -266,7 +266,7 @@ def test_tier1_performance_targets():
     # CPU-Auslastung, Festplatten-Typ und Anzahl der Phasen deutlich variieren.
     # Der Qualitaets-Anspruch (27 Phasen!) ist wichtiger als Echtzeit-Faktor in Tests.
     assert result.rt_factor < TARGET_OVERALL_RT * 10.0, (
-        f"Overall RT factor ({result.rt_factor:.2f}x) exceeds extended test limit " f"({TARGET_OVERALL_RT * 10.0:.1f}x)"
+        f"Overall RT factor ({result.rt_factor:.2f}x) exceeds extended test limit ({TARGET_OVERALL_RT * 10.0:.1f}x)"
     )
 
     print(

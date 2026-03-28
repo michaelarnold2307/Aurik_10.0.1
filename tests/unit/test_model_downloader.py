@@ -21,9 +21,9 @@ import hashlib
 import json
 import logging
 import math
-from pathlib import Path
 import threading
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -526,7 +526,7 @@ class TestThreadSafety:
         def run():
             try:
                 dl.ensure_all()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 errors.append(str(exc))
 
         threads = [threading.Thread(target=run) for _ in range(8)]

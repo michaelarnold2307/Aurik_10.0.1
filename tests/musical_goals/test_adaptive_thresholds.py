@@ -5,8 +5,8 @@ Component 0.9.4: Genre & Medium-Specific Calibration
 """
 
 import json
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import pytest
 

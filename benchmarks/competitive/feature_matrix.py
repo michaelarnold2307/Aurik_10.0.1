@@ -170,9 +170,9 @@ def generate_feature_matrix_table():
             if "supported" in data:
                 if data["supported"]:
                     symbol = "✅"
-                    if "quality" in data and data["quality"]:
+                    if data.get("quality"):
                         symbol += f" ({data['quality']})"
-                    if "ai_powered" in data and data["ai_powered"]:
+                    if data.get("ai_powered"):
                         symbol += " 🤖"
                 else:
                     symbol = "❌"

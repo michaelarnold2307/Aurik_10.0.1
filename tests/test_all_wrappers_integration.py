@@ -31,9 +31,9 @@ Phase: 1 Week 5-6
 """
 
 import json
-from pathlib import Path
 import shutil
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest

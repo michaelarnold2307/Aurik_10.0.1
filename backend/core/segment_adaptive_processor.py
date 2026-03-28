@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -14,7 +14,7 @@ MIN_SEGMENT_DURATION_S: float = 0.5  # Minimale Segmentlänge in Sekunden (§2.1
 CROSSFADE_MS: float = 20.0  # OLA-Crossfade in ms (§2.10 Hanning)
 
 # §7.6 Adaptive Chunk-Verarbeitung (Dateien ≥ 5 Minuten)
-_CHUNK_MIN_S: float = 2.0    # absolutes Minimum
+_CHUNK_MIN_S: float = 2.0  # absolutes Minimum
 _CHUNK_MAX_S: float = 120.0  # absolutes Maximum (Stille-Segmente)
 
 

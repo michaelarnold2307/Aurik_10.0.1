@@ -7,10 +7,8 @@ Provides vectorised multi-core FFT processing and benchmark utilities.
 
 from __future__ import annotations
 
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict
 
 import numpy as np
 
@@ -81,9 +79,7 @@ class AlgorithmicEfficiencyOptimizer:
         else:
             result = self._process_single(audio_f32)
 
-        return np.nan_to_num(
-            np.clip(result, -1.0, 1.0), nan=0.0, posinf=0.0, neginf=0.0
-        ).astype(np.float32)
+        return np.nan_to_num(np.clip(result, -1.0, 1.0), nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
 
     def _process_single(self, audio: np.ndarray) -> np.ndarray:
         hop = self._fft.n_fft // 2
@@ -102,7 +98,7 @@ class AlgorithmicEfficiencyOptimizer:
             spec_out = spec * gain
             restored = self._fft.ifft(spec_out)[: self._fft.n_fft]
             out[start : start + self._fft.n_fft] += restored * win
-            count[start : start + self._fft.n_fft] += win ** 2
+            count[start : start + self._fft.n_fft] += win**2
 
         # OLA normalisation
         count = np.where(count > 1e-8, count, 1.0)
@@ -124,9 +120,7 @@ class AlgorithmicEfficiencyOptimizer:
     # Benchmarking
     # ------------------------------------------------------------------
 
-    def benchmark(
-        self, audio: np.ndarray, sr: int, n_iterations: int = 2
-    ) -> dict[str, object]:
+    def benchmark(self, audio: np.ndarray, sr: int, n_iterations: int = 2) -> dict[str, object]:
         """Measure single-core vs. multi-core throughput.
 
         Returns

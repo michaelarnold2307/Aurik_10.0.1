@@ -9,7 +9,7 @@ The test asserts exactalgorithmically:
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 
 class FeedbackIntegrator:
@@ -69,6 +69,7 @@ def get_feedback_integrator(
             if _feedback_integrator_instance is None:
                 from backend.core.community_rating_platform import CommunityRatingPlatform
                 from backend.core.expert_feedback_system import ExpertFeedbackSystem
+
                 es = expert_system or ExpertFeedbackSystem()
                 cp = community_platform or CommunityRatingPlatform()
                 _feedback_integrator_instance = FeedbackIntegrator(es, cp)

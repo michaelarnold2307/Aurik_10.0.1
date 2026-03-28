@@ -275,9 +275,18 @@ class OutputFormatOptimization(PhaseInterface):
 
         audio_quantized = np.nan_to_num(audio_quantized, nan=0.0, posinf=0.0, neginf=0.0)
         audio_quantized = np.clip(audio_quantized, -1.0, 1.0)
+
+        # Return pre-quantization audio (audio_limited) for the pipeline.
+        # Quantization creates discrete amplitude steps that spectral PMGG proxies
+        # misinterpret as noise injection, causing false catastrophic regressions.
+        # The actual bit-depth conversion is performed by the I/O layer (soundfile)
+        # at export time — returning float32 here is correct and lossless for PMGG.
+        audio_pipeline = np.nan_to_num(audio_limited.copy(), nan=0.0, posinf=0.0, neginf=0.0)
+        audio_pipeline = np.clip(audio_pipeline, -1.0, 1.0).astype(np.float32)
+
         return PhaseResult(
             success=True,
-            audio=audio_quantized,
+            audio=audio_pipeline,
             metrics={
                 "resampled": resampled,
                 "input_sample_rate": sample_rate,

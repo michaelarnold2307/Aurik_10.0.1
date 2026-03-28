@@ -17,7 +17,7 @@ import logging
 import math
 import threading
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import Any
 
 import numpy as np
 
@@ -123,7 +123,7 @@ class TontraegerDenker:
                         logger.info("TontraegerDenker: MediumDetector geladen.")
                     except Exception as exc:
                         logger.warning(
-                            "TontraegerDenker: MediumDetector nicht verfügbar (%s). " "Fallback auf 'unknown'.",
+                            "TontraegerDenker: MediumDetector nicht verfügbar (%s). Fallback auf 'unknown'.",
                             exc,
                         )
                         self._detector = None
@@ -186,8 +186,10 @@ class TontraegerDenker:
                 if "detected_media" not in raw and "transfer_chain" in raw:
                     raw["detected_media"] = [(m, 1.0) for m in raw.get("transfer_chain", [])]
             else:
-                raw = {"material_type": str(getattr(raw_result, "primary_material", "unknown")),
-                       "confidence": float(getattr(raw_result, "confidence", 0.5))}
+                raw = {
+                    "material_type": str(getattr(raw_result, "primary_material", "unknown")),
+                    "confidence": float(getattr(raw_result, "confidence", 0.5)),
+                }
         except Exception as exc:
             logger.warning("TontraegerDenker: detect() fehlgeschlagen (%s). Fallback.", exc)
             return self._fallback_result()

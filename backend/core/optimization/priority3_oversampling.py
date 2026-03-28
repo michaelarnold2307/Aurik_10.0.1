@@ -45,6 +45,7 @@ class AdaptiveOversamplingProcessor:
 
         try:
             import librosa
+
             onsets = librosa.onset.onset_detect(y=x, sr=sr, units="samples")
         except Exception:
             onsets = np.array([], dtype=int)

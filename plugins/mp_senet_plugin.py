@@ -140,6 +140,7 @@ class MpSenetPlugin:
             logger.warning("MP-SENet ONNX nicht ladbar: %s — OMLSA-DSP-Fallback aktiv.", exc)
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("MP-SENet")
             except Exception:
                 pass
@@ -229,27 +230,47 @@ class MpSenetPlugin:
         return x
 
     def _enhance_onnx(self, mono: np.ndarray, sr: int) -> np.ndarray:
-        """MP-SENet ONNX-Inferenz: Magnitude + Phase Enhancement."""
+        """MP-SENet ONNX-Inferenz: Magnitude + Phase Enhancement.
+
+        The model expects two separate inputs:
+            noisy_amp  [batch, 201, time]  — STFT magnitude
+            noisy_pha  [batch, 201, time]  — STFT phase (radians)
+        At 48 kHz with N_FFT=960 we have 481 freq bins.  The model was
+        trained on 201-bin spectrograms (≙ N_FFT=400 @ 16 kHz / ≙ 0–10 kHz
+        at 50 Hz/bin when N_FFT=960 @ 48 kHz).  We crop to the first 201
+        bins (0–10 kHz), process them, and stitch the denoised lower bins
+        back into the full spectrum before iSTFT reconstruction.
+        """
         assert self._session is not None
+        _N_BINS = 201  # model's fixed frequency-bin count
         try:
-            Z, _, n_orig = self._stft(mono)
-            np.abs(Z).astype(np.float32)  # [freq, T]
-            np.angle(Z).astype(np.float32)  # [freq, T]
+            Z, _, n_orig = self._stft(mono)  # Z: [481, T] complex64
+            amp_full = np.abs(Z).astype(np.float32)  # [481, T]
+            pha_full = np.angle(Z).astype(np.float32)  # [481, T]
 
-            # Input: Real + Imag getrennt → [1, 2, freq, T]
-            real_part = Z.real[np.newaxis, np.newaxis]  # [1, 1, freq, T]
-            imag_part = Z.imag[np.newaxis, np.newaxis]  # [1, 1, freq, T]
-            inp = np.concatenate([real_part, imag_part], axis=1).astype(np.float32)
+            # Crop to model's 201-bin input (covers 0–10 kHz @ 50 Hz/bin)
+            amp_in = amp_full[:_N_BINS][np.newaxis]  # [1, 201, T]
+            pha_in = pha_full[:_N_BINS][np.newaxis]  # [1, 201, T]
 
-            inp_name = self._session.get_inputs()[0].name
-            ort_out = self._session.run(None, {inp_name: inp})
-            out_complex = np.asarray(ort_out[0], dtype=np.float32)  # [1, 2, freq, T]
+            # Retrieve both required input names from the session
+            inp_names = [i.name for i in self._session.get_inputs()]
+            if len(inp_names) < 2:
+                raise ValueError(f"MP-SENet: expected ≥2 inputs, got {inp_names}")
 
-            # Real + Imag aus ONNX-Output rekonstruieren
-            out_real = out_complex[0, 0] if out_complex.shape[1] >= 2 else out_complex[0, 0]
-            out_imag = out_complex[0, 1] if out_complex.shape[1] >= 2 else np.zeros_like(out_real)
+            ort_out = self._session.run(
+                ["denoised_amp", "denoised_pha"],
+                {inp_names[0]: amp_in, inp_names[1]: pha_in},
+            )
+            denoised_amp = np.asarray(ort_out[0], dtype=np.float32)[0]  # [201, T]
+            denoised_pha = np.asarray(ort_out[1], dtype=np.float32)[0]  # [201, T]
 
-            Z_enhanced = (out_real + 1j * out_imag).astype(np.complex64)
+            # Stitch denoised lower bins back; keep original upper bins
+            amp_out = amp_full.copy()
+            pha_out = pha_full.copy()
+            amp_out[:_N_BINS] = np.nan_to_num(denoised_amp, nan=0.0, posinf=0.0, neginf=0.0)
+            pha_out[:_N_BINS] = np.nan_to_num(denoised_pha, nan=0.0, posinf=0.0, neginf=0.0)
+
+            Z_enhanced = (amp_out * np.exp(1j * pha_out)).astype(np.complex64)
             Z_enhanced = np.nan_to_num(Z_enhanced, nan=0.0, posinf=0.0, neginf=0.0)
 
             result = self._istft(Z_enhanced, n_orig)

@@ -11,11 +11,11 @@ class TestPerformanceGuardSpecCompliance:
     """Spec-Compliance für PerformanceGuard (§RT8/2026)."""
 
     def test_limits_match_2026_spec(self) -> None:
-        assert PerformanceGuard.LIMIT_FAST == pytest.approx(3.0)
-        assert PerformanceGuard.LIMIT_BALANCED == pytest.approx(32.0)  # v9.10.72: 32× RT (§PerformanceGuard)
-        assert PerformanceGuard.LIMIT_QUALITY == pytest.approx(32.0)  # v9.10.72: 32× RT (Restoration)
-        assert PerformanceGuard.LIMIT_MAXIMUM == pytest.approx(32.0)  # v9.10.72: 32× RT (Studio-2026-ML-Chain)
-        assert PerformanceGuard.RT8_EXCELLENCE_BUDGET == pytest.approx(32.0)  # v9.10.72: 32× RT
+        assert pytest.approx(3.0) == PerformanceGuard.LIMIT_FAST
+        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_BALANCED  # v9.10.72: 32× RT (§PerformanceGuard)
+        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_QUALITY  # v9.10.72: 32× RT (Restoration)
+        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_MAXIMUM  # v9.10.72: 32× RT (Studio-2026-ML-Chain)
+        assert pytest.approx(32.0) == PerformanceGuard.RT8_EXCELLENCE_BUDGET  # v9.10.72: 32× RT
 
     def test_target_mapping_uses_quality_budget(self) -> None:
         fast_guard = PerformanceGuard(mode=QualityMode.FAST, enforce_limit=True, enable_adaptive_skipping=True)

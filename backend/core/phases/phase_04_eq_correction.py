@@ -179,96 +179,161 @@ class EQCorrectionPhase(PhaseInterface):
     # Columbia 78 rpm (1938–1948): τ1=∞, τ2=350μs, τ3=100μs
     # Bass: flat shelf; treble cut from ~500 Hz @ 5 dB/oct
     COLUMBIA_1938 = {
-        50: +2.5, 100: +2.5, 500: +1.0, 1000: -0.5,
-        2000: -2.5, 5000: -6.5, 10000: -11.0, 15000: -14.5,
+        50: +2.5,
+        100: +2.5,
+        500: +1.0,
+        1000: -0.5,
+        2000: -2.5,
+        5000: -6.5,
+        10000: -11.0,
+        15000: -14.5,
     }
 
     # AES (Audio Engineering Society, 1951): τ1=3180μs, τ2=400μs, τ3=50μs
     # Pre-RIAA standard widely used in US, very close to early RIAA.
     AES_1951 = {
-        20: 0.0, 50: +3.0, 100: +6.5, 500: +10.0,
-        1000: +8.5, 2000: +5.5, 5000: +1.5,
-        10000: -1.5, 15000: -3.5, 20000: -5.0,
+        20: 0.0,
+        50: +3.0,
+        100: +6.5,
+        500: +10.0,
+        1000: +8.5,
+        2000: +5.5,
+        5000: +1.5,
+        10000: -1.5,
+        15000: -3.5,
+        20000: -5.0,
     }
 
     # Decca / ffrr (Full Frequency Range Recording, 1944–1954)
     # τ1=3180μs, τ2=450μs, τ3=50μs — prominent HF boost during cutting
     DECCA_FFRR_1949 = {
-        50: +2.5, 100: +5.5, 500: +9.5,
-        1000: +8.0, 2000: +5.0, 5000: +1.0,
-        10000: -2.5, 15000: -5.5, 20000: -8.0,
+        50: +2.5,
+        100: +5.5,
+        500: +9.5,
+        1000: +8.0,
+        2000: +5.0,
+        5000: +1.0,
+        10000: -2.5,
+        15000: -5.5,
+        20000: -8.0,
     }
 
     # EMI (UK, 1953): close to AES but with steeper LF shelf
     # τ1=3180μs, τ2=318μs (same as final RIAA), τ3=75μs
     EMI_1953 = {
-        50: +2.0, 100: +5.5, 500: +9.0,
-        1000: +7.5, 2000: +4.5, 5000: +1.5,
-        10000: -1.0, 15000: -2.5, 20000: -4.0,
+        50: +2.0,
+        100: +5.5,
+        500: +9.0,
+        1000: +7.5,
+        2000: +4.5,
+        5000: +1.5,
+        10000: -1.0,
+        15000: -2.5,
+        20000: -4.0,
     }
 
     # NAB 1952 (tape head replay, not to be confused with NAB 15ips):
     # Used briefly for lacquer disc masters in early 1950s
     NAB_1952 = {
-        50: +3.5, 100: +5.5, 500: +7.5,
-        1000: +6.0, 2000: +3.5, 5000: +0.5,
-        10000: -2.0, 15000: -4.5,
+        50: +3.5,
+        100: +5.5,
+        500: +7.5,
+        1000: +6.0,
+        2000: +3.5,
+        5000: +0.5,
+        10000: -2.0,
+        15000: -4.5,
     }
 
     # RCA Victor (US, 1947–1952): heavy bass compensation, moderate treble
     # τ1=∞, τ2=500μs → notable bass boost up to 500 Hz
     RCA_VICTOR_1947 = {
-        50: +4.5, 100: +6.5, 500: +4.0,
-        1000: +2.0, 2000: +0.5, 5000: -2.0,
-        10000: -5.5, 15000: -9.0,
+        50: +4.5,
+        100: +6.5,
+        500: +4.0,
+        1000: +2.0,
+        2000: +0.5,
+        5000: -2.0,
+        10000: -5.5,
+        15000: -9.0,
     }
 
     # CCIR (European radio standard, 1950–1958)
     # τ1=3180μs, τ2=318μs, NO τ3 (flat above 3.18 kHz)
     CCIR_1950 = {
-        50: +2.0, 100: +5.0, 500: +8.5,
-        1000: +7.5, 2000: +5.0, 5000: +2.5,
-        10000: +1.0, 15000: +0.5,
+        50: +2.0,
+        100: +5.0,
+        500: +8.5,
+        1000: +7.5,
+        2000: +5.0,
+        5000: +2.5,
+        10000: +1.0,
+        15000: +0.5,
     }
 
     # HMV (UK, 1930s–1949): early electrical recording, strong bass rolloff
     HMV_1935 = {
-        50: +5.5, 100: +6.0, 500: +4.0,
-        1000: +2.5, 2000: +0.5, 5000: -3.5,
-        10000: -7.5, 15000: -12.0,
+        50: +5.5,
+        100: +6.0,
+        500: +4.0,
+        1000: +2.5,
+        2000: +0.5,
+        5000: -3.5,
+        10000: -7.5,
+        15000: -12.0,
     }
 
     # Telefunken / DGG (German Electrola, 1940s)
     TELEFUNKEN_1940 = {
-        50: +3.0, 100: +5.0, 500: +3.5,
-        1000: +1.5, 2000: -0.5, 5000: -3.0,
-        10000: -7.0, 15000: -11.5,
+        50: +3.0,
+        100: +5.0,
+        500: +3.5,
+        1000: +1.5,
+        2000: -0.5,
+        5000: -3.0,
+        10000: -7.0,
+        15000: -11.5,
     }
 
     # Generic early wax cylinder playback curve (1900–1925)
     # BW ≤ 5 kHz, heavy bass/mid rolloff, strong treble compensation needed
     WAX_CYLINDER_GENERIC = {
-        50: +6.0, 100: +7.0, 500: +5.0,
-        1000: +3.0, 2000: +1.0, 5000: -4.0,
-        10000: -10.0, 15000: -16.0,
+        50: +6.0,
+        100: +7.0,
+        500: +5.0,
+        1000: +3.0,
+        2000: +1.0,
+        5000: -4.0,
+        10000: -10.0,
+        15000: -16.0,
     }
 
     # Capitol Records (US, ~1951–1954): τ1=∞, τ2=400μs, τ3=75μs
     # Source: Galo (2003) "Disc Recording EQ Curves"; Robertson (2011).
     # Used by Capitol before adopting RIAA 1954 standard.
     CAPITOL_1951 = {
-        50: +4.5, 100: +5.5, 500: +3.0,
-        1000: +1.2, 2000: -0.2, 5000: -2.5,
-        10000: -6.0, 15000: -9.5,
+        50: +4.5,
+        100: +5.5,
+        500: +3.0,
+        1000: +1.2,
+        2000: -0.2,
+        5000: -2.5,
+        10000: -6.0,
+        15000: -9.5,
     }
 
     # London / Decca UK (1953): τ1=3180μs, τ2=350μs, τ3=75μs
     # Close to FFRR 1949 but with softer HF rolloff (75μs instead of 50μs).
     # Source: Copeland (2008) "Phono EQ Curves".
     LONDON_DECCA_1953 = {
-        50: +2.5, 100: +5.5, 500: +5.5,
-        1000: +3.5, 2000: +1.0, 5000: -1.0,
-        10000: -3.5, 15000: -6.5,
+        50: +2.5,
+        100: +5.5,
+        500: +5.5,
+        1000: +3.5,
+        2000: +1.0,
+        5000: -1.0,
+        10000: -3.5,
+        15000: -6.5,
     }
 
     # Mapping: variant name → curve dict (used in _auto_detect_riaa_variant)
@@ -350,19 +415,19 @@ class EQCorrectionPhase(PhaseInterface):
         # Build HISTORICAL_CURVES lookup (class-level to allow subclass override)
         if not EQCorrectionPhase.HISTORICAL_CURVES:
             EQCorrectionPhase.HISTORICAL_CURVES = {
-                "columbia_1938":    self.COLUMBIA_1938,
-                "aes_1951":         self.AES_1951,
-                "decca_ffrr_1949":  self.DECCA_FFRR_1949,
-                "emi_1953":         self.EMI_1953,
-                "nab_1952":         self.NAB_1952,
-                "rca_victor_1947":  self.RCA_VICTOR_1947,
-                "ccir_1950":        self.CCIR_1950,
-                "hmv_1935":         self.HMV_1935,
-                "telefunken_1940":  self.TELEFUNKEN_1940,
-                "wax_cylinder":     self.WAX_CYLINDER_GENERIC,
-                "shellac_generic":  self.SHELLAC_CURVE,
-                "riaa_1954":        self.RIAA_CURVE,
-                "capitol_1951":     self.CAPITOL_1951,
+                "columbia_1938": self.COLUMBIA_1938,
+                "aes_1951": self.AES_1951,
+                "decca_ffrr_1949": self.DECCA_FFRR_1949,
+                "emi_1953": self.EMI_1953,
+                "nab_1952": self.NAB_1952,
+                "rca_victor_1947": self.RCA_VICTOR_1947,
+                "ccir_1950": self.CCIR_1950,
+                "hmv_1935": self.HMV_1935,
+                "telefunken_1940": self.TELEFUNKEN_1940,
+                "wax_cylinder": self.WAX_CYLINDER_GENERIC,
+                "shellac_generic": self.SHELLAC_CURVE,
+                "riaa_1954": self.RIAA_CURVE,
+                "capitol_1951": self.CAPITOL_1951,
                 "london_decca_1953": self.LONDON_DECCA_1953,
             }
 
@@ -405,7 +470,9 @@ class EQCorrectionPhase(PhaseInterface):
             params["eq_curve"] = self.HISTORICAL_CURVES[detected_variant]
             logger.info(
                 "phase_04: historical RIAA variant '%s' selected for decade=%s material=%s",
-                detected_variant, decade, material_type,
+                detected_variant,
+                decade,
+                material_type,
             )
 
         # Check if EQ needed
@@ -479,9 +546,7 @@ class EQCorrectionPhase(PhaseInterface):
             },
         )
 
-    def _auto_detect_riaa_variant(
-        self, audio: np.ndarray, sr: int, decade: int
-    ) -> str:
+    def _auto_detect_riaa_variant(self, audio: np.ndarray, sr: int, decade: int) -> str:
         """
         Selects the most likely pre-RIAA recording standard for a given decade.
 
@@ -540,9 +605,7 @@ class EQCorrectionPhase(PhaseInterface):
             freqs_w, psd_w = signal.welch(mono, sr, nperseg=4096)
             psd_db = 10.0 * np.log10(np.maximum(psd_w, 1e-12))
             # Sample PSD at probe frequencies
-            measured = np.array([
-                psd_db[np.argmin(np.abs(freqs_w - f))] for f in PROBE_FREQS
-            ], dtype=np.float64)
+            measured = np.array([psd_db[np.argmin(np.abs(freqs_w - f))] for f in PROBE_FREQS], dtype=np.float64)
             # Mean-center (only shape matters, not absolute level)
             measured -= measured.mean()
         except Exception:
@@ -555,9 +618,7 @@ class EQCorrectionPhase(PhaseInterface):
             curve = self.HISTORICAL_CURVES.get(variant)
             if curve is None:
                 continue
-            curve_vals = np.array([
-                float(curve.get(f, 0.0)) for f in PROBE_FREQS
-            ], dtype=np.float64)
+            curve_vals = np.array([float(curve.get(f, 0.0)) for f in PROBE_FREQS], dtype=np.float64)
             curve_vals -= curve_vals.mean()
             # Pearson correlation between measured tilt and template
             std_m = np.std(measured)
@@ -572,7 +633,10 @@ class EQCorrectionPhase(PhaseInterface):
 
         logger.debug(
             "phase_04: _auto_detect_riaa_variant decade=%d → '%s' (pearson=%.3f, candidates=%s)",
-            decade, best_variant, best_corr, candidates,
+            decade,
+            best_variant,
+            best_corr,
+            candidates,
         )
         return best_variant
 
@@ -750,9 +814,9 @@ if __name__ == "__main__":
     materials = ["shellac", "vinyl", "tape", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-'*80}")
+        logger.debug(f"\n{'-' * 80}")
         logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-'*80}")
+        logger.debug(f"{'-' * 80}")
 
         phase = EQCorrectionPhase(sample_rate=sr)
         result = phase.process(audio.copy(), material_type=material)
@@ -775,9 +839,9 @@ if __name__ == "__main__":
             logger.debug("⏭️  EQ Skipped")
             logger.debug(f"   Reason: {result.modifications.get('reason', 'unknown')}")
 
-    logger.debug(f"\n{'='*80}")
+    logger.debug(f"\n{'=' * 80}")
     logger.debug("✅ Professional EQ Correction v2.0 Test Complete!")
-    logger.debug(f"{'='*80}")
+    logger.debug(f"{'=' * 80}")
     logger.debug(f"Algorithm: {result.metadata.get('algorithm', 'N/A')}")
     logger.debug(f"Scientific Reference: {result.metadata.get('scientific_ref', 'N/A')}")
     logger.debug(f"Benchmark: {result.metadata.get('benchmark', 'N/A')}")

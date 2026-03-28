@@ -28,7 +28,6 @@ import math
 import threading
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 import numpy as np
 
@@ -38,22 +37,22 @@ logger = logging.getLogger(__name__)
 # Constants (normative per §6.3)
 # ---------------------------------------------------------------------------
 
-FLAT_TOPS_THRESHOLD_PCT: float = 0.1        # > this → potential hard clipping
-FLAT_TOPS_CLIP_BOUNDARY: float = 0.999      # samples within this range are "at ceiling"
-THD_ODD_DOMINANCE_FACTOR: float = 1.5      # THD_odd > THD_even × this → CLIPPING
-ANALYSIS_WINDOW_SAMPLES: int = 2048        # FFT window size for harmonic analysis
-ANALYSIS_HOP_SAMPLES: int = 512            # hop between analysis windows
-FUNDAMENTAL_MIN_HZ: float = 40.0          # lowest fundamental to search (E1 ~ 41 Hz)
-FUNDAMENTAL_MAX_HZ: float = 800.0         # highest fundamental (G5 ~ 784 Hz)
-MAX_HARMONIC_ORDER: int = 10              # analyse up to this harmonic order
-HARMONIC_BIN_RADIUS: int = 1             # bins around harmonic centre to include
+FLAT_TOPS_THRESHOLD_PCT: float = 0.1  # > this → potential hard clipping
+FLAT_TOPS_CLIP_BOUNDARY: float = 0.999  # samples within this range are "at ceiling"
+THD_ODD_DOMINANCE_FACTOR: float = 1.5  # THD_odd > THD_even × this → CLIPPING
+ANALYSIS_WINDOW_SAMPLES: int = 2048  # FFT window size for harmonic analysis
+ANALYSIS_HOP_SAMPLES: int = 512  # hop between analysis windows
+FUNDAMENTAL_MIN_HZ: float = 40.0  # lowest fundamental to search (E1 ~ 41 Hz)
+FUNDAMENTAL_MAX_HZ: float = 800.0  # highest fundamental (G5 ~ 784 Hz)
+MAX_HARMONIC_ORDER: int = 10  # analyse up to this harmonic order
+HARMONIC_BIN_RADIUS: int = 1  # bins around harmonic centre to include
 
 
 class ClippingType(Enum):
     """Discrimination result per §6.3."""
 
-    CLIPPING = "clipping"                  # Hard amplitude clipping — REPAIR (→ phase_23)
-    SOFT_SATURATION = "soft_saturation"   # Tube/Tape saturation character — PRESERVE
+    CLIPPING = "clipping"  # Hard amplitude clipping — REPAIR (→ phase_23)
+    SOFT_SATURATION = "soft_saturation"  # Tube/Tape saturation character — PRESERVE
 
 
 @dataclass
@@ -61,11 +60,11 @@ class ClippingAnalysisResult:
     """Full analysis result returned by classify_clipping()."""
 
     clipping_type: ClippingType
-    flat_tops_pct: float          # % of samples at ±1.0 boundary
-    thd_odd: float                # Total odd-harmonic energy (summed, normalised)
-    thd_even: float               # Total even-harmonic energy (summed, normalised)
-    confidence: float             # 0.0–1.0 — distance from decision boundary
-    is_clipping: bool             # True when clipping_type == CLIPPING
+    flat_tops_pct: float  # % of samples at ±1.0 boundary
+    thd_odd: float  # Total odd-harmonic energy (summed, normalised)
+    thd_even: float  # Total even-harmonic energy (summed, normalised)
+    confidence: float  # 0.0–1.0 — distance from decision boundary
+    is_clipping: bool  # True when clipping_type == CLIPPING
 
     @property
     def should_repair(self) -> bool:
@@ -81,6 +80,7 @@ class ClippingAnalysisResult:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Convert (N,) or (N, C) audio to 1-D mono float32."""
@@ -117,8 +117,8 @@ def _find_dominant_fundamental_hz(mono: np.ndarray, sr: int) -> float | None:
 
     segment = mono[:n].astype(np.float64)
     # Normalised autocorrelation
-    corr = np.correlate(segment, segment, mode='full')
-    corr = corr[n - 1:]  # keep causal half
+    corr = np.correlate(segment, segment, mode="full")
+    corr = corr[n - 1 :]  # keep causal half
     if np.max(np.abs(corr)) < 1e-8:
         return None
     corr = corr / (corr[0] + 1e-12)
@@ -128,7 +128,7 @@ def _find_dominant_fundamental_hz(mono: np.ndarray, sr: int) -> float | None:
     if lag_max <= lag_min:
         return None
 
-    search_region = corr[lag_min:lag_max + 1]
+    search_region = corr[lag_min : lag_max + 1]
     peak_rel = int(np.argmax(search_region))
     peak_lag = lag_min + peak_rel
     peak_val = float(corr[peak_lag])
@@ -248,6 +248,7 @@ def _compute_thd(mono: np.ndarray, sr: int) -> tuple[float, float]:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def classify_clipping(audio: np.ndarray, sr: int) -> ClippingType:
     """
     Discriminate CLIPPING from SOFT_SATURATION via harmonic analysis (§6.3).
@@ -326,14 +327,15 @@ def analyse_clipping(audio: np.ndarray, sr: int) -> ClippingAnalysisResult:
         thd_ratio_distance = abs(math.log(max(thd_ratio, 1e-6)))
         thd_ratio_distance = min(thd_ratio_distance / 2.0, 1.0)  # normalise to [0,1]
 
-    confidence = float(np.clip(
-        min(flat_distance, thd_ratio_distance + 0.1),
-        0.0, 1.0
-    ))
+    confidence = float(np.clip(min(flat_distance, thd_ratio_distance + 0.1), 0.0, 1.0))
 
     logger.info(
         "ClippingDetector: result=%s flat_tops=%.3f%% odd=%.3f even=%.3f confidence=%.2f",
-        clipping_type.value, flat_pct, thd_odd, thd_even, confidence,
+        clipping_type.value,
+        flat_pct,
+        thd_odd,
+        thd_even,
+        confidence,
     )
 
     return ClippingAnalysisResult(
@@ -349,6 +351,7 @@ def analyse_clipping(audio: np.ndarray, sr: int) -> ClippingAnalysisResult:
 # ---------------------------------------------------------------------------
 # Singleton (§3.x — thread-safe, Double-Checked Locking)
 # ---------------------------------------------------------------------------
+
 
 class ClippingClassifier:
     """

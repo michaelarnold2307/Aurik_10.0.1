@@ -18,7 +18,6 @@ HIPS Compliance:
 """
 
 from pathlib import Path
-from typing import Dict, List
 
 import librosa
 import numpy as np
@@ -88,7 +87,7 @@ class DemucsV5Separator:
 
         model_path = model_dir / f"{self.model_name}.yaml"
         if not model_path.exists():
-            logger.warning(f"Demucs model not found at {model_path}. " "Install with: pip install demucs")
+            logger.warning(f"Demucs model not found at {model_path}. Install with: pip install demucs")
 
         return model_path
 
@@ -111,13 +110,15 @@ class DemucsV5Separator:
             return model
 
         except ImportError:
-            logger.warning("Demucs package not installed. " "Install with: pip install demucs")
+            logger.warning("Demucs package not installed. Install with: pip install demucs")
             return None
         except Exception as e:
             logger.error(f"Failed to load Demucs model: {e}")
             return None
 
-    def separate(self, audio: np.ndarray, sr: int | None = None, stems: list[str] | None = None) -> dict[str, np.ndarray]:
+    def separate(
+        self, audio: np.ndarray, sr: int | None = None, stems: list[str] | None = None
+    ) -> dict[str, np.ndarray]:
         """
         Separate audio into stems
 
@@ -140,7 +141,7 @@ class DemucsV5Separator:
         # Validate stems
         for stem in stems:
             if stem not in self.AVAILABLE_STEMS:
-                raise ValueError(f"Invalid stem '{stem}'. " f"Available: {self.AVAILABLE_STEMS}")
+                raise ValueError(f"Invalid stem '{stem}'. Available: {self.AVAILABLE_STEMS}")
 
         # SR-Invariante (Aurik 9 nutzt 48000 Hz)
         assert sr == 48000 or sr is None or sr == self.sample_rate, f"SR muss 48000 Hz sein, erhalten: {sr}"
@@ -160,7 +161,7 @@ class DemucsV5Separator:
         # HIPS: Log separation attempt
         self.separation_count += 1
         logger.info(
-            f"Demucs separation #{self.separation_count}: " f"shape={audio.shape}, sr={self.sample_rate}, stems={stems}"
+            f"Demucs separation #{self.separation_count}: shape={audio.shape}, sr={self.sample_rate}, stems={stems}"
         )
 
         # Actual separation

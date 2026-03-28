@@ -8,7 +8,6 @@ Optionale librosa-Imports sind durch try/except abgesichert.
 import logging
 import math
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -282,8 +281,11 @@ class VoiceHealthNet:
             - Breathiness: spectral tilt (negative slope of log power spectrum)
         """
         _default = VoiceHealthAnalysisResult(
-            fatigue=False, hoarseness=False, recommendation="ok",
-            hnr_db=None, spectral_tilt=None,
+            fatigue=False,
+            hoarseness=False,
+            recommendation="ok",
+            hnr_db=None,
+            spectral_tilt=None,
         )
         if not isinstance(audio, np.ndarray) or audio.size == 0:
             return _default

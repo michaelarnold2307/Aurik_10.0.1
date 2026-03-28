@@ -5,8 +5,8 @@ Component 4.2: Processing Modes Tests
 Tests all 5 processing modes, mode switching, goal validation, and recommendations.
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 

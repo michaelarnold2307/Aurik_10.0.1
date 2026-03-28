@@ -713,7 +713,7 @@ class SemanticGoalsEngine:
             logger.info("madmom structure analyzer loaded")
             return madmom
         except ImportError:
-            logger.warning("madmom package not installed. " "Install with: pip install madmom")
+            logger.warning("madmom package not installed. Install with: pip install madmom")
             return None
 
     def detect_instruments(
@@ -915,7 +915,7 @@ class SemanticGoalsEngine:
             )
 
         logger.debug(
-            f"Adjusted goals for {context.dominant_instrument.value} / " f"{context.segment_type.value}: {adjusted}"
+            f"Adjusted goals for {context.dominant_instrument.value} / {context.segment_type.value}: {adjusted}"
         )
 
         return adjusted

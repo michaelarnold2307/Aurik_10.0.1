@@ -16,11 +16,13 @@ Neue Funktionen / Erweiterungen:
 
 Alle Tests nutzen ausschließlich synthetische Signale (§5.4).
 """
+
 from __future__ import annotations
 
 import math
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 import pytest
 
@@ -32,6 +34,7 @@ RNG = np.random.default_rng(7)
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _white_noise(seconds: float = 2.0) -> np.ndarray:
     return RNG.standard_normal(int(SR * seconds)).astype(np.float32) * 0.2
@@ -54,6 +57,7 @@ def _stereo(mono: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # measure_fricative_snr — Einheits-Tests
 # ---------------------------------------------------------------------------
+
 
 class TestMeasureFricativeSNR:
     """§2.8-kompatible SNR-Messung im adaptiven Frikativband."""
@@ -139,6 +143,7 @@ class TestMeasureFricativeSNR:
 # ---------------------------------------------------------------------------
 # Stage 8c in Phase 19 — Metadaten-Tests
 # ---------------------------------------------------------------------------
+
 
 class TestPhase19FeedbackInvariantMetadata:
     """Phase 19 Stage 8c gibt §2.8-Metadaten zurück."""
@@ -254,8 +259,6 @@ class TestPhase19FeedbackInvariantMetadata:
 
     def test_25_metadata_present_when_consonant_enhancement_unavailable(self):
         """Auch ohne ConsonantEnhancement sind die SNR-Felder vorhanden (Defaults)."""
-        import sys
-        import unittest.mock as mock
 
         # _HAS_CONSONANT_ENHANCEMENT simuliert auf False setzen
         from backend.core.phases import phase_19_de_esser as p19
@@ -264,6 +267,7 @@ class TestPhase19FeedbackInvariantMetadata:
         try:
             p19._HAS_CONSONANT_ENHANCEMENT = False
             from backend.core.defect_scanner import MaterialType
+
             phase = p19.DeEsserPhase(gender="female")
             result = phase.process(_white_noise(2.0), SR, MaterialType.TAPE)
             meta = result.metadata

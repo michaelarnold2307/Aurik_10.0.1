@@ -6,11 +6,12 @@ Testet:
   - EBU Tech 3285 BEXT-Chunk Struktur
 """
 
-from pathlib import Path
 import struct
 import wave
+from pathlib import Path
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 
 from backend.core.delivery_standards import BWFMetadataWriter
@@ -37,7 +38,6 @@ def _create_test_wav(path: Path, n_samples: int = 4410, sr: int = 44100) -> Path
 
 
 class TestBWFMetadataWriter:
-
     def test_returns_true_for_valid_wav(self, tmp_path):
         wav = _create_test_wav(tmp_path / "test.wav")
         result = BWFMetadataWriter.write_bwf_metadata(wav)

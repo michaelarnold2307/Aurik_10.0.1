@@ -138,7 +138,9 @@ class ArchiveManager:
         logger.debug(f"File copied and verified: {src} -> {dest} (hash: {src_hash[:8]}...)")
         return dest_hash
 
-    def _create_retention_metadata(self, job_id: UUID, created_at: datetime, retention_days: int = 90) -> dict[str, Any]:
+    def _create_retention_metadata(
+        self, job_id: UUID, created_at: datetime, retention_days: int = 90
+    ) -> dict[str, Any]:
         """
         Create retention metadata for intermediate files.
 

@@ -15,10 +15,10 @@ Expected results:
 
 import argparse
 import logging
-from pathlib import Path
 import sys
 import time
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -60,10 +60,10 @@ class ModelBenchmark:
         Returns:
             Benchmark results
         """
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"Benchmarking: {model_name}")
         logger.info(f"Model: {model_path.name}")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
 
         try:
             # Load ONNX model
@@ -106,7 +106,7 @@ class ModelBenchmark:
                 "model_size_mb": model_path.stat().st_size / (1024 * 1024),
             }
 
-            logger.info(f"\nResults:")
+            logger.info("\nResults:")
             logger.info(f"  Average time: {avg_time:.2f} ± {std_time:.2f} ms")
             logger.info(f"  Min/Max: {min_time:.2f} / {max_time:.2f} ms")
             logger.info(f"  Real-Time Factor: {rtf:.3f}× RT")
@@ -142,9 +142,9 @@ class ModelBenchmark:
 
     def _print_comparison(self, results: dict[str, Any]) -> None:
         """Print comparison table."""
-        logger.info(f"\n{'='*80}")
+        logger.info(f"\n{'=' * 80}")
         logger.info("COMPARISON SUMMARY")
-        logger.info(f"{'='*80}")
+        logger.info(f"{'=' * 80}")
 
         # Find baseline (usually first model or 'pytorch')
         baseline_name = list(results.keys())[0]

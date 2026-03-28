@@ -18,10 +18,10 @@ Version: 9.0.0
 Date: 2026-02-15
 """
 
-from dataclasses import dataclass, field
-from enum import Enum
 import logging
 import time
+from dataclasses import dataclass, field
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -527,9 +527,7 @@ class PerformanceGuard:
             return PerformanceStatus.EXCEEDED
         elif rt > self.WARNING_FRACTION_ACCEPTABLE * budget:
             return PerformanceStatus.CRITICAL
-        elif rt > self.WARNING_FRACTION_GOOD * budget:
-            return PerformanceStatus.GOOD
-        elif rt > self.WARNING_FRACTION_OPTIMAL * budget:
+        elif rt > self.WARNING_FRACTION_GOOD * budget or rt > self.WARNING_FRACTION_OPTIMAL * budget:
             return PerformanceStatus.GOOD
         else:
             return PerformanceStatus.OPTIMAL

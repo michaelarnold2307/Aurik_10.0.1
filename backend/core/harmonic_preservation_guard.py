@@ -59,7 +59,6 @@ from __future__ import annotations
 import logging
 import math
 import threading
-from typing import Dict, Optional, Tuple
 
 import numpy as np
 
@@ -300,16 +299,12 @@ class HarmonicPreservationGuard:
             float32-Array [n_bins × n_frames] mit G_floor-Werten.
         """
         if noise_psd is not None or stft is not None:
-            _s = stft if stft is not None else np.zeros(
-                protected_mask.shape, dtype=np.complex64
-            )
+            _s = stft if stft is not None else np.zeros(protected_mask.shape, dtype=np.complex64)
             local_snr = self._compute_local_snr(_s, noise_psd)
             # Sigmoid: mappt SNR linear auf [0.10, 0.85]
             g_adaptive = 1.0 / (1.0 + np.exp(-local_snr / SNR_ADAPTIVE_SCALE))
             g_adaptive = g_adaptive * 0.75 + G_FLOOR_DEFAULT
-            g_adaptive = np.clip(
-                g_adaptive, G_FLOOR_DEFAULT, G_FLOOR_HARMONIC
-            ).astype(np.float32)
+            g_adaptive = np.clip(g_adaptive, G_FLOOR_DEFAULT, G_FLOOR_HARMONIC).astype(np.float32)
             mask = np.where(protected_mask > 0.5, g_adaptive, G_FLOOR_DEFAULT)
         else:
             # Legacy: statisch (rückwärtskompatibel)
@@ -363,9 +358,7 @@ class HarmonicPreservationGuard:
         snr_linear = power / noise_psd_used
         snr_db = 10.0 * np.log10(np.maximum(snr_linear, 1e-12))
         snr_db = np.clip(snr_db, -60.0, 60.0)
-        return np.nan_to_num(snr_db, nan=0.0, posinf=60.0, neginf=-60.0).astype(
-            np.float32
-        )
+        return np.nan_to_num(snr_db, nan=0.0, posinf=60.0, neginf=-60.0).astype(np.float32)
 
     def _stft(self, mono: np.ndarray) -> np.ndarray:
         """STFT → [n_bins × n_frames] complex128."""

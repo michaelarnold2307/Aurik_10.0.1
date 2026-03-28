@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -47,7 +47,9 @@ class ImportPipeline:
         self.audit_log: list[dict[str, Any]] = []
         logger.info("ImportPipeline initialized")
 
-    def import_audio(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    def import_audio(
+        self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         # Schritt 1: Feature-Extraktion und Quality-Gates
         features = self.extractor.extract(audio, sr, reference, policy_manager=self.policy_manager)
         self.audit_log.append({"step": "feature_extraction", "features": features})

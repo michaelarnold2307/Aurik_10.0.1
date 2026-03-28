@@ -12,8 +12,9 @@ Covers:
 
 from __future__ import annotations
 
-import numpy as np
 from types import SimpleNamespace
+
+import numpy as np
 
 from backend.core import ml_memory_budget as budget
 from backend.core.adaptive_resource_manager import AdaptiveResourceManager
@@ -100,12 +101,15 @@ def test_adaptive_resource_manager_start_monitoring_is_idempotent(monkeypatch):
 
 # ── Auto-detect budget tests ────────────────────────────────────────────
 
+
 def test_auto_detect_budget_32gb(monkeypatch):
     """On a 32 GB system: budget = 32/3 ≈ 10.7 GB, clamped to [4, 12]."""
+
     class _FakePsutil:
         @staticmethod
         def virtual_memory():
-            return SimpleNamespace(total=32 * 1024 ** 3, available=20 * 1024 ** 3)
+            return SimpleNamespace(total=32 * 1024**3, available=20 * 1024**3)
+
     monkeypatch.setattr(budget, "_psutil", _FakePsutil)
     result = budget._auto_detect_budget()
     assert 10.0 <= result <= 11.0, f"Expected ~10.7 GB for 32 GB system, got {result}"
@@ -113,10 +117,12 @@ def test_auto_detect_budget_32gb(monkeypatch):
 
 def test_auto_detect_budget_16gb(monkeypatch):
     """On a 16 GB system: budget = 16/3 ≈ 5.3 GB."""
+
     class _FakePsutil:
         @staticmethod
         def virtual_memory():
-            return SimpleNamespace(total=16 * 1024 ** 3, available=10 * 1024 ** 3)
+            return SimpleNamespace(total=16 * 1024**3, available=10 * 1024**3)
+
     monkeypatch.setattr(budget, "_psutil", _FakePsutil)
     result = budget._auto_detect_budget()
     assert 4.0 <= result <= 6.0, f"Expected ~5.3 GB for 16 GB system, got {result}"
@@ -124,10 +130,12 @@ def test_auto_detect_budget_16gb(monkeypatch):
 
 def test_auto_detect_budget_8gb(monkeypatch):
     """On an 8 GB system: budget = 8/3 ≈ 2.7 → clamped to 4 GB minimum."""
+
     class _FakePsutil:
         @staticmethod
         def virtual_memory():
-            return SimpleNamespace(total=8 * 1024 ** 3, available=5 * 1024 ** 3)
+            return SimpleNamespace(total=8 * 1024**3, available=5 * 1024**3)
+
     monkeypatch.setattr(budget, "_psutil", _FakePsutil)
     result = budget._auto_detect_budget()
     assert result == 4.0, f"Expected 4.0 GB floor for 8 GB system, got {result}"
@@ -141,6 +149,7 @@ def test_auto_detect_budget_no_psutil(monkeypatch):
 
 
 # ── Budget exhaustion and release tests ─────────────────────────────────
+
 
 def test_budget_exhaustion_blocks_allocation(monkeypatch):
     """When budget is full, subsequent allocations fail."""
@@ -193,9 +202,11 @@ def test_get_status(monkeypatch):
 
 # ── UV3 audio buffer guard test ─────────────────────────────────────────
 
+
 def test_uv3_rejects_oversized_audio():
     """UV3 must raise MemoryError for audio exceeding 4 GB buffer limit."""
     import pytest
+
     from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
     # Create a fake shape that would be > 4 GB if real (we test the guard logic)
@@ -207,7 +218,7 @@ def test_uv3_rejects_oversized_audio():
     class _FakeArray(np.ndarray):
         @property
         def nbytes(self):
-            return 5 * 1024 ** 3  # 5 GB — over the 4 GB limit
+            return 5 * 1024**3  # 5 GB — over the 4 GB limit
 
     oversized = audio.view(_FakeArray)
     with pytest.raises(MemoryError, match="Audio-Buffer"):
@@ -215,6 +226,7 @@ def test_uv3_rejects_oversized_audio():
 
 
 # ── EnsembleProcessor size guard test ───────────────────────────────────
+
 
 def test_ensemble_processor_skipped_for_long_audio():
     """EnsembleProcessor should not run for audio > 2 minutes (OOM guard)."""

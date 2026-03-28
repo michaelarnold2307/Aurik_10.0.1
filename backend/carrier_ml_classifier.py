@@ -14,6 +14,7 @@ Migrationsanleitung::
 
 Referenz: §2.1 Aurik-9-Spec, MediumClassifier (§6.1 MaterialType)
 """
+
 from __future__ import annotations
 
 import warnings as _warnings
@@ -58,26 +59,20 @@ def classify_carrier_ml(features: dict) -> dict:  # type: ignore[type-arg]
         _sr = 48000
         _audio = _np.zeros(int(_sr * 0.1), dtype=_np.float32)
         result = classify_medium(_audio, _sr)
-        carrier = (
-            result.material_type.value
-            if hasattr(result, "material_type")
-            else str(result)
-        )
-        confidence = (
-            float(result.confidence) if hasattr(result, "confidence") else 0.5
-        )
+        carrier = result.material_type.value if hasattr(result, "material_type") else str(result)
+        confidence = float(result.confidence) if hasattr(result, "confidence") else 0.5
         return {
-            "carrier_ml":    carrier,
-            "confidence":    confidence,
-            "probas":        {},
-            "explain":       f"Classified as {carrier} (shim)",
+            "carrier_ml": carrier,
+            "confidence": confidence,
+            "probas": {},
+            "explain": f"Classified as {carrier} (shim)",
         }
     except Exception as exc:
         return {
-            "carrier_ml":    "Unbekannt",
-            "confidence":    0.0,
-            "probas":        {},
-            "explain":       str(exc),
+            "carrier_ml": "Unbekannt",
+            "confidence": 0.0,
+            "probas": {},
+            "explain": str(exc),
         }
 
 

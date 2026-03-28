@@ -8,6 +8,7 @@ Testet:
 """
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 
 from dsp.streaming_optimized import StreamingDenoiser, StreamingGate, StreamingLimiter
@@ -47,7 +48,6 @@ def _noisy(n: int = _N, noise_amp: float = 0.05) -> np.ndarray:
 
 
 class TestStreamingLimiter:
-
     def test_output_shape_preserved(self):
         audio = _sine()
         out = StreamingLimiter().process(audio, SR)
@@ -112,7 +112,6 @@ class TestStreamingLimiter:
 
 
 class TestStreamingDenoiser:
-
     def test_output_shape_preserved(self):
         audio = _sine()
         out = StreamingDenoiser().process(audio, SR)
@@ -176,7 +175,6 @@ class TestStreamingDenoiser:
 
 
 class TestStreamingGate:
-
     def test_output_shape_preserved(self):
         audio = _sine()
         out = StreamingGate().process(audio, SR)

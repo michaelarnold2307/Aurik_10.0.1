@@ -12,8 +12,8 @@ Usage:
 
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 
@@ -35,11 +35,11 @@ def run_validation(test_library: Path, processed_dir: Path, output_file: Path, c
     else:
         categories = ["vinyl", "tape", "digital", "vocals"]
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("VALIDATION SUITE - Objective Metrics Comparison")
     print("Comparing: Original vs AURIK-Processed")
     print(f"Categories: {', '.join(categories)}")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     # Collect all results
     results = {"summary": {}, "per_category": {}, "per_file": []}
@@ -49,9 +49,9 @@ def run_validation(test_library: Path, processed_dir: Path, output_file: Path, c
     thd_changes = []
 
     for cat in categories:
-        print(f"\n{'─'*80}")
+        print(f"\n{'─' * 80}")
         print(f"Category: {cat.upper()}")
-        print(f"{'─'*80}\n")
+        print(f"{'─' * 80}\n")
 
         cat_results = []
 
@@ -116,8 +116,8 @@ def run_validation(test_library: Path, processed_dir: Path, output_file: Path, c
             cat_results.append(file_result)
 
             # Print summary
-            print(f"  SNR: {orig_metrics['snr']:.2f} → {proc_metrics['snr']:.2f} dB " f"({snr_improvement:+.2f} dB)")
-            print(f"  THD: {orig_metrics['thd']:.3f}% → {proc_metrics['thd']:.3f}% " f"({thd_change:+.3f}%)")
+            print(f"  SNR: {orig_metrics['snr']:.2f} → {proc_metrics['snr']:.2f} dB ({snr_improvement:+.2f} dB)")
+            print(f"  THD: {orig_metrics['thd']:.3f}% → {proc_metrics['thd']:.3f}% ({thd_change:+.3f}%)")
             print(
                 f"  Spectral Centroid: {orig_metrics['spectral']['centroid']:.0f} → "
                 f"{proc_metrics['spectral']['centroid']:.0f} Hz"
@@ -140,7 +140,7 @@ def run_validation(test_library: Path, processed_dir: Path, output_file: Path, c
             print("Category Summary:")
             print(f"  Files processed: {len(cat_results)}")
             print(f"  Avg SNR improvement: {np.mean(cat_snr_improvements):+.2f} dB")
-            print(f"  SNR range: {np.min(cat_snr_improvements):+.2f} to " f"{np.max(cat_snr_improvements):+.2f} dB")
+            print(f"  SNR range: {np.min(cat_snr_improvements):+.2f} to {np.max(cat_snr_improvements):+.2f} dB")
             print(f"  Avg THD change: {np.mean(cat_thd_changes):+.3f}%")
 
     # Global summary
@@ -165,9 +165,9 @@ def run_validation(test_library: Path, processed_dir: Path, output_file: Path, c
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("VALIDATION COMPLETE")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
     print(f"Total files validated: {total_files}")
     print(f"Average SNR improvement: {np.mean(snr_improvements):+.2f} ± {np.std(snr_improvements):.2f} dB")
     print(f"SNR range: {np.min(snr_improvements):+.2f} to {np.max(snr_improvements):+.2f} dB")
@@ -182,7 +182,7 @@ def run_validation(test_library: Path, processed_dir: Path, output_file: Path, c
         f"({abs(np.mean(thd_changes)):.2f}%)"
     )
     print(f"\nResults saved to: {output_file}")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     return results
 

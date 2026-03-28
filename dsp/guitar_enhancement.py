@@ -733,7 +733,9 @@ def main():
     logger.info(f"  Transients detected: {report['pick_attack']['transients_detected']}")
 
     logger.info(f"\nString Resonance: {report['string_resonance']['fundamental_energy_change_db']:+.1f} dB")
-    logger.info(f"  Harmonic enhancement: {'Yes' if report['string_resonance']['harmonic_enhancement_applied'] else 'No'}")
+    logger.info(
+        f"  Harmonic enhancement: {'Yes' if report['string_resonance']['harmonic_enhancement_applied'] else 'No'}"
+    )
 
     logger.info(f"\nFret Noise: {report['fret_noise']['fret_noise_reduction_db']:+.1f} dB")
     logger.info(f"  Reduction: {report['fret_noise']['fret_noise_reduction_percent']:.1f}%")

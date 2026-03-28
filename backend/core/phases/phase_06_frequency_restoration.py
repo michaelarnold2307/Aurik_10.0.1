@@ -101,12 +101,12 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # ML-Hybrid Integration for NVSR (Neural Vocoder Super Resolution)
 # ============================================================
-ML_HYBRID_AVAILABLE = False
 try:
-    pass
+    from plugins.audiosr_plugin import get_audiosr_plugin as _get_audiosr_plugin
 
     ML_HYBRID_AVAILABLE = True
-except ImportError:
+except Exception:
+    _get_audiosr_plugin = None
     ML_HYBRID_AVAILABLE = False
 
 
@@ -326,6 +326,94 @@ class FrequencyRestorationPhase(PhaseInterface):
             },
         )
 
+    def _restore_frequency_ml_hybrid(
+        self,
+        audio: np.ndarray,
+        params: dict[str, Any],
+        material_type: str,
+        quality_mode: str,
+        enable_sbr: bool,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Run DSP restoration first, then blend in AudioSR HF delta when available.
+
+        The blend is intentionally HF-limited to preserve low/mid authenticity and
+        avoid broad tonal shifts while still improving perceived openness.
+        """
+        dsp_restored = self._restore_highs_professional(audio, params, enable_sbr)
+
+        if _get_audiosr_plugin is None:
+            return dsp_restored, {
+                "ml_hybrid_available": False,
+                "quality_mode": quality_mode,
+                "strategy_used": "dsp_only",
+                "ml_reason": "audiosr_plugin_import_failed",
+            }
+
+        alpha_by_mode = {
+            "balanced": 0.20,
+            "quality": 0.30,
+            "maximum": 0.40,
+            "restoration": 0.25,
+        }
+        alpha = alpha_by_mode.get(quality_mode, 0.20) * float(params.get("restoration_strength", 0.7))
+        alpha = float(np.clip(alpha, 0.0, 0.45))
+
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager, touch_plugin
+
+            _plm = get_plugin_lifecycle_manager()
+            _plm.set_active("AudioSR", True)
+        except Exception:
+            _plm = None
+
+        try:
+            plugin = _get_audiosr_plugin()
+            plugin_in = audio.T if audio.ndim == 2 else audio
+            ml_out = plugin.process(plugin_in, sr=self.sample_rate, target_sr=self.sample_rate)
+            ml_restored = ml_out.T if (audio.ndim == 2 and ml_out.ndim == 2) else ml_out
+            ml_restored = np.asarray(ml_restored, dtype=np.float32)
+
+            if ml_restored.shape != audio.shape:
+                raise ValueError(f"AudioSR shape mismatch: expected {audio.shape}, got {ml_restored.shape}")
+
+            # Blend only high-frequency delta (around rolloff and above) to keep timbre stable.
+            hp_hz = float(max(2000.0, min(params.get("rolloff_hz", 10000.0) * 0.85, self.sample_rate * 0.45)))
+            sos = signal.butter(4, hp_hz / (self.sample_rate / 2.0), btype="high", output="sos")
+            hf_base = signal.sosfiltfilt(sos, dsp_restored, axis=0)
+            hf_ml = signal.sosfiltfilt(sos, ml_restored, axis=0)
+            hybrid = dsp_restored + alpha * (hf_ml - hf_base)
+            hybrid = np.nan_to_num(hybrid, nan=0.0, posinf=0.0, neginf=0.0)
+            hybrid = np.clip(hybrid, -1.0, 1.0)
+
+            try:
+                touch_plugin("AudioSR")
+            except Exception:
+                pass
+
+            return hybrid, {
+                "ml_hybrid_available": True,
+                "quality_mode": quality_mode,
+                "strategy_used": "ml_hybrid",
+                "ml_model": "AudioSR",
+                "ml_blend_alpha": alpha,
+                "ml_hf_highpass_hz": hp_hz,
+                "material_type": material_type,
+            }
+        except Exception as exc:
+            logger.warning("Phase 06 ML-Hybrid fehlgeschlagen (%s) — DSP-only aktiv", exc)
+            return dsp_restored, {
+                "ml_hybrid_available": True,
+                "quality_mode": quality_mode,
+                "strategy_used": "dsp_only",
+                "ml_error": str(exc),
+            }
+        finally:
+            if _plm is not None:
+                try:
+                    _plm.set_active("AudioSR", False)
+                except Exception:
+                    pass
+
     def _detect_rolloff_professional(self, audio: np.ndarray, params: dict[str, Any]) -> tuple[bool, float, float]:
         """
         Professional rolloff detection with spectral analysis.
@@ -337,7 +425,8 @@ class FrequencyRestorationPhase(PhaseInterface):
         mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
         # Welch PSD
-        freqs, psd = signal.welch(mono, self.sample_rate, nperseg=8192)
+        nperseg = min(8192, max(1, int(mono.shape[0])))
+        freqs, psd = signal.welch(mono, self.sample_rate, nperseg=nperseg)
         psd_db = 10 * np.log10(psd + 1e-10)
 
         # Low-band reference (1-3 kHz, always present in music)

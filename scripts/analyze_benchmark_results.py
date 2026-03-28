@@ -8,9 +8,9 @@ Datum: 16. Februar 2026
 
 import argparse
 import json
-from pathlib import Path
 import sys
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -30,15 +30,15 @@ class Colors:
 
 def print_header(text: str):
     """Print formatted header"""
-    print(f"\n{Colors.HEADER}{Colors.BOLD}{'='*80}{Colors.ENDC}")
+    print(f"\n{Colors.HEADER}{Colors.BOLD}{'=' * 80}{Colors.ENDC}")
     print(f"{Colors.HEADER}{Colors.BOLD}{text.center(80)}{Colors.ENDC}")
-    print(f"{Colors.HEADER}{Colors.BOLD}{'='*80}{Colors.ENDC}\n")
+    print(f"{Colors.HEADER}{Colors.BOLD}{'=' * 80}{Colors.ENDC}\n")
 
 
 def print_section(text: str):
     """Print section header"""
     print(f"\n{Colors.OKBLUE}{Colors.BOLD}{text}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}{'-'*len(text)}{Colors.ENDC}")
+    print(f"{Colors.OKBLUE}{'-' * len(text)}{Colors.ENDC}")
 
 
 def print_success(text: str):
@@ -296,7 +296,7 @@ def generate_markdown_report(results_dir: Path, stats: dict[str, Any], analysis:
         f.write("| System | Overall | Naturalness | RT Factor | Price |\n")
         f.write("|--------|---------|-------------|-----------|-------|\n")
         f.write(
-            f"| **Aurik 9.0 ({mode})** | **0.88-0.90** | **{avg_nat:.4f}** | **{1.5 if mode=='BALANCED' else 0.5 if mode=='FAST' else 4.0:.1f}×** | **$0** |\n"
+            f"| **Aurik 9.0 ({mode})** | **0.88-0.90** | **{avg_nat:.4f}** | **{1.5 if mode == 'BALANCED' else 0.5 if mode == 'FAST' else 4.0:.1f}×** | **$0** |\n"
         )
         f.write("| iZotope RX 10 | 0.90 | 0.88 | 3.0× | $1,299 |\n")
         f.write("| CEDAR Cambridge | 0.92 | 0.90 | 4.5× | $2,000-$8,000 |\n")

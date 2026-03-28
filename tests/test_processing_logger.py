@@ -11,8 +11,8 @@ Tests:
 """
 
 import json
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest

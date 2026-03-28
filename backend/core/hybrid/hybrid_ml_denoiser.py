@@ -353,10 +353,15 @@ class HybridMLDenoiser:
         from scipy.signal import butter, filtfilt
 
         b, a = butter(4, 0.3, btype="high")
-        noise = filtfilt(b, a, audio)
-
-        noise_rms = np.sqrt(np.mean(noise**2))
-        signal_rms = np.sqrt(np.mean(audio**2))
+        # filtfilt requires at least padlen+1 = 15+1 samples; fall back to RMS on short clips
+        min_len = 3 * max(len(b), len(a)) + 1
+        if len(audio) < min_len:
+            noise_rms = float(np.sqrt(np.mean(audio**2)))
+            signal_rms = noise_rms
+        else:
+            noise = filtfilt(b, a, audio)
+            noise_rms = np.sqrt(np.mean(noise**2))
+            signal_rms = np.sqrt(np.mean(audio**2))
 
         # Noise ratio
         noise_ratio = noise_rms / (signal_rms + 1e-8)

@@ -13,6 +13,11 @@ from backend.core.era_classifier import (
     MEDIUM_DECADE_FLOOR,
     EraClassifier,
     EraResult,
+    _dsp_fingerprint_decade,
+    _estimate_highband_presence,
+    _estimate_lf_presence,
+    _estimate_noise_modulation,
+    _transition_1970_score,
     classify_era,
     constrain_era_to_medium,
     get_era_classifier,
@@ -593,6 +598,14 @@ def test_constrain_confidence_low_clamped_to_025():
     assert result.confidence == pytest.approx(0.25)
 
 
+def test_constrain_confidence_floor_guard_for_large_medium_correction():
+    """Große Medium-Korrektur (>=2 Schritte) mit conf>=0.40 darf nicht unter 0.40 fallen."""
+    result = constrain_era_to_medium(_make_era(1890, conf=0.60), "tape")
+    # Ohne Guard: 0.60 * 0.65 = 0.39 (würde material_prior downstream auf unknown kippen)
+    assert result.decade == 1960
+    assert result.confidence >= 0.42
+
+
 def test_constrain_confidence_high_clamped_to_080():
     """Hohe Konfidenz ×0.65 > 0.80 → auf 0.80 clampen."""
     # 0.65 * conf ≤ 0.80 → conf ≤ 1.23; da conf ≤ 1.0 gilt: max 0.65 → nie > 0.80
@@ -654,3 +667,216 @@ def test_constrain_returns_eraresult_dataclass():
     assert isinstance(result, EraResult)
     result_noop = constrain_era_to_medium(_make_era(1970), "unknown")
     assert isinstance(result_noop, EraResult)
+
+
+# ── Neue Feature-Tests: noise_modulation / lf_presence ─────────────────────
+
+
+def test_noise_modulation_range():
+    """_estimate_noise_modulation liefert immer Werte in [0.0, 1.0]."""
+    np.random.seed(123)
+    audio = (np.random.randn(SR * 3) * 0.05).astype(np.float32)
+    value = _estimate_noise_modulation(audio, SR)
+    assert 0.0 <= value <= 1.0
+
+
+def test_noise_modulation_higher_for_amplitude_modulated_noise():
+    """AM-moduliertes Signal soll höhere noise_modulation als stationäres Rauschen haben."""
+    np.random.seed(9)
+    t = np.arange(SR * 4, dtype=np.float32) / float(SR)
+    base = (np.random.randn(SR * 4) * 0.03).astype(np.float32)
+    # 4 Hz Amplitudenmodulation als Wow/Flutter-Proxi im Rauschboden
+    envelope = (0.2 + 0.8 * (0.5 + 0.5 * np.sin(2.0 * np.pi * 4.0 * t))).astype(np.float32)
+    modulated = (base * envelope).astype(np.float32)
+    stationary = base.copy()
+
+    m_mod = _estimate_noise_modulation(modulated, SR)
+    m_sta = _estimate_noise_modulation(stationary, SR)
+    assert m_mod > m_sta
+
+
+def test_lf_presence_range():
+    """_estimate_lf_presence liefert immer Werte in [0.0, 1.0]."""
+    np.random.seed(77)
+    audio = (np.random.randn(SR * 3) * 0.04).astype(np.float32)
+    value = _estimate_lf_presence(audio, SR)
+    assert 0.0 <= value <= 1.0
+
+
+def test_lf_presence_lower_for_high_pass_signal():
+    """Signal mit starkem Hochpass (<300 Hz entfernt) soll niedrige LF-Präsenz zeigen."""
+    from scipy.signal import butter, sosfilt
+
+    np.random.seed(8)
+    white = (np.random.randn(SR * 4) * 0.05).astype(np.float32)
+    # Entfernt Sub-300-Hz fast vollständig
+    sos = butter(6, 300.0, btype="highpass", fs=SR, output="sos")
+    hp = sosfilt(sos, white).astype(np.float32)
+
+    lf_hp = _estimate_lf_presence(hp, SR)
+    assert lf_hp < 0.20
+
+
+def test_highband_presence_range():
+    """_estimate_highband_presence liefert immer Werte in [0.0, 1.0]."""
+    np.random.seed(101)
+    audio = (np.random.randn(SR * 3) * 0.04).astype(np.float32)
+    value = _estimate_highband_presence(audio, SR)
+    assert 0.0 <= value <= 1.0
+
+
+def test_highband_presence_higher_for_wideband_than_lowpass():
+    """Wideband-Signal soll höhere Highband-Präsenz als stark lowpass-gefiltertes Signal haben."""
+    from scipy.signal import butter, sosfilt
+
+    np.random.seed(6)
+    wide = (np.random.randn(SR * 4) * 0.05).astype(np.float32)
+    sos = butter(6, 5000.0, btype="lowpass", fs=SR, output="sos")
+    low = sosfilt(sos, wide).astype(np.float32)
+    hb_wide = _estimate_highband_presence(wide, SR)
+    hb_low = _estimate_highband_presence(low, SR)
+    assert hb_wide > hb_low
+
+
+def test_dsp_highband_promotes_1960_to_1970_when_evidence_is_strong():
+    """Neue H-Regel: hohe HB-Präsenz + gute SNR + breite Stereo-Bühne soll 1960 -> 1970 heben."""
+    decade, _conf = _dsp_fingerprint_decade(
+        11_000.0,  # BW-Startpunkt typischerweise 1960
+        48.0,
+        is_stereo=True,
+        stereo_width=0.12,
+        spectral_tilt=-4.6,
+        dynamic_range_db=27.0,
+        noise_modulation=0.10,
+        lf_presence=0.30,
+        highband_presence=0.28,
+    )
+    assert decade >= 1970
+
+
+def test_dsp_low_highband_demotes_1970_to_1960_with_old_tape_signature():
+    """Neue H-Regel: niedrige HB-Präsenz + hohe Modulation + niedrige SNR soll 1970 -> 1960 senken."""
+    decade, _conf = _dsp_fingerprint_decade(
+        16_500.0,  # Startpunkt typischerweise 1970
+        36.0,
+        is_stereo=True,
+        stereo_width=0.08,
+        spectral_tilt=-5.2,
+        dynamic_range_db=26.0,
+        noise_modulation=0.36,
+        lf_presence=0.26,
+        highband_presence=0.06,
+    )
+    assert decade <= 1960
+
+
+def test_dsp_combined_evidence_promotes_1960_to_1970():
+    """I-Regel: Kombinierte Evidenz im Übergangsband soll 1960 -> 1970 heben."""
+    decade, _conf = _dsp_fingerprint_decade(
+        12_200.0,
+        45.0,
+        is_stereo=True,
+        stereo_width=0.10,
+        spectral_tilt=-4.9,
+        dynamic_range_db=27.5,
+        noise_modulation=0.18,
+        lf_presence=0.31,
+        highband_presence=0.21,
+    )
+    assert decade >= 1970
+
+
+def test_dsp_combined_evidence_demotes_1970_to_1960():
+    """I-Regel: Kombinierte Vintage-Evidenz im Übergangsband soll 1970 -> 1960 senken."""
+    decade, _conf = _dsp_fingerprint_decade(
+        14_800.0,
+        39.0,
+        is_stereo=True,
+        stereo_width=0.08,
+        spectral_tilt=-5.3,
+        dynamic_range_db=26.0,
+        noise_modulation=0.30,
+        lf_presence=0.24,
+        highband_presence=0.10,
+    )
+    assert decade <= 1960
+
+
+def test_dsp_transition_confidence_penalty_for_conflicting_evidence():
+    """Widersprüchliche Übergangs-Evidenz (hohes HB + hohe Modulation) soll Konfidenz senken."""
+    _decade, conf_conflict = _dsp_fingerprint_decade(
+        12_000.0,
+        44.0,
+        is_stereo=True,
+        stereo_width=0.10,
+        spectral_tilt=-4.8,
+        dynamic_range_db=28.0,
+        noise_modulation=0.35,
+        lf_presence=0.30,
+        highband_presence=0.24,
+    )
+    _decade2, conf_clean = _dsp_fingerprint_decade(
+        12_000.0,
+        44.0,
+        is_stereo=True,
+        stereo_width=0.10,
+        spectral_tilt=-4.8,
+        dynamic_range_db=28.0,
+        noise_modulation=0.15,
+        lf_presence=0.30,
+        highband_presence=0.24,
+    )
+    assert conf_conflict <= conf_clean
+
+
+def test_transition_1970_score_orders_clear_cases():
+    """Transition score should rank clear 1970-like evidence above 1960-like evidence."""
+    score_1970_like = _transition_1970_score(
+        highband_presence=0.30,
+        lf_presence=0.36,
+        snr_db=48.0,
+        stereo_width=0.20,
+        noise_modulation=0.05,
+    )
+    score_1960_like = _transition_1970_score(
+        highband_presence=0.05,
+        lf_presence=0.12,
+        snr_db=34.0,
+        stereo_width=0.02,
+        noise_modulation=0.42,
+    )
+    assert 0.0 <= score_1970_like <= 1.0
+    assert 0.0 <= score_1960_like <= 1.0
+    assert score_1970_like > score_1960_like
+
+
+def test_transition_score_promotes_1960_to_1970_in_transition_zone():
+    """High transition score should promote 1960 to 1970 in overlap zone."""
+    decade, _ = _dsp_fingerprint_decade(
+        rolloff_hz=12_000.0,
+        snr_db=46.0,
+        is_stereo=True,
+        stereo_width=0.18,
+        spectral_tilt=-2.6,
+        dynamic_range_db=13.8,
+        noise_modulation=0.09,
+        lf_presence=0.34,
+        highband_presence=0.30,
+    )
+    assert decade == 1970
+
+
+def test_transition_score_demotes_1970_to_1960_in_transition_zone():
+    """Low transition score should demote 1970 to 1960 in overlap zone."""
+    decade, _ = _dsp_fingerprint_decade(
+        rolloff_hz=14_500.0,
+        snr_db=36.0,
+        is_stereo=False,
+        stereo_width=0.01,
+        spectral_tilt=-5.8,
+        dynamic_range_db=9.8,
+        noise_modulation=0.36,
+        lf_presence=0.14,
+        highband_presence=0.06,
+    )
+    assert decade == 1960

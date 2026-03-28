@@ -17,7 +17,6 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 from scipy import stats
@@ -365,7 +364,7 @@ class ResultsAnalyzer:
             print(f"   Overall mean: {rating['overall_mean']}/5.0")
 
             criteria = rating.get("criteria", {})
-            for criterion, stats in criteria.items():  # noqa: F402
+            for criterion, stats in criteria.items():
                 print(f"   {criterion}: {stats['mean']} ± {stats['std']}")
 
         print("\n" + "=" * 60)

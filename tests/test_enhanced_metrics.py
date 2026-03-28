@@ -7,8 +7,8 @@ Author: AURIK Team
 Date: 8. Februar 2026
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest

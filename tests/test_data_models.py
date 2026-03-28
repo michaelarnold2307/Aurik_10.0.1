@@ -3,9 +3,9 @@ Test suite for core/data_models.py - Pydantic models
 Tests AudioFile, Genre, MediaType, DefectType
 """
 
-from datetime import datetime
 import os
 import sys
+from datetime import datetime
 
 import pytest
 

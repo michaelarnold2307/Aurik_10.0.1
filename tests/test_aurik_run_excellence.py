@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import types
+from pathlib import Path
 
 import numpy as np
 
@@ -42,7 +42,9 @@ def test_main_aborts_export_when_quality_gate_fails(monkeypatch, tmp_path):
     monkeypatch.setattr("backend.core.audio_exporter.AudioExporter", _Exporter)
     monkeypatch.setattr(runner, "_progress_cb", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runner.sys, "argv", ["_aurik_run_excellence.py", str(tmp_path / "dummy.mp3")])
-    monkeypatch.setattr(Path, "exists", lambda self: True if str(self).endswith("dummy.mp3") else Path.__dict__["exists"](self))
+    monkeypatch.setattr(
+        Path, "exists", lambda self: True if str(self).endswith("dummy.mp3") else Path.__dict__["exists"](self)
+    )
 
     rc = runner.main()
 

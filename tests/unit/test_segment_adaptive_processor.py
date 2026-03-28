@@ -6,6 +6,7 @@ Tests: ≥ 20 — Abdeckung: Shape, NaN, Bounds, Edge-Cases, Mono, Stereo, Konsi
 import concurrent.futures
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 import pytest
 

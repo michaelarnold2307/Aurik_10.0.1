@@ -774,6 +774,7 @@ class TestBackend3537Integration:
     def test_05_restorer_has_new_metadata_keys(self):
         """Kontrolliert, dass die neuen Metadata-Schlüssel im Restorer vorhanden sind."""
         import os
+
         _path = "backend/core/unified_restorer_v3.py"
         if not os.path.exists(_path):
             _path = "core/unified_restorer_v3.py"
@@ -818,8 +819,8 @@ class TestBackend3537Integration:
 
     def test_10_wiring_count_minimum(self):
         """Mindestens 60 backend.core-Module müssen verdrahtet sein."""
-        import re
         import os
+        import re
 
         _path = "backend/core/unified_restorer_v3.py"
         if not os.path.exists(_path):

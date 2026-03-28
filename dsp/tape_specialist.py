@@ -117,7 +117,7 @@ class TapePrintThroughRemover:
         min_delay_samp = int(20.0 * sample_rate / 1000)  # 20 ms min (physikalisch)
 
         audio_norm = audio.astype(np.float64)
-        rms = float(np.sqrt(np.mean(audio_norm ** 2) + 1e-12))
+        rms = float(np.sqrt(np.mean(audio_norm**2) + 1e-12))
         if rms < 1e-8:
             return self._empty_detection()
         audio_norm = audio_norm / (rms + 1e-8)
@@ -215,34 +215,44 @@ class TapePrintThroughRemover:
 
         # --- §DSP: Post-Echo subtraction: cleaned[t] -= alpha_post · audio[t − delay_post] ---
         if detection.get("post_echo_detected"):
-            alpha_post = float(np.clip(
-                detection.get("alpha_post", detection.get("post_echo_attenuation_db", 0.0) / 100.0),
-                self._ALPHA_POST_MIN, self._ALPHA_POST_MAX,
-            ))
-            delay_post = int(detection.get("delay_post_ms", detection.get("post_echo_delay_ms", 0.0))
-                             * sample_rate / 1000.0)
+            alpha_post = float(
+                np.clip(
+                    detection.get("alpha_post", detection.get("post_echo_attenuation_db", 0.0) / 100.0),
+                    self._ALPHA_POST_MIN,
+                    self._ALPHA_POST_MAX,
+                )
+            )
+            delay_post = int(
+                detection.get("delay_post_ms", detection.get("post_echo_delay_ms", 0.0)) * sample_rate / 1000.0
+            )
             if 0 < delay_post < n:
                 # cleaned[t] -= alpha_post * audio[t - delay_post]
-                cleaned[delay_post:] -= alpha_post * audio_f64[:n - delay_post]
+                cleaned[delay_post:] -= alpha_post * audio_f64[: n - delay_post]
                 logger.debug(
                     "Print-Through post-echo subtracted: delay=%.1fms alpha_post=%.3f",
-                    delay_post / sample_rate * 1000.0, alpha_post,
+                    delay_post / sample_rate * 1000.0,
+                    alpha_post,
                 )
 
         # --- §DSP: Pre-Echo subtraction: cleaned[t] -= alpha_pre · audio[t + delay_pre] ---
         if detection.get("pre_echo_detected"):
-            alpha_pre = float(np.clip(
-                detection.get("alpha_pre", 0.0),
-                self._ALPHA_PRE_MIN, self._ALPHA_PRE_MAX,
-            ))
-            delay_pre = int(detection.get("delay_pre_ms", detection.get("pre_echo_delay_ms", 0.0))
-                            * sample_rate / 1000.0)
+            alpha_pre = float(
+                np.clip(
+                    detection.get("alpha_pre", 0.0),
+                    self._ALPHA_PRE_MIN,
+                    self._ALPHA_PRE_MAX,
+                )
+            )
+            delay_pre = int(
+                detection.get("delay_pre_ms", detection.get("pre_echo_delay_ms", 0.0)) * sample_rate / 1000.0
+            )
             if 0 < delay_pre < n:
                 # cleaned[t] -= alpha_pre * audio[t + delay_pre]
-                cleaned[:n - delay_pre] -= alpha_pre * audio_f64[delay_pre:]
+                cleaned[: n - delay_pre] -= alpha_pre * audio_f64[delay_pre:]
                 logger.debug(
                     "Print-Through pre-echo subtracted: delay=%.1fms alpha_pre=%.3f",
-                    delay_pre / sample_rate * 1000.0, alpha_pre,
+                    delay_pre / sample_rate * 1000.0,
+                    alpha_pre,
                 )
 
         # Korrelationsschutz: Verhindert Over-Processing / Signalumkehr
@@ -527,7 +537,7 @@ class TapeAzimuthCorrector:
         right = audio[1]
 
         # Detect phase error
-        logger.error("[Azimuth] Detecting phase error...")
+        logger.debug("[Azimuth] Detecting phase error...")
         detection = self.detect_phase_error(left, right, sample_rate)
 
         # Log detection
@@ -537,7 +547,9 @@ class TapeAzimuthCorrector:
                 f"Delay: {detection['delay_ms']:.2f}ms"
             )
         else:
-            logger.error(f"[Azimuth] Phase error minimal ({detection['max_phase_error_degrees']:.1f}°), no correction needed")
+            logger.debug(
+                f"[Azimuth] Phase error minimal ({detection['max_phase_error_degrees']:.1f}°), no correction needed"
+            )
 
         # Correct if needed
         if detection["phase_error_detected"]:
@@ -712,7 +724,7 @@ if __name__ == "__main__":
 
     # Get metrics
     metrics = processor.get_metrics()
-    logger.info(f"\n{'='*60}")
+    logger.info(f"\n{'=' * 60}")
     logger.info("METRICS:")
     for module_name, module_metrics in metrics.items():
         logger.info(f"\n{module_name.upper()}:")
@@ -721,7 +733,7 @@ if __name__ == "__main__":
                 logger.info(f"  {key}: {value:.2f}")
             else:
                 logger.info(f"  {key}: {value}")
-    logger.info(f"{'='*60}\n")
+    logger.info(f"{'=' * 60}\n")
 
     # Save
     # Transpose back if stereo

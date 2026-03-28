@@ -11,9 +11,9 @@ Tests:
 5. Model save/load
 """
 
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest

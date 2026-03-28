@@ -33,16 +33,13 @@ class Dither:
         quant_step = 2 ** (1 - self.bit_depth)
         if self.dither_type == "tpdf":
             dither = (
-                np.random.uniform(-0.5, 0.5, audio.shape)
-                + np.random.uniform(-0.5, 0.5, audio.shape)
+                np.random.uniform(-0.5, 0.5, audio.shape) + np.random.uniform(-0.5, 0.5, audio.shape)
             ) * quant_step
             return np.asarray(audio + dither, dtype=np.float64)
         # POW-r Type 3: shaped TPDF dither via Wannamaker noise-shaping filter
         return self._process_powr3(audio, quant_step)
 
-    def _process_powr3(
-        self, audio: npt.NDArray[np.float64], quant_step: float
-    ) -> npt.NDArray[np.float64]:
+    def _process_powr3(self, audio: npt.NDArray[np.float64], quant_step: float) -> npt.NDArray[np.float64]:
         """POW-r Type 3 noise shaping (Wannamaker 1992, JAES 40:611-620).
 
         Feed-forward implementation: TPDF dither is pre-filtered by the
@@ -57,18 +54,13 @@ class Dither:
             Dithered and quantised audio clipped to [-1, 1], float64.
         """
         # TPDF dither at quantisation-step amplitude
-        tpdf = (
-            np.random.uniform(-0.5, 0.5, audio.shape)
-            + np.random.uniform(-0.5, 0.5, audio.shape)
-        ) * quant_step
+        tpdf = (np.random.uniform(-0.5, 0.5, audio.shape) + np.random.uniform(-0.5, 0.5, audio.shape)) * quant_step
 
         # Apply Wannamaker Type 3 FIR noise-shaping filter per channel
         if audio.ndim == 1:
             shaped = lfilter(_POWR3_FIR_B, [1.0], tpdf)
         else:
-            shaped = np.apply_along_axis(
-                lambda x: lfilter(_POWR3_FIR_B, [1.0], x), axis=0, arr=tpdf
-            )
+            shaped = np.apply_along_axis(lambda x: lfilter(_POWR3_FIR_B, [1.0], x), axis=0, arr=tpdf)
 
         # Quantise with shaped dither and clip to [-1, 1]
         quantised = np.round((audio + shaped) / quant_step) * quant_step

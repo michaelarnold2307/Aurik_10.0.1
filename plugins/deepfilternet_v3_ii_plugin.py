@@ -91,7 +91,8 @@ class DeepFilterNetV3Plugin:
         # ── ML-Budget-Check VOR dem Laden (§5.1 OOM-Schutz) ──────────────────
         _allocated = False
         try:
-            from backend.core.ml_memory_budget import release as _release, try_allocate
+            from backend.core.ml_memory_budget import release as _release
+            from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate("DeepFilterNetV3", size_gb=0.15):
                 logger.warning("DeepFilterNet: ML-Budget erschöpft — DSP-Fallback aktiv")

@@ -23,7 +23,7 @@ except ImportError:
     HAS_SOUNDFILE = False
 
 try:
-    from backend.exporter import Exporter, ExportFormat
+    pass
 
     HAS_EXPORTER = True
 except ImportError:
@@ -204,7 +204,7 @@ class TestExportInvariants:
     def test_chroma_correlation_preserved(self, tmp_path: pathlib.Path) -> None:
         """Tonhöhe bleibt nach FLAC-Roundtrip identisch (Chroma-Proxy)."""
         try:
-            import librosa  # noqa: PLC0415
+            import librosa
         except ImportError:
             pytest.skip("librosa nicht installiert")
 

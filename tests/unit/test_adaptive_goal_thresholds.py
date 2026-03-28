@@ -243,7 +243,7 @@ class TestAdaptiveGoalsCalculator:
         for i in range(len(thresholds) - 1):
             assert thresholds[i] >= thresholds[i + 1], (
                 f"Brillanz nicht monoton: score={scores[i]}→{thresholds[i]:.3f} "
-                f"> score={scores[i+1]}→{thresholds[i+1]:.3f}"
+                f"> score={scores[i + 1]}→{thresholds[i + 1]:.3f}"
             )
 
     def test_17_relaxation_factor_stored_correctly(self):
@@ -404,11 +404,12 @@ class TestConvenienceFunction:
         assert isinstance(cfg, dict)
 
 
+import types as _types
+
 # ---------------------------------------------------------------------------
 # P1-2: Tests für das extrahierte Standalone-Modul adaptive_goal_resolver
 # ---------------------------------------------------------------------------
 import pytest
-import types as _types
 
 from backend.core.musical_goals.adaptive_goal_resolver import (
     GOAL_ALIASES,
@@ -423,10 +424,20 @@ class TestAdaptiveGoalResolverModule:
         """GOAL_ALIASES muss alle 14 kanonischen Zielschlüssel enthalten."""
         assert len(GOAL_ALIASES) == 14
         expected = {
-            "bass_kraft", "brillanz", "waerme", "natuerlichkeit",
-            "authentizitaet", "emotionalitaet", "transparenz", "groove",
-            "spatial_depth", "timbre_authentizitaet", "tonal_center",
-            "micro_dynamics", "separation_fidelity", "artikulation",
+            "bass_kraft",
+            "brillanz",
+            "waerme",
+            "natuerlichkeit",
+            "authentizitaet",
+            "emotionalitaet",
+            "transparenz",
+            "groove",
+            "spatial_depth",
+            "timbre_authentizitaet",
+            "tonal_center",
+            "micro_dynamics",
+            "separation_fidelity",
+            "artikulation",
         }
         assert set(GOAL_ALIASES.keys()) == expected
 
@@ -449,8 +460,12 @@ class TestAdaptiveGoalResolverModule:
     def test_36_resolves_from_object_attributes(self):
         """Direkte Objekt-Attribute werden korrekt ausgelesen."""
         obj = _types.SimpleNamespace(
-            brillanz=0.84, waerme=0.80, natuerlichkeit=0.91,
-            authentizitaet=0.88, emotionalitaet=0.87, transparenz=0.89,
+            brillanz=0.84,
+            waerme=0.80,
+            natuerlichkeit=0.91,
+            authentizitaet=0.88,
+            emotionalitaet=0.87,
+            transparenz=0.89,
             bass_kraft=0.85,
         )
         result = resolve_adaptive_goal_thresholds(obj)
@@ -459,9 +474,13 @@ class TestAdaptiveGoalResolverModule:
 
     def test_37_resolves_from_thresholds_attribute_dict(self):
         """Objekt mit .thresholds dict wird korrekt aufgelöst."""
-        obj = _types.SimpleNamespace(thresholds={
-            "groove": 0.62, "spatial_depth": 0.63, "tonal_center": 0.95,
-        })
+        obj = _types.SimpleNamespace(
+            thresholds={
+                "groove": 0.62,
+                "spatial_depth": 0.63,
+                "tonal_center": 0.95,
+            }
+        )
         result = resolve_adaptive_goal_thresholds(obj)
         assert result["groove"] == pytest.approx(0.62)
         assert result["spatial_depth"] == pytest.approx(0.63)
@@ -477,7 +496,7 @@ class TestAdaptiveGoalResolverModule:
 
     def test_39_ignores_nan_and_inf_values(self):
         """NaN / Inf Werte werden ignoriert, kein Eintrag im Ergebnis."""
-        import math
+
         payload = {"brillanz": float("nan"), "waerme": float("inf"), "groove": 0.60}
         result = resolve_adaptive_goal_thresholds(payload)
         assert "brillanz" not in result
@@ -493,6 +512,7 @@ class TestAdaptiveGoalResolverModule:
     def test_41_uv3_static_method_delegates_to_module(self):
         """UnifiedRestorerV3._resolve_adaptive_goal_thresholds delegiert korrekt."""
         from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
         payload = {"brillanz": 0.85, "waerme": 0.80}
         via_uv3 = UnifiedRestorerV3._resolve_adaptive_goal_thresholds(payload)
         via_module = resolve_adaptive_goal_thresholds(payload)

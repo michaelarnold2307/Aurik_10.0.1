@@ -363,24 +363,39 @@ class BassKraftMetric:
         total_energy = float(np.dot(ot_mag, ot_mag) + 1e-10)
         mean_bin_energy = total_energy / max(1, n_bins)  # expected power per bin
 
+        # Vectorised harmonic-alignment search — replaces 100× O(N) argmin calls
+        # with a single O(N·log N) searchsorted pass.  ot_freqs is sorted (rfftfreq).
+        f0_arr = np.arange(20, 121, 5, dtype=np.float32)  # 21 F0 candidates
+        k_arr = np.arange(2, 7, dtype=np.float32)  # 5 harmonics per F0
+        fk_matrix = f0_arr[:, None] * k_arr[None, :]  # shape (21, 5)
+        valid_mask = (fk_matrix >= 120.0) & (fk_matrix <= 500.0)
+        fk_flat = fk_matrix[valid_mask]  # valid harmonic freqs
+
+        if len(fk_flat) == 0:
+            return 0.5
+
+        # Nearest-bin lookup via searchsorted on sorted ot_freqs (O(M·log N))
+        idxs_right = np.clip(np.searchsorted(ot_freqs.astype(np.float32), fk_flat), 0, n_bins - 1)
+        idxs_left = np.maximum(idxs_right - 1, 0)
+        dist_r = np.abs(ot_freqs[idxs_right] - fk_flat)
+        dist_l = np.abs(ot_freqs[idxs_left] - fk_flat)
+        best_idxs = np.where(dist_l <= dist_r, idxs_left, idxs_right)
+
+        harm_energies = ot_mag[best_idxs] ** 2  # shape (n_valid,)
+
+        # Map each valid entry back to its F0 index for groupby-sum
+        f0_indices = np.where(valid_mask)[0]  # shape (n_valid,)
+        n_f0 = len(f0_arr)
+        harm_e_per_f0 = np.bincount(f0_indices, weights=harm_energies, minlength=n_f0)
+        count_per_f0 = np.bincount(f0_indices, minlength=n_f0).astype(np.float32)
+
+        # Saliency per F0 (only where ≥ 2 harmonics are in the 120–500 Hz window)
+        valid_f0 = count_per_f0 >= 2.0
         best_saliency = 0.0
-        for f0 in range(20, 121, 5):
-            harm_e = 0.0
-            count = 0
-            for k in range(2, 7):
-                fk = k * f0
-                if fk < 120 or fk > 500:
-                    continue
-                idx = int(np.argmin(np.abs(ot_freqs - fk)))
-                harm_e += float(ot_mag[idx] ** 2)
-                count += 1
-            if count >= 2:
-                # Saliency: ratio of actual harmonic energy to expected-random level.
-                # For flat noise: expected = count * mean_bin_energy → saliency ≈ 1.0.
-                # For tonal harmonic series: saliency >> 1.
-                saliency = harm_e / (count * mean_bin_energy + 1e-10)
-                if saliency > best_saliency:
-                    best_saliency = saliency
+        if valid_f0.any():
+            saliency_arr = np.zeros(n_f0, dtype=np.float64)
+            saliency_arr[valid_f0] = harm_e_per_f0[valid_f0] / (count_per_f0[valid_f0] * mean_bin_energy + 1e-10)
+            best_saliency = float(np.max(saliency_arr))
         # saliency = 1.0 → random noise (no harmonic structure) → score = 0.0
         # saliency ≥ 6.0 → very strong harmonic ladder   → score = 1.0
         return float(np.clip((best_saliency - 1.0) / 5.0, 0.0, 1.0))

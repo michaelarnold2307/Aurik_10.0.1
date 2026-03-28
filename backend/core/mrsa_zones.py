@@ -27,11 +27,11 @@ logger = logging.getLogger(__name__)
 # Normatives ZONES-Dict (§DSP-Spezialregeln — bindend)
 # ---------------------------------------------------------------------------
 ZONES: dict[str, dict[str, Any]] = {
-    "sub_bass": {"win": 65536, "hop": 16384, "hz": (20,    250)},
-    "mid_low":  {"win": 16384, "hop":  4096, "hz": (250,   800)},
-    "mid":      {"win":  8192, "hop":  2048, "hz": (800,  2000)},
-    "presence": {"win":  1024, "hop":   256, "hz": (2000, 8000)},
-    "air":      {"win":   128, "hop":    32, "hz": (8000, 24000)},
+    "sub_bass": {"win": 65536, "hop": 16384, "hz": (20, 250)},
+    "mid_low": {"win": 16384, "hop": 4096, "hz": (250, 800)},
+    "mid": {"win": 8192, "hop": 2048, "hz": (800, 2000)},
+    "presence": {"win": 1024, "hop": 256, "hz": (2000, 8000)},
+    "air": {"win": 128, "hop": 32, "hz": (8000, 24000)},
 }
 
 # Zone-Reihenfolge (aufsteigend nach Frequenz)
@@ -45,11 +45,11 @@ class ZoneSTFT(NamedTuple):
     """STFT-Ergebnis einer einzelnen MRSA-Zone."""
 
     name: str
-    freqs: npt.NDArray[np.float64]    # shape (F,)
-    times: npt.NDArray[np.float64]    # shape (T,)
+    freqs: npt.NDArray[np.float64]  # shape (F,)
+    times: npt.NDArray[np.float64]  # shape (T,)
     stft: npt.NDArray[np.complex128]  # shape (F, T)
-    win:   int   # spec window size
-    hop:   int   # spec hop size
+    win: int  # spec window size
+    hop: int  # spec hop size
     hz_lo: float
     hz_hi: float
     eff_win: int  # actual nperseg used (may differ from win for short signals)
@@ -75,9 +75,7 @@ def analyze_zones(
     """
     assert sr == 48000, f"MRSA: SR={sr} ≠ 48000 Hz (§DSP-Pflicht)"
     zones = zones or ZONES
-    audio_f32 = np.nan_to_num(
-        np.asarray(audio, dtype=np.float32).ravel(), nan=0.0, posinf=0.0, neginf=0.0
-    )
+    audio_f32 = np.nan_to_num(np.asarray(audio, dtype=np.float32).ravel(), nan=0.0, posinf=0.0, neginf=0.0)
 
     result: dict[str, ZoneSTFT] = {}
     for name in ZONE_ORDER:
@@ -113,7 +111,13 @@ def analyze_zones(
         )
         logger.debug(
             "MRSA zone=%s: win=%d hop=%d STFT=(%d×%d) hz=[%.0f, %.0f]",
-            name, win, hop, Zxx.shape[0], Zxx.shape[1], hz_lo, hz_hi,
+            name,
+            win,
+            hop,
+            Zxx.shape[0],
+            Zxx.shape[1],
+            hz_lo,
+            hz_hi,
         )
     return result
 
@@ -147,9 +151,7 @@ def synthesize_zone(
     try:
         from dsp.pghi import pghi_reconstruct_from_stft
 
-        audio_rec = pghi_reconstruct_from_stft(
-            modified_stft, sr=48000, win_size=effective_win, hop=hop
-        )
+        audio_rec = pghi_reconstruct_from_stft(modified_stft, sr=48000, win_size=effective_win, hop=hop)
     except Exception:
         # Fallback: Phase-Velocity-Continuation (conservative PGHI approximation)
         mag = np.abs(modified_stft)
@@ -236,8 +238,8 @@ def merge_zones(
             filtered[:crossfade_samp] *= fade_in
             filtered[-crossfade_samp:] *= fade_out
 
-        mixed += filtered[:n_original] if len(filtered) >= n_original else np.pad(
-            filtered, (0, n_original - len(filtered))
+        mixed += (
+            filtered[:n_original] if len(filtered) >= n_original else np.pad(filtered, (0, n_original - len(filtered)))
         )
 
     result = np.clip(np.nan_to_num(mixed, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)

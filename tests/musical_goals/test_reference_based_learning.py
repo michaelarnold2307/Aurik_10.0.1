@@ -4,8 +4,8 @@ Tests for Reference-Based Learning
 Tests Component 0.9.8: Reference-Based Learning
 """
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest

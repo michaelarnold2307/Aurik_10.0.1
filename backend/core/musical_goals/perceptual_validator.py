@@ -17,7 +17,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
@@ -29,6 +29,7 @@ except ImportError:
 try:
     import torch
     from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
+
     _TORCH_AVAILABLE = True
 except (ImportError, OSError):
     # OSError: libcupti.so.12 undefined symbol — torch-CUDA-Abhängigkeit in venv

@@ -170,6 +170,7 @@ class CQTdiffPlusPlugin:
             self._fallback_active = True
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("CQTdiff+")
             except Exception:
                 pass

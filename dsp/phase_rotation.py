@@ -76,7 +76,9 @@ class PhaseRotator:
 
         # Check if rotation is needed
         if abs(correlation_before - self.target_correlation) < 0.05:
-            logger.info(f"[PhaseRotator] Phase correlation already optimal ({correlation_before:.3f}), skipping rotation.")
+            logger.info(
+                f"[PhaseRotator] Phase correlation already optimal ({correlation_before:.3f}), skipping rotation."
+            )
             return audio, {
                 "skipped": True,
                 "reason": "already optimal",

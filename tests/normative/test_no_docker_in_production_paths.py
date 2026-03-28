@@ -120,7 +120,6 @@ def test_no_docker_invocation_in_production_paths() -> None:
             for line_no, snippet in _find_docker_invocations(src, rel):
                 violations.append((rel, line_no, snippet.strip().replace("\n", " ")))
 
-    assert not violations, (
-        "Docker invocation found in production code path(s):\n"
-        + "\n".join(f"- {path}:{line_no} -> {snippet}" for path, line_no, snippet in violations)
+    assert not violations, "Docker invocation found in production code path(s):\n" + "\n".join(
+        f"- {path}:{line_no} -> {snippet}" for path, line_no, snippet in violations
     )

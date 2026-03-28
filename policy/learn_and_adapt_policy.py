@@ -14,7 +14,7 @@ AUDIT_DIR = "./"
 POLICY_PATH = "config_dsp_chain_example.yaml"
 
 # Lade aktuelle Policy
-with open(POLICY_PATH, "r") as f:
+with open(POLICY_PATH) as f:
     policy = yaml.safe_load(f)
 
 # Sammle alle Audit-Reports
@@ -28,7 +28,7 @@ artefacts = []
 deesser_sib_ratios = []
 denoiser_strengths = []
 for afile in audit_files:
-    with open(afile, "r") as f:
+    with open(afile) as f:
         report = json.load(f)
     hf_ratios.append(report.get("hf_ratio", 1.0))
     corrs.append(report.get("correlation", 1.0))

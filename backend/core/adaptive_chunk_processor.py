@@ -17,9 +17,9 @@ Reference: copilot-instructions.md §7.6 (Chunk-Größe).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
+from dataclasses import dataclass
 
 import numpy as np
 

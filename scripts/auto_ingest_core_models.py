@@ -8,10 +8,10 @@ selects best matching files, and copies them into canonical target paths.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import shutil
+from dataclasses import dataclass
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 

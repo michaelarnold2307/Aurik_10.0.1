@@ -6,6 +6,8 @@ Professional audio restoration interface
 import math as _math
 from pathlib import Path
 
+import numpy as np
+import soundfile as sf
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
@@ -27,9 +29,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-import numpy as np
 from scipy.signal import resample_poly as _resample_poly
-import soundfile as sf
 
 try:
     from backend.api.bridge import get_aurik_denker_class, get_aurik_denker_instance

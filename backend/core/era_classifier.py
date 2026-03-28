@@ -469,6 +469,141 @@ def _estimate_dynamic_range(audio_mono: np.ndarray, sr: int) -> float:
     return float(np.clip(dr, 5.0, 70.0))
 
 
+def _estimate_noise_modulation(audio_mono: np.ndarray, sr: int) -> float:
+    """Estimates temporal amplitude modulation of the noise/background floor.
+
+    Vintage recordings contain transport-related amplitude modulation in the
+    noise floor: wow & flutter on reel/cassette tape (mechanical variability)
+    and pressing vibration harmonics on shellac/vinyl.  This is quantified as
+    the coefficient of variation (sigma/mu) of RMS energy in quiet frames.
+
+    Calibrated ranges:
+        Pre-1950 wax / shellac / early tape :  > 0.40
+        1950-1965 reel tape                 : 0.22 - 0.45
+        1965-1975 compact cassette          : 0.12 - 0.26
+        1975+  Dolby / HX cassette          :  < 0.15
+        Digital recording                   :  < 0.06
+
+    Args:
+        audio_mono: 1-D float array, normalised to [-1, 1].
+        sr:         Sample rate in Hz.
+
+    Returns:
+        Modulation index in [0.0, 1.0]; higher = more modulation = older era.
+    """
+    frame_size = max(1, sr // 20)  # 50 ms frames
+    n_frames = len(audio_mono) // frame_size
+    if n_frames < 20:
+        return 0.20  # insufficient data
+    energies = np.array(
+        [float(np.mean(audio_mono[i * frame_size : (i + 1) * frame_size] ** 2)) for i in range(n_frames)],
+        dtype=np.float32,
+    )
+    q30 = float(np.percentile(energies, 30))
+    if q30 < 1e-20:
+        return 0.20  # all silence
+    quiet_mask = energies <= q30 * 5.0
+    quiet_energies = energies[quiet_mask]
+    if len(quiet_energies) < 8:
+        return 0.20
+    mean_e = float(np.mean(quiet_energies))
+    std_e = float(np.std(quiet_energies))
+    if mean_e < 1e-18:
+        return 0.20
+    return float(np.clip(std_e / mean_e, 0.0, 1.0))
+
+
+def _estimate_lf_presence(audio_mono: np.ndarray, sr: int) -> float:
+    """Low-frequency presence ratio: energy below 300 Hz vs 300 Hz - 3 kHz.
+
+    Carbon-microphone recordings (1920s-1940s) have a telephone-like response:
+    very little bass below 300 Hz.  Later ribbon and condenser microphones
+    (1950s+) recover bass progressively.
+
+    Typical ranges:
+        1920s-1940s carbon mic :  < 0.18
+        1950s ribbon mic       : 0.18 - 0.35
+        1960s condenser        : 0.30 - 0.55
+        1970s+  modern chain   :  > 0.45
+
+    Returns:
+        LF-presence ratio in [0.0, 1.0].
+    """
+    n_fft = min(4096, len(audio_mono))
+    if n_fft < 256:
+        return 0.35
+    hop = n_fft // 2
+    specs: list[np.ndarray] = []
+    for start in range(0, max(1, len(audio_mono) - n_fft), hop):
+        frame = audio_mono[start : start + n_fft] * np.hanning(n_fft)
+        specs.append(np.abs(np.fft.rfft(frame)) ** 2)
+    if not specs:
+        return 0.35
+    avg_spec = np.mean(np.array(specs), axis=0)
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+    lf_energy = float(np.sum(avg_spec[freqs < 300.0]))
+    mf_energy = float(np.sum(avg_spec[(freqs >= 300.0) & (freqs < 3000.0)]))
+    if mf_energy < 1e-20:
+        return 0.35
+    return float(np.clip(lf_energy / (lf_energy + mf_energy), 0.0, 1.0))
+
+
+def _estimate_highband_presence(audio_mono: np.ndarray, sr: int) -> float:
+    """High-band presence ratio: energy above 8 kHz vs 2-8 kHz.
+
+    This metric helps distinguish late-1960s/1970s productions from earlier
+    bandwidth-limited chains when rolloff and SNR are borderline.
+
+    Typical behavior:
+        Early analog / bandwidth-limited: < 0.10
+        Late analog / 1970s+ tape:       0.12 - 0.30
+        Modern full-band content:        > 0.25
+
+    Returns:
+        High-band presence ratio in [0.0, 1.0].
+    """
+    n_fft = min(4096, len(audio_mono))
+    if n_fft < 256:
+        return 0.12
+    hop = n_fft // 2
+    specs: list[np.ndarray] = []
+    for start in range(0, max(1, len(audio_mono) - n_fft), hop):
+        frame = audio_mono[start : start + n_fft] * np.hanning(n_fft)
+        specs.append(np.abs(np.fft.rfft(frame)) ** 2)
+    if not specs:
+        return 0.12
+    avg_spec = np.mean(np.array(specs), axis=0)
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+    hb_energy = float(np.sum(avg_spec[freqs >= 8000.0]))
+    ref_energy = float(np.sum(avg_spec[(freqs >= 2000.0) & (freqs < 8000.0)]))
+    if ref_energy < 1e-20:
+        return 0.12
+    return float(np.clip(hb_energy / (hb_energy + ref_energy), 0.0, 1.0))
+
+
+def _transition_1970_score(
+    *,
+    highband_presence: float,
+    lf_presence: float,
+    snr_db: float,
+    stereo_width: float,
+    noise_modulation: float,
+) -> float:
+    """Combined evidence score for 1960/1970 transition decisions.
+
+    Returns a calibrated score in [0, 1] where higher values indicate stronger
+    evidence for 1970s-style production chains.
+    """
+    hb_n = float(np.clip((highband_presence - 0.06) / 0.24, 0.0, 1.0))
+    lf_n = float(np.clip((lf_presence - 0.20) / 0.20, 0.0, 1.0))
+    snr_n = float(np.clip((snr_db - 34.0) / 20.0, 0.0, 1.0))
+    st_n = float(np.clip((stereo_width - 0.05) / 0.10, 0.0, 1.0))
+    mod_old_n = float(np.clip((noise_modulation - 0.12) / 0.24, 0.0, 1.0))
+
+    score = 0.30 * hb_n + 0.23 * lf_n + 0.20 * snr_n + 0.15 * st_n + 0.12 * (1.0 - mod_old_n)
+    return float(np.clip(score, 0.0, 1.0))
+
+
 def _dsp_fingerprint_decade(
     rolloff_hz: float,
     snr_db: float,
@@ -477,6 +612,9 @@ def _dsp_fingerprint_decade(
     stereo_width: float = 0.0,
     spectral_tilt: float = -4.0,
     dynamic_range_db: float = 25.0,
+    noise_modulation: float = 0.20,
+    lf_presence: float = 0.35,
+    highband_presence: float = 0.12,
 ) -> tuple[int, float]:
     """Mappt Bandbreite + SNR auf Jahrzehnt via kalibrierter Schwellwert-Tabelle.
 
@@ -638,6 +776,42 @@ def _dsp_fingerprint_decade(
             if votes_up >= 2:
                 decade = next_dec
 
+    # (F) Noise-floor temporal modulation — wow/flutter proxy
+    if noise_modulation > 0.38 and decade in (1960, 1970) and bw_khz < 10.0:
+        decade = min(decade, 1960)
+    elif noise_modulation < 0.08 and decade in (1950, 1960) and bw_khz > 9.0:
+        decade = max(decade, 1970)
+    elif noise_modulation > 0.25 and decade == 1980 and bw_khz < 14.0:
+        decade = 1970
+
+    # (G) Low-frequency presence — carbon/ribbon microphone era footprint
+    if lf_presence < 0.18 and decade in (1950, 1960) and snr_db < 35.0:
+        decade = min(decade, 1940)
+    elif lf_presence > 0.50 and decade in (1920, 1930) and bw_khz > 5.0:
+        decade = max(decade, 1940)
+
+    # (H) High-band presence — late analog / 1970s discriminator
+    if decade == 1960 and highband_presence > 0.22 and snr_db >= 45.0 and stereo_width >= 0.10:
+        decade = 1970
+    elif decade == 1970 and highband_presence < 0.10 and noise_modulation > 0.30 and snr_db < 40.0:
+        decade = 1960
+
+    transition_score_1970 = 0.50
+    # (I) Combined evidence in the 1960/1970 transition zone.
+    # Uses a calibrated weighted score to reduce single-feature overfitting.
+    if decade in (1960, 1970) and 10.5 <= bw_khz <= 15.5:
+        transition_score_1970 = _transition_1970_score(
+            highband_presence=highband_presence,
+            lf_presence=lf_presence,
+            snr_db=snr_db,
+            stereo_width=stereo_width,
+            noise_modulation=noise_modulation,
+        )
+        if decade == 1960 and transition_score_1970 >= 0.58 and highband_presence > 0.16 and snr_db >= 40.0:
+            decade = 1970
+        elif decade == 1970 and transition_score_1970 <= 0.38 and highband_presence < 0.16 and noise_modulation > 0.20:
+            decade = 1960
+
     # Confidence: combine BW error and SNR deviation for each era class.
     expected_bw = DECADE_HF_LIMITS.get(decade, 20000.0) / 1000.0
     bw_error = abs(bw_khz - expected_bw) / max(expected_bw, 1.0)
@@ -673,17 +847,39 @@ def _dsp_fingerprint_decade(
             agreement_count += 1
         conf = min(0.92, conf + agreement_count * 0.04)
 
+    # Confidence fine-tuning for the 1960/1970 transition evidence.
+    if decade in (1960, 1970):
+        # Score certainty around the transition boundary:
+        # far from 0.5 -> clearer evidence, near 0.5 -> ambiguous evidence.
+        dist_mid = abs(transition_score_1970 - 0.5)
+        if dist_mid >= 0.20:
+            conf = min(0.92, conf + 0.03)
+        elif dist_mid <= 0.08:
+            conf = max(0.25, conf - 0.04)
+
+        if (decade == 1970 and highband_presence > 0.20 and noise_modulation < 0.20) or (
+            decade == 1960 and highband_presence < 0.12 and noise_modulation > 0.30
+        ):
+            conf = min(0.92, conf + 0.03)
+        # Penalize contradictory evidence so the classifier can fall back to medium-floor safely.
+        if highband_presence > 0.22 and noise_modulation > 0.32:
+            conf = max(0.25, conf - 0.05)
+
     if bw_khz >= 18.0 and decade < 1990:
         conf = max(conf, 0.75)  # Full-bandwidth analog clearly ≥ 1980
 
     logger.debug(
-        "DSP-Fingerprint: bw=%.1fkHz snr=%.1fdB stereo=%s width=%.3f tilt=%.1fdB/oct dr=%.1fdB → decade=%d conf=%.2f",
+        "DSP-Fingerprint: bw=%.1fkHz snr=%.1fdB stereo=%s width=%.3f tilt=%.1fdB/oct dr=%.1fdB mod=%.2f lf=%.2f hb=%.2f ts=%.2f → decade=%d conf=%.2f",
         bw_khz,
         snr_db,
         is_stereo,
         stereo_width,
         spectral_tilt,
         dynamic_range_db,
+        noise_modulation,
+        lf_presence,
+        highband_presence,
+        transition_score_1970,
         decade,
         conf,
     )
@@ -887,6 +1083,10 @@ class EraClassifier:
         spectral_tilt = _estimate_spectral_tilt(audio_mono, sr)
         dynamic_range_db = _estimate_dynamic_range(audio_mono, sr)
 
+        noise_modulation = _estimate_noise_modulation(audio_mono, sr)
+        lf_presence = _estimate_lf_presence(audio_mono, sr)
+        highband_presence = _estimate_highband_presence(audio_mono, sr)
+
         # Tier-1: CLAP (optional)
         result = self._try_tier1(audio_mono, sr, bark, rolloff_hz, snr_db)
 
@@ -900,6 +1100,9 @@ class EraClassifier:
                 stereo_width=stereo_width,
                 spectral_tilt=spectral_tilt,
                 dynamic_range_db=dynamic_range_db,
+                noise_modulation=noise_modulation,
+                lf_presence=lf_presence,
+                highband_presence=highband_presence,
             )
 
         # Tier-3: Mikrofon-Heuristik (letzter Fallback)
@@ -1021,8 +1224,11 @@ class EraClassifier:
         stereo_width: float = 0.0,
         spectral_tilt: float = -4.0,
         dynamic_range_db: float = 25.0,
+        noise_modulation: float = 0.20,
+        lf_presence: float = 0.35,
+        highband_presence: float = 0.12,
     ) -> EraResult:
-        """Tier-2: DSP-Fingerprint (multi-factor: BW + SNR + stereo + tilt + DR)."""
+        """Tier-2: DSP-Fingerprint (multi-factor: BW + SNR + stereo + tilt + DR + modulation + LF + HB)."""
         decade, conf = _dsp_fingerprint_decade(
             rolloff_hz,
             snr_db,
@@ -1030,6 +1236,9 @@ class EraClassifier:
             stereo_width=stereo_width,
             spectral_tilt=spectral_tilt,
             dynamic_range_db=dynamic_range_db,
+            noise_modulation=noise_modulation,
+            lf_presence=lf_presence,
+            highband_presence=highband_presence,
         )
         material = DECADE_MATERIAL_PRIOR.get(decade, "unknown")
         return EraResult(
@@ -1173,6 +1382,14 @@ def constrain_era_to_medium(era_result: EraResult, medium: str) -> EraResult:
 
     corrected_decade = min(valid_above_floor)
     new_conf = float(np.clip(era_result.confidence * 0.65, 0.25, 0.80))
+    # Ensure the corrected confidence stays above the material_prior threshold (0.40)
+    # when the floor correction is large (>= 2 decade steps) and the original
+    # confidence was trustworthy (>= 0.40).  Without this guard a conf=0.60 era
+    # that gets bumped 3 steps (e.g. 1890->1960 for tape) ends up at 0.39, which
+    # silently drops material_prior to "unknown" downstream.
+    n_corrected_steps = sum(1 for d in VALID_DECADES if era_result.decade <= d < corrected_decade)
+    if n_corrected_steps >= 2 and era_result.confidence >= 0.40:
+        new_conf = max(new_conf, 0.42)
     # Use the actually detected medium — not the decade-based prior which can
     # map e.g. 1960 → "vinyl" even though the medium was detected as "tape".
     new_material = medium.strip().lower()

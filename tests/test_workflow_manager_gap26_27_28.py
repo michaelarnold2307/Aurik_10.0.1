@@ -11,9 +11,9 @@ Author: AURIK Team
 Version: 1.0.0
 """
 
-from pathlib import Path
 import shutil
 import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, Mock
 
 import numpy as np

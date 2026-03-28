@@ -7,8 +7,8 @@ Testet:
 - DynamicsProcessor (unified API)
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -244,7 +244,8 @@ class TestTransparentDynamicsProcessor:
     def test_quality_gate_over_compression(self, loud_audio, sample_rate):
         """Test quality gate prevents extreme compression"""
         processor = TransparentDynamicsProcessor(
-            target_ratio=10.0, threshold_db=-30.0  # Extreme ratio  # Low threshold
+            target_ratio=10.0,
+            threshold_db=-30.0,  # Extreme ratio  # Low threshold
         )
 
         processor.process(loud_audio, sample_rate)
@@ -590,7 +591,7 @@ class TestPerformance:
         assert elapsed < audio_duration * 15
 
         print(f"\nProcessing time: {elapsed:.3f}s for {audio_duration:.1f}s audio")
-        print(f"Real-time factor: {elapsed/audio_duration:.2f}×")
+        print(f"Real-time factor: {elapsed / audio_duration:.2f}×")
 
 
 if __name__ == "__main__":

@@ -8,10 +8,10 @@ Author: AURIK Team
 Date: 8. Februar 2026
 """
 
-from pathlib import Path
 import shutil
 import tempfile
 import time
+from pathlib import Path
 
 import pytest
 

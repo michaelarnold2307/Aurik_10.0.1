@@ -5,7 +5,6 @@ backend/core/expert_feedback_system.py — Expert feedback aggregator
 
 from __future__ import annotations
 
-from typing import Dict, List
 
 
 class ExpertFeedbackSystem:
@@ -23,10 +22,7 @@ class ExpertFeedbackSystem:
         if not self._feedback:
             return {}
         keys = self._feedback[0].keys()
-        return {
-            k: sum(f.get(k, 0.0) for f in self._feedback) / len(self._feedback)
-            for k in keys
-        }
+        return {k: sum(f.get(k, 0.0) for f in self._feedback) / len(self._feedback) for k in keys}
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +32,7 @@ import threading as _threading
 
 _expert_feedback_system_instance = None
 _expert_feedback_system_lock = _threading.Lock()
+
 
 def get_expert_feedback_system() -> ExpertFeedbackSystem:
     """Return the process-wide singleton ExpertFeedbackSystem instance."""

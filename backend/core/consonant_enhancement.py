@@ -31,7 +31,6 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
 
 import numpy as np
 import scipy.signal as sig
@@ -608,19 +607,19 @@ class PlosiveBurstPreserver:
     """
 
     # Detection thresholds
-    ONSET_RATIO_DB: float = 12.0    # RMS must rise ≥ 12 dB in onset window
-    ONSET_WINDOW_MS: float = 5.0    # Look-ahead for onset detection (ms)
+    ONSET_RATIO_DB: float = 12.0  # RMS must rise ≥ 12 dB in onset window
+    ONSET_WINDOW_MS: float = 5.0  # Look-ahead for onset detection (ms)
     BURST_MAX_RISE_MS: float = 5.0  # Maximum rise time for plosive classification
     BURST_PRE_SILENCE_FACTOR: float = 0.25  # Pre-burst RMS ≤ 25 % of burst peak
 
     # Restoration window
-    BURST_PRE_MS: float = 2.0   # Samples before onset to include in window
+    BURST_PRE_MS: float = 2.0  # Samples before onset to include in window
     BURST_POST_MS: float = 30.0  # Aspiration window after onset (ms)
     MAX_RESTORE_DB: float = 6.0  # Maximum transient gain restoration
 
     # Frame / hop sizes
-    _FRAME_MS: float = 2.0   # Frame length for envelope (ms)
-    _HOP_MS: float = 1.0     # Hop size for envelope tracking (ms)
+    _FRAME_MS: float = 2.0  # Frame length for envelope (ms)
+    _HOP_MS: float = 1.0  # Hop size for envelope tracking (ms)
 
     def restore(
         self,
@@ -646,20 +645,14 @@ class PlosiveBurstPreserver:
             empty = np.zeros(0, dtype=np.float32)
             return PlosiveBurstResult(audio=empty)
 
-        original = np.nan_to_num(
-            np.asarray(original, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
-        )
-        processed = np.nan_to_num(
-            np.asarray(processed, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
-        )
+        original = np.nan_to_num(np.asarray(original, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        processed = np.nan_to_num(np.asarray(processed, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
 
         # Handle stereo: process the mix for detection, apply to each channel
         stereo = original.ndim == 2
         orig_mono = original.mean(axis=0) if stereo else original
         proc_channels = (
-            [processed[:, ch] for ch in range(processed.shape[1])]
-            if stereo and processed.ndim == 2
-            else [processed]
+            [processed[:, ch] for ch in range(processed.shape[1])] if stereo and processed.ndim == 2 else [processed]
         )
 
         frame_n = max(2, int(self._FRAME_MS / 1000.0 * sr))
@@ -689,7 +682,7 @@ class PlosiveBurstPreserver:
                 rise_frames = fi - rise_start
                 if rise_frames <= burst_max_rise_frames:
                     # Check pre-burst silence (closure phase)
-                    pre_peak = float(np.max(envelope[max(0, rise_start - 5):rise_start + 1]))
+                    pre_peak = float(np.max(envelope[max(0, rise_start - 5) : rise_start + 1]))
                     if pre_peak <= self.BURST_PRE_SILENCE_FACTOR * post_rms:
                         onsets.append(fi)
                         # Skip ahead to avoid duplicate detections
@@ -756,16 +749,14 @@ class PlosiveBurstPreserver:
             onset_positions_ms=onset_ms_list,
         )
 
-    def _rms_envelope(
-        self, audio: np.ndarray, frame_n: int, hop_n: int
-    ) -> np.ndarray:
+    def _rms_envelope(self, audio: np.ndarray, frame_n: int, hop_n: int) -> np.ndarray:
         """Compute frame-wise RMS envelope."""
         n = len(audio)
         frames = []
         pos = 0
         while pos < n:
-            frame = audio[pos: pos + frame_n]
-            rms = float(np.sqrt(np.mean(frame ** 2))) if len(frame) > 0 else 0.0
+            frame = audio[pos : pos + frame_n]
+            rms = float(np.sqrt(np.mean(frame**2))) if len(frame) > 0 else 0.0
             frames.append(rms if np.isfinite(rms) else 0.0)
             pos += hop_n
         return np.array(frames, dtype=np.float32)

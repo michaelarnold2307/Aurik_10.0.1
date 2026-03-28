@@ -258,6 +258,13 @@ class TapeHissReductionPhase(PhaseInterface):
         for ch in range(channels):
             channel = audio[:, ch] if is_stereo else audio
 
+            # §Psychoacoustic: select pre-computed masking result for this channel.
+            # ch=0 → masking_result (L/mono), ch=1 → masking_result_r (R), fallback to L.
+            if ch == 1:
+                _ch_masking = kwargs.get("masking_result_r") or kwargs.get("masking_result")
+            else:
+                _ch_masking = kwargs.get("masking_result")
+
             # STFT-OMLSA-Verarbeitung (HF-selektiv)
             processed = self._process_channel_omlsa(
                 channel,
@@ -266,6 +273,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 hf_high,
                 material,
                 intensity_scale=_effective_strength,
+                masking_result=_ch_masking,
             )
 
             if is_stereo:
@@ -328,6 +336,7 @@ class TapeHissReductionPhase(PhaseInterface):
         hf_high: float,
         material: "MaterialType",
         intensity_scale: float = 1.0,
+        masking_result=None,  # §Psychoacoustic: pre-computed MaskingResult for this channel
     ) -> np.ndarray:
         """STFT-OMLSA-Verarbeitung: HF-selektive Rauschunterdrückung (Cohen 2002/2003).
 
@@ -443,9 +452,11 @@ class TapeHissReductionPhase(PhaseInterface):
         # §4.5 Psychoakustischer Masking-Gain-Clamp (ISO 11172-3, Painter & Spanias 2000)
         # Berechnet auf Input-Audio → Schutzmaske für Stille / ungemaskierte Bereiche
         try:
-            from backend.core.psychoacoustic_masking_model import compute_masking_threshold
+            _pmm = masking_result
+            if _pmm is None:
+                from backend.core.psychoacoustic_masking_model import compute_masking_threshold
 
-            _pmm = compute_masking_threshold(channel.astype(np.float32), sample_rate)
+                _pmm = compute_masking_threshold(channel.astype(np.float32), sample_rate)
             _pmm_gain_t = np.mean(_pmm.gain_modifier, axis=1).astype(np.float32)
             _hop = 512  # entspricht nperseg=2048, noverlap=1536
             _pmm_centers = np.arange(len(_pmm_gain_t)) * float(_hop) + _hop * 0.5

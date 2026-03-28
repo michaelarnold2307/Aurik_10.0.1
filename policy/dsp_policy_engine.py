@@ -12,7 +12,7 @@ Verwendung:
 """
 
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -288,14 +288,14 @@ class DSPPolicyEngine:
             + len(self.postprocessing_modules)
         )
 
-    def select_dsp_chain(self, context: Dict[str, Any], goal: Dict[str, Any]) -> List[Tuple[str, Dict]]:
+    def select_dsp_chain(self, context: dict[str, Any], goal: dict[str, Any]) -> list[tuple[str, dict]]:
         """
         Wählt optimale DSP-Kette basierend auf Kontext.
 
         Returns:
             List of (module_name, parameters) tuples
         """
-        chain: List[Tuple[str, Dict[str, Any]]] = []
+        chain: list[tuple[str, dict[str, Any]]] = []
 
         # === PHASE 1: PRE-PROCESSING (immer) ===
         chain.append(("DCBlocker", {}))

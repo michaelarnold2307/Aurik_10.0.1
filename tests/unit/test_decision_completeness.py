@@ -317,9 +317,9 @@ class TestRobustness:
         ]:
             for dt in [DefectType.PRINT_THROUGH, DefectType.QUANTIZATION_NOISE, DefectType.JITTER_ARTIFACTS]:
                 phases = _select_phases_for(mat, dt, QualityMode.QUALITY)
-                assert all(
-                    isinstance(p, str) and len(p) > 0 for p in phases
-                ), f"Ungültige Phase bei {mat.name} × {dt.name}: {phases}"
+                assert all(isinstance(p, str) and len(p) > 0 for p in phases), (
+                    f"Ungültige Phase bei {mat.name} × {dt.name}: {phases}"
+                )
 
     def test_no_duplicate_phases(self):
         """Keine doppelten Phasen in einer Auswahl (Deduplizierung)."""
@@ -375,9 +375,7 @@ def test_coverage_summary():
         else "alle Kombinationen vollständig abgedeckt"
     )
 
-    assert (
-        coverage_pct == 100.0
-    ), f"Nicht alle Kombinationen abgedeckt: {coverage_pct:.1f}% — {gap_summary}"
+    assert coverage_pct == 100.0, f"Nicht alle Kombinationen abgedeckt: {coverage_pct:.1f}% — {gap_summary}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

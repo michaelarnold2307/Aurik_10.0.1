@@ -12,16 +12,15 @@ Output:
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import onnx
 import onnxruntime as ort
-from transformers import AutoModel
 import torch
-
+from transformers import AutoModel
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = ROOT / "models" / "wav2vec2-base"

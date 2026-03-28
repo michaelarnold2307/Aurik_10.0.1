@@ -28,7 +28,6 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 import numpy as np
 from scipy.signal import istft, stft
@@ -42,8 +41,8 @@ logger = logging.getLogger(__name__)
 
 class DenoiseStrategy(Enum):
     OMLSA_ONLY = "omlsa_only"
-    HYBRID     = "hybrid"
-    ADAPTIVE   = "adaptive"
+    HYBRID = "hybrid"
+    ADAPTIVE = "adaptive"
 
 
 # ---------------------------------------------------------------------------
@@ -132,9 +131,9 @@ def _omlsa_denoise(
     audio_f64 = np.asarray(audio, dtype=np.float64)
     _, _, Z = stft(audio_f64, fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
 
-    mag = np.abs(Z)                   # (n_freq, n_frames)
+    mag = np.abs(Z)  # (n_freq, n_frames)
     phase = np.angle(Z)
-    power = mag ** 2
+    power = mag**2
 
     n_frames = power.shape[1]
     n_est = max(1, min(noise_frames, n_frames))
@@ -163,9 +162,7 @@ def _omlsa_denoise(
     n_orig = len(audio_f64)
     audio_out = audio_out[:n_orig] if len(audio_out) >= n_orig else np.pad(audio_out, (0, n_orig - len(audio_out)))
 
-    audio_out = np.clip(
-        np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0
-    ).astype(audio.dtype)
+    audio_out = np.clip(np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(audio.dtype)
 
     # Simple quality estimate: ratio of median gain to 1 (closer to 1 = less denoised)
     quality = float(np.clip(1.0 - float(np.mean(1.0 - gain)), 0.0, 1.0))
@@ -210,9 +207,11 @@ class HybridMLDenoiser:
         """Attempt to load the Resemble Enhance plugin (silent on failure)."""
         try:
             from backend.core.ml_memory_budget import try_allocate  # type: ignore[import]
+
             if not try_allocate("ResembleEnhanceHybrid", size_gb=0.75):
                 return
             from plugins.resemble_enhance_plugin import ResembleEnhancePlugin  # type: ignore[import]
+
             self._resemble_plugin = ResembleEnhancePlugin()
         except Exception:
             self._resemble_plugin = None
@@ -262,7 +261,8 @@ class HybridMLDenoiser:
         quality_estimates = []
         for ch in channels:
             out, q = _omlsa_denoise(
-                ch, sr,
+                ch,
+                sr,
                 n_fft=self.config.n_fft,
                 hop=self.config.hop_length,
                 noise_frames=self.config.noise_frames,
@@ -289,9 +289,7 @@ class HybridMLDenoiser:
                 for ch in processed_channels:
                     result = self._resemble_plugin.process(ch, sr)
                     out_ch = result if isinstance(result, np.ndarray) else ch
-                    out_ch = np.clip(
-                        np.nan_to_num(out_ch, nan=0.0), -1.0, 1.0
-                    ).astype(np.float32)
+                    out_ch = np.clip(np.nan_to_num(out_ch, nan=0.0), -1.0, 1.0).astype(np.float32)
                     refined.append(out_ch)
                 processed_channels = refined
                 resemble_applied = True
@@ -314,9 +312,7 @@ class HybridMLDenoiser:
             out_array = processed_channels[0]
 
         # Final NaN guard
-        out_array = np.clip(
-            np.nan_to_num(out_array, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0
-        )
+        out_array = np.clip(np.nan_to_num(out_array, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
 
         elapsed = time.perf_counter() - t_start
 

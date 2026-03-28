@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 import pytest
-
 
 CRITICAL_TEST_FILES = [
     "tests/test_tape_specialist.py",
@@ -27,6 +26,4 @@ def test_critical_dsp_tests_default_to_48k() -> None:
 
         m = pattern.search(text)
         assert m is not None, f"Keine sample_rate-Fixture in {rel} gefunden"
-        assert int(m.group(1)) == 48_000, (
-            f"{rel} nutzt nicht 48k Fixture-Default. Gefunden: {m.group(1)}"
-        )
+        assert int(m.group(1)) == 48_000, f"{rel} nutzt nicht 48k Fixture-Default. Gefunden: {m.group(1)}"

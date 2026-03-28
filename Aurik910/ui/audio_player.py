@@ -5,6 +5,8 @@ Real-time audio playback with before/after comparison
 
 from pathlib import Path
 
+import numpy as np
+import soundfile as sf
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QComboBox,
@@ -16,8 +18,6 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-import numpy as np
-import soundfile as sf
 
 try:
     from backend.api.bridge import get_aurik_denker_class, get_aurik_denker_instance

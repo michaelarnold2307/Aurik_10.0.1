@@ -59,10 +59,8 @@ import logging
 import math
 import threading
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 import numpy as np
-import scipy.signal as sig
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +74,13 @@ ANALYSIS_WINDOW_MS: float = 50.0
 ONSET_SEARCH_MS: float = 100.0
 
 # Feature thresholds (tuned on McIntyre/Woodhouse, Benade reference recordings)
-_CENTROID_BOW_MAX: float = 0.25   # centroid ≤ → BOW candidate
+_CENTROID_BOW_MAX: float = 0.25  # centroid ≤ → BOW candidate
 _CENTROID_PICK_MIN: float = 0.42  # centroid ≥ → PICK / STRIKE candidate
 _FLATNESS_STRIKE_MIN: float = 0.55  # flatness ≥ → STRIKE candidate
 _FLATNESS_BREATH_MIN: float = 0.38  # flatness ≥ (+ ZCR) → BREATH candidate
-_ZCR_BREATH_MIN: float = 0.34     # ZCR ≥ (+ flatness) → BREATH candidate
-_RISE_PICK_MAX_MS: float = 6.0    # rise time ≤ → PICK (not MALLET)
-_RISE_BOW_MIN_MS: float = 40.0    # rise time ≥ → confirms BOW
+_ZCR_BREATH_MIN: float = 0.34  # ZCR ≥ (+ flatness) → BREATH candidate
+_RISE_PICK_MAX_MS: float = 6.0  # rise time ≤ → PICK (not MALLET)
+_RISE_BOW_MIN_MS: float = 40.0  # rise time ≥ → confirms BOW
 
 # ── Result dataclass ─────────────────────────────────────────────────────────
 
@@ -172,10 +170,7 @@ class AttackTypeClassifier:
         n_frames = len(frame) // hop
         if n_frames < 2:
             return ANALYSIS_WINDOW_MS
-        rms = np.array([
-            np.sqrt(np.mean(frame[i * hop:(i + 1) * hop] ** 2))
-            for i in range(n_frames)
-        ])
+        rms = np.array([np.sqrt(np.mean(frame[i * hop : (i + 1) * hop] ** 2)) for i in range(n_frames)])
         peak = rms.max() + 1e-12
         lo_idx = np.argmax(rms >= 0.10 * peak)
         hi_idx = np.argmax(rms >= 0.90 * peak)
@@ -205,7 +200,7 @@ class AttackTypeClassifier:
         prev_mag = np.zeros(win // 2 + 1)
         flux_values: list[float] = []
         for start in range(0, len(audio_slice) - win, hop):
-            frame = audio_slice[start:start + win] * np.hanning(win)
+            frame = audio_slice[start : start + win] * np.hanning(win)
             mag = np.abs(np.fft.rfft(frame))
             flux = float(np.sum(np.maximum(mag - prev_mag, 0.0)))
             flux_values.append(flux)
@@ -245,45 +240,49 @@ class AttackTypeClassifier:
         """
         # 1. STRIKE: noise-like spectrum + sharp onset
         if flatness >= _FLATNESS_STRIKE_MIN and rise_ms <= 8.0:
-            conf = float(np.clip(
-                0.5 + (flatness - _FLATNESS_STRIKE_MIN) / (1.0 - _FLATNESS_STRIKE_MIN) * 0.4
-                + (8.0 - rise_ms) / 8.0 * 0.1,
-                0.0, 1.0
-            ))
+            conf = float(
+                np.clip(
+                    0.5
+                    + (flatness - _FLATNESS_STRIKE_MIN) / (1.0 - _FLATNESS_STRIKE_MIN) * 0.4
+                    + (8.0 - rise_ms) / 8.0 * 0.1,
+                    0.0,
+                    1.0,
+                )
+            )
             return "strike", conf
 
         # 2. BREATH: noisy but not broadband, high ZCR
         if flatness >= _FLATNESS_BREATH_MIN and zcr >= _ZCR_BREATH_MIN:
-            conf = float(np.clip(
-                0.45 + zcr * 0.3 + flatness * 0.25,
-                0.0, 1.0
-            ))
+            conf = float(np.clip(0.45 + zcr * 0.3 + flatness * 0.25, 0.0, 1.0))
             return "breath", conf
 
         # 3. BOW: low centroid and slow rise
         if centroid <= _CENTROID_BOW_MAX and rise_ms >= _RISE_BOW_MIN_MS:
-            conf = float(np.clip(
-                0.5 + (_CENTROID_BOW_MAX - centroid) / _CENTROID_BOW_MAX * 0.3
-                + min(rise_ms, 120.0) / 120.0 * 0.2,
-                0.0, 1.0
-            ))
+            conf = float(
+                np.clip(
+                    0.5 + (_CENTROID_BOW_MAX - centroid) / _CENTROID_BOW_MAX * 0.3 + min(rise_ms, 120.0) / 120.0 * 0.2,
+                    0.0,
+                    1.0,
+                )
+            )
             return "bow", conf
 
         # 4. PICK: high centroid and fast rise
         if centroid >= _CENTROID_PICK_MIN and rise_ms <= _RISE_PICK_MAX_MS:
-            conf = float(np.clip(
-                0.5 + (centroid - _CENTROID_PICK_MIN) / (1.0 - _CENTROID_PICK_MIN) * 0.3
-                + (_RISE_PICK_MAX_MS - rise_ms) / _RISE_PICK_MAX_MS * 0.2,
-                0.0, 1.0
-            ))
+            conf = float(
+                np.clip(
+                    0.5
+                    + (centroid - _CENTROID_PICK_MIN) / (1.0 - _CENTROID_PICK_MIN) * 0.3
+                    + (_RISE_PICK_MAX_MS - rise_ms) / _RISE_PICK_MAX_MS * 0.2,
+                    0.0,
+                    1.0,
+                )
+            )
             return "pick", conf
 
         # 5. MALLET: medium rise, moderate to high centroid
         if 8.0 < rise_ms < 60.0:
-            conf = float(np.clip(
-                0.45 + centroid * 0.2 + (1.0 - flatness) * 0.15,
-                0.0, 1.0
-            ))
+            conf = float(np.clip(0.45 + centroid * 0.2 + (1.0 - flatness) * 0.15, 0.0, 1.0))
             return "mallet", conf
 
         return "unknown", 0.30
@@ -314,9 +313,13 @@ class AttackTypeClassifier:
 
         if len(mono) == 0:
             return AttackTypeResult(
-                attack_type="unknown", confidence=0.0, onset_sample=-1,
-                spectral_centroid=0.0, spectral_flatness=0.0,
-                zcr=0.0, rise_time_ms=0.0,
+                attack_type="unknown",
+                confidence=0.0,
+                onset_sample=-1,
+                spectral_centroid=0.0,
+                spectral_flatness=0.0,
+                zcr=0.0,
+                rise_time_ms=0.0,
                 features={},
             )
 
@@ -332,9 +335,13 @@ class AttackTypeClassifier:
 
         if len(frame) < 8:
             return AttackTypeResult(
-                attack_type="unknown", confidence=0.0, onset_sample=int(onset_sample),
-                spectral_centroid=0.0, spectral_flatness=0.0,
-                zcr=0.0, rise_time_ms=0.0,
+                attack_type="unknown",
+                confidence=0.0,
+                onset_sample=int(onset_sample),
+                spectral_centroid=0.0,
+                spectral_flatness=0.0,
+                zcr=0.0,
+                rise_time_ms=0.0,
                 features={},
             )
 
@@ -345,15 +352,15 @@ class AttackTypeClassifier:
         # Compute features
         centroid = self._spectral_centroid(frame, sr)
         flatness = self._spectral_flatness(frame)
-        zcr      = self._zcr(frame)
-        rise_ms  = self._envelope_rise_time_ms(frame, sr)
+        zcr = self._zcr(frame)
+        rise_ms = self._envelope_rise_time_ms(frame, sr)
 
         # Guard against NaN/Inf in features
         if not all(math.isfinite(v) for v in (centroid, flatness, zcr, rise_ms)):
-            centroid  = float(np.nan_to_num(centroid))
-            flatness  = float(np.nan_to_num(flatness))
-            zcr       = float(np.nan_to_num(zcr))
-            rise_ms   = ANALYSIS_WINDOW_MS
+            centroid = float(np.nan_to_num(centroid))
+            flatness = float(np.nan_to_num(flatness))
+            zcr = float(np.nan_to_num(zcr))
+            rise_ms = ANALYSIS_WINDOW_MS
 
         attack_type, confidence = self._decide(centroid, flatness, zcr, rise_ms)
 
@@ -366,7 +373,12 @@ class AttackTypeClassifier:
 
         logger.debug(
             "AttackTypeClassifier: type=%s conf=%.2f centroid=%.3f flat=%.3f zcr=%.3f rise=%.1fms",
-            attack_type, confidence, centroid, flatness, zcr, rise_ms,
+            attack_type,
+            confidence,
+            centroid,
+            flatness,
+            zcr,
+            rise_ms,
         )
 
         return AttackTypeResult(

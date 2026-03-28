@@ -13,9 +13,9 @@ Tests:
 """
 
 import json
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -29,7 +29,6 @@ from backend.core.forensics.ml_defect_detector import train_ml_defect_detector_f
 from backend.core.forensics.ml_era_detector import train_ml_era_detector_from_dataset
 from backend.core.forensics.ml_medium_detector import train_ml_detector_from_dataset
 from backend.core.forensics.unified_analyzer import UnifiedForensicAnalyzer
-
 
 pytestmark = [pytest.mark.ml, pytest.mark.slow]
 

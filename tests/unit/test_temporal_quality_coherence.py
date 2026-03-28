@@ -195,11 +195,12 @@ class TestOutputInvariants:
 # Importiere Konstanten direkt aus dem Modul
 try:
     from backend.core.temporal_quality_coherence import (
-        measure_temporal_coherence,
         MIN_FILE_DURATION_S,
-        TEMPORAL_CONSISTENCY_THRESHOLD,
         SIGMA_THRESHOLD,
+        TEMPORAL_CONSISTENCY_THRESHOLD,
+        measure_temporal_coherence,
     )
+
     _TQC_IMPORTS_OK = True
 except ImportError:
     _TQC_IMPORTS_OK = False
@@ -216,7 +217,7 @@ class TestTQCMidPipelineRollback:
 
     def test_25_min_file_duration_constant_is_25(self):
         """MIN_FILE_DURATION_S muss 25.0 sein (aus Spec §2.16)."""
-        assert MIN_FILE_DURATION_S == pytest.approx(25.0, abs=0.1)
+        assert pytest.approx(25.0, abs=0.1) == MIN_FILE_DURATION_S
 
     def test_26_temporal_threshold_constant(self):
         """TEMPORAL_CONSISTENCY_THRESHOLD: Spec-Norm 0.30."""
@@ -247,7 +248,7 @@ class TestTQCMidPipelineRollback:
         """Audio mit extremer Qualitätsvariation über Zeit → max_span groß."""
         # Baue ein Signal mit drastisch verschiedenen Qualitätsabschnitten:
         # Erste Hälfte: reines Sinus; zweite Hälfte: Stille (erzeugt MOS-Sprung)
-        half = int(SR * 30.0)
+        int(SR * 30.0)
         sine_part = _sine(secs=30.0)
         silence_part = _silence(secs=30.0)
         non_coherent = np.concatenate([sine_part, silence_part]).astype(np.float32)

@@ -49,6 +49,7 @@ def _silence(duration_s: float = 0.3) -> np.ndarray:
 def _fricative_like(duration_s: float = 0.5) -> np.ndarray:
     """Synthetisches Frikativ-Signal: hochfrequentes Bandpass-Rauschen (6–14 kHz)."""
     import scipy.signal as sp
+
     rng = np.random.default_rng(42)
     noise = rng.standard_normal(int(duration_s * SR)).astype(np.float64)
     nyq = SR / 2.0
@@ -280,6 +281,7 @@ class TestConsonantDetectorIntegration:
     def test_31_consonant_enhancement_imports_detector(self) -> None:
         """consonant_enhancement._sibilant_mask() ruft ConsonantDetector intern auf."""
         from backend.core.consonant_enhancement import ConsonantEnhancement
+
         ce = ConsonantEnhancement()
         # Weißes Rauschen: ConsonantDetector sollte Frikative erkennen
         mono = _white_noise(0.5)
@@ -290,6 +292,7 @@ class TestConsonantDetectorIntegration:
     def test_32_sibilant_mask_no_crash_on_silence(self) -> None:
         """_sibilant_mask() bei Stille → False-Maske, kein Absturz."""
         from backend.core.consonant_enhancement import ConsonantEnhancement
+
         ce = ConsonantEnhancement()
         mono = _silence(0.3)
         mask = ce._sibilant_mask(mono, SR)
@@ -298,6 +301,7 @@ class TestConsonantDetectorIntegration:
     def test_33_end_to_end_enhance_with_fricative_audio(self) -> None:
         """Vollständige enhance()-Kette auf Frikativ-Audio läuft fehlerfrei durch."""
         from backend.core.consonant_enhancement import enhance_consonants
+
         audio = _fricative_like(0.3)
         result = enhance_consonants(audio, SR, voice_gender="female")
         assert result.audio.shape == audio.shape

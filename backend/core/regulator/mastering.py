@@ -60,9 +60,7 @@ def adaptive_eq(audio: np.ndarray, sr: int) -> np.ndarray:
         audio_eq = result.audio
     except Exception:
         # Fallback: Griffin-Lim via librosa (≥ 32 Iterationen, §4.5)
-        audio_eq = librosa.griffinlim(
-            S_eq, n_iter=32, hop_length=hop, win_length=n_fft, n_fft=n_fft
-        )
+        audio_eq = librosa.griffinlim(S_eq, n_iter=32, hop_length=hop, win_length=n_fft, n_fft=n_fft)
     return librosa.util.fix_length(audio_eq, size=len(audio))
 
 
@@ -133,17 +131,15 @@ def dither(audio: np.ndarray, bit_depth: int = 16) -> np.ndarray:
     if bit_depth == 16:
         # Echtes TPDF: Summe zweier unabhängiger Gleichverteilungen → Dreiecksverteilung
         lsb_16 = 1.0 / 32768.0
-        noise = (
-            np.random.uniform(-lsb_16, lsb_16, size=audio.shape)
-            + np.random.uniform(-lsb_16, lsb_16, size=audio.shape)
+        noise = np.random.uniform(-lsb_16, lsb_16, size=audio.shape) + np.random.uniform(
+            -lsb_16, lsb_16, size=audio.shape
         )
         return audio + noise
     elif bit_depth == 24:
         # TPDF für 24-Bit: 1 LSB = 1/2^23
         lsb_24 = 1.0 / 8_388_608.0
-        noise = (
-            np.random.uniform(-lsb_24, lsb_24, size=audio.shape)
-            + np.random.uniform(-lsb_24, lsb_24, size=audio.shape)
+        noise = np.random.uniform(-lsb_24, lsb_24, size=audio.shape) + np.random.uniform(
+            -lsb_24, lsb_24, size=audio.shape
         )
         return audio + noise
     # 32-bit float: kein Quantisierungsrauschen, kein Dithering nötig

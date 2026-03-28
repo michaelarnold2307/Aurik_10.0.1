@@ -106,9 +106,7 @@ class PhonemeSegment:
 
     def __repr__(self) -> str:
         return (
-            f"PhonemeSegment('{self.phoneme}', "
-            f"{self.start_time:.3f}-{self.end_time:.3f}s, "
-            f"conf={self.confidence:.2f})"
+            f"PhonemeSegment('{self.phoneme}', {self.start_time:.3f}-{self.end_time:.3f}s, conf={self.confidence:.2f})"
         )
 
 
@@ -176,11 +174,10 @@ class PhonemeDetector:
         """
         if not TRANSFORMERS_AVAILABLE:
             raise ImportError(
-                "transformers and torch are required for PhonemeDetector. "
-                "Install with: pip install transformers torch"
+                "transformers and torch are required for PhonemeDetector. Install with: pip install transformers torch"
             )
         if not LIBROSA_AVAILABLE:
-            raise ImportError("librosa is required for PhonemeDetector. " "Install with: pip install librosa")
+            raise ImportError("librosa is required for PhonemeDetector. Install with: pip install librosa")
 
         self.config = config or DetectionConfig()
         self._model = None
@@ -358,7 +355,7 @@ class PhonemeDetector:
         assert torch is not None
 
         logger.info(
-            f"Detecting phonemes in {len(audio)/sr:.2f}s audio " f"(lang={language.value}, min_conf={min_confidence})"
+            f"Detecting phonemes in {len(audio) / sr:.2f}s audio (lang={language.value}, min_conf={min_confidence})"
         )
 
         # Preprocess audio
@@ -367,7 +364,9 @@ class PhonemeDetector:
 
         # Very short clips are often non-speech and can trigger tokenizer deps (phonemizer).
         if audio_duration < 0.2:
-            logger.info("Audio too short for reliable phoneme detection (%.3fs), returning empty result", audio_duration)
+            logger.info(
+                "Audio too short for reliable phoneme detection (%.3fs), returning empty result", audio_duration
+            )
             return []
 
         try:
@@ -410,12 +409,15 @@ class PhonemeDetector:
             )
             segments.append(segment)
 
-        logger.info(f"Detected {len(segments)} phonemes " f"(filtered from {len(phonemes_raw)} by confidence)")
+        logger.info(f"Detected {len(segments)} phonemes (filtered from {len(phonemes_raw)} by confidence)")
 
         return segments
 
     def get_phoneme_timeline(
-        self, segments: list[PhonemeSegment], audio_duration: float, frame_duration: float = 0.01  # 10ms frames
+        self,
+        segments: list[PhonemeSegment],
+        audio_duration: float,
+        frame_duration: float = 0.01,  # 10ms frames
     ) -> np.ndarray:
         """
         Convert phoneme segments to frame-level timeline.

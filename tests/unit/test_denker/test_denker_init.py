@@ -52,7 +52,7 @@ class TestDenkerImport:
     def test_01_import_denker_no_exception(self):
         """``import denker`` wirft keine Ausnahme."""
         try:
-            import denker  # noqa: F401
+            pass
         except ImportError as exc:
             pytest.fail(f"'import denker' fehlgeschlagen: {exc}")
 

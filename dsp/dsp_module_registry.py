@@ -31,7 +31,7 @@ class DSPModuleRegistry:
             if fname.endswith(".py") and not fname.startswith("__") and fname != os.path.basename(__file__):
                 mod_name = fname[:-3]
                 try:
-                    mod = importlib.import_module(f"Aurik_Standalone.dsp.{mod_name}")
+                    mod = importlib.import_module(f"dsp.{mod_name}")
                     self.modules[mod_name] = mod
                 except Exception as e:
                     logger.error(f"[Registry] Fehler beim Import von {mod_name}: {e}")

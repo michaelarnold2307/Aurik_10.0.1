@@ -10,7 +10,8 @@ Pytest sammelt die Datei, führt aber keinen Code auf Modul-Ebene aus.
 # damit pytest die Datei importieren kann ohne Seiteneffekte.
 
 if __name__ == "__main__":
-    import sys
+    pass
+
     import numpy as np
 
     from backend.core.phases.phase_02_hum_removal import HumRemovalPhase
@@ -48,9 +49,9 @@ if __name__ == "__main__":
     test_modes = ["FAST", "BALANCED"]
 
     for mode in test_modes:
-        print(f"\n{'-'*80}")
+        print(f"\n{'-' * 80}")
         print(f"Testing Quality Mode: {mode}")
-        print(f"{'-'*80}")
+        print(f"{'-' * 80}")
 
         result = phase.process(audio.copy(), sample_rate=sr, material_type="tape", auto_detect=True, quality_mode=mode)
 
@@ -66,7 +67,7 @@ if __name__ == "__main__":
                 print(f"   ML refined: {result.modifications['ml_refined']}")
             print(
                 f"   Execution time: {result.metadata['execution_time_seconds']:.3f}s "
-                f"({result.metadata['execution_time_seconds']/duration:.2f}× RT)"
+                f"({result.metadata['execution_time_seconds'] / duration:.2f}× RT)"
             )
 
             # Expectations
@@ -84,9 +85,9 @@ if __name__ == "__main__":
         else:
             print("❌ Processing failed!")
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("✅ Phase 2 ML-Hybrid Integration Test Complete!")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
     print("\nStrategy: Dual-Stage (DSP Rough + ML Refine)")
     print("  - Stage 1: DSP adaptive comb filtering removes bulk hum")
     print("  - Stage 2: ML (DeepFilterNet) removes residual hum and smooths artifacts")

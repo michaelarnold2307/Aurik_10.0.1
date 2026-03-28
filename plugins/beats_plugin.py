@@ -159,6 +159,7 @@ class BeatsPlugin:
             logger.warning("BEATs ONNX nicht ladbar: %s — PANNs-Fallback aktiv.", exc)
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("BEATs")
             except Exception:
                 pass

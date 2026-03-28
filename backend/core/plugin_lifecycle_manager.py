@@ -31,10 +31,13 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Konfiguration
 # ---------------------------------------------------------------------------
-_RAM_EVICT_THRESHOLD_PCT: float = 78.0  # RAM% ab der Eviction beginnt
+_RAM_EVICT_THRESHOLD_PCT: float = 75.0  # RAM% ab der Eviction beginnt (gesenkt: früher reagieren)
 _RAM_TARGET_PCT: float = 65.0  # RAM% auf die wir evicten wollen
 _MIN_FREE_MB_HARD: float = 3000.0  # immer mind. 3 GB frei halten
-_PIPELINE_EMERGENCY_PCT: float = 82.0  # RAM% ab der auch WÄHREND Pipeline evicted wird
+_PIPELINE_EMERGENCY_PCT: float = 78.0  # RAM% ab der auch WÄHREND Pipeline evicted wird (gesenkt von 82%)
+# Begründung Absenkung: 82% war zu konservativ — AudioSR (7 GB) konnte nicht geladen werden weil
+# Eviction erst bei 82% erlaubt war, RAM aber schon bei 78% knapp wurde. Modelle die gerade
+# NICHT in Inferenz sind (active=False) können sicher entladen werden auch bei 78%.
 
 # ---------------------------------------------------------------------------
 # §2.37 Phase-zu-Modell-Mapping: Welche ML-Modelle braucht welche Phase?
@@ -55,6 +58,7 @@ _PHASE_REQUIRED_MODELS: dict[str, frozenset[str]] = {
     "phase_29_tape_hiss_reduction": frozenset({"DeepFilterNetV3"}),
     "phase_31_speed_pitch_correction": frozenset({"BasicPitch"}),
     "phase_42_vocal_enhancement": frozenset({"MelBandRoformer", "MDX23C"}),
+    "phase_43_ml_deesser": frozenset({"MP-SENet"}),
     "phase_55_diffusion_inpainting": frozenset({"CQTdiff+", "FlowMatching"}),
     "phase_56_spectral_band_gap_repair": frozenset({"FCPE", "CREPE"}),
 }
@@ -161,6 +165,23 @@ class PluginLifecycleManager:
             if name in self._entries:
                 self._entries[name].active = active
 
+    def enter_pipeline(self) -> int:
+        """Increment pipeline-active refcount in a thread-safe way."""
+        with self._lock:
+            self._pipeline_active += 1
+            return self._pipeline_active
+
+    def leave_pipeline(self) -> int:
+        """Decrement pipeline-active refcount in a thread-safe way."""
+        with self._lock:
+            self._pipeline_active = max(0, self._pipeline_active - 1)
+            return self._pipeline_active
+
+    def pipeline_active_count(self) -> int:
+        """Return current pipeline-active refcount thread-safely."""
+        with self._lock:
+            return self._pipeline_active
+
     def unregister(self, name: str) -> None:
         """Entfernt ein Plugin aus der Registry (nach manuell erfolgtem Unload)."""
         with self._lock:
@@ -195,10 +216,12 @@ class PluginLifecycleManager:
                 ram_pct,
                 free_mb,
             )
+        # required_mb kommt bereits MIT Margin aus ml_memory_budget._preflight_system_memory.
+        # Keine doppelte Margin (war 1.25×) — direkt prüfen ob genug frei ist.
         needs_evict = (
             ram_pct > _RAM_EVICT_THRESHOLD_PCT
             or free_mb < _MIN_FREE_MB_HARD
-            or (required_mb > 0 and free_mb < required_mb * 1.25)
+            or (required_mb > 0 and free_mb < required_mb)
         )
         if not needs_evict:
             return 0
@@ -430,9 +453,9 @@ def set_pipeline_active(active: bool) -> None:
     """
     mgr = get_plugin_lifecycle_manager()
     if active:
-        mgr._pipeline_active += 1
+        mgr.enter_pipeline()
     else:
-        mgr._pipeline_active = max(0, mgr._pipeline_active - 1)
+        mgr.leave_pipeline()
 
 
 def cleanup_after_file() -> int:

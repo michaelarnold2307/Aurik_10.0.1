@@ -1,4 +1,5 @@
 import numpy as np
+
 from backend.core.validate_musical_goals import (
     ArtifactChecker,
     FormantGuard,

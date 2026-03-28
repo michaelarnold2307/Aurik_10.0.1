@@ -2,7 +2,6 @@ import logging
 import os
 from typing import Any
 
-import audioread
 import numpy as np
 import soundfile as sf
 
@@ -45,7 +44,7 @@ def detect_carrier(filepath: str, meta: dict[str, Any] | None = None) -> str:
     if any(x in name for x in ["reel", "tonband", "spule"]):
         return "Tonband/Reel"
     # Heuristik: Metadaten
-    for k, v in (meta.items() if meta else []):
+    for k, v in meta.items() if meta else []:
         vstr = str(v).lower()
         if "vinyl" in vstr or "lp" in vstr or "platte" in vstr or "schellack" in vstr:
             return "Schallplatte (Vinyl/Schellack)"
@@ -83,11 +82,7 @@ def is_supported_audio_file(filename: str) -> bool:
     )
 
 
-def load_audio_file(
-    filepath: str,
-    target_sr: int | None = None,
-    mono: bool = False
-) -> dict[str, Any] | None:
+def load_audio_file(filepath: str, target_sr: int | None = None, mono: bool = False) -> dict[str, Any] | None:
     """Lädt Audiodatei robust und gibt Dict mit allen Metadaten zurück.
 
     Args:

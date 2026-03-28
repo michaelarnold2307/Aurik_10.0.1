@@ -16,12 +16,12 @@ CPU-Only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import os
-from pathlib import Path
 import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 

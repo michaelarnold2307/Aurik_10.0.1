@@ -24,9 +24,9 @@ Module invariants (§3.x compliant):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import threading
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -174,15 +174,15 @@ class PerceptualSalienceEstimator:
         for ann in salience_result.annotations:
             by_type.setdefault(ann.defect_type, []).append(ann)
 
-        for dt, annotations in by_type.items():
+        for dt, type_annotations in by_type.items():
             if dt not in defect_result.scores:
                 continue
             ds = defect_result.scores[dt]
-            mean_sal = float(np.mean([a.salience for a in annotations]))
+            mean_sal = float(np.mean([a.salience for a in type_annotations]))
             mean_sal = float(np.nan_to_num(mean_sal, nan=0.5))
             ds.metadata["perceptual_salience"] = round(mean_sal, 3)
-            ds.metadata["n_salient_events"] = sum(1 for a in annotations if a.salience >= 0.5)
-            ds.metadata["n_masked_events"] = sum(1 for a in annotations if a.salience < 0.3)
+            ds.metadata["n_salient_events"] = sum(1 for a in type_annotations if a.salience >= 0.5)
+            ds.metadata["n_masked_events"] = sum(1 for a in type_annotations if a.salience < 0.3)
 
             # Scale severity: masked defects get reduced priority
             old_sev = ds.severity

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,9 @@ class AdaptiveChainRouter:
             chain = [m for m in chain if m != "Enhancement"]
         return chain
 
-    def configure_modules(self, chain: list[str], forensic_report: dict[str, str]) -> dict[str, dict[str, float | str | bool]]:
+    def configure_modules(
+        self, chain: list[str], forensic_report: dict[str, str]
+    ) -> dict[str, dict[str, float | str | bool]]:
         config = {}
         for module in chain:
             # Beispiel: Material- und Defekt-spezifische Parameter

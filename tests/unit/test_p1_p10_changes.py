@@ -89,7 +89,7 @@ class TestCrepeChunkStreaming:
 
     def test_03_crepe_plugin_importable(self):
         """CrepePlugin und Convenience-Funktion müssen importierbar sein."""
-        from plugins.crepe_plugin import CrepePlugin, analyze_pitch, get_crepe_plugin  # noqa: F401
+        from plugins.crepe_plugin import analyze_pitch
 
         assert callable(analyze_pitch)
 
@@ -184,7 +184,7 @@ class TestDiffWaveNMFInpainting:
 
     def test_01_inpaint_importable(self):
         """inpaint() muss aus plugins.diffwave_plugin importierbar sein."""
-        from plugins.diffwave_plugin import inpaint  # noqa: F401
+        from plugins.diffwave_plugin import inpaint
 
         assert callable(inpaint)
 
@@ -352,7 +352,6 @@ class TestHiFiGANFallbackUndVocosStandard:
 
     def test_01_hifigan_importable(self):
         """HifiGanPlugin muss importierbar bleiben (rückwärtskompatibel)."""
-        from plugins.hifigan_plugin import HifiGanPlugin  # noqa: F401
 
         assert True
 

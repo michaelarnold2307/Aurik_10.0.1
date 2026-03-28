@@ -12,12 +12,11 @@ Deliverables:
 Impact: +0.5 Punkte (Foundation für Phase 2D.2 Validation)
 """
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-import json
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pytest
@@ -466,7 +465,7 @@ class ValidationRunner:
         if snr_improvement < test_file.expected_quality_improvement_db * 0.5:
             passed = False
             notes.append(
-                f"SNR improvement too low: {snr_improvement:.1f}dB < {test_file.expected_quality_improvement_db*0.5:.1f}dB"
+                f"SNR improvement too low: {snr_improvement:.1f}dB < {test_file.expected_quality_improvement_db * 0.5:.1f}dB"
             )
 
         # Check THD (should not increase significantly)

@@ -113,7 +113,6 @@ _CKPT_ORDER: list[str] = [
 
 def _time_average(tensor: Any, factor: int) -> Any:  # type: ignore[return]
     """Temporales Mitteln: [B, C, H, W] → [B, C, H, W//factor]."""
-    import torch
 
     B, C, H, W = tensor.shape
     W2 = W // factor
@@ -177,6 +176,7 @@ class GacelaPlugin:
             pass
         try:
             import torch
+
             torch.set_num_threads(os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
 
             # GACELA-Modell-Paket in sys.path aufnehmen
@@ -227,6 +227,7 @@ class GacelaPlugin:
             logger.info("GACELA: ML-Modell bereit (MODEL_SR=%d Hz).", MODEL_SR)
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
+
                 _reg_plm(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB, unload_fn=_unload_gacela)
             except Exception:
                 pass
@@ -239,6 +240,7 @@ class GacelaPlugin:
             self._model_ready = False
             try:
                 from backend.core.ml_memory_budget import release as _release
+
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -423,6 +425,7 @@ def _unload_gacela() -> None:
     _inst = None  # type: ignore[assignment]
     try:
         import gc
+
         gc.collect()
     except Exception:
         pass

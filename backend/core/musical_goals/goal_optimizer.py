@@ -1,6 +1,7 @@
 """
 GoalOptimizer: Optimiert die Erreichung musikalischer Ziele.
 """
+
 import logging
 
 logger = logging.getLogger(__name__)

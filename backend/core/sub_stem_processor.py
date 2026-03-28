@@ -77,7 +77,6 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import scipy.signal as sig
@@ -93,54 +92,54 @@ SR_REQUIRED: int = 48_000
 
 _BANDS: dict[str, list[tuple[float, float, str, float]]] = {
     "guitar": [
-        (50.0,   800.0,  "bass_body",  +0.5),
-        (800.0,  4000.0, "string_mid", +0.8),
-        (4000.0, 16000.0, "pick_air",   -0.5),
+        (50.0, 800.0, "bass_body", +0.5),
+        (800.0, 4000.0, "string_mid", +0.8),
+        (4000.0, 16000.0, "pick_air", -0.5),
     ],
     "keys": [
-        (50.0,   250.0,  "hammer_sub", +0.3),
-        (250.0,  3000.0, "body_mid",   +0.5),
+        (50.0, 250.0, "hammer_sub", +0.3),
+        (250.0, 3000.0, "body_mid", +0.5),
         (3000.0, 16000.0, "shimmer_hi", -0.3),
     ],
-    "piano": [   # alias for keys
-        (50.0,   250.0,  "hammer_sub", +0.3),
-        (250.0,  3000.0, "body_mid",   +0.5),
+    "piano": [  # alias for keys
+        (50.0, 250.0, "hammer_sub", +0.3),
+        (250.0, 3000.0, "body_mid", +0.5),
         (3000.0, 16000.0, "shimmer_hi", -0.3),
     ],
     "drums": [
-        (30.0,   200.0,  "kick_sub",   +1.0),
-        (200.0,  5000.0, "snare_mid",  +0.5),
-        (5000.0, 20000.0, "cymbal_hi",  -0.3),
+        (30.0, 200.0, "kick_sub", +1.0),
+        (200.0, 5000.0, "snare_mid", +0.5),
+        (5000.0, 20000.0, "cymbal_hi", -0.3),
     ],
-    "percussion": [   # alias for drums
-        (30.0,   200.0,  "kick_sub",   +1.0),
-        (200.0,  5000.0, "snare_mid",  +0.5),
-        (5000.0, 20000.0, "cymbal_hi",  -0.3),
+    "percussion": [  # alias for drums
+        (30.0, 200.0, "kick_sub", +1.0),
+        (200.0, 5000.0, "snare_mid", +0.5),
+        (5000.0, 20000.0, "cymbal_hi", -0.3),
     ],
     "brass": [
-        (50.0,   500.0,  "fundamental", +0.5),
-        (500.0,  5000.0, "harmonics",  +0.5),
-        (5000.0, 16000.0, "air_noise",  -1.0),
+        (50.0, 500.0, "fundamental", +0.5),
+        (500.0, 5000.0, "harmonics", +0.5),
+        (5000.0, 16000.0, "air_noise", -1.0),
     ],
     "strings": [
-        (80.0,   600.0,  "body_wood",  +0.5),
-        (600.0,  4000.0, "bow_mid",    +0.5),
-        (4000.0, 16000.0, "bow_noise",  -0.8),
+        (80.0, 600.0, "body_wood", +0.5),
+        (600.0, 4000.0, "bow_mid", +0.5),
+        (4000.0, 16000.0, "bow_noise", -0.8),
     ],
     "woodwinds": [
-        (80.0,   600.0,  "reed_low",   +0.5),
-        (600.0,  4000.0, "reed_mid",   +0.5),
-        (4000.0, 16000.0, "reed_air",   -0.8),
+        (80.0, 600.0, "reed_low", +0.5),
+        (600.0, 4000.0, "reed_mid", +0.5),
+        (4000.0, 16000.0, "reed_air", -0.8),
     ],
     "bass": [
-        (30.0,   150.0,  "sub_bass",   +1.0),
-        (150.0,  1000.0, "mid_bass",   +0.5),
+        (30.0, 150.0, "sub_bass", +1.0),
+        (150.0, 1000.0, "mid_bass", +0.5),
         (1000.0, 6000.0, "string_top", -0.3),
     ],
     "synth": [
-        (50.0,   300.0,  "low_synth",  +0.3),
-        (300.0,  4000.0, "mid_synth",  +0.3),
-        (4000.0, 16000.0, "hi_synth",   -0.5),
+        (50.0, 300.0, "low_synth", +0.3),
+        (300.0, 4000.0, "mid_synth", +0.3),
+        (4000.0, 16000.0, "hi_synth", -0.5),
     ],
 }
 
@@ -156,7 +155,7 @@ class SubStemBandResult:
     low_hz: float
     high_hz: float
     eq_gain_db: float
-    nr_reduction_db: float    # estimated NR attenuation applied (dB)
+    nr_reduction_db: float  # estimated NR attenuation applied (dB)
     rms_in: float
     rms_out: float
 
@@ -191,7 +190,7 @@ def _lr4_lowpass(audio: np.ndarray, sr: int, cutoff_hz: float) -> np.ndarray:
     cutoff_hz = float(np.clip(cutoff_hz, 5.0, sr / 2.0 - 1.0))
     sos = sig.butter(2, cutoff_hz, btype="low", fs=sr, output="sos")
     out = sig.sosfilt(sos, audio.astype(np.float64))
-    out = sig.sosfilt(sos, out)          # cascade for LR4 phase response
+    out = sig.sosfilt(sos, out)  # cascade for LR4 phase response
     return out.astype(np.float32)
 
 
@@ -204,9 +203,7 @@ def _lr4_highpass(audio: np.ndarray, sr: int, cutoff_hz: float) -> np.ndarray:
     return out.astype(np.float32)
 
 
-def _extract_band(
-    audio: np.ndarray, sr: int, low_hz: float, high_hz: float
-) -> np.ndarray:
+def _extract_band(audio: np.ndarray, sr: int, low_hz: float, high_hz: float) -> np.ndarray:
     """Extract the frequency band [low_hz, high_hz] from *audio* via LR4 crossovers."""
     nyq = sr / 2.0
     # LP at high_hz unless it's effectively SR/2 (pass-through that edge)
@@ -241,24 +238,24 @@ def _soft_spectral_subtraction(
         return band, 0.0
 
     n_fft = 512
-    hop   = 256
-    win   = np.hanning(n_fft)
+    hop = 256
+    win = np.hanning(n_fft)
 
     # STFT
     frames = []
     for i in range(0, n - n_fft + 1, hop):
-        frames.append(band[i:i + n_fft] * win)
+        frames.append(band[i : i + n_fft] * win)
     if not frames:
         return band, 0.0
 
-    stft = np.array([np.fft.rfft(f) for f in frames])   # (n_frames, n_bins)
-    mag  = np.abs(stft)
+    stft = np.array([np.fft.rfft(f) for f in frames])  # (n_frames, n_bins)
+    mag = np.abs(stft)
 
     # Noise floor: mean magnitude of the quietest frames
     frame_energy = mag.mean(axis=1)
     n_quiet = max(1, min(noise_estimate_frames, len(frame_energy) // 4))
     quiet_idx = np.argsort(frame_energy)[:n_quiet]
-    noise_floor = mag[quiet_idx].mean(axis=0)             # (n_bins,)
+    noise_floor = mag[quiet_idx].mean(axis=0)  # (n_bins,)
 
     # Wiener-style mask: max(0, 1 - k * noise/mag)
     k = 2.0 * strength
@@ -267,10 +264,13 @@ def _soft_spectral_subtraction(
 
     # Apply mask
     mag_clean = mag * mask
-    reduction_db = float(np.clip(
-        20.0 * np.log10((mag.mean() + 1e-10) / (mag_clean.mean() + 1e-10)),
-        0.0, 12.0,
-    ))
+    reduction_db = float(
+        np.clip(
+            20.0 * np.log10((mag.mean() + 1e-10) / (mag_clean.mean() + 1e-10)),
+            0.0,
+            12.0,
+        )
+    )
 
     stft_clean = stft * (mag_clean / (mag + 1e-10))
 
@@ -279,8 +279,8 @@ def _soft_spectral_subtraction(
     cnt = np.zeros(n, dtype=np.float32)
     for fi, i in enumerate(range(0, n - n_fft + 1, hop)):
         frame_td = np.fft.irfft(stft_clean[fi], n=n_fft).astype(np.float32)
-        out[i:i + n_fft] += frame_td * win
-        cnt[i:i + n_fft] += win ** 2
+        out[i : i + n_fft] += frame_td * win
+        cnt[i : i + n_fft] += win**2
 
     # Normalise overlap
     cnt = np.where(cnt > 1e-10, cnt, 1.0)
@@ -326,9 +326,7 @@ class SubStemProcessor:
     MAX_STRENGTH: float = 0.60
 
     def __init__(self, processing_strength: float = 0.35) -> None:
-        self.processing_strength = float(
-            np.clip(processing_strength, 0.0, self.MAX_STRENGTH)
-        )
+        self.processing_strength = float(np.clip(processing_strength, 0.0, self.MAX_STRENGTH))
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -353,10 +351,13 @@ class SubStemProcessor:
         assert sr == SR_REQUIRED, f"Sample rate must be 48000 Hz, got {sr}"
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
-        strength = float(np.clip(
-            processing_strength if processing_strength is not None else self.processing_strength,
-            0.0, self.MAX_STRENGTH,
-        ))
+        strength = float(
+            np.clip(
+                processing_strength if processing_strength is not None else self.processing_strength,
+                0.0,
+                self.MAX_STRENGTH,
+            )
+        )
 
         bands_cfg = _BANDS.get(instrument.lower())
 
@@ -364,8 +365,11 @@ class SubStemProcessor:
             out = np.clip(audio, -1.0, 1.0)
             logger.debug("SubStemProcessor passthrough: %s", reason)
             return SubStemResult(
-                audio=out, instrument=instrument, n_bands=0,
-                processing_strength=strength, passthrough=True,
+                audio=out,
+                instrument=instrument,
+                n_bands=0,
+                processing_strength=strength,
+                passthrough=True,
             )
 
         if bands_cfg is None:
@@ -376,28 +380,25 @@ class SubStemProcessor:
         # --- mono processing path ---
         is_stereo = audio.ndim == 2
         if is_stereo:
-            if audio.shape[0] <= 8:   # (channels, samples)
+            if audio.shape[0] <= 8:  # (channels, samples)
                 channels = [audio[c] for c in range(audio.shape[0])]
-            else:                      # (samples, channels)
+            else:  # (samples, channels)
                 channels = [audio[:, c] for c in range(audio.shape[1])]
-            result_channels = [
-                self._process_mono(ch.astype(np.float32), sr, bands_cfg, strength)
-                for ch in channels
-            ]
-            band_results = result_channels[0][1]   # diagnostics from first channel
+            result_channels = [self._process_mono(ch.astype(np.float32), sr, bands_cfg, strength) for ch in channels]
+            band_results = result_channels[0][1]  # diagnostics from first channel
             processed_channels = [r[0] for r in result_channels]
             out = np.stack(processed_channels, axis=0) if audio.shape[0] <= 8 else np.stack(processed_channels, axis=1)
         else:
-            out, band_results = self._process_mono(
-                audio.astype(np.float32), sr, bands_cfg, strength
-            )
+            out, band_results = self._process_mono(audio.astype(np.float32), sr, bands_cfg, strength)
 
         out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
         out = np.clip(out, -1.0, 1.0)
 
         logger.info(
             "SubStemProcessor: instrument=%s bands=%d strength=%.2f",
-            instrument, len(band_results), strength,
+            instrument,
+            len(band_results),
+            strength,
         )
         return SubStemResult(
             audio=out,
@@ -425,7 +426,7 @@ class SubStemProcessor:
         for low_hz, high_hz, label, eq_gain_db in bands_cfg:
             # 1. Extract sub-stem band
             band = _extract_band(mono, sr, low_hz, high_hz)
-            rms_in = float(np.sqrt(np.mean(band ** 2)) + 1e-10)
+            rms_in = float(np.sqrt(np.mean(band**2)) + 1e-10)
 
             # 2. Spectral subtraction NR
             band_nr, nr_db = _soft_spectral_subtraction(band, strength)
@@ -433,13 +434,19 @@ class SubStemProcessor:
             # 3. EQ gain nudge
             band_eq = _apply_gain_db(band_nr, eq_gain_db, strength)
 
-            rms_out = float(np.sqrt(np.mean(band_eq ** 2)) + 1e-10)
+            rms_out = float(np.sqrt(np.mean(band_eq**2)) + 1e-10)
             sub_stems.append(band_eq)
-            band_results.append(SubStemBandResult(
-                label=label, low_hz=low_hz, high_hz=high_hz,
-                eq_gain_db=eq_gain_db, nr_reduction_db=nr_db,
-                rms_in=rms_in, rms_out=rms_out,
-            ))
+            band_results.append(
+                SubStemBandResult(
+                    label=label,
+                    low_hz=low_hz,
+                    high_hz=high_hz,
+                    eq_gain_db=eq_gain_db,
+                    nr_reduction_db=nr_db,
+                    rms_in=rms_in,
+                    rms_out=rms_out,
+                )
+            )
 
         # 4. Reconstruct: blend processed sum with original
         processed_sum = np.zeros_like(mono, dtype=np.float32)
@@ -450,14 +457,11 @@ class SubStemProcessor:
         # Identity-safe blend (protects musical identity)
         blend = float(np.clip(strength, 0.0, 1.0))
         n_min = min(len(mono), len(processed_sum))
-        result = (
-            (1.0 - blend) * mono[:n_min]
-            + blend       * processed_sum[:n_min]
-        ).astype(np.float32)
+        result = ((1.0 - blend) * mono[:n_min] + blend * processed_sum[:n_min]).astype(np.float32)
 
         # Pad if processing shortened the signal
         if len(result) < len(mono):
-            result = np.concatenate([result, mono[len(result):]])
+            result = np.concatenate([result, mono[len(result) :]])
 
         return result, band_results
 
@@ -498,6 +502,4 @@ def process_sub_stems(
     Returns:
         :class:`SubStemResult`.
     """
-    return get_sub_stem_processor().process(
-        audio, sr, instrument=instrument, processing_strength=processing_strength
-    )
+    return get_sub_stem_processor().process(audio, sr, instrument=instrument, processing_strength=processing_strength)

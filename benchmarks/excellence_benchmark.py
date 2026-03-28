@@ -41,12 +41,11 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import json
 import logging
-from pathlib import Path
 import time
-from typing import Dict, List, Optional, Tuple
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -327,16 +326,16 @@ class ExcellenceBenchmark:
     @staticmethod
     def print_report(report: ExcellenceBenchmarkReport) -> None:
         """Gibt den Report als formatierte Tabelle auf stdout aus."""
-        print(f"\n{'='*75}")
+        print(f"\n{'=' * 75}")
         print(f"  Aurik Excellence Benchmark v{report.aurik_version}  |  {report.timestamp[:19]}")
         print(
             f"  SR={report.sample_rate} Hz  |  Dauer={report.duration_s}s  |  N={report.summary.get('n_results', '?')} Tests"
         )
-        print(f"{'='*75}")
+        print(f"{'=' * 75}")
 
         # Header
         print(f"{'Signal':<20} {'Material':<12} {'ΔOVR':>8} {'ΔNAT':>8} {'OVR_nach':>10} {'NAT_nach':>10} {'RT_ms':>8}")
-        print(f"{'-'*75}")
+        print(f"{'-' * 75}")
 
         for r in report.results:
             print(
@@ -348,7 +347,7 @@ class ExcellenceBenchmark:
 
         # Zusammenfassung
         s = report.summary
-        print(f"\n{'─'*75}")
+        print(f"\n{'─' * 75}")
         print(
             f"  Gesamt: Ø ΔOVR={s.get('avg_delta_ovr', 0):+.4f}  "
             f"Ø ΔNAT={s.get('avg_delta_nat', 0):+.4f}  "
@@ -358,14 +357,14 @@ class ExcellenceBenchmark:
         print(f"  ΔOVR Range: [{s.get('min_delta_ovr', 0):+.4f}, {s.get('max_delta_ovr', 0):+.4f}]")
 
         # Pro-Material
-        print(f"\n  Pro-Material-Zusammenfassung:")
+        print("\n  Pro-Material-Zusammenfassung:")
         for mat, ms in s.get("per_material", {}).items():
             print(
                 f"    {mat:<12} Ø ΔOVR={ms['avg_delta_ovr']:+.4f}  "
                 f"Ø ΔNAT={ms['avg_delta_nat']:+.4f}  "
                 f"Ø OVR_nach={ms['avg_after_ovr']:.4f}"
             )
-        print(f"{'='*75}\n")
+        print(f"{'=' * 75}\n")
 
     @staticmethod
     def compare_to_reference(report: ExcellenceBenchmarkReport) -> bool:

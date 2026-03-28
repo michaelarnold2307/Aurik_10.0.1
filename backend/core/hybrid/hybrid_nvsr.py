@@ -22,11 +22,9 @@ Version: 1.0
 """
 
 import logging
-import tempfile
 import time
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 
 import numpy as np
 import scipy.signal as signal
@@ -333,41 +331,12 @@ class HybridNVSR:
 
     def _run_audiosr(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Run AudioSR neural super-resolution.
+        Run AudioSR neural super-resolution via array-based plugin API.
 
-        Handles temporary file I/O for Docker-based plugin.
+        AudioSRPlugin.process() accepts [samples] or [channels, samples] and
+        handles resampling, NaN-guards and target_sr internally.
         """
-        import soundfile as sf
-
-        # Create temp files
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_in:
-            input_path = tmp_in.name
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_out:
-            output_path = tmp_out.name
-
-        try:
-            # Write input audio
-            sf.write(input_path, audio.T if audio.ndim > 1 else audio, sample_rate)
-
-            # Run AudioSR
-            self.audiosr_plugin.process(input_path, output_path, target_sr=self.config.audiosr_target_sr)
-
-            # Read output audio
-            restored, out_sr = sf.read(output_path, always_2d=True)
-            restored = restored.T  # (channels, samples)
-
-            # Resample if needed
-            if out_sr != sample_rate:
-                from scipy import signal as sp_signal
-
-                num_samples = int(len(restored[0]) * sample_rate / out_sr)
-                restored = np.array([sp_signal.resample(restored[ch], num_samples) for ch in range(restored.shape[0])])
-
-            return restored
-        finally:
-            # Cleanup
-            Path(input_path).unlink(missing_ok=True)
-            Path(output_path).unlink(missing_ok=True)
+        return self.audiosr_plugin.process(audio, sample_rate, target_sr=self.config.audiosr_target_sr)
 
     def _blend_audio(
         self, audio_a: np.ndarray, audio_b: np.ndarray, sample_rate: int, crossover_freq: float, blend_ratio: float

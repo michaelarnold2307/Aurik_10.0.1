@@ -6,6 +6,7 @@ Kanonischer Importpfad laut Pipeline-Spec:
 
 Implementierung liegt in: backend/core/per_phase_musical_goals_gate.py
 """
+
 from backend.core.per_phase_musical_goals_gate import (
     PerPhaseMusicalGoalsGate,
     PhaseGateLogEntry,

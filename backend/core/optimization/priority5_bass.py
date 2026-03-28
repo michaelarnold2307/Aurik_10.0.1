@@ -8,7 +8,6 @@ character of the source material.
 
 from __future__ import annotations
 
-from typing import Tuple
 
 import numpy as np
 from scipy.signal import firwin, lfilter
@@ -118,7 +117,5 @@ class PhaseCoherentBassProcessor:
         # Gentle +2 dB enhancement to sub-bass
         enhanced = x.astype(np.float64) + 0.26 * bass  # 0.26 ≈ +2 dB mix-in
 
-        out = np.clip(
-            np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0
-        )
+        out = np.clip(np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
         return out.astype(np.float32)

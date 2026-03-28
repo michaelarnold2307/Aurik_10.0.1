@@ -4,10 +4,10 @@ Test für Multi-Model Ensemble Processor
 
 import unittest
 
-from backend.core.ensemble_processor import EnsembleProcessor
-from backend.core.fusion_engine import FusionEngine
 import numpy as np
 
+from backend.core.ensemble_processor import EnsembleProcessor
+from backend.core.fusion_engine import FusionEngine
 from plugins.deepfilternet_v3_ii_plugin import DeepFilterNetV3IIPlugin
 from plugins.resemble_enhance_plugin import ResembleEnhancePlugin
 

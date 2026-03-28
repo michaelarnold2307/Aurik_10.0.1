@@ -45,7 +45,6 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import scipy.signal as sig
@@ -107,9 +106,7 @@ class InstrumentDriftResult:
 # ── DTW helpers ───────────────────────────────────────────────────────────────
 
 
-def _dtw_distance_and_path(
-    seq_a: np.ndarray, seq_b: np.ndarray
-) -> tuple[float, list[tuple[int, int]]]:
+def _dtw_distance_and_path(seq_a: np.ndarray, seq_b: np.ndarray) -> tuple[float, list[tuple[int, int]]]:
     """Compute DTW distance and warp path between two 1-D sequences.
 
     Uses a vectorized DP cost matrix (Sakoe & Chiba 1978).
@@ -142,8 +139,8 @@ def _dtw_distance_and_path(
     for i in range(1, n + 1):
         for j in range(1, m + 1):
             dp[i, j] = cost[i - 1, j - 1] + min(
-                dp[i - 1, j],      # insertion
-                dp[i, j - 1],      # deletion
+                dp[i - 1, j],  # insertion
+                dp[i, j - 1],  # deletion
                 dp[i - 1, j - 1],  # match
             )
 
@@ -157,8 +154,8 @@ def _dtw_distance_and_path(
         path.append((i - 1, j - 1))
         candidates = {
             (i - 1, j - 1): dp[i - 1, j - 1],
-            (i - 1, j):     dp[i - 1, j],
-            (i, j - 1):     dp[i, j - 1],
+            (i - 1, j): dp[i - 1, j],
+            (i, j - 1): dp[i, j - 1],
         }
         best = min(candidates, key=candidates.get)
         i, j = best
@@ -179,9 +176,7 @@ def _downsample_trajectory(traj: np.ndarray, max_pts: int) -> np.ndarray:
 # ── EQ helper (reuses formant_system._apply_peak_eq_frame pattern) ────────────
 
 
-def _peak_eq(
-    audio: np.ndarray, sr: int, freq: float, bandwidth_hz: float, gain_db: float
-) -> np.ndarray:
+def _peak_eq(audio: np.ndarray, sr: int, freq: float, bandwidth_hz: float, gain_db: float) -> np.ndarray:
     """Apply a biquad peak EQ to *audio* (Audio-EQ-Cookbook, Zölzer).
 
     Args:
@@ -241,6 +236,7 @@ class InstrumentFormantDriftCorrector:
     def _get_tracker(self):
         if self._tracker is None:
             from dsp.formant_system import FormantTracker
+
             self._tracker = FormantTracker(n_formants=5)
         return self._tracker
 
@@ -261,9 +257,7 @@ class InstrumentFormantDriftCorrector:
 
     # ── Internal: drift detection via DTW ─────────────────────────────────────
 
-    def _detect_drift(
-        self, f1_tracked: np.ndarray, f1_target: float
-    ) -> tuple[bool, np.ndarray, float, float, float]:
+    def _detect_drift(self, f1_tracked: np.ndarray, f1_target: float) -> tuple[bool, np.ndarray, float, float, float]:
         """Detect sustained drift in *f1_tracked* relative to *f1_target*.
 
         Returns:
@@ -285,15 +279,15 @@ class InstrumentFormantDriftCorrector:
         deviation_valid[~valid] = 0.0
 
         mean_drift = float(deviation_valid[valid].mean())
-        max_drift  = float(deviation_valid[valid].max())
+        max_drift = float(deviation_valid[valid].max())
 
         # DTW distance: tracked valid F1 vs flat target reference
         f1_valid_seq = f1_tracked[valid]
-        target_seq   = np.full_like(f1_valid_seq, f1_target)
+        target_seq = np.full_like(f1_valid_seq, f1_target)
 
         # Downsample for performance
-        f1_ds  = _downsample_trajectory(f1_valid_seq, DTW_MAX_FRAMES)
-        tgt_ds = _downsample_trajectory(target_seq,   DTW_MAX_FRAMES)
+        f1_ds = _downsample_trajectory(f1_valid_seq, DTW_MAX_FRAMES)
+        tgt_ds = _downsample_trajectory(target_seq, DTW_MAX_FRAMES)
         dtw_dist, _ = _dtw_distance_and_path(f1_ds, tgt_ds)
 
         # Build mask: frames where deviation exceeds threshold for DRIFT_MIN_FRAMES
@@ -307,7 +301,7 @@ class InstrumentFormantDriftCorrector:
             else:
                 run = 0
             if run >= self.drift_min_frames:
-                drift_mask[max(0, i - run + 1):i + 1] = True
+                drift_mask[max(0, i - run + 1) : i + 1] = True
 
         drift_detected = bool(np.any(drift_mask) and mean_drift > self.drift_threshold_hz * 0.5)
 
@@ -329,8 +323,8 @@ class InstrumentFormantDriftCorrector:
         Returns:
             (corrected_mono, n_frames_corrected)
         """
-        hop = max(1, int(0.010 * sr))   # 10 ms hop
-        win = max(1, int(0.025 * sr))   # 25 ms window
+        hop = max(1, int(0.010 * sr))  # 10 ms hop
+        win = max(1, int(0.025 * sr))  # 25 ms window
         n_frames = len(drift_mask)
         enhanced = audio_mono.copy()
         frames_done = 0
@@ -359,14 +353,15 @@ class InstrumentFormantDriftCorrector:
 
             # Gentle F2 nudge (always, lower strength)
             bw_f2 = max(f2_target / 5.0, 80.0)
-            frame_eq = _peak_eq(frame_eq, sr, f2_target, bw_f2,
-                                boost * 0.5 * self.correction_strength / MAX_CORRECTION_STRENGTH)
+            frame_eq = _peak_eq(
+                frame_eq, sr, f2_target, bw_f2, boost * 0.5 * self.correction_strength / MAX_CORRECTION_STRENGTH
+            )
 
             # Hanning blend at frame boundaries (5 ms crossfade)
             blend_f = np.hanning(len(frame_eq))
             enhanced[t0:t1] = (
-                frame * (1.0 - self.correction_strength * blend_f[:t1 - t0])
-                + frame_eq[:t1 - t0] * self.correction_strength * blend_f[:t1 - t0]
+                frame * (1.0 - self.correction_strength * blend_f[: t1 - t0])
+                + frame_eq[: t1 - t0] * self.correction_strength * blend_f[: t1 - t0]
             )
             frames_done += 1
 
@@ -396,23 +391,33 @@ class InstrumentFormantDriftCorrector:
         assert sr == SR_REQUIRED, f"Sample rate must be 48000 Hz, got {sr}"
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
-        strength = float(np.clip(
-            correction_strength if correction_strength is not None else self.correction_strength,
-            0.0, MAX_CORRECTION_STRENGTH,
-        ))
+        strength = float(
+            np.clip(
+                correction_strength if correction_strength is not None else self.correction_strength,
+                0.0,
+                MAX_CORRECTION_STRENGTH,
+            )
+        )
 
         # Look up targets — graceful no-op for unknown instruments
         from dsp.formant_system import InstrumentFormantTargets
+
         row = InstrumentFormantTargets.get_targets(instrument)
 
         def _passthrough(reason: str) -> InstrumentDriftResult:
             out = np.clip(audio, -1.0, 1.0)
             logger.debug("InstrumentFormantDriftCorrector passthrough: %s", reason)
             return InstrumentDriftResult(
-                audio=out, instrument=instrument,
-                drift_detected=False, n_frames_corrected=0, total_frames=0,
-                mean_drift_hz=0.0, max_drift_hz=0.0, dtw_distance=0.0,
-                correction_strength=strength, f1_target_hz=0.0,
+                audio=out,
+                instrument=instrument,
+                drift_detected=False,
+                n_frames_corrected=0,
+                total_frames=0,
+                mean_drift_hz=0.0,
+                max_drift_hz=0.0,
+                dtw_distance=0.0,
+                correction_strength=strength,
+                f1_target_hz=0.0,
             )
 
         if row is None:
@@ -441,16 +446,20 @@ class InstrumentFormantDriftCorrector:
             out = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             out = np.clip(out, -1.0, 1.0)
             return InstrumentDriftResult(
-                audio=out, instrument=instrument,
-                drift_detected=False, n_frames_corrected=0, total_frames=total_frames,
-                mean_drift_hz=mean_drift, max_drift_hz=max_drift, dtw_distance=dtw_dist,
-                correction_strength=strength, f1_target_hz=f1_tgt,
+                audio=out,
+                instrument=instrument,
+                drift_detected=False,
+                n_frames_corrected=0,
+                total_frames=total_frames,
+                mean_drift_hz=mean_drift,
+                max_drift_hz=max_drift,
+                dtw_distance=dtw_dist,
+                correction_strength=strength,
+                f1_target_hz=f1_tgt,
             )
 
         # Apply frame-wise EQ correction on mono
-        mono_corrected, n_corrected = self._apply_frame_correction(
-            mono, sr, f1_tracked, f1_tgt, f2_tgt, drift_mask
-        )
+        mono_corrected, n_corrected = self._apply_frame_correction(mono, sr, f1_tracked, f1_tgt, f2_tgt, drift_mask)
 
         # Recompose stereo by ratio transfer
         if is_stereo:
@@ -468,8 +477,13 @@ class InstrumentFormantDriftCorrector:
         logger.info(
             "InstrumentFormantDriftCorrector: instrument=%s, frames=%d/%d, "
             "drift=%.1fHz (mean) %.1fHz (max), dtw=%.4f, corrected=%d frames",
-            instrument, n_corrected, total_frames,
-            mean_drift, max_drift, dtw_dist, n_corrected,
+            instrument,
+            n_corrected,
+            total_frames,
+            mean_drift,
+            max_drift,
+            dtw_dist,
+            n_corrected,
         )
 
         return InstrumentDriftResult(

@@ -16,9 +16,9 @@ Expected Behavior:
 - BALANCED: Adaptive ML, ~1.5-2× RT (YIN + optional CREPE)
 """
 
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -70,9 +70,9 @@ def create_test_audio_with_speed_error(
 
 def test_phase_31_mode(phase, audio, sr, mode: str):
     """Test Phase 31 with specific quality mode."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Test: {mode.upper()} Mode")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     start_time = time.time()
 
@@ -111,7 +111,7 @@ def test_phase_31_mode(phase, audio, sr, mode: str):
         print(f"   CREPE Applied: {crepe_applied}")
         print(f"   Detected Pitch: {detected_pitch:.2f} Hz")
         print(f"   Confidence: {confidence:.3f}")
-        print(f"   Time: {elapsed:.2f}s ({elapsed*sr/len(audio):.2f}× RT)")
+        print(f"   Time: {elapsed:.2f}s ({elapsed * sr / len(audio):.2f}× RT)")
 
         # Check if speed error was detected
         if "speed_error_percent" in modifications:
@@ -129,9 +129,10 @@ def test_phase_31_mode(phase, audio, sr, mode: str):
             ], f"BALANCED mode should use adaptive strategy, got {strategy}"
             # CREPE may or may not be applied depending on YIN confidence
         elif mode == "balanced":
-            assert strategy in ["adaptive", "yin_fallback"], (
-                f"BALANCED mode should use adaptive strategy, got {strategy}"
-            )
+            assert strategy in [
+                "adaptive",
+                "yin_fallback",
+            ], f"BALANCED mode should use adaptive strategy, got {strategy}"
             assert yin_applied, "BALANCED mode should apply YIN"
 
         print(f"✅ {mode.upper()} Mode Test: PASSED")
@@ -157,7 +158,7 @@ def main():
     print("   Simulating 3% speed error (440 Hz → 453.2 Hz)")
     sr = 48000
     audio = create_test_audio_with_speed_error(duration=3.0, sr=sr, speed_error_percent=3.0)
-    print(f"✅ Created {len(audio)/sr:.1f}s test audio @ {sr} Hz")
+    print(f"✅ Created {len(audio) / sr:.1f}s test audio @ {sr} Hz")
 
     # Initialize phase
     phase = SpeedPitchCorrectionPhase()

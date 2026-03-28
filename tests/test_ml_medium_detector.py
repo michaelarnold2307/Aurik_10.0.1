@@ -11,9 +11,9 @@ Tests:
 5. Feature importance analysis
 """
 
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -261,7 +261,8 @@ class TestAccuracyTargets:
         # Generate larger dataset
         gen = DatasetGenerator()
         dataset = gen.generate_medium_dataset(
-            n_synthetic_per_medium=100, real_samples_only=False  # 100 per medium = ~600 total
+            n_synthetic_per_medium=100,
+            real_samples_only=False,  # 100 per medium = ~600 total
         )
 
         # Train with more estimators

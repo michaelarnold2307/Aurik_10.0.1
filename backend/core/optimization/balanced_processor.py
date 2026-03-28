@@ -8,7 +8,7 @@ Integrates all 6 optimization priorities into a single processing chain.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -33,9 +33,7 @@ class BalancedAudioProcessor:
         Number of CPU cores for multi-threaded stages.
     """
 
-    def __init__(
-        self, sr: int = 48000, preset: str = "balanced", n_cores: int = 2
-    ) -> None:
+    def __init__(self, sr: int = 48000, preset: str = "balanced", n_cores: int = 2) -> None:
         self.sr = sr
         self.preset = preset
         self.n_cores = n_cores
@@ -53,9 +51,7 @@ class BalancedAudioProcessor:
     # Public API
     # ------------------------------------------------------------------
 
-    def process(
-        self, audio: np.ndarray, sr: int, genre: str = "rock"
-    ) -> np.ndarray:
+    def process(self, audio: np.ndarray, sr: int, genre: str = "rock") -> np.ndarray:
         """Run the full 6-stage pipeline on *audio*.
 
         Returns
@@ -96,9 +92,7 @@ class BalancedAudioProcessor:
 
         return np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
 
-    def benchmark(
-        self, audio: np.ndarray, sr: int, n_iterations: int = 1
-    ) -> dict[str, Any]:
+    def benchmark(self, audio: np.ndarray, sr: int, n_iterations: int = 1) -> dict[str, Any]:
         """Measure real-time factor over *n_iterations*.
 
         Returns

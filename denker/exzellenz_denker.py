@@ -11,10 +11,10 @@ Spec §1.2, §2.5, §2.29, §8.1 — v9.10.45
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 
 import numpy as np
 

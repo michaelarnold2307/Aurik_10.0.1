@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-
 _MODERN_WINDOW = Path("Aurik910/ui/modern_window.py")
 _COPILOT_INSTRUCTIONS = Path(".github/copilot-instructions.md")
 
@@ -60,8 +59,7 @@ def test_magic_buttons_offer_exactly_two_modes() -> None:
 
     expected = {"RESTORATION", "STUDIO_2026"}
     assert mode_literals == expected, (
-        "Magic-Buttons müssen exakt zwei Modi anbieten: RESTORATION und STUDIO_2026. "
-        f"Gefunden: {sorted(mode_literals)}"
+        f"Magic-Buttons müssen exakt zwei Modi anbieten: RESTORATION und STUDIO_2026. Gefunden: {sorted(mode_literals)}"
     )
 
 
@@ -93,15 +91,9 @@ def test_mode_mapping_from_magic_button_to_aurik_mode_is_canonical() -> None:
     src, _ = _load_ast(_MODERN_WINDOW)
 
     # Guard auf die explizite Mapping-Logik im BatchThread:
-    assert 'if mode == "STUDIO_2026"' in src, (
-        "STUDIO_2026-Branch fehlt im BatchProcessingThread-Mapping."
-    )
-    assert '_aurik_mode = "studio2026"' in src, (
-        "STUDIO_2026 muss auf Aurik-Modus 'studio2026' gemappt werden."
-    )
-    assert '_aurik_mode = "restoration"' in src, (
-        "RESTORATION muss auf Aurik-Modus 'restoration' gemappt werden."
-    )
+    assert 'if mode == "STUDIO_2026"' in src, "STUDIO_2026-Branch fehlt im BatchProcessingThread-Mapping."
+    assert '_aurik_mode = "studio2026"' in src, "STUDIO_2026 muss auf Aurik-Modus 'studio2026' gemappt werden."
+    assert '_aurik_mode = "restoration"' in src, "RESTORATION muss auf Aurik-Modus 'restoration' gemappt werden."
 
 
 @pytest.mark.normative
@@ -129,7 +121,7 @@ def test_batch_thread_uses_singleton_accessor_not_direct_instantiation() -> None
             self._in_batch_class = False
             self._in_run_method = False
 
-        def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
             if node.name == "BatchProcessingThread":
                 prev = self._in_batch_class
                 self._in_batch_class = True
@@ -138,7 +130,7 @@ def test_batch_thread_uses_singleton_accessor_not_direct_instantiation() -> None
             else:
                 self.generic_visit(node)
 
-        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
             if self._in_batch_class and node.name == "run":
                 prev = self._in_run_method
                 self._in_run_method = True
@@ -147,7 +139,7 @@ def test_batch_thread_uses_singleton_accessor_not_direct_instantiation() -> None
             else:
                 self.generic_visit(node)
 
-        def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        def visit_Call(self, node: ast.Call) -> None:
             if self._in_run_method:
                 # Detect: AurikDenkerClass() — a call whose func is the name "AurikDenkerClass"
                 if isinstance(node.func, ast.Name) and node.func.id == "AurikDenkerClass":

@@ -29,19 +29,17 @@ Author: AURIK Team
 Version: 8.0
 """
 
-from dataclasses import dataclass
 import logging
 import os
-from pathlib import Path
 import sys
-from typing import Literal, Optional
+from dataclasses import dataclass
+from typing import Literal
 
 # Optional dependencies with graceful fallback
 # WICHTIG: colorama.init() wird NICHT auf Modulebene aufgerufen.
 # Auf Linux funktionieren ANSI-Codes nativ im Terminal ohne init().
 # colorama.init() wrapping würde pytest capsys-Capture korrumpieren.
 try:
-    import colorama
     from colorama import Back, Fore, Style
 
     HAS_COLORAMA = True
@@ -159,7 +157,7 @@ class AccessibleCLI:
     audio feedback, and high contrast modes.
     """
 
-    def __init__(self, theme: str = "auto", audio_feedback: Optional[bool] = None, verbose: bool = True):
+    def __init__(self, theme: str = "auto", audio_feedback: bool | None = None, verbose: bool = True):
         """
         Initialize accessible CLI
 
@@ -300,7 +298,7 @@ class AccessibleCLI:
 
         print()
 
-    def prompt(self, message: str, default: Optional[str] = None, valid_choices: Optional[list[str]] = None) -> str:
+    def prompt(self, message: str, default: str | None = None, valid_choices: list[str] | None = None) -> str:
         """
         Prompt user for input with accessibility features
 
@@ -358,7 +356,7 @@ class AccessibleCLI:
         Returns:
             True if user confirms, False otherwise
         """
-        default_str = "Y/n" if default else "y/N"
+        "Y/n" if default else "y/N"
         response = self.prompt(message, default="y" if default else "n", valid_choices=["y", "n"])
         return response.lower() == "y"
 
@@ -386,7 +384,7 @@ class AccessibleCLI:
         except Exception:
             pass  # Silently fail if beep not supported
 
-    def table(self, headers: list[str], rows: list[list[str]], alignments: Optional[list[str]] = None):
+    def table(self, headers: list[str], rows: list[list[str]], alignments: list[str] | None = None):
         """
         Print accessible table with proper alignment
 
@@ -431,7 +429,7 @@ class AccessibleCLI:
             print(row_text)
 
         if self.screen_reader_mode:
-            print(f"[END TABLE]\n")
+            print("[END TABLE]\n")
         else:
             print()
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ _lock_singleton = threading.Lock()
 
 def get_goal_optimizer(
     get_context: Callable[[], dict[str, Any]] | None = None,
-    feedback_callback: Callable[[dict[str, float]], None] | None = None
+    feedback_callback: Callable[[dict[str, float]], None] | None = None,
 ) -> ContextAwareGoalOptimizer:
     """Get or create ContextAwareGoalOptimizer singleton.
 
@@ -34,8 +34,7 @@ def get_goal_optimizer(
         with _lock_singleton:
             if _instance is None:
                 _instance = ContextAwareGoalOptimizer(
-                    get_context or (lambda: {}),
-                    feedback_callback or (lambda x: None)
+                    get_context or (lambda: {}), feedback_callback or (lambda x: None)
                 )
     return _instance
 

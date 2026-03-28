@@ -8,6 +8,7 @@ Testet:
 """
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 
 from dsp.ultra_low_latency import (
@@ -44,7 +45,6 @@ def _loud(n: int = SR, amp: float = 3.0) -> np.ndarray:
 
 
 class TestUltraLowLatencyLimiter:
-
     def test_output_shape_preserved(self):
         audio = _sine()
         out = UltraLowLatencyLimiter().process(audio, SR)
@@ -104,7 +104,6 @@ class TestUltraLowLatencyLimiter:
 
 
 class TestUltraLowLatencyDenoiser:
-
     def test_output_shape_preserved(self):
         audio = _sine()
         out = UltraLowLatencyDenoiser().process(audio, SR)
@@ -163,7 +162,6 @@ class TestUltraLowLatencyDenoiser:
 
 
 class TestUltraLowLatencyGate:
-
     def test_output_shape_preserved(self):
         audio = _sine()
         out = UltraLowLatencyGate().process(audio, SR)

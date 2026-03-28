@@ -105,6 +105,7 @@ def _get_ml_model() -> object | None:
         # Globaler ML-Budget-Guard: verhindert kumulative OOM über alle Plugins.
         try:
             from backend.core.ml_memory_budget import try_allocate as _try_alloc
+
             if not _try_alloc("AudioSR", _AUDIOSR_BUDGET_GB):
                 return None  # Budget erschöpft → DSP-Fallback
         except Exception:
@@ -127,6 +128,7 @@ def _get_ml_model() -> object | None:
             # PLM-Registrierung für LRU-basierte Auto-Eviction
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
+
                 _reg_plm("AudioSR", size_gb=_AUDIOSR_BUDGET_GB, unload_fn=unload_audiosr)
             except Exception:
                 pass
@@ -136,12 +138,11 @@ def _get_ml_model() -> object | None:
             # Budget-Slot freigeben bei Ladefehler
             try:
                 from backend.core.ml_memory_budget import release as _release
+
                 _release("AudioSR")
             except Exception:
                 pass
-            logger.info(
-                "AudioSR: ML-Modell-Load fehlgeschlagen (%s) -- DSP-Fallback aktiv.", exc
-            )
+            logger.info("AudioSR: ML-Modell-Load fehlgeschlagen (%s) -- DSP-Fallback aktiv.", exc)
             return None
 
 
@@ -202,6 +203,7 @@ def unload_audiosr() -> None:
     """
     global _ml_model, _ml_model_failed
     import gc
+
     with _ml_model_lock:
         if _ml_model is not None:
             _ml_model = None
@@ -209,6 +211,7 @@ def unload_audiosr() -> None:
             gc.collect()
             try:
                 from backend.core.ml_memory_budget import release as _release
+
                 _release("AudioSR")
             except Exception:
                 pass
@@ -242,7 +245,7 @@ class AudioSRPlugin:
 
     def __init__(self, **_kwargs: object) -> None:
         logger.debug(
-            "AudioSRPlugin initialisiert " "(ML-Primaer wenn BW < %.0f Hz, DSP-Fallback)",
+            "AudioSRPlugin initialisiert (ML-Primaer wenn BW < %.0f Hz, DSP-Fallback)",
             self.BW_THRESHOLD,
         )
 
@@ -289,7 +292,9 @@ class AudioSRPlugin:
                 if mono_in and ml_result.ndim > 1:
                     ml_result = ml_result.mean(axis=-1) if ml_result.shape[-1] <= 2 else ml_result[: ml_result.shape[0]]
                 return np.clip(np.nan_to_num(ml_result.astype(np.float32), nan=0.0), -1.0, 1.0)
-            logger.debug("AudioSR: ML fehlgeschlagen -- DSP-Kaskade aktiv.")  # Erwartet, DSP-Fallback ist designed-in (§3.5)
+            logger.debug(
+                "AudioSR: ML fehlgeschlagen -- DSP-Kaskade aktiv."
+            )  # Erwartet, DSP-Fallback ist designed-in (§3.5)
 
         # ---- DSP-Fallback -------------------------------------------------------
         if mono_in:

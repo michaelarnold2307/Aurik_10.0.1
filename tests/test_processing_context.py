@@ -14,11 +14,11 @@ Tests:
 8. Context manager
 """
 
-from pathlib import Path
 import sys
 import tempfile
 import threading
 import time
+from pathlib import Path
 
 import pytest
 

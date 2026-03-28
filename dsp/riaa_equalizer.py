@@ -27,7 +27,6 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 from scipy.signal import bilinear_zpk, sosfilt, zpk2sos
@@ -43,6 +42,7 @@ _instance: RIAAEqualizer | None = None
 #   ω = 1 / τ_seconds
 # Standard RIAA 1954 (IEC 60098): τ1=3180 µs, τ2=318 µs, τ3=75 µs
 # The additional τ4=7950 µs subsonic shelving pole is included per IEC 60098.
+
 
 def _us_to_rad(tau_us: float) -> float:
     """Convert time constant in microseconds to pole/zero angular frequency."""
@@ -108,18 +108,19 @@ _CURVES: dict[str, dict] = {
 # Alias map for convenience
 _ALIASES: dict[str, str] = {
     "standard": "riaa",
-    "vinyl":    "riaa",
+    "vinyl": "riaa",
     "columbia": "columbia_1938",
-    "aes":      "aes_1951",
-    "ffrr":     "ffrr_1953",
-    "nab_75":   "nab_tape_7_5ips",
-    "nab_15":   "nab_tape_15ips",
+    "aes": "aes_1951",
+    "ffrr": "ffrr_1953",
+    "nab_75": "nab_tape_7_5ips",
+    "nab_15": "nab_tape_15ips",
 }
 
 
 @dataclass
 class RIAAResult:
     """Result of RIAAEqualizer.process_full()."""
+
     audio: np.ndarray
     curve_used: str
     mode: str
@@ -159,7 +160,7 @@ def _build_sos(curve_key: str, sr: int, invert: bool) -> np.ndarray:
     # Append digital integrator pole at z = −1 (maps from ω_a = 0)
     if has_integrator:
         p_d = np.append(p_d, -1.0 + 0j)
-        z_d = np.append(z_d,  1.0 + 0j)  # add matching zero at DC to keep stability
+        z_d = np.append(z_d, 1.0 + 0j)  # add matching zero at DC to keep stability
 
     # Re-normalise gain so the filter has 0 dB at 1 kHz
     w1k = 2.0 * np.pi * 1000.0 / sr
@@ -190,7 +191,7 @@ def _auto_detect_curve(audio: np.ndarray, sr: int) -> str:
     max_samples = int(sr * 30)
     if len(audio) > max_samples:
         mid = len(audio) // 2
-        segment = audio[mid - max_samples // 2: mid + max_samples // 2]
+        segment = audio[mid - max_samples // 2 : mid + max_samples // 2]
     else:
         segment = audio
 
@@ -202,7 +203,7 @@ def _auto_detect_curve(audio: np.ndarray, sr: int) -> str:
     window = np.hanning(n_fft)
     # Use centre chunk
     c = len(mono) // 2
-    chunk = mono[max(0, c - n_fft // 2): c - n_fft // 2 + n_fft]
+    chunk = mono[max(0, c - n_fft // 2) : c - n_fft // 2 + n_fft]
     if len(chunk) < n_fft:
         chunk = np.pad(chunk, (0, n_fft - len(chunk)))
     spec = np.abs(np.fft.rfft(chunk * window)) ** 2
@@ -214,8 +215,8 @@ def _auto_detect_curve(audio: np.ndarray, sr: int) -> str:
 
     # Spectral tilt: power ratio bass/mid
     bass_power = _band_power(80.0, 300.0)
-    mid_power  = _band_power(1000.0, 4000.0)
-    tilt_db    = 10.0 * np.log10(bass_power / (mid_power + 1e-30))
+    mid_power = _band_power(1000.0, 4000.0)
+    tilt_db = 10.0 * np.log10(bass_power / (mid_power + 1e-30))
 
     # HF bandwidth estimation: −3 dB relative to power at 1 kHz
     ref_power = _band_power(950.0, 1050.0)
@@ -270,7 +271,7 @@ class RIAAEqualizer:
     def __init__(self, mode: str = "invert", curve: str = "riaa") -> None:
         if mode not in ("invert", "apply"):
             raise ValueError(f"mode muss 'invert' oder 'apply' sein, nicht '{mode}'.")
-        self.mode  = mode
+        self.mode = mode
         self.curve = _ALIASES.get(curve.lower(), curve.lower())
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -313,9 +314,7 @@ class RIAAEqualizer:
             auto_detected = True
 
         if curve_key not in _CURVES:
-            logger.warning(
-                "Unbekannte RIAA-Kurve '%s' — verwende Standard-RIAA.", curve_key
-            )
+            logger.warning("Unbekannte RIAA-Kurve '%s' — verwende Standard-RIAA.", curve_key)
             curve_key = "riaa"
 
         invert = self.mode == "invert"
@@ -325,10 +324,7 @@ class RIAAEqualizer:
             out = sosfilt(sos, audio.astype(np.float64)).astype(np.float32)
         else:
             # Multichannel: filter each channel independently
-            channels = [
-                sosfilt(sos, audio[:, c].astype(np.float64)).astype(np.float32)
-                for c in range(audio.shape[1])
-            ]
+            channels = [sosfilt(sos, audio[:, c].astype(np.float64)).astype(np.float32) for c in range(audio.shape[1])]
             out = np.stack(channels, axis=1)
 
         out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
@@ -336,7 +332,10 @@ class RIAAEqualizer:
 
         logger.info(
             "RIAAEqualizer: mode=%s curve=%s auto_detected=%s sr=%d",
-            self.mode, curve_key, auto_detected, sr,
+            self.mode,
+            curve_key,
+            auto_detected,
+            sr,
         )
         return RIAAResult(
             audio=out,
@@ -347,6 +346,7 @@ class RIAAEqualizer:
 
 
 # ── Singleton accessor (thread-safe) ─────────────────────────────────────────
+
 
 def get_riaa_equalizer(mode: str = "invert", curve: str = "auto") -> RIAAEqualizer:
     """Return a RIAAEqualizer instance configured with the requested mode/curve.

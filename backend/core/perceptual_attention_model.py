@@ -23,7 +23,6 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -184,15 +183,15 @@ class PerceptualAttentionModel:
             n_frames_lyr = min(n_frames, lyrics_saliency.shape[0])
             lyr = np.nan_to_num(
                 lyrics_saliency[:n_frames_lyr].astype(np.float32),
-                nan=1.0, posinf=2.0, neginf=0.3,
+                nan=1.0,
+                posinf=2.0,
+                neginf=0.3,
             )
             base_part = saliency_map[:n_frames_lyr]
             # Geometrisches Mittel: kombiniert beide Salienz-Quellen
             combined_part = np.sqrt(np.clip(base_part, 0.3, 2.0) * np.clip(lyr, 0.3, 2.0))
             if n_frames_lyr < n_frames:
-                combined_saliency = np.concatenate(
-                    [combined_part, saliency_map[n_frames_lyr:n_frames]], axis=0
-                )
+                combined_saliency = np.concatenate([combined_part, saliency_map[n_frames_lyr:n_frames]], axis=0)
             else:
                 combined_saliency = combined_part
 

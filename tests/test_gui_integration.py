@@ -4,8 +4,8 @@ Integration Test for AURIK 9.0 GUI
 Tests GUI components and UnifiedRestorerV3 integration without requiring display
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 # Add project root to path
 project_root = Path(__file__).parent.parent

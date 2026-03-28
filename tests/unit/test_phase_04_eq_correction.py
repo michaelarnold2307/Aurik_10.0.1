@@ -25,6 +25,7 @@ SR = 48000
 @pytest.fixture(scope="module")
 def phase():
     from backend.core.phases.phase_04_eq_correction import EQCorrectionPhase
+
     return EQCorrectionPhase(sample_rate=SR)
 
 
@@ -32,6 +33,7 @@ def phase():
 def pink_noise_3s():
     """3 s pink-noise — shaped spectrum, avoids perfectly flat spectrum edge case."""
     import scipy.signal as ss
+
     np.random.seed(42)
     white = np.random.randn(3 * SR).astype(np.float32)
     sos = ss.butter(1, 0.5, output="sos")
@@ -57,9 +59,18 @@ def silence_2s():
 
 class TestHistoricalCurves:
     EXPECTED_VARIANTS = [
-        "columbia_1938", "aes_1951", "decca_ffrr_1949", "emi_1953",
-        "nab_1952", "rca_victor_1947", "ccir_1950", "hmv_1935",
-        "telefunken_1940", "wax_cylinder", "shellac_generic", "riaa_1954",
+        "columbia_1938",
+        "aes_1951",
+        "decca_ffrr_1949",
+        "emi_1953",
+        "nab_1952",
+        "rca_victor_1947",
+        "ccir_1950",
+        "hmv_1935",
+        "telefunken_1940",
+        "wax_cylinder",
+        "shellac_generic",
+        "riaa_1954",
     ]
 
     def test_01_all_expected_variants_present(self, phase):
@@ -83,11 +94,11 @@ class TestHistoricalCurves:
         """Alle Kurven-Werte im Bereich [-20, +15] dB."""
         for name, curve in phase.HISTORICAL_CURVES.items():
             for freq, gain in curve.items():
-                assert -20.0 <= gain <= 15.0, \
-                    f"{name}[{freq}] = {gain:.1f} dB außerhalb plausiblem Bereich"
+                assert -20.0 <= gain <= 15.0, f"{name}[{freq}] = {gain:.1f} dB außerhalb plausiblem Bereich"
 
     def test_06_riaa_1954_matches_class_constant(self, phase):
         from backend.core.phases.phase_04_eq_correction import EQCorrectionPhase
+
         assert phase.HISTORICAL_CURVES["riaa_1954"] is EQCorrectionPhase.RIAA_CURVE
 
 
@@ -154,45 +165,30 @@ class TestAutoDetectRiaaVariant:
 
 class TestProcessDecadeAware:
     def test_16_shellac_with_decade_returns_historical_variant(self, phase, pink_noise_3s):
-        result = phase.process(
-            pink_noise_3s.copy(), material_type="shellac",
-            sample_rate=SR, decade=1945
-        )
+        result = phase.process(pink_noise_3s.copy(), material_type="shellac", sample_rate=SR, decade=1945)
         assert result.success
         variant = result.modifications.get("riaa_variant")
         assert variant is not None, "riaa_variant fehlt in modifications"
         assert variant in phase.HISTORICAL_CURVES
 
     def test_17_shellac_without_decade_uses_shellac_curve(self, phase, pink_noise_3s):
-        result = phase.process(
-            pink_noise_3s.copy(), material_type="shellac",
-            sample_rate=SR
-        )
+        result = phase.process(pink_noise_3s.copy(), material_type="shellac", sample_rate=SR)
         assert result.success
         assert result.modifications.get("riaa_variant") is None
 
     def test_18_wax_cylinder_always_gets_wax_variant(self, phase, pink_noise_3s):
-        result = phase.process(
-            pink_noise_3s.copy(), material_type="wax_cylinder",
-            sample_rate=SR
-        )
+        result = phase.process(pink_noise_3s.copy(), material_type="wax_cylinder", sample_rate=SR)
         assert result.success
         variant = result.modifications.get("riaa_variant")
         assert variant == "wax_cylinder", f"Erwartet 'wax_cylinder', erhalten: {variant}"
 
     def test_19_output_bounded_shellac_1938(self, phase, stereo_3s):
-        result = phase.process(
-            stereo_3s.copy(), material_type="shellac",
-            sample_rate=SR, decade=1938
-        )
+        result = phase.process(stereo_3s.copy(), material_type="shellac", sample_rate=SR, decade=1938)
         assert result.success
         audio = result.audio
         assert np.max(np.abs(audio)) <= 1.0 + 1e-6
 
     def test_20_output_finite_shellac_1953(self, phase, pink_noise_3s):
-        result = phase.process(
-            pink_noise_3s.copy(), material_type="shellac",
-            sample_rate=SR, decade=1953
-        )
+        result = phase.process(pink_noise_3s.copy(), material_type="shellac", sample_rate=SR, decade=1953)
         assert result.success
         assert np.isfinite(result.audio).all()

@@ -474,7 +474,9 @@ class UnifiedDefectDetector:
 
         return confidence, severity, locations
 
-    def _detect_wow_flutter(self, audio: np.ndarray, return_locs: bool) -> tuple[float, float, list, float, float, list]:
+    def _detect_wow_flutter(
+        self, audio: np.ndarray, return_locs: bool
+    ) -> tuple[float, float, list, float, float, list]:
         """Eigenentwicklung: Wow & flutter (pitch/speed variations) detection."""
         from scipy import signal
 
@@ -1329,7 +1331,9 @@ class AurikAIFramework:
         """Analyze audio for defects."""
         return self.detector.detect(audio)
 
-    def restore(self, audio: np.ndarray, mode: RestorationMode = RestorationMode.BALANCED) -> FrameworkRestorationResult:
+    def restore(
+        self, audio: np.ndarray, mode: RestorationMode = RestorationMode.BALANCED
+    ) -> FrameworkRestorationResult:
         """Restore audio."""
         return self.restorer.restore(audio, mode=mode)
 

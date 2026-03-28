@@ -17,6 +17,7 @@ import numpy as np
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except (ImportError, OSError):
     torch = None  # type: ignore[assignment]
@@ -255,9 +256,9 @@ class ONNXConverter:
         results = {}
 
         for name, (model, sample_input, output_path) in models.items():
-            logger.info(f"\n{'='*60}")
+            logger.info(f"\n{'=' * 60}")
             logger.info(f"Converting: {name}")
-            logger.info(f"{'='*60}")
+            logger.info(f"{'=' * 60}")
 
             success = self.convert(
                 pytorch_model=model, output_path=output_path, sample_input=sample_input, validate=validate
@@ -267,9 +268,9 @@ class ONNXConverter:
             logger.info(f"Result: {'✓ SUCCESS' if success else '❌ FAILED'}")
 
         # Summary
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info("CONVERSION SUMMARY")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
         successful = sum(1 for v in results.values() if v)
         logger.info(f"Total: {len(results)}")
         logger.info(f"Successful: {successful}")

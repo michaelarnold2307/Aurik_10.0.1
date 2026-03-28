@@ -150,7 +150,6 @@ class RegionDetector:
         hop_length = int(sr * self.hop_length_ms / 1000.0)
         frame_length = hop_length * 2
 
-        import logging
 
         logger.info(f"[librosa] Signal-Länge (Samples): {len(audio)}, dtype: {audio.dtype}, sr: {sr}")
         # 1. Energy (for silence detection)
@@ -698,12 +697,12 @@ if __name__ == "__main__":
     logger.info("\n📋 REGION RECOMMENDATIONS (for Pipeline):")
     logger.info(str("-" * 80))
     for region in report["regions"][:5]:  # Show first 5
-        logger.info(f"Region {region['region_id']}: {region['type']:12s} " f"({region['duration_s']:.2f}s)")
+        logger.info(f"Region {region['region_id']}: {region['type']:12s} ({region['duration_s']:.2f}s)")
         logger.info(f"  Recommendation: {region['recommendation']['reasoning']}")
         logger.info(
             "  Enhancement: %.1f, Noise Reduction: %.1f",
-            region['recommendation']['enhancement_strength'],
-            region['recommendation']['noise_reduction_strength'],
+            region["recommendation"]["enhancement_strength"],
+            region["recommendation"]["noise_reduction_strength"],
         )
 
     logger.info(str("\n" + "=" * 80))

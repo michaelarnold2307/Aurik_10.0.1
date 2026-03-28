@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Optional
 
 import numpy as np
 
@@ -67,6 +66,7 @@ except ImportError:
             is_stressed: bool = False
             phoneme_type: str = "mixed"
 
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ N_BARK_BANDS: int = 24
 
 # HF-Bark-Bänder-Index-Bereich: Bänder 17–23 (~4–16 kHz, §2.36)
 HF_BARK_START: int = 17
-HF_BARK_END: int = 24   # exclusive (= N_BARK_BANDS)
+HF_BARK_END: int = 24  # exclusive (= N_BARK_BANDS)
 
 # Clamp-Grenzen (PAM-Invariante §2.22)
 _SALIENCY_MIN: float = 0.3
@@ -89,13 +89,13 @@ G_FLOOR_FRICATIVE_STRESSED: float = 0.90
 
 # Salienz-Boost-Tabelle (§2.36)
 SALIENCY_BOOST: dict[str, float] = {
-    "fricative_stressed":   2.0,
+    "fricative_stressed": 2.0,
     "fricative_unstressed": 1.4,
-    "vowel_stressed":       1.6,
-    "vowel_unstressed":     1.0,
-    "plosive":              1.5,
-    "silence":              0.5,
-    "mixed":                1.0,
+    "vowel_stressed": 1.6,
+    "vowel_unstressed": 1.0,
+    "plosive": 1.5,
+    "silence": 0.5,
+    "mixed": 1.0,
 }
 
 # Frame-Konfiguration (identisch zu PAM §2.22: 500 ms, 250 ms Hop)
@@ -106,6 +106,7 @@ _FRAME_HOP_S: float = 0.25
 # ---------------------------------------------------------------------------
 # Öffentliche Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _resolve_boost_key(phoneme_type: str, is_stressed: bool) -> str:
     """Leitet den SALIENCY_BOOST-Schlüssel aus Phonem-Typ und Betonung ab.
@@ -148,6 +149,7 @@ def _find_word_at(
 # ---------------------------------------------------------------------------
 # ContentAwareProcessor (§2.36)
 # ---------------------------------------------------------------------------
+
 
 class ContentAwareProcessor:
     """Verfeinert PAM-Salienz-Karte anhand von Wort-Zeitstempeln (§2.36).
@@ -194,7 +196,9 @@ class ContentAwareProcessor:
         # --- NaN-Guard Eingabe ---
         base_saliency = np.nan_to_num(
             base_saliency.astype(np.float32),
-            nan=1.0, posinf=_SALIENCY_MAX, neginf=_SALIENCY_MIN,
+            nan=1.0,
+            posinf=_SALIENCY_MAX,
+            neginf=_SALIENCY_MIN,
         )
 
         if base_saliency.ndim != 2 or base_saliency.shape[1] != N_BARK_BANDS:
@@ -202,7 +206,7 @@ class ContentAwareProcessor:
             return np.clip(base_saliency, _SALIENCY_MIN, _SALIENCY_MAX).astype(np.float32)
 
         n_frames = base_saliency.shape[0]
-        result   = base_saliency.copy()
+        result = base_saliency.copy()
 
         # Fallback: keine Wörter oder fallback_used → basis zurückgeben
         words = getattr(transcription, "words", [])
@@ -223,21 +227,17 @@ class ContentAwareProcessor:
                 result[k] = result[k] * silence_boost
             else:
                 phoneme_type = getattr(word, "phoneme_type", "mixed")
-                is_stressed  = bool(getattr(word, "is_stressed", False))
-                boost_key    = _resolve_boost_key(phoneme_type, is_stressed)
+                is_stressed = bool(getattr(word, "is_stressed", False))
+                boost_key = _resolve_boost_key(phoneme_type, is_stressed)
                 boost_factor = SALIENCY_BOOST.get(boost_key, 1.0)
 
                 # HF-Bänder 17–23: Boost anwenden
-                result[k, HF_BARK_START:HF_BARK_END] = (
-                    result[k, HF_BARK_START:HF_BARK_END] * boost_factor
-                )
+                result[k, HF_BARK_START:HF_BARK_END] = result[k, HF_BARK_START:HF_BARK_END] * boost_factor
 
                 # G_floor 0.90 bei fricative+stressed (§2.36)
                 if boost_key == "fricative_stressed":
                     hf_slice = result[k, HF_BARK_START:HF_BARK_END]
-                    result[k, HF_BARK_START:HF_BARK_END] = np.maximum(
-                        hf_slice, G_FLOOR_FRICATIVE_STRESSED
-                    )
+                    result[k, HF_BARK_START:HF_BARK_END] = np.maximum(hf_slice, G_FLOOR_FRICATIVE_STRESSED)
 
         # NaN-Guard + Clamp
         result = np.nan_to_num(result, nan=1.0, posinf=_SALIENCY_MAX, neginf=_SALIENCY_MIN)
@@ -269,6 +269,4 @@ def compute_lyrics_saliency(
     sr: int = 48_000,
 ) -> np.ndarray:
     """Convenience-Wrapper: verfeinert Salienz-Karte ohne Klassen-Instantiierung."""
-    return get_content_aware_processor().compute_lyrics_saliency(
-        base_saliency, transcription, sr
-    )
+    return get_content_aware_processor().compute_lyrics_saliency(base_saliency, transcription, sr)

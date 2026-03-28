@@ -8,8 +8,8 @@ Niemals PESQ/DNSMOS/NISQA als Musik-Metrik (§4.4).
 from __future__ import annotations
 
 import math
+
 import numpy as np
-import pytest
 
 np.random.seed(42)
 
@@ -65,6 +65,7 @@ class TestPQSImport:
 
     def test_06_result_fields_present(self):
         import dataclasses
+
         fields = {f.name for f in dataclasses.fields(PQSResult)}
         assert "mos" in fields
         assert "nsim" in fields

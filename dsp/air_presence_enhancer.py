@@ -468,7 +468,7 @@ if __name__ == "__main__":
     logger.info("🎵 ENHANCING:")
     logger.info("  Air Gain: %.1f dB @ 12 kHz", air_gain)
     logger.info("  Presence Gain: %.1f dB @ 5.5 kHz", presence_gain)
-    logger.info("  Micro-Reverb: %s", 'Enabled' if add_reverb else 'Disabled')
+    logger.info("  Micro-Reverb: %s", "Enabled" if add_reverb else "Disabled")
 
     enhanced, report = enhance_air_presence(
         audio, sr, air_gain_db=air_gain, presence_gain_db=presence_gain, add_micro_reverb=add_reverb
@@ -479,10 +479,10 @@ if __name__ == "__main__":
     logger.info("=" * 70)
     logger.info("AIR & PRESENCE ENHANCEMENT REPORT")
     logger.info("=" * 70)
-    logger.info("Air Boost (Measured):       %+.2f dB", report['air_boost_measured_db'])
-    logger.info("Presence Boost (Measured):  %+.2f dB", report['presence_boost_measured_db'])
-    logger.info("Overall Gain:               %+.2f dB", report['overall_gain_db'])
-    logger.info("Micro-Reverb Mix:           %.1f%%", report['micro_reverb_mix']*100)
+    logger.info("Air Boost (Measured):       %+.2f dB", report["air_boost_measured_db"])
+    logger.info("Presence Boost (Measured):  %+.2f dB", report["presence_boost_measured_db"])
+    logger.info("Overall Gain:               %+.2f dB", report["overall_gain_db"])
+    logger.info("Micro-Reverb Mix:           %.1f%%", report["micro_reverb_mix"] * 100)
     logger.info("=" * 70)
 
     # Save

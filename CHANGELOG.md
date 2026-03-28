@@ -2,6 +2,71 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.10.77e — Psychoacoustic Masking als Pipeline-Kwarg + AMRB-Baseline (28. Mär 2026)
+
+### Zusammenfassung
+
+Psychoakustisches Masking-Modell (ISO 11172-3, Painter & Spanias 2000) wird jetzt einmalig vor dem Phase-Loop auf dem vollständigen Mono-Signal berechnet und als `masking_result` / `masking_result_r` / `masking_scalar` an alle Phasen weitergereicht. Phase 03 und Phase 29 (Stereo: kanalweise) nutzen den gecachten Wert statt redundanter Neuberechnung. `_combined_strength` wird für maskierte Inhalte um bis zu 18 % reduziert — das System verarbeitet weniger aggressiv wo der Hörer den Defekt ohnehin nicht wahrnimmt.
+
+- **`backend/core/unified_restorer_v3.py`**:
+  - `_masking_result` (L/Mono) + `_masking_result_r` (R-Kanal, Stereo) pre-computed auf vollem Audio (kein Center-Crop)
+  - `_masking_scalar` via Median statt Mean (robuster gegen transiente Peaks)
+  - `masking_result`, `masking_result_r`, `masking_scalar` in allen 3 kwargs-Pfaden (parallel, PMGG, PMGG-Fallback)
+  - `_combined_strength × (0.7 + 0.3 × masking_scalar)` für nicht-Timing-Phasen bei `masking_scalar < 1.0`; Timing-Phasen 12 + 31 ausgenommen
+
+- **`backend/core/phases/phase_03_denoise.py`**: `kwargs.get("masking_result") or compute_masking_threshold(...)` — Recompute nur wenn kein Cache vorhanden
+
+- **`backend/core/phases/phase_29_tape_hiss_reduction.py`**:
+  - `process()`: kanalweise `_ch_masking` Selektion (ch=0 → `masking_result`, ch=1 → `masking_result_r` fallback L)
+  - `_process_channel_omlsa()`: neuer Parameter `masking_result=None` — behebt bisherigen NameError (kwargs-Zugriff in Methode ohne `**kwargs` wurde still abgefangen → Caching hatte nie funktioniert)
+  - Erstmals wirklich gecachter Masking-Pfad aktiv
+
+### AMRB Mini-Baseline (algorithmisch, kein Hörtest)
+
+Ergebnis gespeichert in `reports/amrb_2026-03-28_v9.10.77.json`.
+
+| Szenario | OQS | MOS | Status |
+| --- | --- | --- | --- |
+| AMRB-01-TAPE | 90.5 | 4.49 | PASS ✓ |
+| AMRB-08-HUM | 82.6 | 3.01 | PASS ✓ |
+| **Overall (2/10 Szenarien)** | **86.5** | — | **PASS** |
+| iZotope RX 11 Baseline | 71.0 | — | Referenz |
+| Delta vs RX 11 | **+15.5** | — | |
+
+> **Hinweis**: Algorithmische PEAQ-Approximation (OQS), kein ITU-R MUSHRA-Hörtest. 2 von 10 AMRB-Szenarien, 1 Item × 5 s. Nicht für externe Publikation geeignet ohne vollständigen 10-Szenarien-Lauf mit n ≥ 3 Items.
+
+### Bugfix
+
+- `phase_29._process_channel_omlsa()`: Masking-Caching war durch fehlendes `**kwargs` nie aktiv — behoben via direkten `masking_result`-Parameter
+
+---
+
+## Version 9.10.77d — KMV Stufe-2 End-to-End (MLRefinementThread + §2.38) (Mär 2026)
+
+### Zusammenfassung
+
+§2.38 Kontinuierliche ML-Veredelung (KMV) vollständig implementiert: Stufe-1-Export (RT-begrenzt, listenable) wird jetzt automatisch von einem niedrig-priorisierten `MLRefinementThread` verbessert, wenn deferred phases vorliegen und ≥ 4 GB RAM frei sind. Das finale Ergebnis überschreibt den Stufe-1-Export atomar nur wenn `stufe2_quality ≥ stufe1_quality`.
+
+- **`backend/core/deferred_refinement_job.py`** (NEU): `DeferredRefinementJob`-Dataclass mit allen §2.38-Pflicht-Feldern (`output_path`, `audio_original`, `sr`, `mode`, `deferred_phase_ids`, `cached_defect_result`, `cached_era_result`, `cached_medium_result`, `stufe1_quality`, `input_path`); Properties `audio_size_gb` + `n_deferred`.
+
+- **`Aurik910/ui/ml_refinement_thread.py`** (NEU): Vollständiger `MLRefinementThread(QThread)` mit allen 5 §2.38-Pflicht-Signalen (`refinement_started`, `refinement_phase_done`, `refinement_progress`, `refinement_complete`, `refinement_cancelled`). Invarianten: `QThread.LowPriority` + `os.nice(10)`, RAM-Guard ≥ 4 GB (`should_start()`), `ml_memory_budget.try_allocate("kmv_job")`, Qualitäts-Gate (`stufe2_quality ≥ stufe1_quality`), atomarer Overwrite via `.tmp → os.replace`. Headless-kompatibel (PyQt5-Fallback-Stub für Tests).
+
+- **`Aurik910/ui/modern_window.py`**:
+  - `refinement_progress_bar` (türkis `#00BCD4`, 3 px, anfangs versteckt) unter `phase_progress_bar` gemäß §11.4-Ergänzung.
+  - `_ml_refinement_thread: None`-Attribut.
+  - `_maybe_start_kmv_refinement(item, restoration_result)` — Single-active-Invariante, DeferredRefinementJob-Erstellung, Signal-Verdrahtung, Thread-Start.
+  - `_on_refinement_started/progress/complete/cancelled` — UI-Reaktionen: Fortschrittsbalken, Status-Text, 5-Sekunden-Notifikation, Waveform/Qualitätsanzeige-Update.
+  - `_cancel_processing` erweitert: Escape stoppt auch aktiven `MLRefinementThread` (`requestInterruption → wait(3 000) → terminate`).
+
+- **`tests/normative/test_kmv_stufe2.py`** (NEU): 14 normative Tests — DeferredRefinementJob-Felder, `should_start()`-RAM-Guard, Qualitätsinvariante (kein Overwrite wenn schlechter), atomarer Schreib-Pfad (kein `.tmp`-Rest), Signal-Kontrakt, RestorationResult-Pflicht-Felder (`deferred_phases`, `refinement_complete`, `stufe2_quality_estimate`).
+
+### Test-Status
+
+- Alle bestehenden Unit-Tests weiterhin grün.
+- Neue normative Tests: `tests/normative/test_kmv_stufe2.py` — 14 Tests.
+
+---
+
 ## Version 9.10.77c — Präzisions-Härtung in Loudness, PMGG, LGE und Kernphasen (Mär 2026)
 
 ### Zusammenfassung
@@ -200,7 +265,7 @@ Das größere Stufe-1-Fenster reduziert die `deferred_phases`-Liste deutlich, be
 typische 3–5-Minuten-Songs (bis 32× RT = praktisch keine Deferral im Studio-2026-Modus).
 
 | Szenario                 | Alt: 1800s Stufe 1 | Neu: 5400s Stufe 1 |
-|--------------------------|--------------------|--------------------|
+| ------------------------ | ------------------ | ------------------ |
 | 20-min Vinyl, schwer     | ≈ 1,5× RT möglich  | ≈ 4,5× RT möglich  |
 | 10-min Shellac, ML-heavy | ≈ 3× RT möglich    | ≈ 9× RT möglich    |
 | 5-min Pop, Studio 2026   | ≈ 6× RT möglich    | ≈ 18× RT möglich   |

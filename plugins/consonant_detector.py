@@ -24,24 +24,24 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 # ── Erkennungsschwellen (§2.8 Step 5b) ──────────────────────────────────── #
-ZCR_THRESHOLD: float = 0.30          # Zero-Crossing-Rate-Mindestanteil
-HF_ENERGY_THRESHOLD: float = 0.25   # Mindestanteil HF-Energie an Gesamt
-HF_LOW_HZ: float = 4_000.0          # Untere Grenze Hochfrequenzband
-HF_HIGH_HZ: float = 16_000.0        # Obere Grenze Hochfrequenzband
+ZCR_THRESHOLD: float = 0.30  # Zero-Crossing-Rate-Mindestanteil
+HF_ENERGY_THRESHOLD: float = 0.25  # Mindestanteil HF-Energie an Gesamt
+HF_LOW_HZ: float = 4_000.0  # Untere Grenze Hochfrequenzband
+HF_HIGH_HZ: float = 16_000.0  # Obere Grenze Hochfrequenzband
 
 # Frame-Analyse-Parameter
-_FRAME_SIZE: int = 1024   # Samples pro Frame (~21 ms @ 48 kHz)
-_HOP_SIZE: int = 512      # Hop-Größe (50 % Überlappung)
+_FRAME_SIZE: int = 1024  # Samples pro Frame (~21 ms @ 48 kHz)
+_HOP_SIZE: int = 512  # Hop-Größe (50 % Überlappung)
 
 
 # ── Ergebnis-Dataclass ───────────────────────────────────────────────────── #
+
 
 @dataclass
 class ConsonantDetectionResult:
@@ -102,6 +102,7 @@ def detect_consonants(
 
 # ── Hauptklasse ──────────────────────────────────────────────────────────── #
 
+
 class ConsonantDetector:
     """Erkennt Frikativ-/Konsonanten-Segmente via ZCR + HF-Energie (§2.8 Step 5b).
 
@@ -137,11 +138,11 @@ class ConsonantDetector:
 
     # Stimmtyp-adaptive HF-Bänder (Hz-Tupel)
     _HF_BANDS: dict[str, tuple[float, float]] = {
-        "male":       (5_000.0, 10_000.0),
-        "female":     (6_000.0, 12_000.0),
-        "child":      (7_000.0, 14_000.0),
+        "male": (5_000.0, 10_000.0),
+        "female": (6_000.0, 12_000.0),
+        "child": (7_000.0, 14_000.0),
         "androgynous": (5_500.0, 11_000.0),
-        "unknown":    (HF_LOW_HZ, HF_HIGH_HZ),
+        "unknown": (HF_LOW_HZ, HF_HIGH_HZ),
     }
 
     def detect(
@@ -167,8 +168,10 @@ class ConsonantDetector:
             return self._detect_safe(audio, sample_rate, voice_gender)
         except Exception as exc:  # pragma: no cover
             logger.warning("ConsonantDetector: Fehler bei Erkennung (%s) — leere Maske", exc)
-            n = audio.shape[0] if isinstance(audio, np.ndarray) and audio.ndim == 1 else (
-                audio.shape[-1] if isinstance(audio, np.ndarray) else 0
+            n = (
+                audio.shape[0]
+                if isinstance(audio, np.ndarray) and audio.ndim == 1
+                else (audio.shape[-1] if isinstance(audio, np.ndarray) else 0)
             )
             return ConsonantDetectionResult(
                 mask=np.zeros(n, dtype=bool),
@@ -256,7 +259,11 @@ class ConsonantDetector:
 
         logger.debug(
             "ConsonantDetector: %d/%d Frames Frikativ (ratio=%.2f, mean_zcr=%.2f, mean_hf=%.2f)",
-            fricative_frames, total_frames, fricative_ratio, mean_zcr, mean_hf,
+            fricative_frames,
+            total_frames,
+            fricative_ratio,
+            mean_zcr,
+            mean_hf,
         )
 
         return ConsonantDetectionResult(

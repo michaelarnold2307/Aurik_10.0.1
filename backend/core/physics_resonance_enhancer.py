@@ -90,7 +90,6 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import scipy.signal as sig
@@ -98,9 +97,9 @@ import scipy.signal as sig
 logger = logging.getLogger(__name__)
 
 SR_REQUIRED: int = 48_000
-MAX_GAIN_DB: float = 4.0          # hard ceiling per peak
-MAX_STRENGTH: float = 1.0         # blend ceiling
-DEFAULT_STRENGTH: float = 0.40    # default enhancement strength
+MAX_GAIN_DB: float = 4.0  # hard ceiling per peak
+MAX_STRENGTH: float = 1.0  # blend ceiling
+DEFAULT_STRENGTH: float = 0.40  # default enhancement strength
 
 
 # ── Resonance model catalogue ─────────────────────────────────────────────────
@@ -109,64 +108,64 @@ DEFAULT_STRENGTH: float = 0.40    # default enhancement strength
 
 _RESONANCES: dict[str, list[tuple[float, float, float]]] = {
     "guitar": [
-        (102.0,  8.0,  2.5),
-        (195.0,  6.0,  2.0),
-        (400.0,  4.0,  1.2),
-        (2500.0, 3.0,  0.8),
+        (102.0, 8.0, 2.5),
+        (195.0, 6.0, 2.0),
+        (400.0, 4.0, 1.2),
+        (2500.0, 3.0, 0.8),
     ],
     "keys": [
-        (75.0,   5.0,  2.0),
-        (180.0,  5.0,  1.5),
-        (550.0,  3.5,  1.0),
-        (3000.0, 2.5,  0.6),
+        (75.0, 5.0, 2.0),
+        (180.0, 5.0, 1.5),
+        (550.0, 3.5, 1.0),
+        (3000.0, 2.5, 0.6),
     ],
-    "piano": [          # alias
-        (75.0,   5.0,  2.0),
-        (180.0,  5.0,  1.5),
-        (550.0,  3.5,  1.0),
-        (3000.0, 2.5,  0.6),
+    "piano": [  # alias
+        (75.0, 5.0, 2.0),
+        (180.0, 5.0, 1.5),
+        (550.0, 3.5, 1.0),
+        (3000.0, 2.5, 0.6),
     ],
     "brass": [
-        (233.0,  10.0, 2.5),
-        (466.0,  8.0,  2.0),
-        (932.0,  6.0,  1.5),
-        (1500.0, 4.0,  0.8),
+        (233.0, 10.0, 2.5),
+        (466.0, 8.0, 2.0),
+        (932.0, 6.0, 1.5),
+        (1500.0, 4.0, 0.8),
     ],
     "drums": [
-        (60.0,   4.0,  3.0),
-        (120.0,  3.5,  1.5),
-        (250.0,  3.0,  0.8),
-        (5000.0, 2.0,  0.5),
+        (60.0, 4.0, 3.0),
+        (120.0, 3.5, 1.5),
+        (250.0, 3.0, 0.8),
+        (5000.0, 2.0, 0.5),
     ],
-    "percussion": [     # alias
-        (60.0,   4.0,  3.0),
-        (120.0,  3.5,  1.5),
-        (250.0,  3.0,  0.8),
-        (5000.0, 2.0,  0.5),
+    "percussion": [  # alias
+        (60.0, 4.0, 3.0),
+        (120.0, 3.5, 1.5),
+        (250.0, 3.0, 0.8),
+        (5000.0, 2.0, 0.5),
     ],
     "strings": [
-        (290.0,  10.0, 3.0),
-        (430.0,  8.0,  2.5),
-        (560.0,  6.0,  1.5),
-        (1800.0, 4.0,  0.8),
+        (290.0, 10.0, 3.0),
+        (430.0, 8.0, 2.5),
+        (560.0, 6.0, 1.5),
+        (1800.0, 4.0, 0.8),
     ],
     "woodwinds": [
-        (350.0,  8.0,  2.0),
-        (700.0,  6.0,  1.5),
-        (1200.0, 5.0,  1.0),
-        (2500.0, 3.0,  0.5),
+        (350.0, 8.0, 2.0),
+        (700.0, 6.0, 1.5),
+        (1200.0, 5.0, 1.0),
+        (2500.0, 3.0, 0.5),
     ],
     "bass": [
-        (85.0,   5.0,  2.5),
-        (200.0,  4.0,  1.5),
-        (600.0,  3.5,  1.0),
-        (1500.0, 2.5,  0.5),
+        (85.0, 5.0, 2.5),
+        (200.0, 4.0, 1.5),
+        (600.0, 3.5, 1.0),
+        (1500.0, 2.5, 0.5),
     ],
     "synth": [
-        (80.0,   2.0,  1.0),
-        (350.0,  1.5,  0.5),
-        (3000.0, 1.5,  0.3),
-        (8000.0, 1.0,  0.2),
+        (80.0, 2.0, 1.0),
+        (350.0, 1.5, 0.5),
+        (3000.0, 1.5, 0.3),
+        (8000.0, 1.0, 0.2),
     ],
 }
 
@@ -181,7 +180,7 @@ class ResonancePeakResult:
     f0_hz: float
     q: float
     gain_db_nominal: float
-    gain_db_applied: float     # after strength scaling
+    gain_db_applied: float  # after strength scaling
     b_coeffs: tuple[float, float, float]
     a_coeffs: tuple[float, float, float]
 
@@ -210,9 +209,7 @@ class PhysicsResonanceResult:
 # ── Biquad helpers ────────────────────────────────────────────────────────────
 
 
-def _peak_eq_coeffs(
-    f0_hz: float, q: float, gain_db: float, sr: int
-) -> tuple[np.ndarray, np.ndarray]:
+def _peak_eq_coeffs(f0_hz: float, q: float, gain_db: float, sr: int) -> tuple[np.ndarray, np.ndarray]:
     """Compute biquad peaking-EQ coefficients (Audio-EQ-Cookbook / Zölzer).
 
     Args:
@@ -225,20 +222,20 @@ def _peak_eq_coeffs(
         (b, a) — numerator/denominator coefficient arrays shape (3,).
     """
     f0_hz = float(np.clip(f0_hz, 1.0, sr / 2.0 - 1.0))
-    q     = float(np.clip(q, 0.1, 100.0))
-    A     = 10.0 ** (gain_db / 40.0)
-    w0    = 2.0 * np.pi * f0_hz / sr
+    q = float(np.clip(q, 0.1, 100.0))
+    A = 10.0 ** (gain_db / 40.0)
+    w0 = 2.0 * np.pi * f0_hz / sr
     alpha = np.sin(w0) / (2.0 * q)
 
-    b0 =  1.0 + alpha * A
+    b0 = 1.0 + alpha * A
     b1 = -2.0 * np.cos(w0)
-    b2 =  1.0 - alpha * A
-    a0 =  1.0 + alpha / A
+    b2 = 1.0 - alpha * A
+    a0 = 1.0 + alpha / A
     a1 = -2.0 * np.cos(w0)
-    a2 =  1.0 - alpha / A
+    a2 = 1.0 - alpha / A
 
     b = np.array([b0 / a0, b1 / a0, b2 / a0])
-    a = np.array([1.0,     a1 / a0, a2 / a0])
+    a = np.array([1.0, a1 / a0, a2 / a0])
     return b, a
 
 
@@ -268,9 +265,7 @@ class PhysicsResonanceEnhancer:
     """
 
     def __init__(self, enhancement_strength: float = DEFAULT_STRENGTH) -> None:
-        self.enhancement_strength = float(
-            np.clip(enhancement_strength, 0.0, MAX_STRENGTH)
-        )
+        self.enhancement_strength = float(np.clip(enhancement_strength, 0.0, MAX_STRENGTH))
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -295,11 +290,13 @@ class PhysicsResonanceEnhancer:
         assert sr == SR_REQUIRED, f"Sample rate must be 48000 Hz, got {sr}"
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
-        strength = float(np.clip(
-            enhancement_strength if enhancement_strength is not None
-            else self.enhancement_strength,
-            0.0, MAX_STRENGTH,
-        ))
+        strength = float(
+            np.clip(
+                enhancement_strength if enhancement_strength is not None else self.enhancement_strength,
+                0.0,
+                MAX_STRENGTH,
+            )
+        )
 
         resonances = _RESONANCES.get(instrument.lower())
 
@@ -307,8 +304,11 @@ class PhysicsResonanceEnhancer:
             out = np.clip(audio, -1.0, 1.0)
             logger.debug("PhysicsResonanceEnhancer passthrough: %s", reason)
             return PhysicsResonanceResult(
-                audio=out, instrument=instrument, n_peaks=0,
-                enhancement_strength=strength, passthrough=True,
+                audio=out,
+                instrument=instrument,
+                n_peaks=0,
+                enhancement_strength=strength,
+                passthrough=True,
             )
 
         if resonances is None:
@@ -330,20 +330,20 @@ class PhysicsResonanceEnhancer:
                 ch_out, prs = self._process_mono(ch, sr, resonances, strength)
                 processed_channels.append(ch_out)
                 if idx == 0:
-                    peak_results = prs   # diagnostics from first channel
+                    peak_results = prs  # diagnostics from first channel
 
             out = np.stack(processed_channels, axis=0) if audio.shape[0] <= 8 else np.stack(processed_channels, axis=1)
         else:
-            out, peak_results = self._process_mono(
-                audio.astype(np.float32), sr, resonances, strength
-            )
+            out, peak_results = self._process_mono(audio.astype(np.float32), sr, resonances, strength)
 
         out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
         out = np.clip(out, -1.0, 1.0)
 
         logger.info(
             "PhysicsResonanceEnhancer: instrument=%s peaks=%d strength=%.2f",
-            instrument, len(peak_results), strength,
+            instrument,
+            len(peak_results),
+            strength,
         )
         return PhysicsResonanceResult(
             audio=out,
@@ -372,19 +372,19 @@ class PhysicsResonanceEnhancer:
             gain_applied = float(np.clip(gain_nominal * strength, -MAX_GAIN_DB, MAX_GAIN_DB))
             b, a = _peak_eq_coeffs(f0, q, gain_applied, sr)
             enhanced = _apply_peak(enhanced, sr, f0, q, gain_applied)
-            peak_results.append(ResonancePeakResult(
-                f0_hz=f0, q=q,
-                gain_db_nominal=gain_nominal,
-                gain_db_applied=gain_applied,
-                b_coeffs=(float(b[0]), float(b[1]), float(b[2])),
-                a_coeffs=(float(a[0]), float(a[1]), float(a[2])),
-            ))
+            peak_results.append(
+                ResonancePeakResult(
+                    f0_hz=f0,
+                    q=q,
+                    gain_db_nominal=gain_nominal,
+                    gain_db_applied=gain_applied,
+                    b_coeffs=(float(b[0]), float(b[1]), float(b[2])),
+                    a_coeffs=(float(a[0]), float(a[1]), float(a[2])),
+                )
+            )
 
         # Identity-safe blend: wet = enhanced, dry = original
-        result = (
-            (1.0 - strength) * mono
-            + strength       * enhanced
-        ).astype(np.float32)
+        result = ((1.0 - strength) * mono + strength * enhanced).astype(np.float32)
 
         return result, peak_results
 

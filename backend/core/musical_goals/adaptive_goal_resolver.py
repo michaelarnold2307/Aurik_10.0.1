@@ -16,24 +16,24 @@ Usage:
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List
+from typing import Any
 
 #: Canonical goal names + accepted alias keys (incl. legacy hyphenated variants).
 GOAL_ALIASES: dict[str, tuple[str, ...]] = {
-    "bass_kraft":            ("bass_kraft", "bass-kraft"),
-    "brillanz":              ("brillanz",),
-    "waerme":                ("waerme",),
-    "natuerlichkeit":        ("natuerlichkeit",),
-    "authentizitaet":        ("authentizitaet",),
-    "emotionalitaet":        ("emotionalitaet",),
-    "transparenz":           ("transparenz",),
-    "groove":                ("groove",),
-    "spatial_depth":         ("spatial_depth",),
+    "bass_kraft": ("bass_kraft", "bass-kraft"),
+    "brillanz": ("brillanz",),
+    "waerme": ("waerme",),
+    "natuerlichkeit": ("natuerlichkeit",),
+    "authentizitaet": ("authentizitaet",),
+    "emotionalitaet": ("emotionalitaet",),
+    "transparenz": ("transparenz",),
+    "groove": ("groove",),
+    "spatial_depth": ("spatial_depth",),
     "timbre_authentizitaet": ("timbre_authentizitaet",),
-    "tonal_center":          ("tonal_center",),
-    "micro_dynamics":        ("micro_dynamics",),
-    "separation_fidelity":   ("separation_fidelity",),
-    "artikulation":          ("artikulation",),
+    "tonal_center": ("tonal_center",),
+    "micro_dynamics": ("micro_dynamics",),
+    "separation_fidelity": ("separation_fidelity",),
+    "artikulation": ("artikulation",),
 }
 
 

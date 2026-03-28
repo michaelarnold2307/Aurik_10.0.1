@@ -365,18 +365,36 @@ class PsychoAcousticMetrics:
 
         # 24 Bark critical-band boundaries [Hz] (Traunmüller 1990)
         bark_freqs = [
-            100, 200, 300, 400, 510, 630, 770, 920, 1080, 1270,
-            1480, 1720, 2000, 2320, 2700, 3150, 3700, 4400, 5300,
-            6400, 7700, 9500, 12000, 15500,
+            100,
+            200,
+            300,
+            400,
+            510,
+            630,
+            770,
+            920,
+            1080,
+            1270,
+            1480,
+            1720,
+            2000,
+            2320,
+            2700,
+            3150,
+            3700,
+            4400,
+            5300,
+            6400,
+            7700,
+            9500,
+            12000,
+            15500,
         ]
 
         # Fine-grained STFT: hop=64 → frame_rate=750 Hz → Nyquist 375 Hz > 200 Hz ✓
         nperseg = 1024
         hop = 64
-        _, _, Zxx = stft(
-            mono, fs=self.sample_rate, nperseg=nperseg,
-            noverlap=nperseg - hop, window="hann"
-        )
+        _, _, Zxx = stft(mono, fs=self.sample_rate, nperseg=nperseg, noverlap=nperseg - hop, window="hann")
         magnitude = np.abs(Zxx)  # (freq_bins, time_frames)
         n_freq_bins, n_frames = magnitude.shape
 

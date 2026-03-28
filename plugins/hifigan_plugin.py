@@ -59,6 +59,7 @@ class HifiGanPlugin:
             logger.warning("HiFi-GAN Ladefehler: %s — Fallback.", exc)
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("HiFiGAN")
             except Exception:
                 pass

@@ -33,9 +33,9 @@ Version: 1.0.0
 Date: 16. Februar 2026
 """
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from typing import Any
 
 import numpy as np
@@ -198,6 +198,13 @@ class PolyphonicSpeedCurveEstimator:
                 ratio = np.where(valid, hz / ref_hz[k], 1.0)
                 ratio = np.clip(ratio, 1e-6, 1e6)
                 deviation_cents[:, k] = np.where(valid, 1200.0 * np.log2(ratio), 0.0)
+
+        # Step 3b: Clamp per-voice deviations to ±500 cents before consensus.
+        # Values beyond ±500 cents (5 semitones) are physically implausible for
+        # wow/flutter and indicate pitch-tracker failure on specific frames.
+        # Clamping here prevents individual outlier frames from inflating the
+        # smoothed curve past the ±200 cents plausibility guard in Step 6b.
+        deviation_cents = np.clip(deviation_cents, -500.0, 500.0)
 
         # Step 4: confidence-weighted median per frame
         speed_curve = np.full(T, np.nan, dtype=np.float32)

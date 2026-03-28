@@ -14,7 +14,7 @@ class _DummyButton:
     def __init__(self) -> None:
         self.enabled: bool | None = None
 
-    def setEnabled(self, enabled: bool) -> None:  # noqa: N802
+    def setEnabled(self, enabled: bool) -> None:
         self.enabled = enabled
 
 
@@ -31,10 +31,10 @@ class _DummyStatusText:
         self.style = ""
         self.text = ""
 
-    def setStyleSheet(self, style: str) -> None:  # noqa: N802
+    def setStyleSheet(self, style: str) -> None:
         self.style = style
 
-    def setText(self, text: str) -> None:  # noqa: N802
+    def setText(self, text: str) -> None:
         self.text = text
 
 

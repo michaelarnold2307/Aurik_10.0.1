@@ -11,8 +11,8 @@ Direkter Test der 3 implementierten ML-Hybrid Phasen:
 Testet die Quality Modes: FAST, BALANCED
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 

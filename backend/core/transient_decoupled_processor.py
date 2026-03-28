@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -179,10 +178,10 @@ TransientDecoupledProcessor = TransientDecoupledProcessing
 
 __all__ = [
     "CROSSFADE_MS",
-    "GrooveViolationError",
     "HPSS_HARMONIC_KERNEL",
     "HPSS_PERCUSSIVE_KERNEL",
     "PERCUSSIVE_ONLY_PHASES",
+    "GrooveViolationError",
     "TransientDecoupledProcessing",
     "TransientDecoupledProcessor",
     "get_transient_decoupled_processor",

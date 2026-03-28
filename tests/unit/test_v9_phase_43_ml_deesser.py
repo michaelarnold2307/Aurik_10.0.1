@@ -35,6 +35,7 @@ np.random.seed(42)
 # Hilfsfunktionen & Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _sibilant_signal(n: int = N, sr: int = SR, freq_hz: float = 7000.0) -> np.ndarray:
     """Reiner Sinus im Sibilantenbereich (steuert De-Esser)."""
     t = np.linspace(0, n / sr, n, endpoint=False)
@@ -50,6 +51,7 @@ def _bass_signal(n: int = N) -> np.ndarray:
 @pytest.fixture()
 def phase():
     from backend.core.phases.phase_43_ml_deesser import MLDeEsserPhase
+
     return MLDeEsserPhase()
 
 
@@ -73,6 +75,7 @@ def silent():
 # ---------------------------------------------------------------------------
 # Grundlegende Ausgangs-Invarianten
 # ---------------------------------------------------------------------------
+
 
 class TestOutputInvariants:
     """NaN, Clipping, Shape, PhaseResult.success."""
@@ -125,15 +128,19 @@ class TestOutputInvariants:
 # Stimmtyp-adaptive Frequenzauswahl (§2.8)
 # ---------------------------------------------------------------------------
 
+
 class TestGenderAdaptiveFrequencies:
     """Verifiziert, dass gender-Parameter die korrekten Frequenzbereiche setzt."""
 
-    @pytest.mark.parametrize("gender,freq_low,freq_high", [
-        ("male",    5_000.0, 10_000.0),
-        ("female",  6_000.0, 12_000.0),
-        ("child",   7_000.0, 14_000.0),
-        ("unknown", 5_000.0,  9_000.0),
-    ])
+    @pytest.mark.parametrize(
+        "gender,freq_low,freq_high",
+        [
+            ("male", 5_000.0, 10_000.0),
+            ("female", 6_000.0, 12_000.0),
+            ("child", 7_000.0, 14_000.0),
+            ("unknown", 5_000.0, 9_000.0),
+        ],
+    )
     def test_11_gender_freq_in_metadata(self, phase, gender, freq_low, freq_high):
         """Metadata enthält gender-spezifische Frequenzgrenzen."""
         audio = _sibilant_signal(freq_hz=(freq_low + freq_high) / 2)
@@ -196,6 +203,7 @@ class TestGenderAdaptiveFrequencies:
 # Strength-Cap (§2.19.3 Schlager-Modus)
 # ---------------------------------------------------------------------------
 
+
 class TestStrengthCap:
     """Strength-Cap limitiert maximale Gain-Reduction."""
 
@@ -212,8 +220,7 @@ class TestStrengthCap:
         rms_no_cap = float(np.sqrt(np.mean(result_no_cap.audio**2)))
         rms_capped = float(np.sqrt(np.mean(result_capped.audio**2)))
         # Mit Cap ist Ausgang lauter (weniger GR)
-        assert rms_capped >= rms_no_cap * 0.98, \
-            "strength_cap soll maximale Gain-Reduction begrenzen"
+        assert rms_capped >= rms_no_cap * 0.98, "strength_cap soll maximale Gain-Reduction begrenzen"
 
     def test_21_strength_cap_0_no_crash(self, phase, mono):
         """strength_cap=0.0 → keine GR, Signal unverändert."""
@@ -231,6 +238,7 @@ class TestStrengthCap:
 # ---------------------------------------------------------------------------
 # Threshold- und Ratio-Verhalten
 # ---------------------------------------------------------------------------
+
 
 class TestThresholdBehavior:
     """Threshold kontrolliert, wann De-Esser eingreift."""
@@ -260,6 +268,7 @@ class TestThresholdBehavior:
 # Abtastrate und Konsistenz
 # ---------------------------------------------------------------------------
 
+
 class TestSampleRateAndConsistency:
     """Verhalten bei verschiedenen Abtastraten und Wiederholbarkeit."""
 
@@ -281,11 +290,18 @@ class TestSampleRateAndConsistency:
         """Alle erwarteten Metadata-Schlüssel vorhanden."""
         result = phase.process(mono, SR)
         required_keys = {
-            "gender", "threshold_db", "ratio", "attack_ms",
-            "release_ms", "freq_low_hz", "freq_high_hz", "strength_cap",
+            "gender",
+            "threshold_db",
+            "ratio",
+            "attack_ms",
+            "release_ms",
+            "freq_low_hz",
+            "freq_high_hz",
+            "strength_cap",
         }
-        assert required_keys.issubset(result.metadata.keys()), \
+        assert required_keys.issubset(result.metadata.keys()), (
             f"Fehlende Metadata-Schlüssel: {required_keys - set(result.metadata.keys())}"
+        )
 
     def test_29_metrics_contains_avg_gr(self, phase, mono):
         result = phase.process(mono, SR)

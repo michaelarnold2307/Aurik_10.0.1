@@ -179,6 +179,7 @@ class FormantTracker:
             logger.debug("DeepFormants ONNX nicht ladbar: %s — LPC-Burg-Fallback.", exc)
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("DeepFormants")
             except Exception:
                 pass

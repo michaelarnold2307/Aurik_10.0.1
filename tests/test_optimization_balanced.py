@@ -5,8 +5,8 @@ BALANCED OPTIMIZATION - COMPREHENSIVE TESTS
 Test suite for all 6 optimization priorities
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest

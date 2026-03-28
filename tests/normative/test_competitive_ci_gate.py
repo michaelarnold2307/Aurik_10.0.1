@@ -254,7 +254,7 @@ def test_competitive_gate_baseline_is_rx11_not_rx10() -> None:
         "sieht aus wie eine RX-10-Baseline. §8.2: RX-11-MUSHRA-Baseline ≥ 68 erwartet."
     )
     # Gesamtschwelle: Aurik muss diese Baseline schlagen
-    assert _PER_SCENARIO_WIN_THRESHOLD == rx11_mushra, (
+    assert rx11_mushra == _PER_SCENARIO_WIN_THRESHOLD, (
         f"_PER_SCENARIO_WIN_THRESHOLD ({_PER_SCENARIO_WIN_THRESHOLD}) != "
         f"AMRB_BASELINES[RX11].mushra_overall ({rx11_mushra}). "
         "Gate-Schwelle muss dynamisch aus AMRB_BASELINES bezogen werden."

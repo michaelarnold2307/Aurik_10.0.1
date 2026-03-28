@@ -8,9 +8,8 @@ Supports legacy context/fusion_engine constructor for backward compatibility.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
-from typing import Any, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -24,10 +23,10 @@ _ENSEMBLE_STRENGTHS: list[float] = [0.6, 1.0, 1.4]
 
 # Mode → preferred chain of model keys (legacy context-based path)
 _MODE_CHAINS: dict[str, list[str]] = {
-    "tape":        ["deepfilternet_v3_ii", "resemble_enhance"],
-    "vinyl":       ["resemble_enhance", "deepfilternet_v3_ii"],
-    "digital":     ["deepfilternet_v3_ii"],
-    "broadcast":   ["resemble_enhance", "deepfilternet_v3_ii"],
+    "tape": ["deepfilternet_v3_ii", "resemble_enhance"],
+    "vinyl": ["resemble_enhance", "deepfilternet_v3_ii"],
+    "digital": ["deepfilternet_v3_ii"],
+    "broadcast": ["resemble_enhance", "deepfilternet_v3_ii"],
     "restoration": ["deepfilternet_v3_ii", "resemble_enhance"],
 }
 _DEFAULT_CHAIN: list[str] = ["deepfilternet_v3_ii", "resemble_enhance"]
@@ -128,6 +127,7 @@ def get_ensemble_processor(context: Any = None, fusion_engine: FusionEngine | No
 # Module-level convenience function (used by UnifiedRestorerV3 §2.21)
 # ---------------------------------------------------------------------------
 
+
 def process_ensemble(
     audio: np.ndarray,
     sr: int,
@@ -186,7 +186,7 @@ def process_ensemble(
     # Simple weighted mean: weight by per-candidate RMS (higher quality → more weight)
     weights: list[float] = []
     for c in candidates:
-        rms = float(np.sqrt(np.mean(c ** 2)))
+        rms = float(np.sqrt(np.mean(c**2)))
         weights.append(max(rms, 1e-9))
 
     total = sum(weights)

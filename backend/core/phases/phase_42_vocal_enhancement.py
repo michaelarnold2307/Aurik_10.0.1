@@ -57,10 +57,11 @@ from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, Phase
 
 # VocalAI Enhancement (Spec §2.8 — Stimmtyp-adaptive Gesangsverarbeitung)
 try:
-    pass
+    from backend.core.vocal_ai_enhancement import UnifiedVocalAIEnhancer as _UnifiedVocalAI
 
     VOCAL_AI_AVAILABLE = True
 except ImportError:
+    _UnifiedVocalAI = None  # type: ignore
     VOCAL_AI_AVAILABLE = False
     logging.getLogger(__name__).warning("VocalAIEnhancement nicht verfügbar — Standard-DSP-Vogalverarbeitung aktiv")
 
@@ -84,6 +85,24 @@ try:
 except ImportError:
     _get_phoneme_detector = None  # type: ignore
     _PHONEME_DETECTOR_AVAILABLE = False
+
+# BreathDetector: Segment-basierte Atemerkennung (§2.8 — ZCR + Energie)
+try:
+    from plugins.breath_detector import get_breath_detector as _get_breath_detector
+
+    _BREATH_DETECTOR_AVAILABLE = True
+except ImportError:
+    _get_breath_detector = None  # type: ignore
+    _BREATH_DETECTOR_AVAILABLE = False
+
+# §2.36 LyricsGuidedEnhancement: Whisper-basierte Phonem-Timeline für Formant-Steering
+try:
+    from backend.core.lyrics_guided_enhancement import get_lyrics_guided_enhancement as _get_lyrics_guided
+
+    _LYRICS_GUIDED_AVAILABLE = True
+except ImportError:
+    _get_lyrics_guided = None  # type: ignore
+    _LYRICS_GUIDED_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +288,9 @@ class VocalEnhancement(PhaseInterface):
                     harshness_severity = float(getattr(ds_val, "severity", 0.0) if hasattr(ds_val, "severity") else 0.0)
                     break
 
+        # §2.8 Vocal-Chain: Pipeline-weite Gender-Info aus _restoration_context
+        _vocal_gender = str(kwargs.get("vocal_gender", "unknown"))
+
         # Detect if audio contains vocals (simple heuristic)
         has_vocals = self._detect_vocals(audio, sample_rate)
 
@@ -297,13 +319,63 @@ class VocalEnhancement(PhaseInterface):
             vocals_stem, instr_stem, vocal_weight, stem_model_used = stem_result
             logger.debug("Phase42: Stem-Sep via %s — verarbeite Vocal-Stem", stem_model_used)
 
+            # §2.28 HPG on vocal stem: HarmonicPreservationGuard info is lost
+            # after Stem-Sep because UV3 runs HPG on full mix.  Re-extract
+            # harmonic mask from the isolated vocal stem so H1/H2/H3 are
+            # protected during formant/presence/compression processing.
+            _hpg_vocal_mask = None
+            _hpg_vocal_href = None
+            try:
+                from backend.core.harmonic_preservation_guard import get_harmonic_preservation_guard
+
+                _hpg_v = get_harmonic_preservation_guard()
+                _v_mono = vocals_stem.mean(axis=1) if vocals_stem.ndim == 2 else vocals_stem
+                _hpg_vocal_mask, _hpg_vocal_href = _hpg_v.extract_harmonic_mask(
+                    _v_mono.astype(np.float32), sample_rate, instrument_tag="vocals"
+                )
+                logger.debug("Phase42 HPG: vocal-stem harmonic mask extracted")
+            except Exception as _hpg_v_err:
+                logger.debug("Phase42 HPG auf Vocal-Stem nicht verfügbar: %s", _hpg_v_err)
+
             # Enhance only the vocal stem
             if vocals_stem.ndim == 2:
-                enh_left = self._enhance_channel(vocals_stem[:, 0], sample_rate, config, harshness_severity)
-                enh_right = self._enhance_channel(vocals_stem[:, 1], sample_rate, config, harshness_severity)
+                enh_left = self._enhance_channel(
+                    vocals_stem[:, 0], sample_rate, config, harshness_severity, _vocal_gender
+                )
+                enh_right = self._enhance_channel(
+                    vocals_stem[:, 1], sample_rate, config, harshness_severity, _vocal_gender
+                )
                 enhanced_vocals = np.column_stack((enh_left, enh_right))
             else:
-                enhanced_vocals = self._enhance_channel(vocals_stem, sample_rate, config, harshness_severity)
+                enhanced_vocals = self._enhance_channel(
+                    vocals_stem, sample_rate, config, harshness_severity, _vocal_gender
+                )
+
+            # §2.28 HPG correction on enhanced vocal stem: restore harmonic
+            # energy that was attenuated by presence-boost or compression.
+            if _hpg_vocal_mask is not None and _hpg_vocal_href is not None:
+                try:
+                    _hpg_v = get_harmonic_preservation_guard()
+                    _enh_mono = enhanced_vocals.mean(axis=1) if enhanced_vocals.ndim == 2 else enhanced_vocals
+                    _corrected = _hpg_v.apply_correction(
+                        _enh_mono.astype(np.float32), _hpg_vocal_href, _hpg_vocal_mask, sample_rate
+                    )
+                    _corrected = np.clip(np.nan_to_num(_corrected, nan=0.0), -1.0, 1.0)
+                    if enhanced_vocals.ndim == 2:
+                        # Apply correction as gain ratio to both channels
+                        _gain = np.where(np.abs(_enh_mono) > 1e-8, _corrected / (_enh_mono + 1e-12), 1.0)
+                        _gain = np.clip(_gain, 0.5, 2.0)
+                        enhanced_vocals = enhanced_vocals * _gain[:, np.newaxis]
+                    else:
+                        enhanced_vocals = _corrected.astype(enhanced_vocals.dtype)
+                    logger.debug("Phase42 HPG: harmonic correction applied to vocal stem")
+                except Exception as _hpg_corr_err:
+                    logger.debug("Phase42 HPG Korrektur fehlgeschlagen: %s", _hpg_corr_err)
+
+            # §8.3 Vocal-Stem MDEM: Recover micro-dynamics ON THE VOCAL STEM ITSELF
+            # (before remix, so instrumental doesn't dominate the LUFS profile).
+            # The original vocal stem is the reference; enhanced vocal stem is the target.
+            enhanced_vocals = self._apply_vocal_stem_mdem(enhanced_vocals, vocals_stem, sample_rate)
 
             # StemRemixBalancer: LUFS-korrekter Re-Mix (§1.4 Spec)
             try:
@@ -320,11 +392,45 @@ class VocalEnhancement(PhaseInterface):
             # Fallback: process full audio without stem separation
             logger.debug("Phase42: Kein Stem-Sep — Vollbild-Verarbeitung")
             if is_stereo:
-                enhanced_left = self._enhance_channel(audio[:, 0], sample_rate, config, harshness_severity)
-                enhanced_right = self._enhance_channel(audio[:, 1], sample_rate, config, harshness_severity)
+                enhanced_left = self._enhance_channel(
+                    audio[:, 0], sample_rate, config, harshness_severity, _vocal_gender
+                )
+                enhanced_right = self._enhance_channel(
+                    audio[:, 1], sample_rate, config, harshness_severity, _vocal_gender
+                )
                 enhanced_audio = np.column_stack((enhanced_left, enhanced_right))
             else:
-                enhanced_audio = self._enhance_channel(audio, sample_rate, config, harshness_severity)
+                enhanced_audio = self._enhance_channel(audio, sample_rate, config, harshness_severity, _vocal_gender)
+
+        # §2.8 VocalAIEnhancement: Optional post-processing with full gender-aware chain
+        # (GenderDetector → BreathPreservation → GenderAwareDeEsser → Formant/Emotion check)
+        # Only applied when module available AND effective_strength > 0.5 (avoid double processing at low strength)
+        _vocal_ai_applied = False
+        if VOCAL_AI_AVAILABLE and _UnifiedVocalAI is not None and _effective_strength > 0.5:
+            try:
+                _vai = _UnifiedVocalAI(sample_rate=sample_rate)
+                _vai_result = _vai.enhance(
+                    enhanced_audio,
+                    breath_preservation=0.7,
+                    sibilance_reduction=False,  # Already handled by Phase 19 + de-ess stage
+                )
+                # Safety: Only accept if formant preservation is high (identity protection)
+                if _vai_result.formant_preservation_score >= 0.85:
+                    enhanced_audio = _vai_result.audio
+                    _vocal_ai_applied = True
+                    logger.debug(
+                        "Phase42 VocalAI: formant_pres=%.2f emotion_pres=%.2f quality_impr=%.3f",
+                        _vai_result.formant_preservation_score,
+                        _vai_result.emotion_preservation_score,
+                        _vai_result.quality_improvement,
+                    )
+                else:
+                    logger.debug(
+                        "Phase42 VocalAI: abgelehnt (formant_pres=%.2f < 0.85 — Identitätsschutz)",
+                        _vai_result.formant_preservation_score,
+                    )
+            except Exception as _vai_err:
+                logger.debug("VocalAIEnhancement fehlgeschlagen (ignoriert): %s", _vai_err)
 
         if 0.0 < _effective_strength < 1.0:
             enhanced_audio = audio + _effective_strength * (enhanced_audio - audio)
@@ -346,11 +452,13 @@ class VocalEnhancement(PhaseInterface):
                 "compression_ratio": float(config["compression_ratio"]),
                 "rt_factor": float(rt_factor),
                 "vocal_ai_linked": VOCAL_AI_AVAILABLE,
+                "vocal_ai_applied": _vocal_ai_applied,
                 "stem_separation_model": stem_model_used,
                 "harshness_severity": float(harshness_severity),
                 "harshness_reduction_applied": harshness_severity > 0.05,
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
+                "vocal_gender": _vocal_gender,
             },
             warnings=[] if rt_factor < 0.35 else [f"Performance sub-optimal: {rt_factor:.2f}× realtime"],
         )
@@ -427,9 +535,20 @@ class VocalEnhancement(PhaseInterface):
             return False
 
     def _enhance_channel(
-        self, audio: np.ndarray, sample_rate: int, config: dict[str, Any], harshness_severity: float = 0.0
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        config: dict[str, Any],
+        harshness_severity: float = 0.0,
+        vocal_gender: str = "unknown",
     ) -> np.ndarray:
-        """Enhance vocals in a single audio channel."""
+        """Enhance vocals in a single audio channel.
+
+        §2.8 Integration (v9.10.78):
+        - PhonemeDetector → phoneme-guided formant steering
+        - BreathDetector → segment-aware breath reduction (replaces static bandpass)
+        - Gender → passed to FormantSystem for per-gender formant targets
+        """
         enhanced = audio.copy()
 
         # Stage 0: Harshness reduction (NEW — §v9.10.77)
@@ -441,8 +560,8 @@ class VocalEnhancement(PhaseInterface):
         # Stage 1: De-essing (sibilance control)
         enhanced = self._apply_deessing(enhanced, sample_rate, config)
 
-        # Stage 2: Formant enhancement (vowel clarity)
-        enhanced = self._enhance_formants(enhanced, sample_rate, config)
+        # Stage 2: Formant enhancement (vowel clarity) — with PhonemeDetector + Gender
+        enhanced = self._enhance_formants(enhanced, sample_rate, config, vocal_gender)
 
         # Stage 3: Presence boost (clarity) — attenuated when harshness detected
         if harshness_severity > 0.3:
@@ -463,7 +582,7 @@ class VocalEnhancement(PhaseInterface):
         # Stage 4: Chest resonance (warmth)
         enhanced = self._enhance_chest(enhanced, sample_rate, config)
 
-        # Stage 5: Breath control
+        # Stage 5: Breath control — §2.8 segment-aware via BreathDetector
         enhanced = self._control_breath(enhanced, sample_rate, config)
 
         # Stage 6: Micro-compression (dynamics)
@@ -592,18 +711,24 @@ class VocalEnhancement(PhaseInterface):
 
         return deessed
 
-    def _enhance_formants(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
+    def _enhance_formants(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        config: dict[str, Any],
+        vocal_gender: str = "unknown",
+    ) -> np.ndarray:
         """Enhance formant region using LPC FormantSystem with Singer's Formant Enhancement.
 
         Processing chain (§2.8):
             1. FormantSystem.process() — LPC tracking, drift correction,
                Singer's Formant (2.5–3.5 kHz).  Primary path.
-            2. FormantSystem.phoneme_guided_enhance() — per-vowel canonical
-               target steering (Peterson & Barney 1952, Hillenbrand 1995).
-               Runs after step 1 with correction_strength=0.25 (identity-safe).
-               Uses the DSP-PhonemeDetector label ('V') to restrict steering
-               to voiced segments; vowel class is auto-classified from F1/F2.
-            3. Bell EQ @ 1.5 kHz — DSP fallback when FormantSystem unavailable.
+            2. PhonemeDetector.detect() — DSP-basierte Phonem-Segmentierung
+               (V/C/sib/sil).  Liefert voiced-Segment-Timestamps.
+            3. FormantSystem.phoneme_guided_enhance() — per-vowel canonical
+               target steering (Peterson & Barney 1952, Hillenbrand 1995)
+               mit echten Phonem-Segmenten + Pipeline-Gender.
+            4. Bell EQ @ 1.5 kHz — DSP fallback when FormantSystem unavailable.
         """
         # Primary: LPC-based formant tracking + Singer's Formant Enhancement
         if self._formant_system is not None:
@@ -612,22 +737,93 @@ class VocalEnhancement(PhaseInterface):
                 enhanced = np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0)
                 enhanced = np.clip(enhanced, -1.0, 1.0)
 
+                # §2.8: PhonemeDetector für segmentgenaue Formant-Steuerung
+                _phoneme_segments = None
+                if _PHONEME_DETECTOR_AVAILABLE and _get_phoneme_detector is not None:
+                    try:
+                        _pd = _get_phoneme_detector()
+                        _pd_result = _pd.detect(enhanced, sample_rate)
+                        if _pd_result.phonemes:
+                            _phoneme_segments = list(zip(_pd_result.phonemes, _pd_result.timestamps_ms))
+                            logger.debug(
+                                "Phase42 PhonemeDetector: %d Segmente (confidence=%.2f)",
+                                len(_pd_result.phonemes),
+                                _pd_result.confidence,
+                            )
+                    except Exception as _pd_err:
+                        logger.debug("PhonemeDetector fehlgeschlagen (F1/F2-Fallback): %s", _pd_err)
+
                 # Stage 2: phoneme-guided per-vowel formant steering
+                # Uses real phoneme segments + pipeline-detected gender
+                # Adaptive correction strength: higher when gender is confidently known
+                _correction_strength = 0.25  # conservative default
+                if vocal_gender in ("male", "female", "child"):
+                    _correction_strength = 0.45  # confident gender → stronger correction
                 try:
+                    _pre_formant = enhanced.copy()
                     enhanced, _pg_report = self._formant_system.phoneme_guided_enhance(
                         enhanced,
                         sample_rate,
-                        phoneme_segments=None,  # DSP fallback: F1/F2-driven classification
-                        gender="unknown",
-                        correction_strength=0.25,
+                        phoneme_segments=_phoneme_segments,
+                        gender=vocal_gender,
+                        correction_strength=_correction_strength,
                     )
                     enhanced = np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0)
                     enhanced = np.clip(enhanced, -1.0, 1.0)
                     logger.debug(
-                        "Phase42 phoneme_guided_enhance: vowel_frames=%d/%d",
+                        "Phase42 phoneme_guided_enhance: vowel_frames=%d/%d gender=%s",
                         _pg_report.get("vowel_segments_processed", 0),
                         _pg_report.get("total_frames", 0),
+                        vocal_gender,
                     )
+
+                    # §2.36 LyricsGuided → Formant-Steering:
+                    # Whisper-based phoneme timeline gates formant correction to
+                    # confirmed vocal regions with stress-adaptive weighting.
+                    # Stressed vowels: full correction (1.0), unstressed: 0.6,
+                    # fricatives: 0.3, silence/plosive: 0.0 → prevents coloring
+                    # non-vocal regions and focuses correction on perceptually
+                    # salient vowel segments.
+                    if _LYRICS_GUIDED_AVAILABLE and _get_lyrics_guided is not None:
+                        try:
+                            _lge = _get_lyrics_guided()
+                            _lge_result = _lge.transcribe(enhanced, sample_rate)
+                            if _lge_result.words and _lge_result.overall_confidence > 0.3:
+                                _n = len(enhanced)
+                                _formant_weight = np.zeros(_n, dtype=np.float32)
+                                _STRESS_WEIGHTS = {
+                                    "vowel_stressed": 1.0,
+                                    "vowel_unstressed": 0.6,
+                                    "fricative_stressed": 0.3,
+                                    "fricative_unstressed": 0.2,
+                                    "plosive": 0.1,
+                                    "silence": 0.0,
+                                }
+                                for _w in _lge_result.words:
+                                    _ws = max(0, int(_w.start_s * sample_rate))
+                                    _we = min(_n, int(_w.end_s * sample_rate))
+                                    if _ws < _we:
+                                        _wt = _STRESS_WEIGHTS.get(_w.phoneme_type, 0.3)
+                                        # Scale by word confidence
+                                        _wt *= min(1.0, _w.confidence)
+                                        np.maximum(_formant_weight[_ws:_we], _wt, out=_formant_weight[_ws:_we])
+                                # Blend: voiced regions get formant correction,
+                                # non-vocal regions keep pre-formant audio
+                                _diff = enhanced - _pre_formant
+                                enhanced = _pre_formant + _formant_weight * _diff
+                                enhanced = np.clip(enhanced, -1.0, 1.0)
+                                logger.debug(
+                                    "Phase42 LyricsGuided formant-steering: %d words, "
+                                    "confidence=%.2f, mean_weight=%.2f",
+                                    len(_lge_result.words),
+                                    _lge_result.overall_confidence,
+                                    float(np.mean(_formant_weight)),
+                                )
+                        except Exception as _lge_err:
+                            logger.debug(
+                                "Phase42 LyricsGuided formant-steering fehlgeschlagen (ignoriert): %s",
+                                _lge_err,
+                            )
                 except Exception as _pg_err:
                     logger.debug("phoneme_guided_enhance fehlgeschlagen (ignoriert): %s", _pg_err)
 
@@ -656,13 +852,78 @@ class VocalEnhancement(PhaseInterface):
         return enhanced
 
     def _boost_presence(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Boost presence region."""
-        # Bell filter @ 4500 Hz
-        w0 = 2 * np.pi * 4500 / sample_rate
-        gain_db = config["presence_gain_db"]
-        q = 1.5
+        """Boost presence region with ISO 226 loudness compensation.
+
+        Improvements (§8.3 Psychoacoustics):
+        - Loudness-adaptive gain: quieter signals get more boost (ISO 226 equal-loudness)
+        - Narrower Q at 4.5 kHz aligned to Zwicker critical bandwidth (~520 Hz → Q ≈ 8)
+        - Vibrato detection: reduce presence gain during active vibrato to protect F0 modulation
+        """
+        n = len(audio)
+        if n < 512:
+            return audio
+
+        base_gain_db = config["presence_gain_db"]
+        center_freq = 4500.0
+
+        # --- ISO 226 Loudness Compensation ---
+        # At low loudness, equal-loudness contours show higher sensitivity in 2-5 kHz
+        # → we need less boost. At high loudness, the sensitivity flattens → more boost needed.
+        # Simplified ISO 226 correction: measure RMS level, adapt gain.
+        rms = float(np.sqrt(np.mean(audio**2) + 1e-12))
+        rms_db = 20.0 * np.log10(rms + 1e-10)
+        # Reference: -14 dBFS (EBU R128 nominal). Below → reduce gain, above → keep.
+        # ISO 226 at 4 kHz: ~10 dB loudness-dependent sensitivity shift across 40-80 phon
+        loudness_compensation = np.clip((rms_db + 14.0) * 0.04, -0.3, 0.2)
+        adapted_gain_db = base_gain_db * (1.0 + loudness_compensation)
+
+        # --- Vibrato detection: protect F0 modulation ---
+        # Measure spectral flux in 80-400 Hz (vocal F0 range) at 4-8 Hz modulation rate
+        vibrato_attenuation = 1.0
+        try:
+            # Extract F0 band
+            sos_f0 = signal.butter(3, [80.0, 400.0], btype="band", fs=sample_rate, output="sos")
+            f0_band = signal.sosfilt(sos_f0, audio)
+            # Compute amplitude envelope
+            analytic = np.abs(signal.hilbert(f0_band))
+            # Look for 4-8 Hz modulation (vibrato rate)
+            if len(analytic) > sample_rate // 2:
+                # Downsample envelope to ~100 Hz for modulation analysis
+                ds_factor = max(1, sample_rate // 100)
+                env_ds = analytic[::ds_factor]
+                if len(env_ds) > 32:
+                    env_ds = env_ds - np.mean(env_ds)
+                    fft_env = np.abs(np.fft.rfft(env_ds))
+                    freqs = np.fft.rfftfreq(len(env_ds), d=ds_factor / sample_rate)
+                    # Vibrato energy in 4-8 Hz range
+                    vibrato_mask = (freqs >= 4.0) & (freqs <= 8.0)
+                    total_mask = freqs > 0.5
+                    if np.any(vibrato_mask) and np.any(total_mask):
+                        vibrato_energy = float(np.sum(fft_env[vibrato_mask] ** 2))
+                        total_energy = float(np.sum(fft_env[total_mask] ** 2)) + 1e-12
+                        vibrato_ratio = vibrato_energy / total_energy
+                        # If vibrato dominates (>15% of modulation energy), attenuate presence
+                        if vibrato_ratio > 0.15:
+                            vibrato_attenuation = max(0.5, 1.0 - vibrato_ratio)
+                            logger.debug(
+                                "Phase42 vibrato detected: ratio=%.2f → presence attenuation=%.2f",
+                                vibrato_ratio,
+                                vibrato_attenuation,
+                            )
+        except Exception:
+            pass  # Vibrato detection failure is non-critical
+
+        final_gain_db = adapted_gain_db * vibrato_attenuation
+        if abs(final_gain_db) < 0.01:
+            return audio
+
+        # Psychoacoustically-aligned Q: critical bandwidth at 4.5 kHz ≈ 520 Hz
+        # Q = center_freq / bandwidth → 4500 / 520 ≈ 8.6 (narrower, perceptually correct)
+        # Compromise: Q=5.0 (still much tighter than old Q=1.5, but avoids ringing)
+        q = 5.0
+        w0 = 2 * np.pi * center_freq / sample_rate
         alpha = np.sin(w0) / (2 * q)
-        A = 10 ** (gain_db / 40)
+        A = 10 ** (final_gain_db / 40)
 
         b0 = 1 + alpha * A
         b1 = -2 * np.cos(w0)
@@ -700,39 +961,172 @@ class VocalEnhancement(PhaseInterface):
         return enhanced
 
     def _control_breath(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Reduce breath noise."""
-        # Extract breath band
+        """Reduce breath noise — segment-aware via BreathDetector (§2.8).
+
+        Primary path: BreathDetector identifies breath segments via ZCR + energy,
+        then applies targeted reduction only in those segments (preserving
+        non-breath HF content like cymbals, harmonics).
+
+        Fallback: Static 8-12 kHz bandpass reduction (legacy behavior).
+        """
+        n = len(audio)
+        if n < 1024:
+            return audio
+
+        # §2.8 Primary: Segment-aware breath reduction via BreathDetector
+        if _BREATH_DETECTOR_AVAILABLE and _get_breath_detector is not None:
+            try:
+                _bd = _get_breath_detector()
+                _bd_result = _bd.detect(audio.astype(np.float32), sample_rate)
+                if _bd_result.breath_positions:
+                    controlled = audio.copy()
+                    reduction_db = config["breath_reduction_db"]
+                    reduction_linear = 10 ** (-reduction_db / 20)
+                    # Crossfade window: 5 ms Hanning (§2.8 BreathDetector spec)
+                    _xfade_samples = max(1, int(0.005 * sample_rate))
+                    _half_xfade = np.hanning(_xfade_samples * 2)
+
+                    for _start, _end in zip(_bd_result.breath_positions, _bd_result.breath_end_positions):
+                        _s = max(0, int(_start))
+                        _e = min(n, int(_end))
+                        if _e <= _s:
+                            continue
+                        seg_len = _e - _s
+                        # Build gain envelope: full reduction in center, crossfade at edges
+                        gain = np.ones(seg_len, dtype=np.float64) * reduction_linear
+                        # Fade-in at start
+                        _fi = min(_xfade_samples, seg_len // 2)
+                        if _fi > 0:
+                            gain[:_fi] = (
+                                1.0 - (1.0 - reduction_linear) * _half_xfade[_xfade_samples - _fi : _xfade_samples]
+                            )
+                        # Fade-out at end
+                        _fo = min(_xfade_samples, seg_len // 2)
+                        if _fo > 0:
+                            gain[-_fo:] = (
+                                1.0 - (1.0 - reduction_linear) * _half_xfade[_xfade_samples : _xfade_samples + _fo]
+                            )
+                        controlled[_s:_e] *= gain
+                    logger.debug(
+                        "Phase42 BreathDetector: %d Segmente reduziert (%.1f dB), confidence=%.2f",
+                        len(_bd_result.breath_positions),
+                        reduction_db,
+                        _bd_result.confidence,
+                    )
+                    return controlled
+                # No breath segments found — return unchanged
+                return audio
+            except Exception as _bd_err:
+                logger.debug("BreathDetector fehlgeschlagen, Bandpass-Fallback: %s", _bd_err)
+
+        # DSP-Fallback: Static 8-12 kHz bandpass reduction
         sos = signal.butter(4, self.VOCAL_BANDS["breath"], btype="band", fs=sample_rate, output="sos")
         breath = signal.sosfilt(sos, audio)
-
-        # Reduce breath by fixed amount
         reduction_linear = 10 ** (-config["breath_reduction_db"] / 20)
         breath_reduced = breath * reduction_linear
-
         controlled = audio + (breath_reduced - breath) * 0.6
         return controlled
 
     def _apply_compression(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Apply micro-compression."""
-        # Simple RMS-based compression
-        window_samples = int(0.020 * sample_rate)  # 20ms window
-        rms = np.sqrt(signal.convolve(audio**2, np.ones(window_samples) / window_samples, mode="same"))
-        rms_db = 20 * np.log10(rms + 1e-10)
+        """Apply psychoacoustically-optimized vocal micro-compression.
 
-        threshold_db = -15
+        Improvements over naive RMS compression (§8.3 Micro-Dynamics):
+        - Separate attack (3 ms) and release (120 ms) for vocal syllabic preservation
+        - Soft-knee (6 dB) to avoid hard compression artifacts
+        - Loudness-adaptive makeup gain (recovers 80% of compression depth)
+        - Exponential envelope follower (not polynomial smoothing)
+        """
+        n = len(audio)
+        if n < 512:
+            return audio
+
+        # Envelope follower with vocal-optimized attack/release
+        attack_s = 0.003  # 3 ms — fast enough for consonant transients
+        release_s = 0.120  # 120 ms — slow enough to preserve vowel sustain
+        attack_coeff = 1.0 - np.exp(-1.0 / (attack_s * sample_rate))
+        release_coeff = 1.0 - np.exp(-1.0 / (release_s * sample_rate))
+
+        envelope = np.zeros(n, dtype=np.float64)
+        abs_audio = np.abs(audio)
+        envelope[0] = abs_audio[0]
+        for i in range(1, n):
+            if abs_audio[i] > envelope[i - 1]:
+                envelope[i] = envelope[i - 1] + attack_coeff * (abs_audio[i] - envelope[i - 1])
+            else:
+                envelope[i] = envelope[i - 1] + release_coeff * (abs_audio[i] - envelope[i - 1])
+
+        env_db = 20.0 * np.log10(envelope + 1e-10)
+
+        threshold_db = -15.0
         ratio = config["compression_ratio"]
+        knee_db = 6.0  # Soft knee width
 
-        # Compute gain reduction
-        gain_db = np.where(rms_db > threshold_db, -(rms_db - threshold_db) * (1 - 1 / ratio), 0)
+        # Soft-knee gain computation (avoids hard compression onset)
+        gain_db = np.zeros(n, dtype=np.float64)
+        half_knee = knee_db / 2.0
+        for i in range(n):
+            over = env_db[i] - threshold_db
+            if over <= -half_knee:
+                gain_db[i] = 0.0
+            elif over >= half_knee:
+                gain_db[i] = -over * (1.0 - 1.0 / ratio)
+            else:
+                # Quadratic soft-knee transition
+                gain_db[i] = -((over + half_knee) ** 2) / (4.0 * knee_db) * (1.0 - 1.0 / ratio)
 
-        # Smooth gain
-        gain_db_smooth = signal.savgol_filter(gain_db, window_length=min(201, len(gain_db) // 10 * 2 + 1), polyorder=3)
-        gain_linear = 10 ** (gain_db_smooth / 20)
-
+        gain_linear = 10.0 ** (gain_db / 20.0)
         compressed = audio * gain_linear
 
-        # Make-up gain
-        makeup_gain = 1.2
-        compressed = compressed * makeup_gain
+        # Loudness-adaptive makeup gain: recover 80% of mean compression depth
+        active_reduction = gain_db[gain_db < -0.1]
+        if len(active_reduction) > 0:
+            mean_reduction_db = float(np.mean(active_reduction))
+            makeup_db = -mean_reduction_db * 0.8
+            makeup_linear = 10.0 ** (makeup_db / 20.0)
+        else:
+            makeup_linear = 1.0
+        compressed = compressed * makeup_linear
 
         return compressed
+
+    def _apply_vocal_stem_mdem(
+        self,
+        enhanced_vocals: np.ndarray,
+        original_vocals: np.ndarray,
+        sample_rate: int,
+    ) -> np.ndarray:
+        """Apply MDEM (Micro-Dynamics Envelope Morphing) on the VOCAL STEM.
+
+        §8.3 Psychoacoustic fix: MDEM in UV3 operates on full mix where
+        instrumental energy dominates the LUFS profile.  By applying MDEM
+        on the isolated vocal stem BEFORE remix, the vocal micro-dynamics
+        (syllabic articulation, breath rhythm, emotional swells) are
+        recovered from the original vocal stem's LUFS profile.
+
+        This is a lightweight LUFS-morphing pass (400 ms window) that
+        corrects gain per frame so that the enhanced vocal stem's loudness
+        contour matches the original vocal stem.
+
+        Falls back gracefully if MDEM module isn't available.
+        """
+        try:
+            from backend.core.micro_dynamics_envelope_morphing import get_mdem
+
+            _mdem = get_mdem()
+            # Ensure matching lengths
+            n = min(enhanced_vocals.shape[0], original_vocals.shape[0])
+            enh = enhanced_vocals[:n]
+            orig = original_vocals[:n]
+            morphed = _mdem.morph(enh, orig, sample_rate, mode="restoration")
+            morphed = np.nan_to_num(morphed, nan=0.0, posinf=0.0, neginf=0.0)
+            morphed = np.clip(morphed, -1.0, 1.0)
+            # Ensure output matches original shape
+            if morphed.shape[0] < enhanced_vocals.shape[0]:
+                out = enhanced_vocals.copy()
+                out[: morphed.shape[0]] = morphed
+                return out
+            logger.debug("Phase42 Vocal-Stem MDEM: micro-dynamics recovered on vocal stem")
+            return morphed
+        except Exception as _mdem_err:
+            logger.debug("Vocal-Stem MDEM nicht verfügbar (ignoriert): %s", _mdem_err)
+            return enhanced_vocals

@@ -27,15 +27,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pathlib import Path
 import time
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 
-from backend.core.quality_mode import QualityMode, QualityModeConfig
 from backend.core.defect_scanner import MaterialType
 from backend.core.phases.phase_23_spectral_repair import SpectralRepair
+from backend.core.quality_mode import QualityMode, QualityModeConfig
 
 
 def create_test_audio(duration: float = 2.0, sample_rate: int = 44100) -> np.ndarray:

@@ -26,7 +26,6 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -36,16 +35,18 @@ logger = logging.getLogger(__name__)
 # ConfidenceLevel
 # ---------------------------------------------------------------------------
 
+
 class ConfidenceLevel(Enum):
-    HIGH      = "high"
-    MEDIUM    = "medium"
-    LOW       = "low"
-    VERY_LOW  = "very_low"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    VERY_LOW = "very_low"
 
 
 # ---------------------------------------------------------------------------
 # UncertaintyEstimate
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class UncertaintyEstimate:
@@ -74,16 +75,14 @@ class UncertaintyEstimate:
                 f"Ergebnis nicht zuverlässig."
             )
         if self.confidence_level == ConfidenceLevel.LOW:
-            return (
-                f"UNSICHER: Ziel '{self.goal_name}' — "
-                f"Konfidenz={self.confidence:.2f}, std={self.std:.3f}."
-            )
+            return f"UNSICHER: Ziel '{self.goal_name}' — Konfidenz={self.confidence:.2f}, std={self.std:.3f}."
         return None
 
 
 # ---------------------------------------------------------------------------
 # GoalsUncertaintyReport
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class GoalsUncertaintyReport:
@@ -119,6 +118,7 @@ class GoalsUncertaintyReport:
 # ---------------------------------------------------------------------------
 # UncertaintyQuantifier
 # ---------------------------------------------------------------------------
+
 
 class UncertaintyQuantifier:
     """Bootstrap-based uncertainty quantification for musical goal calculators.
@@ -246,9 +246,7 @@ class UncertaintyQuantifier:
             return ConfidenceLevel.LOW
         return ConfidenceLevel.VERY_LOW
 
-    def should_proceed(
-        self, estimate: UncertaintyEstimate, strict: bool = False
-    ) -> bool:
+    def should_proceed(self, estimate: UncertaintyEstimate, strict: bool = False) -> bool:
         """Return True if processing should continue given this estimate.
 
         Logic:
@@ -355,6 +353,7 @@ class UncertaintyQuantifier:
 # Convenience functions
 # ---------------------------------------------------------------------------
 
+
 def quick_confidence_check(
     audio: np.ndarray,
     calculator: Callable[[np.ndarray], float],
@@ -393,8 +392,7 @@ def get_uncertainty_summary(
     lines = ["Uncertainty Summary", "=" * 40]
     for name, est in estimates.items():
         lines.append(
-            f"  {name}: mean={est.mean:.2f}  confidence={est.confidence:.2f}"
-            f"  level={est.confidence_level.value}"
+            f"  {name}: mean={est.mean:.2f}  confidence={est.confidence:.2f}  level={est.confidence_level.value}"
         )
     return "\n".join(lines)
 

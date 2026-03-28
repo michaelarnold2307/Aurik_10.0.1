@@ -147,9 +147,7 @@ class AdaptiveFormantShifter:
 
         # Stability guard: keep all poles strictly inside the unit circle
         over_unit = np.abs(new_poles) >= 1.0
-        new_poles[over_unit] = (
-            new_poles[over_unit] / (np.abs(new_poles[over_unit]) + 1e-9) * 0.9999
-        )
+        new_poles[over_unit] = new_poles[over_unit] / (np.abs(new_poles[over_unit]) + 1e-9) * 0.9999
 
         # Reconstruct LPC denominator from shifted poles
         new_a = np.poly(new_poles).real

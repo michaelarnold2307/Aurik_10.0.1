@@ -29,11 +29,11 @@ def _k_weighted_lufs(x: np.ndarray, sr: int = 48000) -> float:
         # Bilinear-Transform: s-domain High-Shelf → z-domain IIR (2 Pole, 1 Zero)
         _Ks = 4.0 / np.tan(np.pi * 1500.0 / sr)
         _Vh = 10.0 ** (4.0 / 20.0)  # +4 dB Gain
-        _b0 = (_Vh + _Ks * np.sqrt(2.0 * _Vh) + _Ks ** 2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks ** 2)
-        _b1 = 2.0 * (_Vh - _Ks ** 2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks ** 2)
-        _b2 = (_Vh - _Ks * np.sqrt(2.0 * _Vh) + _Ks ** 2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks ** 2)
-        _a1 = 2.0 * (1.0 - _Ks ** 2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks ** 2)
-        _a2 = (1.0 - _Ks * np.sqrt(2.0) + _Ks ** 2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks ** 2)
+        _b0 = (_Vh + _Ks * np.sqrt(2.0 * _Vh) + _Ks**2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks**2)
+        _b1 = 2.0 * (_Vh - _Ks**2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks**2)
+        _b2 = (_Vh - _Ks * np.sqrt(2.0 * _Vh) + _Ks**2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks**2)
+        _a1 = 2.0 * (1.0 - _Ks**2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks**2)
+        _a2 = (1.0 - _Ks * np.sqrt(2.0) + _Ks**2) / (1.0 + _Ks * np.sqrt(2.0) + _Ks**2)
         arr = _sig.lfilter([_b0, _b1, _b2], [1.0, _a1, _a2], arr)
 
         # RLB Hochpass 2. Ordnung Butterworth @ 38 Hz
@@ -42,7 +42,7 @@ def _k_weighted_lufs(x: np.ndarray, sr: int = 48000) -> float:
     except Exception:
         pass  # Fallback: Signal ohne Filterung (RMS-Näherung)
 
-    mean_sq = float(np.mean(arr ** 2))
+    mean_sq = float(np.mean(arr**2))
     if mean_sq <= 0.0:
         return -70.0
     return float(-0.691 + 10.0 * np.log10(mean_sq))
@@ -73,13 +73,13 @@ class StemRemixBalancer:
             max_s = int(sr * 10)  # up to 10 s centre excerpt
             if len(mono) > max_s:
                 c = len(mono) // 2
-                mono = mono[c - max_s // 2: c + max_s // 2]
+                mono = mono[c - max_s // 2 : c + max_s // 2]
             if len(mono) < 1024:
                 return 0.5
             n_fft = min(8192, len(mono))
             window = np.hanning(n_fft)
             c = len(mono) // 2
-            chunk = mono[max(0, c - n_fft // 2): c - n_fft // 2 + n_fft]
+            chunk = mono[max(0, c - n_fft // 2) : c - n_fft // 2 + n_fft]
             if len(chunk) < n_fft:
                 chunk = np.pad(chunk, (0, n_fft - len(chunk)))
             spec = np.abs(np.fft.rfft(chunk * window)) ** 2

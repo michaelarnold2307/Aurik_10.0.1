@@ -13,9 +13,9 @@ from forensics.medium_detector import (
 )
 
 __all__ = [
-    "MediumDetector",
     "MediumDetectionResult",
+    "MediumDetector",
     "TransferChain",
-    "get_medium_detector",
     "detect_medium_chain",
+    "get_medium_detector",
 ]

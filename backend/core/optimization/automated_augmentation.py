@@ -360,7 +360,9 @@ class AutoAugment:
         policy = random.choice(self.policies)
         return policy.apply(audio)
 
-    def search_policies(self, model: nn.Module, train_loader, val_loader, n_iterations: int = 50, device: str = "cpu") -> None:  # §9.5 CPU-only
+    def search_policies(
+        self, model: nn.Module, train_loader, val_loader, n_iterations: int = 50, device: str = "cpu"
+    ) -> None:  # §9.5 CPU-only
         """
         Search for optimal augmentation policies.
 
@@ -452,7 +454,9 @@ class ConsistencyTraining:
     Enforces model consistency across different augmentations of same input.
     """
 
-    def __init__(self, model: nn.Module, augmentation: Callable, consistency_weight: float = 1.0, device: str = "cpu") -> None:  # §9.5 CPU-only
+    def __init__(
+        self, model: nn.Module, augmentation: Callable, consistency_weight: float = 1.0, device: str = "cpu"
+    ) -> None:  # §9.5 CPU-only
         """
         Initialize consistency training.
 
@@ -534,4 +538,4 @@ if __name__ == "__main__":
     # Show policies
     logger.debug("\nPolicies:")
     for i, policy in enumerate(auto_augment.policies):
-        logger.debug(f"  Policy {i+1}: {policy.operations}")
+        logger.debug(f"  Policy {i + 1}: {policy.operations}")

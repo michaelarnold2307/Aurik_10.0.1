@@ -12,16 +12,15 @@ Output:
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import onnx
 import onnxruntime as ort
 import torch
 import torch.nn.functional as F
-
 
 ROOT = Path(__file__).resolve().parent.parent
 CLAP_SRC = ROOT / "models" / "clap" / "src"
@@ -49,7 +48,7 @@ def main() -> int:
     if str(CLAP_SRC) not in sys.path:
         sys.path.insert(0, str(CLAP_SRC))
 
-    from laion_clap.clap_module.factory import create_model, load_state_dict  # noqa: PLC0415
+    from laion_clap.clap_module.factory import create_model, load_state_dict
 
     torch.set_num_threads(max(1, os.cpu_count() or 4))
 
@@ -63,11 +62,7 @@ def main() -> int:
     )
     state = load_state_dict(str(CKPT), map_location="cpu", skip_params=True)
     # Audio-only export: text branch is not required and may differ by transformers version.
-    state_audio = {
-        k: v
-        for k, v in state.items()
-        if k.startswith("audio_branch.") or k.startswith("audio_projection")
-    }
+    state_audio = {k: v for k, v in state.items() if k.startswith("audio_branch.") or k.startswith("audio_projection")}
     model.load_state_dict(state_audio, strict=False)
     model.eval()
 

@@ -523,8 +523,11 @@ class MasteringPolishPhase(PhaseInterface):
 
         current_peak = np.abs(polished).max()
         if current_peak > ceiling_linear:
-            # Brick-Wall Limiting
-            polished = np.clip(polished, -ceiling_linear, ceiling_linear)
+            # Proportional gain reduction instead of brick-wall clipping.
+            # Hard clipping would create harmonic distortion that destroys all
+            # musical goals.  A proportional scale preserves the waveform shape
+            # while bringing it within the target ceiling.
+            polished *= ceiling_linear / current_peak
 
         # 3. TPDF Dithering (minimal, 16-bit target)
         lsb = 1.0 / (2**15)
@@ -534,10 +537,12 @@ class MasteringPolishPhase(PhaseInterface):
         tpdf_noise = (r1 + r2) * dither_amplitude
         polished = polished + tpdf_noise
 
-        # 4. Final Peak Normalization
+        # 4. Final Peak Normalization (reduction only — never amplify).
+        # Amplifying here would enlarge any residual processing artefacts and
+        # could shift LUFS far above the original level, causing PMGG regression.
         final_peak = np.abs(polished).max()
         if final_peak > 0:
-            normalization_gain = ceiling_linear / final_peak
+            normalization_gain = min(1.0, ceiling_linear / final_peak)
             polished = polished * normalization_gain
         else:
             normalization_gain = 1.0

@@ -14,11 +14,10 @@ Tests:
 - Statistics
 """
 
-from pathlib import Path
 import sys
 import threading
 import time
-from typing import List
+from pathlib import Path
 
 import pytest
 
@@ -324,7 +323,7 @@ class TestModuleCommunicationBus:
         self.bus.register_module("Module1")
 
         for i in range(5):
-            self.bus.register_module(f"Module{i+2}")
+            self.bus.register_module(f"Module{i + 2}")
 
         received_count = [0]
         lock = threading.Lock()
@@ -335,7 +334,7 @@ class TestModuleCommunicationBus:
 
         # Multiple modules subscribe
         for i in range(5):
-            self.bus.subscribe(f"Module{i+2}", "thread_safe_topic", callback)
+            self.bus.subscribe(f"Module{i + 2}", "thread_safe_topic", callback)
 
         # Multiple threads publish
         def publish_messages(thread_id):

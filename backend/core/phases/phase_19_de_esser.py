@@ -391,7 +391,15 @@ class DeEsserPhase(PhaseInterface):
             else:
                 logger.warning(f"Unknown gender '{gender}', using current profile")
 
-        # Auto-Detection wenn Gender=AUTO
+        # §2.8 Vocal-Chain: Pipeline-weite Gender-Info aus kwargs bevorzugen
+        # (einmalige Detektion in UV3 _select_phases, via _restoration_context injiziert)
+        _external_gender = kwargs.get("vocal_gender")
+        if _external_gender and _external_gender in VOCAL_PROFILES and self.gender == VocalGender.AUTO:
+            self.gender = _external_gender
+            self.vocal_profile = VOCAL_PROFILES[_external_gender]
+            logger.info("§2.8 Phase19: vocal_gender=%s aus Pipeline-Kontext übernommen", _external_gender)
+
+        # Auto-Detection wenn Gender=AUTO (Fallback wenn kein Pipeline-Kontext)
         if self.gender == VocalGender.AUTO:
             detected_gender = self._detect_gender_robust(audio, sample_rate)
             self.vocal_profile = VOCAL_PROFILES[detected_gender]

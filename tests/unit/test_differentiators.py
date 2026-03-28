@@ -14,9 +14,9 @@ Testet:
 from __future__ import annotations
 
 import json
-from typing import List
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 import pytest
 
@@ -26,9 +26,9 @@ from backend.core.defect_quality_report import (
     DefectQualityReporter,
     DefectRepairEntry,
 )
+from backend.core.defect_scanner import DefectScore, DefectType, MaterialType
 from backend.core.medium_chain_model import ChainInversionResult, PhysicalMediumChainModel
 from backend.core.provenance_audit import ProvenanceAudit, ProvenanceEntry, _audio_hash
-from backend.core.defect_scanner import DefectScore, DefectType, MaterialType
 
 # ===========================================================================
 # Fixtures
@@ -94,7 +94,6 @@ def causal_defects() -> list[DefectScore]:
 
 
 class TestCausalDefectGraph:
-
     def test_init(self):
         graph = CausalDefectGraph()
         assert isinstance(graph.CAUSAL_EDGES, dict)
@@ -248,7 +247,6 @@ class TestCausalDefectGraph:
 
 
 class TestPhysicalMediumChainModel:
-
     def test_init(self):
         model = PhysicalMediumChainModel()
         assert isinstance(model.SHELLAC_EQ_CURVES, dict)
@@ -330,7 +328,6 @@ class TestPhysicalMediumChainModel:
 
 
 class TestDefectQualityReport:
-
     def test_empty_report(self):
         report = DefectQualityReport()
         assert len(report.entries) == 0
@@ -411,7 +408,6 @@ class TestDefectQualityReport:
 
 
 class TestDefectQualityReporter:
-
     def test_measure_repair_returns_entry(self, mono_audio, sample_rate):
         reporter = DefectQualityReporter()
         audio_after = mono_audio * 0.95  # Leicht verändert
@@ -460,7 +456,6 @@ class TestDefectQualityReporter:
 
 
 class TestProvenanceAudit:
-
     def test_init(self):
         audit = ProvenanceAudit(source_file="test.wav", material="vinyl", mode="RESTORATION")
         assert len(audit) == 0

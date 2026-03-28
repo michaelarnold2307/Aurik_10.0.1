@@ -6,6 +6,7 @@ Kanonischer Importpfad laut Pipeline-Spec:
 
 Implementierung liegt in: backend/core/genre_classifier.py
 """
+
 from backend.core.genre_classifier import (
     GermanSchlagerClassifier,
     SchlagerClassificationResult,

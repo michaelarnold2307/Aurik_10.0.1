@@ -38,6 +38,7 @@ def synthetic_audio():
     return audio, sr
 
 
+@pytest.mark.e2e
 @pytest.mark.timeout(_E2E_TIMEOUT)
 def test_aurik_denker_returns_restoration_result(synthetic_audio):
     """AurikDenker.denke() gibt AurikErgebnis zurück (§1.1, §2.2)."""
@@ -56,6 +57,7 @@ def test_aurik_denker_returns_restoration_result(synthetic_audio):
     assert result is not None, "Ergebnis darf nicht None sein"
 
 
+@pytest.mark.e2e
 @pytest.mark.timeout(_E2E_TIMEOUT)
 def test_aurik_denker_output_no_nan_inf(synthetic_audio):
     """Ausgabe-Audio enthält kein NaN/Inf (§8.2 Universelle Garantie)."""
@@ -74,6 +76,7 @@ def test_aurik_denker_output_no_nan_inf(synthetic_audio):
         assert np.max(np.abs(out)) <= 1.0, "Clipping im Ausgabe-Audio (|x| > 1.0)"
 
 
+@pytest.mark.e2e
 @pytest.mark.timeout(_E2E_TIMEOUT)
 def test_aurik_denker_quality_estimate_present(synthetic_audio):
     """quality_estimate-Feld ist vorhanden und ≥ 0.0 (§8.1 E2E-Pflicht)."""
@@ -92,6 +95,7 @@ def test_aurik_denker_quality_estimate_present(synthetic_audio):
         assert qe >= 0.0, f"quality_estimate muss ≥ 0.0 sein, erhalten: {qe}"
 
 
+@pytest.mark.e2e
 @pytest.mark.timeout(_E2E_TIMEOUT)
 def test_aurik_denker_preserves_sample_rate(synthetic_audio):
     """Ausgabe-SR muss 48 000 Hz sein (interne Verarbeitungs-Invariante)."""
@@ -114,6 +118,7 @@ def test_aurik_denker_preserves_sample_rate(synthetic_audio):
             assert 0.95 <= ratio <= 1.05, f"Audio-Länge verändert sich zu stark: {actual_samples} vs {expected_samples}"
 
 
+@pytest.mark.e2e
 @pytest.mark.timeout(_E2E_TIMEOUT)
 def test_aurik_denker_fast_mode(synthetic_audio):
     """AurikDenker.denke() funktioniert auch im mode='fast' (kein Absturz)."""

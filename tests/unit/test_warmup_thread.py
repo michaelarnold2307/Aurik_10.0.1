@@ -3,19 +3,17 @@
 Pflicht-Tests (≥ 8) für _warmup_models_background() aus Aurik910/main.py.
 Alle Tests laufen ohne echte ML-Modelle (Stubs/Mocks).
 """
+
 from __future__ import annotations
 
-import importlib
-import math
 import threading
 import time
 import types
-import unittest.mock as mock
-
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktion — isolierte Kopie der Warmup-Logik
 # ---------------------------------------------------------------------------
+
 
 def _run_warmup_logic(module_map: dict | None = None, sleep_s: float = 0.0) -> list[str]:
     """Führt die Warmup-Logik ohne App-Kontext aus.
@@ -36,14 +34,17 @@ def _run_warmup_logic(module_map: dict | None = None, sleep_s: float = 0.0) -> l
         try:
             m = types.ModuleType(_mod)
             if _should_raise:
+
                 def _raise():
                     raise RuntimeError("Modell nicht verfügbar")
+
                 setattr(m, _accessor, _raise)
             else:
                 _name = _accessor
 
                 def _ok(_n=_name):
                     loaded.append(_n)
+
                 setattr(m, _accessor, _ok)
             fn = getattr(m, _accessor, None)
             if fn is not None:
@@ -56,6 +57,7 @@ def _run_warmup_logic(module_map: dict | None = None, sleep_s: float = 0.0) -> l
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestWarmupThread:
     """§9.7.4 — Modell-Warmup-Thread-Tests."""
@@ -90,7 +92,7 @@ class TestWarmupThread:
     def test_03_no_crash_on_missing_plugin(self):
         """Warmup darf bei ImportError / RuntimeError nicht abstürzen."""
         module_map = {
-            "plugins.panns_plugin": ("get_panns_plugin", True),   # raises
+            "plugins.panns_plugin": ("get_panns_plugin", True),  # raises
             "plugins.crepe_plugin": ("get_crepe_plugin", False),
         }
         loaded = _run_warmup_logic(module_map)
@@ -100,8 +102,8 @@ class TestWarmupThread:
     def test_04_all_available_plugins_loaded(self):
         """Alle verfügbaren Plugins werden über ihre Accessor-Funktionen aufgerufen."""
         module_map = {
-            "plugins.panns_plugin":            ("get_panns_plugin", False),
-            "plugins.crepe_plugin":            ("get_crepe_plugin", False),
+            "plugins.panns_plugin": ("get_panns_plugin", False),
+            "plugins.crepe_plugin": ("get_crepe_plugin", False),
             "plugins.deepfilternet_v3_ii_plugin": ("get_deepfilternet", False),
         }
         loaded = _run_warmup_logic(module_map)
@@ -157,10 +159,7 @@ class TestWarmupThread:
             loaded = _run_warmup_logic({})
             results.append(len(loaded))
 
-        threads = [
-            threading.Thread(target=_target, daemon=True, name=f"AurikWarmup-{i}")
-            for i in range(5)
-        ]
+        threads = [threading.Thread(target=_target, daemon=True, name=f"AurikWarmup-{i}") for i in range(5)]
         for t in threads:
             t.start()
         for t in threads:
@@ -173,7 +172,6 @@ class TestWarmupThread:
         """_warmup_models_background muss aus Aurik910.main importierbar sein
         (ohne Qt oder echte ONNX-Modelle)."""
         import sys
-        import importlib
 
         # Stub Qt-Imports bevor main.py geladen wird
         for qt_mod in ("PyQt5", "PyQt5.QtCore", "PyQt5.QtWidgets"):
@@ -195,22 +193,27 @@ class TestWarmupThread:
                         AlignCenter=132,
                     )
                 elif qt_mod == "PyQt5.QtWidgets":
-                    stub.QApplication = type("QApplication", (), {
-                        "setAttribute": staticmethod(lambda *a, **k: None),
-                        "exec_": lambda self: 0,
-                    })
+                    stub.QApplication = type(
+                        "QApplication",
+                        (),
+                        {
+                            "setAttribute": staticmethod(lambda *a, **k: None),
+                            "exec_": lambda self: 0,
+                        },
+                    )
                 sys.modules[qt_mod] = stub
 
         # Jetzt sicher importieren (ohne ModernMainWindow zu instanziieren)
         try:
             import importlib.util
             import pathlib
+
             spec = importlib.util.spec_from_file_location(
                 "Aurik910_main_stub",
                 pathlib.Path("Aurik910/main.py"),
             )
             assert spec is not None
-            module = importlib.util.module_from_spec(spec)
+            importlib.util.module_from_spec(spec)
             # __spec__ setzen aber exec NICHT aufrufen → nur Definitionen laden
             # Wir prüfen nur ob die Funktion im Source vorhanden ist
             src = pathlib.Path("Aurik910/main.py").read_text()
@@ -232,9 +235,9 @@ class TestWarmupThread:
     def test_10_exception_in_accessor_continues_loop(self):
         """Wenn erstes Plugin wirft, läuft Schleife für zweites Plugin weiter."""
         module_map = {
-            "plugins.first":  ("get_first",  True),   # raises
+            "plugins.first": ("get_first", True),  # raises
             "plugins.second": ("get_second", False),
-            "plugins.third":  ("get_third",  False),
+            "plugins.third": ("get_third", False),
         }
         loaded = _run_warmup_logic(module_map)
         assert "get_second" in loaded

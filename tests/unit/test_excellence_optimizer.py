@@ -8,20 +8,20 @@ Micro-Dynamic Re-injection, Harmonic Reinforcement, OLA Smoothing).
 from __future__ import annotations
 
 import math
+
 import numpy as np
-import pytest
 
 np.random.seed(42)
 
 from backend.core.excellence_optimizer import (
-    ExcellenceOptimizer,
+    MATERIAL_PROFILES,
     ExcellenceContext,
+    ExcellenceOptimizer,
     ExcellenceResult,
     MaterialProfile,
-    MATERIAL_PROFILES,
     analyze_context,
-    optimize_for_excellence,
     map_panns_to_profile,
+    optimize_for_excellence,
 )
 
 SR = 48000
@@ -60,9 +60,9 @@ class TestExcellenceOptimizerImport:
 
     def test_04_material_profile_fields(self):
         import dataclasses
+
         fields = {f.name for f in dataclasses.fields(MaterialProfile)}
-        required = {"name", "flux_smoothing_max", "target_cv_min",
-                    "modulation_strength", "harm_boost_db", "ola_ms"}
+        required = {"name", "flux_smoothing_max", "target_cv_min", "modulation_strength", "harm_boost_db", "ola_ms"}
         assert required.issubset(fields)
 
     def test_05_instantiate_default(self):

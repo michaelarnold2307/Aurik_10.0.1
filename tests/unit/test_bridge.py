@@ -17,16 +17,14 @@ from __future__ import annotations
 import importlib
 import inspect
 import threading
-import time
-import types
 
 import numpy as np
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures / Helpers
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def bridge():
@@ -37,6 +35,7 @@ def bridge():
 # ---------------------------------------------------------------------------
 # 1. Grundlegender Import + __all__
 # ---------------------------------------------------------------------------
+
 
 class TestBridgeImport:
     """Bridge-Modul ist importierbar und hat valides __all__."""
@@ -121,15 +120,11 @@ class TestPflichtFunktionenVorhanden:
 
     @pytest.mark.parametrize("name", PFLICHT_FUNKTIONEN)
     def test_funktion_im_modul(self, bridge, name):
-        assert hasattr(bridge, name), (
-            f"Pflicht-Bridge-Funktion '{name}' fehlt — Spec §11 Softwareschichten-Architektur"
-        )
+        assert hasattr(bridge, name), f"Pflicht-Bridge-Funktion '{name}' fehlt — Spec §11 Softwareschichten-Architektur"
 
     @pytest.mark.parametrize("name", PFLICHT_FUNKTIONEN)
     def test_funktion_in_all(self, bridge, name):
-        assert name in bridge.__all__, (
-            f"'{name}' fehlt in bridge.__all__ — muss explizit exportiert werden"
-        )
+        assert name in bridge.__all__, f"'{name}' fehlt in bridge.__all__ — muss explizit exportiert werden"
 
     @pytest.mark.parametrize("name", PFLICHT_FUNKTIONEN)
     def test_funktion_ist_callable(self, bridge, name):
@@ -140,6 +135,7 @@ class TestPflichtFunktionenVorhanden:
 # ---------------------------------------------------------------------------
 # 3. export_guard — NaN/Inf-Bereinigung und Clipping (§3.1 Spec 08)
 # ---------------------------------------------------------------------------
+
 
 class TestExportGuard:
     """export_guard bereinigt Audio korrekt (§3.1 Spec 08)."""
@@ -192,6 +188,7 @@ class TestExportGuard:
 # 4. Defect-Cache — FIFO, Thread-Sicherheit, Grenzwerte
 # ---------------------------------------------------------------------------
 
+
 class TestDefectCache:
     """Defect-Cache ist Thread-sicher und begrenzt auf 64 Einträge (FIFO)."""
 
@@ -226,7 +223,7 @@ class TestDefectCache:
         for i in range(70):
             bridge.cache_defect_result(f"/tmp/fifo_{i}.wav", i)
         # Die ersten 6 sollten verdrängt worden sein
-        missing = [i for i in range(6) if bridge.get_cached_defect_result(f"/tmp/fifo_{i}.wav") is not None]
+        [i for i in range(6) if bridge.get_cached_defect_result(f"/tmp/fifo_{i}.wav") is not None]
         # neueste 64 müssen vorhanden sein
         present = [i for i in range(6, 70) if bridge.get_cached_defect_result(f"/tmp/fifo_{i}.wav") is not None]
         assert len(present) == 64, f"FIFO-Limit nicht korrekt: {len(present)} von 64 vorhanden"
@@ -256,6 +253,7 @@ class TestDefectCache:
 # 5. get_audio_exporter_class — kein Hard-Fail (optional, §11.3)
 # ---------------------------------------------------------------------------
 
+
 class TestAudioExporterClass:
     """get_audio_exporter_class() gibt None zurück statt Exception (§11.3)."""
 
@@ -277,22 +275,19 @@ class TestAudioExporterClass:
 # 6. get_ml_memory_budget_status — immer Dict (§2.37)
 # ---------------------------------------------------------------------------
 
+
 class TestMlMemoryBudgetStatus:
     """get_ml_memory_budget_status() gibt immer ein Dict zurück."""
 
     def test_returns_dict(self, bridge):
         result = bridge.get_ml_memory_budget_status()
-        assert isinstance(result, dict), (
-            f"get_ml_memory_budget_status() muss dict zurückgeben, nicht {type(result)}"
-        )
+        assert isinstance(result, dict), f"get_ml_memory_budget_status() muss dict zurückgeben, nicht {type(result)}"
 
     def test_fallback_dict_has_required_keys(self, bridge):
         """Pflicht-Keys aus ml_memory_budget.get_status() sind vorhanden."""
         result = bridge.get_ml_memory_budget_status()
         for key in ("allocated_gb", "free_gb", "max_gb", "models"):
-            assert key in result, (
-                f"Pflicht-Key '{key}' fehlt in get_ml_memory_budget_status()-Rückgabe"
-            )
+            assert key in result, f"Pflicht-Key '{key}' fehlt in get_ml_memory_budget_status()-Rückgabe"
 
     def test_values_are_numeric_or_dict(self, bridge):
         result = bridge.get_ml_memory_budget_status()
@@ -305,6 +300,7 @@ class TestMlMemoryBudgetStatus:
 # ---------------------------------------------------------------------------
 # 7. warmup_models_background — kein blockierendes sleep() (§9.7.4)
 # ---------------------------------------------------------------------------
+
 
 class TestWarmupModelsBackground:
     """warmup_models_background() blockiert nicht durch time.sleep() (§9.7.4)."""
@@ -333,6 +329,7 @@ class TestWarmupModelsBackground:
 # 8. Qualitätsbewertungs-Wrapper (neu hinzugefügt §8.1)
 # ---------------------------------------------------------------------------
 
+
 class TestQualitaetsBewertungsWrapper:
     """Neue Qualitätsbewertungs-Accessor sind vorhanden und aufrufbar."""
 
@@ -344,9 +341,7 @@ class TestQualitaetsBewertungsWrapper:
 
     def test_get_adaptive_goals_fn_returns_callable(self, bridge):
         result = bridge.get_adaptive_goals_fn()
-        assert callable(result), (
-            f"get_adaptive_goals_fn() muss einen Callable zurückgeben, nicht {type(result)}"
-        )
+        assert callable(result), f"get_adaptive_goals_fn() muss einen Callable zurückgeben, nicht {type(result)}"
 
     def test_get_mushra_evaluator_returns_something(self, bridge):
         result = bridge.get_mushra_evaluator()
@@ -365,6 +360,7 @@ class TestQualitaetsBewertungsWrapper:
 # 9. TYPE_CHECKING — keine zirkulären Imports (§11 Spec 08)
 # ---------------------------------------------------------------------------
 
+
 class TestTypeCheckingGuards:
     """TYPE_CHECKING-Guards erzeugen keine zirkulären Imports."""
 
@@ -376,6 +372,7 @@ class TestTypeCheckingGuards:
     def test_no_circular_import_via_typing(self):
         """Erneuter Import ist idempotent."""
         import importlib
+
         m1 = importlib.import_module("backend.api.bridge")
         m2 = importlib.import_module("backend.api.bridge")
         assert m1 is m2, "Modul wird bei erneutem Import neu geladen (kein Caching)"
@@ -384,6 +381,7 @@ class TestTypeCheckingGuards:
 # ---------------------------------------------------------------------------
 # 10. Lazy-Import-Muster — Rückgabetypen der wichtigsten Wrapper
 # ---------------------------------------------------------------------------
+
 
 class TestLazyImportMuster:
     """Lazy-Import-Wrapper geben den spezifizierten Typ zurück."""
@@ -424,6 +422,7 @@ class TestLazyImportMuster:
 # 11. resolve_pipeline_fail_reason — strukturierter Fail-Reason (§RELEASE_MUST)
 # ---------------------------------------------------------------------------
 
+
 class TestResolvePipelineFailReason:
     """resolve_pipeline_fail_reason gibt immer eine Zeichenkette zurück."""
 
@@ -449,6 +448,7 @@ class TestResolvePipelineFailReason:
 # 12. normalize_pipeline_health_state — Typ-Sicherheit
 # ---------------------------------------------------------------------------
 
+
 class TestNormalizePipelineHealthState:
     """normalize_pipeline_health_state ist robust gegen unbekannte Werte."""
 
@@ -462,6 +462,4 @@ class TestNormalizePipelineHealthState:
 
     def test_property_value_exists(self, bridge):
         result = bridge.normalize_pipeline_health_state("degraded")
-        assert hasattr(result, "value"), (
-            "normalize_pipeline_health_state() muss Objekt mit .value-Attribut zurückgeben"
-        )
+        assert hasattr(result, "value"), "normalize_pipeline_health_state() muss Objekt mit .value-Attribut zurückgeben"

@@ -5,16 +5,18 @@ Uses Pydantic Settings for type-safe, validated configuration with environment v
 
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DSPConfig(BaseModel):
     """DSP Processing Configuration"""
 
-    default_sr: int = Field(default=48000, ge=8000, le=96000, description="Default sample rate in Hz (Aurik canonical SR)")
+    default_sr: int = Field(
+        default=48000, ge=8000, le=96000, description="Default sample rate in Hz (Aurik canonical SR)"
+    )
     max_duration: int = Field(default=7200, ge=1, description="Maximum audio duration in seconds")
     buffer_size: int = Field(default=2048, ge=64, le=8192, description="Audio buffer size")
     hop_length: int = Field(default=512, ge=32, le=4096, description="STFT hop length")
@@ -32,7 +34,9 @@ class DSPConfig(BaseModel):
 class DockerConfig(BaseModel):
     """Docker/Container Configuration"""
 
-    enabled: bool = Field(default=False, description="Enable Docker-based processing (RELEASE_MUST: False for production)")
+    enabled: bool = Field(
+        default=False, description="Enable Docker-based processing (RELEASE_MUST: False for production)"
+    )
     voice_conversion_container: str = Field(default="aurik_voice_conversion_container")
     codec_enhance_container: str = Field(default="aurik_hifigan_container")
     timeout: int = Field(default=300, ge=10, description="Docker operation timeout in seconds")
@@ -43,7 +47,7 @@ class MLConfig(BaseModel):
     """Machine Learning Configuration"""
 
     # §4.4: versa_plugin ersetzt cdpam_plugin als non-reference MOS-Metrik (April 2026)
-    feature_plugins: List[str] = Field(default_factory=lambda: ["panns_integration", "versa_plugin"])
+    feature_plugins: list[str] = Field(default_factory=lambda: ["panns_integration", "versa_plugin"])
     model_cache_dir: Path = Field(default=Path("models/"), description="ML model cache directory")
     use_gpu: bool = Field(default=False, description="Enable GPU acceleration (RELEASE_MUST: False — CPU-only product)")
     batch_size: int = Field(default=1, ge=1, le=128, description="Batch size for ML inference")
@@ -53,8 +57,10 @@ class MLConfig(BaseModel):
 class QualityConfig(BaseModel):
     """Quality Metrics Configuration"""
 
-    sdr_metric: Literal["mir_eval"] = Field(  # §4.4: pesq/dnsmos/nisqa/cdpam verboten für Musikrestaurierung — nur mir_eval
-        default="mir_eval", description="Primary SDR metric"
+    sdr_metric: Literal["mir_eval"] = (
+        Field(  # §4.4: pesq/dnsmos/nisqa/cdpam verboten für Musikrestaurierung — nur mir_eval
+            default="mir_eval", description="Primary SDR metric"
+        )
     )
     min_quality_threshold: float = Field(default=0.7, ge=0.0, le=1.0, description="Minimum quality threshold")
     enable_quality_gates: bool = Field(default=True, description="Enable quality gate checks")
@@ -76,7 +82,7 @@ class PerformanceConfig(BaseModel):
 
     enable_caching: bool = Field(default=True, description="Enable computation caching")
     cache_ttl_seconds: int = Field(default=3600, ge=60, description="Cache TTL in seconds")
-    max_workers: Optional[int] = Field(default=None, description="Max parallel workers (None = auto)")
+    max_workers: int | None = Field(default=None, description="Max parallel workers (None = auto)")
     enable_profiling: bool = Field(default=False, description="Enable performance profiling")
 
 
@@ -156,6 +162,7 @@ def cfg() -> dict:
 
 if __name__ == "__main__":
     import logging as _logging
+
     _logging.basicConfig(level=_logging.DEBUG)
     _main_logger = _logging.getLogger("aurik.config.settings")
     # Sanity-check: dump configuration via logger (never print() in production code)

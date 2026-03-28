@@ -11,7 +11,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -50,7 +49,7 @@ def load_config(path: Path) -> AttrDict:
 # utils.py imports matplotlib (broken under NumPy 2.x) only for plot helpers —
 # the class itself is pure torch, so we inject it directly into sys.modules.
 # ---------------------------------------------------------------------------
-import types as _types  # noqa: E402
+import types as _types
 
 
 def _make_utils_stub() -> _types.ModuleType:
@@ -59,7 +58,7 @@ def _make_utils_stub() -> _types.ModuleType:
 
     mod = _types.ModuleType("utils")
 
-    class LearnableSigmoid2d(_nn.Module):  # noqa: N801
+    class LearnableSigmoid2d(_nn.Module):
         def __init__(self, in_features: int, beta: float = 1.0) -> None:
             super().__init__()
             self.beta = beta
@@ -77,13 +76,14 @@ sys.modules.setdefault("utils", _make_utils_stub())
 
 # pesq is only used in training helpers (pesq_score / eval_pesq), not in forward()
 try:
-    import pesq as _pesq_mod  # noqa: F401
+    pass
 except ImportError:
     sys.modules.setdefault("pesq", _types.ModuleType("pesq"))
 
 
 def build_model(h: AttrDict) -> nn.Module:
-    from models.model import MPNet  # noqa: PLC0415
+    from models.model import MPNet
+
     return MPNet(h)
 
 
@@ -137,12 +137,16 @@ def export():
 
     # Quick validation
     try:
-        import onnxruntime as ort  # noqa: PLC0415
+        import onnxruntime as ort
+
         sess = ort.InferenceSession(str(OUTPUT_ONNX), providers=["CPUExecutionProvider"])
-        out = sess.run(None, {
-            "noisy_amp": noisy_amp.numpy(),
-            "noisy_pha": noisy_pha.numpy(),
-        })
+        out = sess.run(
+            None,
+            {
+                "noisy_amp": noisy_amp.numpy(),
+                "noisy_pha": noisy_pha.numpy(),
+            },
+        )
         print(f"✅ ONNX validation OK — output shapes: {[o.shape for o in out]}")
     except ImportError:
         print("onnxruntime nicht installiert — Validierung übersprungen")

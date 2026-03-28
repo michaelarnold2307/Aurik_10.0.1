@@ -34,7 +34,7 @@ class MockNeutralModule:
     def __init__(self) -> None:
         pass
 
-    def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> np.ndarray:  # noqa: ARG002
+    def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> np.ndarray:
         return np.copy(audio)
 
 
@@ -44,7 +44,7 @@ class MockGoodModule:
     def __init__(self) -> None:
         pass
 
-    def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> np.ndarray:  # noqa: ARG002
+    def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> np.ndarray:
         # Minimale, nicht-destruktive Operation (0.1 % Gain-Trim) für Testzwecke
         return np.clip(audio * 0.999, -1.0, 1.0).astype(audio.dtype)
 
@@ -55,7 +55,7 @@ class MockDestructiveModule:
     def __init__(self) -> None:
         pass
 
-    def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> np.ndarray:  # noqa: ARG002
+    def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> np.ndarray:
         # Stark übersteuert + verrauscht: Quality Gate soll anschlagen
         np.random.seed(99)
         noisy = audio * 8.0 + 0.6 * np.random.randn(*audio.shape).astype(audio.dtype)

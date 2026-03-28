@@ -9,6 +9,7 @@ Klasse heißt dort: PipelineUncertaintyEstimator
 
 UncertaintyQuantifier ist der Spec-konforme Alias.
 """
+
 from backend.core.pipeline_uncertainty import (
     PipelineConfidence,
     PipelineUncertaintyEstimator,

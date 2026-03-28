@@ -30,10 +30,9 @@ Usage:
 import argparse
 import json
 import logging
-from pathlib import Path
 import sys
 import time
-from typing import Dict, List, Optional, Tuple
+from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -161,7 +160,7 @@ class ModelRegistryQuantizer:
             elapsed = time.time() - start_time
 
             if not success:
-                logger.error(f"  ✗ Quantization failed")
+                logger.error("  ✗ Quantization failed")
                 return False, None
 
             # Get stats

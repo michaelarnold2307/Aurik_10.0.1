@@ -19,14 +19,17 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Optional
 
 import numpy as np
 from scipy.ndimage import median_filter
 from scipy.signal import (
     butter,
-    istft as scipy_istft,
     sosfilt,
+)
+from scipy.signal import (
+    istft as scipy_istft,
+)
+from scipy.signal import (
     stft as scipy_stft,
 )
 

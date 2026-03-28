@@ -27,13 +27,13 @@ Referenzen:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import logging
 import math
-from pathlib import Path
 import threading
 import time
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np

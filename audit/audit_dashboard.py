@@ -8,8 +8,8 @@ audit_dashboard.py – Minimaler Dashboard-Server für Policy-/Audit-Übersicht
 
 import os
 
-from flask import Flask, render_template_string
 import yaml
+from flask import Flask, render_template_string
 
 template = """
 <!DOCTYPE html>

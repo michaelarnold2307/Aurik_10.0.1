@@ -17,8 +17,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.core.performance_guard import QualityMode
 from backend.core.defect_scanner import MaterialType
+from backend.core.performance_guard import QualityMode
 from backend.core.unified_restorer_v3 import RestorationConfig, UnifiedRestorerV3
 
 
@@ -155,7 +155,7 @@ def test_synthetic_audio_restore():
     print(f"   Material: {result.material_type.value}")
     print(f"   Time: {elapsed:.2f}s")
     print(f"   RT Factor: {result.rt_factor:.2f}×")
-    print(f"   Quality: {result.quality_estimate*100:.1f}%")
+    print(f"   Quality: {result.quality_estimate * 100:.1f}%")
     print(f"   Phases Executed: {len(result.phases_executed)}")
     print(f"   Phases Skipped: {len(result.phases_skipped)}")
 
@@ -194,12 +194,12 @@ def test_performance_guard_integration():
     print("\n✅ Performance Guard Results:")
     print(f"   Status: {perf['status']}")
     print(f"   RT Factor: {perf['rt_factor']:.2f}×")
-    print(f"   Quality Degradation: {perf['quality_degradation']*100:.1f}%")
+    print(f"   Quality Degradation: {perf['quality_degradation'] * 100:.1f}%")
 
     # Sollte 3× RT Limit einhalten
-    assert (
-        result.rt_factor <= 3.0 or not config.enforce_3x_rt
-    ), f"RT Factor should be <= 3× (was {result.rt_factor:.2f}×)"
+    assert result.rt_factor <= 3.0 or not config.enforce_3x_rt, (
+        f"RT Factor should be <= 3× (was {result.rt_factor:.2f}×)"
+    )
     print("   ✅ 3× RT Limit enforced (PASS)")
 
     print("\n✅ TEST 5 PASSED\n")
@@ -280,7 +280,7 @@ def test_config_variations():
         result = restorer.restore(audio, sample_rate=sr)
         elapsed = time.time() - start_time
 
-        print(f"   Time: {elapsed:.2f}s, RT: {result.rt_factor:.2f}×, Quality: {result.quality_estimate*100:.1f}%")
+        print(f"   Time: {elapsed:.2f}s, RT: {result.rt_factor:.2f}×, Quality: {result.quality_estimate * 100:.1f}%")
 
     # Test different core counts
     print("\nTesting different core counts...")
@@ -330,7 +330,7 @@ def run_all_tests():
     print(f"Total Tests: {len(tests)}")
     print(f"✅ Passed: {passed}")
     print(f"❌ Failed: {failed}")
-    print(f"Success Rate: {passed/len(tests)*100:.1f}%")
+    print(f"Success Rate: {passed / len(tests) * 100:.1f}%")
 
     if failed == 0:
         print("\n🎉 ALL TESTS PASSED!")

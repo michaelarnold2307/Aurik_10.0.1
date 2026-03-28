@@ -115,12 +115,12 @@ class ApolloPlugin:
 
     MODELS_DIR: Path = Path(__file__).parent.parent / "models" / "apollo"
     _MODEL_FILENAME: str = "apollo_model.pt"  # TorchScript (sr=44100, stft/istft nativ)
-    _APOLLO_SR: int = 44100                   # Interne Modell-Sample-Rate
+    _APOLLO_SR: int = 44100  # Interne Modell-Sample-Rate
     N_FFT: int = 2048
     HOP: int = 512
 
     def __init__(self) -> None:
-        self._torch_model = None             # torch.jit.ScriptModule
+        self._torch_model = None  # torch.jit.ScriptModule
         self._model_loaded: bool = False
         self._fallback_active: bool = False
         self._try_load_model()
@@ -148,14 +148,13 @@ class ApolloPlugin:
             torch.set_num_threads(_os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
             model_path = self.MODELS_DIR / self._MODEL_FILENAME
             if model_path.exists():
-                self._torch_model = torch.jit.load(
-                    str(model_path), map_location="cpu"
-                )
+                self._torch_model = torch.jit.load(str(model_path), map_location="cpu")
                 self._torch_model.eval()
                 self._model_loaded = True
                 logger.info("🟡 Apollo TorchScript geladen: %s", model_path.name)
                 try:
                     from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
+
                     _reg_plm(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB, unload_fn=_unload_apollo)
                 except Exception:
                     pass
@@ -170,6 +169,7 @@ class ApolloPlugin:
             self._fallback_active = True
             try:
                 from backend.core.ml_memory_budget import release as _release
+
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -178,6 +178,7 @@ class ApolloPlugin:
             self._fallback_active = True
             try:
                 from backend.core.ml_memory_budget import release as _release
+
                 _release(self._BUDGET_NAME)
             except Exception:
                 pass
@@ -292,9 +293,7 @@ class ApolloPlugin:
             # 4. Länge angleichen + Guard
             n = min(len(audio), len(reconstructed))
             result = audio.copy()
-            result[:n] = np.nan_to_num(
-                reconstructed[:n], nan=0.0, posinf=0.0, neginf=0.0
-            )
+            result[:n] = np.nan_to_num(reconstructed[:n], nan=0.0, posinf=0.0, neginf=0.0)
             return np.clip(result, -1.0, 1.0).astype(np.float32)
 
         except Exception as exc:
@@ -417,6 +416,7 @@ def _unload_apollo() -> None:
     _instance = None  # type: ignore[assignment]
     try:
         import gc
+
         gc.collect()
     except Exception:
         pass

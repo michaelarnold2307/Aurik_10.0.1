@@ -921,6 +921,7 @@ class DefectScanner:
                 DefectType.CLICKS,
                 DefectType.CRACKLE,
                 DefectType.CLIPPING,
+                DefectType.SIBILANCE,
             }
             for _edt, _edet_fn in _EVENT_DETECTORS:
                 if _edt not in scores:
@@ -3839,6 +3840,7 @@ class DefectScanner:
             hop_sib = max(1, win_sib // 2)
             sib_bursts = 0
             n_windows = 0
+            max_frac_w = 0.0
             locations: list[tuple[float, float]] = []
             in_event = False
             ev_start = 0.0
@@ -3863,6 +3865,7 @@ class DefectScanner:
                 c_total = float(np.sum(cs) + 1e-20)
                 c_sib = float(np.sum(cs[(cf >= sib_lo) & (cf <= sib_hi)]))
                 frac_w = c_sib / c_total
+                max_frac_w = max(max_frac_w, frac_w)
                 n_windows += 1
 
                 t_s = i / self.sample_rate
@@ -3883,10 +3886,15 @@ class DefectScanner:
             if burst_ratio > 0.60:
                 sib_frac *= 0.3  # sustained brightness penalty
 
+            # Peak-window salience avoids long-file dilution of short, harsh bursts.
+            sev_peak = float(np.clip((max_frac_w - (sib_burst_threshold + 0.03)) / 0.35, 0.0, 1.0))
+            if burst_ratio > 0.60:
+                sev_peak *= 0.2
+
             # --- Combined severity ---
             sev_frac = float(np.clip((sib_frac - 0.10) / 0.22, 0.0, 1.0))
             sev_sharp = float(np.clip((sharpness - 0.08) / 0.15, 0.0, 1.0))
-            raw_severity = 0.50 * sev_frac + 0.30 * sev_sharp + 0.20 * burst_ratio
+            raw_severity = 0.35 * sev_frac + 0.25 * sev_sharp + 0.15 * burst_ratio + 0.25 * sev_peak
 
             threshold = self.thresholds.get(DefectType.SIBILANCE, 0.5)
             if raw_severity < threshold * 0.15:

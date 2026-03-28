@@ -13,10 +13,10 @@ Ausführen:
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 import pathlib
 import shutil
 import sys
+from datetime import datetime
 
 AURIK_DIR = pathlib.Path.home() / ".aurik"
 

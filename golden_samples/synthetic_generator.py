@@ -21,10 +21,10 @@ Autor: AI Team
 Datum: 11. Februar 2026
 """
 
-import json
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+import json
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 

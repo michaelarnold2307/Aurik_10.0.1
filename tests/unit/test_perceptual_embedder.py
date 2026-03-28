@@ -8,7 +8,7 @@ Distanz verschiedener Signale, Segment-Embedding, Edge-Cases.
 
 from __future__ import annotations
 
-import math
+
 import numpy as np
 import pytest
 
@@ -270,8 +270,7 @@ class TestEdgeCases:
             return
         vec = emb.vector if hasattr(emb, "vector") else emb.embedding
         assert np.all(np.isfinite(vec)), (
-            f"NaN-Eingang ergab nicht-finites Embedding: "
-            f"{np.sum(~np.isfinite(vec))} nicht-finite Werte"
+            f"NaN-Eingang ergab nicht-finites Embedding: {np.sum(~np.isfinite(vec))} nicht-finite Werte"
         )
 
     def test_34_perceptual_distance_symmetric(self):

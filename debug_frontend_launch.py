@@ -11,9 +11,9 @@ Führt keine Änderungen am Produktions-Code durch — rein additives Patching.
 """
 
 import logging
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 # ── Workspace root ──────────────────────────────────────────────────────────
 _ROOT = Path(__file__).parent
@@ -299,6 +299,5 @@ if __name__ == "__main__":
     # Ersetze sys.modules-Eintrag damit main.py die instrumentierte Klasse findet
 
     from Aurik910.main import main  # type: ignore[import]
-    import Aurik910.ui.modern_window  # noqa: F401  (already imported above)
 
     main()

@@ -8,11 +8,13 @@ Usage:
     HF_TOKEN=hf_... python scripts/upload_models_to_hf.py
     HF_TOKEN=hf_... python scripts/upload_models_to_hf.py --dry-run
 """
+
 from __future__ import annotations
+
+import logging
 import os
 import sys
 import time
-import logging
 from pathlib import Path
 
 logging.basicConfig(
@@ -25,9 +27,9 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-HF_REPO   = "michaelarnold2307/aurik-models"
-MODELS    = Path("/media/michael/Software 4TB/Aurik_Standalone/models")
-DRY_RUN   = "--dry-run" in sys.argv
+HF_REPO = "michaelarnold2307/aurik-models"
+MODELS = Path("/media/michael/Software 4TB/Aurik_Standalone/models")
+DRY_RUN = "--dry-run" in sys.argv
 
 # ---------------------------------------------------------------------------
 # Files to upload: (local_relative_to_models, path_in_hf_repo)
@@ -35,36 +37,36 @@ DRY_RUN   = "--dry-run" in sys.argv
 # ---------------------------------------------------------------------------
 UPLOAD_LIST: list[tuple[str, str]] = [
     # ── DeepFilterNet v3.II (custom ONNX export) ───────────────────────────
-    ("deepfilternet_v3_ii/enc.onnx",          "deepfilternet_v3_ii/enc.onnx"),
-    ("deepfilternet_v3_ii/dec.onnx",          "deepfilternet_v3_ii/dec.onnx"),
-    ("deepfilternet_v3_ii/erb_dec.onnx",      "deepfilternet_v3_ii/erb_dec.onnx"),
+    ("deepfilternet_v3_ii/enc.onnx", "deepfilternet_v3_ii/enc.onnx"),
+    ("deepfilternet_v3_ii/dec.onnx", "deepfilternet_v3_ii/dec.onnx"),
+    ("deepfilternet_v3_ii/erb_dec.onnx", "deepfilternet_v3_ii/erb_dec.onnx"),
     # ── MDX23C / Kim (custom ONNX export) ─────────────────────────────────
-    ("mdx23c/models/Kim_Vocal_2.onnx",        "mdx23c/Kim_Vocal_2.onnx"),
-    ("mdx23c/models/Kim_Inst.onnx",           "mdx23c/Kim_Inst.onnx"),
-    ("mdx23c/models/MDX23C-8KFFT-InstVoc_HQ.ckpt",   "mdx23c/MDX23C-8KFFT-InstVoc_HQ.ckpt"),
+    ("mdx23c/models/Kim_Vocal_2.onnx", "mdx23c/Kim_Vocal_2.onnx"),
+    ("mdx23c/models/Kim_Inst.onnx", "mdx23c/Kim_Inst.onnx"),
+    ("mdx23c/models/MDX23C-8KFFT-InstVoc_HQ.ckpt", "mdx23c/MDX23C-8KFFT-InstVoc_HQ.ckpt"),
     ("mdx23c/models/MDX23C-8KFFT-InstVoc_HQ_2.ckpt", "mdx23c/MDX23C-8KFFT-InstVoc_HQ_2.ckpt"),
     # ── Kim standalone copies ──────────────────────────────────────────────
-    ("kim_inst/kim_inst.onnx",                "mdx23c/Kim_Inst.onnx"),
-    ("kim_vocal_2/kim_vocal_2.onnx",          "mdx23c/Kim_Vocal_2.onnx"),
+    ("kim_inst/kim_inst.onnx", "mdx23c/Kim_Inst.onnx"),
+    ("kim_vocal_2/kim_vocal_2.onnx", "mdx23c/Kim_Vocal_2.onnx"),
     # ── CREPE full (custom ONNX export) ───────────────────────────────────
-    ("crepe/crepe/model-full.onnx",           "crepe/model-full.onnx"),
+    ("crepe/crepe/model-full.onnx", "crepe/model-full.onnx"),
     # ── Apollo (codec restoration) ─────────────────────────────────────────
-    ("apollo/apollo_model.onnx",              "apollo/apollo_model.onnx"),
+    ("apollo/apollo_model.onnx", "apollo/apollo_model.onnx"),
     # ── HiFi-GAN (custom ONNX export) ─────────────────────────────────────
-    ("hifi_gan/hifi_gan.onnx",                "hifi_gan/hifi_gan.onnx"),
+    ("hifi_gan/hifi_gan.onnx", "hifi_gan/hifi_gan.onnx"),
     # ── Banquet Vinyl (Aurik-original) ────────────────────────────────────
-    ("banquet/banquet_vinyl_final.onnx",      "banquet/banquet_vinyl_final.onnx"),
+    ("banquet/banquet_vinyl_final.onnx", "banquet/banquet_vinyl_final.onnx"),
     ("banquet/banquet_vinyl_final.onnx.data", "banquet/banquet_vinyl_final.onnx.data"),
-    ("banquet/ev-pre-aug.ckpt",               "banquet/ev-pre-aug.ckpt"),
+    ("banquet/ev-pre-aug.ckpt", "banquet/ev-pre-aug.ckpt"),
     # ── DCCRN ── VERBOTEN (§4.4: ersetzt durch MP-SENet / DeepFilterNet) ──────
     # ("dccrn/dccrn.onnx", ...)  # REMOVED — DCCRN ist VERBOTEN in Aurik 9
     # ── DiffWave (custom ONNX export) ─────────────────────────────────────
-    ("diffwave/diffwave_model.onnx",          "diffwave/diffwave_model.onnx"),
-    ("diffwave/diffwave_model.onnx.data",     "diffwave/diffwave_model.onnx.data"),
+    ("diffwave/diffwave_model.onnx", "diffwave/diffwave_model.onnx"),
+    ("diffwave/diffwave_model.onnx.data", "diffwave/diffwave_model.onnx.data"),
     # ── FullSubNet+ (custom ONNX export) ──────────────────────────────────
-    ("fullsubnet_plus/fullsubnet_plus_1x1x257x100.onnx",  "fullsubnet_plus/fullsubnet_plus_1x1x257x100.onnx"),
-    ("fullsubnet_plus/fullsubnet_plus_1x1x257x200.onnx",  "fullsubnet_plus/fullsubnet_plus_1x1x257x200.onnx"),
-    ("fullsubnet_plus/fullsubnet_plus_1x1x257x500.onnx",  "fullsubnet_plus/fullsubnet_plus_1x1x257x500.onnx"),
+    ("fullsubnet_plus/fullsubnet_plus_1x1x257x100.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x100.onnx"),
+    ("fullsubnet_plus/fullsubnet_plus_1x1x257x200.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x200.onnx"),
+    ("fullsubnet_plus/fullsubnet_plus_1x1x257x500.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x500.onnx"),
     ("fullsubnet_plus/fullsubnet_plus_1x1x257x1000.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x1000.onnx"),
     ("fullsubnet_plus/fullsubnet_plus_1x1x257x2000.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x2000.onnx"),
     ("fullsubnet_plus/fullsubnet_plus_1x1x257x3000.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x3000.onnx"),
@@ -72,41 +74,62 @@ UPLOAD_LIST: list[tuple[str, str]] = [
     ("fullsubnet_plus/fullsubnet_plus_1x1x257x7000.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x7000.onnx"),
     ("fullsubnet_plus/fullsubnet_plus_1x1x257x8000.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x8000.onnx"),
     ("fullsubnet_plus/fullsubnet_plus_1x1x257x10000.onnx", "fullsubnet_plus/fullsubnet_plus_1x1x257x10000.onnx"),
-    ("fullsubnet_plus/model.onnx",            "fullsubnet_plus/model.onnx"),
+    ("fullsubnet_plus/model.onnx", "fullsubnet_plus/model.onnx"),
     # ── PANNs (custom ONNX export) ────────────────────────────────────────
-    ("panns/wavegram_logmel_cnn14.onnx",           "panns/wavegram_logmel_cnn14.onnx"),
-    ("panns/wavegram_logmel_cnn14.onnx.data",      "panns/wavegram_logmel_cnn14.onnx.data"),
-    ("panns/panns_wavegram_logmel_cnn14.onnx",     "panns/panns_wavegram_logmel_cnn14.onnx"),
+    ("panns/wavegram_logmel_cnn14.onnx", "panns/wavegram_logmel_cnn14.onnx"),
+    ("panns/wavegram_logmel_cnn14.onnx.data", "panns/wavegram_logmel_cnn14.onnx.data"),
+    ("panns/panns_wavegram_logmel_cnn14.onnx", "panns/panns_wavegram_logmel_cnn14.onnx"),
     ("panns/panns_wavegram_logmel_cnn14.onnx.data", "panns/panns_wavegram_logmel_cnn14.onnx.data"),
     # ── HTDemucs 6s (custom ONNX export) ─────────────────────────────────
-    ("demucs/htdemucs_6s.onnx",               "demucs/htdemucs_6s.onnx"),
-    ("demucs/htdemucs_6s.onnx.data",          "demucs/htdemucs_6s.onnx.data"),
+    ("demucs/htdemucs_6s.onnx", "demucs/htdemucs_6s.onnx"),
+    ("demucs/htdemucs_6s.onnx.data", "demucs/htdemucs_6s.onnx.data"),
     # ── AudioLDM2 (custom ONNX export) ────────────────────────────────────
-    ("audioldm2/audioldm2.onnx",              "audioldm2/audioldm2.onnx"),
+    ("audioldm2/audioldm2.onnx", "audioldm2/audioldm2.onnx"),
     # ── AudioLM (custom ONNX export) ──────────────────────────────────────
-    ("audiolm/clap.rvq.950_no_fusion.semantic.onnx",      "audiolm/clap.rvq.950_no_fusion.semantic.onnx"),
+    ("audiolm/clap.rvq.950_no_fusion.semantic.onnx", "audiolm/clap.rvq.950_no_fusion.semantic.onnx"),
     ("audiolm/clap.rvq.950_no_fusion.semantic.onnx.data", "audiolm/clap.rvq.950_no_fusion.semantic.onnx.data"),
-    ("audiolm/coarse.transformer.18000.semantic.onnx",    "audiolm/coarse.transformer.18000.semantic.onnx"),
+    ("audiolm/coarse.transformer.18000.semantic.onnx", "audiolm/coarse.transformer.18000.semantic.onnx"),
     ("audiolm/coarse.transformer.18000.semantic.onnx.data", "audiolm/coarse.transformer.18000.semantic.onnx.data"),
-    ("audiolm/fine.transformer.24000.semantic.onnx",      "audiolm/fine.transformer.24000.semantic.onnx"),
+    ("audiolm/fine.transformer.24000.semantic.onnx", "audiolm/fine.transformer.24000.semantic.onnx"),
     ("audiolm/fine.transformer.24000.semantic.onnx.data", "audiolm/fine.transformer.24000.semantic.onnx.data"),
-    ("audiolm/semantic.transformer.14000.semantic.onnx",  "audiolm/semantic.transformer.14000.semantic.onnx"),
+    ("audiolm/semantic.transformer.14000.semantic.onnx", "audiolm/semantic.transformer.14000.semantic.onnx"),
     ("audiolm/semantic.transformer.14000.semantic.onnx.data", "audiolm/semantic.transformer.14000.semantic.onnx.data"),
     # ── MelBandRoformer (custom ONNX exports) ─────────────────────────────
-    ("melbandroformer/melbandroformer.onnx",              "melbandroformer/melbandroformer.onnx"),
-    ("melbandroformer/melbandroformer_optimized.onnx",    "melbandroformer/melbandroformer_optimized.onnx"),
-    ("melbandroformer/bs_conformer_medium.onnx",          "melbandroformer/bs_conformer_medium.onnx"),
-    ("melbandroformer/bs_conformer_medium_stft_decomp.onnx",     "melbandroformer/bs_conformer_medium_stft_decomp.onnx"),
-    ("melbandroformer/bs_conformer_medium_stft_decomp.onnx.data", "melbandroformer/bs_conformer_medium_stft_decomp.onnx.data"),
-    ("melbandroformer/bs_conformer_medium_stft_decomp_emb.onnx", "melbandroformer/bs_conformer_medium_stft_decomp_emb.onnx"),
-    ("melbandroformer/scnet_masked_xl_ihf.onnx",          "melbandroformer/scnet_masked_xl_ihf.onnx"),
-    ("melbandroformer/scnet_masked_xl_ihf.fixed.onnx",    "melbandroformer/scnet_masked_xl_ihf.fixed.onnx"),
-    ("melbandroformer/scnet_masked_xl_ihf_stft_decomp.onnx",     "melbandroformer/scnet_masked_xl_ihf_stft_decomp.onnx"),
-    ("melbandroformer/scnet_masked_xl_ihf_stft_decomp.onnx.data", "melbandroformer/scnet_masked_xl_ihf_stft_decomp.onnx.data"),
-    ("melbandroformer/scnet_masked_xl_ihf_stft_decomp_emb.onnx",         "melbandroformer/scnet_masked_xl_ihf_stft_decomp_emb.onnx"),
-    ("melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.onnx",         "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.onnx"),
-    ("melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.fixed.onnx",   "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.fixed.onnx"),
-    ("melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.reordered.onnx", "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.reordered.onnx"),
+    ("melbandroformer/melbandroformer.onnx", "melbandroformer/melbandroformer.onnx"),
+    ("melbandroformer/melbandroformer_optimized.onnx", "melbandroformer/melbandroformer_optimized.onnx"),
+    ("melbandroformer/bs_conformer_medium.onnx", "melbandroformer/bs_conformer_medium.onnx"),
+    ("melbandroformer/bs_conformer_medium_stft_decomp.onnx", "melbandroformer/bs_conformer_medium_stft_decomp.onnx"),
+    (
+        "melbandroformer/bs_conformer_medium_stft_decomp.onnx.data",
+        "melbandroformer/bs_conformer_medium_stft_decomp.onnx.data",
+    ),
+    (
+        "melbandroformer/bs_conformer_medium_stft_decomp_emb.onnx",
+        "melbandroformer/bs_conformer_medium_stft_decomp_emb.onnx",
+    ),
+    ("melbandroformer/scnet_masked_xl_ihf.onnx", "melbandroformer/scnet_masked_xl_ihf.onnx"),
+    ("melbandroformer/scnet_masked_xl_ihf.fixed.onnx", "melbandroformer/scnet_masked_xl_ihf.fixed.onnx"),
+    ("melbandroformer/scnet_masked_xl_ihf_stft_decomp.onnx", "melbandroformer/scnet_masked_xl_ihf_stft_decomp.onnx"),
+    (
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp.onnx.data",
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp.onnx.data",
+    ),
+    (
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp_emb.onnx",
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp_emb.onnx",
+    ),
+    (
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.onnx",
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.onnx",
+    ),
+    (
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.fixed.onnx",
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.fixed.onnx",
+    ),
+    (
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.reordered.onnx",
+        "melbandroformer/scnet_masked_xl_ihf_stft_decomp_fix_scatter.reordered.onnx",
+    ),
     # ── UVR MDX-Net (custom ONNX export) ─────────────────────────────────
     ("uvr_mdx_net/uvr_mdx_net_inst_hq_1.onnx", "uvr_mdx_net/uvr_mdx_net_inst_hq_1.onnx"),
     ("uvr_mdx_net/uvr_mdx_net_inst_hq_2.onnx", "uvr_mdx_net/uvr_mdx_net_inst_hq_2.onnx"),
@@ -122,19 +145,17 @@ UPLOAD_LIST: list[tuple[str, str]] = [
     # ("cdpam/...", ...)  # REMOVED — CDPAM ist VERBOTEN in Aurik 9 (kein Musiktraining)
     # Nachfolger: versa_plugin (VERSA 2024 MOS) + utmos_plugin (Gesangs-MOS)
     # ── Silero EN v5 (custom ONNX) ────────────────────────────────────────
-    ("silero/silero_en_v5.onnx",          "silero/silero_en_v5.onnx"),
+    ("silero/silero_en_v5.onnx", "silero/silero_en_v5.onnx"),
     # ── Voice Cloning Detection ───────────────────────────────────────────
-    ("voice-cloning-detection/model/model.safetensors",
-     "voice-cloning-detection/model.safetensors"),
+    ("voice-cloning-detection/model/model.safetensors", "voice-cloning-detection/model.safetensors"),
     # ── Whisper ONNX (custom export) ──────────────────────────────────────
     ("whisper/whisper-base_beamsearch.onnx", "whisper/whisper-base_beamsearch.onnx"),
-    ("whisper/whisper_tiny.onnx",            "whisper/whisper_tiny.onnx"),
+    ("whisper/whisper_tiny.onnx", "whisper/whisper_tiny.onnx"),
     # ── Resemble Enhance (also on official HF, but bundled locally) ───────
-    ("resemble_enhance/model.onnx",          "resemble_enhance/model.onnx"),
-    ("resemble_enhance/ds/G/default/mp_rank_00_model_states.pt",
-     "resemble_enhance/mp_rank_00_model_states.pt"),
+    ("resemble_enhance/model.onnx", "resemble_enhance/model.onnx"),
+    ("resemble_enhance/ds/G/default/mp_rank_00_model_states.pt", "resemble_enhance/mp_rank_00_model_states.pt"),
     # ── Vocos (also on official HF, but bundled locally) ──────────────────
-    ("vocos/vocos_mel_spec_24khz.onnx",      "vocos/vocos_mel_spec_24khz.onnx"),
+    ("vocos/vocos_mel_spec_24khz.onnx", "vocos/vocos_mel_spec_24khz.onnx"),
 ]
 
 
@@ -201,7 +222,7 @@ def main() -> None:
         except Exception as exc:
             log.error("   ✗ FEHLER: %s", exc)
             failed += 1
-            time.sleep(5)   # kurze Pause bei Fehler, dann weiter
+            time.sleep(5)  # kurze Pause bei Fehler, dann weiter
 
     log.info("─" * 60)
     log.info("Upload abgeschlossen: %d neu, %d übersprungen, %d Fehler", done, skipped, failed)

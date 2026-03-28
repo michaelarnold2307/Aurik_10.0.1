@@ -9,8 +9,8 @@ Author: Aurik 9.0 Development Team
 Date: 15. Februar 2026
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest

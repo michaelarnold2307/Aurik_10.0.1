@@ -28,6 +28,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 import pytest
 
@@ -75,7 +76,6 @@ def _clipped(duration_s: float = 1.0) -> np.ndarray:
 
 
 class TestBSRoFormerPlugin:
-
     def test_01_import(self):
         from plugins.bs_roformer_plugin import BSRoFormerPlugin, get_bs_roformer
 
@@ -148,7 +148,6 @@ class TestBSRoFormerPlugin:
 
 
 class TestCQTdiffPlusPlugin:
-
     def test_01_import(self):
         from plugins.cqtdiff_plus_plugin import CQTdiffPlusPlugin, get_cqtdiff_plus
 
@@ -217,7 +216,6 @@ class TestCQTdiffPlusPlugin:
 
 
 class TestApolloPlugin:
-
     def test_01_import(self):
         from plugins.apollo_plugin import ApolloPlugin, get_apollo
 
@@ -280,7 +278,6 @@ class TestApolloPlugin:
 
 
 class TestBigVGANv2Plugin:
-
     def test_01_import(self):
         from plugins.bigvgan_v2_plugin import BigVGANv2Plugin, get_bigvgan_v2
 
@@ -341,7 +338,6 @@ class TestBigVGANv2Plugin:
 
 
 class TestLAIONCLAPPlugin:
-
     def test_01_import(self):
         from plugins.laion_clap_plugin import LAIONCLAPPlugin, get_laion_clap
 
@@ -409,7 +405,6 @@ class TestLAIONCLAPPlugin:
 
 
 class TestUTMOSPlugin:
-
     def test_01_import(self):
         from plugins.utmos_plugin import UTMOSPlugin, get_utmos
 
@@ -478,7 +473,6 @@ class TestUTMOSPlugin:
 
 
 class TestV99PluginIntegration:
-
     def test_01_singleton_thread_safety(self):
         """Singletons sind Thread-sicher (Double-Checked Locking §3.2)."""
         import threading

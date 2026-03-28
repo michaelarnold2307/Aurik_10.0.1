@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import os
 import sys
 from pathlib import Path
 
@@ -27,16 +26,19 @@ ROOT = Path(__file__).resolve().parents[1]
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--model", choices=["95m", "330m"], default="95m",
-                   help="Which MERT variant to export (default: 95m)")
+    p.add_argument(
+        "--model", choices=["95m", "330m"], default="95m", help="Which MERT variant to export (default: 95m)"
+    )
     return p.parse_args()
 
 
 # ---------------------------------------------------------------------------
 # Export helpers
 # ---------------------------------------------------------------------------
+
 
 def sha256_of_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -91,7 +93,7 @@ def export(model_id: str) -> Path:
             input_names=["input_values"],
             output_names=["last_hidden_state"],
             dynamic_axes={
-                "input_values":      {0: "batch", 1: "samples"},
+                "input_values": {0: "batch", 1: "samples"},
                 "last_hidden_state": {0: "batch", 1: "frames"},
             },
             do_constant_folding=True,
@@ -105,7 +107,7 @@ def export(model_id: str) -> Path:
     #    CPUExecutionProvider does not support ConvInteger)
     # ------------------------------------------------------------------
     print(f"[3/4] Quantizing to INT8 → {int8_path} ...")
-    from onnxruntime.quantization import quantize_dynamic, QuantType
+    from onnxruntime.quantization import QuantType, quantize_dynamic
 
     quantize_dynamic(
         str(fp32_path),
@@ -115,8 +117,7 @@ def export(model_id: str) -> Path:
     )
 
     size_int8 = int8_path.stat().st_size
-    print(f"      INT8 ONNX size: {size_int8 / 1e6:.1f} MB  "
-          f"({size_fp32 / size_int8:.1f}× smaller)")
+    print(f"      INT8 ONNX size: {size_int8 / 1e6:.1f} MB  ({size_fp32 / size_int8:.1f}× smaller)")
 
     # Clean up FP32 intermediate
     fp32_path.unlink(missing_ok=True)
@@ -127,8 +128,7 @@ def export(model_id: str) -> Path:
     print("[4/4] Verifying with OnnxRuntime ...")
     import onnxruntime as ort
 
-    sess = ort.InferenceSession(str(int8_path),
-                                providers=["CPUExecutionProvider"])
+    sess = ort.InferenceSession(str(int8_path), providers=["CPUExecutionProvider"])
     input_name = sess.get_inputs()[0].name
 
     # 3-second test clip
@@ -138,8 +138,7 @@ def export(model_id: str) -> Path:
     print(f"      Output shape: {out_arr.shape}   (expect [1, *, {hidden_size}])")
     assert out_arr.ndim == 3, f"Expected 3D output, got shape {out_arr.shape}"
     assert out_arr.shape[0] == 1
-    assert out_arr.shape[2] == hidden_size, (
-        f"Hidden size mismatch: {out_arr.shape[2]} vs {hidden_size}")
+    assert out_arr.shape[2] == hidden_size, f"Hidden size mismatch: {out_arr.shape[2]} vs {hidden_size}"
     assert np.isfinite(out_arr).all(), "NaN/Inf in output!"
 
     # Plugin-style score

@@ -8,8 +8,8 @@ systematic skip causes (skip/skipif/importorskip + heavy collection guards).
 from __future__ import annotations
 
 import ast
-from collections import Counter
 import json
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -23,7 +23,7 @@ class SkipVisitor(ast.NodeVisitor):
         self.skipif_decorators = 0
         self.skipif_true_decorators = 0
 
-    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+    def visit_Call(self, node: ast.Call) -> None:
         # pytest.skip(...), pytest.importorskip(...)
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
             if node.func.value.id == "pytest" and node.func.attr == "skip":

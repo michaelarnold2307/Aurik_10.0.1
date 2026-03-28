@@ -112,7 +112,7 @@ class ConductEnforcer:
         """Load conduct rules from YAML file."""
         if not self.rules_path.exists():
             raise FileNotFoundError(
-                f"Conduct rules not found at {self.rules_path}. " "Please create conduct_rules.yaml first."
+                f"Conduct rules not found at {self.rules_path}. Please create conduct_rules.yaml first."
             )
 
         with open(self.rules_path, encoding="utf-8") as f:
@@ -203,8 +203,7 @@ class ConductEnforcer:
             violated_principles.append("reversibilitaet")
             return ValidationResult(
                 allowed=False,
-                reason=f"Irreversible Operation bei Unsicherheit nicht erlaubt "
-                f"(Confidence: {confidence:.2f} < 0.90)",
+                reason=f"Irreversible Operation bei Unsicherheit nicht erlaubt (Confidence: {confidence:.2f} < 0.90)",
                 zone=zone,
                 confidence=confidence,
                 violated_principles=violated_principles,
@@ -311,9 +310,7 @@ class ConductEnforcer:
                 )
 
         # === 8. LISTENER CONSENSUS CHECK (Warning only) ===
-        (
-            self.rules.get("principles", {}).get("hoerer_konsens", {}).get("listener_consensus_threshold", 0.70)
-        )
+        (self.rules.get("principles", {}).get("hoerer_konsens", {}).get("listener_consensus_threshold", 0.70))
 
         if listener_diff > self.listener_diff_max:
             # Warning, but don't block (heuristic, not hard stop)
@@ -405,13 +402,13 @@ class ConductEnforcer:
         if predicted < hard_stop_threshold:
             return (
                 False,
-                f"Musical Goal '{goal_name}' unterschreitet HARD STOP: " f"{predicted:.3f} < {hard_stop_threshold:.3f}",
+                f"Musical Goal '{goal_name}' unterschreitet HARD STOP: {predicted:.3f} < {hard_stop_threshold:.3f}",
             )
 
         if predicted < threshold:
             return (
                 False,
-                f"Musical Goal '{goal_name}' unterschreitet Threshold: " f"{predicted:.3f} < {threshold:.3f}",
+                f"Musical Goal '{goal_name}' unterschreitet Threshold: {predicted:.3f} < {threshold:.3f}",
             )
 
         return (True, f"Musical Goal '{goal_name}' erfüllt: {predicted:.3f} >= {threshold:.3f}")

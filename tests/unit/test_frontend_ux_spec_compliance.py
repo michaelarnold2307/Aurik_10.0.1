@@ -93,7 +93,7 @@ class TestProgressBarRange:
         for i, line in enumerate(lines, 1):
             if "setRange(0, 100)" in line and "progress" in line.lower():
                 violations.append(f"Zeile {i}: {line.strip()}")
-        assert not violations, f"progress_bar.setRange(0, 100) gefunden — verboten (§11.4):\n" + "\n".join(violations)
+        assert not violations, "progress_bar.setRange(0, 100) gefunden — verboten (§11.4):\n" + "\n".join(violations)
 
     def test_completion_uses_10000(self):
         """Fertigstellung muss setValue(10000) nutzen (= 100 %)."""
@@ -465,7 +465,7 @@ class TestKeyboardShortcuts:
         for s in found_shortcuts:
             seen[s] = seen.get(s, 0) + 1
         duplicates = {k: v for k, v in seen.items() if v > 1}
-        assert not duplicates, f"Doppelt registrierte Shortcuts gefunden — Spec §11.4:\n" + "\n".join(
+        assert not duplicates, "Doppelt registrierte Shortcuts gefunden — Spec §11.4:\n" + "\n".join(
             f"  '{k}' × {v}" for k, v in duplicates.items()
         )
 

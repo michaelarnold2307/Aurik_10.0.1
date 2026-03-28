@@ -32,6 +32,7 @@ import numpy as np
 # VERSA 2024 ersetzt CDPAM als non-reference MOS-Metrik (§4.4)
 try:
     from plugins.versa_plugin import get_versa_plugin as _get_versa_plugin_fn
+
     _VERSA_IMPORT_OK = True
 except ImportError:  # Fallback: PQS-DSP
     _VERSA_IMPORT_OK = False
@@ -175,7 +176,9 @@ class QualityMetricsManager:
                     "score": score_raw,
                     "normalized": score_norm,
                     "mos": mos_raw,
-                    "model_used": getattr(versa_result, "model_used", "dsp_fallback") if versa_plugin else "dsp_fallback",
+                    "model_used": (
+                        getattr(versa_result, "model_used", "dsp_fallback") if versa_plugin else "dsp_fallback"
+                    ),
                     "rating": self._rate_cdpam(score_raw),
                 }
                 logger.info("✓ VERSA-MOS: %.2f/5 → CDPAM-kompatibel: %.1f/100", mos_raw, score_raw)
@@ -462,7 +465,7 @@ class QualityMetricsManager:
             report_lines.append("\n" + "-" * 80)
             report_lines.append("\nAGGREGATE QUALITY SCORE")
             report_lines.append(
-                f"   Overall: {aggregate['overall_score']:.3f}/1.0 ({aggregate['overall_score']*100:.1f}%)"
+                f"   Overall: {aggregate['overall_score']:.3f}/1.0 ({aggregate['overall_score'] * 100:.1f}%)"
             )
             report_lines.append(f"   Rating: {aggregate['overall_rating']}")
             report_lines.append(f"   Based on: {aggregate['num_metrics']} metrics")

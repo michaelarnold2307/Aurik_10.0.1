@@ -13,12 +13,12 @@ Ausführen:
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import hashlib
 import json
 import pathlib
 import subprocess
 import sys
+from datetime import datetime, timezone
 from typing import Any
 
 ROOT = pathlib.Path(__file__).parent.parent

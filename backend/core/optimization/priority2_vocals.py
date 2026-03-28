@@ -8,7 +8,6 @@ bands while leaving non-vocal regions untouched.
 
 from __future__ import annotations
 
-from typing import List
 
 import numpy as np
 
@@ -43,11 +42,10 @@ class VocalPresenceDetector:
             return 0.0
 
         n_fft = 2048
-        spec = np.abs(np.fft.rfft(x[:n_fft] if len(x) >= n_fft else
-                                   np.pad(x, (0, n_fft - len(x)))))
+        spec = np.abs(np.fft.rfft(x[:n_fft] if len(x) >= n_fft else np.pad(x, (0, n_fft - len(x)))))
         freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
 
-        total_energy = np.sum(spec ** 2) + 1e-12
+        total_energy = np.sum(spec**2) + 1e-12
 
         vocal_mask = (freqs >= self._low_hz) & (freqs <= self._high_hz)
         presence_mask = (freqs >= self._presence_low_hz) & (freqs <= self._presence_high_hz)
@@ -71,9 +69,7 @@ class ConsonantPreserver:
     def __init__(self, sr: int = 48000) -> None:
         self.sr = sr
 
-    def detect_consonants(
-        self, audio: np.ndarray, sr: int
-    ) -> list[int]:
+    def detect_consonants(self, audio: np.ndarray, sr: int) -> list[int]:
         """Return sample indices of likely consonant onsets.
 
         Uses a simple spectral flux energy detector.
@@ -86,7 +82,7 @@ class ConsonantPreserver:
         prev_energy = 0.0
         for start in range(0, len(x) - win, hop):
             frame = x[start : start + win]
-            energy = float(np.sum(frame ** 2))
+            energy = float(np.sum(frame**2))
             if energy > prev_energy * 2.0 and energy > 1e-6:
                 onsets.append(start)
             prev_energy = energy
@@ -134,6 +130,4 @@ class SelectiveVocalEnhancer:
         spec[boost_mask] *= gain
 
         out = np.fft.irfft(spec, n=n).astype(np.float32)
-        return np.clip(
-            np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0
-        )
+        return np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)

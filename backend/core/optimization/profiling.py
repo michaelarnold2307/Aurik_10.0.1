@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -27,9 +27,7 @@ class PerformanceProfiler:
     def __init__(self, processor: Any) -> None:
         self.processor = processor
 
-    def profile_pipeline(
-        self, audio: np.ndarray, sr: int
-    ) -> dict[str, Any]:
+    def profile_pipeline(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
         """Run the processor and record per-component timings.
 
         Returns
@@ -53,9 +51,7 @@ class PerformanceProfiler:
                 errors.append(f"efficiency:{exc}")
                 logger.debug("PerformanceProfiler: efficiency stage failed: %s", exc)
             dt = time.perf_counter() - t0
-            components.append(
-                {"name": "efficiency", "rt_factor": dt / (duration_s + 1e-12)}
-            )
+            components.append({"name": "efficiency", "rt_factor": dt / (duration_s + 1e-12)})
 
         # --- vocal enhancer stage ---
         vocal_enhancer = getattr(self.processor, "vocal_enhancer", None)
@@ -67,9 +63,7 @@ class PerformanceProfiler:
                 errors.append(f"vocal_enhancer:{exc}")
                 logger.debug("PerformanceProfiler: vocal_enhancer stage failed: %s", exc)
             dt = time.perf_counter() - t0
-            components.append(
-                {"name": "vocal_enhancer", "rt_factor": dt / (duration_s + 1e-12)}
-            )
+            components.append({"name": "vocal_enhancer", "rt_factor": dt / (duration_s + 1e-12)})
 
         # --- full pipeline ---
         t0 = time.perf_counter()
@@ -114,7 +108,7 @@ class QualityValidator:
         audio_f32 = np.asarray(audio, dtype=np.float32)
 
         # Baseline quality: simple crest-factor proxy
-        rms_in = float(np.sqrt(np.mean(audio_f32 ** 2))) + 1e-12
+        rms_in = float(np.sqrt(np.mean(audio_f32**2))) + 1e-12
         peak_in = float(np.max(np.abs(audio_f32))) + 1e-12
         baseline = float(np.clip(rms_in / peak_in, 0.0, 1.0))
 
@@ -125,7 +119,7 @@ class QualityValidator:
             processed = audio_f32
 
         processed = np.asarray(processed, dtype=np.float32)
-        rms_out = float(np.sqrt(np.mean(processed ** 2))) + 1e-12
+        rms_out = float(np.sqrt(np.mean(processed**2))) + 1e-12
         peak_out = float(np.max(np.abs(processed))) + 1e-12
         optimized_quality = float(np.clip(rms_out / peak_out, 0.0, 1.0))
 

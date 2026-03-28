@@ -5,6 +5,7 @@ Unit-Tests für:
 """
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 import pytest
 
@@ -39,7 +40,6 @@ def _signal_mag(n: int = 512, level: float = 0.5) -> np.ndarray:
 
 
 class TestAdaptiveOMLSA:
-
     # --- OMLSA Grundfunktion ---
 
     def test_omlsa_output_shape(self):

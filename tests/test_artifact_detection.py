@@ -7,8 +7,8 @@ Author: AURIK Team
 Date: 8. Februar 2026
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -18,11 +18,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from backend.core.artifact_detection import (
     Artifact,
     ArtifactAnalysisResult,
-    RestorationArtifactDetector as ArtifactDetector,
     ArtifactSeverity,
     ArtifactType,
     generate_artifact_report,
     quick_artifact_check,
+)
+from backend.core.artifact_detection import (
+    RestorationArtifactDetector as ArtifactDetector,
 )
 
 # ============================================================

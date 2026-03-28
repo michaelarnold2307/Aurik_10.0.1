@@ -1995,9 +1995,9 @@ class AdaptiveProcessingPipelineV2:
 
     def _process_step_with_tracking(self, job, audio, sr, operation, model_name, step_id, context, goal):
         """Process a single step and create ProcessingStep tracking"""
-        from datetime import datetime
         import io
         import tempfile
+        from datetime import datetime
 
         import soundfile as sf
 

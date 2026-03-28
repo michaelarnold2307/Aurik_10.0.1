@@ -32,7 +32,7 @@ Date: 8. Februar 2026
 import json
 import logging
 import shutil
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -83,8 +83,19 @@ class ProcessedFile:
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProcessedFile":
-        """Create from dictionary."""
-        return cls(**data)
+        """Create from dictionary.
+
+        Handles legacy JSON formats written by earlier Aurik versions where
+        ``_recent.json`` / ``_history.json`` entries were stored as plain
+        lists or with extra/missing keys. Unknown keys are silently dropped;
+        missing optional keys get their dataclass defaults.
+        """
+        if not isinstance(data, dict):
+            raise TypeError(f"ProcessedFile.from_dict: expected dict, got {type(data).__name__}")
+        # Keep only known fields to avoid unexpected-keyword-argument errors
+        known = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in known}
+        return cls(**filtered)
 
 
 @dataclass
@@ -570,7 +581,14 @@ class SessionManager:
 
         if recent_path.exists():
             try:
-                self._recent_sessions = json.loads(recent_path.read_text())
+                raw = json.loads(recent_path.read_text())
+                # Legacy format was a list-of-lists; current format is list-of-dicts.
+                if isinstance(raw, list) and raw and not isinstance(raw[0], dict):
+                    logger.warning("_recent.json: legacy list-of-lists format detected — resetting.")
+                    self._recent_sessions = []
+                    recent_path.unlink(missing_ok=True)
+                else:
+                    self._recent_sessions = [e for e in raw if isinstance(e, dict)]
             except Exception as e:
                 logger.warning(f"Failed to load recent sessions: {e}")
                 self._recent_sessions = []
@@ -590,7 +608,15 @@ class SessionManager:
         if history_path.exists():
             try:
                 history_data = json.loads(history_path.read_text())
-                self._history = [ProcessedFile.from_dict(f) for f in history_data]
+                if not isinstance(history_data, list):
+                    raise ValueError("_history.json: expected list at top level")
+                loaded: list = []
+                for entry in history_data:
+                    try:
+                        loaded.append(ProcessedFile.from_dict(entry))
+                    except Exception as entry_exc:
+                        logger.debug("_history.json: skipping malformed entry: %s", entry_exc)
+                self._history = loaded
             except Exception as e:
                 logger.warning(f"Failed to load history: {e}")
                 self._history = []

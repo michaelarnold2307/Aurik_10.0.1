@@ -16,15 +16,15 @@ Usage:
 from __future__ import annotations
 
 import hashlib
-import sys
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "models" / "apollo"))  # look2hear verfügbar machen
 
 CHECKPOINT = ROOT / "models" / "apollo" / "pytorch_model.bin"
-OUTPUT_PT  = ROOT / "models" / "apollo" / "apollo_model.pt"
+OUTPUT_PT = ROOT / "models" / "apollo" / "apollo_model.pt"
 
 
 def _load_model():
@@ -59,8 +59,7 @@ def _export(model, args) -> None:
     with torch.no_grad():
         out = traced(dummy)
     assert out.shape == dummy.shape, f"Shape mismatch: {out.shape} != {dummy.shape}"
-    print(f"✓ Forward-Test OK — Shape: {list(out.shape)}, "
-          f"Range: [{out.min().item():.4f}, {out.max().item():.4f}]")
+    print(f"✓ Forward-Test OK — Shape: {list(out.shape)}, Range: [{out.min().item():.4f}, {out.max().item():.4f}]")
 
     traced.save(str(OUTPUT_PT))
     size_mb = OUTPUT_PT.stat().st_size / 1024 / 1024
@@ -80,7 +79,7 @@ def _export(model, args) -> None:
 
 
 if __name__ == "__main__":
-    print(f"=== Apollo TorchScript Export ===")
+    print("=== Apollo TorchScript Export ===")
     print(f"Checkpoint: {CHECKPOINT}")
     if not CHECKPOINT.exists():
         print(f"FEHLER: Checkpoint nicht gefunden: {CHECKPOINT}", file=sys.stderr)

@@ -63,12 +63,10 @@ class StemProcessingDecision:
         self.policy = policy or {}
         self.logger = logger
 
-    def decide(
-        self, stem: np.ndarray, sr: int, features: dict | StemFeatures | None = None
-    ) -> StemDecisionResult:
-        feats = (
-            StemFeatures(**features) if isinstance(features, dict) else features
-        ) or self._analyze_features(stem, sr)
+    def decide(self, stem: np.ndarray, sr: int, features: dict | StemFeatures | None = None) -> StemDecisionResult:
+        feats = (StemFeatures(**features) if isinstance(features, dict) else features) or self._analyze_features(
+            stem, sr
+        )
         action = self._policy_decision(feats)
         result = StemDecisionResult(action=action, features=feats)
         if self.logger:

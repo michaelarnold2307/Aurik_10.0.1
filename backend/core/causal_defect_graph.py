@@ -185,12 +185,24 @@ class CausalDefectGraph:
         )
         ordered.extend(remaining)
 
-        score_lookup = {d.defect_type: d for d in detected}
+        # Build lookup — keep highest-severity entry when duplicates exist.
+        # DefectScanner can theoretically emit the same DefectType more than once
+        # (e.g. two scoring passes).  A plain dict comprehension would silently
+        # drop all but the last entry, making len(result) < len(detected) and
+        # triggering the fallback on every call.  We deduplicate *before* the
+        # length check so the kausal order is actually used.
+        score_lookup: dict = {}
+        for d in detected:
+            if d.defect_type not in score_lookup or d.severity > score_lookup[d.defect_type].severity:
+                score_lookup[d.defect_type] = d
+        # Work with deduplicated list from here on
+        detected_dedup = list(score_lookup.values())
+
         result = [score_lookup[dt] for dt in ordered if dt in score_lookup]
 
-        if len(result) != len(detected):
+        if len(result) != len(detected_dedup):
             logger.warning("Kausale Sortierung unvollständig — Fallback auf Schweregrad.")
-            return sorted(detected, key=lambda d: d.severity, reverse=True)
+            return sorted(detected_dedup, key=lambda d: d.severity, reverse=True)
 
         logger.debug(
             "Kausale Reparaturreihenfolge: %s",
@@ -211,7 +223,7 @@ class CausalDefectGraph:
 
             if is_phantom:
                 cause_names = ", ".join(c.value for c in causes_here)
-                note = f"Symptom von [{cause_names}] — " "wird nach Root-Cause-Reparatur neu bewertet"
+                note = f"Symptom von [{cause_names}] — wird nach Root-Cause-Reparatur neu bewertet"
             elif effects_here:
                 effect_names = ", ".join(e.value for e in effects_here)
                 note = f"Root Cause → verursacht [{effect_names}]"
@@ -248,15 +260,13 @@ class CausalDefectGraph:
         lines = [
             "=== Kausale Defekt-Analyse (Aurik 9.0 CausalDefectGraph) ===",
             f"Erkannte Defekte: {len(detected)}",
-            f"Phantomdefekte (reine Symptome): " f"{sum(1 for n in nodes if n.is_phantom)}",
+            f"Phantomdefekte (reine Symptome): {sum(1 for n in nodes if n.is_phantom)}",
             "",
             "Reparaturreihenfolge (kausal → topologisch sortiert):",
         ]
         for i, dt in enumerate(ordered_types, 1):
             node = next(n for n in nodes if n.defect_score.defect_type == dt)
             prefix = "  PHANTOM" if node.is_phantom else "  ROOT   "
-            lines.append(
-                f"  {i:2d}. {prefix} [{dt.value}] " f"sev={node.defect_score.severity:.2f} — {node.causal_note}"
-            )
+            lines.append(f"  {i:2d}. {prefix} [{dt.value}] sev={node.defect_score.severity:.2f} — {node.causal_note}")
 
         return "\n".join(lines)

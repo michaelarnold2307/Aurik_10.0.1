@@ -10,8 +10,8 @@ Matches the premium carrier-icon aesthetic (3D gradients, specular highlights).
 from __future__ import annotations
 
 import math
-from pathlib import Path
 import random
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 

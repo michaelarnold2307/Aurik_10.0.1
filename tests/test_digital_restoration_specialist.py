@@ -21,7 +21,6 @@ from dsp.digital_restoration_specialist import (
     PacketLossConcealer,
 )
 
-
 _HAS_PYTEST_BENCHMARK = importlib.util.find_spec("pytest_benchmark") is not None
 
 # =============================================================================
@@ -135,7 +134,8 @@ class TestCodecArtifactRemover:
     def test_parameter_clipping(self):
         """Test that parameters are clipped to safe ranges"""
         remover = CodecArtifactRemover(
-            pre_echo_threshold_db=-100.0, smoothing_strength=2.0  # Out of range  # Out of range
+            pre_echo_threshold_db=-100.0,
+            smoothing_strength=2.0,  # Out of range  # Out of range
         )
 
         # Should be clipped
@@ -355,7 +355,8 @@ class TestJitterCorrector:
     def test_parameter_clipping(self):
         """Test that parameters are clipped to safe ranges"""
         corrector = JitterCorrector(
-            jitter_threshold_ppm=2000.0, correction_strength=2.0  # Out of range  # Out of range
+            jitter_threshold_ppm=2000.0,
+            correction_strength=2.0,  # Out of range  # Out of range
         )
 
         assert 10.0 <= corrector.jitter_threshold_ppm <= 1000.0

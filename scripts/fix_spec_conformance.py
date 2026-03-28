@@ -41,9 +41,7 @@ def ensure_logger(content: str) -> str:
 
     # Safety: if last_import_idx is still 0 and line 0 is not an import,
     # insert at the very beginning (after any module docstring).
-    if last_import_idx == 0 and lines and not (
-        lines[0].startswith("import ") or lines[0].startswith("from ")
-    ):
+    if last_import_idx == 0 and lines and not (lines[0].startswith("import ") or lines[0].startswith("from ")):
         # Find end of module docstring (if any)
         insert_at = 0
         stripped0 = lines[0].strip()
@@ -204,10 +202,7 @@ def add_sr_assert_to_phase(path: Path) -> bool:
     if "== 48000" in (lines[body_start] if body_start < len(lines) else ""):
         return False
 
-    assert_line = (
-        f'{" " * indent}assert {sr_param} == 48000, '
-        f'f"SR muss 48000 Hz sein, erhalten: {{{sr_param}}}"\n'
-    )
+    assert_line = f'{" " * indent}assert {sr_param} == 48000, f"SR muss 48000 Hz sein, erhalten: {{{sr_param}}}"\n'
 
     lines.insert(body_start, assert_line)
 

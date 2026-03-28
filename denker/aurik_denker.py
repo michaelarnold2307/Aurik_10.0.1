@@ -1174,6 +1174,70 @@ class AurikDenker:
                         goals_passed,
                         len(_budget_goals),
                     )
+
+                    # Budgetfreundlicher Goal-Recovery ohne zusätzliche DSP-Phasen:
+                    # Falls kritische Goals schwach sind, mische einen kleinen Anteil
+                    # Originalsignal zurück (P1/P2-Schutz), messe erneut und übernehme
+                    # nur bei tatsächlicher Verbesserung.
+                    _critical_goals = {
+                        "natuerlichkeit",
+                        "authentizitaet",
+                        "tonal_center",
+                        "timbre_authentizitaet",
+                        "artikulation",
+                    }
+                    _crit_total = sum(1 for g in _budget_goals if g in _critical_goals)
+                    _crit_pass_before = sum(
+                        1 for g, v in _budget_goals.items() if g in _critical_goals and float(v) >= 0.75
+                    )
+                    if _crit_total > 0 and _crit_pass_before < _crit_total and aktuelles_audio.shape == audio.shape:
+                        _best_audio = aktuelles_audio
+                        _best_goals = dict(_budget_goals)
+                        _best_pass = goals_passed
+                        _best_score = excellence_score
+                        _best_crit = _crit_pass_before
+
+                        for _alpha in (0.92, 0.88, 0.84):
+                            _candidate = np.clip(_alpha * aktuelles_audio + (1.0 - _alpha) * audio, -1.0, 1.0)
+                            _cand_goals = _mg_budget.measure_all(_candidate, sr)
+                            _cand_finite = [v for v in _cand_goals.values() if _math_budget.isfinite(v)]
+                            _cand_pass = sum(1 for v in _cand_finite if v >= 0.75)
+                            _cand_score = float(np.mean(_cand_finite)) if _cand_finite else 0.0
+                            _cand_crit = sum(
+                                1 for g, v in _cand_goals.items() if g in _critical_goals and float(v) >= 0.75
+                            )
+
+                            _is_better = (_cand_crit > _best_crit) or (
+                                _cand_crit == _best_crit
+                                and (
+                                    _cand_pass > _best_pass or (_cand_pass == _best_pass and _cand_score > _best_score)
+                                )
+                            )
+                            if _is_better:
+                                _best_audio = _candidate
+                                _best_goals = dict(_cand_goals)
+                                _best_pass = _cand_pass
+                                _best_score = _cand_score
+                                _best_crit = _cand_crit
+
+                        if _best_crit > _crit_pass_before or _best_pass > goals_passed:
+                            aktuelles_audio = _best_audio
+                            musical_goals = _best_goals
+                            goals_passed = _best_pass
+                            excellence_score = _best_score
+                            stage_notes["exzellenz"] += (
+                                f"; Zielschutz-Blend angewendet (kritisch {_crit_pass_before}/{_crit_total} → "
+                                f"{_best_crit}/{_crit_total}, gesamt {goals_passed}/{len(_best_goals)})"
+                            )
+                            logger.info(
+                                "AurikDenker [9/10] Goal-Recovery-Blend aktiv: kritische Goals %d/%d → %d/%d, gesamt=%d/%d",
+                                _crit_pass_before,
+                                _crit_total,
+                                _best_crit,
+                                _crit_total,
+                                goals_passed,
+                                len(_best_goals),
+                            )
             except Exception as _mg_exc:
                 logger.debug("Musical Goals Messung nach Budget-Limit: %s", _mg_exc)
             try:

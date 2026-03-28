@@ -6,8 +6,8 @@ Ausgabe: docs/aurik_architecture.png  (300 dpi, 7680×4320 px bei 25.6"×14.4")
 import matplotlib
 
 matplotlib.use("Agg")
-from matplotlib.patches import FancyBboxPatch
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch
 
 # ---------------------------------------------------------------------------
 # Layout-Konstanten
@@ -614,7 +614,15 @@ post_row2 = [
         "400ms LUFS-Profil · Savitzky-Golay · ±3.0LU · True-Peak nach Morphing",
         "post",
     ),
-    (0.615, 0.360, 0.175, 0.040, "Vocos 48kHz ONNX", "nativ 48kHz · wenn PQS-MOS<4.3\nHiFi-GAN 3.6MB → PGHI-iSTFT", "post"),
+    (
+        0.615,
+        0.360,
+        0.175,
+        0.040,
+        "Vocos 48kHz ONNX",
+        "nativ 48kHz · wenn PQS-MOS<4.3\nHiFi-GAN 3.6MB → PGHI-iSTFT",
+        "post",
+    ),
     (
         0.800,
         0.360,

@@ -9,9 +9,9 @@ import sys
 import time
 from unittest.mock import AsyncMock, Mock
 
+import pytest
 from fastapi.testclient import TestClient
 from fastapi.websockets import WebSocket
-import pytest
 
 sys.path.insert(0, "/mnt/1846D15B46D139E8/Aurik_Standalone")
 from backend.api.musical_goals_monitor_api import ConnectionManager, GoalsSnapshot, GoalUpdate, MusicalGoalsMonitorAPI

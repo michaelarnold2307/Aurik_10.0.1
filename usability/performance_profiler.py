@@ -42,15 +42,15 @@ Features:
 - Rich reports
 """
 
-from contextlib import contextmanager
-from dataclasses import dataclass, field
-from functools import wraps
 import json
 import logging
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from functools import wraps
+from typing import Any
 
 import psutil
 
@@ -78,7 +78,7 @@ class FunctionProfile:
     memory_delta_mb: float  # Memory change during execution
     cpu_avg: float  # Average CPU during execution
     peak_memory_mb: float  # Peak memory during execution
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 class PerformanceProfiler:
@@ -121,12 +121,12 @@ class PerformanceProfiler:
         # State
         self.running = False
         self.process = psutil.Process()
-        self.snapshots: List[ResourceSnapshot] = []
-        self.function_profiles: List[FunctionProfile] = []
-        self.warnings: List[str] = []
+        self.snapshots: list[ResourceSnapshot] = []
+        self.function_profiles: list[FunctionProfile] = []
+        self.warnings: list[str] = []
 
         # Threading
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
 
     def start(self):
@@ -275,7 +275,7 @@ class PerformanceProfiler:
             with self._lock:
                 self.function_profiles.append(profile)
 
-    def get_report(self) -> Dict[str, Any]:
+    def get_report(self) -> dict[str, Any]:
         """
         Get comprehensive profiling report.
 
@@ -380,10 +380,10 @@ class PerformanceProfiler:
 
     <div class="summary">
         <h2>Summary</h2>
-        <p><strong>Duration:</strong> {report['summary'].get('duration_seconds', 0):.2f}s</p>
-        <p><strong>Samples:</strong> {report['summary'].get('total_samples', 0)}</p>
-        <p><strong>Peak Memory:</strong> {report['summary'].get('memory', {}).get('peak_mb', 0):.1f} MB</p>
-        <p><strong>Avg CPU:</strong> {report['summary'].get('cpu', {}).get('avg_percent', 0):.1f}%</p>
+        <p><strong>Duration:</strong> {report["summary"].get("duration_seconds", 0):.2f}s</p>
+        <p><strong>Samples:</strong> {report["summary"].get("total_samples", 0)}</p>
+        <p><strong>Peak Memory:</strong> {report["summary"].get("memory", {}).get("peak_mb", 0):.1f} MB</p>
+        <p><strong>Avg CPU:</strong> {report["summary"].get("cpu", {}).get("avg_percent", 0):.1f}%</p>
     </div>
 
     <h2>Bottlenecks</h2>
@@ -394,9 +394,9 @@ class PerformanceProfiler:
         for bottleneck in report.get("bottlenecks", []):
             html += f"""
         <tr class="warning">
-            <td>{bottleneck['function']}</td>
-            <td>{bottleneck['duration_ms']:.1f}</td>
-            <td>{', '.join(bottleneck['warnings'])}</td>
+            <td>{bottleneck["function"]}</td>
+            <td>{bottleneck["duration_ms"]:.1f}</td>
+            <td>{", ".join(bottleneck["warnings"])}</td>
         </tr>
 """
 

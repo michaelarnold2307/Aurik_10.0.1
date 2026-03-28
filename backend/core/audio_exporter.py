@@ -23,7 +23,7 @@ import logging
 import threading
 import warnings
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import soundfile as sf
@@ -161,7 +161,7 @@ class AudioExporter:
         # Get format info
         ext = output_path.suffix.lower()
         if ext not in self.FORMATS:
-            raise ValueError(f"Unsupported format: {ext}. " f"Supported: {', '.join(self.FORMATS.keys())}")
+            raise ValueError(f"Unsupported format: {ext}. Supported: {', '.join(self.FORMATS.keys())}")
 
         format_info = self.FORMATS[ext]
 
@@ -236,7 +236,7 @@ class AudioExporter:
                     sf.write(output_path, audio_export, sr, format="OPUS", subtype=subtype)
                 except RuntimeError as e:
                     warnings.warn(
-                        f"Opus export failed ({e}). Falling back to FLAC. " f"Install libopusenc for Opus support."
+                        f"Opus export failed ({e}). Falling back to FLAC. Install libopusenc for Opus support."
                     )
                     # Fallback to FLAC
                     fallback_path = output_path.with_suffix(".flac")
@@ -401,7 +401,9 @@ def export_audio(
     return str(result_path)
 
 
-def batch_export_audio(audio: np.ndarray, sr: int, base_path: str, formats: list[str] | None = None, **kwargs: Any) -> dict[str, str]:
+def batch_export_audio(
+    audio: np.ndarray, sr: int, base_path: str, formats: list[str] | None = None, **kwargs: Any
+) -> dict[str, str]:
     """
     Convenience function for batch exporting to multiple formats.
 

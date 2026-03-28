@@ -34,10 +34,7 @@ class ExplainabilityEngine:
                     f"Es wurden viele Störimpulse (Klicks) erkannt und entfernt "
                     f"(Reduktion: {cr:.0%}). Das Material wies eine hohe Klick-Dichte auf."
                 )
-            return (
-                f"Klick-Entfernung war kaum nötig "
-                f"(Reduktion: {cr:.0%}). Das Material ist in gutem Zustand."
-            )
+            return f"Klick-Entfernung war kaum nötig (Reduktion: {cr:.0%}). Das Material ist in gutem Zustand."
 
         if phase == "denoising":
             nr = float(metrics.get("noise_reduction", 0.0))
@@ -46,10 +43,7 @@ class ExplainabilityEngine:
                     f"Es wurde ein hoher Rauschpegel festgestellt und reduziert "
                     f"(NR: {nr:.0%}). Das Signal-Rausch-Verhältnis wurde verbessert."
                 )
-            return (
-                f"Rauschreduktion war minimal erforderlich "
-                f"(NR: {nr:.0%}). Das Material ist weitgehend rauschfrei."
-            )
+            return f"Rauschreduktion war minimal erforderlich (NR: {nr:.0%}). Das Material ist weitgehend rauschfrei."
 
         if phase == "eq":
             dev = float(metrics.get("bark_band_deviation", 0.0))
@@ -58,10 +52,7 @@ class ExplainabilityEngine:
                     f"Es wurden spektrale Unausgewogenheiten im Frequenzgang "
                     f"festgestellt und korrigiert (Abweichung: {dev:.2f})."
                 )
-            return (
-                f"Frequenzgangkorrektur war kaum nötig "
-                f"(Abweichung: {dev:.2f}). Das Spektrum ist ausgewogen."
-            )
+            return f"Frequenzgangkorrektur war kaum nötig (Abweichung: {dev:.2f}). Das Spektrum ist ausgewogen."
 
         return (
             f"Phase '{phase}' wurde ausgeführt. "
@@ -76,6 +67,7 @@ import threading as _threading
 
 _explainability_engine_instance = None
 _explainability_engine_lock = _threading.Lock()
+
 
 def get_explainability_engine() -> ExplainabilityEngine:
     """Return the process-wide singleton ExplainabilityEngine instance."""

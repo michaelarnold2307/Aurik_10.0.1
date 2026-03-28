@@ -7,8 +7,8 @@ Testet:
 - TapeSpecialist (unified API)
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -120,7 +120,9 @@ class TestTapePrintThroughRemover:
     def test_parameter_clipping(self):
         """Test that parameters are clipped to valid ranges"""
         remover = TapePrintThroughRemover(
-            max_delay_ms=1000.0, attenuation_threshold_db=-70.0, adaptive_strength=1.5  # > 500  # < -60  # > 1.0
+            max_delay_ms=1000.0,
+            attenuation_threshold_db=-70.0,
+            adaptive_strength=1.5,  # > 500  # < -60  # > 1.0
         )
         assert remover.max_delay_ms == 500.0
         assert remover.attenuation_threshold_db == -60.0
@@ -545,7 +547,7 @@ class TestPerformance:
         assert elapsed < audio_duration * 10
 
         print(f"\nProcessing time: {elapsed:.3f}s for {audio_duration:.1f}s audio")
-        print(f"Real-time factor: {elapsed/audio_duration:.2f}×")
+        print(f"Real-time factor: {elapsed / audio_duration:.2f}×")
 
 
 if __name__ == "__main__":

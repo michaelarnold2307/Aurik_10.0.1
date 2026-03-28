@@ -353,6 +353,70 @@ class TestWaveformWidgetLiveUpdate:
         except Exception:
             pytest.skip("WaveformWidget instantiation failed (no QApplication)")
 
+    @pytest.mark.gui
+    def test_set_defects_does_not_mark_detected_low_score_as_resolved(self):
+        """Low rounded scores in detected state must not move active locations to resolved."""
+        try:
+            from Aurik910.ui.modern_window import WaveformWidget
+        except ImportError:
+            pytest.skip("WaveformWidget not importable (Qt not available)")
+
+        try:
+            widget = WaveformWidget.__new__(WaveformWidget)
+            widget.update = MagicMock()
+            widget._active_tool = "DSP"
+            widget._repair_history = {}
+            widget._resolved_locations = {}
+            widget._channel_locations = {}
+            # Existing active marker from previous frame.
+            widget._defect_locations = {"clicks": [(1.0, 1.1)]}
+
+            # New frame: score rounded to 0, but locations still present.
+            widget.set_defects(
+                {
+                    "status": "detected",
+                    "clicks": 0,
+                    "_locations": {"clicks": [(1.0, 1.1)]},
+                    "_channel_locations": {},
+                }
+            )
+
+            assert widget._defect_locations.get("clicks") == [(1.0, 1.1)]
+            assert widget._resolved_locations.get("clicks", []) == []
+        except Exception:
+            pytest.skip("WaveformWidget instantiation failed (no QApplication)")
+
+    @pytest.mark.gui
+    def test_set_defects_marks_resolved_in_correcting_when_locations_gone(self):
+        """During correcting/completed, vanished locations with zero score should move to resolved."""
+        try:
+            from Aurik910.ui.modern_window import WaveformWidget
+        except ImportError:
+            pytest.skip("WaveformWidget not importable (Qt not available)")
+
+        try:
+            widget = WaveformWidget.__new__(WaveformWidget)
+            widget.update = MagicMock()
+            widget._active_tool = "DeClick"
+            widget._repair_history = {}
+            widget._resolved_locations = {}
+            widget._channel_locations = {}
+            widget._defect_locations = {"clicks": [(1.0, 1.1)]}
+
+            widget.set_defects(
+                {
+                    "status": "correcting",
+                    "clicks": 0,
+                    "_locations": {},
+                    "_channel_locations": {},
+                }
+            )
+
+            assert widget._resolved_locations.get("clicks") == [(1.0, 1.1)]
+            assert widget._repair_history.get("clicks") is not None
+        except Exception:
+            pytest.skip("WaveformWidget instantiation failed (no QApplication)")
+
 
 # ---------------------------------------------------------------------------
 # Tests: Denker chain — audio_update_callback forwarding

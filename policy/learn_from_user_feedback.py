@@ -12,7 +12,7 @@ POLICY_PATH = "config_dsp_chain_example.yaml"
 FEEDBACK_PATH = "user_feedback.json"
 
 # Lade aktuelle Policy
-with open(POLICY_PATH, "r") as f:
+with open(POLICY_PATH) as f:
     policy = yaml.safe_load(f)
 
 # Lade User-Feedback (z.B. [{"file":..., "feedback": {"dull": true, "artefacts": false, ...}}, ...])
@@ -20,7 +20,7 @@ if not os.path.exists(FEEDBACK_PATH):
     print("[Feedback] Keine user_feedback.json gefunden. Bitte Feedbackdatei anlegen.")
     exit(0)
 
-with open(FEEDBACK_PATH, "r") as f:
+with open(FEEDBACK_PATH) as f:
     feedbacks = json.load(f)
 
 # Feedback auswerten und Policy anpassen

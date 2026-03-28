@@ -16,8 +16,8 @@ Datum: 14. Februar 2026
 import pytest
 
 pytest.importorskip("optuna")  # Skip module if optuna is not installed
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import torch
 import torch.nn as nn

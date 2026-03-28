@@ -18,9 +18,9 @@ Output:
 """
 
 import argparse
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -74,8 +74,8 @@ def benchmark_numexpr():
     numexpr_time, _ = benchmark_function(dsp.spectral_gate, spectrum, threshold)
     speedup = numpy_time / numexpr_time
 
-    print(f"NumPy:   {numpy_time*1000:8.3f} ms")
-    print(f"NumExpr: {numexpr_time*1000:8.3f} ms")
+    print(f"NumPy:   {numpy_time * 1000:8.3f} ms")
+    print(f"NumExpr: {numexpr_time * 1000:8.3f} ms")
     print(f"Speedup: {speedup:8.2f}×")
     results.append(("Spectral Gate", numpy_time, numexpr_time, speedup))
 
@@ -93,8 +93,8 @@ def benchmark_numexpr():
     numexpr_time, _ = benchmark_function(dsp.soft_threshold, audio, threshold)
     speedup = numpy_time / numexpr_time
 
-    print(f"NumPy:   {numpy_time*1000:8.3f} ms")
-    print(f"NumExpr: {numexpr_time*1000:8.3f} ms")
+    print(f"NumPy:   {numpy_time * 1000:8.3f} ms")
+    print(f"NumExpr: {numexpr_time * 1000:8.3f} ms")
     print(f"Speedup: {speedup:8.2f}×")
     results.append(("Soft Threshold", numpy_time, numexpr_time, speedup))
 
@@ -110,8 +110,8 @@ def benchmark_numexpr():
     numexpr_time, _ = benchmark_function(dsp.hard_threshold, audio, threshold)
     speedup = numpy_time / numexpr_time
 
-    print(f"NumPy:   {numpy_time*1000:8.3f} ms")
-    print(f"NumExpr: {numexpr_time*1000:8.3f} ms")
+    print(f"NumPy:   {numpy_time * 1000:8.3f} ms")
+    print(f"NumExpr: {numexpr_time * 1000:8.3f} ms")
     print(f"Speedup: {speedup:8.2f}×")
     results.append(("Hard Threshold", numpy_time, numexpr_time, speedup))
 
@@ -130,8 +130,8 @@ def benchmark_numexpr():
     numexpr_time, _ = benchmark_function(dsp.spectral_subtraction, spectrum, noise_profile)
     speedup = numpy_time / numexpr_time
 
-    print(f"NumPy:   {numpy_time*1000:8.3f} ms")
-    print(f"NumExpr: {numexpr_time*1000:8.3f} ms")
+    print(f"NumPy:   {numpy_time * 1000:8.3f} ms")
+    print(f"NumExpr: {numexpr_time * 1000:8.3f} ms")
     print(f"Speedup: {speedup:8.2f}×")
     results.append(("Spectral Subtraction", numpy_time, numexpr_time, speedup))
 
@@ -187,8 +187,8 @@ def benchmark_cython():
     cython_time, _ = benchmark_function(cython_loops.click_detector_fast, audio, threshold, min_distance, iterations=10)
     speedup = python_time / cython_time
 
-    print(f"Python: {python_time*1000:8.3f} ms")
-    print(f"Cython: {cython_time*1000:8.3f} ms")
+    print(f"Python: {python_time * 1000:8.3f} ms")
+    print(f"Cython: {cython_time * 1000:8.3f} ms")
     print(f"Speedup: {speedup:7.2f}×")
     results.append(("Click Detector", python_time, cython_time, speedup))
 
@@ -223,8 +223,8 @@ def benchmark_cython():
     )
     speedup = python_time / cython_time
 
-    print(f"Python: {python_time*1000:8.3f} ms")
-    print(f"Cython: {cython_time*1000:8.3f} ms")
+    print(f"Python: {python_time * 1000:8.3f} ms")
+    print(f"Cython: {cython_time * 1000:8.3f} ms")
     print(f"Speedup: {speedup:7.2f}×")
     results.append(("Group Clicks", python_time, cython_time, speedup))
 
@@ -247,8 +247,8 @@ def benchmark_cython():
     cython_time, _ = benchmark_function(cython_loops.peak_finder_fast, audio, threshold, min_distance, iterations=10)
     speedup = python_time / cython_time
 
-    print(f"Python: {python_time*1000:8.3f} ms")
-    print(f"Cython: {cython_time*1000:8.3f} ms")
+    print(f"Python: {python_time * 1000:8.3f} ms")
+    print(f"Cython: {cython_time * 1000:8.3f} ms")
     print(f"Speedup: {speedup:7.2f}×")
     results.append(("Peak Finder", python_time, cython_time, speedup))
 
@@ -274,8 +274,8 @@ def benchmark_cython():
     cython_time, _ = benchmark_function(cython_loops.rms_fast, audio, frame_length, hop_length, iterations=10)
     speedup = python_time / cython_time
 
-    print(f"Python: {python_time*1000:8.3f} ms")
-    print(f"Cython: {cython_time*1000:8.3f} ms")
+    print(f"Python: {python_time * 1000:8.3f} ms")
+    print(f"Cython: {cython_time * 1000:8.3f} ms")
     print(f"Speedup: {speedup:7.2f}×")
     results.append(("RMS Energy", python_time, cython_time, speedup))
 
@@ -330,7 +330,7 @@ def benchmark_fft():
 
         speedup = numpy_time / pyfftw_time
 
-        print(f"{n_fft:6} | {numpy_time*1000:12.3f} | {pyfftw_time*1000:13.3f} | {speedup:8.2f}×")
+        print(f"{n_fft:6} | {numpy_time * 1000:12.3f} | {pyfftw_time * 1000:13.3f} | {speedup:8.2f}×")
         results.append((f"FFT-{n_fft}", numpy_time, pyfftw_time, speedup))
 
     # STFT Benchmark
@@ -358,8 +358,8 @@ def benchmark_fft():
     pyfftw_time, _ = benchmark_function(fft.stft, audio, n_fft, hop_length, iterations=10)
     speedup = numpy_time / pyfftw_time
 
-    print(f"NumPy STFT:   {numpy_time*1000:10.3f} ms")
-    print(f"pyFFTW STFT:  {pyfftw_time*1000:10.3f} ms")
+    print(f"NumPy STFT:   {numpy_time * 1000:10.3f} ms")
+    print(f"pyFFTW STFT:  {pyfftw_time * 1000:10.3f} ms")
     print(f"Speedup:      {speedup:10.2f}×")
     results.append(("STFT", numpy_time, pyfftw_time, speedup))
 

@@ -16,11 +16,11 @@ Type-Annotations nach §3.7.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 import logging
 import math
 import threading
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np

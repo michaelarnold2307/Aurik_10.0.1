@@ -277,6 +277,7 @@ class TestHPGAdaptiveGfloor:
     @pytest.fixture(scope="class")
     def hpg(self):
         from backend.core.harmonic_preservation_guard import HarmonicPreservationGuard
+
         return HarmonicPreservationGuard()
 
     @pytest.fixture(scope="class")
@@ -291,14 +292,17 @@ class TestHPGAdaptiveGfloor:
     def test_26_static_mode_protected_equals_gfloor_harmonic(self, hpg, dummy_mask):
         """Ohne noise_psd/stft: geschützte Bins = G_FLOOR_HARMONIC."""
         from backend.core.harmonic_preservation_guard import G_FLOOR_HARMONIC
+
         result = hpg.build_gfloor_mask(dummy_mask)
         protected_values = result[:2, :]
-        assert np.allclose(protected_values, G_FLOOR_HARMONIC), \
+        assert np.allclose(protected_values, G_FLOOR_HARMONIC), (
             f"Erwartet {G_FLOOR_HARMONIC}, erhalten {protected_values.mean():.4f}"
+        )
 
     def test_27_static_mode_unprotected_equals_gfloor_default(self, hpg, dummy_mask):
         """Ohne noise_psd/stft: ungeschützte Bins = G_FLOOR_DEFAULT."""
         from backend.core.harmonic_preservation_guard import G_FLOOR_DEFAULT
+
         result = hpg.build_gfloor_mask(dummy_mask)
         unprotected_values = result[2:, :]
         assert np.allclose(unprotected_values, G_FLOOR_DEFAULT)
@@ -329,6 +333,7 @@ class TestHPGAdaptiveGfloor:
     def test_32_adaptive_gfloor_bounds(self, hpg, dummy_mask):
         """G_floor immer in [G_FLOOR_DEFAULT, G_FLOOR_HARMONIC]."""
         from backend.core.harmonic_preservation_guard import G_FLOOR_DEFAULT, G_FLOOR_HARMONIC
+
         np.random.seed(3)
         stft = (np.random.randn(4, 8) + 1j * np.random.randn(4, 8)).astype(np.complex64)
         result = hpg.build_gfloor_mask(dummy_mask, stft=stft)
@@ -338,6 +343,7 @@ class TestHPGAdaptiveGfloor:
     def test_33_unprotected_bins_always_gfloor_default(self, hpg, dummy_mask):
         """Ungeschützte Bins bekommen immer G_FLOOR_DEFAULT — auch im adaptiven Modus."""
         from backend.core.harmonic_preservation_guard import G_FLOOR_DEFAULT
+
         np.random.seed(4)
         stft = (np.random.randn(4, 8) * 100.0 + 1j * np.random.randn(4, 8) * 100.0).astype(np.complex64)
         result = hpg.build_gfloor_mask(dummy_mask, stft=stft)
@@ -346,7 +352,7 @@ class TestHPGAdaptiveGfloor:
 
     def test_34_high_snr_protected_bins_approach_gfloor_harmonic(self, hpg):
         """Bei sehr hohem SNR: g_adaptive nähert sich G_FLOOR_HARMONIC."""
-        from backend.core.harmonic_preservation_guard import G_FLOOR_HARMONIC, G_FLOOR_DEFAULT
+
         n_bins, n_frames = 8, 16
         mask = np.ones((n_bins, n_frames), dtype=np.float32)  # alles geschützt
         # Sehr starkes Signal, sehr niedrige Rausch-PSD → SNR >> 0
@@ -358,7 +364,7 @@ class TestHPGAdaptiveGfloor:
 
     def test_35_low_snr_protected_bins_approach_gfloor_default(self, hpg):
         """Bei sehr niedrigem SNR (Rauschburst): g_adaptive → G_FLOOR_DEFAULT."""
-        from backend.core.harmonic_preservation_guard import G_FLOOR_DEFAULT
+
         n_bins, n_frames = 8, 16
         mask = np.ones((n_bins, n_frames), dtype=np.float32)  # alles geschützt
         # Sehr schwaches Signal, sehr starke Rausch-PSD → SNR << 0

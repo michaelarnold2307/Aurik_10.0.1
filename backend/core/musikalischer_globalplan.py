@@ -44,10 +44,9 @@ Version: 9.10.57
 from __future__ import annotations
 
 import logging
-import math
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -62,14 +61,14 @@ logger = logging.getLogger(__name__)
 _ERA_PROFILES: dict[int, dict[str, Any]] = {
     1890: {
         "label": "Früheste Aufnahmen (Zylinder/Wachswalze)",
-        "nr_aggressiveness": 0.45,    # Sehr sanfte NR — Originalcharakter erhalten
-        "harmonic_restore": 1.6,       # Starke Harmonik-Wiederherstellung
-        "hf_ceiling_khz": 4.5,         # Authentische Bandbreitenbegrenzung
-        "presence_boost": 0.0,         # Kein HF-Boost (wäre unhistorisch)
-        "stereo_width": 0.0,           # Immer Mono
-        "warmth_target": 0.92,         # Wärme ist Ära-Merkmal
-        "authenticity_weight": 0.95,   # Authentizität hat höchste Priorität
-        "nr_preserves_grain": True,    # Kornrauschen ist Teil des Charakters
+        "nr_aggressiveness": 0.45,  # Sehr sanfte NR — Originalcharakter erhalten
+        "harmonic_restore": 1.6,  # Starke Harmonik-Wiederherstellung
+        "hf_ceiling_khz": 4.5,  # Authentische Bandbreitenbegrenzung
+        "presence_boost": 0.0,  # Kein HF-Boost (wäre unhistorisch)
+        "stereo_width": 0.0,  # Immer Mono
+        "warmth_target": 0.92,  # Wärme ist Ära-Merkmal
+        "authenticity_weight": 0.95,  # Authentizität hat höchste Priorität
+        "nr_preserves_grain": True,  # Kornrauschen ist Teil des Charakters
     },
     1910: {
         "label": "Frühes Edison-Zeitalter",
@@ -255,6 +254,7 @@ _GENRE_MODIFIERS: dict[str, dict[str, float]] = {
 # Ergebnis-Datenklassen
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MusikalischesPortrait:
     """Semantisches Verständnis eines Audiostücks — das 'Gehör' des Denkers.
@@ -262,30 +262,31 @@ class MusikalischesPortrait:
     Dieser Datencontainer kodiert alles, was Aurik über ein Stück 'weiß',
     bevor die erste Phase der Pipeline startet.
     """
+
     # Ära-Wissen
-    decade: int                         # z.B. 1940
-    era_label: str                      # z.B. "Goldene Ära der Schellackplatte"
-    era_confidence: float               # Konfidenz [0,1]
+    decade: int  # z.B. 1940
+    era_label: str  # z.B. "Goldene Ära der Schellackplatte"
+    era_confidence: float  # Konfidenz [0,1]
 
     # Genre-Wissen
-    genre: str                          # z.B. "schlager", "jazz", "unbekannt"
-    subgenre: str                       # z.B. "wiener_schlager"
-    genre_confidence: float             # Konfidenz [0,1]
-    bpm: float                          # Geschätztes Tempo
+    genre: str  # z.B. "schlager", "jazz", "unbekannt"
+    subgenre: str  # z.B. "wiener_schlager"
+    genre_confidence: float  # Konfidenz [0,1]
+    bpm: float  # Geschätztes Tempo
 
     # Semantisches CLAP-Portrait
-    clap_available: bool                # Ob CLAP-Embeddings genutzt wurden
-    semantic_similarity: float          # Ähnlichkeit zu Ära-Ankern [0,1]
-    semantic_description: str           # Textuelles Portrait des Stücks
+    clap_available: bool  # Ob CLAP-Embeddings genutzt wurden
+    semantic_similarity: float  # Ähnlichkeit zu Ära-Ankern [0,1]
+    semantic_description: str  # Textuelles Portrait des Stücks
 
     # Emotionale Charakteristik
-    estimated_mood: str                 # z.B. "nostalgisch", "tänzerisch"
-    warmth_score: float                 # Wärme-Schätzung aus Spektralenergie [0,1]
-    brightness_score: float             # Brillanz [0,1]
-    dynamic_range_estimate: float       # Dynamikumfang [0,1]
+    estimated_mood: str  # z.B. "nostalgisch", "tänzerisch"
+    warmth_score: float  # Wärme-Schätzung aus Spektralenergie [0,1]
+    brightness_score: float  # Brillanz [0,1]
+    dynamic_range_estimate: float  # Dynamikumfang [0,1]
 
     # Material
-    material: str                       # z.B. "shellac", "tape"
+    material: str  # z.B. "shellac", "tape"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -315,18 +316,19 @@ class StilbewussterRestaurierungsplan:
     anpassen. So entsteht zum ersten Mal eine kohärente, stilbewusste
     Klangvorstellung ÜBER die gesamte Pipeline hinweg.
     """
+
     portrait: MusikalischesPortrait
 
     # Globale Ziele (aus Ära + Genre synthetisiert)
-    authenticity_target: float          # Gewünschte Authentizitätsschwelle [0,1]
-    warmth_target: float                # Ziel-Wärmewert [0,1]
-    presence_target: float              # Ziel-Präsenz (Brillanz) [0,1]
-    stereo_width_target: float          # Ziel-Stereobreite [0,1]
-    hf_ceiling_khz: float               # Authentische HF-Grenzfrequenz
+    authenticity_target: float  # Gewünschte Authentizitätsschwelle [0,1]
+    warmth_target: float  # Ziel-Wärmewert [0,1]
+    presence_target: float  # Ziel-Präsenz (Brillanz) [0,1]
+    stereo_width_target: float  # Ziel-Stereobreite [0,1]
+    hf_ceiling_khz: float  # Authentische HF-Grenzfrequenz
 
     # Emotionale Intention
-    emotional_intention: str            # "wärme_erhalten", "brillanz_stärken", etc.
-    preserve_grain: bool                # Ob Rauschen/Korn als Charaktermerkmal gilt
+    emotional_intention: str  # "wärme_erhalten", "brillanz_stärken", etc.
+    preserve_grain: bool  # Ob Rauschen/Korn als Charaktermerkmal gilt
 
     # Per-Phase-Anpassungen: phase_id → {param: delta}
     # Jede Phase kann plan.get_phase_params(phase_id) aufrufen
@@ -359,9 +361,7 @@ class StilbewussterRestaurierungsplan:
 
     def get_nr_aggressiveness(self) -> float:
         """Gibt die global geplante NR-Aggressivität zurück [0,1]."""
-        return self.phase_adjustments.get("phase_03_denoise", {}).get(
-            "aggressiveness", 0.75
-        )
+        return self.phase_adjustments.get("phase_03_denoise", {}).get("aggressiveness", 0.75)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -374,8 +374,7 @@ class StilbewussterRestaurierungsplan:
             "emotional_intention": self.emotional_intention,
             "preserve_grain": self.preserve_grain,
             "phase_adjustments": {
-                k: {pk: round(pv, 4) for pk, pv in v.items()}
-                for k, v in self.phase_adjustments.items()
+                k: {pk: round(pv, 4) for pk, pv in v.items()} for k, v in self.phase_adjustments.items()
             },
             "reasoning_trace": self.reasoning_trace,
             "plan_version": self.plan_version,
@@ -385,6 +384,7 @@ class StilbewussterRestaurierungsplan:
 # ---------------------------------------------------------------------------
 # DSP-Hilfsfunktionen (kein ML, rein numerisch)
 # ---------------------------------------------------------------------------
+
 
 def _safe_mono(audio: np.ndarray) -> np.ndarray:
     """Convert to mono without NaN propagation."""
@@ -411,7 +411,7 @@ def _estimate_warmth(mono: np.ndarray, sr: int) -> float:
     if len(mono) < 512:
         return 0.5
     try:
-        fft = np.abs(np.fft.rfft(mono[:min(len(mono), 65536)]))
+        fft = np.abs(np.fft.rfft(mono[: min(len(mono), 65536)]))
         freqs = np.fft.rfftfreq(min(len(mono), 65536), d=1.0 / sr)
         low_energy = float(np.sum(fft[freqs < 1000.0] ** 2) + 1e-12)
         mid_energy = float(np.sum(fft[(freqs >= 1000.0) & (freqs < 4000.0)] ** 2) + 1e-12)
@@ -439,10 +439,10 @@ def _estimate_brightness(mono: np.ndarray, sr: int) -> float:
     if len(mono) < 512:
         return 0.5
     try:
-        fft = np.abs(np.fft.rfft(mono[:min(len(mono), 65536)]))
+        fft = np.abs(np.fft.rfft(mono[: min(len(mono), 65536)]))
         freqs = np.fft.rfftfreq(min(len(mono), 65536), d=1.0 / sr)
         hf_energy = float(np.sum(fft[freqs > 8000.0] ** 2) + 1e-12)
-        total_energy = float(np.sum(fft ** 2) + 1e-12)
+        total_energy = float(np.sum(fft**2) + 1e-12)
         brightness = float(np.clip(hf_energy / total_energy * 10.0, 0.0, 1.0))
         return brightness
     except Exception:
@@ -544,15 +544,13 @@ def _build_semantic_description(
         "wax_cylinder": "Wachszylinder",
     }.get(material, material)
     bpm_str = f", ca. {bpm:.0f} BPM" if bpm > 0.0 else ""
-    return (
-        f"{genre_str}{subgenre_str} aus den {decade_str}, aufgenommen auf {material_str}"
-        f"{bpm_str}. Stimmung: {mood}."
-    )
+    return f"{genre_str}{subgenre_str} aus den {decade_str}, aufgenommen auf {material_str}{bpm_str}. Stimmung: {mood}."
 
 
 # ---------------------------------------------------------------------------
 # Kern-Klasse: MusikalischerGlobalplanDienst
 # ---------------------------------------------------------------------------
+
 
 class MusikalischerGlobalplanDienst:
     """Erzeugt stilbewusste Restaurierungspläne — das Dach über der Pipeline.
@@ -579,6 +577,7 @@ class MusikalischerGlobalplanDienst:
         if self._era_classifier is None:
             try:
                 from backend.core.era_classifier import EraClassifier
+
                 self._era_classifier = EraClassifier()
             except Exception as exc:
                 logger.debug("EraClassifier nicht verfügbar: %s", exc)
@@ -588,6 +587,7 @@ class MusikalischerGlobalplanDienst:
         if self._genre_classifier is None:
             try:
                 from backend.core.genre_classifier import GermanSchlagerClassifier
+
                 self._genre_classifier = GermanSchlagerClassifier()
             except Exception as exc:
                 logger.debug("GermanSchlagerClassifier nicht verfügbar: %s", exc)
@@ -634,9 +634,7 @@ class MusikalischerGlobalplanDienst:
             for _key in ("chain", "transfer_chain"):
                 _chain_raw = chain_info.get(_key)
                 if isinstance(_chain_raw, list):
-                    chain_materials.update(
-                        str(x).strip().lower() for x in _chain_raw if x is not None
-                    )
+                    chain_materials.update(str(x).strip().lower() for x in _chain_raw if x is not None)
             for _key in ("primary", "secondary", "tertiary", "primary_material"):
                 _value = chain_info.get(_key)
                 if isinstance(_value, str) and _value.strip():
@@ -661,8 +659,7 @@ class MusikalischerGlobalplanDienst:
                     era_label = getattr(era_result, "era_label", f"{decade}er")
                     clap_available = getattr(era_result, "tier_used", 2) == 1
                     reasoning.append(
-                        f"EraClassifier: {decade}er (Conf={era_conf:.2f}, "
-                        f"Tier={'CLAP' if clap_available else 'DSP'})"
+                        f"EraClassifier: {decade}er (Conf={era_conf:.2f}, Tier={'CLAP' if clap_available else 'DSP'})"
                     )
                 except Exception as exc:
                     logger.debug("EraClassifier fehlgeschlagen: %s", exc)
@@ -687,9 +684,9 @@ class MusikalischerGlobalplanDienst:
                 bw_khz = rolloff_hz / 1000.0
                 reasoning.append(f"Era-DSP-Heuristik: BW={bw_khz:.1f} kHz, SNR={snr_db:.1f} dB → {decade}er")
             except Exception:
-                fft = np.abs(np.fft.rfft(mono[:min(len(mono), 32768)]))
+                fft = np.abs(np.fft.rfft(mono[: min(len(mono), 32768)]))
                 freqs = np.fft.rfftfreq(min(len(mono), 32768), d=1.0 / sr)
-                energy = np.cumsum(fft ** 2)
+                energy = np.cumsum(fft**2)
                 total = energy[-1] + 1e-12
                 idx_95 = int(np.searchsorted(energy, 0.95 * total))
                 bw_khz = float(freqs[min(idx_95, len(freqs) - 1)]) / 1000.0
@@ -738,9 +735,7 @@ class MusikalischerGlobalplanDienst:
                             f"Subgenre={subgenre}, BPM={bpm:.0f})"
                         )
                     else:
-                        reasoning.append(
-                            f"GermanSchlagerClassifier: kein Schlager (Conf={g_result.confidence:.2f})"
-                        )
+                        reasoning.append(f"GermanSchlagerClassifier: kein Schlager (Conf={g_result.confidence:.2f})")
                 except Exception as exc:
                     logger.debug("GermanSchlagerClassifier fehlgeschlagen: %s", exc)
                     reasoning.append(f"GenreClassifier Fallback: {exc}")
@@ -749,6 +744,7 @@ class MusikalischerGlobalplanDienst:
         if bpm <= 0.0:
             try:
                 from backend.core.musical_phrase_context import get_phrase_extractor
+
                 extractor = get_phrase_extractor()
                 bpm = extractor._estimate_tempo(mono, sr)
                 reasoning.append(f"BPM via PhraseExtractor: {bpm:.1f}")
@@ -773,18 +769,14 @@ class MusikalischerGlobalplanDienst:
                 genre = "schlager"
                 subgenre = "deutscher_schlager"
                 genre_conf = 0.36
-                reasoning.append(
-                    "DSP-Fallback: tape→lossy + 1970er + moderates Tempo/Wärmeprofil → deutscher Schlager"
-                )
+                reasoning.append("DSP-Fallback: tape→lossy + 1970er + moderates Tempo/Wärmeprofil → deutscher Schlager")
 
         # Semantische CLAP-Ähnlichkeit (wenn CLAP aktiv)
         semantic_sim = era_conf if clap_available else era_conf * 0.7
 
         # ── 4. Emotionale Intention ─────────────────────────────────────────
         mood = _estimate_mood(warmth_raw, brightness_raw, bpm, genre)
-        semantic_desc = _build_semantic_description(
-            decade, genre, subgenre, material, mood, bpm
-        )
+        semantic_desc = _build_semantic_description(decade, genre, subgenre, material, mood, bpm)
         reasoning.append(f"Semantisches Portrait: '{semantic_desc}'")
 
         # ── 5. Stilbewusste Zielwerte (Ära × Genre) ─────────────────────────
@@ -793,18 +785,10 @@ class MusikalischerGlobalplanDienst:
         nr_aggressiveness = float(era_profile["nr_aggressiveness"]) * float(
             genre_mod.get("nr_aggressiveness_mult", 1.0)
         )
-        warmth_target = float(era_profile["warmth_target"]) + float(
-            genre_mod.get("warmth_boost", 0.0)
-        )
-        presence_target = float(era_profile["presence_boost"]) + float(
-            genre_mod.get("presence_boost_add", 0.0)
-        )
-        stereo_target = float(era_profile["stereo_width"]) + float(
-            genre_mod.get("stereo_width_add", 0.0)
-        )
-        harmonic_restore = float(era_profile["harmonic_restore"]) * float(
-            genre_mod.get("harmonic_restore_mult", 1.0)
-        )
+        warmth_target = float(era_profile["warmth_target"]) + float(genre_mod.get("warmth_boost", 0.0))
+        presence_target = float(era_profile["presence_boost"]) + float(genre_mod.get("presence_boost_add", 0.0))
+        stereo_target = float(era_profile["stereo_width"]) + float(genre_mod.get("stereo_width_add", 0.0))
+        harmonic_restore = float(era_profile["harmonic_restore"]) * float(genre_mod.get("harmonic_restore_mult", 1.0))
         hf_ceiling_khz = float(era_profile["hf_ceiling_khz"])
         authenticity_target = float(era_profile["authenticity_weight"])
         preserve_grain = bool(era_profile["nr_preserves_grain"])
@@ -817,34 +801,26 @@ class MusikalischerGlobalplanDienst:
         # NICHT von DeepFilterNet. Hohe NR-Stärke auf MP3/AAC zerhackt Musikinhalte
         # (Musical Noise / "Kratzen"). Deckeln auf ein minimales Schutzniveau.
         _DIGITAL_NR_CAP: dict[str, float] = {
-            "mp3_low":    0.20,   # schwere Codec-Kompression → Apollo primär, NR minimal
-            "mp3_high":   0.25,   # mittlere Kompression
-            "aac":        0.25,
-            "cd_digital": 0.30,   # nur echter Clipping-Schutz, kein Breitrauschen
-            "dat":        0.30,
+            "mp3_low": 0.20,  # schwere Codec-Kompression → Apollo primär, NR minimal
+            "mp3_high": 0.25,  # mittlere Kompression
+            "aac": 0.25,
+            "cd_digital": 0.30,  # nur echter Clipping-Schutz, kein Breitrauschen
+            "dat": 0.30,
         }
 
-        is_digital_chain = bool(
-            (material in _DIGITAL_NR_CAP)
-            or any(m in _DIGITAL_NR_CAP for m in chain_materials)
-        )
+        is_digital_chain = bool((material in _DIGITAL_NR_CAP) or any(m in _DIGITAL_NR_CAP for m in chain_materials))
 
         _nr_cap = _DIGITAL_NR_CAP.get(material)
         if _nr_cap is None:
             for _m in ("mp3_low", "mp3_high", "aac", "cd_digital", "dat"):
                 if _m in chain_materials:
                     _nr_cap = _DIGITAL_NR_CAP[_m]
-                    reasoning.append(
-                        f"NR-Cap aus Tonträgerkette übernommen: '{material}' + '{_m}'"
-                    )
+                    reasoning.append(f"NR-Cap aus Tonträgerkette übernommen: '{material}' + '{_m}'")
                     break
 
         if _nr_cap is None and material in {"tape", "kassette", "cassette", "reel_tape"} and decade >= 1970:
             _nr_cap = 0.25
-            reasoning.append(
-                "NR-Cap für digitalisierte Bandquelle aktiviert "
-                f"(Material='{material}', Ära={decade}er)"
-            )
+            reasoning.append(f"NR-Cap für digitalisierte Bandquelle aktiviert (Material='{material}', Ära={decade}er)")
 
         if _nr_cap is not None and nr_aggressiveness > _nr_cap:
             reasoning.append(
@@ -1015,8 +991,7 @@ class MusikalischerGlobalplanDienst:
         )
 
         logger.info(
-            "🎼 MusikalischerGlobalplan: %s | Ära=%s (%.0f%%) | Genre=%s | "
-            "NR=%.2f | Wärme=%.2f | Intention='%s'",
+            "🎼 MusikalischerGlobalplan: %s | Ära=%s (%.0f%%) | Genre=%s | NR=%.2f | Wärme=%.2f | Intention='%s'",
             portrait.semantic_description[:60],
             decade,
             era_conf * 100,
@@ -1057,7 +1032,11 @@ def erstelle_globalplan(
 ) -> StilbewussterRestaurierungsplan:
     """Convenience-Funktion: erstellt den Globalplan via Singleton-Dienst."""
     return get_musikalischer_globalplan_dienst().erstelle_plan(
-        audio, sr, material=material, hint_genre=hint_genre, hint_decade=hint_decade,
+        audio,
+        sr,
+        material=material,
+        hint_genre=hint_genre,
+        hint_decade=hint_decade,
         use_ml_classifiers=use_ml_classifiers,
         chain_info=chain_info,
     )

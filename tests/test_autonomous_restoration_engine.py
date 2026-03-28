@@ -21,15 +21,15 @@ import numpy as np
 import pytest
 
 from backend.core.auto_musical_goal_setter import (
-    AutoMusicalGoalSetter,
-    MusicalGoalProfile,
     _MATERIAL_ADJUSTMENTS,
     _MATERIAL_PQS_TARGETS,
+    AutoMusicalGoalSetter,
+    MusicalGoalProfile,
 )
+from backend.core.defect_scanner import DefectAnalysisResult, DefectScore, DefectType, MaterialType
 from backend.core.processing_modes import ProcessingMode
 from backend.core.quality_prediction import QualityEstimate, QualityLevel
 from backend.core.self_learning_optimizer import ArmStats, SelfLearningOptimizer
-from backend.core.defect_scanner import DefectAnalysisResult, DefectScore, DefectType, MaterialType
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -156,9 +156,9 @@ class TestAutoMusicalGoalSetter:
 
         profile = setter.compute_goals(defect_result=defect_result, quality_estimate=quality_est)
 
-        assert (
-            profile.target_authenticity >= 0.70
-        ), f"Authentizität {profile.target_authenticity:.3f} unter 0.70 im Restoration-Modus!"
+        assert profile.target_authenticity >= 0.70, (
+            f"Authentizität {profile.target_authenticity:.3f} unter 0.70 im Restoration-Modus!"
+        )
 
     def test_shellac_material_adjusts_click_sensitivity_up(self):
         """Shellac: Klick-Empfindlichkeit wird erhöht."""
@@ -172,9 +172,9 @@ class TestAutoMusicalGoalSetter:
         profile_vinyl = setter_vinyl.compute_goals(defect_vinyl, quality_est)
         profile_shellac = setter_shellac.compute_goals(defect_shellac, quality_est)
 
-        assert (
-            profile_shellac.click_sensitivity >= profile_vinyl.click_sensitivity
-        ), "Shellac sollte höhere click_sensitivity als Vinyl haben"
+        assert profile_shellac.click_sensitivity >= profile_vinyl.click_sensitivity, (
+            "Shellac sollte höhere click_sensitivity als Vinyl haben"
+        )
 
     def test_high_quality_input_reduces_processing_strength(self):
         """Bei hoher Eingangsqualität werden Processing-Stärken reduziert."""
@@ -184,9 +184,9 @@ class TestAutoMusicalGoalSetter:
         profile_low_q = setter.compute_goals(defect_result, _make_quality_estimate(score=15.0))
         profile_high_q = setter.compute_goals(defect_result, _make_quality_estimate(score=85.0))
 
-        assert (
-            profile_high_q.denoise_strength <= profile_low_q.denoise_strength
-        ), "Hohe Eingangsqualität sollte zu niedrigerer denoise_strength führen"
+        assert profile_high_q.denoise_strength <= profile_low_q.denoise_strength, (
+            "Hohe Eingangsqualität sollte zu niedrigerer denoise_strength führen"
+        )
 
     def test_conflict_resolution_high_authenticity_caps_denoise(self):
         """Hohe Authentizität + starkes De-Noising wird korrigiert."""
@@ -232,9 +232,9 @@ class TestAutoMusicalGoalSetter:
                     _make_defect_result(material=material),
                     _make_quality_estimate(),
                 )
-                assert (
-                    -23.0 <= profile.target_lufs <= -8.0
-                ), f"LUFS {profile.target_lufs} außerhalb [-23, -8] für {material.value}/{mode.value}"
+                assert -23.0 <= profile.target_lufs <= -8.0, (
+                    f"LUFS {profile.target_lufs} außerhalb [-23, -8] für {material.value}/{mode.value}"
+                )
 
     def test_all_material_types_have_explicit_policy(self):
         """Jede MaterialType-Ausprägung muss explizite Vorgaben haben."""

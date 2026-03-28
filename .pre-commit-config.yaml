@@ -209,12 +209,7 @@ repos:
 
       - id: musical-goals-thresholds
         name: "🎵 Musical-Goals-Schwellwerte unverandert"
-        entry: >-
-          .venv_aurik/bin/python -c "
-          from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker;
-          c = MusicalGoalsChecker();
-          assert len(c.thresholds) == 14, f'Erwartet 14 Goals, erhalten {len(c.thresholds)}';
-          print('OK: 14 Musical Goals konfiguriert')"
+        entry: .venv_aurik/bin/python scripts/check_musical_goals.py
         language: system
         pass_filenames: false
         files: ^backend/core/musical_goals/

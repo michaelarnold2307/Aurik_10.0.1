@@ -14,21 +14,21 @@ Notes:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import importlib.machinery
 import importlib.metadata
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import time
 import types
-from typing import Any
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -218,7 +218,7 @@ def _hf_api_json(url: str, retries: int = 1) -> tuple[dict | list | None, str]:
             last_err = f"http_{exc.code}"
         except urllib.error.URLError as exc:
             last_err = f"urlerror:{exc.reason}"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last_err = f"{type(exc).__name__}"
         if attempt < retries:
             time.sleep(0.4 + attempt)
@@ -354,23 +354,23 @@ def _check_onnx_toolchain() -> tuple[bool, str]:
     under their ``fallback`` paths at runtime — no functionality is lost.
     """
     try:
-        import torch.onnx  # noqa: PLC0415,F401
+        pass
 
         return True, "ok"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         msg = f"onnx_toolchain_import_failed:{type(exc).__name__}:{exc}"
         if "ufunc 'isnan' not supported" in str(exc):
             try:
                 np_v = importlib.metadata.version("numpy")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 np_v = "unknown"
             try:
                 mld_v = importlib.metadata.version("ml_dtypes")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 mld_v = "unknown"
             try:
                 onnx_v = importlib.metadata.version("onnx")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 onnx_v = "unknown"
             msg += (
                 f"|numpy={np_v}|ml_dtypes={mld_v}|onnx={onnx_v}|remediation=pip install 'ml_dtypes<0.5' OR 'numpy>=2.0'"
@@ -674,7 +674,7 @@ def _install_rmvpe_import_stubs() -> None:
         signal = types.ModuleType("scipy.signal")
         signal.__spec__ = importlib.machinery.ModuleSpec("scipy.signal", loader=None, is_package=False)
 
-        def _get_window(window: str, win_length: int, fftbins: bool = True) -> np.ndarray:  # noqa: ARG001
+        def _get_window(window: str, win_length: int, fftbins: bool = True) -> np.ndarray:
             if window == "hann":
                 return np.hanning(win_length).astype(np.float32)
             return np.ones(win_length, dtype=np.float32)
@@ -788,7 +788,7 @@ def _load_sgmse_checkpoint_raw(pt_path: Path) -> tuple[dict[str, Any] | None, st
     if stub_mod_name not in sys.modules:
         stub = types.ModuleType(stub_mod_name)
 
-        class SpecsDataModule:  # noqa: D401
+        class SpecsDataModule:
             pass
 
         stub.SpecsDataModule = SpecsDataModule

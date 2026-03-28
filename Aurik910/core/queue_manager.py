@@ -4,33 +4,36 @@ QueueManager — Aurik 9.x.x
 Verwaltet die Warteschlange für Batch-Verarbeitung in der PyQt5-GUI.
 Thread-sicher, NaN/Inf-frei, Singleton-Pattern (§3.2).
 """
+
 from __future__ import annotations
 
 import threading
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class QueueStatus(Enum):
     """Status eines Warteschlangen-Eintrags."""
-    PENDING    = "pending"
+
+    PENDING = "pending"
     PROCESSING = "processing"
-    COMPLETED  = "completed"
-    FAILED     = "failed"
-    CANCELLED  = "cancelled"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 @dataclass
 class QueueItem:
     """Ein einzelner Eintrag in der Restaurierungs-Warteschlange."""
-    id:           str
-    input_file:   str
-    output_file:  str
-    settings:     dict[str, Any]
-    status:       QueueStatus = QueueStatus.PENDING
-    progress:     int         = 0
+
+    id: str
+    input_file: str
+    output_file: str
+    settings: dict[str, Any]
+    status: QueueStatus = QueueStatus.PENDING
+    progress: int = 0
     error_message: str | None = None
 
 
@@ -133,11 +136,7 @@ class QueueManager:
             if clear_completed:
                 self._items.clear()
             else:
-                to_remove = [
-                    item_id
-                    for item_id, item in self._items.items()
-                    if item.status == QueueStatus.PENDING
-                ]
+                to_remove = [item_id for item_id, item in self._items.items() if item.status == QueueStatus.PENDING]
                 for item_id in to_remove:
                     del self._items[item_id]
 
@@ -162,10 +161,7 @@ class QueueManager:
     def get_pending_items(self) -> list[QueueItem]:
         """Gibt alle wartenden (PENDING) Einträge zurück."""
         with self._lock:
-            return [
-                item for item in self._items.values()
-                if item.status == QueueStatus.PENDING
-            ]
+            return [item for item in self._items.values() if item.status == QueueStatus.PENDING]
 
     def __len__(self) -> int:
         with self._lock:

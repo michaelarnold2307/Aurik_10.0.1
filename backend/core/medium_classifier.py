@@ -5,11 +5,11 @@ Automatische Trägermedien-Erkennung (17 Materialtypen).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hashlib
 import logging
 import math
 import threading
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np

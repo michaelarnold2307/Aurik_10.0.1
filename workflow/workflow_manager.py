@@ -14,14 +14,14 @@ Version: 1.0.0
 Date: 9. Februar 2026
 """
 
+import logging
+import shutil
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
-import logging
 from pathlib import Path
-import shutil
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +33,15 @@ logger = logging.getLogger(__name__)
 class BatchJobConfig:
     """Configuration for a batch processing job."""
 
-    input_files: List[Path]
+    input_files: list[Path]
     output_dir: Path
     processing_mode: str = "balanced"
-    medium_type: Optional[str] = None
-    settings: Dict[str, Any] = field(default_factory=dict)
+    medium_type: str | None = None
+    settings: dict[str, Any] = field(default_factory=dict)
     parallel: bool = True
-    max_workers: Optional[int] = None
-    on_progress: Optional[Callable[[int, int, str], None]] = None
-    on_file_complete: Optional[Callable[[Path, Path, bool, str], None]] = None
+    max_workers: int | None = None
+    on_progress: Callable[[int, int, str], None] | None = None
+    on_file_complete: Callable[[Path, Path, bool, str], None] | None = None
     skip_existing: bool = False
 
 
@@ -54,7 +54,7 @@ class BatchJobResult:
     failed_count: int
     skipped_count: int
     total_time: float
-    results: List[Dict[str, Any]]
+    results: list[dict[str, Any]]
 
     def success_rate(self) -> float:
         """Calculate success rate (0.0-1.0)."""
@@ -84,7 +84,7 @@ class BatchProcessor:
     - Comprehensive result reporting
     """
 
-    def __init__(self, restorer_factory: Optional[Callable] = None):
+    def __init__(self, restorer_factory: Callable | None = None):
         """
         Parameters:
         -----------
@@ -93,7 +93,7 @@ class BatchProcessor:
             If None, creates UnifiedRestorerV3 instances.
         """
         self.restorer_factory = restorer_factory or self._default_restorer_factory
-        self.current_job: Optional[BatchJobConfig] = None
+        self.current_job: BatchJobConfig | None = None
 
     def _default_restorer_factory(self):
         """Default restorer factory — liefert AurikDenker-Singleton (§2.2 normativer Einstiegspunkt).
@@ -102,6 +102,7 @@ class BatchProcessor:
         """
         try:
             from denker.aurik_denker import get_aurik_denker  # type: ignore[import]
+
             return get_aurik_denker()
         except Exception as e:
             logger.error("AurikDenker nicht verfügbar: %s", e)
@@ -163,7 +164,7 @@ class BatchProcessor:
             results=results,
         )
 
-    def _process_sequential(self, config: BatchJobConfig) -> List[Dict]:
+    def _process_sequential(self, config: BatchJobConfig) -> list[dict]:
         """Process files sequentially."""
         results = []
 
@@ -186,7 +187,7 @@ class BatchProcessor:
 
         return results
 
-    def _process_parallel(self, config: BatchJobConfig) -> List[Dict]:
+    def _process_parallel(self, config: BatchJobConfig) -> list[dict]:
         """Process files in parallel."""
         try:
             from joblib import Parallel, delayed
@@ -209,7 +210,7 @@ class BatchProcessor:
             logger.info("Falling back to sequential processing")
             return self._process_sequential(config)
 
-    def _process_single_file(self, input_file: Path, config: BatchJobConfig) -> Dict:
+    def _process_single_file(self, input_file: Path, config: BatchJobConfig) -> dict:
         """Process a single file."""
         result = {
             "input_path": str(input_file),
@@ -244,14 +245,16 @@ class BatchProcessor:
             # Custom factories mit .process()-API werden als Legacy-Pfad toleriert.
             if hasattr(restorer, "denke"):
                 _res = restorer.denke(
-                    audio, sr,
+                    audio,
+                    sr,
                     mode=config.processing_mode or "restoration",
                 )
                 processed = _res.audio
             else:
                 # Legacy-Pfad für custom restorer_factory (kein UV3-Default mehr)
                 processed = restorer.process(
-                    audio, sr,
+                    audio,
+                    sr,
                     mode=config.processing_mode,
                     medium_type=config.medium_type,
                 )
@@ -282,8 +285,8 @@ class ProcessingState:
     timestamp: datetime
     input_path: Path
     output_path: Path
-    audio_backup: Optional[Path]  # Temporary backup file
-    settings: Dict[str, Any]
+    audio_backup: Path | None  # Temporary backup file
+    settings: dict[str, Any]
     description: str
 
     def cleanup(self):
@@ -309,7 +312,7 @@ class UndoRedoManager:
     - State description for UI display
     """
 
-    def __init__(self, max_history: int = 10, backup_dir: Optional[Path] = None):
+    def __init__(self, max_history: int = 10, backup_dir: Path | None = None):
         """
         Parameters:
         -----------
@@ -322,11 +325,11 @@ class UndoRedoManager:
         self.backup_dir = backup_dir or Path(".aurik_undo_cache")
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
-        self.undo_stack: List[ProcessingState] = []
-        self.redo_stack: List[ProcessingState] = []
+        self.undo_stack: list[ProcessingState] = []
+        self.redo_stack: list[ProcessingState] = []
         self.current_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    def save_state(self, input_path: Path, output_path: Path, settings: Dict, description: str = "Processing"):
+    def save_state(self, input_path: Path, output_path: Path, settings: dict, description: str = "Processing"):
         """
         Save current state for undo.
 
@@ -375,7 +378,7 @@ class UndoRedoManager:
         """Check if redo is available."""
         return len(self.redo_stack) > 0
 
-    def undo(self) -> Optional[ProcessingState]:
+    def undo(self) -> ProcessingState | None:
         """
         Undo last operation.
 
@@ -403,7 +406,7 @@ class UndoRedoManager:
 
         return state
 
-    def redo(self) -> Optional[ProcessingState]:
+    def redo(self) -> ProcessingState | None:
         """
         Redo previously undone operation.
 
@@ -427,11 +430,11 @@ class UndoRedoManager:
 
         return state
 
-    def get_undo_history(self) -> List[str]:
+    def get_undo_history(self) -> list[str]:
         """Get list of undo descriptions."""
         return [state.description for state in reversed(self.undo_stack)]
 
-    def get_redo_history(self) -> List[str]:
+    def get_redo_history(self) -> list[str]:
         """Get list of redo descriptions."""
         return [state.description for state in self.redo_stack]
 
@@ -472,7 +475,7 @@ class WorkflowSessionManager:
     - Quick session switching
     """
 
-    def __init__(self, sessions_dir: Optional[Path] = None):
+    def __init__(self, sessions_dir: Path | None = None):
         """
         Parameters:
         -----------
@@ -491,7 +494,7 @@ class WorkflowSessionManager:
             logger.warning(f"Failed to initialize backend SessionManager: {e}, using stub")
             self.backend_manager = None
 
-        self.current_session_id: Optional[str] = None
+        self.current_session_id: str | None = None
         self.auto_save = True
 
     def create_session(self, name: str, description: str = "") -> str:
@@ -504,9 +507,9 @@ class WorkflowSessionManager:
             ID of created session
         """
         if self.backend_manager:
-            session_id = self.backend_manager.create_session(name, description)
-            self.current_session_id = session_id
-            return session_id
+            session = self.backend_manager.create_session(name, description)
+            self.current_session_id = session.session_id
+            return session.session_id
         return "stub_session"
 
     def load_session(self, session_id: str) -> bool:
@@ -526,7 +529,7 @@ class WorkflowSessionManager:
         return False
 
     def add_processed_file(
-        self, input_path: Path, output_path: Path, settings: Dict, success: bool = True, error: Optional[str] = None
+        self, input_path: Path, output_path: Path, settings: dict, success: bool = True, error: str | None = None
     ):
         """Add processed file to current session."""
         if self.backend_manager and self.current_session_id:
@@ -542,18 +545,18 @@ class WorkflowSessionManager:
                     error_message=error,
                 )
 
-                self.backend_manager.add_file_to_session(self.current_session_id, processed_file)
+                self.backend_manager.add_to_session(processed_file)
 
                 if self.auto_save:
-                    self.backend_manager.save_session(self.current_session_id)
+                    self.backend_manager.save_session()
 
             except Exception as e:
                 logger.error(f"Failed to add file to session: {e}")
 
-    def get_recent_sessions(self, limit: int = 10) -> List[Dict]:
+    def get_recent_sessions(self, limit: int = 10) -> list[dict]:
         """Get list of recent sessions."""
         if self.backend_manager:
-            return self.backend_manager.list_recent_sessions(limit=limit)
+            return self.backend_manager.get_recent_sessions(n=limit)
         return []
 
     def export_session(self, session_id: str, export_path: Path) -> bool:
@@ -562,7 +565,7 @@ class WorkflowSessionManager:
             return self.backend_manager.export_session(session_id, export_path)
         return False
 
-    def import_session(self, import_path: Path) -> Optional[str]:
+    def import_session(self, import_path: Path) -> str | None:
         """
         Import session from file.
 
@@ -572,7 +575,8 @@ class WorkflowSessionManager:
             ID of imported session, or None if failed
         """
         if self.backend_manager:
-            return self.backend_manager.import_session(import_path)
+            session = self.backend_manager.import_session(import_path)
+            return session.session_id
         return None
 
 
@@ -613,7 +617,7 @@ class WorkflowManager:
     ```
     """
 
-    def __init__(self, sessions_dir: Optional[Path] = None, backup_dir: Optional[Path] = None):
+    def __init__(self, sessions_dir: Path | None = None, backup_dir: Path | None = None):
         """
         Parameters:
         -----------
@@ -635,7 +639,7 @@ class WorkflowManager:
         """Load existing session."""
         return self.session_manager.load_session(session_id)
 
-    def get_recent_sessions(self, limit: int = 10) -> List[Dict]:
+    def get_recent_sessions(self, limit: int = 10) -> list[dict]:
         """Get recent sessions."""
         return self.session_manager.get_recent_sessions(limit)
 
@@ -704,11 +708,11 @@ class WorkflowManager:
         """Check if redo is available."""
         return self.undo_manager.can_redo()
 
-    def get_undo_history(self) -> List[str]:
+    def get_undo_history(self) -> list[str]:
         """Get undo history."""
         return self.undo_manager.get_undo_history()
 
-    def get_redo_history(self) -> List[str]:
+    def get_redo_history(self) -> list[str]:
         """Get redo history."""
         return self.undo_manager.get_redo_history()
 

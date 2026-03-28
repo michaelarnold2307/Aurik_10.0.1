@@ -37,10 +37,10 @@ logger = logging.getLogger(__name__)
 # VERBOTEN: Stufenwerte manuell setzen ohne PhysicalCeilingEstimator-Grundlage.
 # ---------------------------------------------------------------------------
 SCALE_FACTORS: dict[str, float] = {
-    "≥ 70":   1.00,   # GOOD     — ceiling_avg = 0.97
-    "50–69":  0.93,   # FAIR     — ceiling_avg = 0.90
-    "30–49":  0.85,   # POOR     — ceiling_avg = 0.82
-    "< 30":   0.75,   # VERY_POOR — ceiling_avg = 0.73
+    "≥ 70": 1.00,  # GOOD     — ceiling_avg = 0.97
+    "50–69": 0.93,  # FAIR     — ceiling_avg = 0.90
+    "30–49": 0.85,  # POOR     — ceiling_avg = 0.82
+    "< 30": 0.75,  # VERY_POOR — ceiling_avg = 0.73
 }
 
 
@@ -557,11 +557,7 @@ class AdaptiveGoalsCalculator:
         relaxation_factor = quality.degradation_score
 
         # §2.31: restorability-adaptive scale factor (normative SCALE_FACTORS table)
-        scale = (
-            get_restorability_scale_factor(float(restorability_score))
-            if restorability_score is not None
-            else 1.0
-        )
+        scale = get_restorability_scale_factor(float(restorability_score)) if restorability_score is not None else 1.0
 
         # Apply relaxation to each threshold
         thresholds = {}
@@ -592,10 +588,12 @@ class AdaptiveGoalsCalculator:
         )
 
         logger.info(
-            "Adaptive Thresholds calculated for %s: Relaxation=%.2f scale=%.2f"
-            " Brillanz=%.2f Authentizität=%.2f",
-            quality.quality_level.value, relaxation_factor, scale,
-            adaptive_thresholds.brillanz, adaptive_thresholds.authentizitaet,
+            "Adaptive Thresholds calculated for %s: Relaxation=%.2f scale=%.2f Brillanz=%.2f Authentizität=%.2f",
+            quality.quality_level.value,
+            relaxation_factor,
+            scale,
+            adaptive_thresholds.brillanz,
+            adaptive_thresholds.authentizitaet,
         )
 
         return adaptive_thresholds

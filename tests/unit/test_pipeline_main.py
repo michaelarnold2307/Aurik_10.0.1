@@ -11,13 +11,9 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
-from dataclasses import dataclass, field
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 
 np.random.seed(3)
 
@@ -62,9 +58,7 @@ def _make_mock_result(audio: np.ndarray) -> MagicMock:
 def _make_pipeline_with_mock_engine(audio: np.ndarray, mode=ProcessingMode.RESTORATION):
     """Erstellt AurikAutonomousPipeline, dessen Engine gemockt ist."""
     mock_result = _make_mock_result(audio)
-    with patch(
-        "backend.core.pipeline_main.AutonomousRestorationEngine"
-    ) as MockEngine:
+    with patch("backend.core.pipeline_main.AutonomousRestorationEngine") as MockEngine:
         MockEngine.return_value.process.return_value = mock_result
         pipeline = AurikAutonomousPipeline(mode=mode, enable_self_learning=False)
         # Engine muss aktiv bleiben:
@@ -258,9 +252,10 @@ class TestAppendAudit:
     def test_27_audit_creates_ndjson_entry(self, tmp_path):
         audio = _sine(secs=0.5)
         mock_result = _make_mock_result(audio)
-        with patch("backend.core.pipeline_main.AutonomousRestorationEngine"), \
-             patch("backend.core.pipeline_main._AUDIT_LOG_PATH",
-                   str(tmp_path / "audit.ndjson")):
+        with (
+            patch("backend.core.pipeline_main.AutonomousRestorationEngine"),
+            patch("backend.core.pipeline_main._AUDIT_LOG_PATH", str(tmp_path / "audit.ndjson")),
+        ):
             pipeline = AurikAutonomousPipeline(enable_self_learning=False)
             pipeline._append_audit(mock_result)
             log_path = tmp_path / "audit.ndjson"
@@ -270,11 +265,13 @@ class TestAppendAudit:
         audio = _sine(secs=0.5)
         mock_result = _make_mock_result(audio)
         audit_path = str(tmp_path / "audit.ndjson")
-        with patch("backend.core.pipeline_main.AutonomousRestorationEngine"), \
-             patch("backend.core.pipeline_main._AUDIT_LOG_PATH", audit_path):
+        with (
+            patch("backend.core.pipeline_main.AutonomousRestorationEngine"),
+            patch("backend.core.pipeline_main._AUDIT_LOG_PATH", audit_path),
+        ):
             pipeline = AurikAutonomousPipeline(enable_self_learning=False)
             pipeline._append_audit(mock_result)
-        with open(audit_path, "r", encoding="utf-8") as f:
+        with open(audit_path, encoding="utf-8") as f:
             line = f.readline().strip()
         entry = json.loads(line)
         assert isinstance(entry, dict)
@@ -283,11 +280,13 @@ class TestAppendAudit:
         audio = _sine(secs=0.5)
         mock_result = _make_mock_result(audio)
         audit_path = str(tmp_path / "audit.ndjson")
-        with patch("backend.core.pipeline_main.AutonomousRestorationEngine"), \
-             patch("backend.core.pipeline_main._AUDIT_LOG_PATH", audit_path):
+        with (
+            patch("backend.core.pipeline_main.AutonomousRestorationEngine"),
+            patch("backend.core.pipeline_main._AUDIT_LOG_PATH", audit_path),
+        ):
             pipeline = AurikAutonomousPipeline(enable_self_learning=False)
             pipeline._append_audit(mock_result)
-        with open(audit_path, "r", encoding="utf-8") as f:
+        with open(audit_path, encoding="utf-8") as f:
             entry = json.loads(f.readline())
         assert "mode" in entry
 
@@ -295,11 +294,13 @@ class TestAppendAudit:
         audio = _sine(secs=0.5)
         mock_result = _make_mock_result(audio)
         audit_path = str(tmp_path / "audit.ndjson")
-        with patch("backend.core.pipeline_main.AutonomousRestorationEngine"), \
-             patch("backend.core.pipeline_main._AUDIT_LOG_PATH", audit_path):
+        with (
+            patch("backend.core.pipeline_main.AutonomousRestorationEngine"),
+            patch("backend.core.pipeline_main._AUDIT_LOG_PATH", audit_path),
+        ):
             pipeline = AurikAutonomousPipeline(enable_self_learning=False)
             pipeline._append_audit(mock_result)
-        with open(audit_path, "r", encoding="utf-8") as f:
+        with open(audit_path, encoding="utf-8") as f:
             entry = json.loads(f.readline())
         assert "rollback" in entry
 
@@ -325,8 +326,7 @@ class TestAurikMainPipeline:
         assert AurikMainPipeline is not None
 
     def test_32_init_with_mocked_deps(self):
-        with patch("backend.core.pipeline_main.AurikMainPipeline.__init__",
-                   return_value=None):
+        with patch("backend.core.pipeline_main.AurikMainPipeline.__init__", return_value=None):
             pipeline = AurikMainPipeline.__new__(AurikMainPipeline)
             assert pipeline is not None
 

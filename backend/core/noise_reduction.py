@@ -20,13 +20,14 @@ logger = logging.getLogger(__name__)
 
 try:
     from plugins.deepfilternet_v3_ii_plugin import get_deepfilternet_plugin as _get_dfn
+
     _AVAILABLE = True
 except ImportError:
     _AVAILABLE = False
     logger.debug("noise_reduction: DeepFilterNet plugin not available — DSP fallback only")
 
 
-def get_noise_reducer() -> "DeepFilterNetV3Plugin | None":
+def get_noise_reducer() -> DeepFilterNetV3Plugin | None:
     """Return the DeepFilterNet v3.II singleton, or None if unavailable."""
     if not _AVAILABLE:
         return None

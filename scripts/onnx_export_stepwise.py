@@ -29,11 +29,10 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
-from pathlib import Path
 import subprocess
 import sys
-
+from dataclasses import dataclass
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = ROOT / ".venv_aurik" / "bin" / "python"
@@ -236,7 +235,12 @@ def _run_step(step: Step) -> int:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stepwise ONNX export runner")
-    parser.add_argument("--step", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], help="Run only one specific step")
+    parser.add_argument(
+        "--step",
+        type=int,
+        choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+        help="Run only one specific step",
+    )
     parser.add_argument(
         "--profile",
         choices=["core"],

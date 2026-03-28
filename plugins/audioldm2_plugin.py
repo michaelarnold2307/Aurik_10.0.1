@@ -101,6 +101,7 @@ class AudioLDM2Plugin:
         logger.warning("AudioLDM2: Kein ONNX-Modell gefunden — generiere Platzhalterton.")
         try:
             from backend.core.ml_memory_budget import release as _rel
+
             _rel("AudioLDM2")
         except Exception:
             pass

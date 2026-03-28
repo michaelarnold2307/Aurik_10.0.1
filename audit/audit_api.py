@@ -6,11 +6,11 @@ audit_api.py – REST-API für Audit-/Policy-Abfragen und Compliance-Status
 """
 
 import os
-from typing import Any, Dict, List
+from typing import Any
 
+import yaml
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-import yaml
 
 app = FastAPI(title="Audit/Policy API", description="REST-API für Audit- und Policy-Compliance")
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 from backend.core.pipeline_health_state import (
     PipelineHealthState,
     normalize_pipeline_health_state,
-    primary_fail_reason_from_fail_reasons,
     pipeline_health_from_fail_reasons,
+    primary_fail_reason_from_fail_reasons,
     resolve_fail_reason,
 )
 
@@ -22,16 +22,12 @@ def test_pipeline_health_from_fail_reasons_empty_is_ok():
 
 
 def test_pipeline_health_from_fail_reasons_detects_critical():
-    state = pipeline_health_from_fail_reasons(
-        [{"component": "arc", "error_code": "ARC_REGRESSION_ROLLBACK"}]
-    )
+    state = pipeline_health_from_fail_reasons([{"component": "arc", "error_code": "ARC_REGRESSION_ROLLBACK"}])
     assert state == PipelineHealthState.CRITICAL_DEGRADED
 
 
 def test_pipeline_health_from_fail_reasons_detects_blocked():
-    state = pipeline_health_from_fail_reasons(
-        [{"component": "pipeline", "error_code": "PIPELINE_BLOCKED"}]
-    )
+    state = pipeline_health_from_fail_reasons([{"component": "pipeline", "error_code": "PIPELINE_BLOCKED"}])
     assert state == PipelineHealthState.BLOCKED
 
 
@@ -43,9 +39,7 @@ def test_pipeline_health_from_fail_reasons_prefers_severity_over_error_code():
 
 
 def test_pipeline_health_from_fail_reasons_uses_degraded_severity_without_code():
-    state = pipeline_health_from_fail_reasons(
-        [{"component": "adapter", "severity": "degraded"}]
-    )
+    state = pipeline_health_from_fail_reasons([{"component": "adapter", "severity": "degraded"}])
     assert state == PipelineHealthState.DEGRADED
 
 
@@ -69,12 +63,11 @@ def test_resolve_fail_reason_prefers_typed_field_then_fallbacks():
 
 
 def test_primary_fail_reason_from_fail_reasons_prefers_error_code_then_message_fields():
-    assert primary_fail_reason_from_fail_reasons(
-        [{"error_code": "PQS_GATE_FAILED", "exc_msg": "ignored"}]
-    ) == "PQS_GATE_FAILED"
-    assert primary_fail_reason_from_fail_reasons(
-        [{"exc_msg": "Nur Nachricht"}]
-    ) == "Nur Nachricht"
+    assert (
+        primary_fail_reason_from_fail_reasons([{"error_code": "PQS_GATE_FAILED", "exc_msg": "ignored"}])
+        == "PQS_GATE_FAILED"
+    )
+    assert primary_fail_reason_from_fail_reasons([{"exc_msg": "Nur Nachricht"}]) == "Nur Nachricht"
 
 
 def test_resolve_fail_reason_uses_structured_fail_reasons_when_text_fields_empty():

@@ -18,7 +18,6 @@ Aufruf: pytest tests/normative/test_hybrid_release_mode.py -v --timeout=30
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
 
 import pytest
@@ -79,11 +78,7 @@ def test_every_component_has_release_mode(runtime_rows):
 
 def test_release_mode_values_are_valid(runtime_rows):
     """release_mode muss 'primary', 'fallback' oder 'blocked' sein."""
-    invalid = [
-        (r["name"], r["release_mode"])
-        for r in runtime_rows
-        if r.get("release_mode") not in _VALID_MODES
-    ]
+    invalid = [(r["name"], r["release_mode"]) for r in runtime_rows if r.get("release_mode") not in _VALID_MODES]
     assert not invalid, f"Ungültige release_mode-Werte: {invalid}"
 
 
@@ -115,18 +110,14 @@ def test_sgmse_runtime_ready(runtime_rows):
     """sgmse_plus: wpe_dsp_fallback ist immer verfügbar — runtime_ready muss True."""
     row = next((r for r in runtime_rows if r["name"] == "sgmse_plus"), None)
     assert row is not None, "sgmse_plus fehlt in _runtime_ready_checks()"
-    assert bool(row["runtime_ready"]), (
-        "sgmse_plus ist nicht runtime_ready — wpe_dsp_fallback (lokal) muss greifen!"
-    )
+    assert bool(row["runtime_ready"]), "sgmse_plus ist nicht runtime_ready — wpe_dsp_fallback (lokal) muss greifen!"
 
 
 def test_versa_runtime_ready(runtime_rows):
     """versa: pqs_dsp_fallback ist immer verfügbar — runtime_ready muss True."""
     row = next((r for r in runtime_rows if r["name"] == "versa"), None)
     assert row is not None, "versa fehlt in _runtime_ready_checks()"
-    assert bool(row["runtime_ready"]), (
-        "versa ist nicht runtime_ready — pqs_dsp_fallback muss greifen!"
-    )
+    assert bool(row["runtime_ready"]), "versa ist nicht runtime_ready — pqs_dsp_fallback muss greifen!"
 
 
 def test_flow_matching_runtime_ready(runtime_rows):
@@ -136,9 +127,7 @@ def test_flow_matching_runtime_ready(runtime_rows):
     # Fallback ist nur verfügbar wenn cqtdiff oder diffwave existieren — skip wenn weder vorhanden
     if not bool(row["primary"]) and not bool(row["fallback"]):
         pytest.skip("flow_matching: Weder primary noch Fallback-Modell vorhanden — CI-Umgebung ohne Modelle")
-    assert bool(row["runtime_ready"]), (
-        f"flow_matching nicht runtime_ready — release_mode={row.get('release_mode')}"
-    )
+    assert bool(row["runtime_ready"]), f"flow_matching nicht runtime_ready — release_mode={row.get('release_mode')}"
 
 
 # ---------------------------------------------------------------------------
@@ -151,9 +140,10 @@ def test_sgmse_fallback_resolved_by(runtime_rows):
     row = next((r for r in runtime_rows if r["name"] == "sgmse_plus"), None)
     assert row is not None
     if not bool(row["primary"]):
-        assert row["resolved_by"] in {"wpe_dsp_fallback", "torchscript_fallback"}, (
-            f"sgmse_plus ohne primary hat unbekanntes resolved_by='{row['resolved_by']}'"
-        )
+        assert row["resolved_by"] in {
+            "wpe_dsp_fallback",
+            "torchscript_fallback",
+        }, f"sgmse_plus ohne primary hat unbekanntes resolved_by='{row['resolved_by']}'"
 
 
 def test_versa_fallback_resolved_by(runtime_rows):
@@ -171,9 +161,10 @@ def test_flow_matching_fallback_resolved_by(runtime_rows):
     row = next((r for r in runtime_rows if r["name"] == "flow_matching"), None)
     assert row is not None
     if not bool(row["primary"]):
-        assert row["resolved_by"] in {"cqtdiff_or_diffwave_fallback", "missing"}, (
-            f"flow_matching ohne primary hat unbekanntes resolved_by='{row['resolved_by']}'"
-        )
+        assert row["resolved_by"] in {
+            "cqtdiff_or_diffwave_fallback",
+            "missing",
+        }, f"flow_matching ohne primary hat unbekanntes resolved_by='{row['resolved_by']}'"
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +189,7 @@ def test_blocked_only_if_no_fallback(runtime_rows):
         for r in runtime_rows
         if r.get("release_mode") == "blocked" and (bool(r.get("primary")) or bool(r.get("fallback")))
     ]
-    assert not wrong, (
-        f"Komponenten mit release_mode='blocked' aber primary oder fallback verfügbar: {wrong}"
-    )
+    assert not wrong, f"Komponenten mit release_mode='blocked' aber primary oder fallback verfügbar: {wrong}"
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +203,4 @@ def test_fcpe_not_blocked_if_crepe_present(runtime_rows):
     if row is None:
         pytest.skip("fcpe nicht in runtime_rows")
     if bool(row.get("fallback")):
-        assert row.get("release_mode") != "blocked", (
-            "fcpe hat Fallback (crepe/rmvpe), darf nicht 'blocked' sein."
-        )
+        assert row.get("release_mode") != "blocked", "fcpe hat Fallback (crepe/rmvpe), darf nicht 'blocked' sein."

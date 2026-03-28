@@ -2,7 +2,6 @@
 Mono-Summierungslogik für Schellack (Kanalwahl/Summierung)
 """
 
-
 import logging
 
 logger = logging.getLogger(__name__)

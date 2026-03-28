@@ -20,9 +20,9 @@ from __future__ import annotations
 
 import math
 import threading
-from typing import Dict, Optional
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 import pytest
 
@@ -64,7 +64,6 @@ def _voiced(sr: int = SR, duration: float = 1.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 from backend.core.consonant_enhancement import (
     CAUSAL_DEFECT_BOOST,
-    FRICATIVE_BANDS,
     MAX_BOOST_DB,
     SNR_MIN_IMPROVEMENT_DB,
     ConsonantEnhancement,
@@ -248,9 +247,9 @@ class TestBoostBounds:
                 voice_gender=gender,
                 defect_scores={"bandwidth_loss": 1.0},
             )
-            assert (
-                result.boost_applied_db <= MAX_BOOST_DB + 1e-6
-            ), f"Boost {result.boost_applied_db:.2f} dB > {MAX_BOOST_DB} dB für gender={gender}"
+            assert result.boost_applied_db <= MAX_BOOST_DB + 1e-6, (
+                f"Boost {result.boost_applied_db:.2f} dB > {MAX_BOOST_DB} dB für gender={gender}"
+            )
 
     def test_20_boost_ist_nicht_negativ(self):
         audio = _fricative(duration=1.0)

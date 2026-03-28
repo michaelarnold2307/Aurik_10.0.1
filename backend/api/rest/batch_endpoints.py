@@ -9,7 +9,6 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-import soundfile as sf
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 
 # Setup Router
@@ -29,17 +28,18 @@ logger = logging.getLogger(__name__)
 
 def batch_worker(batch_id: str, input_files: list[str]):
     """
-    Worker-Thread für Batch-Verarbeitung
+    Worker-Thread für Batch-Verarbeitung via AurikDenker (UV3).
 
-    Args:
-        batch_id: Eindeutige Batch-ID
-        input_files: Liste von Input-Audio-Dateien
+    Ersetzt die veraltete AdaptiveProcessingPipeline (v8.x) die HIPS-Pre-checks
+    und nicht-installiertes openai-whisper benötigte.
     """
     try:
-        # Import hier um circular dependency zu vermeiden
-        from backend.adaptive_pipeline import AdaptiveProcessingPipeline
+        import numpy as _np
+        import soundfile as _sf
 
-        pipeline = AdaptiveProcessingPipeline()
+        from denker.aurik_denker import get_aurik_denker
+
+        denker = get_aurik_denker()
 
         with batch_lock:
             batch_jobs[batch_id]["total"] = len(input_files)
@@ -54,60 +54,29 @@ def batch_worker(batch_id: str, input_files: list[str]):
                 batch_jobs[batch_id]["current_file"] = fname
 
             try:
-                # Audio als Bytes laden (wie bei /magic_button Upload)
-                with open(in_path, "rb") as f:
-                    audio_bytes = f.read()
+                audio, sr = _sf.read(str(in_path), always_2d=True)
+                audio = audio.astype(_np.float32)
 
-                # Verarbeiten mit Adaptive Pipeline
-                result = pipeline.run(audio_bytes, features={}, user_profile={}, reference_audio=None)
+                result = denker.denke(audio, sr, mode="restoration")
 
-                # Ergebnis speichern
-                if "processed_audio" in result and result["processed_audio"] is not None:
-                    # Get sample rate from original file
-                    audio_orig, sr = sf.read(str(in_path))
-                    sf.write(str(out_path), result["processed_audio"], sr)
+                _sf.write(str(out_path), result.audio, result.sample_rate)
 
-                    # Audit-Report speichern
-                    audit_path = out_path.with_suffix(".json")
-                    import json
+                import json
 
-                    with open(audit_path, "w") as f:
-                        json.dump(
-                            {
-                                "filename": fname,
-                                "steps": result.get("steps", []),
-                                "quality": result.get("quality", {}),
-                                "log": result.get("log", []),
-                            },
-                            f,
-                            indent=2,
-                        )
+                audit_path = out_path.with_suffix(".json")
+                with open(audit_path, "w") as f:
+                    json.dump(
+                        {
+                            "filename": fname,
+                            "quality_estimate": result.quality_estimate,
+                            "material": str(result.material_type),
+                            "deferred_phases": result.deferred_phases,
+                        },
+                        f,
+                        indent=2,
+                    )
 
-                    logger.info(f"[Batch {batch_id}] Processed: {fname}")
-                else:
-                    # Pipeline gab kein processed_audio zurück - verwende Original
-                    logger.warning(f"[Batch {batch_id}] No processed_audio returned for {fname}, using original")
-                    audio_orig, sr = sf.read(str(in_path))
-                    sf.write(str(out_path), audio_orig, sr)
-
-                    # Audit-Report trotzdem speichern
-                    audit_path = out_path.with_suffix(".json")
-                    import json
-
-                    with open(audit_path, "w") as f:
-                        json.dump(
-                            {
-                                "filename": fname,
-                                "note": "No processing applied - original audio copied",
-                                "steps": result.get("steps", []),
-                                "quality": result.get("quality", {}),
-                                "log": result.get("log", []),
-                            },
-                            f,
-                            indent=2,
-                        )
-
-                    logger.info(f"[Batch {batch_id}] Original saved: {fname}")
+                logger.info(f"[Batch {batch_id}] Processed: {fname}")
 
             except Exception as e:
                 logger.exception(f"[Batch {batch_id}] Error processing {fname}: {e}")

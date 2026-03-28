@@ -41,6 +41,7 @@ _MAX_CHECKPOINT_AGE_S: float = 7 * 24 * 3600.0  # 7 days
 # Checkpoint dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RecoveryCheckpoint:
     """Serialisable snapshot of pipeline state at OOM failure point."""
@@ -82,6 +83,7 @@ class RecoveryCheckpoint:
 # Serialisation helpers
 # ---------------------------------------------------------------------------
 
+
 def _checkpoint_json_path(input_path: str) -> Path:
     """Derive checkpoint JSON path from input file path."""
     stem = Path(input_path).stem
@@ -100,6 +102,7 @@ def _checkpoint_audio_path(input_path: str) -> Path:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def save_checkpoint(
     *,
@@ -157,10 +160,7 @@ def save_checkpoint(
                     defect_scores_full[key] = {
                         "severity": float(ds.severity),
                         "confidence": float(getattr(ds, "confidence", 0.0)),
-                        "locations": [
-                            [float(s), float(e)]
-                            for s, e in getattr(ds, "locations", [])
-                        ],
+                        "locations": [[float(s), float(e)] for s, e in getattr(ds, "locations", [])],
                     }
                 else:
                     defect_scores_simple[key] = float(ds)
@@ -172,10 +172,7 @@ def save_checkpoint(
 
         spectral_fp: dict[str, float] = {}
         if defect_result is not None and hasattr(defect_result, "spectral_fingerprint"):
-            spectral_fp = {
-                k: float(v)
-                for k, v in (defect_result.spectral_fingerprint or {}).items()
-            }
+            spectral_fp = {k: float(v) for k, v in (defect_result.spectral_fingerprint or {}).items()}
 
         # 3. Build checkpoint
         checkpoint = RecoveryCheckpoint(
@@ -228,7 +225,7 @@ def find_pending_checkpoints() -> list[RecoveryCheckpoint]:
     now = time.time()
     for json_file in _SESSIONS_DIR.glob("*_oom_checkpoint.json"):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             # Age check
@@ -245,10 +242,9 @@ def find_pending_checkpoints() -> list[RecoveryCheckpoint]:
                 _cleanup_checkpoint_files(json_file)
                 continue
 
-            checkpoint = RecoveryCheckpoint(**{
-                k: v for k, v in data.items()
-                if k in RecoveryCheckpoint.__dataclass_fields__
-            })
+            checkpoint = RecoveryCheckpoint(
+                **{k: v for k, v in data.items() if k in RecoveryCheckpoint.__dataclass_fields__}
+            )
             results.append(checkpoint)
 
         except Exception as exc:
@@ -292,7 +288,7 @@ def cleanup_expired_checkpoints() -> int:
     now = time.time()
     for json_file in _SESSIONS_DIR.glob("*_oom_checkpoint.json"):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
             if now - data.get("timestamp", 0.0) > _MAX_CHECKPOINT_AGE_S:
                 _cleanup_checkpoint_files(json_file)
@@ -308,6 +304,7 @@ def cleanup_expired_checkpoints() -> int:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _cleanup_checkpoint_files(json_path: Path) -> None:
     """Remove checkpoint JSON and associated audio WAV."""

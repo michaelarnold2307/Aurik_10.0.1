@@ -24,10 +24,10 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sessions_tmp(tmp_path):
@@ -114,7 +114,7 @@ class TestSaveCheckpoint:
             quality_estimate=0.42,
             musical_goals={"brillanz": 0.87, "waerme": 0.82},
         )
-        with open(result, "r") as f:
+        with open(result) as f:
             data = json.load(f)
 
         assert data["input_path"] == "/tmp/song.mp3"
@@ -153,12 +153,9 @@ class TestSaveCheckpoint:
         # Load checkpoint
         from backend.core.recovery_checkpoint import RecoveryCheckpoint
 
-        with open(result, "r") as f:
+        with open(result) as f:
             data = json.load(f)
-        cp = RecoveryCheckpoint(**{
-            k: v for k, v in data.items()
-            if k in RecoveryCheckpoint.__dataclass_fields__
-        })
+        cp = RecoveryCheckpoint(**{k: v for k, v in data.items() if k in RecoveryCheckpoint.__dataclass_fields__})
         loaded = load_checkpoint_audio(cp)
         assert loaded is not None
         # soundfile returns (N, 2) — original is (2, N)
@@ -229,7 +226,7 @@ class TestFindPendingCheckpoints:
             defect_result=_FakeDefectResult(),
         )
         # Backdate checkpoint to 8 days ago
-        with open(result, "r") as f:
+        with open(result) as f:
             data = json.load(f)
         data["timestamp"] = time.time() - 8 * 86400
         with open(result, "w") as f:
@@ -290,12 +287,9 @@ class TestLoadCheckpointAudio:
             mode="quality",
             defect_result=_FakeDefectResult(),
         )
-        with open(result, "r") as f:
+        with open(result) as f:
             data = json.load(f)
-        cp = RecoveryCheckpoint(**{
-            k: v for k, v in data.items()
-            if k in RecoveryCheckpoint.__dataclass_fields__
-        })
+        cp = RecoveryCheckpoint(**{k: v for k, v in data.items() if k in RecoveryCheckpoint.__dataclass_fields__})
 
         loaded_audio = load_checkpoint_audio(cp)
         assert loaded_audio is not None
@@ -360,7 +354,7 @@ class TestCleanupExpired:
             defect_result=_FakeDefectResult(),
         )
         # Backdate to 10 days
-        with open(result, "r") as f:
+        with open(result) as f:
             data = json.load(f)
         data["timestamp"] = time.time() - 10 * 86400
         with open(result, "w") as f:
@@ -400,12 +394,26 @@ class TestRecoveryCheckpointDataclass:
 
         fields = set(RecoveryCheckpoint.__dataclass_fields__.keys())
         required = {
-            "input_path", "output_path", "phases_executed", "phases_remaining",
-            "mode", "material_type", "era_decade", "defect_scores",
-            "defect_scores_full", "restorability_score", "spectral_fingerprint",
-            "quality_estimate_at_failure", "musical_goals_at_failure",
-            "audio_wav_path", "sample_rate", "original_input_path",
-            "timestamp", "aurik_version", "failure_phase", "failure_reason",
+            "input_path",
+            "output_path",
+            "phases_executed",
+            "phases_remaining",
+            "mode",
+            "material_type",
+            "era_decade",
+            "defect_scores",
+            "defect_scores_full",
+            "restorability_score",
+            "spectral_fingerprint",
+            "quality_estimate_at_failure",
+            "musical_goals_at_failure",
+            "audio_wav_path",
+            "sample_rate",
+            "original_input_path",
+            "timestamp",
+            "aurik_version",
+            "failure_phase",
+            "failure_reason",
         }
         assert required.issubset(fields), f"Missing fields: {required - fields}"
 
@@ -413,15 +421,21 @@ class TestRecoveryCheckpointDataclass:
         from backend.core.recovery_checkpoint import RecoveryCheckpoint
 
         cp = RecoveryCheckpoint(
-            input_path="", output_path="",
-            phases_executed=[], phases_remaining=[],
-            mode="quality", material_type="",
-            era_decade=None, defect_scores={},
-            defect_scores_full={}, restorability_score=None,
+            input_path="",
+            output_path="",
+            phases_executed=[],
+            phases_remaining=[],
+            mode="quality",
+            material_type="",
+            era_decade=None,
+            defect_scores={},
+            defect_scores_full={},
+            restorability_score=None,
             spectral_fingerprint={},
             quality_estimate_at_failure=0.0,
             musical_goals_at_failure={},
-            audio_wav_path="", sample_rate=48000,
+            audio_wav_path="",
+            sample_rate=48000,
             original_input_path="",
         )
         assert cp.failure_reason == "MemoryError"

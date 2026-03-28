@@ -8,8 +8,8 @@ Author: Aurik 9.0 Development Team
 Date: 15. Februar 2026
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -22,13 +22,15 @@ from backend.core.ai_framework import (
     DefectDetectionResult,
     DefectType,
     EnhancementResult,
-    FrameworkRestorationResult as RestorationResult,
     MaterialType,
     RestorationMode,
     Studio2026Processor,
     UnifiedAudioEnhancer,
     UnifiedAudioRestorer,
     UnifiedDefectDetector,
+)
+from backend.core.ai_framework import (
+    FrameworkRestorationResult as RestorationResult,
 )
 
 # ============================================================

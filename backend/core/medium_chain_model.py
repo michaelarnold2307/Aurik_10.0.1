@@ -204,8 +204,7 @@ class PhysicalMediumChainModel:
         if not isinstance(transfer_chain_raw, dict):
             _chain_list = getattr(transfer_chain_raw, "transfer_chain", []) or []
             _primary = getattr(transfer_chain_raw, "primary_material", "digital")
-            _label = getattr(transfer_chain_raw, "chain_label",
-                             " → ".join(_chain_list) if _chain_list else "")
+            _label = getattr(transfer_chain_raw, "chain_label", " → ".join(_chain_list) if _chain_list else "")
             transfer_chain_raw = {
                 "detected_media": [(m, 1.0) for m in _chain_list],
                 "type": _primary,
@@ -243,7 +242,11 @@ class PhysicalMediumChainModel:
 
         primary_material_str = detected_media[0][0] if detected_media else "digital"
         primary_material = _FORENSIC_TO_MATERIAL.get(primary_material_str, MaterialType.UNKNOWN)
-        chain_label = transfer_chain_raw.get("chain", " → ".join(m for m, _ in detected_media)) if isinstance(transfer_chain_raw, dict) else " → ".join(m for m, _ in detected_media)
+        chain_label = (
+            transfer_chain_raw.get("chain", " → ".join(m for m, _ in detected_media))
+            if isinstance(transfer_chain_raw, dict)
+            else " → ".join(m for m, _ in detected_media)
+        )
         logger.info(
             "Mehrstufige Ketteninversion [%s]: %d Korrekturen, Kette=%s",
             primary_material_str,

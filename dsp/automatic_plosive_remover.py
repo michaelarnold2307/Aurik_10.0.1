@@ -268,7 +268,7 @@ if __name__ == "__main__":
     for i, (start, end) in enumerate(regions):
         duration_ms = (end - start) / sr * 1000
         time_s = start / sr
-        logger.info("  Plosive %d: %.2fs, duration: %.1fms", i+1, time_s, duration_ms)
+        logger.info("  Plosive %d: %.2fs, duration: %.1fms", i + 1, time_s, duration_ms)
 
     # Process audio
     audio_processed = remover.process(audio)

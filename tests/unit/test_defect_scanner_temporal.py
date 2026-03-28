@@ -12,9 +12,8 @@ sowie Abwesenheit von locations bei globalen Detektoren.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -28,7 +27,7 @@ if TYPE_CHECKING:
 SR = 48_000
 
 
-def _scanner(sr: int = SR) -> "DefectScanner":
+def _scanner(sr: int = SR) -> DefectScanner:
     from backend.core.defect_scanner import DefectScanner
 
     return DefectScanner(sample_rate=sr)
@@ -270,9 +269,9 @@ def test_11_print_through_location_within_tolerance():
         assert _locations_valid(score.locations)
         starts = [loc[0] for loc in score.locations]
         # Check ob mindestens ein Eintrag nahe pre_t (±150 ms Toleranz für Hop-Granularität)
-        assert any(
-            abs(s - pre_t) < 0.15 for s in starts
-        ), f"Kein Print-Through-Eintrag nahe {pre_t:.3f} s. Gefunden: {starts}"
+        assert any(abs(s - pre_t) < 0.15 for s in starts), (
+            f"Kein Print-Through-Eintrag nahe {pre_t:.3f} s. Gefunden: {starts}"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -433,11 +433,11 @@ class EdgeCaseHandler:
         if snr < 30:
             reasons.append(f"low SNR ({snr:.1f} dB)")
         if defect_coverage > 0.8:
-            reasons.append(f"high defect coverage ({defect_coverage*100:.1f}%)")
+            reasons.append(f"high defect coverage ({defect_coverage * 100:.1f}%)")
         if dynamic_range < 10:
             reasons.append(f"low dynamic range ({dynamic_range:.1f} dB)")
         if clipping_ratio > 0.1:
-            reasons.append(f"excessive clipping ({clipping_ratio*100:.1f}%)")
+            reasons.append(f"excessive clipping ({clipping_ratio * 100:.1f}%)")
 
         return ", ".join(reasons) if reasons else "none"
 
@@ -586,7 +586,9 @@ class EdgeCaseHandler:
 
         # Check if matches any known combo
         active_set = set(active)
-        return all(not (active_set.issubset(combo) or combo.issubset(active_set)) for combo in known_combos)  # Unusual combination
+        return all(
+            not (active_set.issubset(combo) or combo.issubset(active_set)) for combo in known_combos
+        )  # Unusual combination
 
     # =========================================================================
     # 3. Medium-Mix Detection

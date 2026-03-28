@@ -6,9 +6,9 @@ audit_report_generator.py – Automatische Audit-Report-Generierung nach jedem B
 - Versioniert Report mit Zeitstempel und eindeutigem Namen
 """
 
-from datetime import datetime
 import json
 import os
+from datetime import datetime
 
 import yaml
 
@@ -34,7 +34,7 @@ def generate_audit_report(result_data, out_dir="."):
         "benchmarks": result_data.get("benchmarks", {}),
     }
     # Versionierung: medium_chain_audit_YYYY-MM-DDTHH-MM-SS
-    base_name = f"{report['medium']}_{report['chain']}_audit_{now.replace(':','-')}"
+    base_name = f"{report['medium']}_{report['chain']}_audit_{now.replace(':', '-')}"
     # YAML
     yaml_path = os.path.join(out_dir, base_name + ".yaml")
     with open(yaml_path, "w") as f:

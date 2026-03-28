@@ -8,17 +8,18 @@ from __future__ import annotations
 
 import math
 from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
 np.random.seed(42)
 
 from backend.core.feedback_chain import (
+    DEFAULT_TARGET_SCORE,
+    EXCELLENCE_TARGET_SCORE,
     FeedbackChain,
     FeedbackChainResult,
     get_feedback_chain,
-    DEFAULT_TARGET_SCORE,
-    EXCELLENCE_TARGET_SCORE,
 )
 
 SR = 48000

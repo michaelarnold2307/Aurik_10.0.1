@@ -165,6 +165,7 @@ class LyricsTranscriber:
             logger.info("Whisper-ONNX nicht verfügbar — DSP-Energie-Fallback aktiv: %s", exc)
             try:
                 from backend.core.ml_memory_budget import release as _rel
+
                 _rel("WhisperTiny")
             except Exception:
                 pass
@@ -185,10 +186,21 @@ class LyricsTranscriber:
         Returns:
             LyricsTranscriptionResult mit WordTimestamp-Liste, NaN-frei
         """
-        audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
-        mono = audio if audio.ndim == 1 else audio.mean(axis=0)
-        mono = mono.astype(np.float32)
+        audio = np.nan_to_num(np.asarray(audio), nan=0.0, posinf=0.0, neginf=0.0)
+        if audio.ndim == 0:
+            audio = np.array([float(audio)], dtype=np.float32)
+        mono = audio.astype(np.float32, copy=False) if audio.ndim == 1 else audio.mean(axis=1).astype(np.float32)
+        mono = np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0)
         duration_s = float(len(mono)) / max(sr, 1)
+
+        if mono.size == 0:
+            return LyricsTranscriptionResult(
+                words=[],
+                language="de",
+                overall_confidence=0.0,
+                duration_s=0.0,
+                fallback_used=not (self._session_loaded and self._session is not None),
+            )
 
         try:
             if self._session_loaded and self._session is not None:
@@ -416,8 +428,8 @@ class LyricsTranscriber:
         Kein Whisper nötig. confidence=0.0, fallback_used=True.
         phoneme_type wird dennoch DSP-klassifiziert (ZCR/Spektral).
         """
-        frame_size = int(0.025 * sr)
-        hop = int(0.010 * sr)
+        frame_size = max(1, int(0.025 * sr))
+        hop = max(1, int(0.010 * sr))
         threshold_rms = 0.008
         min_seg_s = 0.100
         min_gap_s = 0.080
@@ -427,8 +439,11 @@ class LyricsTranscriber:
         seg_start = 0.0
         all_rms: list[float] = []
 
-        for i in range(0, max(1, len(mono) - frame_size), hop):
+        frame_stop = max(0, len(mono) - frame_size + 1)
+        for i in range(0, frame_stop, hop):
             frame = mono[i : i + frame_size]
+            if frame.size == 0:
+                continue
             rms = float(np.sqrt(np.mean(frame**2)))
             all_rms.append(rms)
             t = float(i) / sr

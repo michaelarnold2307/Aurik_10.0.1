@@ -10,7 +10,6 @@ Date: 2026
 Version: 9.0.0
 """
 
-from typing import Dict
 
 import numpy as np
 from scipy.signal import butter, filtfilt
@@ -378,13 +377,14 @@ def generate_audio_by_quality(
     """
     if quality_level not in MATERIAL_QUALITY_SPECS:
         raise ValueError(
-            f"Unbekanntes Quality-Level: {quality_level!r}. " f"Verfügbar: {list(MATERIAL_QUALITY_SPECS.keys())}"
+            f"Unbekanntes Quality-Level: {quality_level!r}. Verfügbar: {list(MATERIAL_QUALITY_SPECS.keys())}"
         )
 
     spec = MATERIAL_QUALITY_SPECS[quality_level]
     n_samples = int(sr * duration)
     # §AMRB-Seeding-Invariante: MD5-basierter Seed — kein hash() (prozessabhängig ohne PYTHONHASHSEED)
     import hashlib as _hl
+
     _seed = int(_hl.md5(str(quality_level).encode()).hexdigest()[:8], 16)
     rng = np.random.default_rng(seed=_seed)
 
@@ -433,13 +433,14 @@ def generate_medium_specific_audio(
     """
     if medium_type not in MEDIUM_SPECIFIC_THRESHOLDS:
         raise ValueError(
-            f"Unbekannter Medium-Typ: {medium_type!r}. " f"Verfügbar: {list(MEDIUM_SPECIFIC_THRESHOLDS.keys())}"
+            f"Unbekannter Medium-Typ: {medium_type!r}. Verfügbar: {list(MEDIUM_SPECIFIC_THRESHOLDS.keys())}"
         )
 
     spec = MEDIUM_SPECIFIC_THRESHOLDS[medium_type]
     n_samples = int(sr * duration)
     # §AMRB-Seeding-Invariante: MD5-basierter Seed — kein hash() (prozessabhängig ohne PYTHONHASHSEED)
     import hashlib as _hl
+
     _seed = int(_hl.md5(str(medium_type).encode()).hexdigest()[:8], 16)
     rng = np.random.default_rng(seed=_seed)
 

@@ -8,4 +8,5 @@ Lazy-Import vermeidet Initialisierungsprobleme des backend.api-Pakets.
 
 def __getattr__(name: str):
     from backend.api.rest import batch_api as _m
+
     return getattr(_m, name)

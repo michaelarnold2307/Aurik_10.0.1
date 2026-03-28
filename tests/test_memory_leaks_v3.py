@@ -19,8 +19,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.core.performance_guard import QualityMode
 from backend.core.defect_scanner import DefectScanner
+from backend.core.performance_guard import QualityMode
 from backend.core.unified_restorer_v3 import RestorationConfig, UnifiedRestorerV3
 
 # This module is intentionally heavy and should not run in default local cycles.
@@ -28,7 +28,7 @@ pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 # Check if memory_profiler is available
 try:
-    import memory_profiler  # noqa: F401
+    pass
 
     MEMORY_PROFILING_AVAILABLE = True
 except ImportError:
@@ -149,7 +149,7 @@ def test_multiple_restorations_memory():
         memory_samples.append(mem_current)
 
         if i % 2 == 0:
-            print(f"      Iteration {i+1:2d}: {mem_current:.2f} MB")
+            print(f"      Iteration {i + 1:2d}: {mem_current:.2f} MB")
 
     # Final cleanup
     del restorer
@@ -212,7 +212,7 @@ def test_defect_scanner_memory():
         if i % 5 == 0:
             gc.collect()
             mem_current = get_memory_mb()
-            print(f"      Scan {i+1:2d}: {mem_current:.2f} MB")
+            print(f"      Scan {i + 1:2d}: {mem_current:.2f} MB")
 
     # Final cleanup
     del scanner
@@ -321,7 +321,7 @@ def test_phase_cache_memory():
 
         cache_size = len(restorer._phase_cache)
         mem_current = get_memory_mb()
-        print(f"      Iteration {i+1}: Cache={cache_size}, Memory={mem_current:.2f} MB")
+        print(f"      Iteration {i + 1}: Cache={cache_size}, Memory={mem_current:.2f} MB")
 
     mem_after = get_memory_mb()
     print(f"\n   Memory After: {mem_after:.2f} MB")

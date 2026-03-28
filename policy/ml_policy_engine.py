@@ -13,7 +13,7 @@ Verwendung:
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class MLModelPolicyEngine:
         self.logger = logging.getLogger("MLModelPolicyEngine")
         self.logger.info("Policy-Engine initialisiert")
 
-    def select_denoise_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_denoise_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt bestes Denoise/Restoration-Modell basierend auf semantischem Audio-Verständnis.
 
@@ -64,7 +64,7 @@ class MLModelPolicyEngine:
             return "banquet"
 
         # Priority 2: Quality-Override / schlechte SNR → DeepFilterNet erzwungen
-        snr = context.get("snr", None)
+        snr = context.get("snr")
         quality_level = goal.get("quality_level", "standard")
         if (
             quality_level == "maximal"
@@ -136,7 +136,7 @@ class MLModelPolicyEngine:
         self.logger.info("🎯 Balanced content → Resemble Enhance (general-purpose SOTA)")
         return "resemble_enhance"
 
-    def select_repair_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_repair_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt bestes Repair/Declipping-Modell.
 
@@ -160,7 +160,7 @@ class MLModelPolicyEngine:
         self.logger.info("Music → DCCRN (Music-optimiert)")
         return "dccrn"
 
-    def select_stem_separation_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_stem_separation_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt bestes Stem Separation-Modell.
 
@@ -204,7 +204,7 @@ class MLModelPolicyEngine:
         self.logger.info("Standard separation → MDX23C (SOTA)")
         return "mdx23c"
 
-    def select_enhancement_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_enhancement_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt bestes Enhancement/Upsampling-Modell.
 
@@ -242,7 +242,7 @@ class MLModelPolicyEngine:
         self.logger.info("General Enhancement → GACELA")
         return "gacela"
 
-    def select_quality_assessment_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> List[str]:
+    def select_quality_assessment_model(self, context: dict[str, Any], goal: dict[str, Any]) -> list[str]:
         """
         Wählt Quality Assessment-Modelle für Musikqualität.
 
@@ -291,7 +291,7 @@ class MLModelPolicyEngine:
         self.logger.info(f"Quality Assessment (Musik-Metriken §4.4) → {models}")
         return models
 
-    def select_vocoder_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_vocoder_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt bestes Vocoder/Synthesis-Modell.
 
@@ -319,7 +319,7 @@ class MLModelPolicyEngine:
             self.logger.info("High-Quality Vocoding → Vocos 0.1.0 (Primär-Vocoder §4.5)")
             return "vocos"
 
-    def select_audio_tagging_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_audio_tagging_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt Audio Tagging/Classification-Modell.
 
@@ -333,7 +333,7 @@ class MLModelPolicyEngine:
         self.logger.info("Audio Tagging → PANNS (527 AudioSet classes)")
         return "panns"
 
-    def select_mastering_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_mastering_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt Automated Mastering-Modell.
 
@@ -347,7 +347,7 @@ class MLModelPolicyEngine:
         self.logger.info("Automated Mastering → Matchering 2.0 (reference-based)")
         return "matchering"
 
-    def select_generative_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_generative_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt Generative Audio-Modell.
 
@@ -371,7 +371,7 @@ class MLModelPolicyEngine:
             self.logger.info("Text-to-Audio → AudioLDM2 (text prompt)")
             return "audioldm2"
 
-    def select_pitch_detection_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_pitch_detection_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt Pitch Detection-Modell.
 
@@ -386,7 +386,7 @@ class MLModelPolicyEngine:
         self.logger.info(f"Pitch Detection → FCPE ({model_size} model, CREPE/RMVPE fallback)")
         return "fcpe"
 
-    def select_medium_specific_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_medium_specific_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt Medium-spezifisches Restoration-Modell.
 
@@ -406,7 +406,7 @@ class MLModelPolicyEngine:
             self.logger.info(f"No medium-specific model for {detected_medium}, using general denoise model")
             return self.select_denoise_model(context, goal)
 
-    def select_all_models(self, context: Dict[str, Any], tasks: List[str]) -> Dict[str, Any]:
+    def select_all_models(self, context: dict[str, Any], tasks: list[str]) -> dict[str, Any]:
         """
         Intelligente Auswahl aller benötigten Modelle basierend auf Tasks.
 
@@ -417,7 +417,7 @@ class MLModelPolicyEngine:
         Returns:
             Dict mit gewählten Modellen pro Task
         """
-        selected_models: Dict[str, Any] = {}
+        selected_models: dict[str, Any] = {}
 
         for task in tasks:
             if task == "denoise":
@@ -446,7 +446,7 @@ class MLModelPolicyEngine:
         self.logger.info(f"Selected models for tasks {tasks}: {selected_models}")
         return selected_models
 
-    def select_separation_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_separation_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt bestes Source-Separation-Modell.
 
@@ -483,7 +483,7 @@ class MLModelPolicyEngine:
         self.logger.info("Standard → Demucs v4 (4-Stem)")
         return "demucs"
 
-    def select_enhancement_model_alt(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_enhancement_model_alt(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt bestes allgemeines Enhancement-Modell.
 
@@ -506,7 +506,7 @@ class MLModelPolicyEngine:
         else:
             return "gacela"  # oder 'waveunet'
 
-    def select_super_resolution_model(self, context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+    def select_super_resolution_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
         Wählt bestes Super-Resolution-Modell.
 
@@ -516,7 +516,7 @@ class MLModelPolicyEngine:
         self.logger.info("Super-Resolution → AudioSR (Diffusion-basiert, 48kHz)")
         return "audiosr"
 
-    def select_quality_metrics(self, context: Dict[str, Any], goal: Dict[str, Any]) -> list:
+    def select_quality_metrics(self, context: dict[str, Any], goal: dict[str, Any]) -> list:
         """
         Wählt relevante Quality-Metriken.
 
@@ -556,7 +556,7 @@ class MLModelPolicyEngine:
 
         return list(dict.fromkeys(metrics))  # Deduplizieren, Reihenfolge erhalten
 
-    def should_use_diffusion_models(self, context: Dict[str, Any], goal: Dict[str, Any]) -> bool:
+    def should_use_diffusion_models(self, context: dict[str, Any], goal: dict[str, Any]) -> bool:
         """
         Entscheidet ob Diffusion-basierte Modelle genutzt werden sollen.
 
@@ -586,7 +586,7 @@ class MLModelPolicyEngine:
 # ===== CONVENIENCE FUNCTIONS =====
 
 
-def get_recommended_models(context: Dict[str, Any]) -> Dict[str, Any]:
+def get_recommended_models(context: dict[str, Any]) -> dict[str, Any]:
     """
     Quick helper: Get recommended models for common restoration workflow.
 
@@ -614,19 +614,19 @@ def get_recommended_models(context: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # Convenience-Funktionen für direkte Nutzung
-def get_optimal_denoise_plugin(context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+def get_optimal_denoise_plugin(context: dict[str, Any], goal: dict[str, Any]) -> str:
     """Shortcut: Gibt bestes Denoise-Plugin zurück."""
     engine = MLModelPolicyEngine()
     return engine.select_denoise_model(context, goal)
 
 
-def get_optimal_separation_plugin(context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+def get_optimal_separation_plugin(context: dict[str, Any], goal: dict[str, Any]) -> str:
     """Shortcut: Gibt bestes Separation-Plugin zurück."""
     engine = MLModelPolicyEngine()
     return engine.select_stem_separation_model(context, goal)
 
 
-def get_optimal_repair_plugin(context: Dict[str, Any], goal: Dict[str, Any]) -> str:
+def get_optimal_repair_plugin(context: dict[str, Any], goal: dict[str, Any]) -> str:
     """Shortcut: Gibt bestes Repair-Plugin zurück."""
     engine = MLModelPolicyEngine()
     return engine.select_repair_model(context, goal)
@@ -639,21 +639,21 @@ if __name__ == "__main__":
     engine = MLModelPolicyEngine()
 
     # Test 1: Speech Restoration
-    context1: Dict[str, Any] = {"has_vocals": True, "noise_type": "broadband", "genre": "speech"}
+    context1: dict[str, Any] = {"has_vocals": True, "noise_type": "broadband", "genre": "speech"}
     goal1 = {"quality_level": "high"}
     print(f"Speech Restoration: {engine.select_denoise_model(context1, goal1)}")
 
     # Test 2: Vinyl Restoration
-    context2: Dict[str, Any] = {"detected_medium": "vinyl", "genre": "jazz"}
+    context2: dict[str, Any] = {"detected_medium": "vinyl", "genre": "jazz"}
     goal2 = {"quality_level": "maximal"}
     print(f"Vinyl Restoration: {engine.select_denoise_model(context2, goal2)}")
 
     # Test 3: Classical Music Enhancement
-    context3: Dict[str, Any] = {"genre": "classical", "has_vocals": False}
+    context3: dict[str, Any] = {"genre": "classical", "has_vocals": False}
     goal3 = {"quality_level": "maximal"}
     print(f"Classical Enhancement: {engine.select_denoise_model(context3, goal3)}")
 
     # Test 4: Source Separation
-    context4: Dict[str, Any] = {"stem_count": 4}
+    context4: dict[str, Any] = {"stem_count": 4}
     goal4 = {"quality_level": "maximal"}
     print(f"Source Separation: {engine.select_stem_separation_model(context4, goal4)}")

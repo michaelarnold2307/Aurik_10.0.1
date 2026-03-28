@@ -7,7 +7,6 @@ gemäß Aurik 9 copilot-instructions §2.x.
 """
 
 from pathlib import Path
-import sys
 
 # Mapping: Dateiname → vollständige Implementierung
 IMPLEMENTATIONS = {

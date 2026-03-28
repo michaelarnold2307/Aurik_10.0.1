@@ -182,6 +182,11 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     "phase_18": {"micro_dynamics"},  # Noise gate: deliberate silence insertion
     "phase_26": {"micro_dynamics", "artikulation"},  # Dynamic expansion
     "phase_36": {"micro_dynamics", "artikulation"},  # Transient shaper
+    # Mastering: intentional dynamics compression + spectral shaping
+    "phase_17": {"micro_dynamics", "natuerlichkeit"},
+    # Vocal enhancement: Stages 2-6 intentionally alter spectral shape and dynamics;
+    # natuerlichkeit/timbre proxies are unreliable for deliberate vocal-presence boosts.
+    "phase_19": {"natuerlichkeit", "timbre_authentizitaet", "micro_dynamics"},
 }
 
 
@@ -386,11 +391,16 @@ def _apply_precise_metric_overrides(
     refined = dict(scores)
     for goal_name, metric in precise_metrics.items():
         try:
-            if goal_name in {
+            if goal_name == "micro_dynamics":
+                # Always reference-free: scores_before is measured without reference,
+                # so scores_after must use the same absolute mode for a fair comparison.
+                # Reference-based MicroDynamicsMetric gives 0.60+ baseline vs ~0.75×corr
+                # for scores_after, creating systematic false regressions in PMGG.
+                refined[goal_name] = float(metric.measure(audio, sr))
+            elif goal_name in {
                 "brillanz",
                 "waerme",
                 "tonal_center",
-                "micro_dynamics",
                 "artikulation",
                 "separation_fidelity",
                 "transparenz",
@@ -411,7 +421,9 @@ def _apply_precise_metric_overrides(
     return refined
 
 
-def _measure_quick(audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> dict[str, float]:
+def _measure_quick(
+    audio: np.ndarray, sr: int, reference: np.ndarray | None = None, *, precise_override: bool = True
+) -> dict[str, float]:
     """
     Misst alle 14 Musical Goals auf einer 5-s-Stichprobe in ≤ 200 ms.
 
@@ -791,7 +803,8 @@ def _measure_quick(audio: np.ndarray, sr: int, reference: np.ndarray | None = No
         if k not in scores or not math.isfinite(scores[k]):
             scores[k] = 0.5
 
-    scores = _apply_precise_metric_overrides(scores, audio, sr, reference=reference)
+    if precise_override:
+        scores = _apply_precise_metric_overrides(scores, audio, sr, reference=reference)
 
     for k in FAST_GOALS_SUBSET:
         if k not in scores or not math.isfinite(scores[k]):
@@ -1144,11 +1157,12 @@ class PerPhaseMusicalGoalsGate:
                 )
                 audio_retry = self._run_phase(phase, audio, strength, phase_kwargs)
 
-            scores_retry = _measure_quick(
-                _extract_sample(audio_retry, sr, duration_s=sample_duration_s), sr, reference=_ref_sample
-            )
+            _retry_sample = _extract_sample(audio_retry, sr, duration_s=sample_duration_s)
+            scores_retry = _measure_quick(_retry_sample, sr, reference=_ref_sample, precise_override=False)
             regression_retry = self._max_regression(scores_before, scores_retry, effective_goals)
             if regression_retry <= threshold:
+                # Apply precise overrides once for accurate score propagation to next phase
+                scores_retry = _apply_precise_metric_overrides(scores_retry, _retry_sample, sr, reference=_ref_sample)
                 return audio_retry, scores_retry, action_label, strength
             # Track best attempt (lowest regression)
             if regression_retry < best_regression:
@@ -1194,13 +1208,13 @@ class PerPhaseMusicalGoalsGate:
                     )
                 else:
                     audio_em = self._run_phase(phase, audio, _em_strength, phase_kwargs)
-                scores_em = _measure_quick(
-                    _extract_sample(audio_em, sr, duration_s=sample_duration_s), sr, reference=_ref_sample
-                )
+                _em_sample = _extract_sample(audio_em, sr, duration_s=sample_duration_s)
+                scores_em = _measure_quick(_em_sample, sr, reference=_ref_sample, precise_override=False)
                 regression_em = self._max_regression(scores_before, scores_em, effective_goals)
                 if regression_em <= threshold:
                     if audio_full is not None:
                         del audio_full
+                    scores_em = _apply_precise_metric_overrides(scores_em, _em_sample, sr, reference=_ref_sample)
                     return audio_em, scores_em, f"emergency_s{_em_strength:.2f}", _em_strength
                 if regression_em < best_regression:
                     best_audio = audio_em
@@ -1215,6 +1229,9 @@ class PerPhaseMusicalGoalsGate:
         # Sofortige Freigabe: audio_full (+86 MB bei 225s) nicht bis GC halten.
         if audio_full is not None:
             del audio_full
+        # Apply precise overrides once for accurate score propagation to next phase
+        _best_sample = _extract_sample(best_audio, sr, duration_s=sample_duration_s)
+        best_scores = _apply_precise_metric_overrides(best_scores, _best_sample, sr, reference=_ref_sample)
         logger.warning(
             "⚠️ PMGG: %s best-effort (strength=%.2f, Regression=%.4f > threshold=%.3f) — "
             "Phase wird trotzdem angewendet (kein Rollback/Skip erlaubt)",

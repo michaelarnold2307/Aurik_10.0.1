@@ -83,5 +83,5 @@ class AutomaticTuning:
         n = int(len(audio) / factor)
         y = np.interp(np.linspace(0, len(audio), n, endpoint=False), np.arange(len(audio)), audio)
         # Länge anpassen
-        y = np.pad(y, (0, len(audio) - len(y)), mode="constant") if len(y) < len(audio) else y[:len(audio)]
+        y = np.pad(y, (0, len(audio) - len(y)), mode="constant") if len(y) < len(audio) else y[: len(audio)]
         return np.asarray(y)

@@ -4,6 +4,7 @@ Tests: ≥ 20 — Abdeckung: Shape, NaN, Bounds, Edge-Cases, Mono, Stereo, Konsi
 """
 
 import numpy as np
+
 np.random.seed(42)  # §5.4 Reproduzierbarkeit
 import pytest
 
@@ -38,7 +39,7 @@ def test_extract_context_wrong_sr_raises(extractor):
 
 
 def test_short_audio_returns_empty_context(extractor):
-    short = np.zeros(int(48000 * 4), dtype=np.float32)
+    short = np.zeros((48000 * 4), dtype=np.float32)
     ctx = extractor.extract_context(short, 48000, 0, 1000)
     assert isinstance(ctx, PhraseContext)
     assert ctx.is_fallback is True
@@ -52,7 +53,7 @@ def test_under_8s_audio_rejected(extractor):
 
 def test_exactly_8s_audio_not_rejected(extractor):
     """Genau 8 s liegt an der Grenze und darf nicht abgelehnt werden."""
-    audio = np.random.randn(int(48000 * 8)).astype(np.float32)
+    audio = np.random.randn(48000 * 8).astype(np.float32)
     ctx = extractor.extract_context(audio, 48000, 0, 1000)
     assert isinstance(ctx, PhraseContext)
 
