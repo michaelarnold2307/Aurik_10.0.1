@@ -274,13 +274,6 @@ class PluginLifecycleManager:
                     phase_id,
                 )
                 entry.unload_fn()
-                gc.collect()
-                try:
-                    import ctypes
-
-                    ctypes.CDLL("libc.so.6").malloc_trim(0)
-                except Exception:
-                    pass
                 try:
                     from backend.core.ml_memory_budget import release as _release
 
@@ -294,6 +287,16 @@ class PluginLifecycleManager:
                 logger.warning("PLM: Fehler beim Entladen von '%s': %s", entry.name, exc)
 
         if evicted > 0:
+            # GC und malloc_trim EINMAL nach der Schleife statt pro Plugin.
+            # Jedes gc.collect() hält die Python-GIL für 50–200 ms →
+            # pro-Plugin-Aufruf blockierte den Qt-Hauptthread kumulativ.
+            gc.collect()
+            time.sleep(0)  # GIL explizit freigeben → Qt-Event-Loop kann X11-Pings beantworten
+            try:
+                import ctypes
+                ctypes.CDLL("libc.so.6").malloc_trim(0)
+            except Exception:
+                pass
             logger.info(
                 "PLM: %d Plugin(s) entladen vor %s — RAM nach GC: %.0f %% (%.0f MB frei)",
                 evicted,
@@ -332,15 +335,6 @@ class PluginLifecycleManager:
                     time.monotonic() - entry.last_used_ts,
                 )
                 entry.unload_fn()
-                gc.collect()
-                # malloc_trim: Gebe freigegebenen Heap ans OS zurück (Linux).
-                # Ohne trim behält glibc freigegebene Pages im Prozess-Heap.
-                try:
-                    import ctypes
-
-                    ctypes.CDLL("libc.so.6").malloc_trim(0)
-                except Exception:
-                    pass
                 # Budget-Freigabe
                 try:
                     from backend.core.ml_memory_budget import release as _release
@@ -356,6 +350,16 @@ class PluginLifecycleManager:
                 logger.warning("PLM: Fehler beim Entladen von '%s': %s", entry.name, exc)
 
         if evicted > 0:
+            # GC und malloc_trim EINMAL nach der Schleife statt pro Plugin.
+            # Jedes gc.collect() hält die Python-GIL für 50–200 ms →
+            # pro-Plugin-Aufruf blockierte den Qt-Hauptthread kumulativ.
+            gc.collect()
+            time.sleep(0)  # GIL explizit freigeben → Qt-Event-Loop kann X11-Pings beantworten
+            try:
+                import ctypes
+                ctypes.CDLL("libc.so.6").malloc_trim(0)
+            except Exception:
+                pass
             logger.info("PLM: %d Plugin(s) entladen — RAM nach GC: %.0f %%", evicted, self._ram_percent())
         return evicted
 

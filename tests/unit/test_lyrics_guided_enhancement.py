@@ -635,7 +635,7 @@ class TestLGEInternalCAP:
         base = np.ones(SR, dtype=np.float32)
         result_obj = self._make_result("fricative_stressed")
         sal = cap.compute_lyrics_saliency(base, result_obj, SR)
-        assert sal[int(0.25 * SR)] == pytest.approx(2.0, abs=0.01)
+        assert sal[int(0.25 * SR)] == pytest.approx(1.55, abs=0.01)  # §8.3: fricative ×1.55
 
     def test_lge_15_silence_boost_applied(self) -> None:
         cap = self._cap()
@@ -648,7 +648,7 @@ class TestLGEInternalCAP:
         word = WordTimestamp("", 0.2, 0.8, 0.1, False, "silence")
         result_obj = LyricsTranscriptionResult([word], "de", 0.1, 1.0, fallback_used=False)
         sal = cap.compute_lyrics_saliency(base, result_obj, SR)
-        assert sal[int(0.5 * SR)] == pytest.approx(0.5, abs=0.01)
+        assert sal[int(0.5 * SR)] == pytest.approx(0.70, abs=0.01)  # §8.3: silence ×0.70
 
     def test_lge_16_fallback_no_boost(self) -> None:
         cap = self._cap()
@@ -775,7 +775,7 @@ class TestLGEBuildSampleSaliency:
         word = WordTimestamp("", 0.0, 0.5, 0.9, True, "fricative_stressed")
         result_obj = LyricsTranscriptionResult([word], "de", 0.9, 1.0, fallback_used=False)
         sal = lge._build_sample_saliency(result_obj, SR, SR)
-        assert sal[int(0.25 * SR)] == pytest.approx(2.0, abs=0.01)
+        assert sal[int(0.25 * SR)] == pytest.approx(1.55, abs=0.01)  # §8.3: fricative ×1.55
         assert sal[int(0.75 * SR)] == pytest.approx(1.0, abs=0.01)
 
     def test_lge_31_silence_boost_correct(self) -> None:
@@ -788,7 +788,7 @@ class TestLGEBuildSampleSaliency:
         word = WordTimestamp("", 0.0, 1.0, 0.0, False, "silence")
         result_obj = LyricsTranscriptionResult([word], "de", 0.0, 1.0, fallback_used=False)
         sal = lge._build_sample_saliency(result_obj, SR, SR)
-        assert sal[int(0.5 * SR)] == pytest.approx(0.5, abs=0.01)
+        assert sal[int(0.5 * SR)] == pytest.approx(0.70, abs=0.01)  # §8.3: silence ×0.70
 
     def test_lge_32_output_clipped(self) -> None:
         from backend.core.lyrics_guided_enhancement import (

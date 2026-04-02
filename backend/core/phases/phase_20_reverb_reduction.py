@@ -158,6 +158,10 @@ class ReverbReduction(PhaseInterface):
     def __init__(self):
         super().__init__()
         self.name = "Reverb Reduction v3 OMLSA/IMCRA"
+        # If SGMSE TorchScript fails with deterministic shape/runtime errors,
+        # avoid retrying the same expensive ML path on subsequent PMGG retries.
+        self._force_dsp_only_due_ml_error: bool = False
+        self._ml_disable_reason: str = ""
 
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
@@ -261,7 +265,10 @@ class ReverbReduction(PhaseInterface):
 
         # ML-Hybrid only if resources available and quality mode permits
         use_ml_hybrid = (
-            ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "maximum", "quality"] and not use_lightweight
+            ML_HYBRID_AVAILABLE
+            and quality_mode in ["balanced", "maximum", "quality"]
+            and not use_lightweight
+            and not self._force_dsp_only_due_ml_error
         )
 
         if use_ml_hybrid:
@@ -347,6 +354,21 @@ class ReverbReduction(PhaseInterface):
 
             except Exception as e:
                 import traceback as _tb
+
+                _err_text = str(e)
+                _is_deterministic_ml_fail = (
+                    "Sizes of tensors must match" in _err_text
+                    or "TorchScript" in _err_text
+                    or "expected shape" in _err_text.lower()
+                    or "shape mismatch" in _err_text.lower()
+                )
+                if _is_deterministic_ml_fail and not self._force_dsp_only_due_ml_error:
+                    self._force_dsp_only_due_ml_error = True
+                    self._ml_disable_reason = _err_text[:220]
+                    logger.warning(
+                        "Phase 20: disable ML-hybrid for remaining calls due to deterministic SGMSE error: %s",
+                        self._ml_disable_reason,
+                    )
 
                 logger.warning(
                     f"ML-Hybrid dereverb failed: {e}, falling back to DSP. Error type: {type(e).__name__}\n"

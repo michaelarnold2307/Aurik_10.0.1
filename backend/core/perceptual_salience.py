@@ -154,6 +154,7 @@ class PerceptualSalienceEstimator:
         audio: np.ndarray,
         sr: int,
         defect_result: DefectAnalysisResult,
+        use_erb_model: bool = True,
     ) -> DefectAnalysisResult:
         """Annotate DefectAnalysisResult in-place with salience metadata.
 
@@ -166,8 +167,42 @@ class PerceptualSalienceEstimator:
         ``adjusted_severity = severity * (0.3 + 0.7 * mean_salience)``
         This preserves a base severity (30%) even for fully masked defects
         while boosting exposed defects to near-original severity.
+
+        Parameters
+        ----------
+        use_erb_model : bool
+            If True (default), uses the ERB auditory masking model for
+            frequency-dependent masking thresholds (Glasberg & Moore 1990).
+            Falls back to broadband model on import error.
         """
+        # First run broadband analysis (always needed for annotations)
         salience_result = self.estimate(audio, sr, defect_result)
+
+        # Optionally enhance with ERB model for frequency-dependent masking
+        erb_saliences: dict[tuple[DefectType, tuple[float, float]], float] = {}
+        if use_erb_model:
+            try:
+                from backend.core.erb_auditory_masking import get_erb_auditory_masking_model
+
+                erb_model = get_erb_auditory_masking_model()
+                mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
+                mono = np.nan_to_num(np.asarray(mono, dtype=np.float64), nan=0.0)
+
+                for ann in salience_result.annotations:
+                    erb_result = erb_model.compute_masking_threshold(
+                        mono, sr, ann.location[0], ann.location[1],
+                    )
+                    # Blend: 70% ERB model (frequency-aware) + 30% broadband (robust)
+                    blended = 0.7 * erb_result.salience + 0.3 * ann.salience
+                    ann.salience = float(np.clip(blended, 0.0, 1.0))
+                    erb_saliences[(ann.defect_type, ann.location)] = erb_result.salience
+
+                logger.info(
+                    "ERB masking model enhanced %d salience annotations",
+                    len(erb_saliences),
+                )
+            except ImportError:
+                logger.debug("ERB masking model not available, using broadband only")
 
         # Group annotations by defect type
         by_type: dict[DefectType, list[SalienceAnnotation]] = {}

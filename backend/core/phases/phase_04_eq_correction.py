@@ -170,6 +170,36 @@ class EQCorrectionPhase(PhaseInterface):
     }
 
     # ---------------------------------------------------------------------------
+    # §6.3a PRE-RIAA Canonical τ-Constant LUT (bindend, spec §6.3a v9.10.x)
+    # Triplet: (τ_bass_µs, τ_mid_µs, τ_treble_µs).  0 = no shelf at that pole.
+    # Playback correction: INVERT of recording characteristic derived from τ.
+    # Reference: Copeland (2008); Galo (2003); IEC 60098:1987; Robertson (2011).
+    # ---------------------------------------------------------------------------
+    PRE_RIAA_EQ_CURVES: dict[str, tuple[int, int, int]] = {
+        "riaa":               (3180, 318,  75),   # RIAA 1954 — reference
+        "nab":                (3180, 318,  50),   # NAB until 1953
+        "columbia":           (1590, 318,   0),   # Columbia 78 rpm until 1948
+        "aes":                (3180, 500,   0),   # AES 1951–1954
+        "capitol":            (1590, 400,   0),   # Capitol until 1953
+        "london":             (3180, 318, 100),   # London/Decca UK until 1954
+        "ccir":               (3180, 318, 120),   # CCIR for tape/lacquers
+        "unknown_prestandard": (1590, 318,   0),   # Conservative fallback ≈ Columbia
+    }
+
+    # Mapping from RIAA_CURVE_ERROR subtype (from DefectScanner/MediumClassifier)
+    # to HISTORICAL_CURVES key for inverse-EQ application.
+    RIAA_ERROR_TO_CURVE: dict[str, str] = {
+        "riaa":               "riaa_1954",
+        "nab":                "nab_1952",
+        "columbia":           "columbia_1938",
+        "aes":                "aes_1951",
+        "capitol":            "capitol_1951",
+        "london":             "london_decca_1953",
+        "ccir":               "ccir_1950",
+        "unknown_prestandard": "columbia_1938",
+    }
+
+    # ---------------------------------------------------------------------------
     # Historical pre-RIAA EQ Standards (1925–1954)
     # Each label company used a different recording curve before the RIAA standard.
     # Sources: Copeland (2008) "RIAA Standard"; Thornton (2019) "Phono EQ Curves";
@@ -456,7 +486,18 @@ class EQCorrectionPhase(PhaseInterface):
         decade = kwargs.get("decade")
         effective_material = material_type
         detected_variant: str | None = None
-        if material_type in ("shellac", "wax_cylinder") and decade is not None:
+
+        # §6.3a: honour riaa_curve_type from MediumClassifier / DefectScanner
+        # (set when RIAA_CURVE_ERROR defect is detected at confidence ≥ 0.70)
+        riaa_curve_type: str | None = kwargs.get("riaa_curve_type")
+        if riaa_curve_type and riaa_curve_type in self.RIAA_ERROR_TO_CURVE:
+            detected_variant = self.RIAA_ERROR_TO_CURVE[riaa_curve_type]
+            logger.info(
+                "phase_04: riaa_curve_type=%r from RIAA_CURVE_ERROR → variant '%s'",
+                riaa_curve_type,
+                detected_variant,
+            )
+        elif material_type in ("shellac", "wax_cylinder") and decade is not None:
             detected_variant = self._auto_detect_riaa_variant(audio, sample_rate, int(decade))
         elif material_type == "wax_cylinder":
             detected_variant = "wax_cylinder"
@@ -545,6 +586,57 @@ class EQCorrectionPhase(PhaseInterface):
                 "execution_time_seconds": execution_time,
             },
         )
+
+    def _tau_to_eq_db(
+        self,
+        tau_bass_us: int,
+        tau_mid_us: int,
+        tau_treble_us: int,
+        freq_hz: float,
+    ) -> float:
+        """Compute playback EQ correction (dB) for a pre-RIAA curve at ``freq_hz``.
+
+        Derives the inverse of the recording characteristic from the τ triplet:
+
+            H_rec(f) = (1 + j·ω·τ1) / ((1 + j·ω·τ2)·(1 + j·ω·τ3))
+
+        where τ1=τ_bass, τ2=τ_mid, τ3=τ_treble (all in µs).
+        τ=0 means the corresponding shelf is absent (term = 1).
+
+        The return value is the negative (playback correction) normalized to
+        0 dB at 1 000 Hz so that only the spectral tilt relative to 1 kHz is
+        applied.  This keeps the overall LUFS invariant.
+
+        Reference: IEC 60098:1987; Galo (2003) "Disc Recording EQ Curves".
+
+        Args:
+            tau_bass_us:   Bass time constant in µs (τ_bass).
+            tau_mid_us:    Mid time constant in µs  (τ_mid).
+            tau_treble_us: Treble time constant in µs (τ_treble, 0 = no shelf).
+            freq_hz:       Frequency at which to evaluate.
+
+        Returns:
+            Playback correction in dB (positive = boost, negative = cut).
+        """
+        if freq_hz <= 0.0:
+            return 0.0
+        omega = 2.0 * np.pi * freq_hz
+        # Each τ in seconds
+        t1 = tau_bass_us * 1e-6
+        t2 = tau_mid_us * 1e-6
+        t3 = tau_treble_us * 1e-6
+
+        # Recording curve magnitude (ratio relative to 1 kHz reference)
+        def _mag_ratio(f: float) -> float:
+            w = 2.0 * np.pi * f
+            num = np.sqrt(1.0 + (w * t1) ** 2) if t1 > 0 else 1.0
+            den = np.sqrt(1.0 + (w * t2) ** 2) if t2 > 0 else 1.0
+            den *= np.sqrt(1.0 + (w * t3) ** 2) if t3 > 0 else 1.0
+            return num / (den + 1e-30)
+
+        ratio = _mag_ratio(freq_hz) / (_mag_ratio(1000.0) + 1e-30)
+        # Playback correction = invert recording characteristic
+        return float(-20.0 * np.log10(max(ratio, 1e-30)))
 
     def _auto_detect_riaa_variant(self, audio: np.ndarray, sr: int, decade: int) -> str:
         """

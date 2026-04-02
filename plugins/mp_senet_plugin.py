@@ -48,6 +48,11 @@ _SR: int = 48_000
 _N_FFT: int = 960  # 20 ms @ 48 kHz
 _HOP: int = 480  # 10 ms
 _WIN: int = 960
+# NOTE: Current shipped ONNX export is effectively fixed to time=32 despite
+# dynamic-axis metadata. Using larger T (e.g., 404) triggers Reshape_4 runtime
+# errors. Keep chunk size at 32 for stable inference; plugin handles long audio
+# via segment-wise stitching.
+_MODEL_TIME_FRAMES: int = 32
 
 _lock = threading.Lock()
 _instance: MpSenetPlugin | None = None
@@ -242,32 +247,99 @@ class MpSenetPlugin:
         return x
 
     def _validate_and_pad_shapes(self, amp: np.ndarray, pha: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """§Punkt 4: Shape-Validierung + Padding für ONNX-Kompatibilität.
-
-        Das MP-SENet-Modell erwartet dynamische Zeit-Dimension, aber gewisse
-        Längen triggern Reshape-Fehler im ONNX-Graph. Diese Funktion:
-        1. Validiert Frequency-Dimension (201)
-        2. Paddet Zeit-Dimension (T) zu STFT-konformen Länggen wenn nötig
-        3. Tracked Shape-Mismatches für Diagnostik
-        """
+        """Validate core STFT frequency dimensions before ONNX inference."""
         _N_BINS = 201
         if amp.shape[0] != _N_BINS or pha.shape[0] != _N_BINS:
             raise ValueError(
                 f"Shape-Incompatibilität: erwartet freq={_N_BINS}, got amp freq={amp.shape[0]} pha freq={pha.shape[0]}"
             )
-
-        # Zeit-Dimension: STFT frame count sollte (audio_len - N_FFT) // HOP + 1 sein
-        # Gewisse Längen können Reshape-Fehler triggern. Padding hilft:
-        n_frames = amp.shape[1]
-        # Round-up zu nächster Potenz von 2 für ONNX-Stabilität (empirisch)
-        min_frames = 16  # Minimum time frames für Modell
-        if n_frames < min_frames:
-            pad_frames = min_frames - n_frames
-            amp = np.pad(amp, ((0, 0), (0, pad_frames)), mode="constant", constant_values=0)
-            pha = np.pad(pha, ((0, 0), (0, pad_frames)), mode="constant", constant_values=0)
-            n_frames = min_frames
-
         return amp, pha
+
+    def _run_onnx_segment(self, amp_seg: np.ndarray, pha_seg: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Run one fixed-length ONNX segment and return denoised amp/phase.
+
+        Primary layout is [B, F, T]. If the exported graph expects [B, T, F]
+        (seen as Reshape_4 runtime errors), retry once with transposed inputs.
+        """
+        assert self._session is not None
+        inp_names = [i.name for i in self._session.get_inputs()]
+        if len(inp_names) < 2:
+            raise ValueError(f"MP-SENet: expected >=2 inputs, got {inp_names}")
+
+        def _normalize_out(arr: np.ndarray) -> np.ndarray:
+            x = np.asarray(arr, dtype=np.float32)[0]
+            if x.ndim != 2:
+                raise ValueError(f"MP-SENet output rank unsupported: {x.shape}")
+            if x.shape[0] == 201:
+                return x
+            if x.shape[1] == 201:
+                return x.T
+            raise ValueError(f"MP-SENet output shape unsupported: {x.shape}")
+
+        amp_bft = amp_seg[np.newaxis]  # [1, 201, T]
+        pha_bft = pha_seg[np.newaxis]  # [1, 201, T]
+        try:
+            ort_out = self._session.run(
+                ["denoised_amp", "denoised_pha"],
+                {inp_names[0]: amp_bft, inp_names[1]: pha_bft},
+            )
+            return _normalize_out(ort_out[0]), _normalize_out(ort_out[1])
+        except Exception as exc:
+            msg = str(exc)
+            if "Reshape" not in msg and "reshape" not in msg:
+                raise
+            logger.warning(
+                "MP-SENet layout retry: [B,F,T] fehlgeschlagen (%s) — versuche [B,T,F]",
+                exc,
+            )
+
+        amp_btf = np.transpose(amp_bft, (0, 2, 1))  # [1, T, 201]
+        pha_btf = np.transpose(pha_bft, (0, 2, 1))  # [1, T, 201]
+        ort_out = self._session.run(
+            ["denoised_amp", "denoised_pha"],
+            {inp_names[0]: amp_btf, inp_names[1]: pha_btf},
+        )
+        return _normalize_out(ort_out[0]), _normalize_out(ort_out[1])
+
+    def _run_onnx_fixed_time(self, amp_in: np.ndarray, pha_in: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Execute ONNX with fixed T=404 using padded chunks to avoid Reshape errors."""
+        n_frames = int(amp_in.shape[1])
+        if n_frames <= 0:
+            return amp_in.copy(), pha_in.copy()
+
+        if n_frames <= _MODEL_TIME_FRAMES:
+            amp_seg = np.pad(
+                amp_in,
+                ((0, 0), (0, _MODEL_TIME_FRAMES - n_frames)),
+                mode="constant",
+                constant_values=0.0,
+            )
+            pha_seg = np.pad(
+                pha_in,
+                ((0, 0), (0, _MODEL_TIME_FRAMES - n_frames)),
+                mode="constant",
+                constant_values=0.0,
+            )
+            den_amp, den_pha = self._run_onnx_segment(amp_seg, pha_seg)
+            return den_amp[:, :n_frames], den_pha[:, :n_frames]
+
+        out_amp = np.zeros_like(amp_in, dtype=np.float32)
+        out_pha = np.zeros_like(pha_in, dtype=np.float32)
+        start = 0
+        while start < n_frames:
+            end = min(start + _MODEL_TIME_FRAMES, n_frames)
+            seg_len = end - start
+            amp_seg = np.zeros((amp_in.shape[0], _MODEL_TIME_FRAMES), dtype=np.float32)
+            pha_seg = np.zeros((pha_in.shape[0], _MODEL_TIME_FRAMES), dtype=np.float32)
+            amp_seg[:, :seg_len] = amp_in[:, start:end]
+            pha_seg[:, :seg_len] = pha_in[:, start:end]
+
+            den_amp, den_pha = self._run_onnx_segment(amp_seg, pha_seg)
+            out_amp[:, start:end] = den_amp[:, :seg_len]
+            out_pha[:, start:end] = den_pha[:, :seg_len]
+            start = end
+
+        return out_amp, out_pha
 
     def _enhance_onnx(self, mono: np.ndarray, sr: int) -> tuple[np.ndarray, str | None]:
         """MP-SENet ONNX-Inferenz: Magnitude + Phase Enhancement.
@@ -307,21 +379,7 @@ class MpSenetPlugin:
                 fallback_audio = self._omlsa_fallback(mono, sr)
                 return fallback_audio, "mp_senet_shape_error"
 
-            # Batch-Dimension hinzufügen
-            amp_in = amp_in[np.newaxis]  # [1, 201, T]
-            pha_in = pha_in[np.newaxis]  # [1, 201, T]
-
-            # Retrieve both required input names from the session
-            inp_names = [i.name for i in self._session.get_inputs()]
-            if len(inp_names) < 2:
-                raise ValueError(f"MP-SENet: expected ≥2 inputs, got {inp_names}")
-
-            ort_out = self._session.run(
-                ["denoised_amp", "denoised_pha"],
-                {inp_names[0]: amp_in, inp_names[1]: pha_in},
-            )
-            denoised_amp = np.asarray(ort_out[0], dtype=np.float32)[0]  # [201, T]
-            denoised_pha = np.asarray(ort_out[1], dtype=np.float32)[0]  # [201, T]
+            denoised_amp, denoised_pha = self._run_onnx_fixed_time(amp_in, pha_in)
 
             # Crop zu Original-Länge (falls gepadddet)
             orig_frames = amp_full.shape[1]

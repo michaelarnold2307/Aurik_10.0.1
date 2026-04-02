@@ -1,0 +1,224 @@
+"""Phase 57 — Lyrics-Guided Enhancement (§2.36 PFLICHT).
+
+Whisper-Tiny ONNX → wav2vec2 phoneme alignment → ContentAwareProcessor.
+Runs as post-processing module AFTER the PMGG chain (§7.7 invariant).
+NOT ML-deterministic in the PMGG sense — excluded from PMGG delta-checks.
+
+Privacy invariant: lyrics text MUST NEVER appear in any log, metadata field,
+or RestorationResult. Only phoneme-class labels (fricative/plosive/…) are kept.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any
+
+import numpy as np
+
+from .phase_interface import (
+    PhaseCategory,
+    PhaseInterface,
+    PhaseMetadata,
+    PhaseResult,
+    create_phase_result,
+)
+
+logger = logging.getLogger(__name__)
+
+# Minimum vocal probability (PANNs) to activate LGE (§2.9 invariant).
+_VOCAL_PROB_MIN: float = 0.30
+
+# Latency budget: 8 s per minute of audio (§2.36).
+_LATENCY_BUDGET_S_PER_MIN: float = 8.0
+
+
+class Phase58LyricsGuidedEnhancement(PhaseInterface):
+    """§2.36 Lyrics-guided saliency enhancement via phoneme-class boost factors.
+
+    Pipeline position: post-PMGG-chain, active only when vocals are detected.
+    The phase wraps ``LyricsGuidedEnhancement.enhance()`` which applies
+    segment-specific saliency boosts (fricative ×1.55, plosive ×1.40,
+    vowel_stressed ×1.35, silence ×0.70) to achieve physical vocal intimacy.
+
+    ML components loaded lazily via ``get_lyrics_guided_enhancement()`` (singleton).
+    Memory: ~512 MB (Whisper-Tiny 39 MB + wav2vec2 125 MB + buffer overhead).
+    """
+
+    def get_metadata(self) -> PhaseMetadata:
+        return PhaseMetadata(
+            phase_id="phase_58_lyrics_guided_enhancement",
+            name="Lyrics-gestütztes Enhancement (§2.36)",
+            category=PhaseCategory.ENHANCEMENT,
+            priority=6,
+            version="1.0.0",
+            dependencies=[],
+            estimated_time_factor=0.20,
+            memory_requirement_mb=512,
+            is_cpu_intensive=True,
+            is_io_intensive=False,
+            quality_impact=0.90,
+            description=(
+                "§2.36 Whisper-Tiny ONNX → wav2vec2 forced-alignment → "
+                "ContentAwareProcessor; phoneme-class saliency boosts; "
+                "runs post-PMGG; latency ≤ 8 s/min audio."
+            ),
+            defect_types=["vocal_noise", "sibilant_distortion"],
+            musical_goals=["artikulation", "natuerlichkeit"],
+        )
+
+    def process(
+        self,
+        audio: np.ndarray,
+        sample_rate: int = 48_000,
+        material_type: str = "unknown",
+        **kwargs: Any,
+    ) -> PhaseResult:
+        assert sample_rate == 48_000, f"phase_58: expected sr=48000, got {sample_rate}"
+
+        # §2.36 Pre-computed transcription from original audio (passed by UV3 via phase_kwargs).
+        # If available and not a fallback, use saliency path instead of full re-transcription.
+        pre_transcription: Any = kwargs.get("pre_transcription", None)
+
+        # ── Vocal-gate (§2.9) ────────────────────────────────────────────────
+        vocal_prob: float = float(kwargs.get("vocal_probability", 1.0))
+        if vocal_prob < _VOCAL_PROB_MIN:
+            logger.debug(
+                "phase_58_lyrics_guided_enhancement: skipped — vocal_prob=%.3f < %.2f",
+                vocal_prob,
+                _VOCAL_PROB_MIN,
+            )
+            return create_phase_result(
+                audio=audio,
+                modifications={"lge_skipped": True, "vocal_prob": vocal_prob},
+                warnings=["LGE skipped: vocal probability below threshold"],
+                metadata={"lge_active": False, "vocal_probability": vocal_prob},
+                ml_used=False,
+                quality_estimate=1.0,
+                execution_time_seconds=0.0,
+            )
+
+        # ── Latency budget check ──────────────────────────────────────────────
+        dur_s: float = float(audio.shape[0] if audio.ndim == 1 else audio.shape[0]) / max(1, sample_rate)
+        latency_budget_s: float = (dur_s / 60.0) * _LATENCY_BUDGET_S_PER_MIN
+
+        # ── Load singleton LGE (lazy, DSP-fallback on ImportError) ───────────
+        try:
+            from backend.core.lyrics_guided_enhancement import (
+                get_lyrics_guided_enhancement,
+            )
+            lge = get_lyrics_guided_enhancement()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "phase_58_lyrics_guided_enhancement: LGE unavailable (%s) — DSP passthrough",
+                type(exc).__name__,
+            )
+            return create_phase_result(
+                audio=audio,
+                modifications={"lge_fallback": "passthrough", "reason": type(exc).__name__},
+                warnings=[f"LGE unavailable ({type(exc).__name__}) — passthrough"],
+                metadata={"lge_active": False, "lge_error": type(exc).__name__},
+                ml_used=False,
+                quality_estimate=0.95,
+            )
+
+        # ── Apply LGE (saliency path if pre_transcription available, else full enhance) ─────
+        t0 = time.perf_counter()
+        try:
+            if pre_transcription is not None and not getattr(pre_transcription, "fallback_used", True):
+                # Fast path: use pre-computed transcription from original audio (§2.36 Phase-Gate).
+                from backend.core.lyrics_guided_enhancement import get_content_aware_processor
+                cap = get_content_aware_processor()
+                n_smp = audio.shape[-1] if audio.ndim == 2 else len(audio)
+                base_sal = np.ones(n_smp, dtype=np.float32)
+                saliency = cap.compute_lyrics_saliency(base_sal, pre_transcription, sample_rate)
+                if audio.ndim == 2 and audio.shape[0] <= 2:
+                    audio_out = audio * saliency[np.newaxis, :]
+                elif audio.ndim == 2:
+                    audio_out = audio * saliency[:, np.newaxis]
+                else:
+                    audio_out = audio * saliency
+                audio_out = np.clip(np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)
+                transcription = pre_transcription
+                logger.info(
+                    "phase_58_lyrics_guided_enhancement: saliency path (pre-transcription) — %d segments",
+                    len(pre_transcription.words) if pre_transcription is not None else 0,
+                )
+            else:
+                audio_out, transcription = lge.enhance(audio, sample_rate)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "phase_58_lyrics_guided_enhancement: enhance() failed (%s) — passthrough",
+                type(exc).__name__,
+            )
+            return create_phase_result(
+                audio=audio,
+                modifications={"lge_fallback": "passthrough_on_error", "reason": type(exc).__name__},
+                warnings=[f"LGE enhance() failed ({type(exc).__name__}) — passthrough"],
+                metadata={"lge_active": False, "lge_error": type(exc).__name__},
+                ml_used=True,
+                quality_estimate=0.95,
+            )
+
+        elapsed = time.perf_counter() - t0
+
+        # ── Latency warning (§2.36) ───────────────────────────────────────────
+        warnings: list[str] = []
+        if elapsed > latency_budget_s and latency_budget_s > 0.0:
+            logger.warning(
+                "phase_58_lyrics_guided_enhancement: latency %.2f s > budget %.2f s for %.1f s audio",
+                elapsed,
+                latency_budget_s,
+                dur_s,
+            )
+            warnings.append(
+                f"LGE latency {elapsed:.1f}s exceeds 8 s/min budget ({latency_budget_s:.1f}s)"
+            )
+
+        # ── NaN/Inf guard + clip (redundant — enhance() already does this) ───
+        audio_out = np.clip(
+            np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0),
+            -1.0,
+            1.0,
+        ).astype(np.float32)
+
+        # §2.36 Privacy-Pflicht: word count only — no text in metadata.
+        n_words: int = len(transcription.words) if transcription is not None else 0
+
+        return create_phase_result(
+            audio=audio_out,
+            modifications={
+                "lge_active": True,
+                "vocal_probability": vocal_prob,
+                "n_phoneme_segments": n_words,
+                "latency_s": round(elapsed, 3),
+                "latency_budget_s": round(latency_budget_s, 3),
+            },
+            warnings=warnings,
+            metadata={
+                "lge_active": True,
+                "vocal_probability": vocal_prob,
+                "n_phoneme_segments": n_words,
+                # §2.36 Datenschutz: no lyrics text stored here
+            },
+            ml_used=True,
+            quality_estimate=min(1.0, 0.90 + 0.10 * min(1.0, vocal_prob)),
+            execution_time_seconds=elapsed,
+        )
+
+
+# ── Singleton convenience accessor ───────────────────────────────────────────
+import threading as _threading
+
+_instance: Phase58LyricsGuidedEnhancement | None = None
+_lock = _threading.Lock()
+
+
+def get_phase_58_lge() -> Phase58LyricsGuidedEnhancement:
+    """Return the singleton Phase58LyricsGuidedEnhancement instance (thread-safe)."""
+    global _instance
+    if _instance is None:
+        with _lock:
+            if _instance is None:
+                _instance = Phase58LyricsGuidedEnhancement()
+    return _instance

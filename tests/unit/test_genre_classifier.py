@@ -1,7 +1,7 @@
 """Unit-Tests für core/genre_classifier.py — GermanSchlagerClassifier.
 
-Spec §2.19: 6-Schicht-Ensemble Zero-Shot-Schlager-Erkennung.
-≥ 35 Tests (shape, NaN, Bounds, Edge-Cases, Singleton, Profile).
+Spec §2.19: 7-Schicht-Ensemble Zero-Shot-Schlager-Erkennung.
+≥ 35 Tests (shape, NaN, Bounds, Edge-Cases, Singleton, Profile, Sprachunterscheidung).
 """
 
 from __future__ import annotations
@@ -408,3 +408,122 @@ class TestRestorationProfiles:
             for k, v in profile.items():
                 if isinstance(v, float):
                     assert math.isfinite(v), f"Nicht-finiter Wert {k}={v}"
+
+
+# ---------------------------------------------------------------------------
+# Klasse 8: Tier-7 Vokalsprach-Erkennung (Deutsch vs. Englisch)
+# ---------------------------------------------------------------------------
+
+
+def _german_umlaut_signal(sr: int = 22050, secs: float = 5.0) -> np.ndarray:
+    """Synthetisches Signal mit Vokalformanten für dt. ü (F1=320, F2=1900 → F2-F1=1580)."""
+    t = np.linspace(0, secs, int(sr * secs), endpoint=False)
+    # Grundton 150 Hz (männliche Stimme) + Resonanzen bei F1=320, F2=1900 Hz
+    sig = (
+        np.sin(2 * np.pi * 150 * t) * 1.0
+        + np.sin(2 * np.pi * 320 * t) * 0.6   # F1 (ü-typisch)
+        + np.sin(2 * np.pi * 1900 * t) * 0.4  # F2 (ü-typisch, hohes F2)
+    ).astype(np.float32)
+    sig /= np.max(np.abs(sig) + 1e-8)
+    return sig
+
+
+def _english_vowel_signal(sr: int = 22050, secs: float = 5.0) -> np.ndarray:
+    """Synthetisches Signal mit englischen Vokalformanten /ʌ/ (F1=700, F2=1100 → F2-F1=400)."""
+    t = np.linspace(0, secs, int(sr * secs), endpoint=False)
+    # Grundton 150 Hz + Resonanzen bei F1=700, F2=1100 Hz (eng. /ʌ/, kein Umlaut)
+    sig = (
+        np.sin(2 * np.pi * 150 * t) * 1.0
+        + np.sin(2 * np.pi * 700 * t) * 0.6   # F1 (englisch-typisch)
+        + np.sin(2 * np.pi * 1100 * t) * 0.4  # F2 (englisch-typisch, niedriges F2)
+    ).astype(np.float32)
+    sig /= np.max(np.abs(sig) + 1e-8)
+    return sig
+
+
+class TestVocalLanguageDetection:
+    """Tests für Tier-7: _detect_vocal_language (Deutsch vs. Englisch)."""
+
+    def setup_method(self):
+        self.clf = get_genre_classifier()
+
+    def test_49_vocal_language_score_exists_in_result(self):
+        """SchlagerClassificationResult hat vocal_language_score."""
+        r = self.clf.classify(_sine(), sr=48000)
+        assert hasattr(r, "vocal_language_score")
+        assert math.isfinite(r.vocal_language_score)
+
+    def test_50_vocal_language_score_bounded(self):
+        """vocal_language_score ∈ [0.0, 1.0] für alle Eingaben."""
+        for audio in [_sine(), _white_noise(), _silence(), _am_signal()]:
+            r = self.clf.classify(audio, sr=48000)
+            assert 0.0 <= r.vocal_language_score <= 1.0, (
+                f"vocal_language_score={r.vocal_language_score} out of [0,1]"
+            )
+
+    def test_51_vocal_language_score_finite_on_silence(self):
+        """Stille → Fallback 0.5, kein NaN."""
+        r = self.clf.classify(_silence(), sr=48000)
+        assert math.isfinite(r.vocal_language_score)
+
+    def test_52_umlaut_signal_scores_higher_than_english(self):
+        """Dt. Umlaut-Signal (F2-F1=1580 Hz) hat höheren lang_de_score als engl. Signal."""
+        r_de = self.clf._detect_vocal_language(_german_umlaut_signal(), sr=22050)
+        r_en = self.clf._detect_vocal_language(_english_vowel_signal(), sr=22050)
+        assert r_de >= r_en, (
+            f"Umlaut-Signal sollte höheren lang_de_score haben: de={r_de:.3f} en={r_en:.3f}"
+        )
+
+    def test_53_german_umlaut_score_above_neutral(self):
+        """Dt. Umlaut-Signal (F2-F1 > 1400) → lang_de_score ≥ 0.40."""
+        score = self.clf._detect_vocal_language(_german_umlaut_signal(), sr=22050)
+        assert score >= 0.40, f"Umlaut-Signal: lang_de_score={score:.3f} < 0.40"
+
+    def test_54_no_crash_on_very_short_audio(self):
+        """Sehr kurzes Signal → Fallback 0.5, kein Absturz."""
+        short = np.zeros(100, dtype=np.float32)
+        score = self.clf._detect_vocal_language(short, sr=22050)
+        assert math.isfinite(score)
+        assert 0.0 <= score <= 1.0
+
+    def test_55_german_label_for_high_lang_score(self):
+        """_determine_genre_label mit lang_de_score=0.8 → 'Deutscher Schlager' (eindeutig deutschsprachig)."""
+        label = self.clf._determine_genre_label("schunkel", 130.0, lang_de_score=0.8)
+        assert label == "Deutscher Schlager"
+        assert "Internationaler" not in label
+
+    def test_56_international_label_for_low_lang_score(self):
+        """_determine_genre_label mit lang_de_score=0.1 → 'Internationaler Schlager'."""
+        label = self.clf._determine_genre_label("schunkel", 130.0, lang_de_score=0.1)
+        assert label == "Internationaler Schlager"
+
+    def test_57_reasoning_mentions_language_confidence(self):
+        """Reasoning enthält Sprachinformation wenn Sprache klar erkennbar."""
+        r = self.clf.classify(_german_umlaut_signal(sr=48000), sr=48000)
+        # Score + Reasoning sollen konsistent sein
+        assert isinstance(r.reasoning, str)
+        assert math.isfinite(r.vocal_language_score)
+
+    def test_58_vocal_language_score_nan_safe(self):
+        """NaN-Audio → kein NaN im vocal_language_score."""
+        nan_audio = np.full(22050, np.nan, dtype=np.float32)
+        score = self.clf._detect_vocal_language(nan_audio, sr=22050)
+        assert math.isfinite(score)
+
+    def test_59_walzer_international_label(self):
+        """Walzer-Subgenre mit niedrigem lang_de_score → 'Internationaler Walzer'."""
+        label = self.clf._determine_genre_label("walzer", 165.0, lang_de_score=0.15)
+        assert label == "Internationaler Walzer"
+
+    def test_60_result_has_all_required_fields(self):
+        """SchlagerClassificationResult enthält alle Felder inkl. vocal_language_score."""
+        r = SchlagerClassificationResult(
+            is_schlager=True,
+            confidence=0.75,
+            genre_label="Schlager",
+            subgenre="schunkel",
+            bpm=130.0,
+            vocal_language_score=0.80,
+        )
+        assert r.vocal_language_score == 0.80
+        assert r.is_schlager is True

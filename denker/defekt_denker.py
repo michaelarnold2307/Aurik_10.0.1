@@ -107,8 +107,14 @@ class DefektErgebnis:
     overall_severity: float = 0.0
     """Mittlere Defekt-Schwere ∈ [0, 1]."""
 
+    raw_scan_result: Any | None = None
+    """Originaler DefectAnalysisResult aus DefectScanner.scan() — wird als
+    cached_defect_result an RestaurierDenker/UV3 weitergegeben, damit UV3
+    keinen zweiten internen Scan (mit falscher Material-Erkennung) starten muss.
+    Bug-17-Fix: materialkorrektes Scan-Ergebnis fließt durch die gesamte Kette."""
+
     @classmethod
-    def from_bericht(cls, bericht: DefektBericht) -> DefektErgebnis:
+    def from_bericht(cls, bericht: DefektBericht, raw_scan_result: Any | None = None) -> DefektErgebnis:
         """Konvertiert DefektBericht → DefektErgebnis."""
         return cls(
             defect_scores=bericht.defect_scores,
@@ -118,6 +124,7 @@ class DefektErgebnis:
             recommended_phases=bericht.recommended_phases,
             reasoning=bericht.reasoning,
             overall_severity=bericht.overall_severity,
+            raw_scan_result=raw_scan_result,
         )
 
 
@@ -225,7 +232,29 @@ class DefektDenker:
             logger.info("DefektDenker: Verwende gecachten DefectScan (kein Doppelscan).")
         elif self._scanner is not None:
             try:
-                scan_result = self._scanner.scan(audio, sample_rate=sr, progress_callback=progress_callback)
+                # §6.4c: Pass resolved material_type to DefectScanner so TRANSPORT_BUMP
+                # and other analog-only detectors are skipped for digital materials.
+                _mat_type_arg = None
+                if material and material != "unknown":
+                    try:
+                        from backend.core.defect_scanner import MaterialType as _MaterialType
+                        # MediumDetector returns "cassette" which has no enum value;
+                        # cassette tape maps to MaterialType.TAPE ("tape") in this codebase.
+                        _mat_str = "tape" if material == "cassette" else material
+                        _mat_type_arg = _MaterialType(_mat_str)
+                    except (ValueError, KeyError, ImportError):
+                        _mat_type_arg = None  # unknown value → let Scanner auto-detect
+                logger.info(
+                    "DefektDenker: scan() material=%s → material_type=%s",
+                    material,
+                    _mat_type_arg,
+                )
+                scan_result = self._scanner.scan(
+                    audio,
+                    sample_rate=sr,
+                    material_type=_mat_type_arg,
+                    progress_callback=progress_callback,
+                )
                 defect_scores = self._extract_scores(scan_result)
             except Exception as exc:
                 logger.warning("DefektDenker: scan() fehlgeschlagen (%s).", exc)
@@ -243,7 +272,7 @@ class DefektDenker:
             except Exception as exc:
                 logger.warning("DefektDenker: reason() fehlgeschlagen (%s).", exc)
 
-        return DefektErgebnis.from_bericht(self._to_bericht(defect_scores, plan, material))
+        return DefektErgebnis.from_bericht(self._to_bericht(defect_scores, plan, material), raw_scan_result=scan_result)
 
     def scan_nur(
         self,

@@ -80,12 +80,12 @@ class RestorationConfig:
     mode: QualityMode = QualityMode.QUALITY
     material_type: MaterialType | None = None  # None = auto-detect
     enable_performance_guard: bool = True
-    enable_adaptive_skipping: bool = True
+    enable_adaptive_skipping: bool = False  # RT-based adaptive skipping — opt-in only (tests/benchmarks)
     enable_phase_skipping: bool = True  # Defect-based phase skipping (20-40% speedup)
     phase_skipping_conservative: bool = False  # Conservative skipping (safer)
     enable_phase_gate: bool = True  # §2.29 PMGG — deaktivierbar via --no-phase-gate
     num_cores: int = 4
-    enforce_3x_rt: bool = True
+    enforce_3x_rt: bool = False  # RT enforcement — opt-in only; standard paths use no_rt_limit=True + UI watchdog
     enable_psychoacoustic_enhancement: bool = True
     global_plan: Any | None = None  # MusikalischerGlobalplan.StilbewussterRestaurierungsplan (§Dach)
     # P2-2: Deployment mode — PRODUCT = stable paths only, RESEARCH = experimental SOTA
@@ -150,6 +150,29 @@ class RestorationResult:
     # --- §G3 Export-Gate-Felder (Chroma/LUFS) ---
     chroma_correlation: float | None = None  # Chroma Pearson vs. Original (§8.2)
     lufs_delta: float | None = None  # |LUFS(restored) - LUFS(original)| in LU (§8.2)
+
+
+def _fc_compute_target_score(
+    mode_value: str,
+    cal_profile: "dict | None",
+) -> float:
+    """Compute FeedbackChain target_score adjusted by song calibration restorability.
+
+    §2.31a: Base target 0.78 (studio) / 0.72 (restoration) is fine-tuned
+    by restorability_score from the song calibration profile.
+
+    - Poor material (restorability=30): target −0.035 → avoid artefact accumulation
+    - Average material (restorability=65): no change
+    - Excellent material (restorability=95): target +0.030 → exploit quality headroom
+
+    Range bounded to [0.60, 0.85] to stay within FeedbackChain's convergence zone.
+    """
+    _base = 0.78 if mode_value == "studio_2026" else 0.72
+    if not isinstance(cal_profile, dict):
+        return _base
+    _rest = float(cal_profile.get("restorability_score", 65.0))
+    _adj = (_rest - 65.0) / 1000.0  # ±0.035 for score range 30–100
+    return max(0.60, min(0.85, _base + _adj))
 
 
 class UnifiedRestorerV3:
@@ -291,13 +314,21 @@ class UnifiedRestorerV3:
         bandwidth_mask = energy_db >= (peak_db - 55.0)
         effective_bandwidth_hz = float(freqs[bandwidth_mask][-1]) if np.any(bandwidth_mask) else 0.0
 
+        # §Fix8a: MP3_LOW is always a lossy codec with codec artifacts —
+        #         never considered benign regardless of signal metrics.
+        # §Fix8b: Bandwidth threshold must be relative to Nyquist (78%) to
+        #         avoid false "benign" for band-limited material.
+        #         44.1 kHz → min 17.2 kHz;  48 kHz → min 18.7 kHz.
+        _never_benign_materials = {MaterialType.MP3_LOW}
+        _bw_min = max(12_000.0, 0.78 * (sample_rate / 2.0))
         benign = (
-            dc_offset <= 5e-4
+            material not in _never_benign_materials
+            and dc_offset <= 5e-4
             and hard_clip_ratio <= 5e-6
             and near_clip_ratio <= 5e-5
             and dyn_std_db >= 3.5
             and flatness_median <= 8e-3
-            and effective_bandwidth_hz >= 12000.0
+            and effective_bandwidth_hz >= _bw_min
         )
         return benign, {
             "material": material.value,
@@ -375,6 +406,403 @@ class UnifiedRestorerV3:
             return True
         # Conservative fallback heuristic for benign MP3s where clean-digital classifier is close to threshold.
         return input_snr_db >= 34.0 and max_defect_severity <= 0.20
+
+    @staticmethod
+    def _build_song_calibration_profile(
+        *,
+        material_type: MaterialType | None,
+        mode: QualityMode,
+        restorability_score: float,
+        input_snr_db: float,
+        max_defect_severity: float,
+        pipeline_confidence: float,
+        era_decade: int | None = None,
+        defect_scores: dict[str, float] | None = None,
+        panns_tags: dict[str, float] | None = None,
+        spectral_fingerprint: dict[str, float] | None = None,
+        is_schlager: bool = False,
+    ) -> dict[str, Any]:
+        """Build a song-level calibration profile for phase-family adaptation.
+
+        The profile is intentionally conservative and bounded to avoid overfitting
+        to a single title while still allowing track-specific adaptation.
+
+        Args:
+            era_decade: Recording decade (e.g. 1940, 1960, 1980). Used for
+                era-GP-warmstart scaling per §2.14. None → neutral era factor.
+        """
+        _rest = float(np.clip(restorability_score / 100.0, 0.0, 1.0))
+        _snr = float(np.clip((input_snr_db - 10.0) / 40.0, 0.0, 1.0))
+        _def = float(np.clip(max_defect_severity, 0.0, 1.0))
+        _conf = float(np.clip(pipeline_confidence, 0.0, 1.0))
+
+        # §2.14 Era-GP-warmstart: denoise scaling by recording decade.
+        # pre-war (≤1940) → heavy noise → higher denoise family scalar.
+        # post-1970 → cleaner recordings → lower denoise family scalar.
+        _era_denoise_scale = 1.0
+        if era_decade is not None:
+            if era_decade <= 1940:
+                _era_denoise_scale = 1.10   # ~N(0.90,0.05) prior maps to +10% relative
+            elif era_decade <= 1960:
+                _era_denoise_scale = 1.00   # ~N(0.75,0.08) prior → neutral
+            else:
+                _era_denoise_scale = 0.88   # ≥1970 → N(0.50,0.10) → gentler denoise
+
+        # Material-type base multipliers (psychoacoustic + restoration constraints).
+        # Overrides are narrow (±0.10 max) to stay conservative and not over-ride
+        # per-phase material_initial_strengths (from defect_phase_mapper).
+        _mat_val = material_type.value if material_type is not None and hasattr(material_type, "value") else "unknown"
+        _mat_denoise  = 1.00
+        _mat_reverb   = 1.00
+        _mat_reconstruct = 1.00
+        _mat_vocal    = 1.00
+        _mat_dynamics = 1.00
+        if _mat_val in ("shellac",):
+            _mat_denoise = 1.08   # broad-band shellac noise → slightly more aggressive denoise
+            _mat_reverb  = 0.90   # shellac has no room reverb character worth removing
+            _mat_reconstruct = 1.05  # wide BW loss → more reconstruction
+        elif _mat_val in ("vinyl_standard", "vinyl_premium"):
+            _mat_denoise = 1.00
+            _mat_reverb  = 0.95
+        elif _mat_val in ("tape_standard", "tape_studio", "reel_tape"):
+            _mat_denoise = 1.03   # tape hiss layer → slightly higher denoise
+            _mat_reverb  = 1.05   # tape reverb / room often worth reducing
+        elif _mat_val in ("cd_digital", "dat", "digital"):
+            _mat_denoise = 0.85   # clean digital → gentle denoise family
+            _mat_reverb  = 0.92
+            _mat_reconstruct = 0.88
+        elif _mat_val in ("mp3_low", "mp3_standard"):
+            _mat_reconstruct = 1.08  # codec artefacts → more reconstruction
+            _mat_dynamics = 1.05     # lossy compression → restore dynamics
+        elif _mat_val in ("cassette_standard", "cassette_chrome"):
+            _mat_denoise = 1.05   # moderate tape hiss
+            _mat_reverb  = 0.95
+
+        # §Per-defect calibration: boost the relevant family if a specific defect
+        # dominates this song. Uses weighted severity (0=none, 1=heavy).
+        # Boost is conservative (+12% max) to avoid over-riding per-phase strengths.
+        _dsev_transient_boost = 1.0
+        if isinstance(defect_scores, dict) and defect_scores:
+            def _dsev(k: str) -> float:
+                return float(np.clip(defect_scores.get(k, 0.0), 0.0, 1.0))
+
+            _dsev_denoise    = max(_dsev("noise"), _dsev("high_freq_noise"), _dsev("hum"),
+                                   _dsev("quantization_noise"), _dsev("aliasing"), _dsev("bias_error"))
+            _dsev_transient  = max(_dsev("clicks"), _dsev("crackle"), _dsev("transient_smearing"))
+            _dsev_reconstruct = max(_dsev("dropouts"), _dsev("bandwidth_loss"), _dsev("digital_artifacts"),
+                                   _dsev("compression_artifacts"), _dsev("head_wear"),
+                                   _dsev("pre_echo"), _dsev("jitter_artifacts"), _dsev("azimuth_error"))
+            _dsev_reverb_def = max(_dsev("reverb_excess"), _dsev("print_through"))
+            _dsev_dynq       = max(_dsev("wow"), _dsev("flutter"), _dsev("pitch_drift"),
+                                   _dsev("dynamic_compression_excess"), _dsev("low_freq_rumble"),
+                                   _dsev("riaa_curve_error"))
+            _dsev_vocal_sib  = _dsev("sibilance_excess")
+
+            _mat_denoise      = float(np.clip(_mat_denoise      * (1.0 + 0.12 * _dsev_denoise),     0.85, 1.20))
+            _mat_reverb       = float(np.clip(_mat_reverb       * (1.0 + 0.12 * _dsev_reverb_def),  0.80, 1.15))
+            _mat_reconstruct  = float(np.clip(_mat_reconstruct  * (1.0 + 0.12 * _dsev_reconstruct), 0.80, 1.20))
+            _mat_dynamics     = float(np.clip(_mat_dynamics     * (1.0 + 0.08 * _dsev_dynq),        0.80, 1.15))
+            _mat_vocal        = float(np.clip(_mat_vocal        * (1.0 + 0.10 * _dsev_vocal_sib),   0.80, 1.15))
+            _dsev_transient_boost = float(1.0 + 0.12 * _dsev_transient)
+
+        # §PANNs: scale vocal/instrument families by actual detected presence.
+        # Near-zero vocal prob → spare the vocal processing budget.
+        # Strong vocal → push vocal family harder.
+        _panns_vocal_boost      = 1.0
+        _panns_instrument_boost = 1.0
+        if isinstance(panns_tags, dict) and panns_tags:
+            _vocal_prob = max(
+                panns_tags.get("Singing voice", 0.0),
+                panns_tags.get("Speech", 0.0),
+                panns_tags.get("Vocals", 0.0),
+                panns_tags.get("Male singing", 0.0),
+                panns_tags.get("Female singing", 0.0),
+            )
+            _inst_prob = max(
+                panns_tags.get("Guitar", 0.0),
+                panns_tags.get("Electric guitar", 0.0),
+                panns_tags.get("Brass instrument", 0.0),
+                panns_tags.get("Drum", 0.0),
+                panns_tags.get("Piano", 0.0),
+                panns_tags.get("Keyboard (musical)", 0.0),
+            )
+            if _vocal_prob < 0.10:               # clearly instrumental
+                _panns_vocal_boost = 0.80
+            elif _vocal_prob >= 0.35:            # vocal-dominant
+                _panns_vocal_boost = float(np.clip(0.90 + 0.22 * _vocal_prob, 0.90, 1.10))
+            if _inst_prob >= 0.35:
+                _panns_instrument_boost = float(np.clip(0.90 + 0.22 * _inst_prob, 0.90, 1.10))
+
+        # §Spectral-Fingerprint-Kalibrierung: direkte Messgrößen aus DefectScanner nutzen.
+        # rolloff_95_hz < 8 kHz → Bandbreitenverlust → reconstruction-Familie hochskalieren.
+        # noise_floor_p5_db    → präzisere denoise-Kalibrierung als globale SNR-Heuristik.
+        # wow_flutter_index    → Tonhalteschwankung → dynamics_eq-Familie.
+        _sf_reconstruct_boost = 1.0
+        _sf_denoise_boost     = 1.0
+        _sf_dynq_boost        = 1.0
+        if isinstance(spectral_fingerprint, dict) and spectral_fingerprint:
+            _rolloff = float(spectral_fingerprint.get("rolloff_95_hz", 20000.0))
+            _eff_bw  = float(spectral_fingerprint.get("effective_bandwidth_hz", 20000.0))
+            _nf_db   = float(spectral_fingerprint.get("noise_floor_p5_db", -72.0))
+            _wfi     = float(spectral_fingerprint.get("wow_flutter_index", 0.0))
+            # Bandwidth loss: rolloff below 8 kHz = clear HF truncation.
+            # Linear scale: 8000 Hz → +0%, 4000 Hz → +10%, 2000 Hz → +15%.
+            _bw_use  = min(_rolloff, _eff_bw)  # take the more conservative estimate
+            _sf_reconstruct_boost = float(np.clip(1.0 + 0.15 * max(0.0, (8000.0 - _bw_use) / 8000.0), 1.00, 1.15))
+            # Noise floor: −40 dBFS = very noisy (+10%), −72 dBFS = clean (no boost).
+            _nf_noise_frac = float(np.clip((_nf_db + 72.0) / 32.0, 0.0, 1.0))  # 0.0@−72, 1.0@−40
+            _sf_denoise_boost = float(np.clip(1.0 + 0.10 * _nf_noise_frac, 1.00, 1.10))
+            # Wow/Flutter Index: > 1.5 typical for cassette / damaged tape.
+            _sf_dynq_boost = float(np.clip(1.0 + 0.08 * min(_wfi / 2.0, 1.0), 1.00, 1.08))
+
+        # §Vintage-Charakter-Schutz: SOFT_SATURATION (Röhren-/Tape-Charakter) darf
+        # NICHT als Defekt behandelt werden (§5 Vintage Aesthetics — bindend).
+        # Hohe SOFT_SATURATION-Severity → denoise + transient-Familie dämpfen,
+        # damit H2/H4-Obertöne und der Sättigungs-Charakter erhalten bleiben.
+        _soft_sat_guard = 1.0
+        _soft_sat_transient_guard = 1.0
+        if isinstance(defect_scores, dict):
+            _sat_sev = float(np.clip(defect_scores.get("soft_saturation", 0.0), 0.0, 1.0))
+            if _sat_sev >= 0.25:
+                # Reduce denoise aggressiveness proportionally — preserve harmonic overtones.
+                _soft_sat_guard          = float(np.clip(1.0 - 0.12 * _sat_sev, 0.88, 1.00))
+                # Reduce transient processing slightly — soft clipping rounds transients by design.
+                _soft_sat_transient_guard = float(np.clip(1.0 - 0.07 * _sat_sev, 0.93, 1.00))
+
+        # §Defekt-Diversitäts-Dämpfung: wenn ≥8 unterschiedliche Defektarten gleichzeitig
+        # aktiv sind (severity ≥ 0.18), leichte globale Reduzierung um max. 6%.
+        # Verhindert kompounding Restorer-Interaktionen bei sehr stark geschädigtem Material.
+        _diversity_penalty = 1.0
+        if isinstance(defect_scores, dict) and defect_scores:
+            _n_active = sum(1 for v in defect_scores.values() if float(v) >= 0.18)
+            if _n_active >= 8:
+                _diversity_penalty = float(np.clip(1.0 - 0.01 * min(_n_active - 7, 6), 0.94, 1.00))
+
+        # §German-Schlager-Profil: Vokal-Intimität und Rhythmus-Klarheit priorisieren.
+        # Vocal +10%, Transient +5% (Schlagzeug-Punch), Dynamics +5% (Accordion-Schwung).
+        # Reconstruction leicht reduziert (Schlager-Aufnahmen sind meist gut erhalten).
+        _schlager_vocal_boost  = 1.0
+        _schlager_transient    = 1.0
+        _schlager_dynamics     = 1.0
+        _schlager_recon_factor = 1.0
+        if is_schlager:
+            _schlager_vocal_boost  = 1.10
+            _schlager_transient    = 1.05
+            _schlager_dynamics     = 1.05
+            _schlager_recon_factor = 0.95  # less aggressive reconstruction on intact vocal recordings
+        _global = 1.0
+        _global *= 0.90 + 0.20 * _def
+        _global *= 0.88 + 0.24 * _rest
+        _global *= 0.90 + 0.10 * (1.0 - _snr)
+        _global *= 0.92 + 0.16 * _conf
+        _global *= _diversity_penalty
+        _global = float(np.clip(_global, 0.70, 1.10))
+
+        _family = {
+            "denoise":        float(np.clip(_global * _mat_denoise     * _era_denoise_scale * (0.92 + 0.10 * (1.0 - _snr)) * _sf_denoise_boost * _soft_sat_guard,  0.60, 1.12)),
+            "reverb":         float(np.clip(_global * _mat_reverb      * (0.90 + 0.14 * _def),                                                                      0.60, 1.12)),
+            "reconstruction": float(np.clip(_global * _mat_reconstruct * (0.88 + 0.16 * (1.0 - _conf)) * _sf_reconstruct_boost * _schlager_recon_factor,             0.55, 1.10)),
+            "dynamics_eq":    float(np.clip(_global * _mat_dynamics    * (0.92 + 0.10 * _rest) * _sf_dynq_boost * _schlager_dynamics,                                0.65, 1.08)),
+            "transient":      float(np.clip(_global * (0.95 + 0.06 * _conf) * _dsev_transient_boost * _soft_sat_transient_guard * _schlager_transient,               0.75, 1.10)),
+            "vocal":          float(np.clip(_global * _mat_vocal       * (0.92 + 0.08 * _rest) * _panns_vocal_boost * _schlager_vocal_boost,                         0.55, 1.12)),
+            "instrument":     float(np.clip(_global * (0.90 + 0.10 * _rest)                    * _panns_instrument_boost,                                            0.60, 1.10)),
+            "general":        _global,
+        }
+
+        # §Mode differentiation: Studio 2026 permits more aggressive reconstruction,
+        # transient shaping and vocal enhancement (higher quality budget).
+        _mode_str = getattr(mode, "value", str(mode)).lower()
+        if "studio" in _mode_str or "maximum" in _mode_str:
+            _family["reconstruction"] = float(np.clip(_family["reconstruction"] * 1.08, 0.55, 1.10))
+            _family["transient"]      = float(np.clip(_family["transient"]       * 1.05, 0.75, 1.10))
+            _family["vocal"]          = float(np.clip(_family["vocal"]           * 1.05, 0.55, 1.12))
+            _family["instrument"]     = float(np.clip(_family["instrument"]      * 1.05, 0.60, 1.10))
+
+        if restorability_score < 40.0:
+            _tier = "poor"
+        elif restorability_score < 70.0:
+            _tier = "fair"
+        else:
+            _tier = "good"
+
+        return {
+            "material": _mat_val,
+            "mode": getattr(mode, "value", str(mode)),
+            "restorability_score": float(restorability_score),
+            "restorability_tier": _tier,
+            "input_snr_db": float(input_snr_db),
+            "max_defect_severity": float(max_defect_severity),
+            "pipeline_confidence": _conf,
+            "era_decade": era_decade,
+            "is_schlager": is_schlager,
+            "global_scalar": _global,
+            "family_scalars": _family,
+        }
+
+    @staticmethod
+    def _get_phase_calibration_scalar(phase_id: str, profile: dict[str, Any] | None) -> float:
+        """Return phase-family scalar derived from the song calibration profile."""
+        if not isinstance(profile, dict):
+            return 1.0
+        _family_scalars = profile.get("family_scalars")
+        if not isinstance(_family_scalars, dict):
+            return 1.0
+
+        try:
+            _parts = phase_id.split("_", 2)
+            _phase_num = int(_parts[1]) if len(_parts) > 1 else -1
+        except Exception:
+            _phase_num = -1
+
+        # Denoise family: broadband noise / hiss / gate-based processing
+        if _phase_num in {2, 3, 18, 29, 37}:
+            _family = "denoise"
+        # Reverb family: room removal / dereverb
+        elif _phase_num in {20, 49}:
+            _family = "reverb"
+        # Reconstruction family: dropout / spectral gap / diffusion inpainting / SBR / harmonic
+        elif _phase_num in {6, 7, 9, 23, 24, 55, 56, 57, 58}:
+            _family = "reconstruction"
+        # Dynamics / EQ family: EQ correction, dynamics, mastering chain
+        elif _phase_num in {4, 10, 17, 26, 31, 36, 40, 47}:
+            _family = "dynamics_eq"
+        # Transient family: transient preservation / shaping
+        elif _phase_num in {8, 11, 50}:
+            _family = "transient"
+        # Vocal family: de-esser, vocal enhancement, BSRoFormer separation
+        elif _phase_num in {19, 42, 43}:
+            _family = "vocal"
+        # Instrument family: guitar, brass, drums, piano, spatial enhancement
+        elif _phase_num in {44, 45, 46, 51, 52}:
+            _family = "instrument"
+        else:
+            _family = "general"
+
+        _raw = _family_scalars.get(_family, profile.get("global_scalar", 1.0))
+        try:
+            _scalar = float(_raw)
+        except Exception:
+            _scalar = 1.0
+        return float(np.clip(_scalar, 0.60, 1.10))
+
+    @staticmethod
+    def _mid_pipeline_calibration_step(
+        current_scores: "dict[str, float] | None",
+        profile: "dict[str, Any] | None",
+        checkpoint_label: str,
+        completed_count: int,
+        total_count: int,
+    ) -> "dict[str, Any] | None":
+        """Mid-pipeline family-scalar refinement (§2.31a adaptive iteration).
+
+        Uses PMGG-measured Musical Goal scores (zero additional DSP cost) to
+        refine family_scalars for pipeline phases not yet executed. Called at
+        ~33 % and ~66 % of phase-execution progress inside _execute_pipeline.
+
+        Rules
+        -----
+        - Adjustments bounded at ±12 % per family per checkpoint call.
+        - All scalars clamped to [0.60, 1.10] (matches _get_phase_calibration_scalar).
+        - Returns an updated *copy* of the profile (never mutates the original).
+        - Returns None when no meaningful adjustment was computed (< 0.5 % delta).
+
+        Uses already-computed PMGG scores — no additional audio processing cost.
+        """
+        if not isinstance(profile, dict) or not isinstance(current_scores, dict) or not current_scores:
+            return None
+        _fam = profile.get("family_scalars")
+        if not isinstance(_fam, dict):
+            return None
+
+        import copy as _copy
+
+        _new_profile: dict[str, Any] = _copy.deepcopy(profile)
+        _new_fam: dict[str, float] = _new_profile["family_scalars"]
+        _changes: dict[str, float] = {}
+
+        def _adj(family: str, factor: float) -> None:
+            """Apply a bounded multiplicative adjustment, clamped to [0.60, 1.10]."""
+            _old = float(np.clip(float(_new_fam.get(family, 1.0)), 0.60, 1.10))
+            _new_val = float(np.clip(_old * factor, 0.60, 1.10))
+            if abs(_new_val - _old) >= 0.005:  # ignore sub-0.5 % noise
+                _new_fam[family] = _new_val
+                _changes[family] = round(_new_val - _old, 4)
+
+        # Brillanz (HF crest-factor proxy): low after denoise → SBR / reconstruction needs more
+        _brillanz = current_scores.get("brillanz")
+        if _brillanz is not None and float(_brillanz) < 0.74:
+            _deficit = 0.74 - float(_brillanz)
+            _adj("reconstruction", 1.0 + min(0.12, _deficit * 0.5))
+
+        # Micro-dynamics: low → transient shaping + dynamics/EQ need stronger application
+        _micro = current_scores.get("micro_dynamics")
+        if _micro is not None and float(_micro) < 0.82:
+            _deficit = 0.82 - float(_micro)
+            _adj("transient", 1.0 + min(0.10, _deficit * 0.4))
+            _adj("dynamics_eq", 1.0 + min(0.08, _deficit * 0.3))
+
+        # Tonal center (K-S proxy): regression after denoise/reverb → reconstruction needs care
+        _tonal = current_scores.get("tonal_center")
+        if _tonal is not None and float(_tonal) < 0.91:
+            _deficit = 0.91 - float(_tonal)
+            _adj("reconstruction", 1.0 + min(0.08, _deficit * 0.4))
+            # Minor de-boost on dynamics_eq to avoid over-EQ causing further key drift
+            _adj("dynamics_eq", 1.0 - min(0.05, _deficit * 0.25))
+
+        # Groove: low → rhythm-preserving EQ + transient integrity protection needed
+        _groove = current_scores.get("groove")
+        if _groove is not None and float(_groove) < 0.78:
+            _deficit = 0.78 - float(_groove)
+            _adj("dynamics_eq", 1.0 + min(0.08, _deficit * 0.4))
+            _adj("transient", 1.0 + min(0.06, _deficit * 0.3))
+
+        # Separation fidelity: low → instrument / stem separation needs more strength
+        _sep = current_scores.get("separation_fidelity")
+        if _sep is not None and float(_sep) < 0.74:
+            _deficit = 0.74 - float(_sep)
+            _adj("instrument", 1.0 + min(0.10, _deficit * 0.5))
+
+        # Spatial depth (raumtiefe): low → stereo / spatial enhancement needed
+        _raum = current_scores.get("raumtiefe")
+        if _raum is not None and float(_raum) < 0.65:
+            _deficit = 0.65 - float(_raum)
+            _adj("instrument", 1.0 + min(0.08, _deficit * 0.4))
+
+        # Artikulation: low → vocal precision / clarity enhancement needed
+        _artik = current_scores.get("artikulation")
+        if _artik is not None and float(_artik) < 0.80:
+            _deficit = 0.80 - float(_artik)
+            _adj("vocal", 1.0 + min(0.12, _deficit * 0.5))
+
+        # Bass kraft: low → low-end dynamics EQ boost needed
+        _bass = current_scores.get("bass_kraft")
+        if _bass is not None and float(_bass) < 0.74:
+            _deficit = 0.74 - float(_bass)
+            _adj("dynamics_eq", 1.0 + min(0.06, _deficit * 0.3))
+
+        if not _changes:
+            return None  # no meaningful refinement needed
+
+        logger.info(
+            "§2.31a MidCalibrate[%s] global=%.3f progress=%d/%d adjustments: %s",
+            checkpoint_label,
+            float(profile.get("global_scalar", 1.0)),
+            completed_count,
+            total_count,
+            ", ".join(f"{k}:{v:+.4f}" for k, v in sorted(_changes.items())),
+        )
+        # Persist calibration events for RestorationResult.metadata audit trail
+        _events: list[dict[str, Any]] = list(profile.get("_mid_calibration_events", []))
+        _events.append(
+            {
+                "checkpoint": checkpoint_label,
+                "progress": f"{completed_count}/{total_count}",
+                "adjustments": dict(_changes),
+                "scores_snapshot": {k: round(float(v), 4) for k, v in current_scores.items()},
+            }
+        )
+        _new_profile["_mid_calibration_events"] = _events
+        return _new_profile
 
     def _discover_phase_metadata(self) -> dict[str, dict]:
         """Findet alle Phasenmodule und liest Metadaten (ohne Instanziierung)."""
@@ -481,6 +909,9 @@ class UnifiedRestorerV3:
 
         original_sample_rate = sample_rate
         target_sample_rate = 48000  # Standardisierung auf 48 kHz
+        # Dual-SR routing: analysis modules keep native import SR, processing phases run at 48 kHz.
+        analysis_audio = np.array(audio, copy=True)
+        analysis_sample_rate = sample_rate
 
         # §9.1 kwargs: mode + material aus externen Aufrufen verarbeiten (z.B. AMRB-Runner)
         _mode_map = {
@@ -517,8 +948,15 @@ class UnifiedRestorerV3:
         _cached_restorability_kwarg = kwargs.pop("cached_restorability_result", None)
         _audio_update_cb_kwarg = kwargs.pop("audio_update_callback", None)
         _no_rt_limit = bool(kwargs.pop("no_rt_limit", False))
+        self._song_calibration_profile = {}
         # §11.7a: reconstruction_context von RekonstruktionsDenker — enthält bereits reparierte Gaps
         _reconstruction_ctx = kwargs.pop("reconstruction_context", None)
+        # Bug-15-Fix: file_ext aus input_path extrahieren — wird an DefectScanner.scan()
+        # weitergegeben, damit der interne ForensicMediumDetector-Aufruf das Analog-
+        # Posterior-Zeroing anwenden kann (verhindert wax_cylinder-Fehlklassifikation).
+        _input_path_for_ext = str(kwargs.get("input_path", "") or kwargs.get("file_path", "") or "")
+        import os as _os_uv3
+        _file_ext_for_scan = _os_uv3.path.splitext(_input_path_for_ext)[1].lower() if _input_path_for_ext else ""
         self._active_global_plan = _gp_kwarg if _gp_kwarg is not None else self.config.global_plan
         self._active_chain_info = _chain_kwarg  # TontraegerketteDenker: Ketten-Phasen
         self._active_defekt_hint = _defekt_hint_kwarg  # DefektDenker: heuristische Phasen-Empfehlung
@@ -577,6 +1015,14 @@ class UnifiedRestorerV3:
         # Each entry: {"component": str, "error_code": str, "exc_type": str, "exc_msg": str}
         _fail_reasons: list[dict[str, Any]] = []
 
+        # Normalize analysis path stereo layout once (channel-first) while keeping native SR untouched.
+        if analysis_audio.ndim == 2 and analysis_audio.shape[1] <= 2 and analysis_audio.shape[0] > analysis_audio.shape[1]:
+            analysis_audio = analysis_audio.T
+
+        if not np.all(np.isfinite(analysis_audio)):
+            analysis_audio = np.nan_to_num(analysis_audio, nan=0.0, posinf=0.9, neginf=-0.9)
+        analysis_audio = np.clip(analysis_audio, -1.0, 1.0).astype(np.float32, copy=False)
+
         # Resample to 48 kHz if necessary
         if sample_rate != target_sample_rate:
             if LIBROSA_AVAILABLE:
@@ -604,8 +1050,9 @@ class UnifiedRestorerV3:
                     audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=target_sample_rate)
                 sample_rate = target_sample_rate
             else:
-                logger.warning(
-                    f"Cannot resample to {target_sample_rate} Hz (librosa unavailable), processing at {sample_rate} Hz"
+                raise RuntimeError(
+                    f"Interne 48-kHz-Normierung fehlgeschlagen (librosa nicht verfügbar, Eingang={sample_rate} Hz). "
+                    "Lösung: librosa/scipy im Runtime-Bundle bereitstellen oder Audio vorab auf 48 kHz konvertieren."
                 )
 
         # §3.1 NaN/Inf-Invariante: Bereinigung nach Resampling (Bibliotheks-Artefakte möglich)
@@ -706,7 +1153,7 @@ class UnifiedRestorerV3:
                 from backend.core.restorability_estimator import estimate_restorability
 
                 _mat_str = self.config.material_type.value if self.config.material_type is not None else "unknown"
-                _rest_result = estimate_restorability(audio, sample_rate, material=_mat_str)
+                _rest_result = estimate_restorability(analysis_audio, analysis_sample_rate, material=_mat_str)
                 _pmgg_restorability_score = float(_rest_result.restorability_score)
                 logger.info(
                     "📊 RestorabilityEstimator: score=%.1f grade=%s predicted_MOS=%.2f–%.2f",
@@ -809,7 +1256,7 @@ class UnifiedRestorerV3:
             _futures: dict[str, _cf.Future] = {}
             with _cf.ThreadPoolExecutor(max_workers=3) as _pool:
                 if not _medium_cached:
-                    _futures["mc"] = _pool.submit(_run_mc, audio, sample_rate)
+                    _futures["mc"] = _pool.submit(_run_mc, analysis_audio, analysis_sample_rate)
                 else:
                     logger.info(
                         "MediumClassifier: verwende gecachtes Ergebnis (material=%s, conf=%.2f)",
@@ -817,7 +1264,7 @@ class UnifiedRestorerV3:
                         float(getattr(_cached_medium_kwarg, "confidence", 0.0)),
                     )
                 if not _era_cached:
-                    _futures["era"] = _pool.submit(_run_era, audio, sample_rate)
+                    _futures["era"] = _pool.submit(_run_era, analysis_audio, analysis_sample_rate)
                 else:
                     logger.info(
                         "EraClassifier: verwende gecachtes Ergebnis (decade=%s, conf=%.2f)",
@@ -825,7 +1272,7 @@ class UnifiedRestorerV3:
                         float(getattr(_cached_era_kwarg, "confidence", 0.0)),
                     )
                 if not _genre_cached:
-                    _futures["genre"] = _pool.submit(_run_genre, audio, sample_rate)
+                    _futures["genre"] = _pool.submit(_run_genre, analysis_audio, analysis_sample_rate)
                 else:
                     logger.info(
                         "GenreClassifier: verwende gecachtes Ergebnis (is_schlager=%s, conf=%.2f)",
@@ -837,13 +1284,30 @@ class UnifiedRestorerV3:
                 _schlager_result_par = _cached_genre_kwarg if _genre_cached else _futures["genre"].result()
 
             # MediumClassifier-Ergebnis verarbeiten
-            if _mc_result is not None and _mc_result.confidence >= 0.35:
-                _classified_material = _mc_result.material
+            if _mc_result is not None and _mc_result.confidence >= 0.30:
+                _raw_mat = _mc_result.material
+                # Bug-16a-Fix: ClassificationResult.material kann ein String sein
+                # (forensics/medium_detector.py baut ClassificationResult mit material=primary_string).
+                # _classified_material.value würde AttributeError werfen → stille Ausnahme →
+                # frischer classify_medium()-Aufruf → material=unknown → AudioSR auf MP3 → OOM.
+                if isinstance(_raw_mat, str):
+                    try:
+                        _classified_material = MaterialType(_raw_mat.lower())
+                    except ValueError:
+                        _classified_material = MaterialType.UNKNOWN
+                elif isinstance(_raw_mat, MaterialType):
+                    _classified_material = _raw_mat
+                else:
+                    # Fallback: str-Repräsentation versuchen
+                    try:
+                        _classified_material = MaterialType(str(getattr(_raw_mat, "value", _raw_mat)).lower())
+                    except ValueError:
+                        _classified_material = MaterialType.UNKNOWN
                 logger.info(
                     "🔍 MediumClassifier: Material=%s Konfidenz=%.2f Quelle=%s",
                     _classified_material.value,
                     _mc_result.confidence,
-                    _mc_result.classifier_source,
+                    getattr(_mc_result, "classifier_source", "cached"),
                 )
             else:
                 if _mc_result is not None:
@@ -880,7 +1344,7 @@ class UnifiedRestorerV3:
                 _era_mp = str(getattr(_era_result, "material_prior", "") or "")
                 if _era_mp and _era_mp not in ("unknown", "digital", ""):
                     try:
-                        from backend.core.medium_classifier import MaterialType as _MatType
+                        from backend.core.defect_scanner import MaterialType as _MatType
 
                         _classified_material = _MatType(_era_mp)
                         logger.info(
@@ -909,20 +1373,22 @@ class UnifiedRestorerV3:
                 _gp_material = getattr(_gp_portrait, "material", None)
                 _gp_genre = getattr(_gp_portrait, "genre", None)
 
-                # Era/Decade: GlobalPlan-Era hat Vorrang (Gesamtstück > Chunk-Analyse)
+                # Era/Decade: GlobalPlan überschreibt nur wenn seine Konfidenz HÖHER
+                # ist als die des UV3-Chunk-EraClassifiers.  Verhindert Rückfall auf
+                # schlechtere DSP-Fingerprints (z.B. MP3-BW → fälschlich 1930er).
                 chunk_era_conf = float(getattr(_era_result, "confidence", 0.0)) if _era_result is not None else 0.0
-                if _gp_decade is not None and _gp_era_conf >= 0.35:
+                if _gp_decade is not None and _gp_era_conf >= 0.35 and _gp_era_conf > chunk_era_conf:
                     try:
                         from backend.core.era_classifier import EraResult as _EraResult
 
                         _old_decade = getattr(_era_result, "decade", "?")
+                        _existing_noise = getattr(_era_result, "noise_profile", None)
                         _era_result = _EraResult(
                             decade=int(_gp_decade),
                             era_label=f"{_gp_decade}er",
                             confidence=_gp_era_conf,
                             material_prior=_gp_material or getattr(_era_result, "material_prior", "unknown"),
-                            noise_profile=getattr(_era_result, "noise_profile", None)
-                            or __import__("numpy").zeros(24, dtype="float32"),
+                            noise_profile=_existing_noise if _existing_noise is not None else __import__("numpy").zeros(24, dtype="float32"),
                             tier_used=0,
                             hf_rolloff_hz=getattr(_era_result, "hf_rolloff_hz", 20000.0),
                         )
@@ -941,7 +1407,7 @@ class UnifiedRestorerV3:
                     _chunk_mc_conf = float(getattr(_mc_result, "confidence", 0.0)) if _mc_result is not None else 0.0
                     if _chunk_mc_conf < 0.55:
                         try:
-                            from backend.core.medium_classifier import MaterialType as _MatType
+                            from backend.core.defect_scanner import MaterialType as _MatType
 
                             _gp_mat_type = _MatType(_gp_material)
                             _classified_material = _gp_mat_type
@@ -988,7 +1454,7 @@ class UnifiedRestorerV3:
                         _schlager_result = _GenreResult(
                             is_schlager=True,
                             confidence=_gp_genre_conf,
-                            genre_label="Schlager",
+                            genre_label="Deutscher Schlager",
                             subgenre=_gp_subgenre or "unknown",
                             bpm=float(getattr(_gp_portrait, "bpm", 0.0)),
                         )
@@ -1013,7 +1479,7 @@ class UnifiedRestorerV3:
                 try:
                     from backend.core.era_classifier import classify_era
 
-                    _era_result = classify_era(audio, sample_rate)
+                    _era_result = classify_era(analysis_audio, analysis_sample_rate)
                     logger.info(
                         "🎙️ EraClassifier: decade=%d material_prior=%s confidence=%.2f",
                         _era_result.decade,
@@ -1065,7 +1531,7 @@ class UnifiedRestorerV3:
                 try:
                     from backend.core.genre_classifier import classify_genre
 
-                    _schlager_result = classify_genre(audio, sample_rate)
+                    _schlager_result = classify_genre(analysis_audio, analysis_sample_rate)
                     if _schlager_result.is_schlager:
                         logger.info(
                             "🎵 Schlager erkannt: confidence=%.2f genre=%s bpm=%.0f — SCHLAGER_PROFILE aktiv",
@@ -1091,7 +1557,7 @@ class UnifiedRestorerV3:
                         _schlager_result = _GenreResult(
                             is_schlager=True,
                             confidence=_gp_genre_conf_e,
-                            genre_label="Schlager",
+                            genre_label="Deutscher Schlager",
                             subgenre=_gp_subgenre_e or "unknown",
                             bpm=float(getattr(_gp_portrait_else, "bpm", 0.0)),
                         )
@@ -1109,8 +1575,8 @@ class UnifiedRestorerV3:
             _defect_material.value
             if (_defect_material := getattr(_schlager_result, "_material", None)) is not None
             else (
-                self._current_material.value
-                if hasattr(self, "_current_material") and self._current_material
+                _classified_material.value
+                if _classified_material is not None
                 else "unknown"
             )
         )
@@ -1263,7 +1729,18 @@ class UnifiedRestorerV3:
         try:
             from backend.core.reference_anchor_synthesizer import synthesize_reference_anchor
 
-            _era_for_anchor = _era_result.decade if _era_result is not None else None
+            # Use GlobalPlan decade directly (whole-track analysis) — more reliable
+            # than chunk-level EraClassifier (§Dach principle). Only fall back to
+            # chunk EraResult if no GlobalPlan available.
+            _gp_portrait_anc = getattr(
+                getattr(self, "_active_global_plan", None), "portrait", None
+            )
+            _gp_decade_anc = getattr(_gp_portrait_anc, "decade", None) if _gp_portrait_anc is not None else None
+            _era_for_anchor = (
+                int(_gp_decade_anc)
+                if _gp_decade_anc is not None
+                else (int(_era_result.decade) if _era_result is not None else None)
+            )
             _mat_for_anchor = _classified_material.value if _classified_material is not None else "unknown"
             _genre_for_anchor = _schlager_result.genre_label if _schlager_result is not None else "unknown"
             _reference_anchor = synthesize_reference_anchor(
@@ -1286,7 +1763,7 @@ class UnifiedRestorerV3:
             defect_result = _cached_defect_kwarg
             logger.info("Step 1/4: Verwende gecachten DefectScan (kein Mehrfach-Scan).")
         else:
-            defect_result = self.defect_scanner.scan(audio, sample_rate, _classified_material)
+            defect_result = self.defect_scanner.scan(analysis_audio, analysis_sample_rate, _classified_material, file_ext=_file_ext_for_scan)
         if defect_result is None:
             logger.error(
                 "DefectScanner.scan() returned None — creating fallback DefectAnalysisResult. "
@@ -1298,9 +1775,11 @@ class UnifiedRestorerV3:
                 material_type=MaterialType.UNKNOWN if _classified_material is None else _classified_material,
                 scores={},
                 analysis_time_seconds=0.0,
-                sample_rate=sample_rate,
+                sample_rate=analysis_sample_rate,
                 duration_seconds=(
-                    float(len(audio) / sample_rate) if audio.ndim == 1 else float(audio.shape[-1] / sample_rate)
+                    float(len(analysis_audio) / analysis_sample_rate)
+                    if analysis_audio.ndim == 1
+                    else float(analysis_audio.shape[-1] / analysis_sample_rate)
                 ),
             )
         material_type = defect_result.material_type
@@ -1502,6 +1981,64 @@ class UnifiedRestorerV3:
                 self.config.mode.value,
                 _pipeline_quality_mode_override.value,
             )
+
+        _pipeline_conf_val = float(getattr(_pipeline_confidence, "confidence", 1.0)) if _pipeline_confidence else 1.0
+        # §2.31a: Per-defect and PANNs data available here → pass into calibration.
+        # defect_result.scores: dict[DefectType, DefectScore] → normalise to str→float.
+        _cal_defect_sev: dict[str, float] = {}
+        if hasattr(defect_result, "scores") and isinstance(defect_result.scores, dict):
+            _cal_defect_sev = {
+                (dt.value if hasattr(dt, "value") else str(dt)): float(getattr(ds, "severity", 0.0))
+                for dt, ds in defect_result.scores.items()
+            }
+        _cal_sf: dict[str, float] = {}
+        if hasattr(defect_result, "spectral_fingerprint") and isinstance(defect_result.spectral_fingerprint, dict):
+            _cal_sf = defect_result.spectral_fingerprint
+        _cal_is_schlager = bool(getattr(_schlager_result, "is_schlager", False)) if _schlager_result is not None else False
+        self._song_calibration_profile = self._build_song_calibration_profile(
+            material_type=material_type,
+            mode=self.config.mode,
+            restorability_score=_pmgg_restorability_score,
+            input_snr_db=_input_snr_db,
+            max_defect_severity=_max_defect_severity,
+            pipeline_confidence=_pipeline_conf_val,
+            era_decade=getattr(_era_result, "decade", None) if _era_result is not None else None,
+            defect_scores=_cal_defect_sev if _cal_defect_sev else None,
+            panns_tags=_panns_conf,  # from defect_result.metadata (already extracted above)
+            spectral_fingerprint=_cal_sf if _cal_sf else None,
+            is_schlager=_cal_is_schlager,
+        )
+        if isinstance(getattr(self, "_restoration_context", None), dict):
+            self._restoration_context.update(
+                {
+                    "song_calibration_global": self._song_calibration_profile.get("global_scalar", 1.0),
+                    "song_calibration_tier": self._song_calibration_profile.get("restorability_tier", "fair"),
+                    "song_calibration_confidence": self._song_calibration_profile.get("pipeline_confidence", 1.0),
+                }
+            )
+            # §2.9 PANNs-Durchreichung: panns_tags + abgeleitete Konfidenzen in den
+            # Restaurierungskontext injizieren, damit _profiled_phase_call sie zentral
+            # in ALLE Phase-kwargs verteilt. Phasen 12, 42–45, 51, 52 lesen
+            # kwargs.get("panns_tags") bzw. kwargs.get("panns_vocals_confidence").
+            if isinstance(_panns_conf, dict) and _panns_conf:
+                self._restoration_context["panns_tags"] = _panns_conf
+                _panns_vocal_max = max(
+                    _panns_conf.get("Singing voice", 0.0),
+                    _panns_conf.get("Vocals", 0.0),
+                    _panns_conf.get("Speech", 0.0),
+                    _panns_conf.get("Male singing", 0.0),
+                    _panns_conf.get("Female singing", 0.0),
+                )
+                self._restoration_context["panns_vocals_confidence"] = _panns_vocal_max
+        logger.info(
+            "🎛️ SongCalibration: material=%s era=%s tier=%s global=%.3f denoise=%.3f conf=%.2f",
+            self._song_calibration_profile.get("material", "unknown"),
+            str(self._song_calibration_profile.get("era_decade", "?")),
+            self._song_calibration_profile.get("restorability_tier", "fair"),
+            float(self._song_calibration_profile.get("global_scalar", 1.0)),
+            float(self._song_calibration_profile.get("family_scalars", {}).get("denoise", 1.0)),
+            float(self._song_calibration_profile.get("pipeline_confidence", 1.0)),
+        )
         if _pass_through_mode:
             if _clean_digital_mode and not (_input_snr_db > 40.0 and _max_defect_severity < 0.15):
                 logger.info(
@@ -1588,6 +2125,53 @@ class UnifiedRestorerV3:
                     "🛡️ Pass-Through-Guard: %d Phasen deaktiviert → %d minimal-Phasen verbleiben",
                     len(_pt_removed),
                     len(selected_phases),
+                )
+
+        # §8.2 Leichtpfad: Fast perfektes Material (restorability ≥ 85, Defekte ≤ 0.25)
+        # bekommt NUR Defektkorrektur (Tier 0+1) + Finalisierung (Tier 6) — kein Enhancement.
+        # Verhindert unnötige Klangveränderung bei qualitativ hochwertigen Aufnahmen,
+        # die aber doch leichte Defekte aufweisen (nicht pass-through-tauglich).
+        if (
+            not _pass_through_mode
+            and _pmgg_restorability_score >= 85.0
+            and _max_defect_severity <= 0.25
+            and not _localized_critical
+        ):
+            _leichtpfad_keep = {
+                # Tier 0 — Basis-Vorbereitung
+                "phase_30_dc_offset_removal",
+                "phase_08_transient_preservation",
+                # Tier 1 — Defektkorrektur (alle defektspezifischen Phasen behalten)
+                "phase_01_declipping", "phase_02_dehum", "phase_03_denoise",
+                "phase_04_eq_correction", "phase_05_rumble_removal",
+                "phase_09_crackle_removal", "phase_10_compression_repair",
+                "phase_11_limiting_repair", "phase_12_wow_flutter_fix",
+                "phase_13_azimuth_correction", "phase_14_stereo_repair",
+                "phase_15_channel_balance", "phase_17_distortion_reduction",
+                "phase_18_noise_gate", "phase_19_de_esser",
+                "phase_20_reverb_reduction", "phase_22_speed_correction",
+                "phase_24_dropout_repair", "phase_25_declick",
+                "phase_27_sibilance_control", "phase_29_tape_hiss_reduction",
+                "phase_31_pitch_drift", "phase_43_ml_deesser",
+                "phase_49_advanced_dereverb", "phase_50_spectral_repair",
+                "phase_55_diffusion_inpainting", "phase_56_spectral_band_gap",
+                "phase_59_modulation_noise", "phase_60_inner_groove_distortion",
+                "phase_61_groove_echo", "phase_62_crosstalk_bleed",
+                "phase_63_intermodulation_distortion", "phase_64_tape_splice",
+                # Tier 6 — Finalisierung
+                "phase_40_loudness_normalization",
+                "phase_41_output_format_optimization",
+                "phase_47_truepeak_limiter",
+                "phase_53_semantic_audio",
+            }
+            _lp_removed = [p for p in selected_phases if p not in _leichtpfad_keep]
+            if _lp_removed:
+                selected_phases = [p for p in selected_phases if p in _leichtpfad_keep]
+                logger.info(
+                    "🛡️ Leichtpfad: restorability=%.1f, max_defect=%.3f → %d Enhancement-Phasen "
+                    "deaktiviert, %d Defektkorrektur+Finalisierungs-Phasen verbleiben",
+                    _pmgg_restorability_score, _max_defect_severity,
+                    len(_lp_removed), len(selected_phases),
                 )
 
         # Step 3: Performance Guard Setup
@@ -1885,7 +2469,10 @@ class UnifiedRestorerV3:
                         _fc_max_iter = 7  # armes Material profitiert von mehr Iterationen
                 _fc_chain = FeedbackChain(
                     sample_rate=sample_rate,
-                    target_score=0.78 if getattr(self.config.mode, "value", "") == "studio_2026" else 0.72,  # v9.14-D5
+                    target_score=_fc_compute_target_score(  # §2.31a SongCal-aware FC-Target
+                        mode_value=getattr(self.config.mode, "value", "restoration"),
+                        cal_profile=getattr(self, "_song_calibration_profile", None),
+                    ),
                     max_iterations=_fc_max_iter,
                     excellence_mode=_fc_excellence,
                     material=material_type.value,
@@ -2611,54 +3198,108 @@ class UnifiedRestorerV3:
                     }
                 )
 
-                # §9.8 End-Gate: P1-Goal Recovery Blend
-                # If critical P1 goals (natuerlichkeit, authentizitaet) are violated,
-                # attempt a protective blend with original audio to recover them.
-                _P1_GOALS = {"natuerlichkeit", "authentizitaet"}
-                _p1_violations = [g for g in _mg_violations if g in _P1_GOALS]
+                # §9.8 End-Gate: P1/P2 Goal Recovery Cascade
+                # If critical P1/P2 goals are violated, attempt a multi-step
+                # protective blend with original audio to recover them.
+                # Tries multiple blend ratios (most restored → most original) and
+                # selects the one that resolves the most P1/P2 violations with the
+                # fewest P3–P5 regressions.
+                _P1P2_GOALS = {"natuerlichkeit", "authentizitaet", "tonal_center", "timbre_authentizitaet", "artikulation"}
+                _p1p2_violations = [g for g in _mg_violations if g in _P1P2_GOALS]
                 if (
-                    _p1_violations
+                    _p1p2_violations
                     and original_audio_for_goals is not None
                     and restored_audio.shape == original_audio_for_goals.shape
                 ):
-                    _BLEND_ALPHA = 0.85  # 85 % restored, 15 % original
-                    _blended = np.clip(
-                        _BLEND_ALPHA * restored_audio + (1.0 - _BLEND_ALPHA) * original_audio_for_goals,
-                        -1.0,
-                        1.0,
-                    )
-                    try:
-                        _blend_scores = _mg_checker.measure_all(_blended, sample_rate, reference=_mg_ref)
-                        _p1_resolved = all(
-                            _blend_scores.get(g, 0.0) >= _effective_goal_thresholds.get(g, 0.85) for g in _p1_violations
-                        )
-                        _no_new_regression = all(
-                            _blend_scores.get(g, 0.0) >= _musical_goal_scores.get(g, 0.0) - 0.02
-                            for g in _musical_goal_scores
-                        )
-                        if _p1_resolved and _no_new_regression:
-                            logger.info(
-                                "🔄 End-Gate: P1 Recovery Blend (alpha=%.2f) — %s wiederhergestellt",
-                                _BLEND_ALPHA,
-                                ", ".join(_p1_violations),
+                    # Recovery blend cascade: try progressively more original audio
+                    _BLEND_ALPHAS = [0.92, 0.85, 0.78, 0.70]
+                    _best_blend_audio = None
+                    _best_blend_scores = None
+                    _best_blend_alpha = None
+                    _best_resolved_count = 0
+                    _best_regression_count = float("inf")
+
+                    for _alpha in _BLEND_ALPHAS:
+                        try:
+                            _blended = np.clip(
+                                _alpha * restored_audio + (1.0 - _alpha) * original_audio_for_goals,
+                                -1.0,
+                                1.0,
                             )
-                            restored_audio = _blended
-                            _musical_goal_scores = _blend_scores
-                            _musical_excellence_score = sum(_blend_scores.values()) / max(len(_blend_scores), 1)
-                            _mg_violations = [
-                                k
-                                for k in _musical_goal_scores
-                                if k in _applicable_goal_names
-                                and float(_musical_goal_scores.get(k, 0.0)) < _effective_goal_thresholds.get(k, 0.85)
-                            ]
-                        else:
+                            _blend_scores = _mg_checker.measure_all(_blended, sample_rate, reference=_mg_ref)
+
+                            # Count resolved P1/P2 violations
+                            _resolved = sum(
+                                1 for g in _p1p2_violations
+                                if _blend_scores.get(g, 0.0) >= _effective_goal_thresholds.get(g, 0.85)
+                            )
+                            # Count new regressions (any goal drops > 0.02 from current scores)
+                            _regressions = sum(
+                                1 for g in _musical_goal_scores
+                                if _blend_scores.get(g, 0.0) < _musical_goal_scores.get(g, 0.0) - 0.02
+                            )
+
                             logger.debug(
-                                "End-Gate: P1 Recovery Blend verworfen (resolved=%s, no_regression=%s)",
-                                _p1_resolved,
-                                _no_new_regression,
+                                "End-Gate: alpha=%.2f → resolved=%d/%d, regressions=%d",
+                                _alpha,
+                                _resolved,
+                                len(_p1p2_violations),
+                                _regressions,
                             )
-                    except Exception as _blend_exc:
-                        logger.debug("End-Gate: P1 Recovery Blend fehlgeschlagen: %s", _blend_exc)
+
+                            # Select best: most P1/P2 resolved, fewest regressions, highest alpha
+                            if _resolved > _best_resolved_count or (
+                                _resolved == _best_resolved_count and _regressions < _best_regression_count
+                            ):
+                                _best_resolved_count = _resolved
+                                _best_regression_count = _regressions
+                                _best_blend_audio = _blended
+                                _best_blend_scores = _blend_scores
+                                _best_blend_alpha = _alpha
+                                # Early exit if all P1/P2 resolved with no regressions
+                                if _resolved == len(_p1p2_violations) and _regressions == 0:
+                                    break
+                        except Exception as _blend_iter_exc:
+                            logger.debug(
+                                "End-Gate: Recovery Blend alpha=%.2f failed: %s",
+                                _alpha,
+                                _blend_iter_exc,
+                            )
+
+                    # Accept the best blend if it resolves at least one P1/P2 violation
+                    # without causing more than 1 regression
+                    if (
+                        _best_blend_audio is not None
+                        and _best_blend_scores is not None
+                        and _best_resolved_count > 0
+                        and _best_regression_count <= 1
+                    ):
+                        logger.info(
+                            "🔄 End-Gate: P1/P2 Recovery Blend (alpha=%.2f) — "
+                            "%d/%d P1/P2-Ziele wiederhergestellt, %d Regression(en)",
+                            _best_blend_alpha,
+                            _best_resolved_count,
+                            len(_p1p2_violations),
+                            _best_regression_count,
+                        )
+                        restored_audio = _best_blend_audio
+                        _musical_goal_scores = _best_blend_scores
+                        _musical_excellence_score = sum(_best_blend_scores.values()) / max(
+                            len(_best_blend_scores), 1
+                        )
+                        _mg_violations = [
+                            k
+                            for k in _musical_goal_scores
+                            if k in _applicable_goal_names
+                            and float(_musical_goal_scores.get(k, 0.0)) < _effective_goal_thresholds.get(k, 0.85)
+                        ]
+                    else:
+                        logger.debug(
+                            "End-Gate: Recovery Blend cascade unsuccessful "
+                            "(best_resolved=%d, best_regressions=%s) — keeping unblended result",
+                            _best_resolved_count,
+                            _best_regression_count,
+                        )
             else:
                 logger.info(
                     "🎵 Musical Goals: alle %d Ziele erfüllt (Ø %.3f)",
@@ -3168,7 +3809,7 @@ class UnifiedRestorerV3:
         }
         _post_defect_result = None
         try:
-            _post_defect_result = self.defect_scanner.scan(restored_audio, sample_rate, material_type)
+            _post_defect_result = self.defect_scanner.scan(restored_audio, sample_rate, material_type, file_ext=_file_ext_for_scan)
             if _post_defect_result is not None:
                 _result_defect_scores = {
                     dt: _post_defect_result.scores[dt].severity for dt in DefectType if dt in _post_defect_result.scores
@@ -3269,8 +3910,10 @@ class UnifiedRestorerV3:
                     "gp_bound_factor": round(_pipeline_confidence.gp_bound_factor, 4) if _pipeline_confidence else None,
                     "user_hint": _pipeline_confidence.user_hint if _pipeline_confidence else None,
                 },
+                "song_calibration": dict(getattr(self, "_song_calibration_profile", {})),
                 "musical_goals": {
                     "scores": {k: round(float(v), 4) for k, v in _musical_goal_scores.items()},
+                    "thresholds": {k: round(float(v), 4) for k, v in _effective_goal_thresholds.items()},
                     "passed": _musical_goals_passed,
                     "excellence_score": round(_musical_excellence_score, 4),
                     "all_passed": all(_musical_goals_passed.values()) if _musical_goals_passed else None,
@@ -4154,7 +4797,7 @@ class UnifiedRestorerV3:
         try:
             from backend.core.psychoacoustic_masking_model import PsychoacousticMaskingModel as _PMM
 
-            _pmm_audio = np.mean(restored_audio, axis=0) if restored_audio.ndim == 2 else restored_audio
+            _pmm_audio = restored_audio.mean(axis=0) if restored_audio.ndim == 2 else restored_audio
             _pmm_r = _PMM().compute_threshold(_pmm_audio.astype(np.float32), sr=sample_rate)
             _pmm_result = _pmm_r.as_dict()
             logger.debug("🎭 PsychoacousticMaskingModel: %s", _pmm_result)
@@ -5765,7 +6408,10 @@ class UnifiedRestorerV3:
             from backend.core.musical_goals.edge_case_handler import EdgeCaseHandler as _ECH36h
 
             _ech36 = _ECH36h()
-            _eca36 = _ech36.assess_edge_cases(restored_audio, sample_rate)
+            # Bug-Fix §10b: cap to 10 s — metadata section must not run full-audio O(N²) analysis
+            _ech_cap = 10 * sample_rate
+            _ech_audio = restored_audio[:_ech_cap] if restored_audio.shape[-1] > _ech_cap else restored_audio
+            _eca36 = _ech36.assess_edge_cases(_ech_audio, sample_rate)
             _edge_case_result = _eca36.as_dict() if hasattr(_eca36, "as_dict") else {"severity": str(_eca36)}
             logger.debug("⚠️ EdgeCaseHandler: %s", _edge_case_result)
         except Exception as _exc36h:
@@ -5983,7 +6629,10 @@ class UnifiedRestorerV3:
         try:
             from backend.core.musical_goals.ki_quality_model import KIQualityAnalyzer as _KIQA35
 
-            _ki_score35 = _KIQA35().analyze_audio_quality(restored_audio, sample_rate)
+            # Bug-Fix §10b: cap to 10 s
+            _ki_cap = 10 * sample_rate
+            _ki_audio = restored_audio[:_ki_cap] if restored_audio.shape[-1] > _ki_cap else restored_audio
+            _ki_score35 = _KIQA35().analyze_audio_quality(_ki_audio, sample_rate)
             _ki_quality_score = float(_ki_score35) if _ki_score35 is not None else None
             logger.debug("🤖 KIQuality: score=%.3f", _ki_quality_score or 0.0)
         except Exception as _ki_exc:
@@ -6014,7 +6663,10 @@ class UnifiedRestorerV3:
             _tech_scores35 = {}
             if _musical_goal_scores:
                 _tech_scores35 = {k: float(v) for k, v in _musical_goal_scores.items() if isinstance(v, (int, float))}
-            _pv35_result = _PV35().validate_all_goals(restored_audio, sample_rate, _tech_scores35)
+            # Bug-Fix §10b: cap to 10 s; avoid PerceptualValidator background-thread issues on long audio
+            _pv_cap = 10 * sample_rate
+            _pv_audio = restored_audio[:_pv_cap] if restored_audio.shape[-1] > _pv_cap else restored_audio
+            _pv35_result = _PV35().validate_all_goals(_pv_audio, sample_rate, _tech_scores35)
             _perceptual_validation = {
                 k: {"score": float(getattr(v, "score", 0.0)), "passed": bool(getattr(v, "passed", True))}
                 for k, v in (_pv35_result or {}).items()
@@ -6491,6 +7143,131 @@ class UnifiedRestorerV3:
         drums_detected = panns("Drum", 0.50) or panns("Percussion", 0.50)
         piano_detected = panns("Piano", 0.50) or panns("Keyboard (musical)", 0.50)
 
+        # ── Erweiterte Instrument-/Genre-Erkennung (v9.10.x) ────────────
+        # Streicher, Holzbläser, Synthesizer, Orgel, ethnische Instrumente
+        strings_detected = (
+            panns("Violin, fiddle", 0.40) or panns("Cello", 0.40)
+            or panns("Double bass", 0.40) or panns("Bowed string instrument", 0.40)
+        )
+        woodwind_detected = (
+            panns("Flute", 0.45) or panns("Clarinet", 0.45)
+            or panns("Oboe", 0.45) or panns("Bassoon", 0.45)
+        )
+        synth_detected = panns("Synthesizer", 0.45) or panns("Electronic organ", 0.45)
+        organ_detected = panns("Organ", 0.45) or panns("Church bell", 0.30)
+        # Polyphoniedichte-Schätzung: >3 Instrumentfamilien aktiv → dichtes Ensemble
+        _active_families = sum([
+            vocals_detected, guitar_detected, brass_detected, drums_detected,
+            piano_detected, strings_detected, woodwind_detected, synth_detected,
+        ])
+        _dense_ensemble = _active_families >= 4
+
+        # ── Beat-Reliability-Score (Rubato/Free-Form Detektor) ──────────
+        # Onset-Autokorrelation: periodischer Beat → hoher Score; Rubato → niedrig.
+        # Gated: wen Reliability < 0.40 → Wow/Flutter-Korrektur abschwächen/deaktivieren.
+        _beat_reliability: float = 1.0  # default: Beat angenommen
+        if audio is not None:
+            try:
+                _br_mono = audio.mean(axis=0) if audio.ndim == 2 and audio.shape[0] <= audio.shape[1] else (
+                    audio.mean(axis=1) if audio.ndim == 2 else audio
+                )
+                _br_mono = np.asarray(_br_mono, dtype=np.float32)
+                # Onset-Stärke via Spectral-Flux (schnell, kein librosa nötig)
+                _br_hop = max(1, sr // 100)  # ~10 ms Hops
+                _br_win = _br_hop * 2
+                _br_n_frames = max(1, (len(_br_mono) - _br_win) // _br_hop)
+                if _br_n_frames > 20:
+                    _br_flux = np.zeros(_br_n_frames, dtype=np.float32)
+                    _prev_mag = np.zeros(_br_win // 2 + 1, dtype=np.float32)
+                    for _bi in range(_br_n_frames):
+                        _bstart = _bi * _br_hop
+                        _bframe = _br_mono[_bstart:_bstart + _br_win]
+                        if len(_bframe) < _br_win:
+                            break
+                        _bmag = np.abs(np.fft.rfft(_bframe * np.hanning(_br_win)))
+                        _br_flux[_bi] = float(np.sum(np.maximum(_bmag - _prev_mag, 0.0)))
+                        _prev_mag = _bmag
+                    # Auto-Korrelation der Onset-Stärke (BPM 40–220)
+                    _min_lag = max(1, int(sr / (_br_hop * 220.0 / 60.0)))
+                    _max_lag = min(_br_n_frames // 2, int(sr / (_br_hop * 40.0 / 60.0)))
+                    if _max_lag > _min_lag + 5:
+                        _br_ac = np.correlate(_br_flux[:_br_n_frames], _br_flux[:_br_n_frames], mode="full")
+                        _br_ac = _br_ac[_br_n_frames - 1:]  # positive lags only
+                        _br_ac_norm = _br_ac / (_br_ac[0] + 1e-12)
+                        _br_region = _br_ac_norm[_min_lag:_max_lag]
+                        if len(_br_region) > 0:
+                            _beat_reliability = float(np.max(_br_region))
+                            _beat_reliability = max(0.0, min(1.0, _beat_reliability))
+                logger.info(
+                    "Beat-Reliability: %.3f (%s)",
+                    _beat_reliability,
+                    "steady beat" if _beat_reliability >= 0.40 else "rubato/free-form",
+                )
+            except Exception as _br_exc:
+                logger.debug("Beat-Reliability-Berechnung fehlgeschlagen: %s", _br_exc)
+
+        # ── Loudness-War-Detektor ───────────────────────────────────────
+        # Intentionale Kompression (modernes Material, Crest < 6 dB) ≠ Defekt.
+        # Dynamik-Wiederherstellungsphasen werden für solches Material gesperrt.
+        _loudness_war_victim = False
+        _era_decade_sel = getattr(
+            getattr(self, "_active_era_result", None), "decade", None
+        )
+        _comp_sev = sev(DefectType.DYNAMIC_COMPRESSION_EXCESS)
+        if _comp_sev > 0.25:
+            _is_modern_era = _era_decade_sel is not None and _era_decade_sel >= 2000
+            _is_digital_mat = material in {
+                MaterialType.CD_DIGITAL, MaterialType.MP3_LOW, MaterialType.MP3_HIGH,
+                MaterialType.AAC, MaterialType.STREAMING, MaterialType.DAT,
+            }
+            if _is_modern_era or _is_digital_mat:
+                _loudness_war_victim = True
+                logger.info(
+                    "🔊 Loudness-War-Guard: Intentionale Kompression erkannt "
+                    "(comp_sev=%.2f, era=%s, material=%s) — Dynamik-Phasen gesperrt",
+                    _comp_sev,
+                    _era_decade_sel,
+                    material.value if hasattr(material, "value") else material,
+                )
+
+        # ── Operatic/Classical Vibrato Detektor ─────────────────────────
+        # Breites Vibrato (~5 Hz, ±50–200 Cent) ≠ Pitch-Defekt oder Sibilanz.
+        # Erkannt: starke periodische f0-Modulation im 4–7 Hz Band.
+        _operatic_vibrato = False
+        if vocals_detected and audio is not None:
+            try:
+                _vib_mono = audio.mean(axis=0) if audio.ndim == 2 and audio.shape[0] <= audio.shape[1] else (
+                    audio.mean(axis=1) if audio.ndim == 2 else audio
+                )
+                _vib_mono = np.asarray(_vib_mono, dtype=np.float32)
+                # ZCR-basierte schnelle f0-Schätzung (256-Sample-Fenster, 10 ms Hop)
+                _vib_hop = max(1, sr // 100)
+                _vib_n = max(1, (len(_vib_mono) - 256) // _vib_hop)
+                if _vib_n > 50:
+                    _f0_series = np.zeros(_vib_n, dtype=np.float32)
+                    for _vi in range(_vib_n):
+                        _vs = _vi * _vib_hop
+                        _vframe = _vib_mono[_vs:_vs + 256]
+                        _zcr = float(np.sum(np.abs(np.diff(np.sign(_vframe))) > 0))
+                        _f0_series[_vi] = _zcr * sr / (2.0 * 256)
+                    # Vibrato = periodische Modulation in 4–7 Hz (Fenstergröße ~200 ms)
+                    _f0_detrend = _f0_series - np.convolve(_f0_series, np.ones(20) / 20, mode="same")
+                    _vib_fft = np.abs(np.fft.rfft(_f0_detrend))
+                    _vib_freqs = np.fft.rfftfreq(len(_f0_detrend), d=_vib_hop / sr)
+                    _vib_band = (_vib_freqs >= 4.0) & (_vib_freqs <= 7.0)
+                    _vib_energy = float(np.sum(_vib_fft[_vib_band] ** 2))
+                    _total_energy = float(np.sum(_vib_fft[1:] ** 2)) + 1e-12
+                    _vib_ratio = _vib_energy / _total_energy
+                    if _vib_ratio > 0.15:
+                        _operatic_vibrato = True
+                        logger.info(
+                            "🎭 Vibrato-Detektor: Operatic/klassisches Vibrato erkannt "
+                            "(4–7 Hz Energie-Ratio=%.3f) — De-Esser/Harshness abgeschwächt",
+                            _vib_ratio,
+                        )
+            except Exception as _vib_exc:
+                logger.debug("Vibrato-Detektion fehlgeschlagen: %s", _vib_exc)
+
         # §2.8 Vocal-Chain: Einmalige Gender-Detektion für alle nachfolgenden Vocal-Phasen
         # Ergebnis wird auf self gespeichert und in _restoration_context injiziert,
         # sodass Phase 19/42/43 das erkannte Geschlecht via kwargs erhalten.
@@ -6604,8 +7381,28 @@ class UnifiedRestorerV3:
             selected.append("phase_18_noise_gate")
 
         # Wow/Flutter (Magnetband-Gleichlaufschwankungen)
+        # §Beat-Reliability-Gate: Rubato/Free-Form → Wow/Flutter-Korrektur abschwächen
         if max(sev(DefectType.WOW), sev(DefectType.FLUTTER)) > 0.10:
-            selected.append("phase_12_wow_flutter_fix")
+            if _beat_reliability >= 0.40:
+                selected.append("phase_12_wow_flutter_fix")
+            elif max(sev(DefectType.WOW), sev(DefectType.FLUTTER)) > 0.35:
+                # Nur bei hoher Severity trotz Rubato — schwerer mechanischer Defekt
+                selected.append("phase_12_wow_flutter_fix")
+                logger.info(
+                    "⏱️ Rubato-Override: phase_12 trotz Beat-Reliability=%.2f aktiviert "
+                    "(WOW=%.2f, FLUTTER=%.2f — severity > 0.35 → mechanischer Defekt wahrscheinlich)",
+                    _beat_reliability,
+                    sev(DefectType.WOW),
+                    sev(DefectType.FLUTTER),
+                )
+            else:
+                logger.info(
+                    "⏱️ Rubato-Guard: phase_12 übersprungen — Beat-Reliability=%.2f < 0.40 "
+                    "(WOW=%.2f, FLUTTER=%.2f ≤ 0.35 → wahrscheinlich künstlerisches Rubato)",
+                    _beat_reliability,
+                    sev(DefectType.WOW),
+                    sev(DefectType.FLUTTER),
+                )
 
         # Transport-Bump (impulsartige Bandholperer — Kassette/Tape)
         if sev(DefectType.TRANSPORT_BUMP) > 0.08:
@@ -6613,8 +7410,17 @@ class UnifiedRestorerV3:
                 selected.append("phase_12_wow_flutter_fix")
 
         # Pitch-Drift (langsame Tonhöhenschwankung)
+        # §Rubato-Guard: Expressives Rubato erzeugt natürlichen Pitch-Drift
         if sev(DefectType.PITCH_DRIFT) > 0.15:
-            selected.append("phase_31_speed_pitch_correction")
+            if _beat_reliability >= 0.40 or sev(DefectType.PITCH_DRIFT) > 0.40:
+                selected.append("phase_31_speed_pitch_correction")
+            else:
+                logger.info(
+                    "⏱️ Rubato-Guard: phase_31 übersprungen — Beat-Reliability=%.2f, "
+                    "Pitch-Drift=%.2f → wahrscheinlich expressives Tempo",
+                    _beat_reliability,
+                    sev(DefectType.PITCH_DRIFT),
+                )
 
         # Phasen-/Azimuth-Fehler
         if sev(DefectType.PHASE_ISSUES) > 0.10:
@@ -6696,6 +7502,23 @@ class UnifiedRestorerV3:
             selected.append("phase_06_frequency_restoration")  # Frequenzgang-Verluste ausgleichen
             selected.append("phase_29_tape_hiss_reduction")  # Bias-erhöhtes Hintergrundrauschen
 
+        # Dolby-NR-Mismatch (Dolby B/C/S encode ohne Dekoder abgespielt — §6.3)
+        # Dolby B: +6 dB HF-Shelf; Dolby C: +20 dB; Korrektur: inverses Shelf-EQ + leichte NR
+        if sev(DefectType.DOLBY_NR_MISMATCH) > 0.10:
+            selected.append("phase_04_eq_correction")   # Inverses Dolby-Shelf-EQ (HF-Absenken)
+            selected.append("phase_14_dynamic_range")   # Dolby-Kompander-Dynamik-Rekonstruktion
+        if sev(DefectType.DOLBY_NR_MISMATCH) > 0.40:
+            selected.append("phase_03_denoise")         # Dolby-C-Mismatch: starke HF-Überhöhung maskiert
+            selected.append("phase_29_tape_hiss_reduction")  # Residual-Rauschen nach Dekoder-Emulation
+
+        # Tape Head Level Dip (graduelle Pegeleinbrüche Kopf-Kontaktdruck — §6.3)
+        # Phase 12 enthält autonomen Tape Level Stabilizer (Step 6c).
+        if sev(DefectType.TAPE_HEAD_LEVEL_DIP) > 0.08:
+            selected.append("phase_12_wow_flutter_fix")  # Tape Level Stabilizer (Step 6c)
+        if sev(DefectType.TAPE_HEAD_LEVEL_DIP) > 0.30:
+            selected.append("phase_24_dropout_repair")   # Tiefe Dips die Dropout-Schwelle überschreiten
+            selected.append("phase_26_dynamic_range_expansion")  # Mikro-Dynamik nach Leveling
+
         # ── §6.3 Pflicht-Severity-Checks: HEAD_WEAR, AZIMUTH, TRANSIENT_SMEARING, PRE_ECHO, SIBILANCE ──
         # Ohne diese direkte Aktivierung verlassen sich die Defekte NUR auf CausalReasoner (Tier 1.5).
         # Tier 1 MUSS jede erkannte Severity > Schwelle direkt in Phasen übersetzen.
@@ -6724,12 +7547,18 @@ class UnifiedRestorerV3:
             selected.append("phase_08_transient_preservation")
 
         # Sibilanz (Zischlaut-Überbetonung > 6 kHz — severity-priorisiert, nicht nur PANNs-Gate)
-        if sev(DefectType.SIBILANCE) > 0.15:
+        # Vibrato-Guard: Bei operatischem/klassischem Vibrato (4–7 Hz) erzeugen Gesangs-Obertöne
+        # natürliche HF-Energie im 4–8 kHz Band, die NICHT als Sibilanz behandelt werden darf.
+        # Schwelle erhöht von 0.15 → 0.35 bei Vibrato-Singers.
+        _sib_threshold = 0.35 if _operatic_vibrato else 0.15
+        if sev(DefectType.SIBILANCE) > _sib_threshold:
             selected.append("phase_19_de_esser")  # §6.3 — De-Esser (stimmtyp-adaptiv)
             selected.append("phase_43_ml_deesser")  # ML-De-Esser (zweiter Pass)
 
         # Vocal-Harshness (Übersteuerung/Kratzigkeit/Härte im 2–6 kHz Band)
-        if sev(DefectType.VOCAL_HARSHNESS) > 0.12:
+        # Vibrato-Guard: Operatic Vibrato erzeugt HF-Modulationen, die false-positive Harshness triggern.
+        _harsh_threshold = 0.30 if _operatic_vibrato else 0.12
+        if sev(DefectType.VOCAL_HARSHNESS) > _harsh_threshold:
             selected.append("phase_42_vocal_enhancement")  # Vocal-Enhancement mit Harshness-Absenkung
             selected.append("phase_19_de_esser")  # De-Esser reduziert obere Härte-Frequenzen
             selected.append("phase_43_ml_deesser")  # ML-De-Esser (Frikativ-Kontrolle)
@@ -6762,6 +7591,103 @@ class UnifiedRestorerV3:
                 "phase_29_tape_hiss_reduction",  # Lackoberflächen-Rauschen
             ]
 
+        # ── Neue Defekttypen (v9.10.x — 12 SOTA-Lücken) ──────────────────
+
+        # Modulationsrauschen (Signal-korrelierts Rauschen bei Tape/Vinyl — Esquef & Biscainho SOTA)
+        if sev(DefectType.MODULATION_NOISE) > 0.15:
+            selected.append("phase_59_modulation_noise_reduction")  # Signal-adaptive Spektral-Gating
+        if sev(DefectType.MODULATION_NOISE) > 0.35:
+            selected.append("phase_03_denoise")  # Breitband-Rest-NR nach Modulationsrausch-Entfernung
+
+        # Innenrillenverzerrung (IGD — THD steigt zum Plattenende, Vinyl/Shellac/Lacquer)
+        _is_groove_medium = material in {
+            MaterialType.VINYL,
+            MaterialType.SHELLAC,
+            MaterialType.LACQUER_DISC,
+        }
+        if sev(DefectType.INNER_GROOVE_DISTORTION) > 0.12 and _is_groove_medium:
+            selected.append("phase_60_inner_groove_distortion_repair")  # Positions-adaptive THD-Reduktion
+        if sev(DefectType.INNER_GROOVE_DISTORTION) > 0.35 and _is_groove_medium:
+            selected.append("phase_23_spectral_repair")  # Residuale Verzerrungsprodukte
+
+        # Rillenecho (Groove Echo — benachbarte Rillen bluten durch, Vinyl/Shellac)
+        if sev(DefectType.GROOVE_ECHO) > 0.15 and _is_groove_medium:
+            selected.append("phase_61_groove_echo_cancellation")  # RPM-Template-Matching + Subtraktion
+        if sev(DefectType.GROOVE_ECHO) > 0.40 and _is_groove_medium:
+            selected.append("phase_03_denoise")  # Residuales Echo-Rest-Rauschen
+
+        # Übersprechen (Crosstalk — Stereo-Kanaltrennung bei Vinyl/Tape)
+        if sev(DefectType.CROSSTALK) > 0.15:
+            selected.append("phase_62_crosstalk_cancellation")  # BSS-basierte Kanaltrennung
+        if sev(DefectType.CROSSTALK) > 0.40:
+            selected.append("phase_15_stereo_balance")  # Stereo-Balance nach Crosstalk-Fix
+
+        # Intermodulationsverzerrung (IMD — nichtlineare Mischprodukte bei Vinyl/Röhre)
+        if sev(DefectType.INTERMODULATION_DISTORTION) > 0.15:
+            selected.append("phase_63_intermodulation_reduction")  # Volterra-basierte IMD-Tilgung
+        if sev(DefectType.INTERMODULATION_DISTORTION) > 0.35:
+            selected.append("phase_23_spectral_repair")  # Residuale IMD-Produkte
+
+        # Tape-Klebestellen-Artefakte (Click+Level+Phase-Sprünge an Splice-Punkten)
+        if sev(DefectType.TAPE_SPLICE_ARTIFACT) > 0.10 and material in {
+            MaterialType.TAPE,
+            MaterialType.REEL_TAPE,
+        }:
+            selected.append("phase_64_tape_splice_repair")  # Splice-Click + Level-Crossfade
+        if sev(DefectType.TAPE_SPLICE_ARTIFACT) > 0.30 and material in {
+            MaterialType.TAPE,
+            MaterialType.REEL_TAPE,
+        }:
+            selected.append("phase_24_dropout_repair")  # Schwerer Splice-Ausfall
+
+        # HF-Remanenz-Verlust (Tape Magnetisierungsverlust >4 kHz — Alterung)
+        if sev(DefectType.HF_REMANENCE_LOSS) > 0.15 and material in {
+            MaterialType.TAPE,
+            MaterialType.REEL_TAPE,
+        }:
+            selected.append("phase_06_frequency_restoration")  # Bandwidth-Extension >4 kHz
+            selected.append("phase_07_harmonic_restoration")  # Verlorene HF-Obertöne
+        if sev(DefectType.HF_REMANENCE_LOSS) > 0.40:
+            selected.append("phase_39_air_band_enhancement")  # Air-Band >12 kHz nach HF-Restore
+
+        # Nadelschaden (Stylus Damage — asymmetrischer THD, Vinyl/Shellac)
+        if sev(DefectType.STYLUS_DAMAGE) > 0.15 and _is_groove_medium:
+            selected.append("phase_09_crackle_removal")  # Oberflächen-Micro-Risse
+            selected.append("phase_23_spectral_repair")  # Verzerrungsprodukte reparieren
+        if sev(DefectType.STYLUS_DAMAGE) > 0.35 and _is_groove_medium:
+            selected.append("phase_50_spectral_repair")  # Zweiter Spektral-Pass
+
+        # Sticky-Shed-Syndrome (Tape-Bindemittel-Verfall → kurze Pegeleinbrüche)
+        if sev(DefectType.STICKY_SHED_RESIDUE) > 0.12 and material in {
+            MaterialType.TAPE,
+            MaterialType.REEL_TAPE,
+        }:
+            selected.append("phase_24_dropout_repair")  # Kurze Drop-Outs reparieren
+            selected.append("phase_29_tape_hiss_reduction")  # Residual-Shed-Rauschen
+        if sev(DefectType.STICKY_SHED_RESIDUE) > 0.35:
+            selected.append("phase_03_denoise")  # Breitband-NR nach Shed-Artefakten
+
+        # Multiband-Wow/Flutter (Frequenzabhängige Geschwindigkeitsschwankung)
+        if sev(DefectType.MULTIBAND_WOW_FLUTTER) > 0.12:
+            selected.append("phase_12_wow_flutter_fix")  # Multiband-f0-Korrektur (FCPE/CREPE/pYIN)
+        if sev(DefectType.MULTIBAND_WOW_FLUTTER) > 0.35:
+            selected.append("phase_08_transient_preservation")  # Transienten nach Multiband-Pitch-Fix
+
+        # Generationsverlust (Multi-Copy-Degradation — Rauschen + BW-Verlust + Flattening)
+        if sev(DefectType.GENERATION_LOSS) > 0.15:
+            selected.append("phase_03_denoise")  # Kumuliertes Rauschen
+            selected.append("phase_06_frequency_restoration")  # BW-Verlust durch Kopien
+            selected.append("phase_23_spectral_repair")  # Spektrale Flattening-Effekte
+        if sev(DefectType.GENERATION_LOSS) > 0.40:
+            selected.append("phase_07_harmonic_restoration")  # Obertöne nach Multi-Gen-Verlust
+
+        # Motor-Interferenz (80–300 Hz breite Peaks durch mechanische Ankopplung)
+        if sev(DefectType.MOTOR_INTERFERENCE) > 0.10:
+            selected.append("phase_02_hum_removal")  # Harmonische bei Motor-Grundfrequenz
+            selected.append("phase_05_broadband_hum_filter")  # Breitband-Motor-Peaks 80–300 Hz
+        if sev(DefectType.MOTOR_INTERFERENCE) > 0.30:
+            selected.append("phase_04_eq_correction")  # Frequenzgang-Kompensation nach Motor-Tilgung
+
         # ════════════════════════════════════════════════════════════════════
         # §6.2a [RELEASE_MUST] Material-Pflicht-Phasen — Unconditional
         # Spec 05 §6.2a: Prioritäts-Phasen MÜSSEN aktiviert werden wenn
@@ -6774,17 +7700,23 @@ class UnifiedRestorerV3:
                 "phase_24_dropout_repair",
                 "phase_29_tape_hiss_reduction",
                 "phase_12_wow_flutter_fix",
+                "phase_59_modulation_noise_reduction",
+                "phase_64_tape_splice_repair",
             ],
             "reel_tape": [
                 "phase_29_tape_hiss_reduction",
                 "phase_03_denoise",
                 "phase_24_dropout_repair",
                 "phase_55_diffusion_inpainting",
+                "phase_59_modulation_noise_reduction",
+                "phase_64_tape_splice_repair",
             ],
             "vinyl": [
                 "phase_09_crackle_removal",
                 "phase_12_wow_flutter_fix",
                 "phase_30_dc_offset_removal",
+                "phase_60_inner_groove_distortion_repair",
+                "phase_61_groove_echo_cancellation",
             ],
             "shellac": [
                 "phase_03_denoise",
@@ -6964,7 +7896,8 @@ class UnifiedRestorerV3:
             selected.append("phase_04_eq_correction")
 
         # Dynamikbereich-Erweiterung bei über-Kompression
-        if sev(DefectType.DYNAMIC_COMPRESSION_EXCESS) > 0.30 or sev(DefectType.COMPRESSION_ARTIFACTS) > 0.30:
+        # Loudness-War-Guard: Intentionale Kompression (era ≥ 2000 + digital) NICHT "reparieren"
+        if (sev(DefectType.DYNAMIC_COMPRESSION_EXCESS) > 0.30 or sev(DefectType.COMPRESSION_ARTIFACTS) > 0.30) and not _loudness_war_victim:
             selected.append("phase_26_dynamic_range_expansion")
 
         # Spektrale Gesamt-Reparatur (breiter zweiter Pass)
@@ -6996,11 +7929,18 @@ class UnifiedRestorerV3:
         # ════════════════════════════════════════════════════════════════════
 
         if vocals_detected:
-            selected += [
-                "phase_19_de_esser",  # Sibilant-Kontrolle (stimmtyp-adaptiv)
-                "phase_42_vocal_enhancement",  # Formant, Klarheit, Präsenz
-                "phase_43_ml_deesser",  # ML-De-Esser (zweiter Pass)
-            ]
+            # Vibrato-Guard: Bei operatischem/klassischem Vibrato De-Esser nur bei
+            # wirklich exzessiver Sibilanz aktivieren (Threshold ×2.5), da HF-Vibrato-
+            # Obertöne sonst fälschlich als Sibilanz unterdrückt werden.
+            if _operatic_vibrato:
+                selected.append("phase_42_vocal_enhancement")  # Formant, Klarheit, Präsenz (vibrato-safe)
+                # De-Esser-Phasen nur bei extremer Sibilance (bereits über Severity-Gate oben)
+            else:
+                selected += [
+                    "phase_19_de_esser",  # Sibilant-Kontrolle (stimmtyp-adaptiv)
+                    "phase_42_vocal_enhancement",  # Formant, Klarheit, Präsenz
+                    "phase_43_ml_deesser",  # ML-De-Esser (zweiter Pass)
+                ]
         if guitar_detected:
             selected.append("phase_44_guitar_enhancement")
         if brass_detected:
@@ -7009,6 +7949,39 @@ class UnifiedRestorerV3:
             selected.append("phase_51_drums_enhancement")
         if piano_detected:
             selected.append("phase_52_piano_restoration")
+
+        # Extended Instrument Routing — zusätzliche Instrumentfamilien (§2.9 Erweiterung)
+        # Strings (Violin, Cello, Bowed) → Saiteninstrument-EQ + Transient-Schutz für Bogen-Anstrich
+        if strings_detected:
+            selected.append("phase_44_guitar_enhancement")  # Saiten-Oberton-Optimierung
+            selected.append("phase_08_transient_preservation")  # Bogen-Attack bewahren
+        # Woodwind (Flute, Clarinet, Oboe, Bassoon) → Blas-Formant-Enhancement + Air
+        if woodwind_detected:
+            selected.append("phase_45_brass_enhancement")  # Blas-Instrument-Formant-EQ
+            selected.append("phase_39_air_band_enhancement")  # Atem-/Luft-Geräusche bewahren
+        # Synth/Electronic → Spektral-Repair (breiter Pass), kein Instrument-spezifischer EQ
+        if synth_detected:
+            selected.append("phase_50_spectral_repair")  # Breitband-Spektral-Integrität
+        # Organ/Church → Räumlichkeit + tiefes Fundament bewahren
+        if organ_detected:
+            selected.append("phase_37_bass_enhancement")  # Orgel-Pedal 16'/32' bewahren
+            selected.append("phase_46_spatial_enhancement")  # Kirchenraum-Akustik
+
+        # Dense-Ensemble-Guard: Bei ≥4 aktiven Instrumentfamilien (Orchester, Big Band etc.)
+        # reduziere Instrument-spezifische Enhancement-Phasen — Separation ist bei dicht besetzten
+        # Ensembles fehleranfällig und Einzelinstrument-EQs interferieren miteinander.
+        # Behalte nur generisches Vocal- & Transient-Enhancement, entferne spezifische Instrument-Phasen.
+        if _dense_ensemble:
+            _instrument_specific = {
+                "phase_44_guitar_enhancement",
+                "phase_45_brass_enhancement",
+                "phase_51_drums_enhancement",
+                "phase_52_piano_restoration",
+            }
+            selected = [p for p in selected if p not in _instrument_specific]
+            logger.info("dense_ensemble_guard: %d instrument families active — "
+                        "removed specific instrument phases, keeping general approach",
+                        _active_families)
 
         # Semantische Audio-Analyse (PANNs-Kontext-Verstehen)
         selected.append("phase_53_semantic_audio")
@@ -7041,22 +8014,29 @@ class UnifiedRestorerV3:
             selected.append("phase_22_tape_saturation")
 
         # Transparente Dynamik (psychoakustisch, genre-adaptiv)
-        if (
-            material
-            in [
-                MaterialType.CD_DIGITAL,
-                MaterialType.DAT,
-                MaterialType.MP3_LOW,
-                MaterialType.MP3_HIGH,
-                MaterialType.AAC,
-                MaterialType.STREAMING,
-            ]
-            or sev(DefectType.DYNAMIC_COMPRESSION_EXCESS) > 0.20
-        ):
-            selected.append("phase_54_transparent_dynamics")
+        # §Loudness-War-Guard: Intentionale Kompression bei modernem Material nicht „reparieren"
+        if _loudness_war_victim:
+            logger.info(
+                "🔊 Loudness-War-Guard: phase_54/phase_26/phase_35/phase_10 Dynamik-Phasen "
+                "übersprungen — intentionale Kompression wird bewahrt"
+            )
+        else:
+            if (
+                material
+                in [
+                    MaterialType.CD_DIGITAL,
+                    MaterialType.DAT,
+                    MaterialType.MP3_LOW,
+                    MaterialType.MP3_HIGH,
+                    MaterialType.AAC,
+                    MaterialType.STREAMING,
+                ]
+                or sev(DefectType.DYNAMIC_COMPRESSION_EXCESS) > 0.20
+            ):
+                selected.append("phase_54_transparent_dynamics")
 
         # Multiband-Kompression (wenn nicht über-komprimiert)
-        if sev(DefectType.COMPRESSION_ARTIFACTS) < 0.40:
+        if sev(DefectType.COMPRESSION_ARTIFACTS) < 0.40 and not _loudness_war_victim:
             selected.append("phase_35_multiband_compression")
 
         # Transient-Shaper (nach Drums-Enhancement)
@@ -7064,7 +8044,7 @@ class UnifiedRestorerV3:
             selected.append("phase_36_transient_shaper")
 
         # Kompression & Limiting (wenn nicht bereits über-komprimiert)
-        if sev(DefectType.COMPRESSION_ARTIFACTS) < 0.50:
+        if sev(DefectType.COMPRESSION_ARTIFACTS) < 0.50 and not _loudness_war_victim:
             selected.append("phase_10_compression")
             selected.append("phase_11_limiting")
 
@@ -7315,6 +8295,12 @@ class UnifiedRestorerV3:
             "phase_56_reference_mastering": (0.55, 0.70, 0.85),
             "phase_57_print_through_reduction": (0.65, 0.75, 0.50),
             "phase_58_flow_matching_inpainting": (0.72, 0.84, 0.95),
+            "phase_59_modulation_noise_reduction": (0.68, 0.78, 0.55),
+            "phase_60_inner_groove_distortion_repair": (0.65, 0.75, 0.50),
+            "phase_61_groove_echo_cancellation": (0.62, 0.72, 0.55),
+            "phase_62_crosstalk_cancellation": (0.60, 0.70, 0.60),
+            "phase_63_intermodulation_reduction": (0.64, 0.74, 0.55),
+            "phase_64_tape_splice_repair": (0.70, 0.76, 0.40),
         }
 
         def _phase_num_prefix(phase_id: str) -> str | None:
@@ -7623,6 +8609,10 @@ class UnifiedRestorerV3:
         elif "material" in kwargs and "material_type" not in kwargs:
             kwargs["material_type"] = kwargs["material"]
 
+        _song_calibration = getattr(self, "_song_calibration_profile", None)
+        if isinstance(_song_calibration, dict) and _song_calibration:
+            kwargs.setdefault("song_calibration_profile", dict(_song_calibration))
+
         # §Vintage-Authentizitäts-Guard: Strength-Cap anwenden (copilot-instructions.md)
         # _vintage_phase_strength_caps wird in restore() befüllt und hier per Cap erzwungen.
         _vcaps = getattr(self, "_vintage_phase_strength_caps", {})
@@ -7689,6 +8679,23 @@ class UnifiedRestorerV3:
                             kwargs["phase_target_coverage"] = max(_target_coverages)
             except Exception:
                 pass
+
+        # Song-level self-calibration across phase families (not just single phases).
+        # Keeps behavior track-adaptive while bounded for cross-song robustness.
+        if phase_metadata.phase_id not in _TIMING_PHASES_WD:
+            _cal_scalar = self._get_phase_calibration_scalar(phase_metadata.phase_id, _song_calibration)
+            if abs(_cal_scalar - 1.0) >= 0.03:
+                _sev_wet_dry = float(np.clip(_sev_wet_dry * _cal_scalar, 0.12, 1.0))
+                _in_strength = kwargs.get("strength")
+                if isinstance(_in_strength, (int, float)):
+                    kwargs["strength"] = float(np.clip(float(_in_strength) * _cal_scalar, 0.0, 1.0))
+                kwargs["song_calibration_scalar"] = _cal_scalar
+                logger.debug(
+                    "🎛️ SongCalibration %s: scalar=%.3f wet_dry=%.3f",
+                    phase_metadata.phase_id,
+                    _cal_scalar,
+                    _sev_wet_dry,
+                )
 
         # Call phase.process() method (not phase() itself!)
         _audio_before_phase = audio if _sev_wet_dry < 1.0 else None
@@ -7842,10 +8849,10 @@ class UnifiedRestorerV3:
         quality_mode_override: QualityMode | None = None,
         no_rt_limit: bool = False,
         reconstruction_context=None,  # §11.7a: RekonstruktionsDenker-Ergebnis mit reparierten Gaps
-    ) -> tuple[np.ndarray, list[str], list[str]]:
+    ) -> tuple[np.ndarray, list[str], list[str], list[str]]:
         """
         Führt ausgewählte Phasen parallel (Multi-Core) aus, falls keine Abhängigkeiten bestehen.
-        Returns: (processed_audio, executed_phases, skipped_phases)
+        Returns: (processed_audio, executed_phases, skipped_phases, deferred_phases)
         """
         # §3.1 NaN/Inf-Invariante: Input VOR Phasenausführung bereinigen
         if not np.all(np.isfinite(audio)):
@@ -8066,12 +9073,13 @@ class UnifiedRestorerV3:
         try:
             from backend.core.psychoacoustic_masking_model import compute_masking_threshold as _cmt
 
-            _ma = audio if audio.ndim == 1 else audio[:, 0]
+            # Internal format is channel-first (2, N) — use audio[0] for left channel
+            _ma = audio if audio.ndim == 1 else audio[0]
             _masking_result = _cmt(_ma.astype(np.float32), sample_rate)
             # Right channel: only for stereo, computed independently — avoids cross-channel
             # masking error for asymmetric recordings (e.g. violin hard-left, cello hard-right).
-            if audio.ndim == 2 and audio.shape[1] >= 2:
-                _masking_result_r = _cmt(audio[:, 1].astype(np.float32), sample_rate)
+            if audio.ndim == 2 and audio.shape[0] >= 2:
+                _masking_result_r = _cmt(audio[1].astype(np.float32), sample_rate)
             _gm_median = float(np.median(_masking_result.gain_modifier))
             _masking_scalar = float(np.clip(0.4 + _gm_median * 0.6, 0.4, 1.0))
             logger.debug(
@@ -8326,6 +9334,9 @@ class UnifiedRestorerV3:
                     "phase_31_speed_pitch_correction",
                 }
             )
+            # §2.31a Mid-pipeline calibration: checkpoint flags for ~33 % and ~66 % progress
+            _mid_cal_33pct_done: bool = False
+            _mid_cal_66pct_done: bool = False
             for phase_id in selected_phases:
                 phase = self._get_phase(phase_id)
                 if not phase:
@@ -8458,6 +9469,23 @@ class UnifiedRestorerV3:
                                     _masking_scalar,
                                 )
 
+                            # §2.31a SongCalibration: Family-Scalar in initial_strength einbeziehen.
+                            # Dadurch profitiert auch die PMGG-Retry-Leiter (§2.29a) proportional
+                            # vom Kalibrierungs-Skalar — weniger Retries bei gut kalibrierter Stärke.
+                            _song_cal_profile = getattr(self, "_song_calibration_profile", None)
+                            if _song_cal_profile and phase_id not in _MASK_TIMING:
+                                _song_cal_scalar = self._get_phase_calibration_scalar(phase_id, _song_cal_profile)
+                                if abs(_song_cal_scalar - 1.0) >= 0.03:  # sub-3% Anpassungen ignorieren
+                                    _combined_strength = float(
+                                        np.clip(_combined_strength * _song_cal_scalar, 0.05, 1.0)
+                                    )
+                                    logger.debug(
+                                        "🎛️ SongCal(PMGG) %s: scalar=%.3f → initial_strength=%.3f",
+                                        phase_id,
+                                        _song_cal_scalar,
+                                        _combined_strength,
+                                    )
+
                             _pmgg_audio_out, _pmgg_scores_curr, _pmgg_entry = _pmgg_gate.wrap_phase(
                                 _phase_for_exec,
                                 current_audio,
@@ -8483,6 +9511,7 @@ class UnifiedRestorerV3:
                                     "masking_result": _masking_result,  # §Psychoacoustic: pre-computed MaskingResult (L/mono), opt-in
                                     "masking_result_r": _masking_result_r,  # §Psychoacoustic: pre-computed MaskingResult (R channel, None if mono)
                                     "masking_scalar": _masking_scalar,  # §Psychoacoustic: global audibility scalar ∈ [0.4, 1.0]
+                                    "song_calibration_profile": dict(self._song_calibration_profile) if getattr(self, "_song_calibration_profile", None) else {},  # §2.31a SongCalibration opt-in
                                 },
                                 restorability_score=_pmgg_restorability_score,  # §2.29 normativ
                                 applicable_goals=applicable_goals,  # §2.32 normativ
@@ -8838,6 +9867,35 @@ class UnifiedRestorerV3:
                                 )
                         except Exception as _mtqc_exc:
                             logger.debug("TQC mid-pipeline nicht verfügbar: %s", _mtqc_exc)
+                # §2.31a Mid-pipeline calibration: refine family_scalars at ~33 % and ~66 %
+                # progress using already-computed PMGG scores (zero additional DSP cost).
+                if _pmgg_gate is not None and _pmgg_scores_curr and getattr(self, "_song_calibration_profile", None):
+                    try:
+                        _mid_cal_pct = len(executed) / max(len(selected_phases), 1)
+                        if not _mid_cal_33pct_done and _mid_cal_pct >= 0.33:
+                            _mid_cal_33pct_done = True
+                            _refined = self._mid_pipeline_calibration_step(
+                                _pmgg_scores_curr,
+                                self._song_calibration_profile,
+                                "33pct",
+                                len(executed),
+                                len(selected_phases),
+                            )
+                            if _refined is not None:
+                                self._song_calibration_profile = _refined
+                        elif not _mid_cal_66pct_done and _mid_cal_pct >= 0.66:
+                            _mid_cal_66pct_done = True
+                            _refined = self._mid_pipeline_calibration_step(
+                                _pmgg_scores_curr,
+                                self._song_calibration_profile,
+                                "66pct",
+                                len(executed),
+                                len(selected_phases),
+                            )
+                            if _refined is not None:
+                                self._song_calibration_profile = _refined
+                    except Exception as _midcal_exc:
+                        logger.debug("§2.31a MidCalibrate fehlgeschlagen (ignoriert): %s", _midcal_exc)
                 # Memory-Hygiene: alle 5 Phasen Garbage Collector aufrufen,
                 # um Zwischenpuffer und abgeschlossene Phase-Objekte freizugeben.
                 if (not no_rt_limit) and self.performance_guard and self.performance_guard.check_early_exit(remaining):

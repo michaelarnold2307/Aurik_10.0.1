@@ -488,25 +488,71 @@ class ClickRemovalPhase(PhaseInterface):
 
     def _detect_clicks_multiscale(self, audio: np.ndarray, thresholds: dict[str, float]) -> list[tuple[int, int]]:
         """
-        Multi-scale click detection using inter-sample differences.
+        Multi-scale click detection using MAD-based adaptive thresholds.
+
+        SOTA upgrade (v2.1): Replaces fixed ``median_diff * 10`` multiplier
+        with per-sample adaptive thresholds derived from the Median Absolute
+        Deviation (MAD).  MAD is a robust dispersion estimator that remains
+        accurate even when > 40 % of data are outliers (clicks) — unlike
+        standard deviation, which is inflated by the very events we want to
+        detect.
+
+        Algorithm:
+            1. Compute |Δx| = |x[n] − x[n−1]| (first-order difference)
+            2. Sliding-window median of |Δx| over W = 4801 samples (~100 ms @ 48 kHz)
+            3. MAD = 1.4826 × median(||Δx| − median(|Δx|)||)  per window
+               (1.4826 = consistency factor for Gaussian equivalence; Hampel 1974)
+            4. Adaptive threshold = local_median + k × MAD
+               k = 4.0 (≈ 99.994 % of Gaussian, catches 3-sigma clicks)
+            5. Material sensitivity further scales k: shellac → k=3.5, tape → k=5.0
+
+        Advantages over fixed-multiplier approach:
+            - Catches clicks in high-noise regions (tape hiss, vinyl surface noise)
+              where global median is elevated and fixed multiplier misses them
+            - Avoids false positives in quiet passages where fixed multiplier
+              triggers on normal musical transients
+            - Scientific: Picard (1992), Huber (1981) "Robust Statistics"
 
         Returns:
             List of (start_idx, end_idx) tuples
         """
-        # First-order difference (main click detector)
+        from scipy.ndimage import median_filter
+
         diff = np.abs(np.diff(audio))
 
-        # Adaptive threshold based on local statistics
-        median_diff = np.median(diff)
+        # Sliding-window size: ~100 ms @ 48 kHz (must be odd for median_filter)
+        _W = 4801
 
-        # Detect sudden spikes (clicks)
-        threshold_short = thresholds["short"] + median_diff * 10
+        # Robust local statistics via MAD (Median Absolute Deviation)
+        local_median = median_filter(diff, size=min(_W, len(diff) | 1), mode="reflect")
+        local_deviation = np.abs(diff - local_median)
+        local_mad = 1.4826 * median_filter(local_deviation, size=min(_W, len(diff) | 1), mode="reflect")
 
-        # Find click regions
-        click_mask = diff > threshold_short
+        # Material-adaptive multiplier k (base from threshold config)
+        # Lower threshold → more sensitive → lower k
+        base_thresh = thresholds["short"]
+        if base_thresh <= 0.06:       # shellac: very sensitive
+            k = 3.5
+        elif base_thresh <= 0.12:     # vinyl: moderate
+            k = 4.0
+        elif base_thresh <= 0.20:     # tape: gentle
+            k = 5.0
+        else:                         # digital: conservative
+            k = 6.0
+
+        # Per-sample adaptive threshold
+        adaptive_threshold = local_median + k * np.maximum(local_mad, 1e-8)
+
+        # Also enforce a minimum floor from the material threshold
+        # to prevent detecting micro-noise as clicks
+        global_floor = thresholds["short"] * 0.5
+        adaptive_threshold = np.maximum(adaptive_threshold, global_floor)
+
+        # Detect clicks: diff exceeds local adaptive threshold
+        click_mask = diff > adaptive_threshold
 
         # Group consecutive samples into click regions
-        click_regions = []
+        click_regions: list[tuple[int, int]] = []
         in_click = False
         start_idx = 0
 

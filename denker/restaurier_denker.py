@@ -414,6 +414,27 @@ class RestaurierDenker:
                         _uv3_kwargs2["progress_callback"] = progress_callback
                     if audio_update_callback is not None:
                         _uv3_kwargs2["audio_update_callback"] = audio_update_callback
+                    # Bug-16c-Fix: gecachte Klassifikationsergebnisse im ARE→UV3-Pfad
+                    # weitergeben — ohne diese führt UV3 frische classify_medium() etc.
+                    # durch → material=unknown → AudioSR auf MP3 → OOM.
+                    if cached_era_result is not None:
+                        _uv3_kwargs2["cached_era_result"] = cached_era_result
+                    if cached_genre_result is not None:
+                        _uv3_kwargs2["cached_genre_result"] = cached_genre_result
+                    if cached_defect_result is not None:
+                        _uv3_kwargs2["cached_defect_result"] = cached_defect_result
+                    if cached_medium_result is not None:
+                        _uv3_kwargs2["cached_medium_result"] = cached_medium_result
+                    if cached_restorability_result is not None:
+                        _uv3_kwargs2["cached_restorability_result"] = cached_restorability_result
+                    if reconstruction_context is not None:
+                        _uv3_kwargs2["reconstruction_context"] = reconstruction_context
+                    if pre_repair_reference is not None:
+                        _uv3_kwargs2["pre_repair_reference"] = pre_repair_reference
+                    if input_path:
+                        _uv3_kwargs2["input_path"] = input_path
+                    if output_path:
+                        _uv3_kwargs2["output_path"] = output_path
                     if no_rt_limit:
                         _uv3_kwargs2["no_rt_limit"] = True
                     try:
@@ -494,15 +515,15 @@ class RestaurierDenker:
             cfg = RestorationConfig(
                 mode=qmode,
                 studio_2026=_is_studio,  # §11.7a — activates Stem-Sep, Matchering, Vocos
-                enforce_3x_rt=True,  # NIEMALS False — Pflicht-Invariante
+                enforce_3x_rt=False,  # RT enforcement opt-in only; standard paths use no_rt_limit=True + UI watchdog (§2.38)
                 enable_performance_guard=True,
-                enable_adaptive_skipping=True,
+                enable_adaptive_skipping=False,  # Adaptive skipping opt-in only (tests/benchmarks)
                 enable_phase_gate=True,
                 num_cores=4,
                 enable_psychoacoustic_enhancement=True,
             )
 
-            logger.info("🎵 RestaurierDenker: UnifiedRestorerV3 init (mode=%s, enforce_3x_rt=True)", mode)
+            logger.info("🎵 RestaurierDenker: UnifiedRestorerV3 init (mode=%s, enforce_3x_rt=False)", mode)
             return UnifiedRestorerV3(config=cfg)
 
         except Exception as exc:

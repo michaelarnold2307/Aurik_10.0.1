@@ -556,8 +556,12 @@ class EdgeCaseHandler:
 
     def _detect_quantization_noise(self, audio: np.ndarray, sr: int) -> bool:
         """Detect quantization noise patterns."""
+        # Bug-Fix §10a: np.correlate(N, N, mode="same") is O(N²) → O(10.8M²) ≈ 8 hours
+        # on 225 s audio.  Only lags 10–50 are inspected, so 4096 samples are sufficient.
+        _seg = audio[: min(4096, len(audio))]
+
         # Quantization noise shows up as correlated noise in difference signal
-        diff = np.diff(audio)
+        diff = np.diff(_seg)
 
         # Autocorrelation of difference
         autocorr = np.correlate(diff, diff, mode="same")

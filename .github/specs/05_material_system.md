@@ -35,7 +35,7 @@ SUPPORTED_MATERIALS = [
 ## §6.2 Material-spezifische Verarbeitungsregeln
 
 | Material | Hauptdefekte | Prioritäts-Phasen | PQS-Erwartung |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `tape` | Dropout, Hiss, Wow/Flutter | phase_24, phase_29, phase_12 | MOS ≥ 4.2 |
 | `reel_tape` | Print-Through, Hiss, Dropout | phase_29, phase_03, phase_24, phase_55 | MOS ≥ 4.3 |
 | `vinyl` | Crackle, Warp, DC-Offset | phase_09, phase_12, phase_30 | MOS ≥ 4.0 |
@@ -124,6 +124,48 @@ RIAA_CURVE_ERROR  # Falsche oder historische Disc-Entzerrungskurve → phase_04 
                   # Klassifikator liefert: curve_type ∈ {"riaa", "nab", "columbia", "aes",
                   #   "capitol", "london", "ccir", "unknown_prestandard"}
                   # phase_04 wendet Inverse-Kurve der erkannten Variante an
+                  #
+                  # §6.3a PRE-RIAA KURVENPARAMETER (kanonische Zeitkonstanten, bindend):
+                  # Alle Werte: (τ_bass_µs, τ_mid_µs, τ_treble_µs) → Pol/Nullstellen-Tripel.
+                  # Inverse Korrektur: Shelving-EQ mit diesen Zeitkonstanten gespiegelt.
+                  #
+                  # PRE_RIAA_EQ_CURVES = {
+                  #   # RIAA 1954 (Referenz — Standard ab 1954):
+                  #   "riaa":           (3180, 318, 75),     # IEC 60268-4
+                  #
+                  #   # NAB (National Association of Broadcasters, bis 1953):
+                  #   "nab":            (3180, 318, 50),     # Basswendepunkt 500 Hz, HF-Shelf 3180 µs
+                  #
+                  #   # Columbia 78 rpm (bis 1948):
+                  #   "columbia":       (1590, 318, 0),      # Bass turnover 100 Hz, kein HF-Shelf
+                  #                                          # → +6 dB Bass vs. RIAA bei 50 Hz
+                  #
+                  #   # AES (Audio Engineering Society, 1951–1954):
+                  #   "aes":            (3180, 500, 0),      # Mittenbetonte Entzerrung
+                  #
+                  #   # Capitol (US, bis 1953):
+                  #   "capitol":        (1590, 400, 0),      # ähnlich Columbia, flacherer HF-Abfall
+                  #
+                  #   # London / Decca (UK, bis 1954):
+                  #   "london":         (3180, 318, 100),    # HF-Boost stärker als RIAA
+                  #
+                  #   # CCIR (europäischer Rundfunkstandard für Tape, sekundär für lacquers):
+                  #   "ccir":           (3180, 318, 120),    # Tape-Entzerrung, 50 µs kurzfristig
+                  #
+                  #   # Unbekannte Vorstandardkurve — konservative Näherung Columbia:
+                  #   "unknown_prestandard": (1590, 318, 0),
+                  # }
+                  #
+                  # Erkennung Algorithmus (MediumClassifier._detect_riaa_curve_error):
+                  #   1. Spectral-Slope 250–8000 Hz vs. RIAA-Ideal-LUT (±3 dB Toleranz pro Oktave)
+                  #   2. Vergleich Basswendepunkt: Short-time LUFS 50–200 Hz / 200–800 Hz Ratio
+                  #      → Ratio > +4 dB → columbia/nab verdächtig
+                  #   3. Log-Likelihood über alle Kurven → argmax = curve_type
+                  #   4. Konfidenz-Grenzwert ≥ 0.70 → RIAA_CURVE_ERROR setzen, sonst skip
+                  #
+                  # INVARIANTE: phase_04 MUSS bei curve_type ≠ "riaa" die exakten
+                  # Zeitkonstanten aus PRE_RIAA_EQ_CURVES laden und die inverse
+                  # Shelving-Kette anwenden. VERBOTEN: generische EQ-Schätzung ohne LUT.
 ALIASING          # Spiegelfrequenzen durch AA-Filter-Fehler → phase_03 + phase_23
 BIAS_ERROR        # Falscher Vormagnetisierungsstrom → phase_04 + phase_03 + phase_29
 # --- Spec §6.3 v9.10.57: Sibilanten-Überbetonung ---
@@ -153,7 +195,7 @@ def classify_clipping(audio: np.ndarray, sr: int) -> ClippingType:
 DefectScanner-Erkennungsschwellen MÜSSEN **material-adaptiv** sein. Analoge Medien erfordern empfindlichere Schwellwerte als digitale Quellen.
 
 | Defekttyp | Analog-Medien | Digital-Medien | Begründung |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | DROPOUTS | 20 % median-RMS | 10 % median-RMS | Tape-Dropouts: graduelle Pegelfades statt hartem Null |
 | CLICKS | material-skaliert | Standard | Vinyl-Rillengeräusche vs. digitale Störimpulse |
 
@@ -165,7 +207,7 @@ DefectScanner-Erkennungsschwellen MÜSSEN **material-adaptiv** sein. Analoge Med
 
 ## §6.4 GP-Gedächtnis pro Material & Genre
 
-```
+```text
 ~/.aurik/gp_memory/
     tape.json         vinyl.json      shellac.json
     digital.json      unknown.json
@@ -192,7 +234,7 @@ Format:
 ## §6.5 Export-Formate & Regeln
 
 | Format | Qualität | Anwendungsfall |
-|---|---|---|
+| --- | --- | --- |
 | FLAC (24-bit) | Archivqualität | Standard-Export |
 | WAV (24-bit, 48 kHz) | Produktionsqualität | DAW-Weiterverarbeitung |
 | WAV (16-bit, 44.1 kHz) | CD-Qualität | CD-Mastering |
@@ -233,7 +275,7 @@ assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 **Pflicht-Spektralfingerabdruck bei jedem Import (vor allen Klassifikatoren):**
 
 | Merkmal | Messmethode | Schwellwerte |
-|---|---|---|
+| --- | --- | --- |
 | Rolloff 95 % | `librosa.feature.spectral_rolloff(roll_percent=0.95)` Median | < 4 kHz → Shellac/Wachswalze; < 8 kHz → Kassette |
 | WOW-Index | pYIN-Pitch-Varianz über 500 ms-Fenster (IEC 60386) | > 1.0 Hz → Kassette WOW; ≤ 0.1 Hz → digital |
 | FLUTTER-Index | pYIN-Pitch-Varianz über 50 ms-Fenster (IEC 60386) | > 0.5 Hz → Bandantrieb-FLUTTER; Drahtband: stochastischer Verlauf (σ > 1.2 Hz) |
@@ -257,7 +299,7 @@ if result.is_multi_generation:
 **Referenz-Fingerabdruck (Elke, Feb 2026):**
 
 | Merkmal | Messwert | Diagnose |
-|---|---|---|
+| --- | --- | --- |
 | Rolloff 95 % | 1 486 Hz | Kassettenköpfe verschlissen |
 | Wow/Flutter | 2,38 Hz | Schwere Pitch-Instabilität → Kassette |
 | HF > 16 kHz | 0 % | Kassette + MP3-Kette |
@@ -269,7 +311,7 @@ if result.is_multi_generation:
 ## §6.7 Importformate (Eingang)
 
 | Format | Erweiterungen |
-|---|---|
+| --- | --- |
 | WAV / AIFF | `.wav`, `.aiff`, `.aif` |
 | FLAC | `.flac` |
 | MP3 | `.mp3` |

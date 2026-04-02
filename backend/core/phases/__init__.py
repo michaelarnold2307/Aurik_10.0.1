@@ -87,17 +87,48 @@ from .phase_interface import (
     PhaseResult,
 )
 
+import logging as _logging
+_logger = _logging.getLogger(__name__)
+
+# Phase 53: Semantic Audio Analysis — Metadata-only (BPM, Key, Genre-Hint)
+try:
+    from .phase_53_semantic_audio import SemanticAudioPhase
+
+    _PHASE53_OK = True
+except ImportError as _p53_err:
+    _logger.debug("Phase 53 nicht verfügbar: %s", _p53_err)
+    _PHASE53_OK = False
+    SemanticAudioPhase = None  # type: ignore[assignment,misc]
+
+# Phase 57: Print-Through Reduction — Bidirektionale LMS (§7.x DSP-Pflicht)
+try:
+    from .phase_57_print_through_reduction import PrintThroughReductionPhase
+
+    _PHASE57_OK = True
+except ImportError as _p57_err:
+    _logger.debug("Phase 57 nicht verfügbar: %s", _p57_err)
+    _PHASE57_OK = False
+    PrintThroughReductionPhase = None  # type: ignore[assignment,misc]
+
 # Phase 56: HEAD_WEAR Spectral Band Gap Repair (v9.9.8)
 try:
     from .phase_56_spectral_band_gap_repair import SpectralBandGapRepairPhase
 
     _PHASE56_OK = True
 except ImportError as _p56_err:
-    import logging as _logging
-
-    _logging.getLogger(__name__).debug("Phase 56 nicht verfügbar: %s", _p56_err)
+    _logger.debug("Phase 56 nicht verfügbar: %s", _p56_err)
     _PHASE56_OK = False
     SpectralBandGapRepairPhase = None  # type: ignore[assignment,misc]
+
+# Phase 58: Lyrics-Guided Enhancement (§2.36 PFLICHT, v9.10.x)
+try:
+    from .phase_58_lyrics_guided_enhancement import Phase58LyricsGuidedEnhancement
+
+    _PHASE58_OK = True
+except ImportError as _p58_err:
+    _logger.debug("Phase 58 nicht verfügbar: %s", _p58_err)
+    _PHASE58_OK = False
+    Phase58LyricsGuidedEnhancement = None  # type: ignore[assignment,misc]
 
 # Exported symbols
 __all__ = [
@@ -152,6 +183,8 @@ __all__ = [
     "SpatialEnhancementPhase",
     "SpectralBandGapRepairPhase",
     "SpectralRepair",
+    "SemanticAudioPhase",
+    "PrintThroughReductionPhase",
     # Phase 50+ (Tier 1 ML-Hybrid)
     "SpectralRepairPhase",
     "SpeedPitchCorrectionPhase",
@@ -161,6 +194,8 @@ __all__ = [
     "StereoWidthLimiterPhaseV2",
     "SurfaceNoiseProfiling",
     "TapeHissReductionPhase",
+    # Phase 58 (§2.36 PFLICHT)
+    "Phase58LyricsGuidedEnhancement",
     "TapeSaturation",
     "TransientPreservationPhase",
     "TransientShaper",

@@ -366,12 +366,14 @@ class TontraegerketteDenker:
         self,
         audio: np.ndarray,
         sr: int,
+        *,
+        file_path: str = "",
     ) -> KettenErgebnis:
         """Analysiert die Tonträgerkette eines Audio-Signals.
 
         Algorithmus:
             1. NaN/Inf-Schutz (§3.1)
-            2. MediumDetector.detect(audio, sr) → Rohbefund
+            2. MediumDetector.detect(audio, sr, file_ext=...) → Rohbefund
             3. detected_media (List[Tuple[str, float]]) extrahieren
             4. Zeitliche Sortierung via _MEDIUM_ORDER
             5. KettenGlieder mit Phasen-Empfehlungen aufbauen
@@ -380,8 +382,10 @@ class TontraegerketteDenker:
             8. KettenErgebnis zurückgeben
 
         Args:
-            audio: Float32-Array ∈ [-1, 1], mono oder stereo.
-            sr:    Abtastrate in Hz.
+            audio:     Float32-Array ∈ [-1, 1], mono oder stereo.
+            sr:        Abtastrate in Hz.
+            file_path: Optionaler Pfad zur Quelldatei.  Dateiendung wird als
+                       Prior für die Materialerkennung verwendet (§6.7b).
 
         Returns:
             KettenErgebnis mit zeitlich geordneter Kette, Phasen und Komplexität.
@@ -396,7 +400,9 @@ class TontraegerketteDenker:
         )
 
         # Detektion durchführen
-        raw = self._erkennen(audio, sr)
+        import os as _os
+        _file_ext = _os.path.splitext(file_path)[1] if file_path else ""
+        raw = self._erkennen(audio, sr, file_ext=_file_ext)
         return self._aufbereiten(raw)
 
     # ------------------------------------------------------------------
@@ -414,7 +420,7 @@ class TontraegerketteDenker:
                     logger.debug("MediumDetector lazy-initialisiert.")
         return self._detector
 
-    def _erkennen(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
+    def _erkennen(self, audio: np.ndarray, sr: int, *, file_ext: str = "") -> dict[str, Any]:
         """Ruft MediumDetector.detect() auf und normalisiert das Ergebnis auf dict.
 
         MediumDetector.detect() gibt ein MediumDetectionResult-Dataclass zurück.
@@ -423,7 +429,7 @@ class TontraegerketteDenker:
         """
         try:
             detector = self._get_detector()
-            result = detector.detect(audio, sr)  # type: ignore[union-attr]
+            result = detector.detect(audio, sr, file_ext=file_ext)  # type: ignore[union-attr]
 
             # MediumDetectionResult auf dict normalisieren
             if hasattr(result, "as_dict"):

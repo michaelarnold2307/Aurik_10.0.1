@@ -178,9 +178,12 @@ def _export_guard(audio: np.ndarray) -> np.ndarray:
 def validate_export_quality(result: Any) -> tuple[bool, list[str]]:
     """Validate export quality based on RestorationResult metadata.
 
-    Checks chroma correlation (§8.2), LUFS delta, and Musical Goals.
-    Returns (passed, list_of_warnings).  Always allows export but logs violations.
-    Hard-fail only on chroma_correlation < 0.80 (catastrophic tonal shift).
+    Hard-fail conditions (§8.1 / §8.2 / Copilot-Instructions):
+    - chroma_correlation < 0.80 (catastrophic tonal shift)
+    - quality_estimate < 0.55 (spec §8.1 E2E-Pflicht)
+    - P1 goal (natuerlichkeit, authentizitaet) below minimum threshold
+
+    Returns (passed, list_of_warnings).
     """
     warnings: list[str] = []
     passed = True
@@ -197,18 +200,51 @@ def validate_export_quality(result: Any) -> tuple[bool, list[str]]:
         elif chroma < 0.95:
             warnings.append(f"WARNUNG: Chroma-Korrelation {chroma:.3f} < 0.95 — geringe Tonart-Abweichung erkannt.")
 
+    # §8.1 quality_estimate ≥ 0.55 (E2E-Pflicht)
+    quality_estimate = getattr(result, "quality_estimate", None)
+    if quality_estimate is not None and quality_estimate < 0.55:
+        warnings.append(
+            f"KRITISCH: quality_estimate {quality_estimate:.3f} < 0.55 — "
+            "Mindestqualität nicht erreicht. Mögliche Ursache: schweres Ausgangsmaterial "
+            "oder Pipeline-Fehler. Prüfe Defekt-Analyse und Musical Goals."
+        )
+        passed = False
+
     # §8.2 LUFS delta ≤ 1 LU (Restoration) / EBU R128 (Studio 2026)
     lufs_delta = getattr(result, "lufs_delta", None)
     if lufs_delta is not None and lufs_delta > 3.0:
         warnings.append(f"WARNUNG: LUFS-Delta {lufs_delta:.1f} LU > 3.0 LU — signifikante Lautstärke-Änderung.")
 
-    # Musical Goals Violations
-    meta = getattr(result, "metadata", {})
+    # Musical Goals: P1/P2 hard-fail, P3–P5 warning-only
+    meta = getattr(result, "metadata", {}) or {}
     goals_meta = meta.get("musical_goals", {})
-    violations = goals_meta.get("violations", [])
-    if violations:
+    goal_scores: dict = goals_meta.get("scores", {})
+    goal_thresholds: dict = goals_meta.get("thresholds", {})
+    violations: list = goals_meta.get("violations", [])
+
+    # P1/P2 goals with hard minimum thresholds (below these the result is unacceptable)
+    _P1P2_HARD_MINIMUMS = {
+        "natuerlichkeit": 0.82,     # P1: absolute Untergrenze (8% unter Zielwert 0.90)
+        "authentizitaet": 0.80,     # P1: absolute Untergrenze (8% unter Zielwert 0.88)
+        "tonal_center": 0.88,      # P2: absolute Untergrenze (7% unter Zielwert 0.95)
+        "timbre_authentizitaet": 0.79,  # P2: absolute Untergrenze (8% unter Zielwert 0.87)
+        "artikulation": 0.77,      # P2: absolute Untergrenze (8% unter Zielwert 0.85)
+    }
+    for goal_name, hard_min in _P1P2_HARD_MINIMUMS.items():
+        score = goal_scores.get(goal_name)
+        if score is not None and float(score) < hard_min:
+            warnings.append(
+                f"KRITISCH: {goal_name} = {float(score):.3f} < {hard_min:.2f} — "
+                f"P1/P2-Mindestziel unterschritten. Restaurierung hat Kernqualität verletzt."
+            )
+            passed = False
+
+    # P3–P5 violations: warning only (no hard-fail)
+    _p3p5_violations = [v for v in violations if v not in _P1P2_HARD_MINIMUMS]
+    if _p3p5_violations:
         warnings.append(
-            f"Qualitäts-Hinweis: {len(violations)} Musical Goal(s) nicht erfüllt: {', '.join(violations[:5])}"
+            f"Qualitäts-Hinweis: {len(_p3p5_violations)} Musical Goal(s) nicht optimal: "
+            f"{', '.join(_p3p5_violations[:5])}"
         )
 
     for w in warnings:

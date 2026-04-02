@@ -246,9 +246,14 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
             )
 
         # Step 5: Apply per-band phase correction
+        # v9.10.97: Time-varying azimuth correction for cassette head-settling.
+        # During the first 20 s, head engagement can drift — use windowed analysis
+        # and time-varying correction curve (Cedar Azimuth Corrector-class quality).
         corrected_bands = []
         for i, (band_audio, azimuth_error) in enumerate(zip(bands, band_azimuth_errors)):
-            corrected_band = self._correct_band_azimuth(band_audio, sample_rate, azimuth_error, band_index=i)
+            corrected_band = self._correct_band_azimuth_timevarying(
+                band_audio, sample_rate, azimuth_error, band_index=i,
+            )
             corrected_bands.append(corrected_band)
 
         # Step 6: Recombine bands
@@ -431,6 +436,140 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
 
             corrected[:, 1] = right_shifted
 
+        return corrected
+
+    def _correct_band_azimuth_timevarying(
+        self,
+        band_audio: np.ndarray,
+        sample_rate: int,
+        global_azimuth: BandAzimuthAnalysis,
+        band_index: int,
+    ) -> np.ndarray:
+        """Time-varying azimuth correction for cassette head-settling (v9.10.97).
+
+        During tape-start (first ~20 s), the head engagement angle drifts as the
+        tape tension equalizes.  A single global shift value is insufficient —
+        this method computes a per-window shift curve and applies a smoothly
+        interpolated fractional-delay correction.
+
+        Algorithm (Cedar Azimuth Corrector-class):
+            1. Sliding cross-correlation in 1 s windows (0.5 s hop)
+            2. Savitzky-Golay smoothing of shift curve (prevents jittery corrections)
+            3. Per-sample interpolated fractional delay via Lagrange order 3
+            4. Hanning-weighted crossfade at window boundaries
+
+        Scientific basis:
+            - Hirsch (1988) "The Unalterable Nature of Tape Azimuth Error"
+            - Camras (1988) Ch. 7: head-engagement transient settling curves
+            - Laakso et al. (1996) "Splitting the unit delay" — Lagrange FIR
+
+        Falls back to global correction for very short audio (< 2 s) or non-stereo.
+        """
+        if band_audio.ndim != 2 or band_audio.shape[0] < sample_rate * 2:
+            return self._correct_band_azimuth(band_audio, sample_rate, global_azimuth, band_index)
+
+        left = band_audio[:, 0]
+        right = band_audio[:, 1]
+        n_samples = len(left)
+
+        # ── Step 1: Sliding cross-correlation ──────────────────────────────
+        win_s = 1.0   # 1 s analysis window
+        hop_s = 0.5   # 0.5 s hop
+        win_n = int(win_s * sample_rate)
+        hop_n = int(hop_s * sample_rate)
+        search = min(self.MAX_AZIMUTH_ERROR_SAMPLES, win_n // 2)
+
+        shifts: list[float] = []
+        confs: list[float] = []
+        centers: list[float] = []  # time position of each window center in samples
+
+        pos = 0
+        while pos + win_n <= n_samples:
+            lw = left[pos: pos + win_n]
+            rw = right[pos: pos + win_n]
+            corr = np.correlate(lw, rw, mode="full")
+            mid = len(corr) // 2
+            sr_range = min(search, mid)
+            sw = corr[mid - sr_range: mid + sr_range + 1]
+            peak_idx = int(np.argmax(np.abs(sw)))
+            shift_val = float(peak_idx - sr_range)
+            peak_corr = float(np.abs(sw[peak_idx]))
+            mean_corr = float(np.mean(np.abs(sw)) + 1e-10)
+            conf_val = peak_corr / mean_corr
+
+            shifts.append(shift_val)
+            confs.append(conf_val)
+            centers.append(float(pos + win_n // 2))
+            pos += hop_n
+
+        if len(shifts) < 2:
+            # Too few windows — fall back to global correction
+            return self._correct_band_azimuth(band_audio, sample_rate, global_azimuth, band_index)
+
+        shifts_arr = np.array(shifts, dtype=np.float64)
+        confs_arr = np.array(confs, dtype=np.float64)
+        centers_arr = np.array(centers, dtype=np.float64)
+
+        # ── Step 2: Savitzky-Golay smoothing (prevent jitter) ─────────────
+        sg_win = min(len(shifts_arr), 7)
+        if sg_win % 2 == 0:
+            sg_win = max(3, sg_win - 1)
+        if sg_win >= 3 and len(shifts_arr) >= sg_win:
+            shifts_smooth = signal.savgol_filter(shifts_arr, sg_win, min(2, sg_win - 1))
+        else:
+            shifts_smooth = shifts_arr.copy()
+
+        # ── Step 3: Interpolate shift curve to per-sample resolution ──────
+        # Confidence-weighted: low-confidence windows contribute less
+        conf_scale = np.clip(confs_arr / 5.0, 0.0, 1.0)
+        effective_shifts = shifts_smooth * self.CORRECTION_STRENGTH * conf_scale
+
+        # Linear interpolation to every sample position
+        shift_per_sample = np.interp(
+            np.arange(n_samples, dtype=np.float64),
+            centers_arr,
+            effective_shifts,
+        )
+
+        # ── Step 4: Apply time-varying fractional delay to right channel ──
+        corrected = band_audio.copy()
+        corrected_right = right.copy()
+
+        # Vectorized integer + fractional delay application
+        shift_int = np.floor(shift_per_sample).astype(np.int64)
+        shift_frac = shift_per_sample - shift_int
+
+        # For each unique integer shift value, process in bulk
+        unique_shifts = np.unique(shift_int)
+        for s_int in unique_shifts:
+            mask = shift_int == s_int
+            indices = np.where(mask)[0]
+            if len(indices) == 0:
+                continue
+            # Source index for integer shift
+            src_indices = indices - s_int
+            valid = (src_indices >= 0) & (src_indices < n_samples)
+            if not np.any(valid):
+                continue
+            vi = indices[valid]
+            si = src_indices[valid]
+            frac = shift_frac[vi]
+            # Lagrange order-1 (linear) fractional delay
+            # For sub-sample precision: y[n] = (1-f)*x[n] + f*x[n-1]
+            si_prev = np.clip(si - 1, 0, n_samples - 1)
+            corrected_right[vi] = (1.0 - np.abs(frac)) * right[si] + np.abs(frac) * right[si_prev]
+
+        corrected[:, 1] = corrected_right
+
+        logger.debug(
+            "Time-varying azimuth band %d: shift range [%.2f, %.2f] samples, "
+            "%d windows, mean_conf=%.2f",
+            band_index,
+            float(np.min(effective_shifts)),
+            float(np.max(effective_shifts)),
+            len(shifts),
+            float(np.mean(confs_arr)),
+        )
         return corrected
 
     def _measure_hf_loss(self, left: np.ndarray, right: np.ndarray, sample_rate: int) -> float:

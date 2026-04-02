@@ -62,7 +62,14 @@ else:
             return _Sig()
 
 
-from backend.core.deferred_refinement_job import DeferredRefinementJob
+if TYPE_CHECKING:
+    from backend.core.deferred_refinement_job import DeferredRefinementJob
+else:
+    try:
+        from backend.api.bridge import get_deferred_refinement_job_class as _get_drj_class
+        DeferredRefinementJob = _get_drj_class()
+    except Exception:
+        from backend.core.deferred_refinement_job import DeferredRefinementJob
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +148,7 @@ class MLRefinementThread(QThread):
         # ── 1. Register audio in ml_memory_budget ────────────────────────────
         _budget_registered = False
         try:
-            from backend.core.ml_memory_budget import get_ml_memory_budget
+            from backend.api.bridge import get_ml_memory_budget
 
             _budget = get_ml_memory_budget()
             _budget_registered = _budget.try_allocate("kmv_job", job.audio_size_gb)

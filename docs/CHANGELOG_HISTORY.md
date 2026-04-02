@@ -7,7 +7,58 @@
 >
 > Historische Versions- und Metrikangaben in dieser Datei sind bewusst als Zeitstände erhalten.
 >
-> Stand: März 2026 — Aurik 9.10.77
+> Stand: März 2026 — Aurik 9.10.83
+
+---
+
+## v9.10.87 (30. März 2026) — Dual-SR-Vertrag + 48-kHz-Fail-fast-Härtung
+
+- **instructions_version**: 3.7 → **3.8**
+- **copilot-instructions.md**:
+  - Performance-Budget um harte Dual-SR-Invarianten erweitert (`analysis_audio/analysis_sr` getrennt von `processing_audio/processing_sr=48000`).
+  - Fail-fast-Vertrag ergänzt: Kein Weiterlauf auf Nicht-48k, wenn Normierung auf 48 kHz nicht möglich ist.
+  - Resampling-Scope-Invariante ergänzt: Resampling darf nur den Verarbeitungspfad beeinflussen, Analysepfad bleibt native SR.
+- **Spec 02** (`.github/specs/02_pipeline_architecture.md`):
+  - Neuer Abschnitt **§2.2.0 Sample-Rate-Vertrag (Dual-SR, RELEASE_MUST)**.
+  - Kanonischer Ablauf um expliziten `Dual-SR-Split` vor der Pipeline erweitert.
+- **Spec 04** (`.github/specs/04_dsp_standards.md`):
+  - Neuer Abschnitt **§4.1a Sample-Rate-Vertrag (Dual-SR, RELEASE_MUST)**.
+  - Klargestellt: Komponenten mit abweichender Modell-SR dürfen intern resamplen, müssen aber wieder `processing_sr=48000` zurückgeben.
+- **Code-Umsetzung**:
+  - `backend/core/unified_restorer_v3.py`: native-SR-Routing für RestorabilityEstimator, Medium/Era/Genre-Classifier und DefectScanner; harter Abbruch bei fehlender 48-kHz-Normierung.
+  - `cli/aurik_cli.py`: `_resample_to_48k()` wirft RuntimeError statt still auf Original-SR weiterzulaufen.
+
+---
+
+## v9.10.83 (29. März 2026) — Ganzheitliche Song-Selbstkalibrierung (psychoakustisch priorisiert)
+
+- **instructions_version**: 3.6 → **3.7**
+- **copilot-instructions.md**:
+  - Neuer `[RELEASE_MUST]`-Abschnitt **§2.31a Ganzheitliche Song-Selbstkalibrierung**.
+  - Pflichtprofil `song_calibration_profile` (inkl. `global_scalar` + `family_scalars`) als phasenübergreifende Vorgabe.
+  - Klargestellt: bounded Skalare (anti-overfitting), deterministische Reproduzierbarkeit, psychoakustische Priorität (P1/P2, Maskierung, Transienten-Integrität).
+- **Spec 02** (`.github/specs/02_pipeline_architecture.md`):
+  - Pipeline um expliziten Schritt `SongCalibrationProfile` ergänzt (vor Klassifikations-/Phasenkette, mit Familien-Skalierung).
+  - Phasen-Ausführung ergänzt um family-basierte strength/wet-dry-Skalierung mit psychoakustischer Priorisierung.
+- **Spec 07** (`.github/specs/07_quality_and_tests.md`):
+  - Neuer Abschnitt **§8.3.1 Song-Selbstkalibrierung** mit Qualitäts- und Testpflichten (`metadata["song_calibration"]`).
+
+---
+
+## v9.10.82 (29. März 2026) — Quality-First Standardpfad + MP-SENet Runtime-Vertrag
+
+- **instructions_version**: 3.5 → **3.6**
+- **copilot-instructions.md**:
+  - RELEASE_MUST-Abschnitt **Quality-First Hauptlauf (v9.10.80)** als nutzerseitiger Standardpfad präzisiert: GUI/CLI/Batch müssen `AurikDenker.denke(..., no_rt_limit=True)` nutzen.
+  - PerformanceGuard- und KMV-Kontrakt explizit als Schutz-/Telemetrieschicht bei gleichzeitiger Qualitätspriorisierung dokumentiert.
+- **Spec 02** (`.github/specs/02_pipeline_architecture.md`):
+  - Kanonischer Ablauf um Quality-First-Hauptlauf ergänzt (Stage-1 ohne RT-bedingtes Qualitätsopfer in Standardpfaden).
+  - RT-limitierte Pfade als explizite Nicht-Standardpfade klar abgegrenzt.
+- **Spec 04** (`.github/specs/04_dsp_standards.md`):
+  - MP-SENet ONNX Runtime-Vertrag ergänzt: segmentierte Inferenz mit fixem Zeitfenster und robustem Layout-Handling; Fehlerfall führt zu DSP-Fallback statt Hard-Fail.
+- **Spec 08** (`.github/specs/08_architecture_and_distribution.md`):
+  - Architektur- und Entry-Point-Vertrag auf Quality-First-Standard (`no_rt_limit=True`) harmonisiert.
+  - Plugin-Matrix-Hinweis zum MP-SENet-Runtime-Verhalten ergänzt.
 
 ---
 

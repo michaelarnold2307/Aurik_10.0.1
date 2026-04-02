@@ -9,6 +9,7 @@ Zielanzahl: ≥ 37 Tests (alle grün)
 """
 
 import numpy as np
+import pytest
 
 # ── Globale Testsignale ──────────────────────────────────────────────────────
 np.random.seed(42)
@@ -76,6 +77,34 @@ class TestHybridDereverb:
         hd = self._make()
         result = hd.dereverb(AUDIO_SILENCE, SR)
         assert result is not None
+
+    def test_07_deterministic_ml_error_latches_dsp_only(self):
+        from backend.core.hybrid.hybrid_dereverb import DereverbStrategy
+
+        hd = self._make()
+
+        class _ExplodingSGMSE:
+            def __init__(self):
+                self.calls = 0
+
+            def enhance(self, _audio, _sr):
+                self.calls += 1
+                raise RuntimeError(
+                    "The size of tensor a (3841) must match the size of tensor b (3843) at non-singleton dimension 2"
+                )
+
+        plugin = _ExplodingSGMSE()
+        hd.dccrn = plugin
+        hd._sgmse_active = True
+        hd.config.strategy = DereverbStrategy.DCCRN_ONLY
+
+        first = hd.dereverb(AUDIO_SINE, SR)
+        second = hd.dereverb(AUDIO_SINE, SR)
+
+        assert plugin.calls == 1
+        assert getattr(hd, "_disable_ml_due_deterministic_error", False) is True
+        assert first.metadata.get("ml", {}).get("deterministic_error_latched", False) is True
+        assert second.metadata.get("ml_skipped_reason") == "deterministic_ml_error_latched"
 
 
 # ============================================================================
@@ -160,11 +189,13 @@ class TestHybridNVSR:
         hn = self._make()
         assert hn is not None
 
+    @pytest.mark.slow
     def test_03_restore_bandwidth_sine(self):
         hn = self._make()
         result = hn.restore_bandwidth(AUDIO_SINE, SR)
         assert result is not None
 
+    @pytest.mark.slow
     def test_04_result_has_audio_or_score(self):
         hn = self._make()
         result = hn.restore_bandwidth(AUDIO_SINE, SR)
@@ -177,6 +208,7 @@ class TestHybridNVSR:
         )
         assert has_content
 
+    @pytest.mark.slow
     def test_05_output_finite(self):
         hn = self._make()
         result = hn.restore_bandwidth(AUDIO_SINE, SR)
@@ -185,6 +217,7 @@ class TestHybridNVSR:
             if isinstance(val, np.ndarray):
                 assert np.isfinite(val).all()
 
+    @pytest.mark.slow
     def test_06_with_dsp_reference(self):
         hn = self._make()
         result = hn.restore_bandwidth(AUDIO_SINE, SR, dsp_restored_audio=AUDIO_SINE)

@@ -7,10 +7,10 @@
 
 ## §11 Softwareschichten-Architektur
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │  Desktop-UI  (Aurik910/)   PyQt5 · ModernMainWindow          │
-│    BatchProcessingThread (Stufe 1, RT-limitiert)             │
+│    BatchProcessingThread (Stufe 1, Quality-first Standard)    │
 │    MLRefinementThread    (Stufe 2, LIMIT_BACKGROUND=∞)       │
 ├─────────────────────────────────────────────────────────────┤
 │  Frontend-Bridge  backend/api/bridge.py  Lazy-Imports        │
@@ -38,6 +38,9 @@ from backend.api.bridge import get_aurik_denker_class
 AurikDenkerClass = get_aurik_denker_class()
 denker = AurikDenkerClass()
 result = denker.denke(audio, sr, mode="quality")
+
+# Standardpfad (GUI/CLI/Batch): keine Qualitätsreduktion zugunsten RT
+result = denker.denke(audio, sr, mode="quality", no_rt_limit=True)
 ```
 
 ---
@@ -407,7 +410,7 @@ def _check_audio_buffer_size(audio: np.ndarray, file_path: str) -> None:
 **Bindende Lock-Ordnung:**
 
 | Priorität | Lock | Besitzer |
-|---|---|---|
+| --- | --- | --- |
 | 1 (zuerst) | `MLMemoryBudget._lock` | `ml_memory_budget.py` |
 | 2 | `PluginLifecycleManager._lock` | `plugin_lifecycle_manager.py` |
 | 3 | `AdaptiveResourceManager._lock` | `adaptive_resource_manager.py` |
@@ -485,7 +488,7 @@ _cache = {}                      # ohne Lock → threading.Lock() Pflicht
 
 ### Verbotene Legacy-Algorithmen als Primärverarbeitung
 
-```
+```text
 Ephraim & Malah (1984) Wiener-Filter  → Ersatz: OMLSA/IMCRA
 Simple Spectral Subtraction            → Ersatz: MMSE-LSA + OMLSA
 YIN Pitch-Tracker                      → Ersatz: pYIN / CREPE
@@ -517,7 +520,7 @@ class AudioFileValidator:
 
 ## §11.3 Plugin-Policy — bestehende Plugins nutzen, nicht neu schreiben
 
-```
+```text
 ✅ = lokal gebündelt, out-of-the-box, kein Download
 
 # Vocoder / Synthese
@@ -532,7 +535,8 @@ plugins/bs_roformer_plugin.py         ✅ BS-RoFormer / Mel-RoFormer (+0.4–0.8
 # Rauschunterdrückung & Dereverb
 plugins/deepfilternet_v3_ii_plugin.py ✅ DeepFilterNet v3.II (37 MB, 3 ONNX) — PRIMÄR NR
 plugins/sgmse_plugin.py               ✅ SGMSE+ (251 MB TorchScript) — PRIMÄR Dereverb/Enhancement
-plugins/mp_senet_plugin.py            ✅ MP-SENet 2023 (35 MB ONNX) — Speech/Music Enhancement
+plugins/mp_senet_plugin.py            ✅ MP-SENet 2023 (ONNX) — Speech/Music Enhancement
+                                      Laufzeitvertrag: segmentierte Inferenz in 32-Frame-Chunks
 plugins/wpe_plugin.py                 ✅ WPE Dereverb (3-Tier: nara_wpe→NumPy→OMLSA)
 # VERBOTEN: dccrn_plugin (deprecated — ersetzt durch mp_senet_plugin)
 
@@ -590,7 +594,7 @@ self.btn_magic_restoration.setStyleSheet(f"""
 **Keyboard-Shortcuts:**
 
 | Shortcut | Aktion |
-|---|---|
+| --- | --- |
 | Leertaste | Play / Pause |
 | `A` | Original hören |
 | `B` | Restauriert hören |
@@ -618,7 +622,7 @@ quality_update = pyqtSignal(float)  # live MOS estimate 0.0–5.0
 ### Feature-Übersicht
 
 | # | Feature | Klasse / Methode | Verhalten |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1 | Zweistufiger Fortschrittsbalken | `phase_progress_bar` (`QProgressBar`, `setFixedHeight(5)`, lila Gradient) | Unter `progress_bar`; eingeblendet bei Batch-Start, ausgeblendet + `setValue(10000)` in `_on_all_finished` |
 | 2 | Defekte hochzählen / herunterzählen | `_update_defects` + `_tick_defect_reveal` | `status=="detected"` → Count-up-Animation (QTimer, 22 Frames × 85 ms); `_PHASE_REDUCES`-Mapping × 0.3 bei passenden Phasen-Keywords → `defect_update.emit` |
 | 3 | Varianten-Wettkampf | `multi_pass_strategy.process_with_variants()` + `_on_batch_progress` | Nach jeder Variante: `"Variante X/N: 'name' → MOS 4.12 ✓"`; Frontend baut Rangliste `★name_1 (4.12) › name_2 (3.87)` |
@@ -686,7 +690,7 @@ _PHASE_REDUCES = {
 ### Installer-Ziele
 
 | Plattform | Format | Anforderung |
-|---|---|---|
+| --- | --- | --- |
 | **Linux** | AppImage (`.AppImage`) | Einzeldatei, keine Root-Rechte |
 | **Windows 10/11** | NSIS-Installer (`.exe`) | Signiert, optional ohne Admin |
 
@@ -720,7 +724,7 @@ _PHASE_REDUCES = {
 
 ### Requirements — nur verifizierte PyPI-Pakete
 
-```
+```text
 # VERBOTEN (existieren nicht auf PyPI oder falsche Version):
 dccrn==0.1.0          diffwave==1.0.0
 hifi-gan==0.1.1       nisqa==1.0.0
@@ -737,7 +741,7 @@ python -m pip install --dry-run -r requirements/requirements_aurik.txt
 
 ### §9.1 Checkliste neue Kernmodule
 
-```
+```text
 □ Datei in backend/core/ angelegt mit Singleton-Pattern (§3.2)
 □ Thread-safe: threading.Lock() + Double-Checked Locking
 □ Vollständige PEP 484 Type-Annotations (§3.7)
@@ -758,7 +762,7 @@ python -m pip install --dry-run -r requirements/requirements_aurik.txt
 
 ### §9.4 Anti-Parallelwelten-Workflow (vor jeder Implementierung)
 
-```
+```text
 1. grep -r "<Funktionsname>" backend/core/ plugins/ dsp/ → 0 Treffer?
 2. Kein Plugin mit gleicher Funktionalität in plugins/?
 3. Keine Phase mit gleicher DSP-Logik in backend/core/phases/?

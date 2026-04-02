@@ -54,6 +54,9 @@ class _DummyWindow:
     def _apply_status_text_style(self, style: str) -> None:
         pass
 
+    def _stop_sd_playback_locked(self) -> None:
+        pass
+
 
 class _ImmediateThread:
     def __init__(self, target=None, daemon: bool | None = None, name: str | None = None, **_: object) -> None:
@@ -124,6 +127,9 @@ def test_play_audio_normalizes_before_sounddevice(monkeypatch: pytest.MonkeyPatc
         def close(self) -> None:
             pass
 
+    class _FakeInactiveStream:
+        active: bool = False
+
     class _FakeSoundDevice:
         def stop(self) -> None:
             captured["stopped"] = True
@@ -131,8 +137,12 @@ def test_play_audio_normalizes_before_sounddevice(monkeypatch: pytest.MonkeyPatc
         def query_devices(self, kind: str | None = None) -> dict:  # type: ignore[override]
             return {}
 
-        def OutputStream(self, **kwargs: object) -> _FakeStream:
-            return _FakeStream(**kwargs)
+        def play(self, data: np.ndarray, samplerate: int, blocking: bool = True) -> None:
+            captured["data"] = np.array(data, copy=True)
+            captured["samplerate"] = samplerate
+
+        def get_stream(self) -> _FakeInactiveStream:
+            return _FakeInactiveStream()
 
     monkeypatch.setattr(modern_window, "_SD_AVAILABLE", True)
     monkeypatch.setattr(modern_window, "_sd", _FakeSoundDevice())

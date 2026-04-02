@@ -418,6 +418,35 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings.default_mode_batch_album": "Standard-Modus für Batch / Album",
         "settings.artist_learning": "Künstler-Lernmodus aktivieren",
         "settings.session_learning": "Sitzungs-Lernmodus aktivieren",
+        # Zuletzt geöffnet
+        "recent.title": "Zuletzt geöffnet",
+        "recent.empty": "(keine)",
+        "recent.clear": "Liste leeren",
+        # Hilfe-Menü
+        "help.shortcuts": "⌨  Tastenkürzel  (F1)",
+        "help.user_guide": "📖  Benutzerhandbuch",
+        "help.troubleshooting": "🔧  Fehlerbehebung",
+        "help.configuration": "⚙  Konfiguration",
+        "help.about": "ℹ  Über Aurik",
+        # Batch-Retry
+        "batch.retry_tooltip": "Fehlgeschlagene Dateien erneut verarbeiten",
+        "batch.retry_hint": "{count} Datei(en) fehlgeschlagen — erneut versuchen?",
+        # Update-Prüfung
+        "update.checking": "Suche nach Updates…",
+        "update.available": "Neue Version {version} verfügbar!",
+        "update.up_to_date": "Aurik ist auf dem neuesten Stand ✓",
+        "update.error": "Update-Prüfung fehlgeschlagen (offline?)",
+        "update.unavailable": "Update-Modul nicht verfügbar",
+        "update.banner_text": "Version {version} ist verfügbar — jetzt herunterladen!",
+        "update.download": "⬇  Herunterladen",
+        "help.check_update": "🔄  Nach Updates suchen",
+        # Tray-Benachrichtigungen
+        "tray.batch_done": "Restaurierung abgeschlossen",
+        "tray.batch_ok": "{count} Datei(en) erfolgreich restauriert ✓",
+        "tray.batch_mixed": "{ok} erfolgreich, {failed} fehlgeschlagen",
+        "tray.batch_failed": "{failed} Datei(en) konnten nicht verarbeitet werden",
+        "tray.show_window": "Aurik anzeigen",
+        "tray.quit": "Beenden",
         # Physikalische Grenzen
         "ceiling.reached": "Das Beste aus dieser Aufnahme wurde herausgeholt — die physikalischen Grenzen des Quellmaterials sind erreicht.",
         "ceiling.adaptive": "Zielvorgaben wurden an den Zustand der Aufnahme angepasst.",
@@ -783,6 +812,35 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings.default_mode_batch_album": "Default mode for batch / album",
         "settings.artist_learning": "Enable Artist Learning Mode",
         "settings.session_learning": "Enable Session Learning Mode",
+        # Recent files
+        "recent.title": "Recently opened",
+        "recent.empty": "(none)",
+        "recent.clear": "Clear list",
+        # Help menu
+        "help.shortcuts": "⌨  Keyboard shortcuts  (F1)",
+        "help.user_guide": "📖  User guide",
+        "help.troubleshooting": "🔧  Troubleshooting",
+        "help.configuration": "⚙  Configuration",
+        "help.about": "ℹ  About Aurik",
+        # Batch retry
+        "batch.retry_tooltip": "Retry failed files",
+        "batch.retry_hint": "{count} file(s) failed — retry?",
+        # Update check
+        "update.checking": "Checking for updates…",
+        "update.available": "New version {version} available!",
+        "update.up_to_date": "Aurik is up to date ✓",
+        "update.error": "Update check failed (offline?)",
+        "update.unavailable": "Update module not available",
+        "update.banner_text": "Version {version} is available — download now!",
+        "update.download": "⬇  Download",
+        "help.check_update": "🔄  Check for updates",
+        # Tray notifications
+        "tray.batch_done": "Restoration complete",
+        "tray.batch_ok": "{count} file(s) restored successfully ✓",
+        "tray.batch_mixed": "{ok} successful, {failed} failed",
+        "tray.batch_failed": "{failed} file(s) could not be processed",
+        "tray.show_window": "Show Aurik",
+        "tray.quit": "Quit",
         # Misc
         "ceiling.reached": "The best possible result for this recording has been achieved — the physical limits of the source material have been reached.",
         "ceiling.adaptive": "Quality targets have been adjusted to match the condition of the recording.",

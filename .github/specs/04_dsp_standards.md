@@ -7,7 +7,7 @@
 ## §4.1 Pflicht-Konzepte (mindestens eines pro DSP-Funktion)
 
 | Konzept | Anwendung | Referenz |
-|---|---|---|
+| --- | --- | --- |
 | **OMLSA / IMCRA** | Rauschunterdrückung stationär | Cohen (2002, 2003) |
 | **Consistent Wiener Filter** | Spektrale Restaurierung (modernisierter Wiener) | Le Roux & Vincent (2013) |
 | **PGHI** | Phasenkonsistenz nach Spektral-Modifikation | Perraudin et al. (2013) |
@@ -27,6 +27,13 @@
 | **LUFS / ITU-R BS.1770-5** | Lautstärkenormalisierung (2023) | ITU-R BS.1770-5 |
 
 > **DDSP-Implementierung**: Aurik nutzt eine leichtgewichtige NumPy/SciPy-Eigenimplementierung (`dsp/ddsp_synth.py`) — **KEIN** Google-`ddsp`-PyPI-Paket (benötigt TensorFlow). Die Eigenimplementierung deckt additive Synthese + Rauschfilter vollständig ab und ist out-of-the-box ohne TF lauffähig.
+
+### §4.1a Sample-Rate-Vertrag (Dual-SR, [RELEASE_MUST])
+
+- Analyse-/Klassifikations-Module arbeiten mit nativer Import-SR (`analysis_sr`).
+- DSP/ML-Verarbeitungsstufen arbeiten strikt mit `processing_sr = 48000`.
+- Resampling-Fehler in Richtung 48 kHz sind harte Fehler (fail-fast), kein Silent-Fallback auf Nicht-48k-Processing.
+- Komponenten mit modellnativer SR duerfen intern resamplen (z. B. 48k -> 44.1k -> 48k), aber nur innerhalb der Komponente und mit Rueckgabe in `processing_sr=48000`.
 
 ---
 
@@ -74,7 +81,7 @@ def hz_to_mel(f_hz: float) -> float:
 ## §4.4 SOTA-ML-Entscheidungsmatrix (Stand 2025/2026)
 
 | Anwendungsfall | Primär (SOTA) | DSP-Fallback (Post-2018) | VERBOTEN |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Breitrauschen (Gesang/Vokal) | ML: **DeepFilterNet v3.II** (DNS4-Speech; geeignet weil Gesang sprachnähnlich) | OMLSA/IMCRA | ~~Wiener 1984~~ |
 | Breitrauschen (rein instrumental, PANNs Vocals < 0.4) | DSP: **OMLSA/IMCRA** (kein Speech-Prior, musik-neutral) | DeepFilterNet v3.II + energy_bias=−6 dB | ~~Wiener 1984~~ |
 | Nicht-stationäres Rauschen | ML: **DeepFilterNet v3.II** | MMSE-LSA + IMCRA | ~~Spectral Subtraction~~ |
@@ -100,6 +107,13 @@ def hz_to_mel(f_hz: float) -> float:
 | Decrackle | DSP: **RBME + iterative Konsistenz** | Sparse Bayes | ~~Medianfilter~~ |
 | Spektral-Matching | DSP: **Optimal Transport** | Multibänder-EQ | ~~fixe EQ-Kurve~~ |
 | Groove / Timing | DSP: **Onset-DTW (madmom RNN)** | Beat-Tracking (librosa) | ~~fixes Raster~~ |
+
+**MP-SENet ONNX Laufzeitvertrag (Release-Must):**
+
+- Eingabeformat bleibt `noisy_amp/noisy_pha: [batch, 201, time]`.
+- Das aktuell gebündelte ONNX-Artefakt zeigt trotz `dynamic_axes` einen faktisch festen Zeit-Shape (`time=32`) in internen Reshape-Knoten.
+- Implementierungspflicht: segmentierte Inferenz in festen 32-Frame-Chunks mit Stitching zurück auf Originallänge.
+- Bei Reshape-/Layout-Fehlern: kontrollierter Fallback (Layout-Retry, dann OMLSA-DSP), niemals Hard-Crash.
 
 ---
 
@@ -164,6 +178,37 @@ Pflicht: Apollo (Zhang et al. 2024)
 Fallback: Resemble-Enhance ONNX → DSP Spectral Repair + PGHI
 ```
 
+### Amplituden-Clipping (Phase 23 — CLIPPING-Typ) §4.5a [RELEASE_MUST]
+
+```text
+Diskriminierung: classify_clipping() MUSS VOR Reparatur ausgeführt werden.
+    SOFT_SATURATION → Phase 23 ÜBERSPRINGEN (§5 Vintage-Guard)
+    CLIPPING         → ADMM-Declipping
+
+Primär: ADMM-basierte Sparse-Recovery (Záviška et al., EUSIPCO 2021)
+    Modell: geclippte Abtastwerte y_c = clip(x, -A, +A)
+    Minimierungsproblem:
+        min_x  ||x||_1   s.t.   x_free = y_free   (ungesättigte Stellen exakt)
+                                |x_clip| >= A       (gesättigte Stellen ≥ Clipwert)
+    ADMM-Parameter:
+        rho     = 0.1        (Penalty, adaptiv: rho *= 1.5 wenn Residuum > 10× Dual)
+        max_iter = 200       (typisch 80–120 Konvergenz)
+        tol     = 1e-4       (Primal- und Duales Residuum unter Schwelle)
+    Wavelet-Prior (Daubechies db4, Level 5) als Sparsifying-Transform
+    Frequenzband: 20 Hz – 20 kHz (keine Sub-Bass-Beschränkung)
+    Transient-Guard: Attack-Bins (onset ±5 ms) erhalten rho × 3.0 → stärkerer Erhalt
+
+Fallback: Consistent Wiener Filter mit Clip-Constraints
+    → Spectral Repair + PGHI falls beide fehlschlagen
+
+INVARIANTE: Nach ADMM-Declipping MUSS Transient-Shape-Korrelation
+    mit pre-clipping Signal ≥ 0.88 (ArticulationMetric-Grenzwert).
+    Unterschreitung → Safety-Blend mit Dry-Signal (max 30 % Wet).
+
+VERBOTEN: Apollo für Amplituden-Clipping (Apollo = Codec-Artefakte-Training).
+    Apollo NUR für digitale Codec-Komprimierungsartefakte (mp3/aac/ogg-Distortion).
+```
+
 ### Print-Through-Reduktion (Phase 29, reel_tape)
 
 ```text
@@ -206,8 +251,6 @@ ZONES = {
     1. Vocos 48 kHz nativ — vocos_mel_spec_24khz.onnx (CPUExecutionProvider)
        Mel-Bins 80; True-Peak −1.0 dBTP nach Synthese
     2. BigVGAN-v2 — bigvgan_v2 (0,4 GB, ONNX/PyTorch, CPU-only)
-```
-
     3. HiFi-GAN (3,6 MB ONNX) — Tertiär-Fallback
     4. PGHI-ISTFT — DSP-Endfall-Fallback
 VERBOTEN: Griffin-Lim als Endschritt in Studio-2026
@@ -222,6 +265,68 @@ Bei Gesang (PANNs Vocals ≥ 0.4):
     PSOLA (Moulines & Charpentier 1990) — formanterhaltend bei Transposition > ±2 Halbton
     Phase-Vocoder: nur für perkussive / nicht-vokale Segmente (HPSS-detektiert)
 DSP-Fallback: PESTO (Riou et al. ISMIR 2023) → pYIN (Mauch & Dixon 2014)
+```
+
+### Klavier-Inharmonizität §4.5b (Phase 52) [RELEASE_MUST]
+
+```text
+Physikalisches Modell (Fletcher 1964):
+    f_n = n · f_0 · sqrt(1 + B · n²)
+    B = Inharmonizitätskoeffizient (abhängig von Saitenlänge, Durchmesser, Material)
+
+B-Schätzung per Oktavlage (aus MIDI-Pitch oder f₀-Track):
+    MIDI 21–35  (Kontra-Oktave,  21–62 Hz):  B ∈ [0.00005, 0.0003]
+    MIDI 36–47  (Groß-Oktave,    65–247 Hz): B ∈ [0.0003,  0.001]
+    MIDI 48–71  (Klein/1-Oktave, 130–987 Hz):B ∈ [0.001,   0.003]
+    MIDI 72–108 (2–5-Oktave,     1047–4186 Hz):B ∈ [0.002, 0.008]
+
+Schätzung (wenn kein MIDI-Input):
+    1. f₀ per FCPE/CREPE → nächster MIDI-Pitch
+    2. Partials f_2, f_3, f_4 aus Spektrum detektieren
+    3. B = mean([(f_n / (n · f_0))² - 1] / n²)  für n = 2..4
+    4. B im zulässigen Bereich für die Oktavlage klemmen (s. o.)
+
+Anwendung in phase_52:
+    - Partial-Lock: Obertöne auf Fletcher-Raster statt harmonisches int-Vielfaches
+    - Resynthese (DDSP additive): f_n = n · f_0 · sqrt(1 + B · n²)
+    - VERBOTEN: Partial-Locking auf exakte ganzzahlige Vielfache bei Klaviermaterial
+      (ergibt zu hartes/synthetisches Ergebnis)
+
+INVARIANTE: TimbralAuthenticityMetric ≥ 0.87 nach phase_52.
+    B-Schätz-Fehler > 15 % → DSP-Fallback (sinusoidales Partial-Tracking ohne Lock).
+```
+
+### Dereverb — Early-Reflection-Guard §4.5c (Phase 20, 49) [RELEASE_MUST]
+
+```text
+Physikalische Grundlage:
+    Schallfeld = Direktschall + frühe Reflexionen (0–80 ms) + diffuser Nachhall (> 80 ms)
+    Frühe Reflexionen (0–50 ms): definieren Raumcharakter, Wärme, Quellenlokalisierung
+    (Haas-Effekt / Precedence Effect — Blauert 1997)
+    Diffuser Nachhall (> 80 ms): maskierend, verschleiert Transienten, Artikulation
+
+Pflicht-Algorithmus (SGMSE+ und WPE):
+    1. RIR-Schätzung (Blind): Kreuzkorrelations-Dekonvolution oder
+       ML-RT60-Schätzer (DPRNN-Head in SGMSE+ oder spectral-based RT60)
+    2. Early-Reflection-Guard: C80 und D50 VOR und NACH Dereverb messen
+           C80 = 10 · log10(∫₀⁸⁰ₘₛ h²(t)dt / ∫₈₀ₘₛ^∞ h²(t)dt)   [Klarheitsmaß, Musik]
+           D50 = ∫₀⁵⁰ₘₛ h²(t)dt / ∫₀^∞ h²(t)dt                    [Deutlichkeitsmaß, Sprache]
+    3. Wet-Mix-Begrenzung: Dereverb-Intensität MUSS begrenzt werden, wenn:
+           ΔC80 = C80_post − C80_pre > 6 dB  → Wet weiter reduzieren
+           ΔD50 > 0.12                         → Wet weiter reduzieren
+       Ziel: ΔC80 ≤ 6 dB, ΔD50 ≤ 0.12 (kein Raumcharakter-Verlust)
+    4. Early-Reflection-Blend: Residual der ersten 50 ms aus Originalschall
+       (vor Dereverb) mit alpha = 0.35 zurückzumischen falls ΔC80 > 4 dB:
+           audio_out[t] = audio_dereverb[t] + 0.35 · audio_early[t]  (t ∈ [0, 50ms] jedes Onset)
+    5. Safety-Revert: Wenn C80_post < C80_pre − 2 dB → vollständiger Rollback
+
+Messung (einfache Approximation ohne RIR-Inversion):
+    RT60-Proxy: Energie-Abfall von −5 dBFS auf −35 dBFS in Stille-Segmenten (Silero VAD)
+    C80-Proxy: Energie-Ratio 80 ms / Rest in Onset-Fenstern (madmom Onset-Detektion)
+
+INVARIANTE: NatuerlichkeitMetric darf nach phase_49 nicht sinken
+    (Early-Reflection-Blend stellt Raumluft wieder her).
+VERBOTEN: Aggressives Dereverb ohne Early-Reflection-Guard (klingt klinisch/steril).
 ```
 
 ### Phasen-Rekonstruktion (nach JEDER Spektral-Modifikation)
@@ -263,3 +368,6 @@ VERBOTEN: Truncation ohne Dithering
 - Radford et al. (2022): Whisper — _Robust Speech Recognition via Large-Scale Weak Supervision_
 - ISO 226:2023: _Acoustics — Normal Equal-Loudness-Level Contours_
 - ITU-R BS.1770-5 (2023): _Algorithms to measure audio programme loudness_
+- Záviška et al. (2021): _A Proper Version of Synthesis-based Sparse Audio Declipper_ — EUSIPCO 2021
+- Blauert (1997): _Spatial Hearing — The Psychophysics of Human Sound Localization_ — MIT Press
+- Kuttruff (2009): _Room Acoustics_ — 5th Ed. (C80/D50 Definitionen §4.5c)

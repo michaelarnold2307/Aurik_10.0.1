@@ -124,6 +124,10 @@ class GenderDetector:
         self.sr = sample_rate
 
         # Gender-spezifische Formant-Bereiche (Hz)
+        # f0 ranges: Titze 1994 (singing ranges), Klatt & Klatt 1990 (speech).
+        # FEMALE extended to (165, 700) to cover mezzo-soprano/alto singing (not
+        # just speech 165-255 Hz); CHILD reliably distinguishable via formants
+        # (smaller vocal tract → all formants higher), not via f0 alone in music.
         self.formant_ranges = {
             VoiceGender.MALE: {
                 "f0": (85, 180),
@@ -132,13 +136,13 @@ class GenderDetector:
                 "f3": (1690, 3010),
             },
             VoiceGender.FEMALE: {
-                "f0": (165, 255),
+                "f0": (165, 700),   # singing range: alto 165 Hz – soprano 700 Hz
                 "f1": (310, 860),
                 "f2": (920, 2790),
                 "f3": (1890, 3310),
             },
             VoiceGender.CHILD: {
-                "f0": (200, 500),
+                "f0": (250, 600),   # children speak reliably above 250 Hz
                 "f1": (370, 1030),
                 "f2": (1170, 3330),
                 "f3": (2590, 4990),
@@ -221,9 +225,20 @@ class GenderDetector:
 
         autocorr_search = autocorr[min_period:max_period]
         if len(autocorr_search) > 0:
-            peaks, _ = signal.find_peaks(autocorr_search, height=0.3)
+            # height=0.15 (lowered from 0.30): vintage tape material has low SNR and
+            # bandlimited content (BW ≤ 7 kHz); the normalized autocorrelation peak
+            # at the fundamental is weaker than for clean studio recordings.
+            # White noise autocorrelation fluctuations ≈ 1/√N ≈ 0.006 for 100 ms
+            # @ 48 kHz → 0.15 is still safely above the noise floor (de Cheveigné &
+            # Kawahara 2002, YIN pitch estimator, §4.3 minimum peak threshold).
+            peaks, _ = signal.find_peaks(autocorr_search, height=0.15)
             if len(peaks) > 0:
-                period = peaks[0] + min_period
+                # Use the peak with the HIGHEST autocorrelation value (= true fundamental),
+                # not peaks[0] (smallest lag = highest f0): for noisy vintage audio
+                # a false noise-peak at a harmonic frequency often appears first.
+                # McLeod & Wyvill 2005 — "A Smarter Way to Find Pitch"
+                best_peak = peaks[np.argmax(autocorr_search[peaks])]
+                period = best_peak + min_period
                 f0 = self.sr / period
                 return float(f0)
 
@@ -377,24 +392,65 @@ class GenderDetector:
 
         # Best match
         best_gender = max(scores.items(), key=lambda x: x[1])
+
+        # Tie-breaking for FEMALE vs CHILD when scores are close (< 0.05 delta):
+        # F0 < 350 Hz is incompatible with a child's voice in a professional
+        # musical recording. Children speak reliably above 300-400 Hz
+        # (Titze 1994; Huber et al. 1999). Vintage recordings (pre-1950) with
+        # a "child" voice are extremely rare in practice → prefer FEMALE.
+        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        if (
+            len(sorted_scores) >= 2
+            and sorted_scores[0][0] == VoiceGender.CHILD
+            and sorted_scores[1][0] == VoiceGender.FEMALE
+            and (sorted_scores[0][1] - sorted_scores[1][1]) < 0.05
+            and f0 < 350.0
+        ):
+            best_gender = sorted_scores[1]  # prefer FEMALE
+
         return best_gender[0], best_gender[1]
 
     def _detect_breathiness(self, audio: np.ndarray) -> float:
-        """
-        Detect breathiness (noise-to-harmonics ratio).
+        """Detect breathiness via WORLD per-frame aperiodicity (primary) or HF energy ratio.
 
-        Breathy voices have more high-frequency noise.
+        WORLD's d4c() provides per-bin aperiodicity AP[frame, bin] in [0, 1] where
+        0 = perfectly harmonic and 1 = fully aperiodic/breathy.  The mean
+        sqrt-aperiodicity over voiced frames (F0 > 30 Hz) in the 1-4 kHz band is a
+        direct, SNR-robust proxy for the harmonics-to-noise ratio (Yumoto et al. 1982).
+        The HF energy ratio falls back when pyworld is unavailable.
+
+        Scientific basis:
+            Yumoto et al. (1982) — Harmonics-to-noise ratio as an index of the
+            degree of hoarseness. J. Acoust. Soc. Am. 71(6).
+            Ferrand (2002) — Harmonics-to-noise ratios in connected discourse for
+            male and female speakers. J. Voice 16(1).
+            Morise et al. (2016) — WORLD vocoder. IEICE Trans. A.
         """
-        # High-pass filter > 3 kHz (breath region)
+        if HAS_PYWORLD and _pw is not None:
+            try:
+                audio_f64 = np.asarray(audio.flatten(), dtype=np.float64)
+                sr_f64 = float(self.sr)
+                f0, timeaxis = _pw.harvest(audio_f64, sr_f64)
+                f0_sm = _pw.stonemask(audio_f64, f0, timeaxis, sr_f64)
+                ap = _pw.d4c(audio_f64, f0_sm, timeaxis, sr_f64)  # (n_frames, bins)
+                voiced = f0_sm > 30.0
+                if np.any(voiced):
+                    freq_axis = np.linspace(0.0, sr_f64 / 2.0, ap.shape[1])
+                    band = (freq_axis >= 1000.0) & (freq_axis <= 4000.0)
+                    if np.any(band):
+                        ap_band = ap[voiced][:, band]
+                        # sqrt-aperiodicity: 0=harmonic, 1=breathy; ×2 to use [0,1] output range
+                        breathiness = float(np.mean(np.sqrt(np.maximum(ap_band, 0.0))))
+                        return min(1.0, breathiness * 2.0)
+            except Exception:
+                pass
+        # DSP fallback: HF energy ratio (breathy voices have more noise above 3 kHz)
         sos = signal.butter(4, 3000, "high", fs=self.sr, output="sos")
         hf_signal = signal.sosfilt(sos, audio)
-
-        # Energy ratio
         hf_energy = np.sum(hf_signal**2)
         total_energy = np.sum(audio**2)
-
         breathiness = hf_energy / (total_energy + 1e-10)
-        return min(1.0, breathiness * 5)  # Scale
+        return min(1.0, breathiness * 5)
 
     def _detect_vocal_effort(self, audio: np.ndarray) -> float:
         """Detect vocal effort (whisper to shout)."""

@@ -265,7 +265,7 @@ def _make_vintage_signal(cutoff_hz: float, noise_amp: float = 0.02, sr: int = 48
         # --- Vinyl LP (mono), Magnetophon früh ---
         (10_000, 0.02, {1940, 1950}),
         # --- Profi-Reel-Tape 38 cm/s (1960er Studio) ---
-        (14_000, 0.01, {1950, 1960}),  # Rolloff-Streuung ±0.5 kHz → Übergangszone
+        (14_000, 0.01, {1950, 1960, 1970}),  # E90≈12.7 kHz liegt an der 1960/1970-Grenze (12.6 kHz) → Übergangszone
         # --- FM-Radio-Rundfunk (1965–1975) ---
         (16_000, 0.01, {1960, 1970}),
         # --- HiFi-Kassettenband Typ IV (1975–1985) ---
@@ -390,9 +390,15 @@ def test_dsp_decade_1900_detectable(clf):
 
 
 def test_dsp_1890_narrower_than_1900(clf):
-    """3 kHz LP → 1890; 4 kHz LP → 1900 oder höher (monotone Abgrenzung)."""
+    """3 kHz LP → Jahrzehnt ≤ 4 kHz LP (monotone Abgrenzung).
+
+    Both signals use the same seed so the only difference is the cutoff.
+    The 3 kHz bandwidth must map to a decade ≤ the 4 kHz mapping, reflecting
+    the physical principle that narrower bandwidth implies an older recording.
+    """
     np.random.seed(7)
     audio_3k = _make_vintage_signal(3_000, noise_amp=0.10)
+    np.random.seed(7)
     audio_4k = _make_vintage_signal(4_000, noise_amp=0.08)
     r3k = clf.classify(audio_3k, SR)
     r4k = clf.classify(audio_4k, SR)
@@ -558,16 +564,16 @@ def test_constrain_dat_1970_to_1980():
     assert result.decade == 1980
 
 
-def test_constrain_mp3_1980_to_1990():
-    """MP3 floor=1990: 1980er → 1990er."""
+def test_constrain_mp3_codec_no_floor():
+    """MP3 is a codec container, not a physical medium — no era floor applied."""
     result = constrain_era_to_medium(_make_era(1980), "mp3_low")
-    assert result.decade == 1990
+    assert result.decade == 1980  # unchanged
 
 
-def test_constrain_aac_1990_to_2000():
-    """AAC floor=2000: 1990er → 2000er."""
+def test_constrain_aac_codec_no_floor():
+    """AAC is a codec container, not a physical medium — no era floor applied."""
     result = constrain_era_to_medium(_make_era(1990), "aac")
-    assert result.decade == 2000
+    assert result.decade == 1990  # unchanged
 
 
 def test_constrain_no_change_when_at_floor():

@@ -267,9 +267,18 @@ class AestheticProxyCalculator:
         spectral_flatness = profile.spectral.spectral_flatness if profile.spectral.spectral_flatness else 0.5
         details["spectral_flatness"] = float(spectral_flatness)
 
-        # 2. Inter-Source Masking (estimated from spectral contrast)
-        # Higher contrast suggests less masking
-        masking_estimate = 0.7  # Placeholder - would need source separation for true measurement
+        # 2. Inter-Source Masking Index via Spectral Contrast (Moore & Glasberg 1983)
+        # Higher contrast across frequency bands → less inter-source masking → higher transparency
+        try:
+            import librosa as _lr
+            audio_mono = audio.flatten()
+            S = np.abs(_lr.stft(audio_mono, n_fft=2048, hop_length=512))
+            contrast = _lr.feature.spectral_contrast(S=S, sr=sr, n_bands=6, fmin=200.0)
+            # Mean contrast across bands and frames; typical range 10-40 dB
+            mean_contrast = float(np.mean(contrast))
+            masking_estimate = float(np.clip((mean_contrast - 10.0) / 30.0, 0.0, 1.0))
+        except Exception:
+            masking_estimate = 0.7
         details["inter_source_masking_index"] = masking_estimate
 
         # 3. Transient Sharpness (from onset count and strength)
@@ -503,8 +512,38 @@ class AestheticProxyCalculator:
         warmth_from_crest = np.clip(1.0 - (crest_factor_db - 8) / 12, 0.0, 1.0)
         details["crest_factor_warmth"] = float(warmth_from_crest)
 
-        # 4. Tube Saturation Profile (placeholder - would need saturation detection)
-        tube_saturation_similarity = 0.6  # Neutral default
+        # 4. Tube Saturation Profile — Even/Odd Harmonic Ratio (Rossing 2007)
+        # Tube amps produce predominantly even harmonics (H2, H4, H6).
+        # A high even/odd ratio indicates warm tube-like saturation.
+        try:
+            audio_flat = audio.flatten()
+            fft_full = np.fft.rfft(audio_flat)
+            mag = np.abs(fft_full)
+            freqs_full = np.fft.rfftfreq(len(audio_flat), 1.0 / sr)
+            # Find dominant fundamental in 50-500 Hz range
+            f_mask = (freqs_full >= 50) & (freqs_full <= 500)
+            if np.any(f_mask):
+                f0_idx = int(np.where(f_mask)[0][0] + np.argmax(mag[f_mask]))
+                f0 = freqs_full[f0_idx]
+                if f0 > 0:
+                    even_pwr = 0.0
+                    odd_pwr = 0.0
+                    for h in range(2, 9):
+                        h_idx = int(np.argmin(np.abs(freqs_full - f0 * h)))
+                        if h_idx < len(mag):
+                            pwr = float(mag[h_idx] ** 2)
+                            if h % 2 == 0:
+                                even_pwr += pwr
+                            else:
+                                odd_pwr += pwr
+                    ratio = even_pwr / (even_pwr + odd_pwr + 1e-12)
+                    tube_saturation_similarity = float(np.clip(ratio, 0.0, 1.0))
+                else:
+                    tube_saturation_similarity = 0.5
+            else:
+                tube_saturation_similarity = 0.5
+        except Exception:
+            tube_saturation_similarity = 0.5
         details["tube_saturation_profile"] = tube_saturation_similarity
 
         # Weighted combination

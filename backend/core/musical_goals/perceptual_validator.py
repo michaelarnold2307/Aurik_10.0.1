@@ -543,29 +543,62 @@ class PerceptualValidator:
             confidence = 0.5
 
         elif goal_name == "waerme":
-            # Mid-range energy = warmth
-            score = 0.7  # Placeholder
-            confidence = 0.3
+            # Warmth Ratio E(200-800 Hz) / E(800-3000 Hz) — Moore & Glasberg 1983
+            S = np.abs(librosa.stft(audio, n_fft=2048, hop_length=512))
+            freqs_w = librosa.fft_frequencies(sr=sr, n_fft=2048)
+            low_mask = (freqs_w >= 200) & (freqs_w <= 800)
+            mid_mask = (freqs_w >= 800) & (freqs_w <= 3000)
+            low_e = float(np.sum(S[low_mask, :] ** 2))
+            mid_e = float(np.sum(S[mid_mask, :] ** 2))
+            warmth_ratio = low_e / (mid_e + 1e-12)
+            score = float(np.clip(warmth_ratio / 2.0, 0.0, 1.0))
+            confidence = 0.55
 
         elif goal_name == "natuerlichkeit":
-            # Low zero-crossing rate = more natural
-            score = 1.0 - np.clip(np.mean(zcr), 0, 1)
-            confidence = 0.4
+            # ZCR + Spectral Flatness combined (Fastl & Zwicker 2007)
+            sf = librosa.feature.spectral_flatness(y=audio)[0]
+            zcr_score = 1.0 - float(np.clip(np.mean(zcr), 0, 1))
+            sf_score = float(np.clip(np.mean(sf) * 3.0, 0, 1))  # flat spectrum = natural
+            score = 0.6 * zcr_score + 0.4 * sf_score
+            confidence = 0.5
 
         elif goal_name == "emotionalitaet":
-            # Dynamic range = emotionality
-            dynamic_range = np.std(rms)
-            score = np.clip(dynamic_range * 10, 0, 1)
-            confidence = 0.4
+            # Dynamic range + spectral centroid variance (Juslin & Laukka 2003)
+            dynamic_range = float(np.std(rms))
+            centroid_var = float(np.std(spectral_centroid) / (np.mean(spectral_centroid) + 1e-10))
+            score = float(np.clip(0.6 * dynamic_range * 10 + 0.4 * centroid_var * 5, 0, 1))
+            confidence = 0.5
 
         elif goal_name == "transparenz":
-            # Clear separation (placeholder)
-            score = 0.75
-            confidence = 0.3
+            # Multi-Band Spectral Crest Factor (Moore & Glasberg 1983; ITU-T P.862)
+            S = np.abs(librosa.stft(audio, n_fft=2048, hop_length=512))
+            freqs_t = librosa.fft_frequencies(sr=sr, n_fft=2048)
+            band_edges = [250, 500, 1000, 2000, 4000, 8000]
+            crest_values = []
+            for i in range(len(band_edges) - 1):
+                bm = (freqs_t >= band_edges[i]) & (freqs_t < band_edges[i + 1])
+                if np.any(bm):
+                    band_energy = S[bm, :]
+                    p95 = float(np.percentile(band_energy, 95))
+                    p50 = float(np.percentile(band_energy, 50))
+                    crest = p95 / (p50 + 1e-12)
+                    crest_values.append(float(np.clip(crest / 10.0, 0.0, 1.0)))
+            score = float(np.mean(crest_values)) if crest_values else 0.5
+            confidence = 0.5
 
         else:  # 'authentizitaet' or unknown
-            score = 0.7
-            confidence = 0.3
+            # Spectral correlation stability as authenticity proxy
+            S = np.abs(librosa.stft(audio, n_fft=2048, hop_length=512))
+            if S.shape[1] > 1:
+                frame_corrs = []
+                for i in range(min(S.shape[1] - 1, 50)):
+                    c = float(np.corrcoef(S[:, i], S[:, i + 1])[0, 1])
+                    if np.isfinite(c):
+                        frame_corrs.append(c)
+                score = float(np.mean(frame_corrs)) if frame_corrs else 0.7
+            else:
+                score = 0.7
+            confidence = 0.4
 
         return float(score), float(confidence)
 

@@ -298,10 +298,26 @@ class TransientPreservationPhase(PhaseInterface):
 
     def _detect_onsets_spectral_flux(self, audio: np.ndarray, sensitivity: float) -> tuple[np.ndarray, np.ndarray]:
         """
-        Detect onsets using spectral flux method.
+        Detect onsets using Superflux with maximum-filter vibrato suppression.
+
+        Replaces naive frame-difference spectral flux with the Superflux algorithm
+        (Böck & Widmer 2013): a max-filter over a short lag window suppresses
+        slowly oscillating magnitude changes caused by vibrato and tremolo, which
+        would otherwise produce dozens of false onset detections in sustained
+        notes (strings, vocals).  Only genuine energy onsets pass through.
+
+        Scientific basis:
+            Böck & Widmer (2013). "Maximum Filter Vibrato Suppression for Onset
+            Detection." Proc. DAFx-13.
+            Window size W=3 frames @ 512/48000 ≈ 32 ms covers typical vibrato
+            rates (4-8 Hz) at one half-cycle precision.
+
+        Args:
+            audio:       Input audio (mono or stereo).
+            sensitivity: Threshold sensitivity [0, 1]; higher → more onsets.
 
         Returns:
-            (onset_times, onset_strengths): Arrays of onset times (seconds) and their strengths
+            (onset_times, onset_strengths): Arrays of onset times (s) and heights.
         """
         # Convert to mono for onset detection
         mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
@@ -310,16 +326,34 @@ class TransientPreservationPhase(PhaseInterface):
         hop_length = 512
         n_fft = 2048
 
+        # Guard against audio shorter than one STFT frame
+        if len(mono) < n_fft:
+            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+
         # Compute STFT
         _f, _t, Zxx = signal.stft(mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
-        magnitude = np.abs(Zxx)
+        magnitude = np.abs(Zxx)  # shape: (n_bins, n_frames)
 
-        # Compute spectral flux (frame-to-frame spectral change)
-        flux = np.zeros(magnitude.shape[1])
-        for i in range(1, magnitude.shape[1]):
-            diff = magnitude[:, i] - magnitude[:, i - 1]
-            # Only positive differences (energy increase)
-            flux[i] = np.sum(np.maximum(diff, 0))
+        # Superflux: causal W-frame backward maximum reference (Böck & Widmer 2013)
+        # For each frame t, ref[:, t] = max(magnitude[:, t-1], ..., magnitude[:, t-W]).
+        # Using strictly causal shifts avoids the symmetric-filter pitfall where the
+        # reference already contains the current frame, which would yield zero flux.
+        # W=3 frames @ hop=512/48000 ≈ 32 ms suppresses vibrato (4-8 Hz) at half-cycle.
+        _W_MAX = 3
+        ref = np.zeros_like(magnitude)
+        for _lag in range(1, _W_MAX + 1):
+            lagged = np.concatenate(
+                [np.zeros((magnitude.shape[0], _lag), dtype=magnitude.dtype), magnitude[:, :-_lag]],
+                axis=1,
+            )
+            ref = np.maximum(ref, lagged)
+
+        # Half-wave rectified positive difference against the causal reference
+        # (shape: n_frames; frame 0 is zero by construction)
+        n_frames = magnitude.shape[1]
+        flux = np.zeros(n_frames)
+        if n_frames > 1:
+            flux[1:] = np.sum(np.maximum(magnitude[:, 1:] - ref[:, 1:], 0.0), axis=0)
 
         # Normalize
         flux = flux / (np.max(flux) + 1e-10)

@@ -642,11 +642,21 @@ class AurikDenker:
         _emit(2, "Tonträger wird erkannt …")
         material = "unknown"
         try:
-            toni = get_tontraeger_denker().erkenne(aktuelles_audio, sr)
+            toni = get_tontraeger_denker().erkenne(aktuelles_audio, sr, file_path=input_path)
             material = toni.material_type
             stage_notes["tontraeger"] = f"{material} (Konfidenz: {toni.confidence:.2f})"
             phases_executed.append("tontraeger_erkennung")
             logger.info("AurikDenker [1/10] Träger: %s (%.2f)", material, toni.confidence)
+            # §6.7 v9.10.97: Bayesian ClassificationResult aus Stufe 1 als cached_medium_result
+            # für UV3 übernehmen — eliminiert redundante MediumClassifier-Aufrufe.
+            if cached_medium_result is None and getattr(toni, "classification_result", None) is not None:
+                cached_medium_result = toni.classification_result
+                logger.info(
+                    "AurikDenker: MediumDetector-ClassificationResult als cached_medium_result übernommen "
+                    "(material=%s, conf=%.2f)",
+                    getattr(cached_medium_result, "material_type", material),
+                    getattr(cached_medium_result, "confidence", toni.confidence),
+                )
         except Exception as exc:
             _record_stage_failure("tontraeger", "TontraegerDenker", exc)
             logger.warning("AurikDenker [1/10] TontraegerDenker: %s", exc)
@@ -655,7 +665,7 @@ class AurikDenker:
         _emit(4, "Tonträgerkette analysiert …")
         chain_info: dict[str, Any] = {}
         try:
-            kette = get_tontraegerkette_denker().analysiere(aktuelles_audio, sr)
+            kette = get_tontraegerkette_denker().analysiere(aktuelles_audio, sr, file_path=input_path)
             chain_info = kette.as_dict()
             stage_notes["kette"] = kette.chain_string
             phases_executed.extend(kette.combined_phases)
@@ -693,6 +703,17 @@ class AurikDenker:
                 "recommended_phases": list(getattr(defekt, "recommended_phases", [])),
                 "confidence": float(getattr(defekt, "cause_confidence", 0.0)),
             }
+            # Bug-17-Fix: raw DefectAnalysisResult aus DefektErgebnis extrahieren und
+            # als cached_defect_result weiterreichen — verhindert zweiten internen Scan
+            # in RestaurierDenker (ARE-Pfad) mit falscher Material-Erkennung.
+            if cached_defect_result is None:
+                _raw = getattr(defekt, "raw_scan_result", None)
+                if _raw is not None:
+                    cached_defect_result = _raw
+                    logger.info(
+                        "AurikDenker: DefektScan-Ergebnis (material=%s) als cached_defect_result übernommen.",
+                        getattr(_raw, "material_type", "?"),
+                    )
             logger.info(
                 "AurikDenker [3/10] Defekt: %s (Schwere: %.2f)",
                 defekt_primär,
@@ -957,7 +978,15 @@ class AurikDenker:
                                 audio_update_callback=audio_update_callback,
                                 cached_era_result=cached_era_result,
                                 cached_genre_result=cached_genre_result,
-                                cached_defect_result=cached_defect_result,
+                                # Bug-17-Fix: intern berechnetes DefectAnalysisResult aus
+                                # DefektDenker.analysiere() als cached_defect_result nutzen,
+                                # damit RestaurierDenker den Direkt-UV3-Pfad (_has_caches=True)
+                                # nehmen kann. Ohne diesen Fix: _has_caches=False → ARE-Pfad →
+                                # konkurrierende UV3-Instanzen → OOM.
+                                cached_defect_result=(
+                                    cached_defect_result
+                                    or (getattr(defekt, "raw_scan_result", None) if defekt is not None else None)
+                                ),
                                 cached_medium_result=cached_medium_result,
                                 cached_restorability_result=cached_restorability_result,
                                 reconstruction_context=rek,

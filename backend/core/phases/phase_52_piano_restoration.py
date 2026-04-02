@@ -219,18 +219,26 @@ class PianoRestorationV1(PhaseInterface):
         return n * f0_hz * np.sqrt(1.0 + B * float(n) ** 2)
 
     def _get_piano_B_coefficient(self, f0_hz: float) -> float:
-        """Inharmonizitätskoeffizient B nach Spec §2.11 INHARMONICITY_PRIORS.
+        """Inharmonicity coefficient B per spec §4.5b (Piano-Inharmonizität-B table).
 
-        Register-Zuordnung:
-            f0 < 200 Hz  → piano_bass   (B=0.0080, starke Inharmonizität)
-            f0 < 800 Hz  → piano_mid    (B=0.0020)
-            f0 ≥ 800 Hz  → piano_treble (B=0.0001, fast harmonisch)
+        Physical reality: short, stiff treble strings have HIGH B; long, wound
+        bass strings have LOW B.  Mapped to MIDI octave ranges (Fletcher model):
+
+            MIDI 21–35  (f0 <  65 Hz)  → B ≈ 0.00015  (long wound contrabass)
+            MIDI 36–47  (f0 < 247 Hz)  → B ≈ 0.00065  (bass / tenor)
+            MIDI 48–71  (f0 < 987 Hz)  → B ≈ 0.002    (mid / alto)
+            MIDI 72–108 (f0 ≥ 987 Hz)  → B ≈ 0.005    (short stiff treble)
+
+        Reference: §4.5b; Fletcher (1964) "Normal Vibration Frequencies of a
+        Stiff Piano String"; Conklin (1999) string inharmonicity tables.
         """
-        if f0_hz < 200.0:
-            return 0.0080  # piano_bass
-        if f0_hz < 800.0:
-            return 0.0020  # piano_mid
-        return 0.0001  # piano_treble
+        if f0_hz < 65.0:
+            return 0.00015   # MIDI 21–35: long wound contrabass strings
+        if f0_hz < 247.0:
+            return 0.00065   # MIDI 36–47: bass / tenor register
+        if f0_hz < 987.0:
+            return 0.002     # MIDI 48–71: mid / alto register
+        return 0.005         # MIDI 72–108: short stiff treble strings
 
     def process(
         self, audio: np.ndarray, material_type: MaterialType = MaterialType.CD_DIGITAL, **kwargs

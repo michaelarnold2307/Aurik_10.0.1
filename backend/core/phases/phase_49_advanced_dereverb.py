@@ -156,8 +156,75 @@ class AdvancedDereverbPhase(PhaseInterface):
         else:
             processed = self._dereverb_channel(audio, sample_rate, strength, protect_transients)
 
-        elapsed = time.time() - t0
+        # Make PMGG strength retries audibly monotonic: explicit wet/dry blend at
+        # the phase output, independent from internal WPE model scaling.
+        wet_mix = float(np.clip(effective_strength, 0.0, 1.0))
+        attenuation_guard_triggered = False
+        attenuation_guard_factor = 1.0
+
         rms_before = float(np.sqrt(np.mean(audio**2)))
+        rms_processed = float(np.sqrt(np.mean(processed**2)))
+        rms_drop_db = 20.0 * np.log10(max(rms_processed / (rms_before + 1e-10), 1e-30))
+
+        # Safety rescue for catastrophic dereverb attenuation. If the raw processed
+        # signal collapses energy too aggressively, reduce wet mix preemptively.
+        if rms_drop_db < -4.0 and wet_mix > 0.0:
+            attenuation_guard_triggered = True
+            attenuation_guard_factor = float(np.clip(4.0 / (abs(rms_drop_db) + 1e-9), 0.20, 1.0))
+            wet_mix *= attenuation_guard_factor
+
+        # --- §4.5c Early-Reflection-Guard: C80/D50 clarity-based wet-mix limiting ---
+        # Measure C80 (Kuttruff 2009) on original and processed signal.
+        # Spec limits: ΔC80 ≤ 6 dB.  Values exceeding bounds → reduce wet_mix
+        # or blend early reflections back (alpha=0.35 for first 50 ms).
+        c80_pre = self._measure_c80_proxy(audio, sample_rate)
+        c80_post = self._measure_c80_proxy(processed, sample_rate)
+        delta_c80 = c80_post - c80_pre
+        c80_guard_triggered = False
+        early_blend_triggered = False
+
+        if delta_c80 < -2.0:
+            # C80 degraded — full rollback to original dry signal
+            logger.warning(
+                "Phase 49 C80-guard: ΔC80=%.2f dB below −2 dB → rollback to dry", delta_c80
+            )
+            processed = audio.copy()
+            wet_mix = 0.0
+            c80_guard_triggered = True
+        elif delta_c80 > 6.0:
+            # Excessive clarity boost → scale wet_mix proportionally
+            _c80_scale = float(np.clip(6.0 / (delta_c80 + 1e-9), 0.30, 1.0))
+            wet_mix *= _c80_scale
+            c80_guard_triggered = True
+            logger.info(
+                "Phase 49 C80-guard: ΔC80=%.2f dB > 6 dB → wet_mix scaled to %.3f",
+                delta_c80,
+                wet_mix,
+            )
+        elif delta_c80 > 4.0:
+            # Moderate clarity boost → blend 35 % of original early reflections
+            # back into the first 50 ms (spec §4.5c alpha=0.35 early-reflection blend)
+            early_blend_triggered = True
+            _early_win = int(sample_rate * 0.050)
+            _alpha = 0.35
+            _proc64 = processed.copy().astype(np.float64)
+            _orig64 = audio.copy().astype(np.float64)
+            if _proc64.ndim == 2:
+                for _ch in range(_proc64.shape[1]):
+                    _e = min(_early_win, _proc64.shape[0])
+                    _proc64[:_e, _ch] = (1.0 - _alpha) * _proc64[:_e, _ch] + _alpha * _orig64[:_e, _ch]
+            else:
+                _e = min(_early_win, len(_proc64))
+                _proc64[:_e] = (1.0 - _alpha) * _proc64[:_e] + _alpha * _orig64[:_e]
+            processed = _proc64.astype(np.float32)
+            logger.info(
+                "Phase 49 C80-guard: ΔC80=%.2f dB — early-reflection blend 35 %% applied (50 ms)", delta_c80
+            )
+
+        if wet_mix < 1.0:
+            processed = audio + wet_mix * (processed - audio)
+
+        elapsed = time.time() - t0
         rms_after = float(np.sqrt(np.mean(processed**2)))
         # Guard: log10(0) => RuntimeWarning bei Stille-Eingaben; clamp auf >= 1e-30
         rms_change_db = 20.0 * np.log10(max(rms_after / (rms_before + 1e-10), 1e-30))
@@ -185,8 +252,16 @@ class AdvancedDereverbPhase(PhaseInterface):
                 "wpe_iterations": self._WPE_ITERATIONS,
                 "window_size": self._WINDOW_SIZE,
                 "hop_size": self._HOP_SIZE,
+                "wet_mix": wet_mix,
+                "attenuation_guard_triggered": attenuation_guard_triggered,
+                "attenuation_guard_factor": attenuation_guard_factor,
                 "rms_change_db": rms_change_db,
                 "protect_transients": protect_transients,
+                "c80_pre": float(c80_pre),
+                "c80_post": float(c80_post),
+                "delta_c80": float(delta_c80),
+                "c80_guard_triggered": c80_guard_triggered,
+                "early_blend_triggered": early_blend_triggered,
             },
             metrics={"rms_change_db": rms_change_db, "strength": strength, "effective_strength": effective_strength},
         )
@@ -194,6 +269,39 @@ class AdvancedDereverbPhase(PhaseInterface):
     # ------------------------------------------------------------------
     # Kern-Implementierung
     # ------------------------------------------------------------------
+
+    def _measure_c80_proxy(self, audio: np.ndarray, sr: int) -> float:
+        """Estimate Clarity C80 from time-domain energy ratio (Kuttruff 2009).
+
+        C80 = 10 × log10(E_early / E_late)
+        where E_early = energy in first 80 ms, E_late = energy from 80 ms onward.
+
+        Used by spec §4.5c Early-Reflection-Guard to limit dereverberation depth.
+        Returns 0.0 when audio is silent or shorter than 80 ms.
+        """
+        mono = audio[:, 0] if audio.ndim == 2 else audio
+        early_win = int(sr * 0.080)  # 80 ms
+        if len(mono) <= early_win:
+            return 0.0
+        e_early = float(np.sum(mono[:early_win] ** 2))
+        e_late = float(np.sum(mono[early_win:] ** 2))
+        if e_late < 1e-12:
+            return 0.0
+        return 10.0 * float(np.log10(max(e_early, 1e-12) / e_late))
+
+    def _measure_d50_proxy(self, audio: np.ndarray, sr: int) -> float:
+        """Estimate Definition D50 from time-domain energy ratio.
+
+        D50 = E_early50 / E_total  where E_early50 = energy in first 50 ms.
+        Returns 0.0 when audio is silent.
+        """
+        mono = audio[:, 0] if audio.ndim == 2 else audio
+        early_win = int(sr * 0.050)  # 50 ms
+        e_total = float(np.sum(mono**2))
+        if e_total < 1e-12:
+            return 0.0
+        e_early50 = float(np.sum(mono[:early_win] ** 2))
+        return float(np.clip(e_early50 / e_total, 0.0, 1.0))
 
     def _dereverb_channel(
         self,

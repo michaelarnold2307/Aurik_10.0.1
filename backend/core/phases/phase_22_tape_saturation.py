@@ -304,12 +304,63 @@ class TapeSaturation(PhaseInterface):
             },
         )
 
+    @staticmethod
+    def _peak_envelope(audio: np.ndarray, attack_ms: float, release_ms: float, sr: int) -> np.ndarray:
+        """Compute peak-follower envelope with separate attack/release time constants.
+
+        Real magnetic tape does not saturate uniformly: loud transients compress
+        harder than quiet passages because the oxide approaches saturation faster
+        at higher flux levels.  This function tracks the signal envelope with
+        analogue-like attack/release dynamics so that the drive can be modulated
+        sample-by-sample, faithfully reproducing that level-dependent character.
+
+        Scientific basis:
+            McNally (1984). "Dynamic Range Control of Digital Audio Signals."
+            Journal of the Audio Engineering Society, 32(5), 316-327.
+            Attack < release mirrors tape transport mechanics: flux ramps up
+            quickly but decays more slowly due to remanence.
+
+        Args:
+            audio:      Mono audio signal (1-D).
+            attack_ms:  Envelope attack time constant in milliseconds.
+            release_ms: Envelope release time constant in milliseconds.
+            sr:         Sample rate in Hz.
+
+        Returns:
+            Peak envelope array, same length as audio, values in [0, +inf).
+        """
+        a_att = np.exp(-1.0 / max(sr * attack_ms * 1e-3, 1.0))
+        a_rel = np.exp(-1.0 / max(sr * release_ms * 1e-3, 1.0))
+        env = np.empty(len(audio), dtype=np.float64)
+        env[0] = abs(float(audio[0]))
+        for i in range(1, len(audio)):
+            e = abs(float(audio[i]))
+            if e > env[i - 1]:
+                env[i] = a_att * env[i - 1] + (1.0 - a_att) * e
+            else:
+                env[i] = a_rel * env[i - 1]
+        return env
+
     def _saturate_multi_band(
         self, audio: np.ndarray, sample_rate: int, drive: float, tape_speed: str, hysteresis: float
     ) -> np.ndarray:
+        """Multi-band tape saturation with envelope-following dynamic drive.
+
+        Applies a peak-follower (McNally 1984) to the full-band signal to derive
+        a time-varying drive_vec.  Each band then receives a sample-wise drive
+        instead of a fixed scalar, so loud transients saturate proportionally
+        harder than quiet passages -- matching the physical behaviour of magnetic
+        tape oxide under varying flux levels.
         """
-        Multi-band tape saturation.
-        """
+        nyquist = sample_rate / 2.0
+
+        # Envelope-following dynamic drive (McNally 1984)
+        # attack 3 ms / release 80 ms mirrors tape flux rise/decay physics.
+        mono = np.mean(audio, axis=1).astype(np.float64) if audio.ndim == 2 else audio.astype(np.float64)
+        env = self._peak_envelope(mono, attack_ms=3.0, release_ms=80.0, sr=sample_rate)
+        p95 = np.percentile(env, 95) + 1e-8
+        # Scale: quiet zones → ~40 % drive, loud zones → 100 % drive
+        drive_vec = drive * np.clip(0.40 + 0.60 * env / p95, 0.40, 1.0).astype(np.float32)
         nyquist = sample_rate / 2.0
 
         # Design crossover filters (Linkwitz-Riley 4th order)
@@ -324,15 +375,15 @@ class TapeSaturation(PhaseInterface):
         # Mid: 300-4000 Hz (residual)
         mid = audio - bass - high
 
-        # Per-band saturation
+        # Per-band saturation (pass drive_vec so each band is level-adaptive)
         bass_saturated = self._saturate_band(
-            bass, drive * self.BAND_DRIVE_SCALE["bass"], hysteresis, self.HARMONIC_WEIGHTS["bass"]
+            bass, drive_vec * self.BAND_DRIVE_SCALE["bass"], hysteresis, self.HARMONIC_WEIGHTS["bass"]
         )
         mid_saturated = self._saturate_band(
-            mid, drive * self.BAND_DRIVE_SCALE["mid"], hysteresis, self.HARMONIC_WEIGHTS["mid"]
+            mid, drive_vec * self.BAND_DRIVE_SCALE["mid"], hysteresis, self.HARMONIC_WEIGHTS["mid"]
         )
         high_saturated = self._saturate_band(
-            high, drive * self.BAND_DRIVE_SCALE["high"], hysteresis, self.HARMONIC_WEIGHTS["high"]
+            high, drive_vec * self.BAND_DRIVE_SCALE["high"], hysteresis, self.HARMONIC_WEIGHTS["high"]
         )
 
         # Recombine bands
@@ -352,22 +403,56 @@ class TapeSaturation(PhaseInterface):
 
         return saturated
 
-    def _saturate_band(self, audio: np.ndarray, drive: float, hysteresis: float, harmonic_weights: list) -> np.ndarray:
+    @staticmethod
+    def _tanh_adaa(x0: np.ndarray, x1: np.ndarray) -> np.ndarray:
+        """1st-order Antiderivative Antialiasing for tanh.
+
+        Computes (F(x0) - F(x1)) / (x0 - x1) where F(x) = log(cosh(x)) is
+        the antiderivative of tanh.  Midpoint fallback when |x0 - x1| < 1e-7.
+
+        Scientific basis:
+            Parker, Esqueda & Bergner (2019). "Antiderivative Antialiasing for
+            Stateless and Stateful Nonlinearities." IEEE SPL 26(3), 357-361.
         """
-        Saturate a single band with harmonic modeling.
+        dX = x0 - x1
+        close = np.abs(dX) < 1e-7
+
+        def _log_cosh(x: np.ndarray) -> np.ndarray:
+            ax = np.abs(x)
+            return ax + np.log1p(np.exp(-2.0 * ax)) - np.log(2.0)
+
+        midpoint = np.tanh(0.5 * (x0 + x1))
+        adaa = (_log_cosh(x0) - _log_cosh(x1)) / np.where(close, 1.0, dX)
+        return np.where(close, midpoint, adaa)
+
+    def _saturate_band(
+        self, audio: np.ndarray, drive: "float | np.ndarray", hysteresis: float, harmonic_weights: list
+    ) -> np.ndarray:
+        """Saturate a single band using ADAA-processed tanh with hysteresis.
+
+        Accepts `drive` as either a scalar float or a 1-D numpy array of the
+        same length as `audio` (envelope-following dynamic drive, McNally 1984).
+        1st-order Antiderivative Antialiasing (Parker et al. 2019) replaces
+        direct np.tanh calls to suppress aliased harmonics that would otherwise
+        fold back from above Nyquist into the audio band at high drive levels.
+        The asymmetric positive/negative processing (hysteresis) models the
+        asymmetric flux response of real tape oxide (Hamada & Koizumi 1981).
         """
-        # Drive stage
+        # Drive stage — works for scalar and vector drive
         driven = audio * (1.0 + drive * 8.0)
 
-        # Tape saturation with hysteresis
-        # Positive: standard tanh
-        # Negative: reduced gain (asymmetric)
-        saturated = np.zeros_like(driven)
-        positive_mask = driven >= 0
-        negative_mask = driven < 0
+        # Previous-sample reference for ADAA (causal, 1-sample look-back)
+        prev = np.roll(driven, 1)
+        prev[0] = 0.0
 
-        saturated[positive_mask] = np.tanh(driven[positive_mask])
-        saturated[negative_mask] = np.tanh(driven[negative_mask] * (1.0 - hysteresis))
+        prev_neg = prev * (1.0 - hysteresis)
+
+        # ADAA tanh: positive half — standard, negative half — hysteresis-scaled
+        saturated = np.where(
+            driven >= 0,
+            self._tanh_adaa(driven, prev),
+            self._tanh_adaa(driven * (1.0 - hysteresis), prev_neg),
+        )
 
         # Add harmonics (2nd, 3rd, 4th)
         # 2nd harmonic (even): saturated^2 (scaled)

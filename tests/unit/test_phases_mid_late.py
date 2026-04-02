@@ -436,6 +436,40 @@ class TestPhase20ReverbReduction:
         assert 0.0 < eff < 1.0
         assert float(result.metadata.get("phase_locality_factor", 1.0)) <= 0.4 + 1e-6
 
+    def test_ml_shape_failure_disables_repeated_ml_attempts(self, mono, monkeypatch):
+        import backend.core.phases.phase_20_reverb_reduction as phase20_mod
+
+        class _ExplodingHybrid:
+            def __init__(self, config):
+                pass
+
+            def dereverb(self, audio, sample_rate=48000):
+                raise RuntimeError("Sizes of tensors must match except in dimension 1")
+
+        monkeypatch.setattr(phase20_mod, "ML_HYBRID_AVAILABLE", True)
+        monkeypatch.setattr(phase20_mod, "HybridDereverb", _ExplodingHybrid)
+
+        # First call hits ML failure once and should switch phase instance to DSP-only.
+        result1 = self.phase.process(mono, SR, MaterialType.TAPE, quality_mode="quality")
+        _assert_phase_result(result1, mono, check_clipping=False)
+        assert self.phase._force_dsp_only_due_ml_error is True
+
+        calls = {"n": 0}
+
+        class _CountingHybrid:
+            def __init__(self, config):
+                calls["n"] += 1
+
+            def dereverb(self, audio, sample_rate=48000):
+                return audio
+
+        monkeypatch.setattr(phase20_mod, "HybridDereverb", _CountingHybrid)
+
+        # Second call must stay DSP-only and not instantiate HybridDereverb again.
+        result2 = self.phase.process(mono, SR, MaterialType.TAPE, quality_mode="quality")
+        _assert_phase_result(result2, mono, check_clipping=False)
+        assert calls["n"] == 0
+
 
 # ===========================================================================
 # Phase 21 – Exciter
@@ -1055,6 +1089,26 @@ class TestPhase49AdvancedDereverb:
         eff = float(result.metadata.get("effective_strength", 1.0))
         assert 0.0 < eff < 1.0
         assert float(result.metadata.get("phase_locality_factor", 1.0)) <= 0.4 + 1e-6
+
+    def test_reduced_strength_stays_closer_to_input(self, mono):
+        full = self.phase.process(mono, SR, strength=1.0)
+        reduced = self.phase.process(mono, SR, strength=0.25)
+        _assert_phase_result(full, mono, check_clipping=False)
+        _assert_phase_result(reduced, mono, check_clipping=False)
+        full_delta = float(np.mean(np.abs(full.audio - mono)))
+        reduced_delta = float(np.mean(np.abs(reduced.audio - mono)))
+        assert reduced_delta <= full_delta + 1e-6
+
+    def test_attenuation_guard_rescues_aggressive_output(self, mono, monkeypatch):
+        def _fake_aggressive(_audio, _sample_rate, _strength, _protect):
+            return np.zeros_like(_audio)
+
+        monkeypatch.setattr(self.phase, "_dereverb_channel", _fake_aggressive)
+        result = self.phase.process(mono, SR, strength=1.0)
+        _assert_phase_result(result, mono, check_clipping=False)
+        assert bool(result.metadata.get("attenuation_guard_triggered", False)) is True
+        assert float(result.metadata.get("wet_mix", 1.0)) < 1.0
+        assert float(np.sqrt(np.mean(result.audio**2))) > 0.0
 
 
 # ===========================================================================

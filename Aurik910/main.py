@@ -74,8 +74,8 @@ def _run_startup_model_check(app: QApplication) -> None:
     try:
         import time
 
+        from backend.api.bridge import get_model_downloader  # type: ignore[import]
         from backend.api.bridge import get_startup_check_result  # type: ignore[import]
-        from backend.core.model_downloader import get_model_downloader
 
         def run_self_heal(missing_primary, missing_optional):
             dl = get_model_downloader()
@@ -109,7 +109,7 @@ def _run_startup_model_check(app: QApplication) -> None:
                 run_self_heal(result.missing_primary, result.missing_optional)
                 # Nach Abschluss Check wiederholen
                 result2 = get_startup_check_result()
-                if result2.all_ok:
+                if result2 is not None and result2.all_ok:
                     QMessageBox.information(
                         None,
                         "AURIK — Modelle repariert",

@@ -2,6 +2,454 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.10.96 — §2.29c Restorative-Phase-Baseline-Capping + PMGG Exclusion-Fixes (30. Mär 2026)
+
+### Zusammenfassung
+
+Defekt-inflationierte PMGG-Baselines gedeckelt (`_RESTORATIVE_PHASES` + `_CANONICAL_THRESHOLDS` + `effective_scores_before`). `timbre_authentizitaet` zu phase_03/23/24/29 Exclusions, neuer phase_12 Exclusion-Eintrag. `enforce_3x_rt=False` und `enable_adaptive_skipping=False` als Defaults in `RestorationConfig` und `restaurier_denker.py`.
+
+### Root-Cause
+
+In restorativen Phasen misst `scores_before` auf defekt-belastetem Audio. Bestimmte Defekte (Rauschen, Hall, Dropouts) inflationieren Metriken künstlich über kanonische Schwellwerte. Nach Restaurierung sinken Werte auf physikalisch korrekte Levels → PMGG meldet Falsch-Regression → Retry-Kaskade → best-effort bei minimaler Wet-Strength → Defekte bleiben unbehandelt.
+
+### Änderungen
+
+- **`per_phase_musical_goals_gate.py`**: `_RESTORATIVE_PHASES` (9 Phasen), `_CANONICAL_THRESHOLDS` (14 Goals), `effective_scores_before` Capping in `_run_with_retry()`
+- **`PHASE_GOAL_EXCLUSIONS`**: `timbre_authentizitaet` zu phase_03/23/24/29; **neue** phase_12 → `{"tonal_center", "timbre_authentizitaet"}`
+- **`unified_restorer_v3.py`**: `enforce_3x_rt=False`, `enable_adaptive_skipping=False` in `RestorationConfig`
+- **`restaurier_denker.py`**: `enforce_3x_rt=False`, `enable_adaptive_skipping=False`
+- **Docs**: copilot-instructions.md + specs/02_pipeline_architecture.md auf v9.10.96 aktualisiert
+
+### Tests: 122 PMGG-Tests (alle grün), 4 normative Tests bestanden
+
+---
+
+## Version 9.10.95 — §9.7.11 ext: tonal_center in phase_03/phase_29 PMGG-Exclusions (30. Mär 2026)
+
+### Zusammenfassung
+
+`"tonal_center"` zu `PHASE_GOAL_EXCLUSIONS["phase_03"]` und `["phase_29"]` hinzugefügt.
+`test_38` und `test_40b` invertiert (assert IN statt NOT IN).
+
+### Root-Cause (Real-Run bestätigt 2026-03-30)
+
+K-S (Krumhansl-Schmuckler) ist invariant gegenüber **additivem weißem Rauschen** (hebt alle 24 Chroma-Bins gleichmäßig), aber **nicht** gegenüber **frequenzselektiver NR**:
+
+- **phase_29 DeepFilterNet v3 II**: zielt auf HF-Tape-Hiss (> 4 kHz). Reduziert Energie in den hohen Chroma-Register-Bins (C5–B7) stärker als in tiefen → K-S Korrelationsshift → `tonal_center P2` catastrophic Regression `0.8333 > 0.08` → Emergency-Mode strength=0.12 → DeepFilterNet nearly disabled. Stagnation Δ=0.000 über alle Retries bestätigt Messartefakt, kein echter Key-Shift.
+- **phase_03 OMLSA/ResembleEnhance**: OMLSA/ResembleEnhance wenden G(f) pro Frequenzband an (noise-adaptive EQ). Chroma-Energie-Verteilung ändert sich durch selektive Unterdrückung → K-S argmax verschiebt sich scheinbar. Δ=0.1043 auf 1930er-Tape (SNR≈15 dB, 1/f-Hiss) dokumentiert.
+
+### Tests: `test_38` → `test_38_phase03_tonal_center_excluded`, `test_40b` → `test_40b_phase29_tonal_center_excluded`
+
+---
+
+## Version 9.10.94 — §2.31a Iterative Mid-Pipeline Calibration (30. Mär 2026)
+
+### Zusammenfassung
+
+`UnifiedRestorerV3._mid_pipeline_calibration_step()` als neue `@staticmethod` hinzugefügt. Zwei Checkpoint-Aufrufe in `_execute_pipeline` (sequentieller Pfad) bei ~33 % und ~66 % Phasen-Fortschritt. Konvertiert die bisherige "einmaliger Prior → durchlaufen"-Kalibrierung in ein geschlossenes adaptives Regelsystem ohne zusätzliche DSP-Kosten.
+
+### Mechanismus
+
+- Wertet bereits von PMGG gemessene Musical-Goal-Scores aus (zero additional overhead).
+- 8 Feedback-Signale: `brillanz`, `micro_dynamics`, `tonal_center`, `groove`, `separation_fidelity`, `raumtiefe`, `artikulation`, `bass_kraft`.
+- Jede Anpassung bounded ±12 % pro Familie pro Checkpoint; alle Skalare clamped `[0.60, 1.10]`.
+- Gibt eine **Kopie** des Profils zurück (keine In-place-Mutation). Gibt `None` zurück wenn kein sinnvoller Delta ≥ 0,5 %.
+- Audit-Trail in `_mid_calibration_events` (Liste pro Checkpoint) im Profil — fließt via `RestorationResult.metadata["song_calibration"]` in den Export.
+
+### Checkpoint-Zuordnung
+
+| Checkpoint | Signal → Ziel-Familie |
+| --- | --- |
+| `brillanz` < 0.74 | `reconstruction` ↑ (max +12 %) |
+| `micro_dynamics` < 0.82 | `transient` ↑ (max +10 %), `dynamics_eq` ↑ (max +8 %) |
+| `tonal_center` < 0.91 | `reconstruction` ↑ (max +8 %), `dynamics_eq` ↓ (max −5 %) |
+| `groove` < 0.78 | `dynamics_eq` ↑ (max +8 %), `transient` ↑ (max +6 %) |
+| `separation_fidelity` < 0.74 | `instrument` ↑ (max +10 %) |
+| `raumtiefe` < 0.65 | `instrument` ↑ (max +8 %) |
+| `artikulation` < 0.80 | `vocal` ↑ (max +12 %) |
+| `bass_kraft` < 0.74 | `dynamics_eq` ↑ (max +6 %) |
+
+### Tests
+
+19 neue Unit-Tests `test_72`–`test_90` in `TestMidPipelineCalibrationStep` (`tests/unit/test_unified_restorer_v3.py`). Gesamt UV3-Tests: **90**.
+
+---
+
+## Version 9.10.93 — §9.7.11 K-S + TonalCenterMetric aus _PRECISE_METRICS + K-S Hanning-Fix (30. Mär 2026)
+
+### Zusammenfassung
+
+`TonalCenterMetric` aus `_PRECISE_METRICS` entfernt (§2.29b analog zu `NatuerlichkeitMetric`).
+K-S `_ks_key` Hanning-Bug ("first 4096 samples ≈ 0 → immer 0.5") behoben.
+Root-Cause: librosa `chroma_stft` + binäre Key-Shift-Penalty (1 HT → 0.50, ≥ 2 HT → 0.0) verursachte false catastrophic P2-Regressionen (Δ ≈ 0.56) in phase_08/36/49 → Retry-Kaskade → Watchdog-Timeout.
+
+### Zusammenfassung
+
+Drei Quick-Proxies und zwei defekte Precise-Override-Pfade in PMGG `_measure_quick` behoben,
+die false P3–P5-Regressionen in Denoise- und Dereverb-Phasen verursachten. brillanz, transparenz
+und waerme aus `_PRECISE_METRICS` entfernt; 14 überflüssige PHASE_GOAL_EXCLUSIONS-Einträge
+über 7 Phasen gelöscht. 14 neue Tests (test_83–test_96) in `TestNoiseRobustProxies`.
+Gesamt PMGG-Tests: **117**.
+
+### Root-Causes
+
+| Metrik | Problem | Folge |
+| --- | --- | --- |
+| brillanz | HF-Energie-Ratio SNR-sensitiv: Rauschen inflationiert HF-Energie → false P5-Regression nach Denoise; `BrillanzMetric.measure(reference=noisy)` Preservation-Penalty straft Denoise doppelt | phase_03/06/07/18/20/29/49 hatten brillanz fälschlicherweise in Exclusions |
+| transparenz | 75%-Rolloff SNR-sensitiv; `TransparenzMetric.measure()` hat **kein** `reference=`-Parameter → TypeError in Precise-Override → stille Fallback auf fehlerhaften Proxy | phase_03/18/20/29/49 hatten transparenz fälschlicherweise in Exclusions |
+| waerme | ISO-226 mid/total-Ratio reverb-sensitiv: Nachhall inflationiert Mid-Range → false P4-Regression nach Dereverb | phase_20/49 hatten waerme fälschlicherweise in Exclusions |
+
+### §9.7.12 brillanz — HF Spectral Crest Factor (2–16 kHz)
+
+**Neuer Algorithmus** (ersetzt `hf_energy / tot_energy / 0.3 + 0.4`):
+
+```python
+_hf_mask_b = (freqs >= 2000) & (freqs <= 16000)
+_hf_bins_b = fft_mag[_hf_mask_b]
+_p95_b = float(np.percentile(_hf_bins_b, 95))
+_p50_b = float(np.median(_hf_bins_b)) + 1e-9
+scores["brillanz"] = float(np.clip((_p95_b / _p50_b - 1.5) / 13.5, 0.0, 1.0))
+```
+
+Wissenschaftliche Basis: Fastl & Zwicker 2007 §8.3 (Spectral Brightness).
+Rauschen hebt p50 (Median); musikalische Peaks dominieren p95 → Crest nach Denoise steigt.
+
+### §9.7.13 transparenz — Multi-Band Spectral Crest (5 Oktavbänder 250 Hz–8 kHz)
+
+**Neuer Algorithmus** (ersetzt 75%-Rolloff + 3-Band-Balance):
+
+```python
+_oct_bands_t = [(250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000)]
+# per-band p95/p50 crest, mean over 5 bands
+scores["transparenz"] = float(np.clip(np.mean(band_crests), 0.0, 1.0))
+```
+
+Wissenschaftliche Basis: Moore & Glasberg 1983 (Auditory Filters); ITU-T P.862.
+Bug fix: `TransparenzMetric.measure()` hatte kein `reference=`-Parameter → TypeError war still
+verschluckt → Precise-Override funktionierte nie korrekt.
+
+### §9.7.14 waerme — Warmth Ratio E(200–800 Hz)/E(800–3000 Hz)
+
+**Neuer Algorithmus** (ersetzt ISO-226 mid/total-Energie-Ratio):
+
+```python
+_e_low_mid = float(np.mean(fft_mag[(freqs >= 200) & (freqs < 800)] ** 2)) + 1e-9
+_e_upper_mid = float(np.mean(fft_mag[(freqs >= 800) & (freqs < 3000)] ** 2)) + 1e-9
+scores["waerme"] = float(np.clip(_e_low_mid / _e_upper_mid / 1.5, 0.0, 1.0))
+```
+
+Wissenschaftliche Basis: Fletcher & Rossing; Moore & Glasberg 1983 Auditory Filters.
+Nachhall addiert Energie proportional in beiden Sub-Bändern → Ratio reverb-invariant.
+
+### Entfernte PHASE_GOAL_EXCLUSIONS (14 Einträge über 7 Phasen)
+
+| Phase | Entfernt | Grund |
+| --- | --- | --- |
+| phase_03 | brillanz, transparenz | §9.7.12/13: Denoise → Crest-Factor verbessert sich |
+| phase_06 | brillanz | §9.7.12: AudioSR SBR erhöht HF-Crest |
+| phase_07 | brillanz | §9.7.12: HF-Repair erhöht Crest |
+| phase_18 | brillanz, transparenz | §9.7.12/13: Noise Gate senkt Rauschboden → Crest steigt |
+| phase_20 | brillanz, waerme, transparenz | §9.7.12/13/14: SGMSE+ Dereverb reverb-invariant |
+| phase_29 | brillanz, transparenz | §9.7.12/13: DeepFilterNet Tape-Hiss → Crest SNR-robust |
+| phase_49 | brillanz, waerme, transparenz | §9.7.12/13/14: Advanced Dereverb reverb-invariant |
+
+### _PRECISE_METRICS nach Änderung
+
+Entfernt: `BrillanzMetric`, `WaermeMetric`, `TransparenzMetric`.
+Verblieben: `TonalCenterMetric`, `MicroDynamicsMetric`, `ArticulationMetric`, `SeparationFidelityMetric`.
+
+### Tests
+
+14 neue Tests (`test_83`–`test_96`) in Klasse `TestNoiseRobustProxies`:
+
+- `test_83`: brillanz steigt nach Denoise (Crest-Factor-Nachweis)
+- `test_84`: brillanz nicht in Exclusions nach §9.7.12
+- `test_85`: brillanz ∈ [0,1], nicht NaN für 8 Signale
+- `test_86`: transparenz steigt nach Denoise (5-Band-Nachweis)
+- `test_87`: transparenz nicht in Exclusions nach §9.7.13
+- `test_88`: transparenz ∈ [0,1], nicht NaN
+- `test_89`: waerme stabil nach Reverb-Reduktion (Δ ≤ 0.10 — IRkonvolution)
+- `test_90`: waerme nicht in Exclusions nach §9.7.14
+- `test_91`: waerme ∈ [0,1], nicht NaN
+- `test_92`: phase_03 exakt {natuerlichkeit, artikulation, authentizitaet}
+- `test_93`: phase_29 exakt {artikulation, authentizitaet, natuerlichkeit}
+- `test_94`: phase_49 exakt {authentizitaet}
+- `test_95`: phase_18 kein brillanz/transparenz mehr
+- `test_96`: brillanz/waerme/transparenz nicht in `_PRECISE_METRICS`
+
+Alle **117 PMGG-Tests grün**.
+
+## Version 9.10.91 — PMGG tonal_center §9.7.11 Krumhansl-Schmuckler Proxy (30. Mär 2026)
+
+### Zusammenfassung
+
+Der `tonal_center`-Proxy in PMGG `_measure_quick` wurde von der **Chroma-Konzentrations-Entropie**
+auf **Krumhansl-Schmuckler (1990) Key Detection** umgestellt. Der alte Proxy war SNR-abhängig:
+Rauschen/Nachhall/EQ verteilen Energie gleichmäßig über Chroma-Bins → hohe Konzentration vor
+Verarbeitung → niedrige danach → false P2-Regression auf jeder rauschreduzierenden Phase
+(Δ≈0-Stagnation bestätigt). K-S ist SNR-invariant: uniformes Rauschen hebt alle 24 Major/Moll-
+Korrelationsscores gleich → argmax unverändert → kein false key-shift. Damit werden sieben
+redundante `tonal_center`-Ausschlüsse aus PHASE_GOAL_EXCLUSIONS entfernt.
+
+### Root-Cause
+
+Katastrophale PMGG-Regressions aus Produktionslogs 2026-03-30:
+
+| Phase | Regression | Δ-Stagnation | Ursache (Entropie-Proxy) |
+| --- | --- | --- | --- |
+| phase_49_advanced_dereverb | 0.5312 > 0.08 | 0.000010 | Nachhall füllt Chroma-Bins diffus |
+| phase_08_transient_preservation | 0.5612 > 0.08 | 0.000025 | HPSS verschiebt Energie-Balance |
+| phase_04_eq_correction | 0.0753 | 0.000600 | EQ-Shelf verschiebt Bin-Amplituden |
+| phase_18_noise_gate (groove) | 0.1721 | 0.002226 | VAD-Gating → Chroma-Sparsität |
+
+### Änderungen
+
+**`backend/core/per_phase_musical_goals_gate.py`**
+
+- `_measure_quick` tonal_center-Block vollständig ersetzt:
+  - **Alt**: `entropy = -Σ(chroma * log chroma)`, `tonal_score = 1 - entropy/log(12)` — SNR-abhängig.
+  - **Neu**: Krumhansl-Schmuckler Key Detection (§9.7.11):
+    - `_ks_key()`: Korrelation gegen 24 normierte Major/Moll-Profile → argmax → Key-Label 0–23.
+    - Delta-Modus (mit `_ref_mono`): `tonal_center = 1 - circle_of_fifths_distance/6`.
+    - Absolut-Modus (ohne Referenz): Max K-S-Korrelation normiert auf [0, 1] als Tonalitätsstärke.
+    - Fallback bei Stille/zu kurzem Signal → `0.5`.
+  - Profile (Krumhansl & Schmuckler 1990, Table 1): `_KS_MAJOR`, `_KS_MINOR` — normiert zu
+    zero-mean, unit-variance für Pearson-Äquivalenz via `np.dot`.
+- PHASE_GOAL_EXCLUSIONS — tonal_center aus 7 Phasen **entfernt** (K-S macht diese Workarounds obsolet):
+  - `phase_02`: `"groove", "tonal_center",` → `"groove",` (K-S robust gegen G-Pitch-Notches)
+  - `phase_03`: tonal_center entfernt (Denoising ändert Tonart nicht)
+  - `phase_04`: tonal_center entfernt (EQ ändert Tonart nicht)
+  - `phase_08`: tonal_center entfernt → jetzt `{"micro_dynamics", "artikulation"}` (HPSS ändert Tonart nicht)
+  - `phase_18`: tonal_center entfernt → jetzt `{"micro_dynamics", "brillanz", "authentizitaet", "transparenz", "emotionalitaet", "groove"}`
+  - `phase_29`: tonal_center entfernt (HF-Hiss-Removal ändert Tonart nicht)
+  - `phase_49`: tonal_center entfernt (Dereverb ändert Tonart nicht)
+  - Alle zugehörigen tonal_center-Kommentarblöcke entfernt (nun hinfällig).
+
+**`tests/unit/test_per_phase_musical_goals_gate.py`**
+
+- 8 veraltete Tests aktualisiert (Assertions invertiert — tonal_center NOT in exclusions):
+  - `test_38` → `test_38_phase03_tonal_center_not_excluded`
+  - `test_38b` → Docstring aktualisiert (5 statt 6 Ziele)
+  - `test_40b` → `test_40b_phase29_tonal_center_not_excluded`
+  - `test_46b` → `test_46b_phase18_tonal_center_not_excluded`
+  - `test_52c` → `test_52c_phase02_tonal_center_not_excluded`
+  - `test_52e` → tonal_center aus required-Set entfernt (v9.10.91, 6 statt 7 Goals)
+  - `test_72` → 5-Goal-Exact-Set für phase_03 (v9.10.91)
+  - `test_73` → 5-Goal-Exact-Set für phase_29 (v9.10.91)
+- `TestKrumhanslSchmucklerTonalCenter` (5 neue Tests, test_78–test_82):
+  - `test_78`: K-S SNR-Invarianz — Δ ≤ 0.05 mit/ohne ~0 dB weißem Rauschen.
+  - `test_79`: tonal_center in [0, 1] für 8 diverse Signale.
+  - `test_80`: K-S EQ-Stabilität — Δ ≤ 0.08 nach Breitband-Shelf-Cut.
+  - `test_81`: Stilles Signal → 0.5 ohne Absturz.
+  - `test_82`: tonal_center in keiner der 7 ehemals betroffenen Phasen ausgeschlossen.
+
+**`.github/specs/02_pipeline_architecture.md`**
+
+- §9.7.11 Krumhansl-Schmuckler tonal_center Proxy hinzugefügt (nach §9.7.10).
+
+### Wissenschaftliche Quellen
+
+- Krumhansl, C.L. & Schmuckler, M.A. (1990). *The Petrouchka chord*. Music Perception, 7(4), 397–432.
+- Temperley, D. (2001). *The Cognition of Basic Musical Structures*. MIT Press. (K-S Re-Normierung)
+- Müller, M. (2015). *Fundamentals of Music Processing*. Springer. §5.3 Chroma Features.
+
+### Teststand
+
+98 → **103 Tests grün** (5 neue K-S-Tests, 8 invertierte Exclusions-Tests).
+
+---
+
+### Zusammenfassung
+
+Strukturfehler im Groove-Proxy behoben: Die Normierungsbasis `autocorr[0]` enthielt bisher die **Gesamtvarianz** von `rms_env` inkl. 50/100 Hz-Hum-Modulation. Eine 5-Frame-Glättung (50 ms Moving Average) auf `rms_env` vor der Autokorrelation filtert Hum-Modulation heraus, ohne rhythmische Periodizität (120–500 ms) zu verändern. Damit ist der Groove-Proxy unabhängig von LF-Spektraländerungen durch Hum-Removal-Phasen (§9.7.9).
+
+### Änderungen
+
+**`backend/core/per_phase_musical_goals_gate.py`**
+
+- `_measure_quick` Groove-Block: 5-Frame-Glättung von `rms_env` vor `np.correlate()` eingefügt.
+  - Vor Fix: `autocorr[0]` = Gesamtvarianz inkl. Hum → Normierung durch Hum-Entfernung verändert → false groove-Delta auch bei unveränderten Rhythmusstrukturen.
+  - Nach Fix: `_sw = min(5, len(rms_env) // 4)` → Moving Average auf `rms_env` → `autocorr[0]` repräsentiert nur rhythmische Varianz → Normierung stabil bei LF-Spektraländerungen.
+  - 50 ms MA: Hum-Periode 10–20 ms → stark gedämpft; musikalische Groove-Perioden 120–500 ms → unverändert.
+  - Robustheit bei kurzen Clips: `_sw = min(5, len(rms_env) // 4)` → keine Überglättung bei < 20 Frames; falls `_sw < 2`, kein Smoothing.
+
+**`tests/unit/test_per_phase_musical_goals_gate.py`**
+
+- `TestGrooveProxyLFRobustness` (4 neue Tests, test_74–test_77):
+  - `test_74`: Groove-Delta zwischen reinem Click-Track mit/ohne 50 Hz Hum < 0.10 (nach Fix).
+  - `test_75`: Periodische 500ms-Bursts haben höheren Groove-Score als aperiodische Bursts (keine 500ms-Periodik → niedrigeres autocorr[50]).
+  - `test_76`: Kein NaN/Inf bei kurzem Audio (< 0.2 s) → 12-Frame rms_env.
+  - `test_77`: Groove in [0, 1] für 8 verschiedene Testsignale (Silence, DC, Sinus, Hum, Rauschen, Rechteck, Leises Rauschen).
+
+### Teststand
+
+- 98 Tests, 98/98 bestanden (+4 gegenüber v9.10.89).
+
+---
+
+## Version 9.10.89 — PMGG phase_20/phase_23 Exclusions + phase_29 analog timbre (30. Mär 2026)
+
+### Zusammenfassung
+
+Tiefenanalyse der PMGG-Konfiguration hat drei Lücken identifiziert: `phase_20` (SGMSE+ Reverb-Reduction) und `phase_23` (AudioSR Spectral Inpainting) hatten keine Exclusions trotz nachgewiesener mechanistischer Identität zu bereits geschützten Phasen. `phase_29` (DeepFilterNet) erhält die material-adaptive `timbre_authentizitaet`-Extension für Analog-Material.
+
+### Änderungen
+
+**`backend/core/per_phase_musical_goals_gate.py`**
+
+- `phase_20` (SGMSE+ Reverb-Reduction) zu `PHASE_GOAL_EXCLUSIONS` hinzugefügt: `{brillanz, waerme, authentizitaet, transparenz, natuerlichkeit}`. Identische Dereverb-Mechanik wie `phase_49` (0.5502 P1-Regression beobachtet) + SGMSE+-Spektral-Deconvolution → MFCC-Glattheit-Störung (natuerlichkeit).
+- `phase_23` (AudioSR Spectral Inpainting) zu `PHASE_GOAL_EXCLUSIONS` hinzugefügt: `{natuerlichkeit, brillanz, authentizitaet, artikulation}`. Identische Synthesize-new-content-Mechanik wie `phase_24` (Dropout Repair) — kein valides Transient-Reference für inpainted Regionen.
+- Material-adaptive Extension für `phase_29`: analog-Materialien (vinyl/shellac/tape/reel_tape/cassette) → `timbre_authentizitaet` zur Exclusionsmenge hinzugefügt. DeepFilterNet HF-Removal hat identische Centroid-CV-Disturbance-Mechanik wie `phase_03` (bereits seit 2026-03-30 dort geschützt).
+
+**`tests/unit/test_per_phase_musical_goals_gate.py`**
+
+- 6 neue Tests `test_53a–test_53f`: Verifizieren alle 5 phase_20-Exclusions + Superset-Prüfung.
+- 5 neue Tests `test_54a–test_54e`: Verifizieren alle 4 phase_23-Exclusions + Superset-Prüfung.
+- 1 neuer Test `test_55`: Verifiziert phase_29 material-adaptive timbre exclusion für tape via wrap_phase-Integration.
+
+---
+
+## Version 9.10.88 — PMGG phase_02 Exclusions erweitert (30. Mär 2026)
+
+### Zusammenfassung
+
+`PHASE_GOAL_EXCLUSIONS["phase_02"]` um drei Metriken erweitert, die durch Kammfilter-Notches bei 50/100/150/200 Hz false PMGG-Regressions erzeugten und den catastrophic-Pfad auslösten.
+
+### Änderungen
+
+**`backend/core/per_phase_musical_goals_gate.py`**
+
+- `grove` (P3) zu phase_02-Exclusions hinzugefügt: Real-Run-Stagnation Δ=0.000000 über alle Retries beweist LF-Filter-Unabhängigkeit; GrooveMetric Onset/DTW-Proxy sensitiv gegenüber LF-Energieänderungen 50–200 Hz (Measurement-Artifact, kein echter Groove-Verlust).
+- `tonal_center` (P2) zu phase_02-Exclusions hinzugefügt: Kammfilter-Notches bei G1/G2/G3/G4 (49/98/196/392 Hz) beeinflussen G-Pitch-Chroma-Bin im kurzen 2-s-PMGG-Fenster → false P2-Regression ohne echten Key-Shift. Export-Gate erzwingt tonal_center ≥ 0.95 global.
+- `timbre_authentizitaet` (P2) zu phase_02-Exclusions hinzugefügt: Notches bei 50/100/150 Hz stören direkt MFCC-Pearson und Spectral-Centroid-Korrelations-Proxies → false P2-Regression trotz keiner wahrnehmbaren Timbre-Degradation.
+- Root-Cause: Kombination aus grove P3 0.1526 Regression + P2 false trigger setzte `_worst_prio=2` → catastrophic-Schwelle 0.08 überschritten → Emergency-Retries auf stagnierende DSP-Phase.
+
+**`tests/unit/test_per_phase_musical_goals_gate.py`**
+
+- `test_52b_phase02_excludes_groove`: Verifiziert Exclusion mit Root-Cause-Dokumentation.
+- `test_52c_phase02_excludes_tonal_center`: Verifiziert P2-Exclusion Chroma/G-Notch-Rationale.
+- `test_52d_phase02_excludes_timbre_authentizitaet`: Verifiziert P2-Exclusion MFCC-Notch-Rationale.
+- `test_52e_phase02_exclusion_superset_v9_10_88`: Prüft alle 7 phase_02-Exclusions als Superset.
+
+---
+
+## Version 9.10.87 — Dual-SR-Vertrag + 48-kHz-Fail-fast (30. Mär 2026)
+
+### Zusammenfassung
+
+Die interne Sample-Rate-Vertragslogik wurde normativ und im Code gehärtet: Analyse bleibt auf nativer Import-SR, Verarbeitung läuft strikt auf 48 kHz, Nicht-48k-Processing ist bei Resampling-Fehlern verboten (fail-fast).
+
+### Änderungen
+
+**`backend/core/unified_restorer_v3.py`**
+
+- Dual-SR-Routing explizit umgesetzt: `analysis_audio/analysis_sample_rate` (native SR) getrennt von `audio/sample_rate` im 48-kHz-Verarbeitungspfad.
+- Fail-fast statt Soft-Warnung: Wenn `import_sr -> 48000` nicht möglich ist, wird mit strukturierter RuntimeError-Meldung abgebrochen.
+- Native-SR-Analyse für Kernmodule verdrahtet: `RestorabilityEstimator`, `MediumClassifier`, `EraClassifier`, `GenreClassifier`, `DefectScanner` laufen auf `analysis_sr`.
+
+**`cli/aurik_cli.py`**
+
+- `_resample_to_48k()` bricht bei Resampling-Fehlern nun hart mit RuntimeError ab (kein stilles Weiterarbeiten mit Original-SR).
+
+**`.github/copilot-instructions.md`**
+
+- `instructions_version` auf `3.8` erhöht.
+- Performance-Budget um harte Dual-SR/Fast-Fail-Invarianten erweitert (Dual-SR-Routing, Resampling-Scope, Verbot von Nicht-48k-Processing).
+
+**`.github/specs/02_pipeline_architecture.md`**
+
+- Neuer Abschnitt §2.2.0 (Dual-SR, RELEASE_MUST) ergänzt.
+- Kanonischen Pipeline-Flow um expliziten `Dual-SR-Split` erweitert.
+
+**`.github/specs/04_dsp_standards.md`**
+
+- Neuer Abschnitt §4.1a (Sample-Rate-Vertrag, RELEASE_MUST) ergänzt.
+
+**Tests**
+
+- `tests/unit/test_unified_restorer_v3.py`:
+  - `test_40b_fail_fast_if_48k_norm_not_available`
+  - `test_40c_analysis_modules_keep_native_import_sr`
+
+### Ergebnis
+
+Gezielte Verifikation der neuen Tests: **2 passed**.
+
+## Version 9.10.86 — §2.31b PMGG Vollintegration + material-adaptive Exclusions + copilot-instructions Konsolidierung (29. Mär 2026)
+
+### Zusammenfassung
+
+Zwei normative PMGG-Ergänzungen (§2.31b F + G) implementiert; copilot-instructions.md und Spec 02
+vollständig auf aktuellen Codestand synchronisiert. §9.7.9 in Spec 02 neu dokumentiert.
+
+### Änderungen
+
+**`backend/core/per_phase_musical_goals_gate.py`** — 2 Ergänzungen:
+
+- **§2.31b F — Dynamischer Catastrophic-Threshold** (`_run_with_retry`): Fest 0.20 → `max(0.08, 4.0 × adaptive_threshold)`. GOOD-Material (0.020) → 0.08: Emergency-Retries greifen früher zum Schutz des Qualitätskopfraums. POOR-Material (0.055) → 0.22 (entspricht bisherigem Wert). Nur für P1/P2-Regressionen.
+- **§2.31b G — Material-adaptive PHASE_GOAL_EXCLUSIONS** (`wrap_phase`): Für `cd_digital`/`dat` werden bei `phase_03` und `phase_29` die Rausch-induzierten Ausschlüsse (`brillanz`, `authentizitaet`, `transparenz`, `tonal_center`) auf `{"natuerlichkeit", "artikulation"}` reduziert. HF-Pseudo-Regressions-Ursachen existieren auf digitalen Quellen nicht; CREPE-Load-State und transient-shape mismatch bleiben als stabile Ausschlüsse.
+
+**`.github/copilot-instructions.md`** — 4 normative Synchronisierungen:
+
+- **§2.31a `family_scalars`**: 2 fehlende Familien ergänzt → 8 Familien: `denoise`, `reverb`, `reconstruction`, `dynamics_eq`, `transient`, `vocal`, `instrument`, `general`.
+- **§2.31a Kalibrier-Berechnungsblöcke**: Kanonische Reihenfolge (1–9, inkl. PANNs, Schlager, Diversity-Penalty, SOFT_SATURATION-Guard, Modus-Post-Skalierung) dokumentiert — bisher nur im Code vorhanden.
+- **§2.31b neu**: Alle 7 PMGG-Schnittstellen mit Song-Kalibrierungs-Integration normativ spezifiziert (Threshold-Feinjustage, Retry-Leiter, Stagnation, P3-Tier, FeedbackChain, Catastrophic-Threshold, Material-Exclusions). `[RELEASE_MUST]` für F und G.
+- **§2.29b PHASE_GOAL_EXCLUSIONS**: Von 4 unvollständigen Einträgen auf vollständige kanonische Liste (12+ Phasen mit korrekten Exclusion-Sets) aktualisiert. §2.31b Material-adaptive Relaxation als normativer Hinweis ergänzt.
+- **PMGG Priority-Aware Retries**: Section um §2.31b-Ergänzungen (Catastrophic-Threshold-Formel, Stagnation-Delta, P3-tier, sanfte Leiter) erweitert.
+
+**`.github/specs/02_pipeline_architecture.md`** — 3 Ergänzungen:
+
+- **§9.7.6 PMGG-Codeblock**: `_RETRY_STRENGTHS`-Kommentar um §2.31b-Parameter erweitert (sanfte Leiter, Catastrophic-Threshold-Formel, P3-tier, Stagnation-Delta).
+- **§9.7.7 PHASE_GOAL_EXCLUSIONS**: Vollständige kanonische Liste (13 Phasen) ersetzt die 3-Einträge-Version. Root-cause-Kommentare für jede Phase. §2.31b material-adaptive Relaxation dokumentiert.
+- **§9.7.9 neu**: Material-adaptive PHASE_GOAL_EXCLUSIONS vollständig spezifiziert inkl. Implementierungsbeispiel.
+
+### Zusammenfassung
+
+Fünf gezielte Fidelity- und Regressions-Schutz-Verbesserungen, die das §2.31a Song-Kalibrierungsprofil vollständig mit PMGG und FeedbackChain verzahnen.
+
+### Änderungen
+
+**`backend/core/per_phase_musical_goals_gate.py`** — 4 Verbesserungen:
+
+- **§2.31a Kalibrierungs-adaptiver PMGG-Threshold** (`wrap_phase`): `global_scalar < 0.85` → Threshold ×0.85 (engerer Schutz); `global_scalar > 1.20` → Threshold ×1.15 (weniger Retry-Zyklen auf stark beschädigtem Material). Begrenzt [0.015, 0.070].
+- **§2.31a Sanftere Retry-Leiter** (`_run_with_retry`): Wenn `initial_strength < 0.90`, Ankerpunkte `[0.80, 0.65, 0.50, 0.35, 0.20]` statt `[0.65, …]`. Verhindert Doppelreduktion bei vorkalibrierten Phasen.
+- **§2.31a Proportionale Stagnation-Schwelle** (`_run_with_retry`): Fest 0.005 → `max(0.002, threshold × 0.15)`. GOOD (0.020): geduldiger (0.003); POOR (0.055): bricht früher ab (0.008).
+- **§2.31a P3-Retry-Feinjustage nach restorability_tier** (`_run_with_retry`): `restorability_tier="good"` → P3 2→3 Retries (mehr Chancen für Groove/MicroDynamics); `"poor"` → P3 2→1 (keine Zeit verschwenden bei unabwendbaren Regressionen).
+
+**`backend/core/unified_restorer_v3.py`** — 1 Verbesserung:
+
+- **§2.31a FeedbackChain `target_score` Song-kalibriert** (`_fc_compute_target_score`): `restorability_score` justiert FC-Ziel-Score ±0.035 im Bereich [0.60, 0.85].
+
+---
+
+## Version 9.10.84 — Spec-Konsistenz-Patch (Tiefenanalyse-Korrekturen) (29. Mär 2026)
+
+### Zusammenfassung
+
+Alle Inkonsistenzen aus der Tiefenanalyse der 8 Spec-Dateien und `copilot-instructions.md` behoben. Keine Code-Änderungen — ausschließlich normative Spec-Korrekturen.
+
+### Spec-Korrekturen
+
+- **Spec 06 §7.3** (PANNs-Schwellen): Guitar/Brass/Piano-Schwellen `0.60 → 0.50` (Invariante einheitlich; `0.60` blockierte Ensemble-Aufnahmen — bereits in v9.10.83 korrigiert, jetzt als CHANGELOG nachgetragen)
+- **Spec 07 §9** (Performance-Budget): Tabelle korrigiert — `4s / 240s / 120s / 60s` aus copilot-instructions.md kanonisch gemacht; veraltete niedrigere Werte entfernt
+- **Spec 06 §7.1** (Phasenliste): `phase_57_lyrics_guided_enhancement.py` als Pflicht-Phase (§2.36) eingetragen
+- **Spec 06 §7.7** (neu): PMGG Inference-Caching-Tabelle (§2.29a) — ML-deterministische Phasenliste + Wet/Dry-Reblend-Referenzimplementierung — jetzt normativ in Spec 06
+- **Spec 07 §8.1.2** (AMRB Seeding-Invariante): `_sid_offset(sid)` via MD5 als RELEASE_MUST dokumentiert; `hash(sid)` explizit verboten
+- **Spec 03** (Modultabelle): `CausalDefectReasoner` 34→35 Kausal-Ursachen; neue Module `SongCalibrationProfile`, `EraAuthenticPerceptualCompletion`, `LyricsGuidedEnhancement` eingetragen
+- **Spec 02 §2.2.2** (neu): `SCHLAGER_RESTORATION_PROFILE` formal definiert — GP-Priors, forced_phases, family_scalars_override, Invariante
+- **Spec 02 §2.38b** (neu): Formale Deferred-Phases vs. Phase-Skip-Abgrenzung — Invariante: RT-Limit → immer Defer, nie Skip; Endlosschleifen-Prävention (3 Versuche → non_recoverable)
+- **copilot-instructions.md**: UV3-Kernreihenfolge: `SongCalibrationProfile` + `GermanSchlagerClassifier` ergänzt; `CausalDefectReasoner` 34→35; Phasen 01–56 → 01–57
+
+### Betroffene Dateien
+
+- `.github/specs/02_pipeline_architecture.md`
+- `.github/specs/03_cognitive_modules.md`
+- `.github/specs/06_phases_system.md`
+- `.github/specs/07_quality_and_tests.md`
+- `.github/copilot-instructions.md`
+
+---
+
 ## Version 9.10.77g — §3.9 Stabilitäts-Invarianten (Crash/OOM/Deadlock-Härtung) (28. Mär 2026)
 
 ### Zusammenfassung

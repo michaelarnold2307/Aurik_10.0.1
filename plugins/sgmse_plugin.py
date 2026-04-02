@@ -47,12 +47,16 @@ logger = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).parent.parent
 _TS_PATH = _ROOT / "models" / "sgmse_plus" / "sgmse_plus.ts"
+_CKPT_CANDIDATES = (
+    _ROOT / "models" / "sgmse_plus" / "sgmse_plus_src_1.ckpt",
+    _ROOT / "models" / "sgmse_plus" / "sgmse_wsj0_reverb.ckpt",
+)
 
 # Verarbeitungs-Konstanten (48 kHz)
 _SR: int = 48_000
-_N_FFT: int = 512  # 10.7 ms @ 48 kHz (typisch für SGMSE+)
-_HOP: int = 128  # 2.7 ms
-_WIN: int = 512
+_DEFAULT_N_FFT: int = 510  # Match the bundled SGMSE checkpoints (256 frequency bins)
+_DEFAULT_HOP: int = 128
+_DEFAULT_WIN: int = 510
 
 _lock_plus = threading.Lock()
 _instance_plus: SGMSEPlusPlugin | None = None
@@ -99,8 +103,55 @@ class SGMSEPlusPlugin:
     def __init__(self) -> None:
         self._session: Any = None
         self._ts_model: Any = None
+        self._eager_model: Any = None
+        self._eager_backbone: str = ""
+        self._num_frames: int = 256
         self._model_loaded: bool = False
+        self._n_fft: int = _DEFAULT_N_FFT
+        self._hop: int = _DEFAULT_HOP
+        self._win: int = _DEFAULT_WIN
+        self._load_model_geometry()
         self._try_load()
+
+    def _load_model_geometry(self) -> None:
+        """Load STFT geometry from bundled SGMSE checkpoint metadata.
+
+        The exported TorchScript backbone is traced on tensors with 256 frequency
+        bins. If the plugin uses a different frontend, the U-Net skip-connections
+        inside NCSNPP fail deterministically with tensor-size mismatches.
+        """
+        try:
+            import sys
+
+            import torch
+
+            sys.path.insert(0, str((_ROOT / "models" / "sgmse_plus").resolve()))
+            for ckpt_path in _CKPT_CANDIDATES:
+                if not ckpt_path.exists():
+                    continue
+                ckpt = torch.load(ckpt_path, map_location="cpu")
+                hyper = ckpt.get("hyper_parameters")
+                if not isinstance(hyper, dict):
+                    continue
+                n_fft = int(hyper.get("n_fft") or self._n_fft)
+                hop = int(hyper.get("hop_length") or self._hop)
+                if n_fft <= 0 or hop <= 0:
+                    continue
+                self._n_fft = n_fft
+                self._hop = hop
+                self._win = n_fft
+                self._num_frames = int(hyper.get("num_frames") or self._num_frames)
+                logger.info(
+                    "SGMSE+ geometry from %s: n_fft=%d hop=%d win=%d num_frames=%d",
+                    ckpt_path.name,
+                    self._n_fft,
+                    self._hop,
+                    self._win,
+                    self._num_frames,
+                )
+                return
+        except Exception as exc:
+            logger.debug("SGMSE+ checkpoint geometry unavailable (%s) — using defaults", exc)
 
     def _try_load(self) -> None:
         """Lädt SGMSE+ TorchScript; sonst WPE-Fallback."""
@@ -145,17 +196,58 @@ class SGMSEPlusPlugin:
                 except Exception:
                     pass
 
+        # Recovery path: keep ML available via checkpoint-backed eager model.
+        if self._try_load_from_checkpoint():
+            self._model_loaded = True
+            return
+
         logger.info(
             "SGMSE+ Modell nicht verfügbar (TorchScript: %s) — WPE-DSP-Fallback aktiv.",
             _TS_PATH,
         )
+
+    def _try_load_from_checkpoint(self) -> bool:
+        """Load SGMSE backbone directly from checkpoint as ML recovery path."""
+        try:
+            import sys
+
+            import torch
+
+            sys.path.insert(0, str((_ROOT / "models" / "sgmse_plus").resolve()))
+            from sgmse.backbones import BackboneRegistry  # type: ignore
+
+            for ckpt_path in _CKPT_CANDIDATES:
+                if not ckpt_path.exists():
+                    continue
+                ckpt = torch.load(ckpt_path, map_location="cpu")
+                hyper = ckpt.get("hyper_parameters")
+                state = ckpt.get("state_dict")
+                if not isinstance(hyper, dict) or not isinstance(state, dict):
+                    continue
+                backbone_name = str(hyper.get("backbone") or "").strip()
+                if not backbone_name:
+                    continue
+                dnn_cls = BackboneRegistry.get_by_name(backbone_name)
+                dnn = dnn_cls(**hyper)
+                dnn_state = {k[4:]: v for k, v in state.items() if k.startswith("dnn.")}
+                if not dnn_state:
+                    continue
+                dnn.load_state_dict(dnn_state, strict=False)
+                dnn.eval()
+                self._eager_model = dnn
+                self._eager_backbone = backbone_name
+                logger.info("✅ SGMSE+ Checkpoint-ML geladen (%s, backbone=%s)", ckpt_path.name, backbone_name)
+                return True
+        except Exception as exc:
+            logger.warning("SGMSE+ Checkpoint-ML nicht ladbar: %s", exc)
+        return False
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     # Adaptive chunk size: 10 s when RAM is tight (< 6 GB free), else 30 s.
-    # 10 s @ 48 kHz = 480k samples → STFT [1,2,257,3750] → ~15 MB + Torch
+    # 10 s @ 48 kHz = 480k samples → STFT [1,2,256,3751] with bundled model geometry
     # peak ~300–400 MB.  30 s → ~1 GB peak.  Scales to RAM pressure.
     _MAX_CHUNK_SAMPLES_LARGE: int = 30 * _SR  # 30 s — plenty of RAM
     _MAX_CHUNK_SAMPLES_SMALL: int = 10 * _SR  # 10 s — RAM-tight mode
@@ -384,8 +476,8 @@ class SGMSEPlusPlugin:
         _, _, Z = scipy_stft(
             mono.astype(np.float64),
             fs=_SR,
-            nperseg=_WIN,
-            noverlap=_WIN - _HOP,
+            nperseg=self._win,
+            noverlap=self._win - self._hop,
             window="hann",
         )
         return Z.astype(np.complex64), n_orig
@@ -397,8 +489,8 @@ class SGMSEPlusPlugin:
         _, x = scipy_istft(
             Z.astype(np.complex128),
             fs=_SR,
-            nperseg=_WIN,
-            noverlap=_WIN - _HOP,
+            nperseg=self._win,
+            noverlap=self._win - self._hop,
             window="hann",
         )
         x = x.astype(np.float32)
@@ -461,7 +553,8 @@ class SGMSEPlusPlugin:
         Time-dimension is zero-padded to a multiple of _UNET_ALIGN to prevent
         encoder/decoder skip-connection shape mismatches in NCSNPP.
         """
-        assert self._ts_model is not None
+        if self._ts_model is None and self._eager_model is None:
+            return self._wpe_fallback(mono, _SR)
         try:
             import gc
 
@@ -472,39 +565,55 @@ class SGMSEPlusPlugin:
             x_t = np.stack([Z.real, Z.imag], axis=0)[np.newaxis].astype(np.float32)
             del Z  # free complex spectrogram immediately (~44 MB per 30s)
 
-            # ── Pad frequency dimension to multiple of _UNET_ALIGN ──
-            # NCSNPP U-Net skip-connections also require aligned frequency bins.
-            # Without this, audio lengths that produce F=351 bins (instead of 350)
-            # trigger "Sizes of tensors must match" RuntimeError in torch.cat.
             F_orig = x_t.shape[2]
-            F_pad = (self._UNET_ALIGN - F_orig % self._UNET_ALIGN) % self._UNET_ALIGN
-            if F_pad > 0:
-                x_t = np.pad(x_t, ((0, 0), (0, 0), (0, F_pad), (0, 0)), mode="constant")
-
-            # ── Pad time dimension to multiple of _UNET_ALIGN ──
             T_orig = x_t.shape[3]
-            T_pad = (self._UNET_ALIGN - T_orig % self._UNET_ALIGN) % self._UNET_ALIGN
-            if T_pad > 0:
-                x_t = np.pad(x_t, ((0, 0), (0, 0), (0, 0), (0, T_pad)), mode="constant")
+            target_frames = max(32, int(self._num_frames))
+            step = max(16, target_frames // 2)
+
+            # Process with model-native frame windows and overlap-add in STFT domain.
+            out_acc = np.zeros((1, 2, F_orig, T_orig), dtype=np.float32)
+            w_acc = np.zeros((1, 1, 1, T_orig), dtype=np.float32)
+            starts = list(range(0, max(1, T_orig), step))
+            if starts[-1] != max(0, T_orig - target_frames):
+                starts.append(max(0, T_orig - target_frames))
 
             with torch.no_grad():
-                xt_t = torch.from_numpy(x_t)
-                # y = x_t for SGMSE+ (noisy input = conditioning) — share memory
-                y_t = xt_t  # no copy — same tensor, saves ~88 MB
                 t_t = torch.tensor([float(sigma)], dtype=torch.float32)
-                out_t = self._ts_model(xt_t, y_t, t_t)
+                for s in starts:
+                    e = min(s + target_frames, T_orig)
+                    seg = x_t[:, :, :, s:e]
+                    seg_len = seg.shape[3]
+                    if seg_len < target_frames:
+                        seg = np.pad(seg, ((0, 0), (0, 0), (0, 0), (0, target_frames - seg_len)), mode="constant")
 
-            del xt_t, y_t, t_t, x_t  # free torch tensors + numpy backing
-            out_arr = out_t.detach().cpu().numpy().astype(np.float32)
-            del out_t  # free torch output tensor
+                    xt_t = torch.from_numpy(seg)
+                    y_t = xt_t
+                    if self._ts_model is not None:
+                        out_t = self._ts_model(xt_t, y_t, t_t)
+                    else:
+                        if self._eager_backbone == "ncsnpp_v2":
+                            out_t = self._eager_model(xt_t, y_t, t_t)
+                        else:
+                            x_complex = torch.complex(xt_t[:, 0], xt_t[:, 1])
+                            y_complex = torch.complex(y_t[:, 0], y_t[:, 1])
+                            dnn_input = torch.stack([x_complex, y_complex], dim=1)
+                            out_complex = -self._eager_model(dnn_input, t_t)
+                            out_t = torch.stack([out_complex.real, out_complex.imag], dim=1)
 
-            # ── Remove time padding ──
-            if T_pad > 0:
-                out_arr = out_arr[:, :, :, :T_orig]
+                    out_seg = out_t.detach().cpu().numpy().astype(np.float32)
+                    out_seg = out_seg[:, :, :F_orig, :seg_len]
+                    if seg_len > 1:
+                        w = np.hanning(seg_len).astype(np.float32)
+                        if float(np.sum(w)) <= 1e-6:
+                            w = np.ones(seg_len, dtype=np.float32)
+                    else:
+                        w = np.ones(1, dtype=np.float32)
+                    out_acc[:, :, :, s:e] += out_seg * w[np.newaxis, np.newaxis, np.newaxis, :]
+                    w_acc[:, :, :, s:e] += w[np.newaxis, np.newaxis, np.newaxis, :]
 
-            # ── Remove frequency padding ──
-            if F_pad > 0:
-                out_arr = out_arr[:, :, :F_orig, :]
+            out_arr = out_acc / np.maximum(w_acc, 1e-6)
+
+            del x_t
 
             out_real = out_arr[0, 0]
             out_imag = out_arr[0, 1] if out_arr.shape[1] > 1 else np.zeros_like(out_real)

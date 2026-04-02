@@ -49,8 +49,10 @@ def _resample_to_48k(audio: np.ndarray, sr: int) -> np.ndarray:
         n_out = int(round(audio.shape[0] * _TARGET_SR / sr))
         return _sig.resample_poly(audio, _TARGET_SR, sr, axis=0).astype(np.float32)
     except Exception as exc:
-        logging.getLogger("aurik_cli").warning("Resampling fehlgeschlagen: %s — verwende Originaldaten", exc)
-        return audio
+        raise RuntimeError(
+            "Interne 48-kHz-Normierung fehlgeschlagen. Ursache: Resampling konnte nicht ausgefuehrt werden. "
+            "Loesung: scipy/librosa im Bundle sicherstellen oder Eingabedatei vorab auf 48 kHz konvertieren."
+        ) from exc
 
 
 def process_audio(input_path: str, output_path: str, verbose: bool = True, mode: str = "Restoration") -> object:
@@ -77,7 +79,11 @@ def process_audio(input_path: str, output_path: str, verbose: bool = True, mode:
         logger.info("Datei: %s  (%.2f MB, %d Hz, %d Kanäle)", input_path, file_mb, sr_raw, audio_raw.shape[1])
 
     # ── 2. Auf 48 kHz resamplen (Aurik-kanonische SR) ─────────────────────────
-    audio_48k = _resample_to_48k(audio_raw, sr_raw)
+    try:
+        audio_48k = _resample_to_48k(audio_raw, sr_raw)
+    except RuntimeError as exc:
+        logger.error("Fehler bei der SR-Normierung: %s", exc)
+        sys.exit(6)
 
     if verbose:
         logger.info("🔧 Starte AurikDenker — Modus: %s", mode)
@@ -85,7 +91,8 @@ def process_audio(input_path: str, output_path: str, verbose: bool = True, mode:
     # ── 3. Kanonischer Einstiegspunkt: AurikDenker.denke() (Spec §2.2) ────────
     try:
         denker = get_aurik_denker()
-        result = denker.denke(audio_48k, sr=_TARGET_SR, mode=mode)
+        # Quality-first policy: prefer full-quality execution over RT budget cuts.
+        result = denker.denke(audio_48k, sr=_TARGET_SR, mode=mode, no_rt_limit=True, input_path=input_path)
     except Exception as exc:
         logger.error("Fehler in der Restaurierungspipeline: %s", exc)
         sys.exit(4)

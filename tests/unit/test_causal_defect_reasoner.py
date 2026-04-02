@@ -57,7 +57,7 @@ class TestImportAndConstants:
         assert CausalDefectReasoner is not None
 
     def test_02_causes_list_length(self):
-        assert len(CAUSES) == 34
+        assert len(CAUSES) == 48
 
     def test_03_causes_contains_soft_saturation(self):
         assert "soft_saturation" in CAUSES

@@ -216,7 +216,32 @@ class EraFeatureExtractor:
         era_features.attack_time_ms = (
             base_features.attack_time_mean * 1000 if base_features.attack_time_mean > 0 else 10.0
         )
-        era_features.release_time_ms = 100.0  # Placeholder
+        # Release time — estimated from envelope decay (Giannoulis et al. 2012)
+        try:
+            env_diff = np.diff(envelope_smooth)
+            release_mask = env_diff < 0  # falling segments
+            if np.any(release_mask):
+                # Measure average duration of continuous falling segments
+                release_runs = []
+                run_len = 0
+                for val in release_mask:
+                    if val:
+                        run_len += 1
+                    elif run_len > 0:
+                        release_runs.append(run_len)
+                        run_len = 0
+                if run_len > 0:
+                    release_runs.append(run_len)
+                if release_runs:
+                    samples_per_step = 1  # envelope_smooth has same sr
+                    median_release_samples = float(np.median(release_runs)) * samples_per_step
+                    era_features.release_time_ms = (median_release_samples / sr) * 1000.0
+                else:
+                    era_features.release_time_ms = 100.0
+            else:
+                era_features.release_time_ms = 100.0
+        except Exception:
+            era_features.release_time_ms = 100.0
 
         return base_features, era_features
 

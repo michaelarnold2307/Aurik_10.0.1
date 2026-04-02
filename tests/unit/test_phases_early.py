@@ -202,6 +202,49 @@ class TestPhase03Denoise:
         result = self.phase.process(mono, material_type="vinyl")
         _assert_phase_result(result, mono)
 
+    def test_quality_mode_ignores_lightweight_dsp_for_ml_path(self, mono, monkeypatch):
+        """Quality-first: quality mode must not force DSP-only via lightweight hint."""
+        import backend.core.phases.phase_03_denoise as phase03_mod
+
+        class _DummyRM:
+            @staticmethod
+            def should_use_lightweight_mode():
+                return True
+
+            @staticmethod
+            def get_cpu_usage():
+                return 95.0
+
+            @staticmethod
+            def get_memory_usage():
+                return 92.0
+
+        class _DummyMLResult:
+            def __init__(self, audio):
+                self.audio = audio
+                self.omlsa_applied = True
+                self.resemble_applied = False
+                self.quality_estimate = 0.8
+                self.processing_time = 0.01
+                self.strategy_used = "hybrid"
+                self.metadata = {}
+
+        class _DummyDenoiser:
+            def __init__(self, config):
+                self.config = config
+
+            def denoise(self, audio, sample_rate=48000):
+                return _DummyMLResult(np.asarray(audio, dtype=np.float32))
+
+        monkeypatch.setattr(phase03_mod, "RESOURCE_MANAGER_AVAILABLE", True)
+        monkeypatch.setattr(phase03_mod, "adaptive_resource_manager", _DummyRM)
+        monkeypatch.setattr(phase03_mod, "ML_HYBRID_AVAILABLE", True)
+        monkeypatch.setattr(phase03_mod, "HybridMLDenoiser", _DummyDenoiser)
+
+        result = self.phase.process(mono, material_type="tape", quality_mode="quality", sample_rate=48000)
+        _assert_phase_result(result, mono)
+        assert bool(result.metadata.get("ml_hybrid")) is True
+
 
 # ---------------------------------------------------------------------------
 # Phase 04: EQ Correction

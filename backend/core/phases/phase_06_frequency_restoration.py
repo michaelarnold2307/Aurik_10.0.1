@@ -762,6 +762,7 @@ class FrequencyRestorationPhase(PhaseInterface):
                 extension_end_bin,
                 params["sbr_ratio"],
                 params["restoration_strength"],
+                hop=hop_length,
             )
 
         # Harmonic Extension: Generate new harmonics via LPC
@@ -824,11 +825,15 @@ class FrequencyRestorationPhase(PhaseInterface):
         extension_end_bin: int,
         sbr_ratio: float,
         strength: float,
+        hop: int = 512,
     ) -> np.ndarray:
         """
-        Spectral Band Replication (SBR).
+        Spectral Band Replication (SBR) with phase-vocoder-consistent phase.
 
-        Transpose existing low-band harmonics to high-band.
+        Transposes existing low-band harmonics to the high-band target range.
+        Phase is derived from instantaneous-frequency integration (Laroche &
+        Dolson 1999) instead of the original random HF phase to eliminate
+        metallic ringing artefacts in the synthesised extension band.
         """
         # Source band: below rolloff (e.g., 5-10 kHz for shellac)
         source_start = max(0, rolloff_bin // 2)
@@ -850,9 +855,18 @@ class FrequencyRestorationPhase(PhaseInterface):
             [np.interp(source_indices, frame_indices, source_abs[:, t]) for t in range(source_abs.shape[1])]
         ).T  # (target_width, T)
 
-        # Apply to target band with strength scaling
-        target_phase = np.exp(1j * np.angle(Zxx[target_start:target_end, :]))
-        Zxx[target_start:target_end, :] += source_interp * sbr_ratio * strength * target_phase
+        # Apply to target band with phase-vocoder-consistent phase (J — PVT).
+        # For bandwidth-limited sources the original HF STFT has near-zero
+        # amplitude → its phase is essentially noise → ringing in extended band.
+        # PVT derives phase from source IF scaled by transposition ratio.
+        pvt_phase = self._sbr_phase_vocoder_transposition(
+            Zxx[source_start:source_end, :],
+            f[source_start:source_end],
+            f[target_start:target_end],
+            hop=hop,
+            sr=self.sample_rate,
+        )
+        Zxx[target_start:target_end, :] += source_interp * sbr_ratio * strength * pvt_phase
 
         return Zxx
 
@@ -946,6 +960,96 @@ class FrequencyRestorationPhase(PhaseInterface):
         Zxx[target_start:target_end, :] += harmonic_pred * blend * target_phase
 
         return Zxx
+
+    @staticmethod
+    def _sbr_phase_vocoder_transposition(
+        Zxx_source: np.ndarray,
+        source_freqs: np.ndarray,
+        target_freqs: np.ndarray,
+        hop: int,
+        sr: int,
+    ) -> np.ndarray:
+        """Phase-vocoder-consistent phase phasors for the SBR target band.
+
+        Computes the instantaneous frequency (IF) per source bin via the
+        canonical phase-difference estimator, interpolates IF across the
+        source→target frequency mapping, and integrates to obtain temporally
+        coherent phase for the transposed band.
+
+        Motivation: using the existing random HF phase of bandwidth-limited
+        recordings (near-zero content → essentially noise) creates frame-to-
+        frame phase discontinuities in the synthesised extension, manifesting
+        as metallic ringing/phasiness.  IF-derived phase eliminates these
+        discontinuities and produces a cleaner, more natural air band.
+
+        Scientific basis:
+            Laroche & Dolson (1999). "Improved Phase Vocoder Time-Scale
+            Modification of Audio." IEEE Trans. Speech Audio Process. 7(3),
+            323\u2013332.
+            Dietz et al. (2002). "Spectral Band Replication, a Novel
+            Approach in Audio Coding." Proc. AES 112th Conv.
+
+        Args:
+            Zxx_source:   Complex source-band STFT slice, (n_src, n_frames).
+            source_freqs: Frequency axis for source bins (Hz), (n_src,).
+            target_freqs: Frequency axis for target bins (Hz), (n_tgt,).
+            hop:          STFT hop size (samples).
+            sr:           Sample rate (samples/s).
+
+        Returns:
+            Unit-magnitude complex phasors for the target band,
+            shape (n_tgt, n_frames), dtype complex64.
+        """
+        n_src, n_frames = Zxx_source.shape
+        n_tgt = len(target_freqs)
+
+        if n_src < 2 or n_frames < 1:
+            return np.ones((n_tgt, n_frames), dtype=np.complex64)
+
+        # Source bin float indices for each target bin (mirrors linspace used in
+        # _apply_sbr when mapping source magnitudes to the target band).
+        src_idx = np.linspace(0.0, float(n_src - 1), n_tgt)
+        floor_idx = np.floor(src_idx).astype(int)
+        ceil_idx = np.minimum(floor_idx + 1, n_src - 1)
+        frac = (src_idx - floor_idx).astype(np.float64)  # (n_tgt,)
+
+        # Transposition ratio: f_target / f_source_mapped.
+        src_f_interp = (
+            (1.0 - frac) * source_freqs[floor_idx].astype(np.float64)
+            + frac * source_freqs[ceil_idx].astype(np.float64)
+        )
+        ratio = target_freqs.astype(np.float64) / np.maximum(src_f_interp, 1.0)  # (n_tgt,)
+
+        # --- Source instantaneous frequency (rad/sample) ---
+        omega_s = 2.0 * np.pi * source_freqs.astype(np.float64) / float(sr)  # (n_src,)
+        expected_inc = omega_s * float(hop)  # rad/frame  (n_src,)
+
+        phi_s = np.angle(Zxx_source).astype(np.float64)  # (n_src, n_frames)
+        dphi = np.empty_like(phi_s)
+        dphi[:, 0] = 0.0
+        dphi[:, 1:] = phi_s[:, 1:] - phi_s[:, :-1]
+        # Subtract nominal increment, wrap to [-π, +π], add back
+        dphi -= expected_inc[:, None]
+        dphi = (dphi + np.pi) % (2.0 * np.pi) - np.pi
+        IF_s = (expected_inc[:, None] + dphi) / float(hop)  # (n_src, n_frames)
+
+        # --- Interpolate IF to target frequency grid (no Python loop) ---
+        IF_target = (
+            (1.0 - frac[:, None]) * IF_s[floor_idx, :]
+            + frac[:, None] * IF_s[ceil_idx, :]
+        ) * ratio[:, None]  # (n_tgt, n_frames)
+
+        # --- Integrate IF → phase ---
+        phi_raw = np.cumsum(IF_target * float(hop), axis=1)  # (n_tgt, n_frames)
+        # Seed phase at frame 0: transpose source initial phase by ratio
+        phi0_src = (
+            (1.0 - frac) * phi_s[floor_idx, 0]
+            + frac * phi_s[ceil_idx, 0]
+        )  # (n_tgt,)
+        phi0_target = phi0_src * ratio  # (n_tgt,)
+        phi_target = phi_raw - phi_raw[:, :1] + phi0_target[:, None]
+
+        return np.exp(1j * phi_target).astype(np.complex64)
 
     def _apply_transient_synthesis(
         self, Zxx: np.ndarray, f: np.ndarray, rolloff_bin: int, extension_end_bin: int, strength: float

@@ -186,9 +186,17 @@ class DropoutRepairPhase(PhaseInterface):
         self._audiosr_plugin = None
         self.sample_rate = 48000  # Default, will be updated in process()
         self._ml_guard_events: list[dict[str, Any]] = []
+        self._current_material: str = "unknown"  # updated per process() call
 
     def _has_sufficient_ml_headroom(self, audio: np.ndarray, sample_rate: int) -> bool:
-        """Return True when enough physical RAM is available for AudioSR dropout repair."""
+        """Return True when enough physical RAM is available for AudioSR dropout repair.
+
+        Guard 1 — material check: AudioSR is the wrong tool for lossy-codec dropout
+        artifacts. DSP inpainting preferred; never load 6 GB model for this.
+
+        Guard 2 — channel-aware RAM check (§2.38a): stereo doubles inference working
+        memory; empirical per-minute inference buffer overhead is added.
+        """
         try:
             import gc
 
@@ -196,15 +204,49 @@ class DropoutRepairPhase(PhaseInterface):
         except Exception:
             return True
 
-        n_samples = len(audio)
-        n_channels = 1
+        # Guard 1: AudioSR nur für bekannte Analog-Quellen erlaubt (Allowlist-Prinzip).
+        # Bug-16b-Fix: Blocklist schließt "unknown" nicht aus → AudioSR auf unbekanntem
+        # Material → OOM. Allowlist verlangt positive Analog-Evidenz.
+        _ANALOG_ALLOW_AUDIOSR: frozenset[str] = frozenset({
+            "vinyl", "shellac", "tape", "reel_tape", "wax_cylinder",
+            "cassette", "lacquer_disc", "wire_recording",
+        })
+        _mat = getattr(self, "_current_material", None)
+        if _mat not in _ANALOG_ALLOW_AUDIOSR:
+            self._ml_guard_events.append(
+                {
+                    "phase_id": "phase_24_dropout_repair",
+                    "model": "AudioSR",
+                    "reason": "lossy_codec_material_dsp_preferred",
+                    "required_gb": 0.0,
+                    "available_gb": 0.0,
+                    "channels": 0,
+                    "duration_s": 0.0,
+                    "fallback": "dsp_dropout_inpainting",
+                }
+            )
+            logger.info(
+                "DropoutRepair: AudioSR skipped — material '%s' not in analog allowlist — DSP preferred",
+                _mat,
+            )
+            return False
+
+        # Guard 2: channel-aware physical RAM check (§2.38a)
+        # Aurik internal format: (N,) mono or (N, ch) stereo — first axis is always samples.
+        n_channels = int(audio.shape[1]) if (audio.ndim == 2 and 1 < audio.shape[1] <= 8) else 1
+        n_samples = int(audio.shape[0])
         duration_s = n_samples / float(max(1, sample_rate))
 
+        # Base model 6.0 GB + duration bonus, scaled by channel count.
+        # Empirical: AudioSR keeps overlapping windows in memory → ~1.5 GB/min overhead.
         required_gb = 6.0
         if duration_s >= 180.0:
             required_gb += 2.0
         elif duration_s >= 60.0:
             required_gb += 1.0
+        required_gb *= max(1, n_channels)  # stereo doubles working memory
+        required_gb += 1.5 * (duration_s / 60.0)  # inference buffer overhead per minute
+        required_gb = min(required_gb, 22.0)  # sanity cap
 
         available_gb = float(psutil.virtual_memory().available / (1024**3))
         if available_gb < required_gb + 1.5:
@@ -231,16 +273,18 @@ class DropoutRepairPhase(PhaseInterface):
                     "reason": "insufficient_physical_ram_headroom",
                     "required_gb": float(required_gb),
                     "available_gb": float(available_gb),
-                    "channels": int(n_channels),
+                    "channels": n_channels,
                     "duration_s": float(duration_s),
                     "fallback": "dsp_dropout_inpainting",
                 }
             )
             logger.warning(
-                "DropoutRepair RAM guard triggered: %.1f GB available, %.1f GB required (duration=%.1fs) - using DSP fallback",
+                "DropoutRepair RAM guard triggered: %.1f GB available, %.1f GB required "
+                "(duration=%.1fs, ch=%d) — using DSP fallback",
                 available_gb,
                 required_gb,
                 duration_s,
+                n_channels,
             )
             return False
         return True
@@ -307,6 +351,8 @@ class DropoutRepairPhase(PhaseInterface):
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
         self.sample_rate = sample_rate
+        # Store material as lowercase string value for guard comparison (handles both str and MaterialType enum)
+        self._current_material = str(getattr(material_type, "value", material_type) or "unknown").lower()
         self._ml_guard_events = []
 
         # Determine if ML should be used
@@ -695,12 +741,20 @@ class DropoutRepairPhase(PhaseInterface):
         """
         Repair long dropouts (>100ms) using AudioSR generative model.
 
+        AudioSR is a bandwidth-extension model — it must NOT be called on the
+        full audio signal (would take 12+ minutes for a 4-minute song and freeze
+        the Qt event loop via GIL starvation).  Instead, we process a short
+        context window per dropout: 500 ms before + gap + 500 ms after, capped
+        at MAX_WINDOW_S seconds.  Only the gap region is written back; the context
+        serves as conditioning.  Between dropouts we release the GIL with
+        time.sleep(0) so the Qt main thread can process events.
+
         Args:
             audio: Audio array (mono, will be modified in-place)
             dropouts: List of (start, end) tuples for long dropouts
 
         Returns:
-            True if successful, False otherwise
+            True if at least one dropout was repaired successfully, False otherwise
         """
         if not self._has_sufficient_ml_headroom(audio, self.sample_rate):
             return False
@@ -709,23 +763,94 @@ class DropoutRepairPhase(PhaseInterface):
         if plugin is None:
             return False
 
-        try:
+        # Context window constants
+        _CTX_SECS: float = 0.5       # 500 ms context on each side
+        _MAX_WINDOW_S: float = 5.0   # hard cap: skip to DSP if window > 5 s
+        _ctx_samps: int = int(self.sample_rate * _CTX_SECS)
+        _max_samps: int = int(self.sample_rate * _MAX_WINDOW_S)
+        _fade_samps: int = max(2, int(self.sample_rate * 0.003))  # 3 ms crossfade
+
+        repaired_count: int = 0
+
+        for drop_idx, (start, end) in enumerate(dropouts):
+            time.sleep(0)  # yield GIL → Qt event loop can breathe between dropouts
+
+            gap_len = end - start
             if not self._has_sufficient_ml_headroom(audio, self.sample_rate):
-                return False
+                logger.warning("AudioSR: insufficient headroom after dropout %d/%d — stopping", drop_idx + 1, len(dropouts))
+                break
 
-            repaired = plugin.process(audio, self.sample_rate, target_sr=self.sample_rate)
+            # Build context window
+            win_start = max(0, start - _ctx_samps)
+            win_end = min(len(audio), end + _ctx_samps)
+            window_len = win_end - win_start
 
-            if len(repaired) == len(audio):
-                audio[:] = repaired
-                logger.info("AudioSR dropout repair successful (%d long dropouts)", len(dropouts))
-                return True
+            if window_len > _max_samps:
+                # Window is too long for responsive processing — fall back to DSP
+                logger.debug(
+                    "AudioSR: dropout %d/%d window %.1f s > %.1f s cap — skip to DSP fallback",
+                    drop_idx + 1,
+                    len(dropouts),
+                    window_len / self.sample_rate,
+                    _MAX_WINDOW_S,
+                )
+                continue
 
-            logger.warning("AudioSR output length mismatch: %d vs %d", len(repaired), len(audio))
-            return False
+            window_orig = audio[win_start:win_end].copy()
 
-        except Exception as e:
-            logger.error(f"ML dropout repair error: {e}")
-            return False
+            try:
+                repaired_window = plugin.process(window_orig, self.sample_rate, target_sr=self.sample_rate)
+            except Exception as _exc:
+                logger.warning("AudioSR: window repair failed for dropout %d/%d: %s", drop_idx + 1, len(dropouts), _exc)
+                continue
+
+            if len(repaired_window) != window_len:
+                logger.warning(
+                    "AudioSR: output length mismatch for dropout %d/%d (%d vs %d)",
+                    drop_idx + 1, len(dropouts), len(repaired_window), window_len,
+                )
+                continue
+
+            # Splice only the gap region back, with short cosine crossfades at boundaries
+            rel_start = start - win_start
+            rel_end = end - win_start
+            gap_repaired = repaired_window[rel_start:rel_end]
+
+            # Crossfade into the gap at the entry boundary (first _fade_samps samples)
+            if _fade_samps < gap_len and start >= _fade_samps:
+                _ramp_in = np.linspace(0.0, 1.0, _fade_samps, dtype=np.float64)
+                _ramp_out = 1.0 - _ramp_in
+                audio[start : start + _fade_samps] = (
+                    gap_repaired[:_fade_samps] * _ramp_in + audio[start : start + _fade_samps] * _ramp_out
+                )
+                audio[start + _fade_samps : end] = gap_repaired[_fade_samps:]
+            else:
+                audio[start:end] = gap_repaired
+
+            # Crossfade out of the gap at the exit boundary (last _fade_samps samples)
+            if _fade_samps < gap_len and end + _fade_samps <= len(audio):
+                _ramp_in = np.linspace(0.0, 1.0, _fade_samps, dtype=np.float64)
+                _ramp_out = 1.0 - _ramp_in
+                audio[end - _fade_samps : end] = (
+                    gap_repaired[-_fade_samps:] * _ramp_out + audio[end - _fade_samps : end] * _ramp_in
+                )
+
+            repaired_count += 1
+            logger.info(
+                "AudioSR: repaired dropout %d/%d (start=%.2fs, gap=%.0fms, window=%.1fs)",
+                drop_idx + 1,
+                len(dropouts),
+                start / self.sample_rate,
+                gap_len * 1000.0 / self.sample_rate,
+                window_len / self.sample_rate,
+            )
+
+        if repaired_count > 0:
+            logger.info("AudioSR dropout repair: %d/%d dropouts repaired (windowed)", repaired_count, len(dropouts))
+            return True
+
+        logger.warning("AudioSR: no dropouts could be repaired (all fell back to DSP)")
+        return False
 
     def _classify_content(self, before: np.ndarray, after: np.ndarray) -> str:
         """

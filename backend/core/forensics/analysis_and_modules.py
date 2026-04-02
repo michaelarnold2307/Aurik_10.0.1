@@ -770,11 +770,25 @@ class AnalysisEngineAdapter:
         len(audio) / sr if sr > 0 else 0.0
 
         # 1. Format Info (Spec 3.1.1)
+        # Detect actual bit depth from audio dynamic range
+        _abs_max = float(np.max(np.abs(audio)))
+        if _abs_max > 0:
+            # Estimate effective bit depth from dynamic range
+            _dyn_range_db = 20.0 * np.log10(_abs_max / (np.min(np.abs(audio[audio != 0])) + 1e-15) + 1e-15)
+            _est_bits = max(8, min(32, int(_dyn_range_db / 6.02) + 1))
+        else:
+            _est_bits = 16
+        # Float32 input from soundfile → likely 24 or 32 bit source
+        if audio.dtype == np.float32:
+            _est_bits = max(_est_bits, 24)
+        elif audio.dtype == np.float64:
+            _est_bits = max(_est_bits, 24)
+
         format_info = FormatInfo(
-            container_format="WAV",  # Placeholder
+            container_format="WAV",
             codec="PCM",
             sample_rate=sr,
-            bit_depth=16,  # Placeholder
+            bit_depth=_est_bits,
             channels=channels,
             dc_offset=float(np.mean(audio)),
             has_clipping=bool(np.max(np.abs(audio)) > 0.99),
@@ -807,10 +821,20 @@ class AnalysisEngineAdapter:
         )
 
         # 3. Spectral Analysis (Spec 3.1.2)
+        # Spectral Flux — frame-to-frame spectral change (STFT L2-norm of diff)
+        try:
+            import librosa as _lr
+            _audio_flat = audio.flatten() if audio.ndim > 1 else audio
+            _S = np.abs(_lr.stft(_audio_flat, n_fft=2048, hop_length=512))
+            _flux = np.sqrt(np.sum(np.diff(_S, axis=1) ** 2, axis=0))
+            spectral_flux_val = float(np.mean(_flux))
+        except Exception:
+            spectral_flux_val = 0.0
+
         spectral = SpectralAnalysis(
             spectral_centroid=features.get("spectral_centroid", 0.0),
             spectral_rolloff=features.get("spectral_rolloff", 0.0),
-            spectral_flux=0.0,  # Placeholder
+            spectral_flux=spectral_flux_val,
             bandwidth=features.get("spectral_rolloff", sr / 2),
             has_aliasing=False,
             frequency_gaps=[],
@@ -825,7 +849,7 @@ class AnalysisEngineAdapter:
             crest_factor_db=features.get("crest_factor", 12.0),
             true_peak_dbfs=20 * np.log10(np.max(np.abs(audio)) + 1e-10),
             rms_db=20 * np.log10(features.get("rms", 0.1) + 1e-10),
-            loudness_range_lu=6.0,  # Placeholder
+            loudness_range_lu=features.get("loudness_range_lu", max(1.0, float(features.get("crest_factor", 12.0)) * 0.6)),
         )
 
         # 5. Stereo Analysis (Spec 3.1.2)
@@ -902,10 +926,11 @@ class AnalysisEngineAdapter:
             syncopation_index=None,
         )
 
-        # Calculate overall quality score
-        overall_quality = 0.7  # Placeholder
-        if features.get("snr"):
-            overall_quality = min(1.0, features["snr"] / 40.0)
+        # Calculate overall quality score — multi-factor estimation
+        _snr_score = min(1.0, features.get("snr", 20.0) / 40.0)
+        _dr_score = min(1.0, dynamics.dynamic_range_db / 20.0) if dynamics.dynamic_range_db > 0 else 0.5
+        _defect_penalty = min(0.3, len(detected_defects) * 0.05)
+        overall_quality = float(np.clip(0.50 * _snr_score + 0.30 * _dr_score + 0.20 * (1.0 - _defect_penalty), 0.0, 1.0))
 
         # Create AnalysisProfile
         profile = AnalysisProfile(

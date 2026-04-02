@@ -152,23 +152,36 @@ class FeedbackChain:
         _sr = sr if sr is not None else self.sample_rate
         assert _sr == 48000, f"FeedbackChain.run() erwartet SR=48000, erhalten: {_sr}"
 
-        # Phasen-Listen-Modus: Liste von (id, fn, kwargs)-Tupeln
-        if isinstance(phases_or_fn, list):
+        # --- Adaptive Per-Phase Pruning for phase-list mode ---
+        # In the first iteration, evaluate each phase individually.
+        # Phases that degrade MOS (Δ < -0.01) are pruned from subsequent iterations.
+        # This prevents a harmful phase from cancelling gains of helpful ones.
+        _phase_list_mode = isinstance(phases_or_fn, list)
+        _active_phases: list = list(phases_or_fn) if _phase_list_mode else []
+        _pruned_phases: list[str] = []
+        _phase_deltas: dict[str, float] = {}  # phase_id → MOS delta from first iteration
 
-            def _combined_fn(a: np.ndarray, _sr2: int) -> np.ndarray:
-                out = a
-                for _pid, _fn, _kw in phases_or_fn:
-                    try:
-                        out = _fn(out, _sr2, **_kw) if _kw else _fn(out, _sr2)
-                    except Exception as phase_exc:
-                        logger.debug(
-                            "FeedbackChain: phase callable failed (%s): %s",
-                            _pid,
-                            phase_exc,
-                        )
-                return out
+        if _phase_list_mode:
 
-            improve_fn: Callable[[np.ndarray, int], np.ndarray] = _combined_fn
+            def _build_combined_fn(active_phase_list: list):
+                """Build improve_fn from currently active phases."""
+
+                def _combined_fn(a: np.ndarray, _sr2: int) -> np.ndarray:
+                    out = a
+                    for _pid, _fn, _kw in active_phase_list:
+                        try:
+                            out = _fn(out, _sr2, **_kw) if _kw else _fn(out, _sr2)
+                        except Exception as phase_exc:
+                            logger.debug(
+                                "FeedbackChain: phase callable failed (%s): %s",
+                                _pid,
+                                phase_exc,
+                            )
+                    return out
+
+                return _combined_fn
+
+            improve_fn: Callable[[np.ndarray, int], np.ndarray] = _build_combined_fn(_active_phases)
         else:
             improve_fn = phases_or_fn  # type: ignore[assignment]
 
@@ -228,6 +241,56 @@ class FeedbackChain:
                     i,
                 )
                 break
+
+            # --- Adaptive Pruning: after iteration 1, evaluate each phase individually ---
+            # On the first iteration, run all phases as a bundle to get the combined effect.
+            # Then measure each phase's individual contribution and prune harmful ones.
+            if _phase_list_mode and i == 2 and len(_active_phases) > 1:
+                _pre_prune_audio = current.copy()
+                _base_mos = self._compute_iteration_score(_pre_prune_audio, _sr)
+                _surviving_phases = []
+                for _pid, _fn, _kw in _active_phases:
+                    try:
+                        _test_out = _fn(_pre_prune_audio, _sr, **_kw) if _kw else _fn(_pre_prune_audio, _sr)
+                        _test_out = np.clip(np.nan_to_num(np.asarray(_test_out, dtype=np.float32)), -1.0, 1.0)
+                        _test_mos = self._compute_iteration_score(_test_out, _sr)
+                        _delta = _test_mos - _base_mos
+                        _phase_deltas[str(_pid)] = float(_delta)
+                        if _delta >= -0.01:
+                            _surviving_phases.append((_pid, _fn, _kw))
+                            logger.debug(
+                                "FeedbackChain: phase %s kept (Δ=%.4f)",
+                                _pid,
+                                _delta,
+                            )
+                        else:
+                            _pruned_phases.append(str(_pid))
+                            logger.info(
+                                "FeedbackChain: phase %s pruned — degraded MOS by %.4f",
+                                _pid,
+                                _delta,
+                            )
+                    except Exception as _eval_exc:
+                        _surviving_phases.append((_pid, _fn, _kw))
+                        logger.debug(
+                            "FeedbackChain: phase %s evaluation failed (%s) — keeping",
+                            _pid,
+                            _eval_exc,
+                        )
+                if _surviving_phases and len(_surviving_phases) < len(_active_phases):
+                    _active_phases = _surviving_phases
+                    improve_fn = _build_combined_fn(_active_phases)
+                    logger.info(
+                        "FeedbackChain: pruned %d/%d phases, %d remaining",
+                        len(_pruned_phases),
+                        len(_pruned_phases) + len(_active_phases),
+                        len(_active_phases),
+                    )
+                elif not _surviving_phases:
+                    logger.info("FeedbackChain: all phases degrade quality — converging early")
+                    converged = True
+                    break
+
             candidate = improve_fn(current, _sr)
             candidate = np.clip(np.nan_to_num(np.asarray(candidate, dtype=np.float32)), -1.0, 1.0)
             mos = self._compute_iteration_score(candidate, _sr)
@@ -342,6 +405,8 @@ class FeedbackChain:
                     (self.use_pqs_in_loop or self.use_versa_in_loop)
                     and any(src == "heuristic_rms" for src in _score_sources)
                 ),
+                "pruned_phases": _pruned_phases,
+                "phase_deltas": _phase_deltas,
             },
             phase_executions=_phase_executions,
             overall_score=float(best_mos),

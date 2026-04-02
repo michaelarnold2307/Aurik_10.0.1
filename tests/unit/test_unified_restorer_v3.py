@@ -19,6 +19,7 @@ import pytest
 
 np.random.seed(42)
 
+import backend.core.unified_restorer_v3 as _uv3_mod
 from backend.core.defect_scanner import DefectType, MaterialType
 from backend.core.performance_guard import DeploymentMode, QualityMode
 from backend.core.unified_restorer_v3 import (
@@ -511,6 +512,56 @@ class TestRestoreMocked:
             result = restorer.restore(audio, SR)
             assert isinstance(result, RestorationResult)
 
+    def test_40b_fail_fast_if_48k_norm_not_available(self):
+        restorer = UnifiedRestorerV3()
+        audio = np.zeros(8820, dtype=np.float32)  # 0.2 s @ 44.1 kHz (> min length guard)
+        with patch("backend.core.unified_restorer_v3.LIBROSA_AVAILABLE", False):
+            with pytest.raises(RuntimeError, match="48-kHz-Normierung"):
+                restorer.restore(audio, 44100)
+
+    @pytest.mark.skipif(not _uv3_mod.LIBROSA_AVAILABLE, reason="librosa not available")
+    def test_40c_analysis_modules_keep_native_import_sr(self):
+        restorer = UnifiedRestorerV3()
+        audio = np.zeros(8820, dtype=np.float32)  # 0.2 s @ 44.1 kHz
+
+        calls: dict[str, int] = {}
+
+        def _scan_capture(a: np.ndarray, sr: int, _mat: object, **kwargs) -> object:
+            calls["sr"] = int(sr)
+            calls["n"] = int(a.shape[-1])
+            raise RuntimeError("stop_after_scan")
+
+        restorer.defect_scanner.scan = _scan_capture  # type: ignore[method-assign]
+
+        cached_medium = types.SimpleNamespace(
+            material=MaterialType.VINYL,
+            material_type=MaterialType.VINYL,
+            confidence=0.99,
+            classifier_source="unit",
+        )
+        cached_era = types.SimpleNamespace(decade=1970, material_prior="vinyl", confidence=0.99)
+        cached_genre = types.SimpleNamespace(
+            is_schlager=False,
+            confidence=0.0,
+            genre_label="unknown",
+            bpm=0.0,
+            subgenre="unknown",
+        )
+        cached_restorability = types.SimpleNamespace(restorability_score=70.0, grade="FAIR", predicted_mos=(3.5, 4.1))
+
+        with patch("backend.core.unified_restorer_v3.librosa.resample", side_effect=lambda y, **_: y):
+            with pytest.raises(RuntimeError, match="stop_after_scan"):
+                restorer.restore(
+                    audio,
+                    44100,
+                    cached_medium_result=cached_medium,
+                    cached_era_result=cached_era,
+                    cached_genre_result=cached_genre,
+                    cached_restorability_result=cached_restorability,
+                )
+
+        assert calls["sr"] == 44100
+
 
 # ---------------------------------------------------------------------------
 # Klasse 9: Phasen-Regressionsprotokoll (§Punkt3)
@@ -903,3 +954,224 @@ class TestLocalizedPassThroughGuard:
 
         assert active is False
         assert int(metrics["localized_count"]) == 0
+
+
+class TestSongCalibrationProfile:
+    def test_68_build_song_calibration_profile_has_expected_keys(self):
+        profile = UnifiedRestorerV3._build_song_calibration_profile(
+            material_type=MaterialType.TAPE,
+            mode=QualityMode.QUALITY,
+            restorability_score=62.0,
+            input_snr_db=24.0,
+            max_defect_severity=0.45,
+            pipeline_confidence=0.71,
+        )
+
+        assert profile["material"] == MaterialType.TAPE.value
+        assert profile["mode"] == QualityMode.QUALITY.value
+        assert "global_scalar" in profile
+        assert "family_scalars" in profile
+        assert set(profile["family_scalars"].keys()) >= {
+            "denoise",
+            "reverb",
+            "reconstruction",
+            "dynamics_eq",
+            "transient",
+            "general",
+        }
+
+    def test_69_song_calibration_global_scalar_is_bounded(self):
+        profile = UnifiedRestorerV3._build_song_calibration_profile(
+            material_type=MaterialType.VINYL,
+            mode=QualityMode.MAXIMUM,
+            restorability_score=5.0,
+            input_snr_db=80.0,
+            max_defect_severity=1.0,
+            pipeline_confidence=0.0,
+        )
+
+        assert 0.70 <= float(profile["global_scalar"]) <= 1.10
+
+    def test_70_phase_calibration_scalar_maps_reverb_family(self):
+        profile = {"global_scalar": 1.0, "family_scalars": {"reverb": 0.83, "general": 1.0}}
+
+        scalar = UnifiedRestorerV3._get_phase_calibration_scalar("phase_49_advanced_dereverb", profile)
+
+        assert scalar == pytest.approx(0.83)
+
+    def test_71_phase_calibration_scalar_falls_back_to_general(self):
+        profile = {"global_scalar": 0.91, "family_scalars": {"general": 0.91}}
+
+        scalar = UnifiedRestorerV3._get_phase_calibration_scalar("phase_99_unknown", profile)
+
+        assert scalar == pytest.approx(0.91)
+
+
+# ---------------------------------------------------------------------------
+# Klasse: MidPipelineCalibrationStep — §2.31a iterative Kalibrierung
+# ---------------------------------------------------------------------------
+
+
+class TestMidPipelineCalibrationStep:
+    """Tests für UnifiedRestorerV3._mid_pipeline_calibration_step (§2.31a)."""
+
+    _FN = staticmethod(UnifiedRestorerV3._mid_pipeline_calibration_step)
+
+    def _base_profile(self, **overrides) -> dict:
+        p = {
+            "global_scalar": 1.0,
+            "family_scalars": {
+                "denoise": 1.0,
+                "reverb": 1.0,
+                "reconstruction": 1.0,
+                "dynamics_eq": 1.0,
+                "transient": 1.0,
+                "vocal": 1.0,
+                "instrument": 1.0,
+                "general": 1.0,
+            },
+            "restorability_tier": "fair",
+        }
+        p.update(overrides)
+        return p
+
+    def test_72_returns_none_for_none_profile(self):
+        result = self._FN({"brillanz": 0.8}, None, "33pct", 5, 15)
+        assert result is None
+
+    def test_73_returns_none_for_empty_scores(self):
+        result = self._FN({}, self._base_profile(), "33pct", 5, 15)
+        assert result is None
+
+    def test_74_returns_none_when_no_adjustment_needed(self):
+        # All goals well above thresholds → no adjustment
+        scores = {
+            "brillanz": 0.90, "micro_dynamics": 0.92, "tonal_center": 0.97,
+            "groove": 0.89, "separation_fidelity": 0.85, "raumtiefe": 0.75,
+            "artikulation": 0.90, "bass_kraft": 0.85,
+        }
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is None
+
+    def test_75_returns_copy_not_in_place(self):
+        scores = {"brillanz": 0.50}  # low → adjustment expected
+        profile = self._base_profile()
+        result = self._FN(scores, profile, "33pct", 5, 15)
+        # Original must be unchanged
+        assert profile["family_scalars"]["reconstruction"] == 1.0
+        if result is not None:
+            assert result is not profile
+
+    def test_76_low_brillanz_boosts_reconstruction(self):
+        scores = {"brillanz": 0.50}  # 0.74 - 0.50 = 0.24 deficit
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is not None
+        assert result["family_scalars"]["reconstruction"] > 1.0
+
+    def test_77_low_micro_dynamics_boosts_transient_and_dynamics_eq(self):
+        scores = {"micro_dynamics": 0.60}
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is not None
+        assert result["family_scalars"]["transient"] > 1.0
+        assert result["family_scalars"]["dynamics_eq"] > 1.0
+
+    def test_78_low_tonal_center_boosts_reconstruction(self):
+        scores = {"tonal_center": 0.80}
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is not None
+        assert result["family_scalars"]["reconstruction"] > 1.0
+
+    def test_79_low_groove_boosts_dynamics_eq_and_transient(self):
+        scores = {"groove": 0.60}
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is not None
+        assert result["family_scalars"]["dynamics_eq"] > 1.0
+        assert result["family_scalars"]["transient"] > 1.0
+
+    def test_80_low_separation_fidelity_boosts_instrument(self):
+        scores = {"separation_fidelity": 0.50}
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is not None
+        assert result["family_scalars"]["instrument"] > 1.0
+
+    def test_81_low_artikulation_boosts_vocal(self):
+        scores = {"artikulation": 0.60}
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is not None
+        assert result["family_scalars"]["vocal"] > 1.0
+
+    def test_82_low_bass_kraft_boosts_dynamics_eq(self):
+        scores = {"bass_kraft": 0.50}
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is not None
+        assert result["family_scalars"]["dynamics_eq"] > 1.0
+
+    def test_83_all_scalars_clamped_to_1_10_max(self):
+        # Extreme deficit → clamp must prevent going above 1.10
+        profile = self._base_profile()
+        profile["family_scalars"]["reconstruction"] = 1.08  # already high
+        scores = {"brillanz": 0.00, "micro_dynamics": 0.00, "tonal_center": 0.00}
+        result = self._FN(scores, profile, "33pct", 5, 15)
+        if result is not None:
+            for k, v in result["family_scalars"].items():
+                assert float(v) <= 1.10 + 1e-9, f"{k}={v} exceeds 1.10 clamp"
+
+    def test_84_all_scalars_clamped_to_0_60_min(self):
+        # Low tonal_center causes dynamics_eq to be de-boosted; verify floor
+        profile = self._base_profile()
+        profile["family_scalars"]["dynamics_eq"] = 0.62  # near floor
+        scores = {"tonal_center": 0.50}  # strong de-boost signal
+        result = self._FN(scores, profile, "33pct", 5, 15)
+        if result is not None:
+            for k, v in result["family_scalars"].items():
+                assert float(v) >= 0.60 - 1e-9, f"{k}={v} below 0.60 clamp"
+
+    def test_85_adjustment_bounded_at_12_percent_max(self):
+        scores = {"brillanz": 0.00}  # maximum deficit
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        if result is not None:
+            delta = result["family_scalars"]["reconstruction"] - 1.0
+            assert delta <= 0.12 + 1e-9
+
+    def test_86_audit_trail_event_appended(self):
+        scores = {"brillanz": 0.40}
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        assert result is not None
+        events = result.get("_mid_calibration_events", [])
+        assert len(events) == 1
+        assert events[0]["checkpoint"] == "33pct"
+        assert "adjustments" in events[0]
+        assert "scores_snapshot" in events[0]
+
+    def test_87_second_call_appends_to_existing_events(self):
+        scores = {"brillanz": 0.40}
+        profile = self._base_profile()
+        result1 = self._FN(scores, profile, "33pct", 5, 15)
+        assert result1 is not None
+        result2 = self._FN({"groove": 0.50}, result1, "66pct", 10, 15)
+        assert result2 is not None
+        events = result2.get("_mid_calibration_events", [])
+        assert len(events) == 2
+        assert events[0]["checkpoint"] == "33pct"
+        assert events[1]["checkpoint"] == "66pct"
+
+    def test_88_none_scores_for_individual_goals_skip_gracefully(self):
+        # Only some goals present → others should not crash
+        scores = {"brillanz": 0.50}  # other keys absent
+        result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
+        # Should produce a result for brillanz without errors
+        assert result is not None
+
+    def test_89_returns_none_for_missing_family_scalars(self):
+        profile = {"global_scalar": 1.0}  # no family_scalars key
+        scores = {"brillanz": 0.50}
+        result = self._FN(scores, profile, "33pct", 5, 15)
+        assert result is None
+
+    def test_90_global_scalar_preserved_in_output(self):
+        scores = {"brillanz": 0.50}
+        profile = self._base_profile()
+        profile["global_scalar"] = 0.88
+        result = self._FN(scores, profile, "33pct", 5, 15)
+        assert result is not None
+        assert result["global_scalar"] == pytest.approx(0.88)

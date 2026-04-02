@@ -2,15 +2,15 @@
 
 > **Systemidentität**: Aurik 9.x.x ist ein *weltweit erstmaliges intelligentes,
 > kontextbewusstes Musik- und Gesangs-Restaurations-, Reparatur- und
-> Rekonstruktions-Denkersystem.* Stand: März 2026 — Version **9.10.77**
+> Rekonstruktions-Denkersystem.* Stand: März 2026 — Version **9.10.83**
 >
-> **instructions_version: 3.5** — komprimiert 28.03.2026
+> **instructions_version: 4.0** — komprimiert 30.03.2026
 >
 > Bump-Regel: neue RELEASE_MUST-Zeile, neues Gate oder §-Änderung → `instructions_version` inkrementieren + `docs/CHANGELOG_HISTORY.md` Eintrag.
 >
-> Aktuelle Testzahl: **~8900+ Pytest-IDs** (inkl. parametrisierter Tests; `def test_`-Funktionen ≈ 7252; alle grün)
+> Aktuelle Testzahl: **~8919+ Pytest-IDs** (inkl. parametrisierter Tests; `def test_`-Funktionen ≈ 7271; alle grün)
 >
-> Stand: 28. März 2026 — Vocos 48 kHz nativ bevorzugt (§2.37); laion_clap ONNX-Format; Hybrid-Release-Mode RELEASE_MUST; §3.9 Stabilitäts-Invarianten (9 neue Gates) ergänzt.
+> Stand: 30. März 2026 — §2.29c Restorative-Baseline-Capping + §9.7.11 ext phase_12 + timbre_authentizitaet Exclusions; 122 PMGG-Tests.
 >
 > **§2.36 `LyricsGuidedEnhancement`** ist ab Version **9.10.x Pflicht** (bisher v10.0-Label entfernt).
 
@@ -54,7 +54,8 @@ Gate-zuordnung (aktuell implementierte CI-Guards):
 | Vollpipeline-Determinismus (bitnahe Reproduzierbarkeit) | `[RELEASE_MUST]` | `tests/normative/test_full_pipeline_determinism.py` |
 | Stratifiziertes Konkurrenz-Gate (Material x Defektklasse) | `[RELEASE_MUST]` | `tests/normative/test_competitive_stratified_gate.py` |
 | Externer Mini-MUSHRA bei Kern-aenderungen | `[RELEASE_MUST]` | `tests/normative/test_external_mushra_artifact_contract.py` |
-| §2.29b PMGG Stable-Metric-Invariante (`NatuerlichkeitMetric` nie in `_PRECISE_METRICS`) | `[RELEASE_MUST]` | `tests/unit/test_per_phase_musical_goals_gate.py` (35 Tests — `PHASE_GOAL_EXCLUSIONS` + Audio-Cap 2.5 s) |
+| §2.29b PMGG Stable-Metric-Invariante (`NatuerlichkeitMetric` nie in `_PRECISE_METRICS`) | `[RELEASE_MUST]` | `tests/unit/test_per_phase_musical_goals_gate.py` (122 Tests — `PHASE_GOAL_EXCLUSIONS` + Audio-Cap 2.5 s + Groove-Proxy §9.7.10 + K-S tonal_center §9.7.11 + Restorative-Baseline §2.29c) |
+| §2.29c PMGG Restorative-Phase-Baseline-Capping (Defekt-inflationierte Baselines gedeckelt) | `[RELEASE_MUST]` | `tests/unit/test_per_phase_musical_goals_gate.py` — `_RESTORATIVE_PHASES` + `_CANONICAL_THRESHOLDS` + `effective_scores_before` |
 | §3.9 Stabilitäts-Invarianten (9 Punkte: Inference-Timeout, SIGTERM, Phase-Output-Guard, Executor-Lifecycle, Budget-Reconciliation, Exception-Logging, Buffer-RAM-Guard, Lock-Order, KMV-Buffer-Release) | `[RELEASE_MUST]` | `tests/normative/test_stability_invariants.py` — je Invariante mind. 3 Tests |
 | OQS ≥ 88 / Weltklasse-Ziele | `[TARGET_2026]` | Roadmap/Benchmark-Ziel, kein harter Release-Blocker |
 | AMRB-basierter MUSHRA-Hörertest (ITU-R BS.1534-3) | `[TARGET_2026]` | Extern validiert 14 Goal-Schwellwerte; ersetzt „best engineering estimate"-Status; geplant nach OQS ≥ 84.0-Erreichung |
@@ -107,10 +108,12 @@ Falls EraClassifier und MediumClassifier widersprüchliche Materialtypen liefern
 
 **Invariante**: Jede Restaurierungsoperation darf keines der 14 Ziele verschlechtern. Pflicht-Check: `MusicalGoalsChecker(mode=mode).measure_all(audio, sr)` → `assert all(scores[g] >= t for g, t in checker.thresholds.items())`.
 
-**PMGG Priority-Aware Retries (§2.29 v9.10.77)**:
-- P1/P2-Regression: Volle Retry-Kaskade (4 Retries + Emergency)
-- P3-Regression: Max 2 Retries, 1.5× Regression-Toleranz
+**PMGG Priority-Aware Retries (§2.29 v9.10.77 + §2.31b v9.10.85)**:
+- P1/P2-Regression: Volle Retry-Kaskade (4 Retries + Emergency); Catastrophic-Threshold = `max(0.08, 4.0 × adaptive_threshold)`
+- P3-Regression: Basis 2 Retries, 1.5× Toleranz; `restorability_tier="good"` → 3 Retries; `tier="poor"` → 1 Retry
 - P4/P5-Regression: Kein Retry — nur Logging (`passed_p4p5_tolerated`)
+- `initial_strength < 0.90` (SongCal-reduziert) → Retry-Ankerpunkte `[0.80, 0.65, 0.50, 0.35, 0.20]`
+- Stagnation-Abbruch: `max(0.002, threshold × 0.15)` (proportional)
 
 ## [RELEASE_MUST] Qualitätsmessung & Metriken-System (§8.1 — PFLICHT)
 
@@ -188,7 +191,7 @@ Kein direktes Aufrufen von `UnifiedRestorerV3.restore()` aus dem Frontend — im
 
 Kontextfluss: `defect_result → ReparaturDenker → RekonstruktionsDenker(+defect_result) → RestaurierDenker(+reconstruction_context) → UV3`
 
-UV3-Kernreihenfolge: DCOffset-Removal → TDP (HPSS) → RestorabilityEstimator → EraClassifier → MediumClassifier → GoalApplicabilityFilter → AdaptiveGoalThresholds → DefectScanner (32 Defekte) → CausalDefectReasoner (34 Kausal-Ursachen) → GPParameterOptimizer → HarmonicPreservationGuard → Phasen-Ausführung (01–56) → FeedbackChain → PhysicalCeilingEstimator → MusicalGoalsChecker → MicroDynamicsEnvelopeMorphing → RestorationResult
+UV3-Kernreihenfolge: DCOffset-Removal → TDP (HPSS) → RestorabilityEstimator → SongCalibrationProfile → EraClassifier → GermanSchlagerClassifier → MediumClassifier → GoalApplicabilityFilter → AdaptiveGoalThresholds → DefectScanner (32 Defekte) → CausalDefectReasoner (35 Kausal-Ursachen) → GPParameterOptimizer → HarmonicPreservationGuard → Phasen-Ausführung (01–57) → FeedbackChain → PhysicalCeilingEstimator → MusicalGoalsChecker → MicroDynamicsEnvelopeMorphing → RestorationResult
 
 **Parallelisierungs-Invariante**: Tier 0+1 sequenziell; EraClassifier+GermanSchlager+MediumClassifier parallel (`ThreadPoolExecutor max_workers=3`); Tier 6 sequenziell.
 
@@ -200,6 +203,42 @@ UV3-Kernreihenfolge: DCOffset-Removal → TDP (HPSS) → RestorabilityEstimator 
 `get_adaptive_goals_and_config(audio, sr)` → skalierte Schwellwerte, GoalApplicabilityFilter, PhysicalCeilingEstimator.
 Priority-Hierarchie: P1 (natürlichkeit, authentizität) → P2 (tonal_center, timbre, artikulation) → P3–5 best-effort.
 P1+P2-Regression → `FeedbackChain`-Rollback; Ceiling Δ < 3 % → Terminierung.
+
+### [RELEASE_MUST] §2.31a Ganzheitliche Song-Selbstkalibrierung (v9.10.83)
+
+**Kernprinzip**: Keine globalen Fix-Strengths. Jede Restaurierung MUSS vor der Phasenkette ein Song-Kalibrierungsprofil berechnen und phasenübergreifend anwenden.
+
+- Pflichtprofil `song_calibration_profile` mit mindestens: `material`, `mode`, `restorability_score`, `input_snr_db`, `max_defect_severity`, `pipeline_confidence`, `global_scalar`, `family_scalars`.
+- `family_scalars` müssen mindestens Familien enthalten: `denoise`, `reverb`, `reconstruction`, `dynamics_eq`, `transient`, `vocal`, `instrument`, `general`.
+- Kalibrierung MUSS begrenzt sein (`global_scalar` bounded), um Overfitting auf Einzelsongs zu vermeiden.
+- Kalibrierung MUSS psychoakustisch priorisieren: P1/P2-Stabilität und Hörbarkeit (Maskierung/Transient-Integrität) vor aggressiver Defektentfernung.
+- Kalibrierung MUSS Tonträgerkette/Material/Defektlage berücksichtigen; statische One-Size-Fits-All-Konfigurationen sind für Produktionspfade unzulässig.
+- `RestorationResult.metadata["song_calibration"]` ist Pflicht zur späteren songs-übergreifenden Auswertung.
+
+**Invariante**: Bei identischer Eingangsumgebung ist das Kalibrierungsprofil deterministisch reproduzierbar; unterschiedliche Songs dürfen bewusst unterschiedliche Skalare erhalten.
+
+**Kalibrier-Berechnungsblöcke** (kanonische Reihenfolge in `_build_song_calibration_profile`):
+1. Era-GP-Warmstart: ≤1940 →`_era_denoise_scale` ×1.10; ≤1960 →×1.00; ≥1970 →×0.88
+2. Material-Multiplikatoren: shellac/vinyl/tape/cd_digital/mp3/cassette (6 Werte)
+3. Per-Defekt-Family-Boost: 28 DefectTypes → 6 Familien, max +12 % je Familie
+4. Spektral-Fingerprint: `rolloff_95_hz` → reconstruction; `noise_floor_p5_db` → denoise; `wow_flutter_index` → dynamics
+5. SOFT_SATURATION-Vintage-Guard: sat_severity ≥ 0.25 → denoise −12 %, transient −7 %
+6. Schlager-Profil: vocal +10 %, transient +5 %, dynamics +5 %, reconstruction ×0.95
+7. Diversity-Penalty: ≥8 aktive Defekte (severity ≥ 0.18) → global −1 % je Extra-Defekt, max −6 %
+8. PANNs: vocal_prob < 0.10 → vocal ×0.80; ≥0.35 → vocal ×0.97–1.10; inst_prob ≥ 0.35 → inst ×0.97–1.10
+9. Modus-Post-Skalierung: studio/maximum → reconstruction ×1.08, transient ×1.05, vocal ×1.05, instrument ×1.05
+
+### [RELEASE_MUST] §2.31b PMGG Song-Kalibrierungs-Integration (v9.10.85)
+
+Alle 7 PMGG-Schnittstellen MÜSSEN das `song_calibration_profile` aktiv nutzen:
+
+1. **Kalibrierungs-adaptiver Threshold** (`wrap_phase`): `global_scalar < 0.85` → Threshold ×0.85 (engerer Schutz); `global_scalar > 1.20` → Threshold ×1.15 (reduziert Retry-Verschwendung). Begrenzt [0.015, 0.070].
+2. **Sanftere Retry-Leiter** (`_run_with_retry`): `initial_strength < 0.90` (SongCal hat vorreduziert) → Ankerpunkte `[0.80, 0.65, 0.50, 0.35, 0.20]` statt `[0.65, 0.50, …]`. Verhindert destruktive Doppelreduktion.
+3. **Proportionale Stagnation-Schwelle** (`_run_with_retry`): `max(0.002, threshold × 0.15)` — GOOD: 0.003 (geduldiger); POOR: 0.008 (bricht früher ab).
+4. **P3-Retry-Budget nach `restorability_tier`** (`_run_with_retry`): `tier="good"` → P3 2→3 Retries; `tier="poor"` → P3 2→1. P1/P2/P4/P5 unverändert.
+5. **FeedbackChain `target_score`** (`_fc_compute_target_score`): Base 0.72/0.78 (Restoration/Studio) ±0.035 nach `restorability_score`. Begrenzt [0.60, 0.85].
+6. **[RELEASE_MUST] Dynamischer Catastrophic-Threshold** (`_run_with_retry`): `max(0.08, 4.0 × adaptive_threshold)`. GOOD (0.020) → 0.08 (Emergency früher, mehr Qualitätsschutz); POOR (0.055) → 0.22 (wie bisher).
+7. **[RELEASE_MUST] Material-adaptive PHASE_GOAL_EXCLUSIONS** (`wrap_phase`): `cd_digital`/`dat` haben kein Breitbandrauschen → HF-bedingte Falsch-Regressionen treten bei phase_03/phase_29 nicht auf. Reduktion auf `{"natuerlichkeit", "artikulation"}`. Statische Ausschlüsse (CREPE-Load-State, transient-shape mismatch, timbre_authentizitaet) bleiben materialunabhängig.
 
 ## Algorithmische Pflicht-Mindeststandards
 
@@ -254,13 +293,23 @@ Alle übrigen Phasen, bei denen `strength` Algorithmus-Parameter steuert (z.B. F
 
 **Implementierung**: `PerPhaseMusicalGoalsGate._run_with_retry()` führt `_run_phase(phase, audio, 1.0, kwargs)` genau einmal aus. Retries nutzen `_wet_dry_blend(audio, audio_full, strength, phase)`.
 
+**[RELEASE_MUST] §9.7.11 K-S tonal_center Proxy** (v9.10.91):
+`tonal_center` verwendet ab jetzt Krumhansl-Schmuckler-Key-Detection — SNR-invariant. Alle früheren tonal_center-Exclusions (phase_02/03/04/08/18/29/49) wurden entfernt. Wiss. Basis: Krumhansl & Schmuckler 1990, Temperley 2001.
+
+**[RELEASE_MUST] §9.7.12/13/14 SNR-robuste PMGG-Proxy-Fixes für brillanz/transparenz/waerme** (v9.10.92):
+Falsche P3–P5-Regressionen in Denoise-/Dereverb-Phasen durch SNR-sensitive Quick-Proxies und pathologische Precise-Override-Mechanismen eliminiert. brillanz, waerme, transparenz aus `_PRECISE_METRICS` entfernt; 14 Exclusion-Einträge über 7 Phasen gelöscht.
+- **§9.7.12 brillanz — HF Spectral Crest Factor (2–16 kHz)**: HF-Energie-Ratio ersetzt durch p95/p50-Crest-Factor. Noise hebt p50-Median; musikalische Peaks dominieren p95 → Crest nach Denoise steigt, nie false drop. `BrillanzMetric`-Preservation-Penalty war kontraproduktiv. Wiss. Basis: Fastl & Zwicker 2007 §8.3.
+- **§9.7.13 transparenz — Multi-Band Spectral Crest (5 Oktavbänder 250 Hz–8 kHz)**: 75%-Rolloff-Proxy (SNR-sensitiv) ersetzt durch 5-Oktavband-Crest-Mittelwert. Zudem hatte `TransparenzMetric.measure()` **kein** `reference=`-Parameter → TypeError in Precise-Override → stille Fallback auf fehlerhaften Proxy. Wiss. Basis: Moore & Glasberg 1983; ITU-T P.862.
+- **§9.7.14 waerme — Warmth Ratio E(200–800 Hz)/E(800–3000 Hz)**: ISO-226 mid/total-Energie-Ratio reverb-sensitiv → false P4-Regression nach Dereverb. Ersetzt durch reverb-invariantes Sub-Band-Verhältnis (Nachhall addiert Energie proportional in beiden Bändern → Ratio stabil). Wiss. Basis: Fletcher & Rossing; Moore & Glasberg 1983.
+
 **[RELEASE_MUST] §2.29b PMGG Stable-Metric-Invariante (v9.10.79)**:
 Metriken mit ML-zustandsabhängigem Gewicht **NIEMALS** in `_PRECISE_METRICS` für PMGG-Delta-Checks aufnehmen.
 - **Root-Cause `NatuerlichkeitMetric`**: CREPE-Load-State ändert Gewichte (w_crepe 0.0 → 0.18) zwischen `scores_before` (CREPE nicht geladen) und `scores_after` (CREPE nun geladen) → Pseudo-Regression Δ ≈ 0.15–0.28 auf unverändertem Audio → false P1-Kaskade → Phase_03 best-effort @ 5.6 % Wet → Noise-Floor −55 dBFS statt −72 dBFS → Mikrodetails verdeckt → **Tiefen-Immersion zerstört**.
 - `NatuerlichkeitMetric` läuft **ausschließlich** im Export-Gate (`MusicalGoalsChecker`) — nie in PMGG-Delta-Checks. Schwellwert ≥ 0.90 bleibt dort unverändert normativ.
 - **§9.7.8 Audio-Cap**: `_apply_precise_metric_overrides` kappt auf **2.5 s** — ausreichend für stationäre Spektral-/Chroma-/Transient-Metriken; verhindert NMF/Onset-Runs auf Langaudio (> 2 s/Call auf 60 s-Material).
 - Neue Metriken vor `_PRECISE_METRICS`-Aufnahme: Eigenrauschen ≤ 0.02 auf identischen Audio-Paaren nachweisen.
-- **Aktuelle `PHASE_GOAL_EXCLUSIONS`** (v9.10.79): `phase_03: {"natuerlichkeit", "artikulation"}` — CREPE-Pseudo-Regression + transient-shape mismatch bei Breitband-Denoise; `phase_02: {"bass_kraft", "authentizitaet", "natuerlichkeit"}` — Kammfilter löst CREPE-Voicing-Fehler aus; `phase_24: {"natuerlichkeit"}` — generierter Dropout-Inhalt hat keinen CREPE-Referenzbezug; `phase_29: {"brillanz", "artikulation"}` — HF-Reduktion + transient-shape mismatch bei Hiss-Reduction.
+- **Aktuelle `PHASE_GOAL_EXCLUSIONS`** (v9.10.96, kanonisch im Code): `phase_03: {"natuerlichkeit", "artikulation", "authentizitaet", "tonal_center", "timbre_authentizitaet"}` (Breitband-Denoise: CREPE-Load-State + transient-shape + K-S NOT invariant for shaped NR §9.7.11 ext + MFCC-Pearson/Centroid-CV disturbed by spectral-envelope change after NR); `phase_29: {"artikulation", "authentizitaet", "natuerlichkeit", "tonal_center", "timbre_authentizitaet"}` (DeepFilterNet Tape-Hiss — gleiche Root-Causes wie phase_03); `phase_02: {"bass_kraft", "authentizitaet", "natuerlichkeit", "transparenz", "groove", "timbre_authentizitaet"}` (Kammfilter Hum-Removal); `phase_04: {"transparenz", "brillanz", "waerme", "authentizitaet", "natuerlichkeit", "timbre_authentizitaet"}` (EQ); `phase_08: {"micro_dynamics", "artikulation"}` (TDP/HPSS); `phase_12: {"tonal_center", "timbre_authentizitaet"}` (Wow/Flutter: K-S volatile nach Pitch-/Speed-Korrektur + Centroid-CV disturbed); `phase_18: {"micro_dynamics", "authentizitaet", "emotionalitaet", "groove"}` (Noise Gate); `phase_20: {"authentizitaet", "natuerlichkeit"}` (SGMSE+ Reverb-Reduction); `phase_23: {"natuerlichkeit", "brillanz", "authentizitaet", "artikulation", "timbre_authentizitaet"}` (AudioSR Spectral Inpainting: synthetisierter Inhalt); `phase_24: {"natuerlichkeit", "brillanz", "authentizitaet", "artikulation", "timbre_authentizitaet"}` (Dropout); `phase_49: {"authentizitaet"}` (Dereverb); weitere kleinere Phasen. Material-adaptive Erweiterungen: `cd_digital`/`dat` → phase_03/phase_29 auf `{"natuerlichkeit", "artikulation"}` reduziert.
+- **§2.31b Material-adaptive Relaxation** (v9.10.85, akt. v9.10.96): Für `cd_digital`/`dat` werden bei `phase_03` und `phase_29` die meisten Ausschlüsse aufgehoben — nur `{"natuerlichkeit", "artikulation"}` bleiben. brillanz/transparenz sind seit §9.7.12/13 bei **allen** Materialtypen SNR-robust — nicht mehr ausgeschlossen. tonal_center und timbre_authentizitaet bleiben statisch ausgeschlossen (materialunabhängig: shaped NR und Centroid-CV-Disturbance).
 
 **Era-GP-Warmstart §2.14**: decade ≤ 1940 → `noise_reduction_strength ~ N(0.90, 0.05)`; ≤ 1960 → N(0.75, 0.08); ≥ 1970 → N(0.50, 0.10).
 **Material-MOS §6.2**: MOS ≥ 4.5 NUR für `cd_digital/dat/mp3_high/aac`; Shellac ≥ 3.8, Vinyl ≥ 4.0, Tape ≥ 4.2.
@@ -390,6 +439,9 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print(); Logs auf Engli
 
 - Interne Verarbeitungs-SR (Phasen 01–56, Plugins): stets **48 000 Hz**
 - **Analyse-Module** (DefectScanner, classify_clipping, RestorabilityEstimator, EraClassifier, MediumClassifier): arbeiten bei **nativer Import-SR** — kein Resampling vor Analyse, kein `assert sr == 48000`
+- **Dual-SR-Routing (Pflicht)**: Zwei getrennte Pfade führen — `analysis_audio/analysis_sr` (native Import-SR) für Analyse/Klassifikation, `processing_audio/processing_sr=48000` für alle Verarbeitungsphasen/Plugins.
+- **Fail-fast bei 48-kHz-Normierung (Pflicht)**: Wenn `processing_sr != 48000` und Resampling nicht möglich ist, MUSS der Lauf mit strukturierter Fehlermeldung abbrechen; ein Weiterlauf der Phasen auf Nicht-48k ist verboten.
+- **Resampling-Scope-Invariante**: Resampling darf nur den Verarbeitungspfad verändern; Analysepfad bleibt unverändert in nativer SR für material-/ära-/defektrobuste Entscheidungen.
 - **§9.1a Nicht-stationäre Defekte** (DROPOUTS, TRANSPORT_BUMP): MÜSSEN auf **vollständigem Audio** analysiert werden — kein 60 s Center-Crop. Stationäre Defekte (Rauschen, Brummen, Flutter) dürfen Center-Crop nutzen.
 - **§6.2a Material-Prioritäts-Phasen**: Phasen aus Spec 05 §6.2 MÜSSEN bei erkanntem Material **unbedingt aktiviert** werden — unabhängig vom Severity-Score. Phase entscheidet intern über Reparaturbedarf.
 - **§6.4a Material-adaptive Schwellen**: DefectScanner-Erkennungsschwellen material-abhängig (Analog 20 % median-RMS für Dropouts, Digital 10 %).
@@ -407,6 +459,13 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print(); Logs auf Engli
 - Überschreitung in Stufe 1 → DSP-Fallback **+ Phase in `deferred_phases` eintragen** (kein endgültiger Abbruch)
 - `LIMIT_BACKGROUND = float("inf")` — ausschließlich für `MLRefinementThread` (§2.38 KMV Stufe 2)
 - `RT8_EXCELLENCE_BUDGET = 32.0` (Benchmark-Gate-Referenz, RT-Kappe für reported rt_factor im Output). Kein Silence-Padding.
+
+### [RELEASE_MUST] Quality-First Hauptlauf (v9.10.80)
+
+- In nutzerseitigen Standardpfaden (GUI `BatchProcessingThread`, CLI `aurik_cli.py`, Batch `batch_processor.py`) MUSS `AurikDenker.denke(..., no_rt_limit=True)` verwendet werden.
+- Ziel: Keine Qualitätsreduktion zugunsten von RT im Hauptlauf (kein RT-bedingtes Phase-Skip/Deferral im Normalbetrieb).
+- PerformanceGuard bleibt aktiv für Telemetrie, Stabilitäts-Gates und strukturierte Schutzentscheidungen; RT-Limits dürfen Qualität nur in expliziten Nicht-Standardpfaden begrenzen.
+- `deferred_phases` bleibt verpflichtend für echte Laufzeit-/Ressourcen-Fallbacks (z. B. OOM/Headroom/Inference-Timeout), damit KMV Stufe 2 Vollqualität nachzieht.
 
 ### [RELEASE_MUST] §2.38 Kontinuierliche ML-Veredelung (KMV) — Vollqualitäts-Garantie
 
@@ -682,6 +741,18 @@ Fehlermeldungen immer mit **Ursache** + **Lösungsvorschlag** auf Deutsch.
 ## §2.36 LyricsGuidedEnhancement (ab 9.10.x — PFLICHT)
 
 Whisper-Tiny ONNX (39 MB) → Phonem-Alignment via wav2vec2_forced_alignment.onnx (125 MB) → Timeline-Segmentierung (vowel_stressed / fricative / plosive / silence) → ContentAwareProcessor (Salienz-Boosts pro Phonemklasse, Stille → aggressivere NR). Latenz ≤ 8 s/min Audio. Shortcut L (Overlay). **Datenschutz-Pflicht**: Lyrics-Text niemals in Logs oder `RestorationResult.metadata`.
+
+**§2.36a Phonem-spezifische DSP-Algorithmen ([RELEASE_MUST], v9.10.90):**
+Einheitlicher Gain-Boost reicht nicht — jede Phonemklasse erfordert separate Spektral-Behandlung:
+
+| Phonemklasse | DSP-Anforderung | Kernalgorithmus |
+|---|---|---|
+| `fricative_stressed/unstressed` | Rauschtextur 4–8 kHz ERHALTEN | Ramp-Gain `g(f) = 1 + str × ramp(4k→8k Hz)`; KEIN Wiener-Smoothing in diesem Band |
+| `plosive` | Onset-Transient unveränderlich (0–5 ms) | TransientShapeGuard: onset-Fenster gain=1.0; Burst 100–350 Hz ×1.40; Aspiration 3–8 kHz ×1.20 |
+| `vowel_stressed` | Formant-Amplituden proportional heben | LPC Burg Ord.30–40 → F1–F4 → symmetrisches Shelving ±2 HT um jeden Peak |
+| `silence` | Aggressivere NR ohne Hard-Gate | OMLSA G_floor=0.05, DeepFilterNet energy_bias=−12 dB |
+
+PGHI nach jeder Spektral-Modifikation. TimbralAuthenticityMetric ≥ 0.87, ArticulationMetric ≥ 0.85 nach phase_57. Vollständige Spezifikation: `spec 03 §2.36a`.
 
 ## ML-Plugin-Status (verifiziert, März 2026)
 

@@ -26,6 +26,7 @@ class SchlagerClassificationResult:
     rhythm_score: float = 0.0
     vocal_german_prior: float = 0.0
     melodic_repetition: float = 0.0
+    vocal_language_score: float = 0.5  # 1.0 = klar Deutsch, 0.0 = klar Englisch
     key: str = ""
     reasoning: str = ""
 
@@ -63,6 +64,9 @@ class GermanSchlagerClassifier:
         "electronic dance music synthesizer",
         "hip hop rap rhythm and blues",
         "heavy metal electric guitar distortion",
+        "English pop singing british accent",
+        "American country music english vocals",
+        "English language pop ballad singing",
     ]
 
     # ---- Schwellwerte ----
@@ -140,6 +144,9 @@ class GermanSchlagerClassifier:
         # Tier-6: Melodische Wiederholung
         melodic_rep = self._compute_melodic_repetition(mono, sr_a)
 
+        # Tier-7: Vokalsprach-Erkennung (Deutsch vs. Englisch)
+        lang_de_score = self._detect_vocal_language(mono, sr_a)
+
         # Ensemble-Voting
         tier_scores = [accordion_score, hsi, rhythm_score, vocal_prior, melodic_rep]
         n_active = sum(1 for s, t in zip(tier_scores, self._TIER_THRESHOLDS) if s >= t)
@@ -153,11 +160,15 @@ class GermanSchlagerClassifier:
         ) / 1.0  # Normalisierung bereits 1.0
         confidence = float(np.clip(0.30 * clap_score + 0.70 * weighted_mean, 0.0, 1.0))
 
+        # Sprach-Penalty: klar englischer Gesang (lang_de_score < 0.30) → confidence −15 %
+        if lang_de_score < 0.30:
+            confidence = float(np.clip(confidence * 0.85, 0.0, 1.0))
+
         is_schlager = (n_active >= 3) and (confidence >= self.SCHLAGER_CONFIDENCE_THRESHOLD)
 
         # Genre-Label + Subgenre
         if is_schlager:
-            genre_label = self._determine_genre_label(subgenre, bpm)
+            genre_label = self._determine_genre_label(subgenre, bpm, lang_de_score)
         else:
             # Multi-genre fallback: score Rock / Jazz / Klassik
             alt_genre, alt_conf = self._classify_non_schlager_genre(mono, sr_a, hsi, bpm)
@@ -180,15 +191,18 @@ class GermanSchlagerClassifier:
             melodic_rep,
             n_active,
             subgenre,
+            lang_de_score,
         )
 
         if is_schlager:
             logger.info(
-                "🎵 Deutscher Schlager erkannt — Akkordeon-Klangcharakter und "
+                "🎵 %s erkannt — Akkordeon-Klangcharakter und "
                 "Schunkelrhythmus werden sorgfältig bewahrt. "
-                "Konfidenz=%.2f, Subgenre=%s",
+                "Konfidenz=%.2f, Subgenre=%s, Sprache=%.2f",
+                genre_label,
                 confidence,
                 subgenre,
+                lang_de_score,
             )
 
         return SchlagerClassificationResult(
@@ -201,6 +215,7 @@ class GermanSchlagerClassifier:
             rhythm_score=float(np.clip(rhythm_score, 0.0, 1.0)),
             vocal_german_prior=float(np.clip(vocal_prior, 0.0, 1.0)),
             melodic_repetition=float(np.clip(melodic_rep, 0.0, 1.0)),
+            vocal_language_score=float(np.clip(lang_de_score, 0.0, 1.0)),
             subgenre=subgenre,
             bpm=float(bpm),
             key=key,
@@ -475,6 +490,126 @@ class GermanSchlagerClassifier:
 
         except Exception as e:
             logger.debug("VocalPrior Fallback: %s", e)
+            return 0.5
+
+    # ---- Tier-7: Vokalsprach-Erkennung (Deutsch vs. Englisch) ----
+
+    def _detect_vocal_language(self, audio: np.ndarray, sr: int) -> float:
+        """Erkennt ob Vokalinhalt eher Deutsch (1.0) oder Englisch (0.0) ist.
+
+        Drei DSP-Merkmale (gewichtetes Mittel):
+
+        1. Umlaut-F2-F1-Gap (Gewicht 0.50):
+           Deutsch ü/ö haben F2-F1 > 1400 Hz bei gleichzeitig F1 < 550 Hz.
+           Kein englisches Vokal-Phonem besetzt diesen Bereich systematisch.
+           Hoher Anteil solcher Frames → klar Deutsch.
+
+        2. F2-Varianz-Bimodalität (Gewicht 0.30):
+           Deutsch kontrastiert stark zwischen front-gerundeten Vokalen (ü, ö → hohe F2)
+           und Rückenvokalen (u, o → niedrige F2). Englisch hat weniger front-gerundete
+           Vokale → niedrigere F2-Standardabweichung relativ zum Mittelwert.
+           Normierte F2-Std (σ/µ) > 0.35 → eher Deutsch.
+
+        3. Konsonant-Cluster-Fricative-Band (Gewicht 0.20):
+           Deutsch /ch/ (Ich-Laut ~2.5 kHz, Ach-Laut ~1.5 kHz) erzeugt charakteristische
+           Energie im 1.2–3.5 kHz Band während stimmloser Passagen. Englisch fehlt dieses
+           Paar weitgehend (/ʃ/ konzentriert sich in 3–8 kHz).
+           Ratio E(1.2–3.5kHz) / E(3.5–8kHz) in stillen Segmenten > 1.2 → eher Deutsch.
+
+        Args:
+            audio: Mono float32, bereits auf 22050 Hz umgetastet.
+            sr:    22050.
+
+        Returns:
+            lang_de_score ∈ [0.0, 1.0] — 1.0 = klar Deutsch, 0.0 = klar Englisch.
+            0.5 = neutral / kein Gesang erkennbar.
+        """
+        try:
+            if len(audio) < sr // 2:
+                return 0.5
+
+            frame_len = int(sr * 0.025)  # 25 ms
+            hop = frame_len
+            frames = [audio[i : i + frame_len] for i in range(0, len(audio) - frame_len, hop)]
+
+            f1_vals: list[float] = []
+            f2_vals: list[float] = []
+            order = 16
+
+            for frame in frames[:300]:
+                rms = float(np.sqrt(np.mean(frame**2)))
+                if rms < 0.01:
+                    continue
+                if len(frame) <= order:
+                    continue
+                try:
+                    r = np.correlate(frame, frame, mode="full")
+                    r = r[len(r) // 2 :]
+                    R = np.array([r[abs(i - j)] for i in range(order) for j in range(order)]).reshape(order, order)
+                    rhs = r[1 : order + 1]
+                    lpc_coefs = np.linalg.lstsq(R, rhs, rcond=None)[0]
+                    poly = np.concatenate([[1.0], -lpc_coefs])
+                    roots = np.roots(poly)
+                    formants: list[float] = []
+                    for root in roots:
+                        if np.imag(root) > 0:
+                            freq = np.angle(root) * sr / (2 * np.pi)
+                            if 200 < freq < 3500:
+                                formants.append(freq)
+                    formants.sort()
+                    if len(formants) >= 2:
+                        f1_vals.append(formants[0])
+                        f2_vals.append(formants[1])
+                except Exception:
+                    continue
+
+            # --- Merkmal 1: Umlaut-Score (F2-F1 > 1400, F1 < 550) ---
+            umlaut_score = 0.5
+            if len(f1_vals) >= 5:
+                f1_arr = np.array(f1_vals)
+                f2_arr = np.array(f2_vals)
+                umlaut_mask = (f2_arr - f1_arr > 1400.0) & (f1_arr < 550.0)
+                umlaut_frac = float(np.sum(umlaut_mask)) / len(f1_vals)
+                # 0 Frames → 0.15 (neutral-negativ); > 20 % Frames → 1.0
+                umlaut_score = float(np.clip(0.15 + umlaut_frac * 4.25, 0.0, 1.0))
+
+            # --- Merkmal 2: F2-Bimodalität (normierte F2-Standardabweichung) ---
+            f2_bimodal_score = 0.5
+            if len(f2_vals) >= 10:
+                f2_arr = np.array(f2_vals)
+                f2_mean = float(np.mean(f2_arr))
+                if f2_mean > 100.0:
+                    f2_cv = float(np.std(f2_arr)) / f2_mean  # Variationskoeffizient
+                    # Deutsch: σ/µ typisch 0.35–0.60; Englisch: 0.20–0.35
+                    f2_bimodal_score = float(np.clip((f2_cv - 0.20) / 0.25, 0.0, 1.0))
+
+            # --- Merkmal 3: Konsonant-Cluster /ch/-Band-Ratio ---
+            ch_score = 0.5
+            try:
+                spec = np.abs(np.fft.rfft(audio, n=min(len(audio), 4096 * 8)))
+                freqs = np.fft.rfftfreq(min(len(audio), 4096 * 8), d=1.0 / sr)
+                ch_band = (freqs >= 1200.0) & (freqs <= 3500.0)
+                hf_band = (freqs > 3500.0) & (freqs <= 8000.0)
+                e_ch = float(np.mean(spec[ch_band] ** 2)) if np.any(ch_band) else 1e-12
+                e_hf = float(np.mean(spec[hf_band] ** 2)) if np.any(hf_band) else 1e-12
+                ratio = e_ch / (e_hf + 1e-12)
+                # Ratio > 1.2 → eher Deutsch; < 0.8 → eher Englisch
+                ch_score = float(np.clip((ratio - 0.8) / 0.8, 0.0, 1.0))
+            except Exception:
+                pass
+
+            lang_de_score = float(np.clip(
+                0.50 * umlaut_score + 0.30 * f2_bimodal_score + 0.20 * ch_score,
+                0.0, 1.0,
+            ))
+            logger.debug(
+                "VocalLanguage: umlaut=%.2f f2_bimodal=%.2f ch_ratio=%.2f → lang_de=%.2f",
+                umlaut_score, f2_bimodal_score, ch_score, lang_de_score,
+            )
+            return float(np.nan_to_num(lang_de_score, nan=0.5))
+
+        except Exception as exc:
+            logger.debug("VocalLanguage Fallback: %s", exc)
             return 0.5
 
     # ---- Tier-6: Melodische Wiederholungsrate ----
@@ -805,8 +940,13 @@ class GermanSchlagerClassifier:
         except Exception:
             return "Unbekannt"
 
-    def _determine_genre_label(self, subgenre: str, bpm: float) -> str:
-        """Bestimmt das Genre-Label aus Subgenre und BPM."""
+    def _determine_genre_label(self, subgenre: str, bpm: float, lang_de_score: float = 0.5) -> str:
+        """Bestimmt das Genre-Label aus Subgenre, BPM und Sprachscore.
+
+        lang_de_score >= 0.55 → Deutscher Schlager (eindeutig deutschsprachig).
+        lang_de_score < 0.30 → Internationaler Schlager (englischsprachig vermutet).
+        0.30–0.55 → Schlager (Sprache unsicher).
+        """
         mapping = {
             "schunkel": "Schlager",
             "walzer": "Walzer",
@@ -814,7 +954,12 @@ class GermanSchlagerClassifier:
             "discoschlager": "Disco-Schlager",
             "unknown": "Schlager",
         }
-        return mapping.get(subgenre, "Schlager")
+        base_label = mapping.get(subgenre, "Schlager")
+        if lang_de_score < 0.30:
+            return f"Internationaler {base_label}"
+        if lang_de_score >= 0.55 and base_label == "Schlager":
+            return f"Deutscher {base_label}"
+        return base_label
 
     def _build_reasoning(
         self,
@@ -828,6 +973,7 @@ class GermanSchlagerClassifier:
         melodic: float,
         n_active: int,
         subgenre: str,
+        lang_de_score: float = 0.5,
     ) -> str:
         parts = []
         if accordion >= 0.50:
@@ -838,6 +984,10 @@ class GermanSchlagerClassifier:
             parts.append(f"Schlager-Rhythmus '{subgenre}' erkannt ({rhythm:.2f})")
         if melodic >= self.REPETITION_THRESHOLD:
             parts.append(f"Hohe melodische Wiederholungsrate ({melodic:.2f})")
+        if lang_de_score >= 0.55:
+            parts.append(f"Deutschsprachiger Gesang erkannt ({lang_de_score:.2f})")
+        elif lang_de_score < 0.30:
+            parts.append(f"Englischsprachiger Gesang vermutet ({lang_de_score:.2f}) → Sprach-Penalty")
         verdict = "Schlager erkannt" if is_schlager else "Kein Schlager"
         return f"{verdict} (Konfidenz={confidence:.2f}, {n_active}/5 DSP-Schichten aktiv). " + "; ".join(parts)
 

@@ -109,7 +109,7 @@ def test_defect_story_widget_renders_layman_story_matrix() -> None:
     widget.update_story(defects, phase_text="phase_42_vocal_enhancement", active_tool="BSRoFormer")
     html = widget._body.text()
 
-    assert "Defekt-Story Matrix (32/32)" in html
+    assert "Erkannte Defekte" in html
     assert "WAS:" in html
     assert "WO:" in html
     assert "WIE:" in html

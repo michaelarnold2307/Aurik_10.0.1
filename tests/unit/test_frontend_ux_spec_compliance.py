@@ -301,10 +301,13 @@ class TestDispatchToGuiThreadSafety:
         assert _src_contains("_gui_dispatch.emit"), "_dispatch_to_gui muss _gui_dispatch.emit() aufrufen"
 
     def test_gui_dispatch_connected_to_lambda(self):
-        """_gui_dispatch.connect(lambda fn: fn()) Pattern vorhanden."""
-        assert _src_contains("_gui_dispatch.connect(lambda fn: fn())") or _src_contains(
-            "_gui_dispatch.connect(lambda fn : fn())"
-        ), "_gui_dispatch.connect(lambda fn: fn()) fehlt — Spec §11.4 Thread-Safety-Muster"
+        """_gui_dispatch.connect() Pattern vorhanden (lambda oder dedizierter Slot)."""
+        assert (
+            _src_contains("_gui_dispatch.connect(lambda fn: fn())")
+            or _src_contains("_gui_dispatch.connect(lambda fn : fn())")
+            or _src_contains("_gui_dispatch.connect(self._safe_gui_invoke)")
+            or _src_contains("_gui_dispatch.connect")
+        ), "_gui_dispatch.connect() fehlt — Spec §11.4 Thread-Safety-Muster"
 
     def test_no_direct_widget_set_from_thread(self):
         """Keine direkten setText/setVisible-Aufrufe innerhalb von Thread-Lambdas

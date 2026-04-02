@@ -298,8 +298,7 @@ class DtwGrooveMeasurer:
         Args:
             sr: Sample-Rate (muss 48000)
         """
-        if sr <= 0:
-            raise ValueError(f"SR muss > 0 Hz sein, erhalten: {sr}")
+        assert sr == 48000, f"SR muss 48000 Hz sein, erhalten: {sr}"
         self.sr = sr
 
     def measure(

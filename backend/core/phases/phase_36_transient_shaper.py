@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Phase 36: Transient Shaper v2.0 - Professional
+Phase 36: Transient Shaper v2.1 - Professional
 Multi-band transient enhancement and sustain control.
 
 Algorithm Overview:
 1. Multi-Band Split: 4 bands (Bass/Low-Mid/Mid-High/High @ 150/800/5k Hz)
 2. Transient Detection:
-   - Envelope follower (attack/release)
+   - Envelope follower (attack/release) — LOG-DOMAIN ballistics (v2.1)
    - Onset detection (spectral flux)
    - Peak detection (adaptive threshold)
 3. Per-Band Shaping:
@@ -20,7 +20,9 @@ Algorithm Overview:
 5. Safety Limiting: Prevent clipping from attack boost
 
 Scientific Foundation:
-- Zölzer (2011): DAFX - Digital Audio Effects - Transient Processing
+- Zölzer (2011): DAFX - Digital Audio Effects §6.1 — log-domain ballistics
+- Giannoulis et al. (2012): "Digital Dynamic Range Compressor Design — A Tutorial
+  and Analysis", JAES 60(6), pp. 399–408 — log-domain attack/release detector
 - Arfib et al. (2011): Time-Frequency Processing of Musical Signals
 - Bello et al. (2005): A Tutorial on Onset Detection in Music Signals
 - Dixon (2006): Onset Detection Revisited - Beat Tracking
@@ -38,7 +40,7 @@ Quality Target: 0.75 → 0.90 (+20% improvement)
 Performance Target: <0.20× realtime
 
 Author: Aurik Development Team
-Version: 2.0.0 Professional
+Version: 2.1.0 Professional
 """
 
 import logging
@@ -129,7 +131,7 @@ class TransientShaper(PhaseInterface):
             priority=5,
             dependencies=["phase_08_transient_preservation"],
             estimated_time_factor=0.20,
-            version="2.0.0",
+            version="2.1.0",
             memory_requirement_mb=70,
             is_cpu_intensive=True,
             is_io_intensive=False,
@@ -309,13 +311,37 @@ class TransientShaper(PhaseInterface):
         return shaped_band
 
     def _compute_envelope(self, audio: np.ndarray, attack_samples: int, release_samples: int) -> np.ndarray:
-        """Compute envelope with asymmetric attack/release.
+        """Compute envelope with asymmetric attack/release in the *log domain*.
+
+        Processing in dBFS ensures perceptually uniform ballistics: a transient
+        of equal loudness difference (dB) relative to its local floor is captured
+        consistently regardless of absolute signal level (Weber–Fechner law).  In
+        contrast, a linear-domain follower over-responds to loud transients and
+        misses quiet ones by the same dB amount.
+
+        Algorithm (Giannoulis et al. 2012, JAES 60(6); Zölzer 2011 DAFX §6.1):
+            1. Convert |x| to dBFS:  x_db = 20·log₁₀(max(|x|, ε))
+            2. Asymmetric smoothing in dBFS:
+                   e_db[n] = α_a · x_db[n] + (1−α_a) · e_db[n−1]  if x_db > e_db[n−1]
+                           = α_r · x_db[n] + (1−α_r) · e_db[n−1]  otherwise
+            3. Convert back to linear:  e[n] = 10^(e_db[n] / 20)
 
         Optimized: Downsample by factor 16 for the sequential loop,
-        then upsample back. Preserves asymmetric attack/release behavior
-        while reducing 10.8M iterations to ~675K.
+        then upsample back.  Preserves asymmetric attack/release behavior
+        while reducing 10.8 M iterations to ~675 K.
+
+        Args:
+            audio:           1-D float64 signal (a single sub-band channel)
+            attack_samples:  Time constant in samples for fast detector
+            release_samples: Time constant in samples for slow release
+
+        Returns:
+            Envelope as non-negative linear-domain float64 array, same length as
+            ``audio``.
         """
-        _DS = 16  # Downsample factor — 0.33 ms at 48 kHz, well below attack window
+        _DS = 16        # Downsample factor — 0.33 ms at 48 kHz, well below attack window
+        _FLOOR_DB = -120.0  # dBFS floor: prevents log(0) and pins silence to a finite value
+
         abs_audio = np.abs(audio)
 
         # Downsample via block-max (preserves transient peaks)
@@ -326,20 +352,27 @@ class TransientShaper(PhaseInterface):
         if n_trim < n:
             abs_ds = np.append(abs_ds, abs_audio[n_trim:].max())
 
-        # Scale coefficients for downsampled rate
+        # --- Convert to dBFS for perceptually uniform ballistics ---
+        floor_lin = 10.0 ** (_FLOOR_DB / 20.0)  # ≈ 1e-6
+        abs_ds_db = 20.0 * np.log10(np.maximum(abs_ds, floor_lin))
+
+        # Scale time constants for the downsampled rate
         att_ds = max(1, attack_samples // _DS)
         rel_ds = max(1, release_samples // _DS)
         attack_coeff = 1.0 - np.exp(-1.0 / att_ds)
         release_coeff = 1.0 - np.exp(-1.0 / rel_ds)
 
-        # Sequential loop on downsampled data (~675K iterations instead of ~10.8M)
-        envelope_ds = np.empty_like(abs_ds)
-        envelope_ds[0] = abs_ds[0]
-        for i in range(1, len(abs_ds)):
-            if abs_ds[i] > envelope_ds[i - 1]:
-                envelope_ds[i] = attack_coeff * abs_ds[i] + (1 - attack_coeff) * envelope_ds[i - 1]
+        # Sequential loop on downsampled dBFS data (~675 K iterations)
+        envelope_db = np.empty_like(abs_ds_db)
+        envelope_db[0] = abs_ds_db[0]
+        for i in range(1, len(abs_ds_db)):
+            if abs_ds_db[i] > envelope_db[i - 1]:
+                envelope_db[i] = attack_coeff * abs_ds_db[i] + (1.0 - attack_coeff) * envelope_db[i - 1]
             else:
-                envelope_ds[i] = release_coeff * abs_ds[i] + (1 - release_coeff) * envelope_ds[i - 1]
+                envelope_db[i] = release_coeff * abs_ds_db[i] + (1.0 - release_coeff) * envelope_db[i - 1]
+
+        # Convert back to linear domain for downstream compatibility
+        envelope_ds = 10.0 ** (envelope_db / 20.0)
 
         # Upsample back via linear interpolation
         x_ds = np.linspace(0, n - 1, len(envelope_ds))

@@ -234,15 +234,16 @@ class PolyphonicSpeedCurveEstimator:
         speed_curve = np.nan_to_num(speed_curve, nan=0.0).astype(np.float32)
 
         # Step 6b: Plausibility guard — speed deviations > 200 cents (2 semitones)
-        # are physically implausible for wow/flutter and indicate estimation failure.
+        # are physically implausible for wow/flutter and indicate inference failure.
+        # Use a deterministic pYIN fallback instead of forcing a zero-curve to avoid
+        # masking hard tracker failures and to preserve musical timing information.
         _max_abs_cents = float(np.max(np.abs(speed_curve))) if len(speed_curve) > 0 else 0.0
         if _max_abs_cents > 200.0:
             logger.warning(
-                "PolyphonicSpeedCurveEstimator: speed_range implausible (max |%.1f| cents > 200) — zeroing speed_curve",
+                "PolyphonicSpeedCurveEstimator: speed_range implausible (max |%.1f| cents > 200) — switching to pYIN fallback",
                 _max_abs_cents,
             )
-            speed_curve[:] = 0.0
-            final_conf = np.full_like(speed_curve, 0.05, dtype=np.float32)
+            return self._pyin_fallback(audio, sr)
         else:
             final_conf = None  # computed below
 

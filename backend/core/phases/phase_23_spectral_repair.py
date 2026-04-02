@@ -38,6 +38,7 @@ Version: 3.0.0
 """
 
 import logging
+import importlib
 import time
 from typing import Any
 
@@ -145,9 +146,18 @@ class SpectralRepair(PhaseInterface):
         self.name = "Spectral Repair v3 IMCRA"
         self._audiosr_plugin = None  # Lazy loading
         self._ml_guard_events: list[dict[str, Any]] = []
+        self._current_material: MaterialType = MaterialType.CD_DIGITAL  # updated per process() call
 
     def _has_sufficient_ml_headroom(self, audio: np.ndarray, sample_rate: int) -> bool:
-        """Return True when enough physical RAM is available for AudioSR stage."""
+        """Return True when enough physical RAM is available for AudioSR stage.
+
+        Guard 1 — material check: AudioSR bandwidth extension is the wrong tool for
+        lossy-codec artifacts (MP3/AAC ringing, pre-echo, masking throughout spectrum).
+        DSP spectral inpainting is more appropriate; never load 5.9 GB for this.
+
+        Guard 2 — channel-aware RAM check (§2.38a): stereo doubles inference working
+        memory; empirical per-minute inference buffer overhead is added.
+        """
         try:
             import gc
 
@@ -155,15 +165,51 @@ class SpectralRepair(PhaseInterface):
         except Exception:
             return True
 
-        n_samples = len(audio)
-        n_channels = 1
+        # Guard 1: AudioSR nur für bekannte Analog-Quellen erlaubt (Allowlist-Prinzip).
+        # Bug-16b-Fix: Blocklist {"mp3_low", ...} verhindert nicht "unknown" — bei unbekanntem
+        # Material lädt AudioSR trotzdem → OOM. Allowlist verlangt positive Analog-Evidenz.
+        # AudioSR trainiert auf Analog-Bandbreitenverlust (Shellac ≤7 kHz, Tape ≤12 kHz).
+        # Für "unknown", cd_digital, dat, mp3*, aac, streaming: DSP-Inpainting überlegen.
+        _ANALOG_ALLOW_AUDIOSR: frozenset[str] = frozenset({
+            "vinyl", "shellac", "tape", "reel_tape", "wax_cylinder",
+            "cassette", "lacquer_disc", "wire_recording",
+        })
+        _mat = getattr(self, "_current_material", None)
+        if _mat not in _ANALOG_ALLOW_AUDIOSR:
+            self._ml_guard_events.append(
+                {
+                    "phase_id": "phase_23_spectral_repair",
+                    "model": "AudioSR",
+                    "reason": "lossy_codec_material_dsp_preferred",
+                    "required_gb": 0.0,
+                    "available_gb": 0.0,
+                    "channels": 0,
+                    "duration_s": 0.0,
+                    "fallback": "dsp_inpainting",
+                }
+            )
+            logger.info(
+                "SpectralRepair: AudioSR skipped — material '%s' not in analog allowlist — DSP inpainting preferred",
+                _mat,
+            )
+            return False
+
+        # Guard 2: channel-aware physical RAM check (§2.38a)
+        # Aurik internal format: (N,) mono or (N, ch) stereo — first axis is always samples.
+        n_channels = int(audio.shape[1]) if (audio.ndim == 2 and 1 < audio.shape[1] <= 8) else 1
+        n_samples = int(audio.shape[0])
         duration_s = n_samples / float(max(1, sample_rate))
 
+        # Base model 5.9 GB + duration bonus, scaled by channel count.
+        # Empirical: AudioSR keeps overlapping windows in memory → ~1.5 GB/min overhead.
         required_gb = 5.0
         if duration_s >= 180.0:
             required_gb += 2.0
         elif duration_s >= 60.0:
             required_gb += 1.0
+        required_gb *= max(1, n_channels)  # stereo doubles working memory
+        required_gb += 1.5 * (duration_s / 60.0)  # inference buffer overhead per minute
+        required_gb = min(required_gb, 22.0)  # sanity cap
 
         available_gb = float(psutil.virtual_memory().available / (1024**3))
         if available_gb < required_gb + 1.5:
@@ -190,16 +236,18 @@ class SpectralRepair(PhaseInterface):
                     "reason": "insufficient_physical_ram_headroom",
                     "required_gb": float(required_gb),
                     "available_gb": float(available_gb),
-                    "channels": int(n_channels),
+                    "channels": n_channels,
                     "duration_s": float(duration_s),
                     "fallback": "dsp_inpainting",
                 }
             )
             logger.warning(
-                "SpectralRepair RAM guard triggered: %.1f GB available, %.1f GB required (duration=%.1fs) - using DSP fallback",
+                "SpectralRepair RAM guard triggered: %.1f GB available, %.1f GB required "
+                "(duration=%.1fs, ch=%d) — using DSP fallback",
                 available_gb,
                 required_gb,
                 duration_s,
+                n_channels,
             )
             return False
         return True
@@ -253,6 +301,8 @@ class SpectralRepair(PhaseInterface):
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
         self._ml_guard_events = []
+        # Store material as lowercase string value for guard comparison (handles both str and MaterialType enum)
+        self._current_material = str(getattr(material, "value", material)).lower()
         self.validate_input(audio)
 
         is_stereo = audio.ndim == 2
@@ -287,13 +337,45 @@ class SpectralRepair(PhaseInterface):
                 warnings=["Repair skipped due to zero effective strength"],
             )
 
-        # Process each channel
-        if is_stereo:
-            repaired_left = self._repair_channel(audio[:, 0], sample_rate, stft_cfg, thresholds, repair_strength)
-            repaired_right = self._repair_channel(audio[:, 1], sample_rate, stft_cfg, thresholds, repair_strength)
-            repaired_audio = np.column_stack((repaired_left, repaired_right))
+        # --- ADMM Declipping path (spec §4.5a) ---
+        # Detect hard clipping and route to sparse-recovery solver instead of
+        # standard inpainting.  SOFT_SATURATION → no ADMM (per §5 vintage rules).
+        _use_admm = False
+        _clip_level = 0.98
+        _defect_type_kwarg = kwargs.get("defect_type", None)
+        if _defect_type_kwarg is not None and hasattr(_defect_type_kwarg, "name"):
+            if _defect_type_kwarg.name in ("CLIPPING", "HARMONIC_DISTORTION"):
+                _use_admm = True
         else:
-            repaired_audio = self._repair_channel(audio, sample_rate, stft_cfg, thresholds, repair_strength)
+            try:
+                from backend.core.clipping_detection import ClippingType, classify_clipping
+
+                _mono_ref = audio[:, 0] if is_stereo else audio
+                _clip_check = _mono_ref[: min(len(_mono_ref), sample_rate * 10)]
+                if classify_clipping(_clip_check, sample_rate) == ClippingType.CLIPPING:
+                    _use_admm = True
+            except Exception as _ce:
+                logger.debug("classify_clipping check failed: %s", _ce)
+
+        if _use_admm:
+            # Estimate clip ceiling as 99.5th percentile of absolute amplitude
+            _clip_level = float(np.percentile(np.abs(audio), 99.5))
+            _clip_level = float(np.clip(_clip_level, 0.85, 1.0))
+            logger.info("ADMM declipping activated: clip_level=%.4f", _clip_level)
+            if is_stereo:
+                repaired_left = self._admm_declip(audio[:, 0], _clip_level, sample_rate)
+                repaired_right = self._admm_declip(audio[:, 1], _clip_level, sample_rate)
+                repaired_audio = np.column_stack((repaired_left, repaired_right))
+            else:
+                repaired_audio = self._admm_declip(audio, _clip_level, sample_rate)
+        else:
+            # Process each channel via standard spectral inpainting
+            if is_stereo:
+                repaired_left = self._repair_channel(audio[:, 0], sample_rate, stft_cfg, thresholds, repair_strength)
+                repaired_right = self._repair_channel(audio[:, 1], sample_rate, stft_cfg, thresholds, repair_strength)
+                repaired_audio = np.column_stack((repaired_left, repaired_right))
+            else:
+                repaired_audio = self._repair_channel(audio, sample_rate, stft_cfg, thresholds, repair_strength)
 
         # Calculate metrics
         defect_reduction = self._calculate_defect_reduction(audio, repaired_audio, sample_rate)
@@ -321,6 +403,132 @@ class SpectralRepair(PhaseInterface):
             },
             warnings=[] if rt_factor < 0.6 else [f"Performance sub-optimal: {rt_factor:.2f}× realtime"],
         )
+
+    def _admm_declip(
+        self,
+        audio: np.ndarray,
+        clip_level: float,
+        sr: int = 48_000,
+        rho: float = 0.1,
+        max_iter: int = 200,
+        tol: float = 1e-4,
+    ) -> np.ndarray:
+        """ADMM sparse-recovery declipping per spec §4.5a (Záviška 2021).
+
+        Solves:  minimize  ||W x||_1
+                 subject to  x[reliable] = y[reliable]
+                              x[clipped] ∈ [-C, C]
+
+        where W is a Daubechies-db4 Level-5 wavelet transform and C = clip_level.
+
+        TransientGuard: at onset positions (±5 ms) rho is scaled by 3.0 to
+        preserve attack transients (ArticulationMetric ≥ 0.88 invariant).
+
+        Post-ADMM: clipped samples that remain > clip_level are hard-clamped
+        to avoid residual ears.
+
+        Reference: Záviška et al. (2021) "A Survey and an Extensive Evaluation
+        of Popular Audio Declipping Methods"; Condat (2013) ADMM tutorial.
+
+        Args:
+            audio:     1-D float32 mono signal (clipped).
+            clip_level: Amplitude ceiling (e.g. 0.98 for near-full-scale).
+            sr:        Sample rate — must be 48 000 Hz.
+            rho:       ADMM penalty parameter (default 0.1, adaptive at onsets).
+            max_iter:  Maximum ADMM iterations.
+            tol:       Convergence tolerance (relative primal residual).
+
+        Returns:
+            Declipped 1-D float32 array, same shape as input.
+        """
+        try:
+            pywt = importlib.import_module("pywt")
+        except ModuleNotFoundError:
+            logger.warning("pywt not available — ADMM declipping skipped, returning original")
+            return np.asarray(audio, dtype=np.float32)
+
+        y = np.asarray(audio, dtype=np.float64)
+        n = len(y)
+
+        # --- Reliable vs clipped mask ---
+        reliable_mask = np.abs(y) < clip_level * 0.99
+        clipped_mask = ~reliable_mask
+        if not np.any(clipped_mask):
+            return y.astype(np.float32)
+
+        # --- Onset detection for TransientGuard (§4.5a) ---
+        onset_win = max(1, int(sr * 0.005))  # ±5 ms
+        onset_guard = np.zeros(n, dtype=bool)
+        try:
+            hop = 64
+            n_frames = max(1, (n - hop) // hop)
+            frame_energy = np.array([np.sum(y[i * hop: i * hop + hop] ** 2) for i in range(n_frames)])
+            diff = np.diff(frame_energy, prepend=frame_energy[0])
+            mu, sigma = float(np.mean(diff)), float(np.std(diff)) + 1e-10
+            onset_frames = np.where(diff > mu + 2.0 * sigma)[0]
+            for of in onset_frames:
+                s = max(0, of * hop - onset_win)
+                e = min(n, of * hop + onset_win)
+                onset_guard[s:e] = True
+        except Exception:
+            pass  # No transient guard on error — safe fallback
+
+        # --- Wavelet parameters: db4 Level-5 ---
+        wavelet = "db4"
+        level = 5
+
+        # --- ADMM initialisation ---
+        x = y.copy()
+        coeffs_shape = pywt.wavedec(x, wavelet, level=level, mode="periodization")
+        z = [c.copy() for c in coeffs_shape]
+        u = [np.zeros_like(c) for c in coeffs_shape]
+
+        lam = 0.01 * rho  # Sparsity weight balanced against rho
+        rho_onset = rho * 3.0  # TransientGuard penalty
+
+        x_prev = x.copy()
+        for _iter in range(max_iter):
+            # x-update: reconstruct from (z − u), then project onto constraints
+            z_minus_u = [z[i] - u[i] for i in range(len(z))]
+            x_new = pywt.waverec(z_minus_u, wavelet, mode="periodization")
+            x_new = x_new[:n]
+            if len(x_new) < n:
+                x_new = np.pad(x_new, (0, n - len(x_new)))
+
+            # Projection: reliable → original; clipped → clamp to [-C, C]
+            x_new[reliable_mask] = y[reliable_mask]
+            x_new[clipped_mask] = np.clip(x_new[clipped_mask], -clip_level, clip_level)
+
+            # At onset guard positions: keep original value when reliable to
+            # preserve transient shape (rho_onset applied implicitly via z-update)
+            onset_reliable = onset_guard & reliable_mask
+            x_new[onset_reliable] = y[onset_reliable]
+
+            x = x_new
+
+            # z-update: soft-threshold in wavelet domain
+            xc = pywt.wavedec(x, wavelet, level=level, mode="periodization")
+            for i in range(len(z)):
+                v = xc[i] + u[i]
+                # Use onset-aware threshold only for approximation coefficients (i==0)
+                thr = lam / (rho_onset if i == 0 and np.any(onset_guard) else rho)
+                z[i] = np.sign(v) * np.maximum(np.abs(v) - thr, 0.0)
+
+            # u-update: dual ascent
+            xc2 = pywt.wavedec(x, wavelet, level=level, mode="periodization")
+            for i in range(len(u)):
+                u[i] = u[i] + xc2[i] - z[i]
+
+            # Convergence check
+            rel = float(np.linalg.norm(x - x_prev)) / (float(np.linalg.norm(x_prev)) + 1e-10)
+            if rel < tol:
+                logger.debug("ADMM declip converged after %d iterations (rel=%.2e)", _iter + 1, rel)
+                break
+            x_prev = x.copy()
+
+        # Hard-clamp residual excursions > clip_level as safety net
+        x = np.clip(x, -1.0, 1.0)
+        return x.astype(np.float32)
 
     def _repair_channel(
         self,

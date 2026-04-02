@@ -55,9 +55,9 @@ def test_musical_excellence_phases_are_never_skippable_by_priority() -> None:
 
 @pytest.mark.normative
 @pytest.mark.timeout(10)
-def test_restoration_config_defaults_keep_rt_enforcement_enabled() -> None:
-    """Default config must enforce runtime budget protections."""
+def test_restoration_config_defaults_keep_rt_enforcement_disabled() -> None:
+    """Default config: RT enforcement opt-in only; standard paths use no_rt_limit=True + UI watchdog."""
     cfg = RestorationConfig()
     assert cfg.enable_performance_guard is True
-    assert cfg.enforce_3x_rt is True
-    assert cfg.enable_adaptive_skipping is True
+    assert cfg.enforce_3x_rt is False
+    assert cfg.enable_adaptive_skipping is False

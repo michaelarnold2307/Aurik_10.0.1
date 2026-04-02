@@ -154,7 +154,10 @@ class BatchProcessor:
             # §2.2 Canonical Singleton-Einstiegspunkt (No-Competing-Instances-Protokoll)
             denker = _get_aurik_denker()
             mode = (config or {}).pop("mode", "restoration")
-            denker_result = denker.denke(audio_data, file_sr, mode=mode)
+            denker_result = denker.denke(
+                audio_data, file_sr, mode=mode, no_rt_limit=True,
+                input_path=str(input_file),
+            )
             restorer_result = denker_result
             restored_audio = denker_result.audio
 

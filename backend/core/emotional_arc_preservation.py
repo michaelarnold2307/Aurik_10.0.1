@@ -353,6 +353,29 @@ class EmotionalArcPreservationMetric:
         gain_db = 20.0 * np.log10((rms_orig + eps) / (rms_rest + eps))
         gain_db = np.clip(gain_db.astype(np.float64) * damping, -max_gain_db, max_gain_db)
 
+        # Guard: suppress positive gain on near-silent restored segments.
+        # After denoising the tail is genuinely silent; applying a positive
+        # gain here (to match original tape/vinyl noise floor) inflates the
+        # integrated LUFS measurement and forces phase_40 to attenuate the
+        # musical content in compensation (regression).
+        _silence_rms_thresh = 10.0 ** (-60.0 / 20.0)  # −60 dBFS ≈ noise floor
+        # §2.30 Bug-Fix §13 — Fade-out denoising guard (companion to MDEM guard):
+        # Restored segment is moderately quiet (< -42 dBFS) AND original is
+        # significantly louder (> 6 dB difference). This is the "denoised fade-out"
+        # pattern: original had noise+signal, restored has only the clean signal.
+        # Applying positive gain would reconstruct the noise floor and cause an
+        # audible volume jump at the end of the song.
+        _quiet_rms_thresh = 10.0 ** (-42.0 / 20.0)  # −42 dBFS = quiet/fade-out zone
+        _noise_diff_thresh_db = 6.0
+        for _i in range(len(gain_db)):
+            if gain_db[_i] > 0.0:
+                if rms_rest[_i] < _silence_rms_thresh:
+                    gain_db[_i] = 0.0
+                elif rms_rest[_i] < _quiet_rms_thresh:
+                    _diff = 20.0 * np.log10((rms_orig[_i] + eps) / (rms_rest[_i] + eps))
+                    if _diff >= _noise_diff_thresh_db:
+                        gain_db[_i] = 0.0  # Denoised fade-out: no boost
+
         # Savitzky-Golay smooth (boxcar fallback)
         if len(gain_db) >= 7:
             try:

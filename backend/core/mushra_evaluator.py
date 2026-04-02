@@ -357,7 +357,9 @@ class MushraEvaluator:
 
             min_frames = min(mfcc_ref.shape[0], mfcc_test.shape[0])
             diff = mfcc_ref[:min_frames, 1:] - mfcc_test[:min_frames, 1:]  # skip c0
-            mcd = (10.0 / math.log(10)) * math.sqrt(2.0) * float(np.sqrt(np.mean(diff**2)))
+            # Per-frame MCD then average (correct formulation — not global RMS)
+            frame_dists = np.sqrt(2.0 * np.sum(diff**2, axis=1))
+            mcd = (10.0 / math.log(10)) * float(np.mean(frame_dists))
             return max(0.0, mcd)
         except Exception as exc:
             logger.debug("MCD Fallback: %s", exc)

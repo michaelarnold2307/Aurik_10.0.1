@@ -6,7 +6,9 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at:
 
-    http://www.apache.org/licenses/LICENSE-2.0
+```text
+http://www.apache.org/licenses/LICENSE-2.0
+```
 
 ---
 
@@ -18,7 +20,7 @@ Each component retains its original license as specified below.
 ### ML Models (bundled in `models/`)
 
 | Model | License | Source |
-|---|---|---|
+| --- | --- | --- |
 | **Vocos 24 kHz** (vocos_mel_spec_24khz.onnx) | MIT | Siuzdak (2023), github.com/hubert-siuzdak/vocos |
 | **MDX23C Kim_Vocal_2 / Kim_Inst** | MIT | UVR / KimberleyJensen |
 | **Apollo** (apollo_model.onnx) | Apache-2.0 | Zhang et al. (2024) |
@@ -39,7 +41,6 @@ Each component retains its original license as specified below.
 > **Hinweis MERT-v1-330M**: MERT wird NICHT gebündelt (CC BY-NC-SA 4.0,
 > nicht-kommerziell). Es ist ein optionales Opt-in-Modul mit DSP-Fallback.
 > Bei Aktivierung erscheint ein expliziter NC-Hinweis in der UI.
-
 > **Hinweis Banquet Vinyl / DeepFilterNet-Gewichte**: CC BY-NC-SA 4.0 gilt
 > für die Modellgewichte. Der Quellcode ist unter MIT/Apache-2.0 lizenziert.
 > Für kommerzielle Nutzung der Gewichte bitte die jeweiligen Autoren kontaktieren.
@@ -47,7 +48,7 @@ Each component retains its original license as specified below.
 ### Python-Bibliotheken (Auswahl, vollständige Liste via `pip-licenses`)
 
 | Paket | Lizenz |
-|---|---|
+| --- | --- |
 | numpy | BSD-3-Clause |
 | scipy | BSD-3-Clause |
 | librosa | ISC |

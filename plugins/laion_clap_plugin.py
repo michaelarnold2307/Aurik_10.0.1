@@ -479,6 +479,54 @@ class LAIONCLAPPlugin:
     # Öffentliche API
     # ------------------------------------------------------------------
 
+    def embed_audio(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        """Return a 512-dim L2-normalised audio embedding for downstream NN search.
+
+        Used by EraClassifier Tier-1 for cosine-similarity based decade detection.
+
+        Args:
+            audio: 1-D float audio (mono, any length).
+            sr:    Sample rate (must be 48000).
+
+        Returns:
+            np.ndarray of shape (512,), L2-normalised, dtype float32.
+
+        Raises:
+            RuntimeError: If no CLAP model is available (caller should catch
+                          and fall back to DSP-based era detection).
+        """
+        assert sr == 48000, f"LAION-CLAP embed_audio: SR muss 48000 Hz sein, erhalten: {sr}"
+        self._ensure_loaded()
+        audio_f32 = np.asarray(audio, dtype=np.float32).ravel()
+        audio_f32 = np.nan_to_num(audio_f32, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Path 1: ONNX audio-encoder
+        if self._model_loaded and self._audio_session is not None:
+            feat = np.abs(np.fft.rfft(audio_f32[:sr], n=2048)).astype(np.float32)
+            feat = feat[np.newaxis, :]
+            input_name = self._audio_session.get_inputs()[0].name
+            outputs = self._audio_session.run(None, {input_name: feat})
+            emb = np.nan_to_num(outputs[0].flatten()[: self.EMBEDDING_DIM], nan=0.0)
+        # Path 2: PyTorch laion_clap
+        elif self._model_loaded and self._clap_model is not None:
+            import torch
+            with torch.no_grad():
+                emb = self._clap_model.get_audio_embedding_from_data(
+                    x=[audio_f32], use_tensor=False,
+                )
+                if isinstance(emb, np.ndarray) and emb.ndim == 2:
+                    emb = emb[0]
+                emb = np.nan_to_num(emb, nan=0.0)
+        else:
+            raise RuntimeError("No CLAP model loaded — embed_audio unavailable")
+
+        # L2 normalise
+        emb = emb.astype(np.float32)
+        norm = np.linalg.norm(emb)
+        if norm > 1e-12:
+            emb = emb / norm
+        return emb
+
     def tag(
         self,
         audio: np.ndarray,

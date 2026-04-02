@@ -51,6 +51,12 @@ class TontraegerInfo:
     reasoning: str = ""
     """Menschenlesbare Begründung der Erkennung (Deutsch)."""
 
+    classification_result: Any = None
+    """ClassificationResult-Objekt für Passthrough an UV3 (§6.7 v9.10.97)."""
+
+    bayesian_scores: dict[str, float] = field(default_factory=dict)
+    """Posterior-Wahrscheinlichkeiten aller 16 Materialtypen."""
+
     def as_dict(self) -> dict[str, Any]:
         """Serialisierungsformat für Logging und Persistenz."""
         return {
@@ -140,12 +146,13 @@ class TontraegerDenker:
         sr: int,
         *,
         validate_audio: bool = True,
+        file_path: str = "",
     ) -> TontraegerInfo:
         """Erkennt das Quellmaterial und liefert eine strukturierten TontraegerInfo.
 
         Algorithmus:
             1. NaN/Inf-Schutz auf Eingabe
-            2. MediumDetector.detect(audio, sr) → Dict
+            2. MediumDetector.detect(audio, sr, file_ext=...) → Dict
             3. Strukturierung + Konfidenz-Normalisierung
             4. Laienverständliche Begründung erzeugen
 
@@ -153,6 +160,9 @@ class TontraegerDenker:
             audio: Eingabe-Audio, float32/64 mono oder stereo.
             sr:    Sample-Rate in Hz.
             validate_audio: NaN/Inf-Bereinigung durchführen (Standard: True).
+            file_path: Optionaler Pfad zur Quelldatei.  Die Dateiendung wird als
+                Prior für die Materialerkennung verwendet (§6.7b): digitale
+                Formate (.mp3, .flac, …) schließen analoge Materialien aus.
 
         Returns:
             TontraegerInfo mit material_type, confidence und Details.
@@ -172,8 +182,14 @@ class TontraegerDenker:
         if detector is None:
             return self._fallback_result()
 
+        import os as _os
+        _file_ext = _os.path.splitext(file_path)[1] if file_path else ""
+
         try:
-            raw_result = detector.detect(audio, sr)
+            raw_result = detector.detect(audio, sr, file_ext=_file_ext)
+            # Preserve classification_result + bayesian_scores for passthrough (§6.7 v9.10.97)
+            _classification_result = getattr(raw_result, "classification_result", None)
+            _bayesian_scores = getattr(raw_result, "bayesian_scores", {}) or {}
             # MediumDetectionResult (dataclass) → dict für _struktur()
             if isinstance(raw_result, dict):
                 raw: dict[str, Any] = raw_result
@@ -194,7 +210,10 @@ class TontraegerDenker:
             logger.warning("TontraegerDenker: detect() fehlgeschlagen (%s). Fallback.", exc)
             return self._fallback_result()
 
-        return self._struktur(raw)
+        info = self._struktur(raw)
+        info.classification_result = _classification_result
+        info.bayesian_scores = _bayesian_scores
+        return info
 
     # ------------------------------------------------------------------
     # Hilfsmethoden

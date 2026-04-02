@@ -198,37 +198,107 @@ class LyricsAligner:
         sr: int,
         language: str,
     ) -> list[LyricsSegment]:
-        """Use Whisper for transcription with timestamps."""
-        # This is a simplified implementation
-        # Production version should use Montreal Forced Aligner for precision
-
+        """Use Whisper for transcription with word-level timestamps."""
         segments = []
 
-        # Placeholder: Segment audio into ~3-second chunks
-        segment_length = 3.0  # seconds
+        try:
+            import whisper
 
-        for i in range(0, int(len(audio) / sr), int(segment_length)):
-            start_time = float(i)
-            end_time = float(min(i + segment_length, len(audio) / sr))
+            model = whisper.load_model("tiny")
+            # Whisper expects float32 audio at 16 kHz
+            if sr != 16000:
+                import librosa
+                audio_16k = librosa.resample(audio.astype(np.float32), orig_sr=sr, target_sr=16000)
+            else:
+                audio_16k = audio.astype(np.float32)
 
-            # Extract segment
-            start_idx = int(start_time * sr)
-            end_idx = int(end_time * sr)
-            segment_audio = audio[start_idx:end_idx]
+            result = model.transcribe(
+                audio_16k,
+                language=language,
+                word_timestamps=True,
+                fp16=False,
+            )
 
-            # Check if segment has vocal content (simple energy threshold)
-            rms = np.sqrt(np.mean(segment_audio**2))
-            if rms > 0.01:
-                # Placeholder text (production would use Whisper transcription)
-                segment = LyricsSegment(
-                    text=f"[vocal_{i}]",
-                    start_time=start_time,
-                    end_time=end_time,
-                    confidence=0.8,
-                )
-                segments.append(segment)
+            for seg in result.get("segments", []):
+                for word_info in seg.get("words", []):
+                    text = word_info.get("word", "").strip()
+                    if not text:
+                        continue
+                    start_t = float(word_info.get("start", 0.0))
+                    end_t = float(word_info.get("end", start_t + 0.1))
+                    prob = float(word_info.get("probability", 0.5))
+                    segments.append(
+                        LyricsSegment(
+                            text=text,
+                            start_time=start_t,
+                            end_time=end_t,
+                            confidence=prob,
+                        )
+                    )
 
-        logger.info(f"Aligned {len(segments)} vocal segments")
+            # Fallback: if word_timestamps not available, use segment-level
+            if not segments:
+                for seg in result.get("segments", []):
+                    text = seg.get("text", "").strip()
+                    if not text:
+                        continue
+                    segments.append(
+                        LyricsSegment(
+                            text=text,
+                            start_time=float(seg.get("start", 0.0)),
+                            end_time=float(seg.get("end", 0.0)),
+                            confidence=float(seg.get("avg_logprob", -1.0) + 1.0),
+                        )
+                    )
+
+        except ImportError:
+            logger.warning("Whisper not installed — falling back to energy-based segmentation")
+            segments = self._energy_based_segmentation(audio, sr)
+        except Exception as e:
+            logger.warning("Whisper transcription failed: %s — using energy-based fallback", e)
+            segments = self._energy_based_segmentation(audio, sr)
+
+        logger.info("Aligned %d vocal segments", len(segments))
+        return segments
+
+    def _energy_based_segmentation(
+        self, audio: np.ndarray, sr: int
+    ) -> list[LyricsSegment]:
+        """Fallback: RMS-based vocal activity segmentation when Whisper unavailable."""
+        segments = []
+        frame_size = int(0.05 * sr)  # 50 ms
+        hop = frame_size // 2
+        n_frames = max(1, (len(audio) - frame_size) // hop)
+
+        rms_values = np.array([
+            np.sqrt(np.mean(audio[i * hop: i * hop + frame_size] ** 2))
+            for i in range(n_frames)
+        ])
+        threshold = max(0.01, float(np.percentile(rms_values, 30)))
+
+        in_segment = False
+        seg_start = 0.0
+        for i, rms in enumerate(rms_values):
+            t = i * hop / sr
+            if rms > threshold and not in_segment:
+                seg_start = t
+                in_segment = True
+            elif rms <= threshold and in_segment:
+                if t - seg_start > 0.1:  # minimum 100 ms
+                    segments.append(LyricsSegment(
+                        text="[vocal]",
+                        start_time=seg_start,
+                        end_time=t,
+                        confidence=0.6,
+                    ))
+                in_segment = False
+        if in_segment:
+            segments.append(LyricsSegment(
+                text="[vocal]",
+                start_time=seg_start,
+                end_time=len(audio) / sr,
+                confidence=0.6,
+            ))
         return segments
 
     def _add_phoneme_information(
@@ -238,10 +308,27 @@ class LyricsAligner:
         sr: int,
     ) -> list[LyricsSegment]:
         """Add phoneme information from Week 7-9 classifier."""
-        # Integrate with PhonemeClassifier
+        if self.phoneme_classifier is None:
+            logger.debug("PhonemeClassifier not available — skipping phoneme annotation")
+            return segments
+
         for segment in segments:
-            # Placeholder: would extract phonemes from audio segment
-            segment.phonemes = ["placeholder"]
+            start_idx = int(segment.start_time * sr)
+            end_idx = int(segment.end_time * sr)
+            if end_idx <= start_idx or end_idx > len(audio):
+                continue
+            segment_audio = audio[start_idx:end_idx]
+            try:
+                result = self.phoneme_classifier.classify(segment_audio, sr)
+                if hasattr(result, "phonemes"):
+                    segment.phonemes = result.phonemes
+                elif isinstance(result, list):
+                    segment.phonemes = result
+                else:
+                    segment.phonemes = [str(result)]
+            except Exception as e:
+                logger.debug("Phoneme classification failed for segment '%s': %s", segment.text, e)
+                segment.phonemes = []
 
         return segments
 

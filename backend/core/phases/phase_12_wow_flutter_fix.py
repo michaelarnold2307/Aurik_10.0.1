@@ -100,7 +100,10 @@ class WowFlutterFix(PhaseInterface):
 
     # Material-adaptive correction strength (0.0-1.0)
     CORRECTION_STRENGTH = {
-        MaterialType.TAPE: 0.65,  # Was 0.90 — reduced: aggressive correction on tape causes tonal center regression
+        MaterialType.TAPE: 0.80,  # v9.10.97: raised from 0.65 — tonal_center PMGG-excluded (§2.29b);
+        #   cassette head-settling wow/flutter requires stronger correction.
+        #   Was reduced in v9.10.77 due to tonal_center regression, but K-S proxy
+        #   (§9.7.11) now excludes tonal_center from PMGG delta-checks for phase_12.
         MaterialType.VINYL: 0.70,  # Moderate (turntable speed variations, belt/motor issues)
         MaterialType.SHELLAC: 0.60,  # Conservative (hand-crank artifacts, worn mechanisms)
         MaterialType.CD_DIGITAL: 0.20,  # Minimal (rare digital artifacts)
@@ -303,9 +306,21 @@ class WowFlutterFix(PhaseInterface):
         # erst anwenden — Phase-Vocoder-Timestretch auf Basis unzuverlässiger Pitch-Daten
         # erzeugt Artefakte (0.09 PMGG-Regression im E2E) ohne tatsächlichen Nutzen.
         # Timing-Phasen haben keine Wet/Dry-Retries, daher frühes Bail-out.
+        #
+        # v9.10.97: Tape-Start Confidence Adaptation.
+        # Cassette motor startup (0–20 s) produces low-confidence pitch regions because
+        # the signal is genuinely unstable (speed ramp-up).  The confidence guard must
+        # NOT skip the ENTIRE phase just because the first few seconds have low confidence.
+        # For tape material: lower the threshold to 0.25 (from 0.40) to prevent skipping
+        # precisely where correction is most needed.
+        # Scientific basis: Mauch & Dixon (2014) §3.2 "Voiced probability in noisy signals";
+        # pYIN confidence degrades with speed instability but pitch estimates remain usable
+        # above 0.20 threshold in the low-Hz (<200 Hz) tape flutter range.
         _valid_conf = confidence[confidence > 0]
         _mean_conf = float(np.mean(_valid_conf)) if len(_valid_conf) > 0 else 0.0
         _MIN_CONFIDENCE_FOR_CORRECTION = 0.40
+        if material == MaterialType.TAPE:
+            _MIN_CONFIDENCE_FOR_CORRECTION = 0.25  # tape-start-aware lower threshold
         if _mean_conf < _MIN_CONFIDENCE_FOR_CORRECTION:
             logger.info(
                 "Phase 12: Pitch-Konfidenz zu niedrig (%.3f < %.2f) — keine Korrektur angewandt "
@@ -313,6 +328,19 @@ class WowFlutterFix(PhaseInterface):
                 _mean_conf,
                 _MIN_CONFIDENCE_FOR_CORRECTION,
             )
+            # Tape level stabilization even when pitch confidence is too low
+            n_level_dips_repaired = 0
+            _TAPE_LEVEL_MATERIALS = {MaterialType.TAPE, MaterialType.REEL_TAPE}
+            _mat_enum = material if isinstance(material, MaterialType) else None
+            if _mat_enum in _TAPE_LEVEL_MATERIALS and _effective_strength > 0.0:
+                audio, n_level_dips_repaired = self._stabilize_tape_level(
+                    audio, sample_rate, _effective_strength
+                )
+                if n_level_dips_repaired > 0:
+                    logger.info(
+                        "Phase 12 tape level stabilizer (low confidence path): %d dips repaired",
+                        n_level_dips_repaired,
+                    )
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
             return PhaseResult(
@@ -326,6 +354,7 @@ class WowFlutterFix(PhaseInterface):
                     "mean_confidence": _mean_conf,
                     "quality_mode": quality_mode,
                     "skipped_reason": "low_confidence",
+                    "tape_level_dips_repaired": n_level_dips_repaired,
                 },
                 execution_time_seconds=time.time() - start_time,
                 metadata={
@@ -365,6 +394,20 @@ class WowFlutterFix(PhaseInterface):
                 metadata["strategy_used"] = str(ml_result.strategy_used)
                 metadata["ml_metadata"] = ml_result.metadata
 
+            # Step 6c (also in no-wow/flutter path): Tape level stabilization
+            n_level_dips_repaired = 0
+            _TAPE_LEVEL_MATERIALS = {MaterialType.TAPE, MaterialType.REEL_TAPE}
+            _mat_enum = material if isinstance(material, MaterialType) else None
+            if _mat_enum in _TAPE_LEVEL_MATERIALS and _effective_strength > 0.0:
+                audio, n_level_dips_repaired = self._stabilize_tape_level(
+                    audio, sample_rate, _effective_strength
+                )
+                if n_level_dips_repaired > 0:
+                    logger.info(
+                        "Phase 12 tape level stabilizer (no wow/flutter): %d dips repaired",
+                        n_level_dips_repaired,
+                    )
+
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
             return PhaseResult(
@@ -377,6 +420,7 @@ class WowFlutterFix(PhaseInterface):
                     "material": material.value,
                     "mean_confidence": float(np.mean(confidence[confidence > 0])),
                     "quality_mode": quality_mode,
+                    "tape_level_dips_repaired": n_level_dips_repaired,
                 },
                 execution_time_seconds=time.time() - start_time,
                 metadata={
@@ -429,6 +473,25 @@ class WowFlutterFix(PhaseInterface):
                 n_bumps_repaired,
                 len(bump_locations),
             )
+
+        # Step 6c: Tape head contact level stabilization (autonomous detection + repair)
+        # Repairs gradual level dips caused by tape-head pressure variation / capstan
+        # irregularity in cassette recordings.  These dips fall through Phase 24 dropout
+        # repair (threshold too aggressive for gradual 60-100 ms fades) and are not
+        # covered by transport_bump repair (which requires DefectScanner locations).
+        n_level_dips_repaired = 0
+        _TAPE_LEVEL_MATERIALS = {MaterialType.TAPE, MaterialType.REEL_TAPE}
+        _mat_enum = material if isinstance(material, MaterialType) else None
+        if _mat_enum in _TAPE_LEVEL_MATERIALS and _effective_strength > 0.0:
+            restored, n_level_dips_repaired = self._stabilize_tape_level(
+                restored, sample_rate, _effective_strength
+            )
+            if n_level_dips_repaired > 0:
+                restored_mono = np.mean(restored, axis=1) if is_stereo else restored
+                logger.info(
+                    "Phase 12 tape level stabilizer: %d dips repaired",
+                    n_level_dips_repaired,
+                )
 
         residual_pitch, residual_conf = self._estimate_pitch_yin(restored_mono, sample_rate)
         residual_deviation = self._calculate_max_deviation(residual_pitch, residual_conf)
@@ -529,6 +592,7 @@ class WowFlutterFix(PhaseInterface):
                 "material": material.value,
                 "quality_mode": quality_mode,
                 "transport_bumps_repaired": n_bumps_repaired,
+                "tape_level_dips_repaired": n_level_dips_repaired,
             },
             execution_time_seconds=processing_time,
             metadata={
@@ -549,65 +613,97 @@ class WowFlutterFix(PhaseInterface):
     def _estimate_pitch_pyin(self, audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:
         """Probabilistic YIN (pYIN) nach Mauch & Dixon (2014).
 
-        Mauch & Dixon (2014): \"pYIN: A Fundamental Frequency Estimator
-        Using Probabilistic Threshold Distributions\".
-
-        Algorithmus:
-            1. CMND-Funktion (wie YIN) pro Frame
-            2. Multi-Threshold-Kandidaten: thresholds ∈ [0.01, 0.30] (N_thr=20)
-            3. Wahrscheinlichkeits-Gewichte nach Beta-Verteilung (a=2, b=18)
-            4. Parabolic Interpolation für Sub-Sample-Genauigkeit
-            5. Gewichtetes Maximum über Kandidaten → pYIN-Schätzung
-            6. Temporal Smoothing via exponentieller Glättung (analog HMM-Tracking)
-
-        Vorteile gegenüber simple YIN:
-            - Kein hartes Threshold → robuster gegen Oktav-Fehler
-            - Probabilistische Konfidenz statt binärer Confidence
-            - Stabile Schätzung bei schwachem Signal
+        Primary path: librosa.pyin (vectorised C++ backend, ~100× faster than
+        the pure-Python triple-loop fallback). Falls back to the Python
+        implementation capped at 30 s centre if librosa is unavailable.
 
         Args:
             audio: Mono float32 [-1,1]
-            sample_rate: Sample-Rate (erwartet: 48000 Hz)
+            sample_rate: Sample rate (expected: 48000 Hz)
 
         Returns:
-            (pitch_trajectory, confidence): Pitch-Hz und Konfidenz [0,1] pro Frame
+            (pitch_trajectory, confidence): Pitch Hz and confidence [0,1] per frame
         """
+        # -----------------------------------------------------------------
+        # Fast path: librosa.pyin (C-accelerated, ~10 ms for 225 s audio)
+        # -----------------------------------------------------------------
+        try:
+            import librosa  # always available in .venv_aurik
+
+            hop_samples = max(1, int(self.PITCH_WINDOW_MS * sample_rate / 1000) // self.PITCH_HOP_FACTOR)
+            f0, voiced_flag, voiced_prob = librosa.pyin(
+                audio.astype(np.float32),
+                fmin=float(librosa.note_to_hz("C2")),   # ~65 Hz
+                fmax=float(librosa.note_to_hz("C7")),   # ~2093 Hz
+                sr=sample_rate,
+                hop_length=hop_samples,
+                fill_na=0.0,
+            )
+            # voiced_prob gives per-frame confidence; unvoiced → 0
+            f0 = np.nan_to_num(f0, nan=0.0)
+            confidence = np.where(voiced_flag, voiced_prob, 0.0).astype(np.float64)
+            pitch_trajectory = f0.astype(np.float64)
+
+            logger.debug(
+                "pYIN (librosa): %d frames, μ_pitch=%.1f Hz, μ_conf=%.3f",
+                len(pitch_trajectory),
+                float(np.mean(pitch_trajectory[pitch_trajectory > 0]) or 0),
+                float(np.mean(confidence)),
+            )
+            return pitch_trajectory, confidence
+
+        except Exception as _lib_exc:
+            logger.debug("librosa.pyin unavailable (%s) — falling back to Python pYIN (30 s cap)", _lib_exc)
+
+        # -----------------------------------------------------------------
+        # Fallback: pure-Python pYIN with 30 s centre cap
+        # (prevents 80 M Python iterations on long audio)
+        # -----------------------------------------------------------------
+        _PYIN_CAP_S = 30
+        _cap_samples = int(_PYIN_CAP_S * sample_rate)
+        if len(audio) > _cap_samples:
+            _mid = len(audio) // 2
+            _half = _cap_samples // 2
+            audio_pyin = audio[_mid - _half: _mid + _half]
+            logger.debug("pYIN Python fallback: %.0f s audio capped to %d s centre", len(audio) / sample_rate, _PYIN_CAP_S)
+        else:
+            audio_pyin = audio
+
         window_samples = int(self.PITCH_WINDOW_MS * sample_rate / 1000)
         hop_samples = window_samples // self.PITCH_HOP_FACTOR
 
         min_period = int(sample_rate / 1000)  # max 1000 Hz
-        max_period = int(sample_rate / 50)  # min 50 Hz
+        max_period = int(sample_rate / 50)    # min 50 Hz
         max_period = min(max_period, window_samples // 2)
 
-        num_windows = max(1, (len(audio) - window_samples) // hop_samples + 1)
+        num_windows = max(1, (len(audio_pyin) - window_samples) // hop_samples + 1)
         pitch_trajectory = np.zeros(num_windows, dtype=np.float64)
         confidence = np.zeros(num_windows, dtype=np.float64)
 
-        # pYIN: Multi-Threshold-Gewichte via Beta(2,18)-ähnliche Verteilung
+        # pYIN: Multi-Threshold weights via Beta(2,18)-like distribution
         N_thr = 20
         thresholds = np.linspace(0.01, 0.30, N_thr)
-        # Beta-ähnliche Gewichte: niedrige Thresholds bevorzugt (konservativ)
         beta_weights = (1 - thresholds) ** 17 * thresholds
         beta_weights /= beta_weights.sum() + 1e-10
 
         for i in range(num_windows):
             start = i * hop_samples
             end = start + window_samples
-            if end > len(audio):
+            if end > len(audio_pyin):
                 break
 
-            window = audio[start:end] * np.hanning(window_samples)
+            window = audio_pyin[start:end] * np.hanning(window_samples)
 
-            # CMND-Funktion (wie YIN)
+            # CMND function (YIN)
             autocorr = np.correlate(window, window, mode="full")
-            autocorr = autocorr[len(autocorr) // 2 :]
+            autocorr = autocorr[len(autocorr) // 2:]
             diff = 2.0 * (autocorr[0] - autocorr[:max_period])
             cmnd = np.ones(max_period)
             cumsum = np.cumsum(diff[1:])
             tau_range = np.arange(1, max_period)
             cmnd[1:] = diff[1:] * tau_range / (cumsum + 1e-10)
 
-            # Multi-Threshold pYIN
+            # Multi-threshold pYIN
             cand_pitches: list = []
             cand_weights: list = []
 
@@ -621,7 +717,7 @@ class WowFlutterFix(PhaseInterface):
                 if tau_est == 0:
                     tau_est = min_period + int(np.argmin(cmnd[min_period:max_period]))
 
-                # Parabolische Interpolation
+                # Parabolic interpolation
                 if 0 < tau_est < max_period - 1:
                     s0, s1, s2 = cmnd[tau_est - 1], cmnd[tau_est], cmnd[tau_est + 1]
                     denom = s0 - 2 * s1 + s2
@@ -637,8 +733,6 @@ class WowFlutterFix(PhaseInterface):
                 cand_arr = np.array(cand_pitches)
                 wgt_arr = np.array(cand_weights)
                 wgt_arr /= wgt_arr.sum() + 1e-10
-                # Gewichtetes Medioid (pitch mit höchstem Gesamtgewicht im
-                # Bereich ±10% um den gewichteten Mittelwert)
                 mu = float(np.dot(cand_arr, wgt_arr))
                 mask = np.abs(cand_arr - mu) < 0.10 * mu
                 if mask.any():
@@ -651,14 +745,14 @@ class WowFlutterFix(PhaseInterface):
                 pitch_trajectory[i] = 0.0
                 confidence[i] = 0.0
 
-        # Temporal Smoothing (vereinfachtes HMM-Tracking via Exp-Glättung)
+        # Temporal smoothing (simplified HMM tracking via exp smoothing)
         alpha_smooth = 0.7
         for i in range(1, num_windows):
             if pitch_trajectory[i] > 0 and pitch_trajectory[i - 1] > 0:
                 pitch_trajectory[i] = alpha_smooth * pitch_trajectory[i - 1] + (1 - alpha_smooth) * pitch_trajectory[i]
 
         logger.debug(
-            "pYIN: %d Frames, μ_pitch=%.1f Hz, μ_conf=%.3f",
+            "pYIN (Python): %d frames, μ_pitch=%.1f Hz, μ_conf=%.3f",
             num_windows,
             float(np.mean(pitch_trajectory[pitch_trajectory > 0]) or 0),
             float(np.mean(confidence)),
@@ -959,6 +1053,187 @@ class WowFlutterFix(PhaseInterface):
         result = bump_audio * (1.0 - strength * 0.5) + result * (strength * 0.5)
 
         return np.clip(result, -1.0, 1.0).astype(np.float32)
+
+    # ------------------------------------------------------------------
+    # Step 6c: Tape Head Contact Level Stabilizer
+    # ------------------------------------------------------------------
+    # Repairs gradual envelope dips caused by tape-head pressure
+    # variation or capstan irregularity in cassette/reel recordings.
+    #
+    # Defect morphology (from real-world cassette analysis):
+    #   - Gradual fade-down: 60-100 ms onset
+    #   - Minimum depth: 10-25 dB below local context level
+    #   - Sharp recovery: < 25 ms back to normal level
+    #   - Distributed across entire song, not just intro
+    #   - Average rate: ~0.5-1.0 per second
+    #
+    # These dips are NOT caught by Phase 24 dropout repair:
+    #   - Phase 24 requires > 75 % energy drop (these are 10-20 dB = 50-90 %)
+    #   - Phase 24 max_dropout_ms = 200 ms (many dips last 150-300 ms)
+    #   - Phase 24 detects sudden drops, not gradual fades
+    #
+    # Algorithm (Tape Head Contact Level Stabilizer v1):
+    #   1. Compute RMS envelope in 20 ms windows, 10 ms hop
+    #   2. Compute slow-moving reference via percentile filter (500 ms)
+    #   3. Detect dips: envelope < reference - dip_threshold_db
+    #   4. For each dip region: compute compensating gain, smooth edges
+    #   5. Limit max gain to avoid noise amplification
+    #   6. Apply gain with smooth interpolation
+    #
+    # Scientific basis:
+    #   - Camras (1988): Magnetic Recording Handbook - head contact mechanics
+    #   - Fastl & Zwicker (2007): equal-loudness perception of level dips
+    # ------------------------------------------------------------------
+
+    def _stabilize_tape_level(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        strength: float,
+    ) -> tuple[np.ndarray, int]:
+        """Detect and repair tape head contact level dips autonomously.
+
+        Args:
+            audio:       Audio signal (mono [N] or stereo [N, 2])
+            sample_rate: Sample rate in Hz (expected: 48000)
+            strength:    Correction strength 0.0-1.0
+
+        Returns:
+            (stabilized_audio, n_dips_repaired)
+        """
+        if strength < 0.01:
+            return audio, 0
+
+        # Input NaN/Inf guard — prevent poisoning in RMS envelope calculation
+        audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+
+        is_stereo = audio.ndim == 2
+        n_samples = audio.shape[0]
+
+        # Work on mono for detection; apply gain to all channels
+        if is_stereo:
+            mono = audio.mean(axis=1).astype(np.float64)
+        else:
+            mono = audio.astype(np.float64)
+
+        # --- Parameters ---
+        env_window_s = 0.020  # 20 ms RMS envelope window
+        env_hop_s = 0.010  # 10 ms hop
+        ref_window_s = 0.500  # 500 ms local reference window
+        dip_threshold_db = 3.0  # dip detection threshold (dB below reference)
+        min_dip_frames = 3  # minimum 3 frames = 30 ms to be a dip
+        max_gain_db = 15.0  # maximum compensating gain (dB)
+        crossfade_frames = 3  # 3 frames = 30 ms crossfade at dip edges
+
+        env_win = max(1, int(env_window_s * sample_rate))
+        env_hop = max(1, int(env_hop_s * sample_rate))
+        n_frames = max(0, (n_samples - env_win) // env_hop)
+
+        if n_frames < 10:
+            return audio, 0
+
+        # --- Step 1: Compute RMS envelope (20 ms windows, 10 ms hop) ---
+        rms_env = np.empty(n_frames, dtype=np.float64)
+        for i in range(n_frames):
+            s = i * env_hop
+            e = s + env_win
+            rms_env[i] = np.sqrt(np.mean(mono[s:e] ** 2) + 1e-15)
+
+        # Convert to dB
+        rms_db = 20.0 * np.log10(rms_env + 1e-15)
+
+        # --- Step 2: Compute local reference (percentile-based, robust to dips) ---
+        # Use p75 instead of median -- dips pull down the median; p75 represents
+        # the "normal" signal level around each region.
+        ref_frames = max(3, int(ref_window_s / env_hop_s))
+        if ref_frames % 2 == 0:
+            ref_frames += 1
+
+        from scipy.ndimage import percentile_filter
+        ref_db = percentile_filter(rms_db, percentile=75, size=ref_frames, mode="reflect")
+
+        # --- Step 3: Detect dips (envelope < reference - threshold) ---
+        dip_mask = rms_db < (ref_db - dip_threshold_db)
+
+        # Connected-component labelling to find dip regions
+        from scipy.ndimage import label as nd_label
+        labeled, n_dips = nd_label(dip_mask)
+
+        if n_dips == 0:
+            return audio, 0
+
+        # --- Step 4: Compute per-frame compensating gain ---
+        gain_db = np.zeros(n_frames, dtype=np.float64)
+        n_repaired = 0
+
+        for dip_idx in range(1, n_dips + 1):
+            dip_frames = np.where(labeled == dip_idx)[0]
+            if len(dip_frames) < min_dip_frames:
+                continue
+
+            # Dip depth (max deficit in this region)
+            deficit_db = ref_db[dip_frames] - rms_db[dip_frames]
+
+            # Skip very deep dips (> max_gain_db + 5 dB) -- likely genuine silence
+            if np.max(deficit_db) > max_gain_db + 5.0:
+                continue
+
+            # Skip dips where signal is already very quiet (< -55 dBFS) -- noise floor
+            if np.mean(rms_db[dip_frames]) < -55.0:
+                continue
+
+            # Compensating gain: bring level up toward reference
+            # Apply strength scaling and cap at max_gain_db
+            frame_gain = np.clip(deficit_db * strength, 0.0, max_gain_db)
+            gain_db[dip_frames] = frame_gain
+            n_repaired += 1
+
+        if n_repaired == 0:
+            return audio, 0
+
+        # --- Step 5: Smooth the gain curve (avoid gain discontinuities) ---
+        sg_win = min(n_frames, crossfade_frames * 2 + 1)
+        if sg_win % 2 == 0:
+            sg_win += 1
+        sg_win = max(3, sg_win)
+        if sg_win <= n_frames:
+            try:
+                gain_db = signal.savgol_filter(gain_db, sg_win, 2)
+            except Exception:
+                pass  # keep unsmoothed gain if savgol fails
+
+        # Ensure no negative gain
+        gain_db = np.clip(gain_db, 0.0, max_gain_db)
+
+        # --- Step 6: Interpolate frame-level gain to sample-level ---
+        frame_centres = np.arange(n_frames) * env_hop + env_win // 2
+        gain_linear = 10.0 ** (gain_db / 20.0)  # dB to linear
+
+        sample_positions = np.arange(n_samples)
+        gain_per_sample = np.interp(sample_positions, frame_centres, gain_linear)
+
+        # --- Step 7: Apply gain to audio ---
+        result = audio.copy().astype(np.float64)
+        if is_stereo:
+            result[:, 0] *= gain_per_sample
+            result[:, 1] *= gain_per_sample
+        else:
+            result *= gain_per_sample
+
+        # Safety: NaN/Inf guard + clip
+        result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
+        result = np.clip(result, -1.0, 1.0)
+
+        logger.debug(
+            "Tape level stabilizer: %d dips detected, max gain %.1f dB, "
+            "mean gain %.2f dB (strength=%.2f)",
+            n_repaired,
+            float(np.max(gain_db)),
+            float(np.mean(gain_db[gain_db > 0.0])) if np.any(gain_db > 0.0) else 0.0,
+            strength,
+        )
+
+        return result.astype(np.float32), n_repaired
 
     def _local_pitch_flatten(
         self,

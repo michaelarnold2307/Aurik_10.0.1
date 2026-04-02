@@ -189,14 +189,23 @@ class TestCausalDefectReasoner:
         )
         assert plan.primary_cause == "tape_dropout", f"Erwartet tape_dropout, got {plan.primary_cause}"
 
-    def test_electrical_hum_detected(self, sine_440):
+    def test_electrical_hum_detected(self):
         """Hohes hum_score→ electrical_hum in Top-Position."""
         from backend.core.causal_defect_reasoner import CausalDefectReasoner
 
+        # 50 Hz Brumm + Obertöne (100, 150, 200 Hz) — triggert hum_score
+        t = np.linspace(0, 2.0, int(SR * 2.0), endpoint=False)
+        hum_signal = (
+            0.5 * np.sin(2 * np.pi * 50 * t)
+            + 0.3 * np.sin(2 * np.pi * 100 * t)
+            + 0.15 * np.sin(2 * np.pi * 150 * t)
+            + 0.05 * np.sin(2 * np.pi * 200 * t)
+        ).astype(np.float32)
+
         plan = CausalDefectReasoner().reason(
-            defect_scores={"noise_floor_db": -20.0},
+            defect_scores={"noise_floor_db": -20.0, "hum_severity": 0.70},
             material="digital",
-            audio=sine_440,
+            audio=hum_signal,
             sample_rate=SR,
         )
         # electrical_hum sollte in Top-5 sein
@@ -253,9 +262,12 @@ class TestCausalDefectReasoner:
             "dc_offset",
             "tape_dropout",
             "tape_hiss",
+            "tape_start_instability",
+            "tape_head_contact_instability",
             "vinyl_crackle",
             "vinyl_warp",
             "head_misalignment",
+            "clipping",
         ]
 
     def test_convenience_function(self, sine_440):

@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # Typ-Definitionen
 # ---------------------------------------------------------------------------
 
-# 34 Kausal-Ursachen (Spec §2.4) — alle CAUSE_TO_PHASES-Einträge mit Bayesian-Posterior
+# 36 Kausal-Ursachen (Spec §2.4) — alle CAUSE_TO_PHASES-Einträge mit Bayesian-Posterior
 CAUSES = [
     # ── Analoge Magnetband-Ursachen ──────────────────────────────────────────
     "tape_dropout",
@@ -91,6 +91,22 @@ CAUSES = [
     "sibilance",  # Zischlautüberbetonung > 6 kHz
     # ── Vintage (Schutz) ────────────────────────────────────────────────────
     "soft_saturation",  # Tube-/Tape-Sättigung — BEWAHREN, P(phases) = leer
+    # ── Transport-Mechanik (v9.10.97) ───────────────────────────────────────
+    "tape_start_instability",  # Cassette head engagement + motor startup (first 20 s)
+    "tape_head_contact_instability",  # Gradual level dips from head-tape pressure variation / capstan irregularity
+    # ── v9.10.98: 12 neue Kausal-Ursachen ────────────────────────────────────
+    "modulation_noise",            # Signal-dependent noise modulation (tape media)
+    "inner_groove_distortion",     # IGD: THD increasing with groove radius (vinyl/shellac)
+    "groove_echo",                 # Pre-echo from adjacent groove deformation (~1.8 s @ 33⅓)
+    "crosstalk",                   # Channel separation degradation in early stereo
+    "intermodulation_distortion",  # Nonlinear sum/difference products (amplifier chain)
+    "tape_splice_artifact",        # Click + level jump + phase discontinuity at splices
+    "hf_remanence_loss",           # Magnetic particle demagnetization over decades
+    "stylus_damage",               # Asymmetric distortion from worn/damaged stylus
+    "sticky_shed_residue",         # Post-baking tape degradation: level dips + noise bursts
+    "multiband_wow_flutter",       # Frequency-dependent speed fluctuations (head gap)
+    "generation_loss",             # Cumulative degradation from tape dubbing/transcoding
+    "motor_interference",          # Motor harmonics 80–300 Hz from DC/sync motors
 ]
 
 # Material-Typen — Priors für alle 34 Kausal-Ursachen (v9.10.77b)
@@ -109,6 +125,8 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "head_wear": 0.04,
         "print_through": 0.02,
         "transport_bump": 0.12,
+        "tape_start_instability": 0.15,  # v9.10.97: cassette head/motor startup (first 20 s)
+        "tape_head_contact_instability": 0.12,  # v9.10.x: gradual level dips from head-tape pressure variation
         # v9.10.77b: 22 erweiterte Ursachen
         "bandwidth_loss": 0.06,
         "high_freq_noise": 0.03,
@@ -132,6 +150,19 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.06,
         "flutter": 0.05,
         "wow_flutter": 0.08,
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.18,               # very common on tape
+        "inner_groove_distortion": 0.01,         # N/A for tape
+        "groove_echo": 0.01,                    # N/A for tape
+        "crosstalk": 0.04,                      # early stereo tape
+        "intermodulation_distortion": 0.03,      # tube amp chains
+        "tape_splice_artifact": 0.12,            # common on reel/cassette
+        "hf_remanence_loss": 0.15,               # primary tape issue
+        "stylus_damage": 0.01,                  # N/A for tape
+        "sticky_shed_residue": 0.14,            # polyester tape degradation
+        "multiband_wow_flutter": 0.08,           # head geometry artifact
+        "generation_loss": 0.10,                 # common in tape dubbing
+        "motor_interference": 0.06,              # capstan motor
     },
     "vinyl": {
         "tape_dropout": 0.02,
@@ -168,6 +199,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.03,
         "flutter": 0.01,
         "wow_flutter": 0.03,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.18,
+        "groove_echo": 0.15,
+        "crosstalk": 0.06,
+        "intermodulation_distortion": 0.05,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.15,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.02,
+        "motor_interference": 0.1,
     },
     "shellac": {
         "tape_dropout": 0.01,
@@ -204,6 +250,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.02,
         "flutter": 0.01,
         "wow_flutter": 0.02,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.2,
+        "groove_echo": 0.12,
+        "crosstalk": 0.02,
+        "intermodulation_distortion": 0.06,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.18,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.12,
     },
     "digital": {
         "tape_dropout": 0.02,
@@ -240,6 +301,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.01,
         "flutter": 0.01,
         "wow_flutter": 0.01,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.01,
+        "intermodulation_distortion": 0.02,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.01,
     },
     "unknown": {
         "tape_dropout": 0.10,
@@ -276,6 +352,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.03,
         "flutter": 0.02,
         "wow_flutter": 0.03,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.05,
+        "inner_groove_distortion": 0.05,
+        "groove_echo": 0.04,
+        "crosstalk": 0.03,
+        "intermodulation_distortion": 0.03,
+        "tape_splice_artifact": 0.03,
+        "hf_remanence_loss": 0.04,
+        "stylus_damage": 0.04,
+        "sticky_shed_residue": 0.03,
+        "multiband_wow_flutter": 0.03,
+        "generation_loss": 0.03,
+        "motor_interference": 0.03,
     },
     # ── Digitale / Codec-Quellen ─────────────────────────────────────────────
     "mp3_low": {
@@ -313,6 +404,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.01,
         "flutter": 0.01,
         "wow_flutter": 0.01,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.01,
+        "intermodulation_distortion": 0.02,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.01,
     },
     "mp3_high": {
         "tape_dropout": 0.01,
@@ -349,6 +455,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.01,
         "flutter": 0.01,
         "wow_flutter": 0.01,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.01,
+        "intermodulation_distortion": 0.01,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.01,
     },
     "aac": {
         "tape_dropout": 0.01,
@@ -385,6 +506,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.01,
         "flutter": 0.01,
         "wow_flutter": 0.01,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.01,
+        "intermodulation_distortion": 0.01,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.01,
     },
     "cd_digital": {
         "tape_dropout": 0.01,
@@ -421,6 +557,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.01,
         "flutter": 0.01,
         "wow_flutter": 0.01,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.01,
+        "intermodulation_distortion": 0.01,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.01,
     },
     "streaming": {
         "tape_dropout": 0.01,
@@ -457,6 +608,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.01,
         "flutter": 0.01,
         "wow_flutter": 0.01,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.01,
+        "intermodulation_distortion": 0.01,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.01,
     },
     "dat": {
         "tape_dropout": 0.07,
@@ -493,6 +659,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.01,
         "flutter": 0.01,
         "wow_flutter": 0.01,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.03,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.02,
+        "intermodulation_distortion": 0.01,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.02,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.02,
+        "motor_interference": 0.01,
     },
     "minidisc": {
         "tape_dropout": 0.04,
@@ -529,6 +710,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.01,
         "flutter": 0.01,
         "wow_flutter": 0.01,
+        "tape_start_instability": 1.0,  # N/A: no tape transport mechanism
+        "tape_head_contact_instability": 1.0,  # N/A: no tape head contact
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.01,
+        "intermodulation_distortion": 0.01,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.01,
     },
     # ── Historische Medien ───────────────────────────────────────────────────
     "wax_cylinder": {
@@ -566,6 +762,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.04,
         "flutter": 0.02,
         "wow_flutter": 0.05,
+        "tape_start_instability": 1.0,  # N/A: no magnetic tape head
+        "tape_head_contact_instability": 1.0,  # N/A: no magnetic tape head
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.15,
+        "groove_echo": 0.08,
+        "crosstalk": 0.01,
+        "intermodulation_distortion": 0.04,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.2,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.15,
     },
     "lacquer_disc": {
         "tape_dropout": 0.02,
@@ -602,6 +813,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.02,
         "flutter": 0.01,
         "wow_flutter": 0.02,
+        "tape_start_instability": 1.0,  # N/A: no magnetic tape
+        "tape_head_contact_instability": 1.0,  # N/A: no magnetic tape
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.01,
+        "inner_groove_distortion": 0.16,
+        "groove_echo": 0.12,
+        "crosstalk": 0.03,
+        "intermodulation_distortion": 0.05,
+        "tape_splice_artifact": 0.01,
+        "hf_remanence_loss": 0.01,
+        "stylus_damage": 0.16,
+        "sticky_shed_residue": 0.01,
+        "multiband_wow_flutter": 0.01,
+        "generation_loss": 0.01,
+        "motor_interference": 0.1,
     },
     "wire_recording": {
         "tape_dropout": 0.18,
@@ -638,6 +864,21 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.05,
         "flutter": 0.04,
         "wow_flutter": 0.07,
+        "tape_start_instability": 0.10,  # v9.10.97: wire recording motor startup
+        "tape_head_contact_instability": 0.08,  # v9.10.x: wire head contact less affected
+        # v9.10.98: 12 neue Ursachen
+        "modulation_noise": 0.1,
+        "inner_groove_distortion": 0.01,
+        "groove_echo": 0.01,
+        "crosstalk": 0.03,
+        "intermodulation_distortion": 0.03,
+        "tape_splice_artifact": 0.08,
+        "hf_remanence_loss": 0.12,
+        "stylus_damage": 0.01,
+        "sticky_shed_residue": 0.05,
+        "multiband_wow_flutter": 0.06,
+        "generation_loss": 0.08,
+        "motor_interference": 0.1,
     },
 }
 
@@ -787,12 +1028,98 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_24_dropout_repair",  # Fallback: Amplitude-Reparatur bei Signal-Einbruch
         "phase_31_speed_pitch_correction",  # Zusätzlich: globale Speed-Stabilisierung
     ],
+    # ── Tape-Start-Instability (v9.10.97 — Kassettenkopf-Einrastfehler) ─────
+    # Combined multi-defect cause for the first 20 s of cassette playback:
+    # motor spin-up speed ramp, head engagement azimuth drift, tape slack
+    # tension equalization.  Requires coordinated WOW+AZIMUTH+SPEED correction.
+    # Scientific basis: Camras (1988) Ch. 7 "Transport Mechanisms — Start Transients";
+    # McKnight (1969) AES Convention 36 — measured cassette start-up characteristics.
+    "tape_start_instability": [
+        "phase_12_wow_flutter_fix",      # Motor speed ramp → wow/flutter in intro
+        "phase_25_azimuth_correction",   # Head engagement → time-varying azimuth drift
+        "phase_31_speed_pitch_correction",  # Constant speed offset after motor stabilization
+        "phase_14_phase_correction",     # Residual L/R phase misalignment
+        "phase_24_dropout_repair",       # Tape-slack can cause momentary signal loss
+    ],
+    # ── Tape Head Contact Instability (level dips from pressure variation) ──
+    # Gradual envelope dips (60-100 ms onset, 100-400 ms total, 10-25 dB deep)
+    # caused by capstan irregularity, worn pinch roller, oxide shedding, or
+    # tape tension variation.  Phase 12 contains the autonomous Tape Level
+    # Stabilizer (Step 6c) that detects and compensates these dips.
+    # Scientific basis: Camras (1988) Ch.7 — head-tape spacing modulates output.
+    "tape_head_contact_instability": [
+        "phase_12_wow_flutter_fix",      # Primary: Tape Level Stabilizer (Step 6c)
+        "phase_24_dropout_repair",       # Deep dips that cross dropout threshold
+        "phase_26_dynamic_range_expansion",  # Restore micro-dynamics after leveling
+    ],
     # ── Vocal-Harshness (v9.10.77 — Vokal-Härte/Übersteuerung/Kratzigkeit) ──
     "vocal_harshness": [
         "phase_42_vocal_enhancement",  # Primär: Vocal-Enhancement mit Harshness-Absenkung (2–6 kHz)
         "phase_19_de_esser",  # De-Esser reduziert auch obere Härte-Frequenzen
         "phase_43_ml_deesser",  # ML-De-Esser (zweiter Pass, Frikativ-Kontrolle)
         "phase_23_spectral_repair",  # Spektrale Reparatur bei starker Verzerrung
+    ],
+    # ── v9.10.98: 12 neue Kausal-Ursachen → Phase-Mappings ──────────────────
+    "modulation_noise": [
+        "phase_59_modulation_noise_reduction",  # Primary: signal-dependent noise reduction
+        "phase_03_denoise",  # OMLSA/ResembleEnhance secondary pass
+        "phase_29_tape_hiss_reduction",  # Complementary HF denoising
+    ],
+    "inner_groove_distortion": [
+        "phase_60_inner_groove_distortion_repair",  # Primary: adaptive THD reduction
+        "phase_23_spectral_repair",  # Spectral inpainting for severe cases
+        "phase_04_eq_correction",  # HF tilt compensation
+    ],
+    "groove_echo": [
+        "phase_61_groove_echo_cancellation",  # Primary: template-based echo removal
+        "phase_20_reverb_reduction",  # SGMSE+ for residual echo energy
+        "phase_03_denoise",  # Final noise cleanup
+    ],
+    "crosstalk": [
+        "phase_62_crosstalk_cancellation",  # Primary: BSS-based channel separation
+        "phase_14_phase_correction",  # Phase alignment after separation
+        "phase_34_stereo_restoration",  # Stereo field restoration
+    ],
+    "intermodulation_distortion": [
+        "phase_63_intermodulation_reduction",  # Primary: Volterra-based IMD removal
+        "phase_23_spectral_repair",  # Spectral inpainting for IMD products
+        "phase_04_eq_correction",  # Spectral tilt correction
+    ],
+    "tape_splice_artifact": [
+        "phase_64_tape_splice_repair",  # Primary: splice artifact removal
+        "phase_01_click_removal",  # Impulse component
+        "phase_24_dropout_repair",  # Level discontinuity component
+    ],
+    "hf_remanence_loss": [
+        "phase_06_frequency_restoration",  # Primary: AudioSR bandwidth extension
+        "phase_23_spectral_repair",  # Spectral envelope reconstruction
+        "phase_04_eq_correction",  # HF shelf compensation
+    ],
+    "stylus_damage": [
+        "phase_09_crackle_removal",  # Primary: broadband distortion removal
+        "phase_23_spectral_repair",  # Spectral repair of harmonic distortion
+        "phase_60_inner_groove_distortion_repair",  # Shared asymmetric distortion logic
+    ],
+    "sticky_shed_residue": [
+        "phase_24_dropout_repair",  # Primary: level dip repair
+        "phase_29_tape_hiss_reduction",  # Modulated noise burst removal
+        "phase_03_denoise",  # Residual noise cleanup
+    ],
+    "multiband_wow_flutter": [
+        "phase_12_wow_flutter_fix",  # Primary: multi-band pitch correction
+        "phase_31_speed_pitch_correction",  # Global speed correction
+        "phase_08_transient_preservation",  # Transient integrity after correction
+    ],
+    "generation_loss": [
+        "phase_06_frequency_restoration",  # Bandwidth extension
+        "phase_03_denoise",  # Cumulative noise removal
+        "phase_23_spectral_repair",  # Spectral coherence restoration
+        "phase_04_eq_correction",  # Spectral tilt correction
+    ],
+    "motor_interference": [
+        "phase_02_hum_removal",  # Primary: harmonic removal in 80–300 Hz
+        "phase_05_low_freq_cleanup",  # Sub-harmonic cleanup
+        "phase_04_eq_correction",  # Residual spectral correction
     ],
 }
 
@@ -899,6 +1226,67 @@ CAUSE_PARAMS: dict[str, dict[str, Any]] = {
     "pre_echo": {
         "spectral_repair_strength": 0.50,
         "transient_preserve_strength": 0.80,
+    },
+    # ── v9.10.98: Parameter für 12 neue Ursachen ────────────────────────────
+    "modulation_noise": {
+        "noise_reduction_strength": 0.60,
+        "signal_dependent_gate": True,
+        "modulation_tracking_ms": 20.0,
+    },
+    "inner_groove_distortion": {
+        "thd_reduction_strength": 0.55,
+        "hf_compensation_db": 2.0,
+        "position_adaptive": True,
+    },
+    "groove_echo": {
+        "echo_cancellation_strength": 0.65,
+        "revolution_delay_s": 1.8,
+        "spectral_subtraction_floor": -40.0,
+    },
+    "crosstalk": {
+        "separation_strength": 0.50,
+        "bss_iterations": 20,
+        "preserve_stereo_image": True,
+    },
+    "intermodulation_distortion": {
+        "imd_reduction_strength": 0.55,
+        "volterra_order": 3,
+        "spectral_notch_width_hz": 50.0,
+    },
+    "tape_splice_artifact": {
+        "crossfade_ms": 15.0,
+        "impulse_removal_strength": 0.70,
+        "level_smoothing_ms": 50.0,
+    },
+    "hf_remanence_loss": {
+        "hf_restoration_strength": 0.60,
+        "ghost_harmonic_boost_db": 3.0,
+        "rolloff_compensation_slope": 6.0,
+    },
+    "stylus_damage": {
+        "distortion_reduction_strength": 0.55,
+        "asymmetry_correction": True,
+        "harmonic_rebalancing": True,
+    },
+    "sticky_shed_residue": {
+        "level_dip_repair_strength": 0.65,
+        "noise_burst_removal_strength": 0.60,
+        "dip_detection_threshold_db": 4.0,
+    },
+    "multiband_wow_flutter": {
+        "multiband_correction": True,
+        "n_bands": 4,
+        "flutter_smoothing_ms": 30.0,
+    },
+    "generation_loss": {
+        "noise_reduction_strength": 0.55,
+        "bandwidth_extension_strength": 0.50,
+        "phase_coherence_restoration": True,
+    },
+    "motor_interference": {
+        "harmonic_removal_strength": 0.65,
+        "motor_freq_range_hz": [80, 300],
+        "sideband_removal": True,
     },
 }
 
@@ -1552,6 +1940,174 @@ def _likelihood_wow_flutter(sf: SpectralFeatures, defect_scores: dict[str, float
     return float(np.clip(p, 0.0, 1.0))
 
 
+def _likelihood_tape_head_contact(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(Merkmale | tape_head_contact_instability) — level dips from head pressure variation."""
+    p = 0.0
+    # Primary evidence: detected tape head level dips
+    dip_sev = float(defect_scores.get("tape_head_level_dip", 0.0))
+    p += _sigmoid_score(dip_sev, k=8, x0=0.15) * 0.50
+    # Secondary: dropout evidence (deep dips cross dropout threshold)
+    dropout_sev = float(defect_scores.get("dropouts", 0.0))
+    p += _sigmoid_score(dropout_sev, k=5, x0=0.20) * 0.20
+    # Tertiary: also accompanied by wow/flutter (same transport mechanism)
+    wow_sev = float(defect_scores.get("wow", 0.0))
+    flutter_sev = float(defect_scores.get("flutter", 0.0))
+    p += _sigmoid_score(max(wow_sev, flutter_sev), k=4, x0=0.15) * 0.15
+    # Low clip fraction expected (analog source, not digital clipping)
+    p += (1.0 - sf.clip_fraction) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+# ── v9.10.98: 12 neue Likelihood-Funktionen ─────────────────────────────────
+
+def _likelihood_modulation_noise(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | modulation_noise) — signal-dependent noise modulation."""
+    p = 0.0
+    mod_sev = float(defect_scores.get("modulation_noise", 0.0))
+    p += _sigmoid_score(mod_sev, k=8, x0=0.25) * 0.45
+    hiss_sev = float(defect_scores.get("tape_hiss", 0.0))
+    p += _sigmoid_score(hiss_sev, k=5, x0=0.20) * 0.25
+    p += _gaussian_score(sf.hf_energy_ratio, mu=0.30, sigma=0.15) * 0.20
+    p += (1.0 - sf.clip_fraction) * 0.10
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_inner_groove_distortion(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | inner_groove_distortion) — THD increasing with groove radius."""
+    p = 0.0
+    igd_sev = float(defect_scores.get("inner_groove_distortion", 0.0))
+    p += _sigmoid_score(igd_sev, k=8, x0=0.20) * 0.50
+    p += _gaussian_score(sf.hf_energy_ratio, mu=0.40, sigma=0.20) * 0.20
+    crackle_sev = float(defect_scores.get("crackle", 0.0))
+    p += _sigmoid_score(crackle_sev, k=4, x0=0.15) * 0.15
+    p += (1.0 - sf.clip_fraction) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_groove_echo(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | groove_echo) — pre-echo from adjacent groove deformation."""
+    p = 0.0
+    echo_sev = float(defect_scores.get("groove_echo", 0.0))
+    p += _sigmoid_score(echo_sev, k=8, x0=0.20) * 0.50
+    crackle_sev = float(defect_scores.get("crackle", 0.0))
+    p += _sigmoid_score(crackle_sev, k=4, x0=0.10) * 0.20
+    p += _gaussian_score(sf.stereo_correlation, mu=0.85, sigma=0.15) * 0.15
+    p += (1.0 - sf.clip_fraction) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_crosstalk(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | crosstalk) — channel separation degradation."""
+    p = 0.0
+    xt_sev = float(defect_scores.get("crosstalk", 0.0))
+    p += _sigmoid_score(xt_sev, k=8, x0=0.20) * 0.50
+    # High stereo correlation = poor separation = crosstalk
+    p += _sigmoid_score(sf.stereo_correlation, k=5, x0=0.85) * 0.30
+    p += (1.0 - sf.clip_fraction) * 0.10
+    p += (1.0 - abs(sf.dc_offset)) * 0.10
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_intermodulation_distortion(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | intermodulation_distortion) — nonlinear sum/difference products."""
+    p = 0.0
+    imd_sev = float(defect_scores.get("intermodulation_distortion", 0.0))
+    p += _sigmoid_score(imd_sev, k=8, x0=0.20) * 0.50
+    p += _gaussian_score(sf.hf_energy_ratio, mu=0.35, sigma=0.20) * 0.20
+    clip_sev = float(defect_scores.get("clipping", 0.0))
+    p += _sigmoid_score(clip_sev, k=4, x0=0.15) * 0.15
+    p += (1.0 - abs(sf.dc_offset)) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_tape_splice(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | tape_splice_artifact) — click + level jump at splices."""
+    p = 0.0
+    splice_sev = float(defect_scores.get("tape_splice_artifact", 0.0))
+    p += _sigmoid_score(splice_sev, k=8, x0=0.20) * 0.50
+    click_sev = float(defect_scores.get("click_severity", 0.0))
+    p += _sigmoid_score(click_sev, k=4, x0=0.20) * 0.20
+    dropout_sev = float(defect_scores.get("dropouts", 0.0))
+    p += _sigmoid_score(dropout_sev, k=4, x0=0.15) * 0.15
+    p += (1.0 - sf.clip_fraction) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_hf_remanence_loss(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | hf_remanence_loss) — magnetic particle demagnetization."""
+    p = 0.0
+    hf_loss_sev = float(defect_scores.get("hf_remanence_loss", 0.0))
+    p += _sigmoid_score(hf_loss_sev, k=8, x0=0.20) * 0.45
+    bw_sev = float(defect_scores.get("bandwidth_loss", 0.0))
+    p += _sigmoid_score(bw_sev, k=5, x0=0.20) * 0.25
+    # Low HF energy = HF loss
+    p += _gaussian_score(sf.hf_energy_ratio, mu=0.10, sigma=0.10) * 0.20
+    p += (1.0 - sf.clip_fraction) * 0.10
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_stylus_damage(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | stylus_damage) — asymmetric distortion from worn stylus."""
+    p = 0.0
+    stylus_sev = float(defect_scores.get("stylus_damage", 0.0))
+    p += _sigmoid_score(stylus_sev, k=8, x0=0.20) * 0.50
+    crackle_sev = float(defect_scores.get("crackle", 0.0))
+    p += _sigmoid_score(crackle_sev, k=4, x0=0.15) * 0.20
+    p += _gaussian_score(sf.hf_energy_ratio, mu=0.40, sigma=0.20) * 0.15
+    p += (1.0 - abs(sf.dc_offset)) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_sticky_shed(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | sticky_shed_residue) — post-baking tape degradation."""
+    p = 0.0
+    shed_sev = float(defect_scores.get("sticky_shed_residue", 0.0))
+    p += _sigmoid_score(shed_sev, k=8, x0=0.20) * 0.50
+    dropout_sev = float(defect_scores.get("dropouts", 0.0))
+    p += _sigmoid_score(dropout_sev, k=5, x0=0.15) * 0.20
+    hiss_sev = float(defect_scores.get("tape_hiss", 0.0))
+    p += _sigmoid_score(hiss_sev, k=4, x0=0.15) * 0.15
+    p += (1.0 - sf.clip_fraction) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_multiband_wow_flutter(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | multiband_wow_flutter) — frequency-dependent speed fluctuations."""
+    p = 0.0
+    mb_sev = float(defect_scores.get("multiband_wow_flutter", 0.0))
+    p += _sigmoid_score(mb_sev, k=8, x0=0.20) * 0.45
+    wf_sev = float(defect_scores.get("wow_flutter", 0.0))
+    p += _sigmoid_score(wf_sev, k=5, x0=0.15) * 0.25
+    p += _sigmoid_score(sf.pitch_instability, k=20, x0=0.02) * 0.20
+    p += (1.0 - sf.clip_fraction) * 0.10
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_generation_loss(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | generation_loss) — cumulative dubbing/transcoding degradation."""
+    p = 0.0
+    gen_sev = float(defect_scores.get("generation_loss", 0.0))
+    p += _sigmoid_score(gen_sev, k=8, x0=0.20) * 0.45
+    bw_sev = float(defect_scores.get("bandwidth_loss", 0.0))
+    p += _sigmoid_score(bw_sev, k=5, x0=0.15) * 0.20
+    hiss_sev = float(defect_scores.get("tape_hiss", 0.0))
+    p += _sigmoid_score(hiss_sev, k=4, x0=0.15) * 0.20
+    p += _gaussian_score(sf.hf_energy_ratio, mu=0.15, sigma=0.10) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_motor_interference(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | motor_interference) — motor harmonics in 80–300 Hz."""
+    p = 0.0
+    motor_sev = float(defect_scores.get("motor_interference", 0.0))
+    p += _sigmoid_score(motor_sev, k=8, x0=0.20) * 0.45
+    hum_sev = float(defect_scores.get("hum", 0.0))
+    p += _sigmoid_score(hum_sev, k=5, x0=0.15) * 0.20
+    p += _gaussian_score(sf.lf_energy_ratio, mu=0.35, sigma=0.15) * 0.20
+    p += _gaussian_score(sf.hum_score, mu=0.40, sigma=0.20) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
 LIKELIHOOD_FNS = {
     # ── Original 12 ──────────────────────────────────────────────────────────
     "tape_dropout": _likelihood_tape_dropout,
@@ -1589,6 +2145,21 @@ LIKELIHOOD_FNS = {
     "wow": _likelihood_wow,
     "flutter": _likelihood_flutter,
     "wow_flutter": _likelihood_wow_flutter,
+    "tape_start_instability": _likelihood_wow_flutter,  # same transport mechanism
+    "tape_head_contact_instability": _likelihood_tape_head_contact,
+    # ── v9.10.98: 12 neue Ursachen ──────────────────────────────────────────
+    "modulation_noise": _likelihood_modulation_noise,
+    "inner_groove_distortion": _likelihood_inner_groove_distortion,
+    "groove_echo": _likelihood_groove_echo,
+    "crosstalk": _likelihood_crosstalk,
+    "intermodulation_distortion": _likelihood_intermodulation_distortion,
+    "tape_splice_artifact": _likelihood_tape_splice,
+    "hf_remanence_loss": _likelihood_hf_remanence_loss,
+    "stylus_damage": _likelihood_stylus_damage,
+    "sticky_shed_residue": _likelihood_sticky_shed,
+    "multiband_wow_flutter": _likelihood_multiband_wow_flutter,
+    "generation_loss": _likelihood_generation_loss,
+    "motor_interference": _likelihood_motor_interference,
 }
 
 

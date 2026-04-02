@@ -424,9 +424,12 @@ class EmotionalResonanceEnhancer:
         if peak > 0:
             enhanced = enhanced / peak
 
-        # === REPORT ===
-        # Measure improvement (would require re-analysis, skip for performance)
-        resonance_improvement = 0.0  # Placeholder
+        # === REPORT — Re-Analyse für Resonanz-Improvement ===
+        analyzer = EmotionalResonanceAnalyzer(threshold=self.warmth_boost_db)
+        post_analysis = analyzer.analyze(enhanced, sr)
+        resonance_improvement = float(
+            post_analysis.emotional_resonance_score - current_analysis.emotional_resonance_score
+        )
 
         report = EmotionalEnhancementReport(
             warmth_boost_db=actual_warmth_boost if warmth_applied else 0.0,

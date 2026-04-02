@@ -710,6 +710,19 @@ class MusikalischerGlobalplanDienst:
                     "Ketten-Prior: tape→lossy bei 10.5–14.5 kHz → 1970er Aufnahmeära plausibler als 1990er"
                 )
 
+            # §Fix9: Reine Lossy-Kette (MP3/AAC ohne Bandträger): Bandbreite ist
+            # codec-bedingt, NICHT Aufnahme-ära-bedingt. MP3 existiert erst ab 1993.
+            # Minimaler Decade-Floor = 1975 verhindert 1930er-Fehlzuweisung bei
+            # niedrig-bitraten- oder bandbreite-limitierten Codec-Quellen.
+            if is_lossy_chain and not is_tape_chain and decade < 1975:
+                _decade_before_fix9 = decade
+                decade = 1975
+                era_conf = max(era_conf, 0.55)
+                reasoning.append(
+                    f"Lossy-Codec-Korrektur: Ära {_decade_before_fix9}er → 1975 "
+                    f"(MP3/AAC-Bandbreite ist codec-bedingt, kein Ära-Indikator; §Fix9)"
+                )
+
         # Profil aus dezennium-nächstem Profil
         era_profile = _nearest_era_profile(decade)
         era_label = era_profile.get("label", f"{decade}er")

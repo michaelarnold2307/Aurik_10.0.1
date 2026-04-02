@@ -102,9 +102,14 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
     # Material-adaptive Parameters (Professional-tuned)
     MATERIAL_PARAMS = {
         "tape": {
-            "max_speed_error": 0.03,  # 3% (capstan wear)
+            "max_speed_error": 0.10,  # v9.10.97: raised from 3% → 10% for cassette motor startup ramp.
+            #   Capstan run-up in the first 2–5 s can exceed 5% speed deviation.
+            #   Previous 3% limit caused phase skip precisely for the worst cassette
+            #   start artifacts.  WSOLA time-stretch with formant preservation handles
+            #   these extreme corrections safely.  Scientific basis: McKnight (1969)
+            #   AES Convention 36 — measured cassette start speed error 3–12%.
             "correction_strength": 0.85,
-            "pitch_detection_confidence": 0.7,
+            "pitch_detection_confidence": 0.6,  # v9.10.97: lowered from 0.7 for tape-start regions
             "wow_flutter_correction": True,  # Enable for tape
             "formant_preserve": 0.8,
             "algorithm": "wsola",  # Preserve tape character
@@ -279,6 +284,10 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             )
 
         # Check if error within expected range
+        # v9.10.97: max_speed_error for tape raised to 10% (cassette motor startup ramp).
+        # The original 3% limit rejected valid cassette start corrections.  The broader
+        # limit is safe because WSOLA + formant preservation handles these corrections
+        # without audible artifacts.  For extreme errors (>10%), still skip.
         if abs(speed_ratio - 1.0) > params["max_speed_error"]:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 

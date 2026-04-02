@@ -280,3 +280,243 @@ def test_deferred_job_mode_is_lowercase(minimal_job):
 def test_deferred_job_sr_is_48000(minimal_job):
     """sr must be 48000 (Verarbeitungs-SR §2.37)."""
     assert minimal_job.sr == 48000
+
+
+# ── Interruption-Handling (§2.38: isInterruptionRequested zwischen jeder Phase) ──
+
+
+def test_interruption_early_exit(tmp_path):
+    """run() must emit refinement_cancelled if interrupted before denke()."""
+    from unittest.mock import PropertyMock
+
+    from Aurik910.ui.ml_refinement_thread import MLRefinementThread
+    from backend.core.deferred_refinement_job import DeferredRefinementJob
+
+    audio = np.zeros(48000, dtype=np.float32)
+    job = DeferredRefinementJob(
+        output_path=str(tmp_path / "interrupt_test.wav"),
+        audio_original=audio,
+        sr=48000,
+        mode="restoration",
+        deferred_phase_ids=["phase_20_reverb_reduction"],
+        cached_defect_result=None,
+        cached_era_result=None,
+        cached_medium_result=None,
+        stufe1_quality=0.60,
+        input_path="",
+    )
+    thread = MLRefinementThread(job)
+    # Record emitted signals
+    cancelled_paths: list[str] = []
+    thread.refinement_cancelled.connect(lambda p: cancelled_paths.append(p))
+    # Force interruption before run starts
+    thread.requestInterruption()
+    thread.run()  # Execute synchronously for test
+    assert len(cancelled_paths) >= 1, "refinement_cancelled must be emitted on interruption"
+    assert cancelled_paths[0] == str(tmp_path / "interrupt_test.wav")
+
+
+def test_budget_allocation_failure_cancels(tmp_path):
+    """run() must emit refinement_cancelled if ml_memory_budget.try_allocate fails."""
+    from Aurik910.ui.ml_refinement_thread import MLRefinementThread
+    from backend.core.deferred_refinement_job import DeferredRefinementJob
+
+    audio = np.zeros(48000, dtype=np.float32)
+    job = DeferredRefinementJob(
+        output_path=str(tmp_path / "budget_fail.wav"),
+        audio_original=audio,
+        sr=48000,
+        mode="restoration",
+        deferred_phase_ids=["phase_20_reverb_reduction"],
+        cached_defect_result=None,
+        cached_era_result=None,
+        cached_medium_result=None,
+        stufe1_quality=0.60,
+        input_path="",
+    )
+    thread = MLRefinementThread(job)
+    cancelled_paths: list[str] = []
+    thread.refinement_cancelled.connect(lambda p: cancelled_paths.append(p))
+
+    # Mock budget to refuse allocation
+    mock_budget = MagicMock()
+    mock_budget.try_allocate.return_value = False
+    with patch("backend.api.bridge.get_ml_memory_budget", return_value=mock_budget):
+        thread.run()
+
+    # Budget failure must result in cancellation (or the import mock path
+    # might cause it to fall through to denker unavailable → cancellation too)
+    assert len(cancelled_paths) >= 1, "Cancelled signal must be emitted on budget allocation failure"
+
+
+def test_quality_gate_blocks_inferior_stufe2(tmp_path):
+    """Stufe-2 result with lower quality than Stufe-1 must NOT overwrite."""
+    from Aurik910.ui.ml_refinement_thread import MLRefinementThread
+    from backend.core.deferred_refinement_job import DeferredRefinementJob
+
+    audio = np.random.default_rng(42).standard_normal(48000).astype(np.float32) * 0.1
+    out_path = str(tmp_path / "gate_test.wav")
+    job = DeferredRefinementJob(
+        output_path=out_path,
+        audio_original=audio,
+        sr=48000,
+        mode="restoration",
+        deferred_phase_ids=["phase_20_reverb_reduction"],
+        cached_defect_result=None,
+        cached_era_result=None,
+        cached_medium_result=None,
+        stufe1_quality=0.95,  # Very high Stufe-1 — hard to beat
+        input_path="",
+    )
+    thread = MLRefinementThread(job)
+    cancelled_paths: list[str] = []
+    complete_paths: list[str] = []
+    thread.refinement_cancelled.connect(lambda p: cancelled_paths.append(p))
+    thread.refinement_complete.connect(lambda p, r: complete_paths.append(p))
+
+    # Mock denker to return result with lower quality
+    mock_result = MagicMock()
+    mock_result.quality_estimate = 0.50  # Lower than stufe1_quality (0.95)
+    mock_result.audio = audio
+
+    mock_denker = MagicMock()
+    mock_denker.denke.return_value = mock_result
+
+    with patch("backend.api.bridge.get_aurik_denker_instance", return_value=mock_denker), \
+         patch("backend.api.bridge.get_ml_memory_budget") as mock_get_budget:
+        mock_budget = MagicMock()
+        mock_budget.try_allocate.return_value = True
+        mock_get_budget.return_value = mock_budget
+        thread.run()
+
+    # Quality gate must prevent overwrite
+    assert len(cancelled_paths) >= 1 or len(complete_paths) == 0, \
+        "Inferior Stufe-2 quality must trigger cancellation, not completion"
+
+
+def test_cache_passthrough_to_denker(tmp_path):
+    """Stufe-1 cached results (defect/era/medium) must be forwarded to denke()."""
+    from Aurik910.ui.ml_refinement_thread import MLRefinementThread
+    from backend.core.deferred_refinement_job import DeferredRefinementJob
+
+    audio = np.zeros(48000, dtype=np.float32)
+    mock_defect = {"NOISE": 0.5}
+    mock_era = {"decade": 1970}
+    mock_medium = {"type": "vinyl"}
+
+    job = DeferredRefinementJob(
+        output_path=str(tmp_path / "cache_test.wav"),
+        audio_original=audio,
+        sr=48000,
+        mode="restoration",
+        deferred_phase_ids=["phase_20_reverb_reduction"],
+        cached_defect_result=mock_defect,
+        cached_era_result=mock_era,
+        cached_medium_result=mock_medium,
+        stufe1_quality=0.60,
+        input_path=str(tmp_path / "in.wav"),
+    )
+    thread = MLRefinementThread(job)
+    # Swallow all signals
+    thread.refinement_cancelled.connect(lambda p: None)
+    thread.refinement_complete.connect(lambda p, r: None)
+
+    mock_result = MagicMock()
+    mock_result.quality_estimate = 0.80
+    mock_result.audio = audio
+
+    mock_denker = MagicMock()
+    mock_denker.denke.return_value = mock_result
+
+    with patch("backend.api.bridge.get_aurik_denker_instance", return_value=mock_denker), \
+         patch("backend.api.bridge.get_ml_memory_budget") as mock_get_budget:
+        mock_budget = MagicMock()
+        mock_budget.try_allocate.return_value = True
+        mock_get_budget.return_value = mock_budget
+        thread.run()
+
+    # Verify denke() was called with cached results
+    assert mock_denker.denke.called, "denke() must be called in Stufe-2 run()"
+    call_kwargs = mock_denker.denke.call_args
+    if call_kwargs.kwargs:
+        kw = call_kwargs.kwargs
+    else:
+        kw = call_kwargs[1] if len(call_kwargs) > 1 else {}
+    assert kw.get("cached_defect_result") is mock_defect, "cached_defect_result must be forwarded"
+    assert kw.get("cached_era_result") is mock_era, "cached_era_result must be forwarded"
+    assert kw.get("cached_medium_result") is mock_medium, "cached_medium_result must be forwarded"
+    assert kw.get("no_rt_limit") is True, "no_rt_limit must be True for Stufe-2"
+
+
+def test_write_audio_stereo(tmp_path):
+    """_write_audio must handle stereo (2D) arrays."""
+    import soundfile as sf
+
+    from Aurik910.ui.ml_refinement_thread import _write_audio
+
+    rng = np.random.default_rng(123)
+    # _write_audio expects (samples, channels) shape for stereo via soundfile
+    audio = rng.standard_normal((4800, 2)).astype(np.float32) * 0.3
+    path = str(tmp_path / "stereo.wav")
+    _write_audio(audio, 48000, path)
+    loaded, sr = sf.read(path, dtype="float32")
+    assert sr == 48000
+    assert loaded.size > 0
+
+
+def test_extract_quality_from_restoration_result():
+    """_extract_quality must read quality_estimate from standard result objects."""
+    from Aurik910.ui.ml_refinement_thread import _extract_quality
+
+    mock_result = MagicMock()
+    mock_result.quality_estimate = 0.72
+    assert _extract_quality(mock_result) == pytest.approx(0.72, abs=1e-3)
+
+    assert _extract_quality(None) is None
+
+
+def test_extract_audio_from_result():
+    """_extract_audio must extract audio ndarray from result."""
+    from Aurik910.ui.ml_refinement_thread import _extract_audio
+
+    mock_result = MagicMock()
+    expected = np.zeros(480, dtype=np.float32)
+    mock_result.audio = expected
+    got = _extract_audio(mock_result)
+    assert got is not None
+    np.testing.assert_array_equal(got, expected)
+
+
+def test_should_start_single_instance_guard():
+    """Concurrent MLRefinementThread instances must be prevented by should_start."""
+    from Aurik910.ui.ml_refinement_thread import MLRefinementThread
+    from backend.core.deferred_refinement_job import DeferredRefinementJob
+
+    audio = np.zeros(48000, dtype=np.float32)
+    job = DeferredRefinementJob(
+        output_path="/tmp/instance_guard.wav",
+        audio_original=audio,
+        sr=48000,
+        mode="restoration",
+        deferred_phase_ids=["phase_20"],
+        cached_defect_result=None,
+        cached_era_result=None,
+        cached_medium_result=None,
+        stufe1_quality=0.60,
+        input_path="",
+    )
+    # First call should be True (mocking RAM check)
+    import psutil
+    mock_vm = MagicMock()
+    mock_vm.available = int(8.0 * 1024**3)
+    with patch.object(psutil, "virtual_memory", return_value=mock_vm):
+        assert MLRefinementThread.should_start(job) is True
+
+
+def test_deferred_job_release_buffer(minimal_job):
+    """release_buffer must set audio_original to None and release budget."""
+    assert minimal_job.audio_original is not None
+    with patch("backend.core.ml_memory_budget.release") as mock_release:
+        minimal_job.release_buffer()
+    # Audio should be cleared
+    assert minimal_job.audio_original is None

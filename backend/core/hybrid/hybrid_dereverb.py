@@ -114,6 +114,8 @@ class HybridDereverb:
         """
         self.config = config or DereverbConfig()
         self._sgmse_active: bool = False  # True wenn SGMSE+ ONNX geladen (Primär §4.4)
+        self._disable_ml_due_deterministic_error: bool = False
+        self._last_deterministic_ml_error: str = ""
 
         # Lazy-load ML-Stufe: SGMSE+ primär, ResembleEnhance als Fallback 1
         self.dccrn = None  # backward-compat Name beibehalten
@@ -202,6 +204,15 @@ class HybridDereverb:
                 logger.info("Stage 2: %s ML-Dereverb-Stufe...", _ml_name)
 
                 _skip_ml = not self._has_sufficient_ml_headroom(audio)
+                if self._disable_ml_due_deterministic_error:
+                    _skip_ml = True
+                    metadata["ml_skipped_reason"] = "deterministic_ml_error_latched"
+                    if self._last_deterministic_ml_error:
+                        metadata["ml_last_error"] = self._last_deterministic_ml_error
+                    logger.info(
+                        "HybridDereverb: ML-Stufe dauerhaft deaktiviert nach deterministischem Fehler (%s) — DSP-Ergebnis bleibt aktiv",
+                        self._last_deterministic_ml_error or "unknown",
+                    )
 
                 if not _skip_ml:
                     audio, dccrn_meta = self._apply_dccrn(audio, sample_rate)
@@ -420,9 +431,22 @@ class HybridDereverb:
             return np.clip(np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0), metadata
 
         except Exception as e:
+            err_msg = str(e)
+            err_l = err_msg.lower()
+            deterministic_patterns = (
+                "the size of tensor",
+                "must match the size of tensor",
+                "torchscript",
+                "size mismatch",
+                "shape mismatch",
+            )
+            if any(pat in err_l for pat in deterministic_patterns):
+                self._disable_ml_due_deterministic_error = True
+                self._last_deterministic_ml_error = err_msg
             logger.warning("HybridDereverb ML-Stufe fehlgeschlagen (%s) — DSP-Ergebnis unverändert", e)
             metadata["success"] = False
-            metadata["error"] = str(e)
+            metadata["error"] = err_msg
+            metadata["deterministic_error_latched"] = self._disable_ml_due_deterministic_error
             return audio, metadata
 
     def _estimate_reverb_level(self, audio: np.ndarray, sample_rate: int) -> float:

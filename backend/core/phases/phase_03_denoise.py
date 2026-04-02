@@ -137,8 +137,33 @@ class DenoisePhase(PhaseInterface):
             "smoothing_freq": 5,  # Bins for freq smoothing
             "transient_preserve": 0.9,
         },
+        "reel_tape": {
+            "strength": 0.75,  # Higher quality than cassette; gentler NR preserves tape warmth
+            "bands": {
+                "low": {"threshold": -55, "reduction": 0.25},
+                "mid": {"threshold": -50, "reduction": 0.60},
+                "high": {"threshold": -45, "reduction": 0.80},
+            },
+            "musical_noise_suppression": 0.7,
+            "smoothing_time": 3,
+            "smoothing_freq": 4,
+            "transient_preserve": 0.92,
+        },
+        "cassette": {
+            "strength": 0.80,  # Slightly gentler than generic tape for thin-tape SNR
+            "bands": {
+                "low": {"threshold": -55, "reduction": 0.30},
+                "mid": {"threshold": -50, "reduction": 0.65},
+                "high": {"threshold": -45, "reduction": 0.88},
+            },
+            "musical_noise_suppression": 0.75,
+            "smoothing_time": 3,
+            "smoothing_freq": 5,
+            "transient_preserve": 0.88,
+        },
         "vinyl": {
             "strength": 0.65,
+            "g_floor": 0.12,  # Slightly raised to protect groove rumble character (200-1000 Hz)
             "bands": {
                 "low": {"threshold": -50, "reduction": 0.4},
                 "mid": {"threshold": -48, "reduction": 0.6},
@@ -151,7 +176,7 @@ class DenoisePhase(PhaseInterface):
         },
         "shellac": {
             "strength": 0.30,  # Sehr konservativ (bewahrt Charakter bei SNR≈6 dB)
-            "g_floor": 0.30,  # Höherer G_FLOOR gegen Signal-Vernichtung (Überschreibt Standard 0.10)
+            "g_floor": 0.22,  # Raised floor — salience curve further adapts per-frame
             "bands": {
                 "low": {"threshold": -45, "reduction": 0.15},  # Bass minimal berühren
                 "mid": {"threshold": -45, "reduction": 0.35},
@@ -161,6 +186,19 @@ class DenoisePhase(PhaseInterface):
             "smoothing_time": 2,
             "smoothing_freq": 3,
             "transient_preserve": 0.8,
+        },
+        "wax_cylinder": {
+            "strength": 0.25,  # Most conservative — extreme SNR (~3-5 dB), noise IS the signal
+            "g_floor": 0.35,  # High floor to preserve any residual audio content
+            "bands": {
+                "low": {"threshold": -42, "reduction": 0.10},
+                "mid": {"threshold": -42, "reduction": 0.25},
+                "high": {"threshold": -38, "reduction": 0.35},
+            },
+            "musical_noise_suppression": 0.2,
+            "smoothing_time": 2,
+            "smoothing_freq": 2,
+            "transient_preserve": 0.75,
         },
         "cd_digital": {
             "strength": 0.35,  # Conservative (rare noise)
@@ -173,6 +211,58 @@ class DenoisePhase(PhaseInterface):
             "smoothing_time": 1,
             "smoothing_freq": 2,
             "transient_preserve": 0.95,
+        },
+        "dat": {
+            "strength": 0.20,  # Very clean medium — minimal NR needed
+            "g_floor": 0.05,  # Low floor safe for high-SNR sources
+            "bands": {
+                "low": {"threshold": -38, "reduction": 0.15},
+                "mid": {"threshold": -36, "reduction": 0.20},
+                "high": {"threshold": -34, "reduction": 0.30},
+            },
+            "musical_noise_suppression": 0.3,
+            "smoothing_time": 1,
+            "smoothing_freq": 2,
+            "transient_preserve": 0.97,
+        },
+        "mp3_low": {
+            "strength": 0.25,  # Gentle — codec artifacts must not be amplified
+            "g_floor": 0.15,  # Higher floor protects codec ringing/pre-echo
+            "bands": {
+                "low": {"threshold": -42, "reduction": 0.15},
+                "mid": {"threshold": -40, "reduction": 0.25},
+                "high": {"threshold": -38, "reduction": 0.30},  # Brick-wall above cutoff
+            },
+            "musical_noise_suppression": 0.35,
+            "smoothing_time": 1,
+            "smoothing_freq": 2,
+            "transient_preserve": 0.90,
+        },
+        "mp3_high": {
+            "strength": 0.30,
+            "g_floor": 0.08,
+            "bands": {
+                "low": {"threshold": -40, "reduction": 0.18},
+                "mid": {"threshold": -38, "reduction": 0.28},
+                "high": {"threshold": -35, "reduction": 0.35},
+            },
+            "musical_noise_suppression": 0.35,
+            "smoothing_time": 1,
+            "smoothing_freq": 2,
+            "transient_preserve": 0.93,
+        },
+        "aac": {
+            "strength": 0.28,
+            "g_floor": 0.07,
+            "bands": {
+                "low": {"threshold": -40, "reduction": 0.18},
+                "mid": {"threshold": -38, "reduction": 0.25},
+                "high": {"threshold": -35, "reduction": 0.32},
+            },
+            "musical_noise_suppression": 0.35,
+            "smoothing_time": 1,
+            "smoothing_freq": 2,
+            "transient_preserve": 0.94,
         },
         "unknown": {
             "strength": 0.45,  # Mäßig konservativ für unbekanntes Material
@@ -264,14 +354,29 @@ class DenoisePhase(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         effective_strength = max(0.01, min(1.0, effective_strength * phase_locality_factor))
 
-        # §2.14+ Era-adaptive NR: older recordings tolerate stronger denoising,
-        # modern recordings need gentler treatment to preserve fine detail.
+        # §2.14+ Era-adaptive NR: smooth interpolation across decades.
+        # Older recordings have higher noise floors and tolerate stronger
+        # denoising; modern recordings need gentler treatment.  Continuous
+        # interpolation avoids abrupt strength jumps at decade boundaries.
         decade = kwargs.get("decade")
         if decade is not None and "strength" not in kwargs:
-            if decade <= 1940:
-                effective_strength = min(1.0, effective_strength * 1.15)
-            elif decade >= 1990:
-                effective_strength = max(0.01, effective_strength * 0.80)
+            # Piecewise-linear era→strength multiplier (calibrated):
+            #   1890–1930: ×1.15 (aggressive — high intrinsic noise)
+            #   1940:      ×1.10 (early electronic era)
+            #   1950:      ×1.05 (improved tape/vinyl)
+            #   1960:      ×1.00 (neutral baseline)
+            #   1970:      ×0.95 (better production)
+            #   1980:      ×0.90 (digital transition)
+            #   1990+:     ×0.80 (clean digital sources)
+            _era_knots = [
+                (1890, 1.15), (1930, 1.15), (1940, 1.10), (1950, 1.05),
+                (1960, 1.00), (1970, 0.95), (1980, 0.90), (1990, 0.80), (2025, 0.80),
+            ]
+            _dec = float(max(1890, min(2025, decade)))
+            _era_decades = [k[0] for k in _era_knots]
+            _era_mults = [k[1] for k in _era_knots]
+            era_mult = float(np.interp(_dec, _era_decades, _era_mults))
+            effective_strength = max(0.01, min(1.0, effective_strength * era_mult))
 
         # §2.20 Genre-adaptive NR: classical/opera preserve hall ambience,
         # rock tolerates aggressive NR without losing character.
@@ -292,7 +397,11 @@ class DenoisePhase(PhaseInterface):
         use_lightweight = False
         if RESOURCE_MANAGER_AVAILABLE:
             use_lightweight = adaptive_resource_manager.should_use_lightweight_mode()
-            if use_lightweight:
+            # Quality-first contract: in quality/maximum we do not downgrade to DSP
+            # based solely on transient resource pressure.
+            if quality_mode in ["quality", "maximum"]:
+                use_lightweight = False
+            elif use_lightweight:
                 logger.info(
                     f"Phase 03: Resource constraint detected, forcing DSP-only mode "
                     f"(CPU: {adaptive_resource_manager.get_cpu_usage():.1f}%, "
@@ -574,6 +683,11 @@ class DenoisePhase(PhaseInterface):
         all_gain_mb_means: list[float] = []
         all_gain_sm_means: list[float] = []
 
+        # §A Salience-adaptive G_floor (Moore 2003): compute once on full audio at
+        # reference STFT timing; each zone resamples the curve to its own frame count.
+        _g_floor_base_val = float(params.get("g_floor", 0.1))
+        _g_floor_ref_vec = self._compute_salience_g_floor(audio, sr, _g_floor_base_val, n_t, REF_HOP)
+
         for zone_name, zone_win, zone_hop, f_low, f_high in self._MRSA_ZONES:
             try:
                 # Use zone-specific STFT if audio is long enough; fall back to reference STFT
@@ -603,10 +717,19 @@ class DenoisePhase(PhaseInterface):
                     nm_z = np.percentile(mag_z, 10, axis=1, keepdims=True) * np.ones((1, n_z_t))
                     nm_z = np.maximum(nm_z, 1e-8)
                 else:
-                    nm_z = self._estimate_noise_imcra(mag_z, t_z)
+                    nm_z = self._estimate_noise_imcra(mag_z, t_z, sr=sr)
 
                 # --- OMLSA gain chain ---
-                G_z, _ = self._compute_omlsa_gain(mag_z, nm_z, params)
+                # Resample salience G_floor vector to this zone's frame count.
+                if n_z_t != n_t and n_z_t > 0:
+                    _g_floor_zone = np.interp(
+                        np.linspace(0.0, 1.0, n_z_t),
+                        np.linspace(0.0, 1.0, n_t),
+                        _g_floor_ref_vec,
+                    ).astype(np.float32)
+                else:
+                    _g_floor_zone = _g_floor_ref_vec
+                G_z, _ = self._compute_omlsa_gain(mag_z, nm_z, params, g_floor_vec=_g_floor_zone)
                 G_mb = self._apply_multiband_gate(G_z, f_z, params["bands"])
                 G_sm = self._suppress_musical_noise(
                     G_mb,
@@ -614,7 +737,9 @@ class DenoisePhase(PhaseInterface):
                     params["smoothing_time"],
                     params["smoothing_freq"],
                 )
-                G_tr = self._preserve_transients(mag_z, G_sm, params["transient_preserve"])
+                # §D masking gate: attenuate chirp artefacts below simultaneous masking threshold
+                G_ms = self._apply_masking_gate(G_sm, mag_z)
+                G_tr = self._preserve_transients(mag_z, G_ms, params["transient_preserve"])
 
                 all_gain_mb_means.append(float(np.mean(G_mb)))
                 all_gain_sm_means.append(float(np.mean(G_sm)))
@@ -692,8 +817,8 @@ class DenoisePhase(PhaseInterface):
         gain_mb_mean = float(np.mean(all_gain_mb_means)) if all_gain_mb_means else 1.0
         gain_sm_mean = float(np.mean(all_gain_sm_means)) if all_gain_sm_means else 1.0
 
-        # Apply MRSA gain to reference STFT
-        Zxx_processed = G_combined * np.abs(Zxx_ref) * np.exp(1j * np.angle(Zxx_ref))
+        # Apply MRSA gain with gain-gradient phase correction (Prusa & Holighaus 2017 §3.4)
+        Zxx_processed = self._apply_gain_gradient_phase_correction(Zxx_ref, G_combined, REF_HOP, sr)
 
         # PGHI phase reconstruction (Perraudin 2013) — replaces direct iSTFT
         if _PGHI_AVAILABLE:
@@ -727,8 +852,14 @@ class DenoisePhase(PhaseInterface):
 
         return audio_out, gain_mb_mean, gain_sm_mean
 
-    def _estimate_noise_imcra(self, magnitude: np.ndarray, times: np.ndarray) -> np.ndarray:
-        """IMCRA Noise PSD Estimation (zeitvariant).
+    def _estimate_noise_imcra(
+        self,
+        magnitude: np.ndarray,
+        times: np.ndarray,
+        onset_frames: "np.ndarray | None" = None,
+        sr: int = 48_000,
+    ) -> np.ndarray:
+        """IMCRA Noise PSD Estimation with ERB-rate grouping + adaptive smoothing.
 
         Cohen & Berdugo (2002): "Noise Estimation by Minima Controlled
         Recursive Averaging" (IMCRA).
@@ -736,11 +867,28 @@ class DenoisePhase(PhaseInterface):
         Algorithmus:
             - Gleitendes Minimum über M Frames (≈1.5 s)
             - Bias-Korrektur: b_min = 1.66 (Gauß'sches Rauschen)
-            - Exponentielle Glättung: α_n = 0.85
+            - ERB-rate Grouping: Glasberg & Moore (1990) — Verbesserung B
+            - Exponentielle Glättung: α_n adaptiv (Loizou 2013, §7.3)
+
+        ERB-rate grouping (§B):
+            Linear STFT bins are perceptually redundant above ~1 kHz (many bins
+            per auditory critical band).  A single low-energy outlier bin can
+            produce a false minimum that drives over-suppression of all nearby
+            fricative bins.  Pooling sigma2 within 38 ERB bands equalises the
+            noise estimate at the perceptual resolution of the basilar membrane.
+
+        Stationarity-adaptive α (§E — Verbesserung E):
+            Transient onsets require fast noise-estimate updates (α=0.50);
+            stationary segments use the standard slow tracker (α=0.85).
+            Ephraim & Malah (1984) showed optimal α depends on the second
+            derivative of the power spectrum (∂²P/∂t²).  Onset frames are
+            self-detected from the positive spectral flux if not supplied.
 
         Args:
-            magnitude: |STFT| (F×T)
-            times: STFT-Zeitachse
+            magnitude:    |STFT| (F×T)
+            times:        STFT-Zeitachse
+            onset_frames: Optional 1-D array of frame indices for detected onsets.
+                          If None, auto-detected from positive spectral flux.
 
         Returns:
             noise_mag: Rausch-Amplitude (F×T), immer positiv
@@ -767,18 +915,55 @@ class DenoisePhase(PhaseInterface):
         b_min = 1.66
         sigma2 *= b_min
 
-        # Exponentielle Glättung über die Zeit
-        alpha_n = 0.85
+        # §B ERB-rate grouping: pool minimum statistics within auditory critical bands.
+        # Glasberg & Moore (1990): 38 ERB bands, 100 Hz – Nyquist.
+        # After bias correction, average sigma2 within each perceptual band so that
+        # an isolated low-energy bin cannot over-suppress its fricative neighbours.
+        if n_freq > 1 and sr > 0:
+            erb_idx = self._compute_erb_bands(n_freq, sr)
+            n_erb = int(erb_idx.max()) + 1
+            sigma2_grouped = np.empty_like(sigma2)
+            for b in range(n_erb):
+                mask = erb_idx == b
+                if np.any(mask):
+                    sigma2_grouped[mask, :] = np.mean(sigma2[mask, :], axis=0)
+            sigma2 = sigma2_grouped
+
+        # Stationarity-adaptive α: fast tracking at onsets, slow elsewhere.
+        # Loizou (2013) §7.3 + Ephraim & Malah (1984): optimal α ∝ 1/|∂²P/∂t²|.
+        ALPHA_STAT  = 0.85  # standard stationary noise tracking
+        ALPHA_ONSET = 0.50  # fast update: transient onsets need fresh estimate
+        ONSET_RADIUS = 2    # frames around each onset to apply fast α
+
+        if onset_frames is None:
+            # Auto-detect onsets from positive spectral-flux sum (frame energy increase).
+            energy = np.sum(pow_spec, axis=0)  # (n_frames,)
+            flux = np.maximum(0.0, np.diff(energy, prepend=energy[:1]))  # positive only
+            threshold = np.percentile(flux, 88) if n_frames > 10 else float(np.max(flux))
+            onset_frames = np.where(flux > threshold)[0]
+
+        alpha_t = np.full(n_frames, ALPHA_STAT, dtype=np.float64)
+        for of in onset_frames:
+            lo = max(0, int(of) - ONSET_RADIUS)
+            hi = min(n_frames, int(of) + ONSET_RADIUS + 1)
+            alpha_t[lo:hi] = ALPHA_ONSET
+
+        # Exponentielle Glättung über die Zeit — per-frame alpha
         smoothed = np.zeros_like(sigma2)
         smoothed[:, 0] = sigma2[:, 0]
         for t in range(1, n_frames):
-            smoothed[:, t] = alpha_n * smoothed[:, t - 1] + (1 - alpha_n) * sigma2[:, t]
+            a = alpha_t[t]
+            smoothed[:, t] = a * smoothed[:, t - 1] + (1 - a) * sigma2[:, t]
 
         noise_mag = np.sqrt(np.maximum(smoothed, 1e-10))
         return np.nan_to_num(noise_mag, nan=1e-6, posinf=1.0, neginf=1e-6)
 
     def _compute_omlsa_gain(
-        self, magnitude: np.ndarray, noise_mag: np.ndarray, params: dict[str, Any]
+        self,
+        magnitude: np.ndarray,
+        noise_mag: np.ndarray,
+        params: dict[str, Any],
+        g_floor_vec: "np.ndarray | None" = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """OMLSA Gain Function (Cohen 2003).
 
@@ -790,22 +975,40 @@ class DenoisePhase(PhaseInterface):
             ξ(t,f) = max(γ − 1, 0)        (a-priori SNR, Decision-Directed-Approx.)
             Λ(t,f) = 1/(1+ξ) · exp(ξγ/(1+ξ))  (Likelihood-Ratio)
             p(t,f) = 1 / (1 + q/(1−q) / Λ)  (Präsenzwahrscheinlichkeit)
-            G(t,f) = G_floor^(1−p) · (ξ/(1+ξ))^p
-            G(t,f) ∈ [G_floor, 1.0]
+            G(t,f) = G_floor(t)^(1−p) · (ξ/(1+ξ))^p
+            G(t,f) ∈ [G_floor(t), 1.0]
 
         Args:
             magnitude: |STFT| (F×T)
             noise_mag: Rausch-Amplitude (F×T)
-            params: Enthält 'strength' (0..1)
+            params: Enthält 'strength' (0..1) und optionales 'g_floor'
+            g_floor_vec: Optional time-varying G_floor curve shape (n_t,).
+                Computed by _compute_salience_g_floor() — louder frames get a
+                lower floor (noise is masked), quiet frames get a higher floor
+                (signal is fragile). If None, falls back to scalar params['g_floor'].
 
         Returns:
             (G_omlsa, p_speech): Gain-Matrix und Signal-Präsenz-Wahrsch. (je F×T)
         """
-        # G_FLOOR: material-spezifisch überschreibbar (z.B. shellac g_floor=0.30
+        # G_FLOOR_BASE: material-spezifisch überschreibbar (z.B. shellac g_floor=0.30
         # verhindert Signal-Vernichtung bei SNR ≈ 6 dB — Pflicht-Invariante ≥0.10)
-        G_FLOOR = float(params.get("g_floor", 0.1))  # Standard: −20 dB
+        G_FLOOR_BASE = float(params.get("g_floor", 0.1))  # Standard: −20 dB
         Q_NOISE = 0.5  # A-priori Wahrsch. für Rausch-only Frame
         STRENGTH = float(params.get("strength", 0.7))
+
+        # Salience-adaptive G_floor (Moore 2003 §9: masking is loudness-relative).
+        # g_floor_vec shape (n_t,) is broadcast to (1, n_t) for (n_freq, n_t) ops.
+        # Loud frames  → lower floor (residual noise is masked by signal energy).
+        # Quiet frames → higher floor (signal is fragile; OMLSA may mis-classify it).
+        if (
+            g_floor_vec is not None
+            and isinstance(g_floor_vec, np.ndarray)
+            and g_floor_vec.ndim == 1
+            and g_floor_vec.shape[0] == magnitude.shape[1]
+        ):
+            G_FLOOR: "np.ndarray | float" = g_floor_vec[np.newaxis, :].astype(np.float64)  # (1, n_t)
+        else:
+            G_FLOOR = G_FLOOR_BASE  # scalar fallback
 
         sigma_n2 = noise_mag**2 + 1e-10
         Y2 = magnitude**2
@@ -845,15 +1048,161 @@ class DenoisePhase(PhaseInterface):
         # Stärke skalieren (Nutzerpräferenz)
         G_omlsa = G_FLOOR + (G_omlsa - G_FLOOR) * STRENGTH
         G_omlsa = np.clip(G_omlsa, G_FLOOR, 1.0)
-        G_omlsa = np.nan_to_num(G_omlsa, nan=G_FLOOR)
+        G_omlsa = np.nan_to_num(G_omlsa, nan=G_FLOOR_BASE)  # nan= requires scalar
 
         logger.debug(
-            "OMLSA: μ_G=%.3f σ_G=%.3f μ_p=%.3f",
+            "OMLSA: μ_G=%.3f σ_G=%.3f μ_p=%.3f (salience_adaptive=%s)",
             float(np.mean(G_omlsa)),
             float(np.std(G_omlsa)),
             float(np.mean(p_speech)),
+            g_floor_vec is not None,
         )
         return G_omlsa, p_speech
+
+    @staticmethod
+    def _compute_salience_g_floor(
+        audio: np.ndarray,
+        sr: int,
+        g_floor_base: float,
+        n_t: int,
+        hop: int,
+    ) -> np.ndarray:
+        """Compute a time-varying G_floor curve based on momentary loudness.
+
+        Scientific basis:
+            Moore (2003) "Psychology of Hearing" §9: the simultaneous masking
+            threshold is loudness-relative.  In loud passages the residual noise
+            after NR is inaudible → we can afford a lower G_floor (more aggressive
+            noise removal).  In quiet/exposed passages the signal is fragile and
+            OMLSA may mis-classify signal bins as noise → higher G_floor protects
+            musical content (e.g. pianissimo transitions before a chorus).
+
+        Mapping (linear interpolation):
+            LUFS > -12 dBFS  (loud):   G_floor = 0.50 × g_floor_base  (aggressive)
+            LUFS < -30 dBFS  (quiet):  G_floor = min(3.0 × base, 0.40) (conservative)
+
+        A 500 ms smoothing kernel prevents pumping artefacts at loudness transitions.
+
+        Args:
+            audio:        Mono float32 audio at native SR (48 kHz in processing path).
+            sr:           Sample rate.
+            g_floor_base: Material-specific scalar G_floor (from params).
+            n_t:          Number of STFT frames to produce.
+            hop:          STFT hop size in samples (reference grid).
+
+        Returns:
+            g_floor_vec: np.ndarray shape (n_t,), dtype float32.
+        """
+        WIN_S = 0.4   # ITU-R BS.1770-5 momentary loudness window (400 ms)
+        HOP_S = 0.1   # 100 ms hop
+        win_n = max(1, int(WIN_S * sr))
+        hop_n = max(1, int(HOP_S * sr))
+        n = audio.shape[-1] if audio.ndim > 1 else len(audio)
+        mono = audio[0] if audio.ndim == 2 else audio  # channel-first safe
+        mono = np.asarray(mono, dtype=np.float64)
+
+        n_lufs_frames = max(1, (n - win_n) // hop_n + 1)
+        lufs_db = np.full(n_lufs_frames, -60.0, dtype=np.float32)
+        for i in range(n_lufs_frames):
+            start = i * hop_n
+            frame = mono[start : start + win_n]
+            rms = float(np.sqrt(np.mean(frame ** 2) + 1e-20))
+            lufs_db[i] = float(np.clip(20.0 * np.log10(rms + 1e-10), -80.0, 0.0))
+
+        # G_floor bounds: loud → aggressive (0.5×), quiet → conservative (3× capped at 0.40)
+        g_lo = float(np.clip(0.50 * g_floor_base, 0.03, 0.10))
+        g_hi = float(np.clip(3.0  * g_floor_base, g_floor_base + 1e-6, 0.40))
+        # np.interp: x < xp[0] → fp[0], x > xp[-1] → fp[-1] (automatic clamping)
+        g_floor_lufs = np.interp(lufs_db.astype(np.float64), [-30.0, -12.0], [g_hi, g_lo]).astype(np.float32)
+
+        # 500 ms smoothing to avoid pumping at loudness transitions.
+        # round() avoids floating-point truncation (e.g. int(0.5/0.1) == 4 instead of 5).
+        smooth_frames = max(3, round(0.5 / max(HOP_S, 1e-6)))
+        kernel = np.ones(smooth_frames, dtype=np.float32) / smooth_frames
+        g_floor_smooth = np.convolve(g_floor_lufs, kernel, mode="same")[:n_lufs_frames]
+
+        # Interpolate from LUFS time grid to STFT time grid
+        t_lufs = np.arange(n_lufs_frames, dtype=np.float32) * HOP_S
+        t_stft = np.arange(n_t, dtype=np.float32) * (hop / float(sr))
+        g_floor_vec = np.interp(t_stft, t_lufs, g_floor_smooth).astype(np.float32)
+        # Clamp to [g_lo, g_hi] as defensive guard against convolution edge artefacts.
+        g_floor_vec = np.clip(g_floor_vec, g_lo, g_hi).astype(np.float32)
+        return np.nan_to_num(g_floor_vec, nan=float(g_floor_base))
+
+    @staticmethod
+    def _apply_gain_gradient_phase_correction(
+        Zxx_ref: np.ndarray,
+        G_combined: np.ndarray,
+        hop: int,
+        sr: int,
+    ) -> np.ndarray:
+        """Gain-gradient phase correction before PGHI/iSTFT (Prusa & Holighaus 2017, §3.4).
+
+        Time-varying gain G(k,t) introduces an instantaneous-frequency (IF) error of
+        ∂log(G)/∂t per STFT frame.  PGHI estimates IF from the log-magnitude gradient and
+        therefore inherits this artefact as phase chirps on transient attacks and gain-ramp
+        edges, degrading TimbralAuthenticityMetric and SpatialDepthMetric.
+
+        Correction:
+            Δφ(k,t) = -(hop/sr) × cumsum_t( ∂log G(k,t)/∂t )
+
+        The corrected STFT is a better PGHI initialisation and provides phase-correct
+        reconstruction in the iSTFT fallback path.
+
+        Scientific reference:
+            Prusa & Holighaus (2017) "Phase-Vocoder Done Right", §3.4 "Enhancement".
+
+        Args:
+            Zxx_ref:    Reference STFT (n_bins × n_t), complex.
+            G_combined: MRSA gain matrix (n_bins × n_t), float32, ∈ [0, 1].
+            hop:        STFT hop size in samples.
+            sr:         Processing sample rate (48 000 Hz).
+
+        Returns:
+            Zxx_corrected: complex64 STFT with gain applied and phase corrected.
+        """
+        log_G = np.log(np.maximum(G_combined.astype(np.float64), 1e-8))  # (n_bins, n_t)
+        # ∂log(G)/∂t — forward difference; prepend first col to preserve shape
+        dlogG_dt = np.diff(log_G, axis=1, prepend=log_G[:, :1])           # (n_bins, n_t)
+        # Cumulative phase offset: Δφ = -(hop/sr) × ∫ ∂logG/∂τ dτ
+        delta_phi = -np.cumsum(dlogG_dt, axis=1) * (hop / float(sr))      # (n_bins, n_t)
+        mag_out = G_combined.astype(np.float64) * np.abs(Zxx_ref)
+        phase_out = np.angle(Zxx_ref) + delta_phi
+        Zxx_corrected = mag_out * np.exp(1j * phase_out)
+        return np.nan_to_num(Zxx_corrected, nan=0.0, posinf=0.0, neginf=0.0).astype(np.complex64)
+
+    @staticmethod
+    def _compute_erb_bands(n_bins: int, sr: int) -> np.ndarray:
+        """Map STFT frequency bins to ERB-rate band indices (Glasberg & Moore 1990).
+
+        ERB-rate: E(f) = 21.4 × log10(4.37 × f/1000 + 1) [Cams].
+        38 uniformly-spaced bands from 100 Hz to sr/2 give perceptually uniform
+        coverage.  Multiple linear STFT bins that fall within one ERB band are
+        auditorily unresolvable; pooling their minimum statistics prevents a
+        single isolated low-energy bin from driving over-suppression of the
+        entire fricative range (/s/, /f/, /ʃ/ at 4–8 kHz).
+
+        Args:
+            n_bins: Number of STFT frequency bins (n_fft//2 + 1).
+            sr:     Sample rate (Hz).
+
+        Returns:
+            band_idx: np.ndarray shape (n_bins,) dtype int32 — ERB band per bin,
+                      values ∈ [0, 37].
+        """
+        freqs = np.linspace(0.0, float(sr) / 2.0, n_bins, endpoint=True)
+
+        def _hz_to_cam(f: np.ndarray) -> np.ndarray:
+            return 21.4 * np.log10(4.37 * np.maximum(f, 1.0) / 1000.0 + 1.0)
+
+        N_ERB = 38
+        e_min = float(_hz_to_cam(np.array([100.0]))[0])
+        e_max = float(_hz_to_cam(np.array([float(sr) / 2.0]))[0])
+        erb_edges = np.linspace(e_min, e_max, N_ERB + 1)
+        band_idx = np.clip(
+            np.searchsorted(erb_edges[1:], _hz_to_cam(freqs)), 0, N_ERB - 1
+        ).astype(np.int32)
+        return band_idx
 
     def _estimate_noise_profile_adaptive(
         self,
@@ -912,6 +1261,57 @@ class DenoisePhase(PhaseInterface):
                 gain_modified[mask, :] *= reduction
 
         return gain_modified
+
+    @staticmethod
+    def _apply_masking_gate(gain: np.ndarray, magnitude: np.ndarray) -> np.ndarray:
+        """Musical-noise post-filter via psychoacoustic simultaneous masking (§D).
+
+        Musical noise = isolated high-gain STFT bins whose output power is below
+        the simultaneous masking threshold set by their spectral neighbours.  The
+        auditory system cannot separately resolve such isolated tones, yet they
+        produce clearly audible chirping artefacts (Cappé 1994).
+
+        Gate formula (Gustafsson et al. 2001, adapted; Scalart & Filho 1996):
+            E_out(k,t)  = (G(k,t) × |Y(k,t)|)²
+            M(t)        = α × P₂₄(E_out(:,t))   [α = 10^(−16/10) ≈ 0.025]
+            gate(k,t)   = √( min(1, E_out(k,t) / M(t)) )
+            G_out(k,t)  = clip( G(k,t) × gate(k,t), 0.1, 1.0 )
+
+        M(t) is the 75th-percentile frame power, scaled by α corresponding to
+        16 dB simultaneous masking spread (Fastl & Zwicker 2007, §4.2).  Bins
+        more than 16 dB below the dominant spectral energy are auditorily masked
+        by their neighbours and qualify as potential chirp artefacts.
+
+        The sqrt soft-knee prevents hard-cut artefacts:  a bin at 0.1 × M is
+        attenuated by -10 dB (not silenced), preserving authentic pianissimo
+        content that legitimately falls below the spectral average.
+
+        Gain floor 0.1 (−20 dB) matches the existing `_suppress_musical_noise`
+        floor and the OMLSA G_floor for material shellac.
+
+        Args:
+            gain:      OMLSA gain matrix (n_freq × n_t), float, ∈ [0, 1].
+            magnitude: |STFT| at zone resolution, same shape as gain.
+
+        Returns:
+            G_out: gain matrix, dtype float32, shape (n_freq × n_t), ∈ [0.1, 1].
+        """
+        output_power = (gain.astype(np.float64) * magnitude.astype(np.float64)) ** 2
+
+        # 75th-percentile per frame: robust dominant spectral level.
+        frame_p75 = np.percentile(output_power, 75, axis=0, keepdims=True) + 1e-20
+
+        # α = 10^(-16/10) ≈ 0.025  — simultaneous masking offset (Fastl & Zwicker 2007 §4.2)
+        ALPHA = 10.0 ** (-16.0 / 10.0)
+        masking_threshold = ALPHA * frame_p75   # broadcast (1, n_t) → (n_freq, n_t)
+
+        # Soft-knee gate: √(min(1, E_out / M)) preserves loud bins, attenuates chirps.
+        gate = np.sqrt(np.minimum(1.0, output_power / (masking_threshold + 1e-20)))
+        gate = np.clip(gate, 0.1, 1.0)          # floor -20 dB, never mute
+
+        return np.clip(
+            gain.astype(np.float64) * gate, 0.1, 1.0
+        ).astype(np.float32)
 
     def _suppress_musical_noise(
         self, gain: np.ndarray, suppression_strength: float, smoothing_time: int, smoothing_freq: int

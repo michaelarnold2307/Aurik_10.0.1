@@ -21,6 +21,13 @@ import numpy as np
 from scipy import signal
 from scipy.signal import lfilter
 
+try:
+    import pyworld as _pw  # type: ignore[import-untyped]
+    _HAS_PYWORLD: bool = True
+except ImportError:
+    _pw = None  # type: ignore[assignment]
+    _HAS_PYWORLD: bool = False
+
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
@@ -333,27 +340,42 @@ class FormantCorrector:
             # Use median as target
             target_formants = np.asarray(np.median(formant_freqs, axis=0))
 
-        # For now, use EQ-based approximation
-        # (Full formant shifting requires complex vocoder)
-        audio_corrected = audio.copy()
+        # Median detected formants for this correction pass
+        n_correct = min(3, len(target_formants))
+        current_formants = np.array([
+            float(np.median(formant_freqs[:, i])) if formant_freqs.shape[1] > i else 0.0
+            for i in range(n_correct)
+        ])
 
-        for i in range(min(3, len(target_formants))):  # Correct first 3 formants
-            if target_formants[i] == 0:
-                continue
-
-            current_freq = np.median(formant_freqs[:, i])
-            if current_freq == 0:
-                continue
-
-            # Shift frequency
-            shift_hz = target_formants[i] - current_freq
-
-            if np.abs(shift_hz) > self.max_drift_hz:
-                # Apply correction using EQ
-                audio_corrected = self._apply_formant_shift_eq(audio_corrected, sr, current_freq, shift_hz)
+        # Primary: WORLD spectral-envelope warp (Morise et al. 2016) — phase-transparent.
+        # Fallback: biquad EQ approximation when pyworld is unavailable.
+        audio_full = audio.copy()
+        if _HAS_PYWORLD and _pw is not None:
+            try:
+                audio_full = self._correct_with_world(
+                    audio, sr, current_formants, target_formants[:n_correct]
+                )
+            except Exception:
+                for i in range(n_correct):
+                    if target_formants[i] == 0 or current_formants[i] == 0:
+                        continue
+                    shift_hz = target_formants[i] - current_formants[i]
+                    if np.abs(shift_hz) > self.max_drift_hz:
+                        audio_full = self._apply_formant_shift_eq(
+                            audio_full, sr, current_formants[i], shift_hz
+                        )
+        else:
+            for i in range(n_correct):
+                if target_formants[i] == 0 or current_formants[i] == 0:
+                    continue
+                shift_hz = target_formants[i] - current_formants[i]
+                if np.abs(shift_hz) > self.max_drift_hz:
+                    audio_full = self._apply_formant_shift_eq(
+                        audio_full, sr, current_formants[i], shift_hz
+                    )
 
         # Blend with original
-        audio_corrected = self.correction_strength * audio_corrected + (1 - self.correction_strength) * audio
+        audio_corrected = self.correction_strength * audio_full + (1 - self.correction_strength) * audio
 
         # NaN/Inf-Guard and clipping
         audio_corrected = np.nan_to_num(audio_corrected, nan=0.0, posinf=0.0, neginf=0.0)
@@ -433,6 +455,98 @@ class FormantCorrector:
 
         return audio
 
+    def _correct_with_world(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        current_formants: np.ndarray,
+        target_formants: np.ndarray,
+    ) -> np.ndarray:
+        """WORLD spectral-envelope warp for phase-transparent formant correction.
+
+        Decomposes audio into F0, spectral envelope SP, and aperiodicity AP via
+        WORLD (Morise et al. 2016).  For each of the first three formants a
+        Gaussian-weighted frequency remap moves the detected SP peak toward the
+        target frequency.  Audio is resynthesised with the original F0 and AP,
+        preserving timing and voice naturalness without EQ phase distortion.
+
+        Scientific basis:
+            Morise et al. (2016) — WORLD: A Vocoder-Based High-Quality Speech
+            Synthesis System for Real-Time Applications. IEICE Trans. A.
+            Toda & Shikano (2005) — Voice conversion based on maximum likelihood
+            estimation of spectral parameter trajectory. Interspeech.
+
+        Args:
+            audio:            Mono float32/64 audio, 48 000 Hz.
+            sr:               Sample rate — must be 48 000 Hz.
+            current_formants: Detected median formant frequencies (Hz), shape (≤3,).
+            target_formants:  Target formant frequencies (Hz), same shape.
+
+        Returns:
+            Corrected mono audio (float32, same length as input).
+        """
+        audio_f64 = np.asarray(audio.flatten(), dtype=np.float64)
+        sr_f64 = float(sr)
+
+        f0, timeaxis = _pw.harvest(audio_f64, sr_f64)
+        f0_sm = _pw.stonemask(audio_f64, f0, timeaxis, sr_f64)
+        sp = _pw.cheaptrick(audio_f64, f0_sm, timeaxis, sr_f64)   # (n_frames, bins)
+        ap = _pw.d4c(audio_f64, f0_sm, timeaxis, sr_f64)
+
+        freq_axis = np.linspace(0.0, sr_f64 / 2.0, sp.shape[1])
+        sp_warped = np.empty_like(sp)
+        for fi in range(sp.shape[0]):
+            sp_warped[fi] = self._warp_sp_frame(
+                sp[fi], freq_axis, current_formants, target_formants
+            )
+
+        out = _pw.synthesize(f0_sm, sp_warped, ap, sr_f64)
+        out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+        # Match original length (WORLD synthesis may pad by a few samples)
+        n = len(audio_f64)
+        if len(out) >= n:
+            out = out[:n]
+        else:
+            out = np.pad(out, (0, n - len(out)))
+        return np.asarray(out, dtype=np.float32)
+
+    def _warp_sp_frame(
+        self,
+        sp_frame: np.ndarray,
+        freq_axis: np.ndarray,
+        src_formants: np.ndarray,
+        tgt_formants: np.ndarray,
+    ) -> np.ndarray:
+        """Gaussian-weighted frequency remap of a single spectral-envelope frame.
+
+        For each formant pair (src_f, tgt_f) a Gaussian centred at *tgt_f* with
+        bandwidth max(200, 0.15 × tgt_f) Hz pulls energy from *src_f* toward the
+        target position via interpolation of the SP vector.  The warp magnitude
+        is scaled by ``self.correction_strength`` so identity is preserved when
+        strength = 0.  This achieves formant relocation without IIR phase
+        distortion (Toda & Shikano 2005).
+
+        Args:
+            sp_frame:     1-D spectral envelope frame (linear power, not dB).
+            freq_axis:    Corresponding frequency axis in Hz, same length.
+            src_formants: Source formant frequencies (Hz).
+            tgt_formants: Target formant frequencies (Hz).
+
+        Returns:
+            Warped spectral envelope frame, same shape as *sp_frame*.
+        """
+        warp = freq_axis.copy()
+        for src_f, tgt_f in zip(src_formants, tgt_formants):
+            if src_f <= 0.0 or tgt_f <= 0.0:
+                continue
+            bw = max(200.0, tgt_f * 0.15)
+            weights = np.exp(-0.5 * ((freq_axis - tgt_f) / bw) ** 2)
+            # Inverse warp: when reading at tgt_f, pull energy from src_f
+            delta = (src_f - tgt_f) * self.correction_strength
+            warp += weights * delta
+        warp = np.clip(warp, 0.0, freq_axis[-1])
+        return np.interp(warp, freq_axis, sp_frame)
+
 
 class SingersFormantEnhancer:
     """
@@ -442,7 +556,7 @@ class SingersFormantEnhancer:
     creating a "ring" that helps trained singers project over orchestras.
     """
 
-    def __init__(self, target_freq_hz: float = 3000.0, bandwidth_hz: float = 500.0, gain_db: float = 3.0):
+    def __init__(self, target_freq_hz: float = 3000.0, bandwidth_hz: float = 250.0, gain_db: float = 3.0):
         """
         Parameters
         ----------
@@ -543,12 +657,31 @@ class SingersFormantEnhancer:
         if formant_freqs is not None:
             has_formant, strength = self.detect_singers_formant(formant_freqs)
 
-        # Adapt gain based on existing strength
-        # If already strong, reduce enhancement
-        adaptive_gain = self.gain_db * (1.0 - strength * 0.5)
+        # Compute dynamic cluster center from actual F4/F5 median in 2800-3200 Hz
+        # (Sundberg 1987/2015: Singer's formant = tight F3-F5 cluster at 2.8-3.2 kHz
+        # in classically trained voices.  Pop/speech vocals lack this cluster.)
+        cluster_center = self.target_freq_hz
+        if has_formant and formant_freqs is not None and formant_freqs.shape[1] >= 4:
+            f4 = formant_freqs[:, 3] if formant_freqs.shape[1] > 3 else np.zeros(len(formant_freqs))
+            f5 = formant_freqs[:, 4] if formant_freqs.shape[1] > 4 else np.zeros(len(formant_freqs))
+            cluster_vals = np.concatenate([
+                f4[(f4 >= 2500.0) & (f4 <= 3500.0)],
+                f5[(f5 >= 2500.0) & (f5 <= 3500.0)],
+            ])
+            if len(cluster_vals) > 0:
+                cluster_center = float(np.median(cluster_vals))
 
-        # Apply peaked EQ at singer's formant frequency
-        audio_enhanced = self._apply_peak_eq(audio, sr, self.target_freq_hz, self.bandwidth_hz, adaptive_gain)
+        if not has_formant:
+            # No Singer's formant detected — passthrough.  Imposing a 3 kHz boost
+            # on pop or folk vocals creates nasal/honky coloration (Sundberg 1987 §4.2).
+            audio_enhanced = audio.copy()
+            adaptive_gain = 0.0
+        else:
+            # Scale gain by clustering strength; boost at the actual cluster center
+            adaptive_gain = self.gain_db * (1.0 - strength * 0.5)
+            audio_enhanced = self._apply_peak_eq(
+                audio, sr, cluster_center, self.bandwidth_hz, adaptive_gain
+            )
 
         # NaN/Inf-Guard and clipping
         audio_enhanced = np.nan_to_num(audio_enhanced, nan=0.0, posinf=0.0, neginf=0.0)
@@ -559,6 +692,7 @@ class SingersFormantEnhancer:
             "strength_before": strength,
             "gain_applied_db": adaptive_gain,
             "target_freq_hz": self.target_freq_hz,
+            "cluster_center_hz": cluster_center,
         }
 
         return audio_enhanced, metrics

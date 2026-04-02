@@ -54,6 +54,9 @@ class PhysicalCeilingEstimator:
 
     HEADROOM_THRESHOLD: float = HEADROOM_THRESHOLD
 
+    def __init__(self) -> None:
+        self._last_ceiling: dict[str, float] | None = None
+
     BARK_EDGES_HZ = [
         20,
         100,
@@ -118,6 +121,9 @@ class PhysicalCeilingEstimator:
             if not math.isfinite(ceiling[g]):
                 ceiling[g] = 0.98
 
+        # Cache for ceiling_avg()
+        self._last_ceiling = ceiling
+
         # 4. Headroom + Flag
         headroom: dict[str, float] = {}
         for g, ceil_v in ceiling.items():
@@ -135,6 +141,17 @@ class PhysicalCeilingEstimator:
             headroom_per_goal=headroom,
             further_optimization_worthwhile=worthwhile,
         )
+
+    def ceiling_avg(self) -> float:
+        """Return arithmetic mean of all Musical-Goal ceiling values from last estimate() call.
+
+        Spec §2.33: ceiling_avg() is used to derive headroom tiers 1.00 / 0.93 / 0.85 / 0.75.
+        Returns 0.85 if estimate() has not been called yet (conservative fallback).
+        """
+        if self._last_ceiling is None:
+            return 0.85
+        values = [v for v in self._last_ceiling.values() if math.isfinite(v)]
+        return float(np.mean(values)) if values else 0.85
 
     def _compute_bark_snr(self, mono: np.ndarray, sr: int) -> np.ndarray:
         """SNR pro Bark-Band (24 Baender), float32 [24]."""

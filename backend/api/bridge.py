@@ -63,9 +63,12 @@ Referenz: Spec 08 §11 Softwareschichten-Architektur.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 import threading
-from typing import TYPE_CHECKING
+from collections import OrderedDict
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -132,57 +135,185 @@ __all__ = [
     "resolve_pipeline_fail_reason",
     # Hintergrund-Vorwärmung
     "warmup_models_background",
+    # §2.38 KMV / §2.39 OOM-Recovery / §2.37 RAM-Budget
+    "get_deferred_refinement_job_class",
+    "get_era_medium_constraint",
+    "get_ml_memory_budget",
+    "get_model_downloader",
+    "get_recovery_checkpoint_fns",
+    # §11 erweiterte Core-Module (bisher nicht bridge-zugänglich)
+    "get_german_schlager_classifier_fn",
+    "get_harmonic_preservation_guard",
+    "get_feedback_chain",
+    "get_physical_ceiling_estimator",
+    "get_per_phase_musical_goals_gate",
+    "get_emotional_arc_metric",
+    "get_micro_dynamics_em",
+    "get_goal_applicability_filter",
+    "get_perceptual_salience_estimator",
+    # Content-Addressed LRU Cache — Utility
+    "content_cache_key",
 ]
 
 # ---------------------------------------------------------------------------
-# Defect-Scan-Cache  (Thread-sicher, Prozess-Lebensdauer, RAM-only)
-# Key: file_path (str), Value: ScanResult-Objekt
-# Limit: 64 Einträge (FIFO-Trim)
+# _AnalysisLruCache — Unified Thread-safe LRU Cache mit Content-Addressing
+#
+# Ersetzt die vier früheren FIFO-Dict-Caches durch eine gemeinsame Klasse:
+# - LRU-Eviction statt FIFO: heiße Einträge bleiben, kalte fliegen raus
+# - Content-Addressing: selbes Audio unter zwei Pfaden trifft denselben Slot
+# - Ein Lock statt vier separater Locks
+# - Optionaler Path→ContentKey-Alias für schnelle path-basierte Lookups
 # ---------------------------------------------------------------------------
 
-_defect_cache: dict[str, object] = {}
-_defect_cache_lock = threading.Lock()
-_DEFECT_CACHE_MAX = 64
+_ANALYSIS_CACHE_MAX = 64
+_CONTENT_CHUNK = 4096  # Bytes vom Anfang + Ende für SHA-256 Content-Key
+
+
+class _AnalysisLruCache:
+    """Thread-safe LRU cache keyed by content-hash (or arbitrary string).
+
+    Stores analysis results under a content-addressed key so that the same
+    audio file is not re-analysed when its path changes (e.g. rename before
+    OOM-checkpoint resume).  Path→key aliases are maintained for fast
+    backward-compatible path lookups.
+
+    Args:
+        maxsize: Maximum number of entries before LRU eviction.
+    """
+
+    def __init__(self, maxsize: int = _ANALYSIS_CACHE_MAX) -> None:
+        self._maxsize = maxsize
+        self._data: OrderedDict[str, Any] = OrderedDict()
+        self._path_to_key: dict[str, str] = {}  # path → content_key
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    def put(self, key: str, value: Any, path_alias: str | None = None) -> None:
+        """Insert *value* under *key*, evicting LRU entry when full."""
+        with self._lock:
+            if key in self._data:
+                self._data.move_to_end(key)
+            self._data[key] = value
+            if path_alias:
+                self._path_to_key[path_alias] = key
+            while len(self._data) > self._maxsize:
+                evicted_key, _ = self._data.popitem(last=False)
+                # Clean up alias mapping for evicted key
+                self._path_to_key = {
+                    p: k for p, k in self._path_to_key.items() if k != evicted_key
+                }
+
+    def get(self, key: str) -> Any | None:
+        """Return cached value for *key* and promote to MRU, or ``None``."""
+        with self._lock:
+            if key not in self._data:
+                return None
+            self._data.move_to_end(key)
+            return self._data[key]
+
+    def get_by_path(self, path: str) -> Any | None:
+        """Return cached value using a path alias, or ``None``."""
+        with self._lock:
+            key = self._path_to_key.get(path)
+            if key is None or key not in self._data:
+                return None
+            self._data.move_to_end(key)
+            return self._data[key]
+
+    def remove(self, key_or_path: str) -> None:
+        """Remove entry by content-key or path alias."""
+        with self._lock:
+            # Try as path alias first
+            key = self._path_to_key.pop(key_or_path, key_or_path)
+            self._data.pop(key, None)
+            # Also remove any alias pointing to same key
+            self._path_to_key = {
+                p: k for p, k in self._path_to_key.items() if k != key
+            }
+
+    def clear(self) -> None:
+        """Remove all entries."""
+        with self._lock:
+            self._data.clear()
+            self._path_to_key.clear()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._data)
+
+
+def content_cache_key(file_path: str) -> str:
+    """Compute a content-addressed cache key for *file_path*.
+
+    Uses SHA-256 over the first and last ``_CONTENT_CHUNK`` bytes of the
+    file (fast, file-size independent).  Falls back to the path itself when
+    the file is not readable (e.g. missing/locked).
+
+    Args:
+        file_path: Absolute path to an audio file.
+
+    Returns:
+        A 64-character hex string suitable as a cache key, or the path
+        itself on I/O error.
+    """
+    try:
+        size = os.path.getsize(file_path)
+        with open(file_path, "rb") as fh:
+            head = fh.read(_CONTENT_CHUNK)
+            if size > _CONTENT_CHUNK * 2:
+                fh.seek(-_CONTENT_CHUNK, 2)
+                tail = fh.read(_CONTENT_CHUNK)
+            else:
+                tail = b""
+        return hashlib.sha256(head + tail + str(size).encode()).hexdigest()
+    except OSError:
+        return file_path
+
+
+# Singleton caches — one per analysis type for independent eviction
+_defect_lru: _AnalysisLruCache = _AnalysisLruCache()
+_era_genre_lru: _AnalysisLruCache = _AnalysisLruCache()
+_medium_lru: _AnalysisLruCache = _AnalysisLruCache()
+_restorability_lru: _AnalysisLruCache = _AnalysisLruCache()
+
+
+# ---------------------------------------------------------------------------
+# Defect-Scan-Cache  (Thread-sicher, LRU, content-addressed)
+# ---------------------------------------------------------------------------
 
 
 def cache_defect_result(file_path: str, result: object) -> None:
-    """Speichert einen DefectScanner-Befund für *file_path* im Cache.
+    """Cache a DefectScanner result under a content-addressed key.
 
-    Thread-sicher. Trimmt den Cache auf _DEFECT_CACHE_MAX Einträge (FIFO).
+    Thread-safe.  Uses LRU eviction (max 64 entries).  Identical audio
+    stored under a different path will hit the same cache slot.
     """
-    with _defect_cache_lock:
-        _defect_cache[file_path] = result
-        # FIFO-Trim
-        if len(_defect_cache) > _DEFECT_CACHE_MAX:
-            oldest = next(iter(_defect_cache))
-            del _defect_cache[oldest]
-    logger.debug("bridge: DefectScan cached for '%s'", file_path)
+    key = content_cache_key(file_path)
+    _defect_lru.put(key, result, path_alias=file_path)
+    logger.debug("bridge: DefectScan cached for '%s' (key=%.8s…)", file_path, key)
 
 
 def get_cached_defect_result(file_path: str) -> object | None:
-    """Gibt einen gecachten DefectScanner-Befund zurück oder ``None``."""
-    with _defect_cache_lock:
-        return _defect_cache.get(file_path)
+    """Return a cached DefectScanner result or ``None``."""
+    key = content_cache_key(file_path)
+    result = _defect_lru.get(key)
+    if result is None:
+        result = _defect_lru.get_by_path(file_path)
+    return result
 
 
 def clear_defect_cache(file_path: str | None = None) -> None:
-    """Löscht einen oder alle Einträge aus dem DefectScan-Cache."""
-    with _defect_cache_lock:
-        if file_path is not None:
-            _defect_cache.pop(file_path, None)
-        else:
-            _defect_cache.clear()
+    """Remove one entry (by path) or all entries from the defect cache."""
+    if file_path is not None:
+        key = content_cache_key(file_path)
+        _defect_lru.remove(key)
+    else:
+        _defect_lru.clear()
 
 
 # ---------------------------------------------------------------------------
-# Era/Genre-Cache  (Thread-sicher, Prozess-Lebensdauer, RAM-only)
-# Key: file_path (str), Value: dict mit era_result und genre_result
-# Limit: 64 Einträge (FIFO-Trim)
+# Era/Genre-Cache  (Thread-sicher, LRU, content-addressed)
 # ---------------------------------------------------------------------------
-
-_era_genre_cache: dict[str, dict[str, object]] = {}
-_era_genre_cache_lock = threading.Lock()
-_ERA_GENRE_CACHE_MAX = 64
 
 
 def cache_era_genre_result(
@@ -190,92 +321,81 @@ def cache_era_genre_result(
     era_result: object | None = None,
     genre_result: object | None = None,
 ) -> None:
-    """Speichert Era/Genre-Klassifikationsergebnisse für *file_path* im Cache.
+    """Cache Era/Genre classification results for *file_path*.
 
-    Thread-sicher. Trimmt den Cache auf _ERA_GENRE_CACHE_MAX Einträge (FIFO).
+    Thread-safe, LRU-evicting, content-addressed.
     """
-    with _era_genre_cache_lock:
-        _era_genre_cache[file_path] = {
-            "era_result": era_result,
-            "genre_result": genre_result,
-        }
-        if len(_era_genre_cache) > _ERA_GENRE_CACHE_MAX:
-            oldest = next(iter(_era_genre_cache))
-            del _era_genre_cache[oldest]
-    logger.debug("bridge: Era/Genre cached for '%s'", file_path)
+    key = content_cache_key(file_path)
+    _era_genre_lru.put(
+        key,
+        {"era_result": era_result, "genre_result": genre_result},
+        path_alias=file_path,
+    )
+    logger.debug("bridge: Era/Genre cached for '%s' (key=%.8s…)", file_path, key)
 
 
 def get_cached_era_genre_result(file_path: str) -> dict[str, object] | None:
-    """Gibt gecachte Era/Genre-Ergebnisse zurück oder ``None``.
+    """Return cached Era/Genre results or ``None``.
 
     Returns:
-        dict mit Keys ``era_result`` und ``genre_result`` oder ``None``.
+        dict with keys ``era_result`` and ``genre_result``, or ``None``.
     """
-    with _era_genre_cache_lock:
-        return _era_genre_cache.get(file_path)
+    key = content_cache_key(file_path)
+    result = _era_genre_lru.get(key)
+    if result is None:
+        result = _era_genre_lru.get_by_path(file_path)
+    return result
 
 
 def clear_era_genre_cache(file_path: str | None = None) -> None:
-    """Löscht einen oder alle Einträge aus dem Era/Genre-Cache."""
-    with _era_genre_cache_lock:
-        if file_path is not None:
-            _era_genre_cache.pop(file_path, None)
-        else:
-            _era_genre_cache.clear()
+    """Remove one entry (by path) or all entries from the Era/Genre cache."""
+    if file_path is not None:
+        key = content_cache_key(file_path)
+        _era_genre_lru.remove(key)
+    else:
+        _era_genre_lru.clear()
 
 
 # ---------------------------------------------------------------------------
-# Medium-Cache  (Thread-sicher, Prozess-Lebensdauer, RAM-only)
-# Key: file_path (str), Value: MediumClassifier-Result-Objekt
-# Limit: 64 Einträge (FIFO-Trim)
+# Medium-Cache  (Thread-sicher, LRU, content-addressed)
 # ---------------------------------------------------------------------------
-
-_medium_cache: dict[str, object] = {}
-_medium_cache_lock = threading.Lock()
-_MEDIUM_CACHE_MAX = 64
 
 
 def cache_medium_result(file_path: str, result: object) -> None:
-    """Speichert ein MediumClassifier-Ergebnis für *file_path* im Cache."""
-    with _medium_cache_lock:
-        _medium_cache[file_path] = result
-        if len(_medium_cache) > _MEDIUM_CACHE_MAX:
-            oldest = next(iter(_medium_cache))
-            del _medium_cache[oldest]
-    logger.debug("bridge: Medium cached for '%s'", file_path)
+    """Cache a MediumClassifier result for *file_path*."""
+    key = content_cache_key(file_path)
+    _medium_lru.put(key, result, path_alias=file_path)
+    logger.debug("bridge: Medium cached for '%s' (key=%.8s…)", file_path, key)
 
 
 def get_cached_medium_result(file_path: str) -> object | None:
-    """Gibt ein gecachtes MediumClassifier-Ergebnis zurück oder ``None``."""
-    with _medium_cache_lock:
-        return _medium_cache.get(file_path)
+    """Return a cached MediumClassifier result or ``None``."""
+    key = content_cache_key(file_path)
+    result = _medium_lru.get(key)
+    if result is None:
+        result = _medium_lru.get_by_path(file_path)
+    return result
 
 
 # ---------------------------------------------------------------------------
-# Restorability-Cache  (Thread-sicher, Prozess-Lebensdauer, RAM-only)
-# Key: file_path (str), Value: RestorabilityResult-Objekt
-# Limit: 64 Einträge (FIFO-Trim)
+# Restorability-Cache  (Thread-sicher, LRU, content-addressed)
 # ---------------------------------------------------------------------------
-
-_restorability_cache: dict[str, object] = {}
-_restorability_cache_lock = threading.Lock()
-_RESTORABILITY_CACHE_MAX = 64
 
 
 def cache_restorability_result(file_path: str, result: object) -> None:
-    """Speichert ein RestorabilityEstimator-Ergebnis für *file_path* im Cache."""
-    with _restorability_cache_lock:
-        _restorability_cache[file_path] = result
-        if len(_restorability_cache) > _RESTORABILITY_CACHE_MAX:
-            oldest = next(iter(_restorability_cache))
-            del _restorability_cache[oldest]
-    logger.debug("bridge: Restorability cached for '%s'", file_path)
+    """Cache a RestorabilityEstimator result for *file_path*."""
+    key = content_cache_key(file_path)
+    _restorability_lru.put(key, result, path_alias=file_path)
+    logger.debug("bridge: Restorability cached for '%s' (key=%.8s…)", file_path, key)
 
 
 def get_cached_restorability_result(file_path: str) -> object | None:
-    """Gibt ein gecachtes RestorabilityEstimator-Ergebnis zurück oder ``None``."""
-    with _restorability_cache_lock:
-        return _restorability_cache.get(file_path)
+    """Return a cached RestorabilityEstimator result or ``None``."""
+    key = content_cache_key(file_path)
+    result = _restorability_lru.get(key)
+    if result is None:
+        result = _restorability_lru.get_by_path(file_path)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -752,6 +872,252 @@ def warmup_models_background() -> None:
         except Exception as _e:
             logger.debug("bridge: %s.%s übersprungen: %s", _mod, _accessor, _e)
     logger.info("bridge: Warmup abgeschlossen")
+
+
+# ---------------------------------------------------------------------------
+# §2.38 KMV + §2.39 OOM-Recovery + §2.37 RAM-Budget  (Lazy-Wrapper)
+# ---------------------------------------------------------------------------
+
+
+def get_deferred_refinement_job_class() -> type:
+    """Return ``DeferredRefinementJob`` class (lazy import, §2.38 KMV Stufe 2).
+
+    Used by MLRefinementThread and ModernMainWindow._maybe_start_kmv_refinement.
+    """
+    from backend.core.deferred_refinement_job import DeferredRefinementJob  # type: ignore[import]
+
+    return DeferredRefinementJob
+
+
+def get_recovery_checkpoint_fns() -> tuple:
+    """Return ``(cleanup_expired_checkpoints, find_pending_checkpoints, delete_checkpoint)`` (lazy, §2.39).
+
+    Usage::
+
+        cleanup_fn, find_fn, delete_fn = get_recovery_checkpoint_fns()
+        cleanup_fn()
+        checkpoints = find_fn()
+        delete_fn(input_path)
+    """
+    from backend.core.recovery_checkpoint import (  # type: ignore[import]
+        cleanup_expired_checkpoints,
+        delete_checkpoint,
+        find_pending_checkpoints,
+    )
+
+    return cleanup_expired_checkpoints, find_pending_checkpoints, delete_checkpoint
+
+
+def get_era_medium_constraint() -> tuple:
+    """Return ``(MEDIUM_DECADE_FLOOR, constrain_era_to_medium)`` from era_classifier (lazy import).
+
+    Usage::
+
+        floor_map, constrain_fn = get_era_medium_constraint()
+        era = constrain_fn(era_result, medium_type)
+        floor = floor_map.get(medium_type)
+    """
+    from backend.core.era_classifier import (  # type: ignore[import]
+        MEDIUM_DECADE_FLOOR,
+        constrain_era_to_medium,
+    )
+
+    return MEDIUM_DECADE_FLOOR, constrain_era_to_medium
+
+
+def get_ml_memory_budget():
+    """Return the ``MlMemoryBudget`` singleton (lazy import, §2.37).
+
+    Usage::
+
+        budget = get_ml_memory_budget()
+        ok = budget.try_allocate("kmv_job", size_gb)
+        budget.release("kmv_job")
+
+    VERBOTEN: ``get_plugin_lifecycle_manager().try_allocate()`` — existiert nicht.
+    """
+    from backend.core.ml_memory_budget import get_ml_memory_budget as _get  # type: ignore[import]
+
+    return _get()
+
+
+def get_model_downloader():
+    """Return the ``ModelDownloader`` singleton (lazy import, §9.x / §13.x).
+
+    Used in Aurik startup self-heal to repair missing/corrupted bundled models.
+    """
+    from backend.core.model_downloader import get_model_downloader as _get  # type: ignore[import]
+
+    return _get()
+
+
+# ---------------------------------------------------------------------------
+# §11 erweiterte Core-Module  (bisher nicht über Bridge zugänglich)
+# Alle 9 Getter sind lazy — kein Import-Overhead beim Bridge-Load.
+# ---------------------------------------------------------------------------
+
+
+def get_german_schlager_classifier_fn():
+    """Return the ``GermanSchlagerClassifier`` singleton (lazy, §2.1 Pipeline).
+
+    Alias wrapper around ``backend.core.german_schlager_classifier``.
+    The canonical implementation lives in ``backend.core.genre_classifier``.
+
+    Usage::
+
+        clf = get_german_schlager_classifier_fn()
+        result = clf.classify(audio, sr)
+        profile = clf.get_restoration_profile(result)
+    """
+    from backend.core.german_schlager_classifier import (  # type: ignore[import]
+        get_german_schlager_classifier,
+    )
+
+    return get_german_schlager_classifier()
+
+
+def get_harmonic_preservation_guard():
+    """Return the ``HarmonicPreservationGuard`` singleton (lazy).
+
+    Guards all spectral modifications against harmonic structure loss.
+    Run ``guard.protect(audio, sr, fn)`` to wrap any processing function.
+
+    Usage::
+
+        guard = get_harmonic_preservation_guard()
+        restored = guard.protect(audio, sr, my_phase_fn)
+    """
+    from backend.core.harmonic_preservation_guard import (  # type: ignore[import]
+        get_harmonic_preservation_guard as _get,
+    )
+
+    return _get()
+
+
+def get_feedback_chain():
+    """Return the ``FeedbackChain`` singleton (lazy, §2.33 FeedbackChain-Rollback).
+
+    Manages iterative quality improvement with automatic rollback when
+    MOS degrades by more than 0.05 (§8.2 universelle Garantien).
+
+    Usage::
+
+        fc = get_feedback_chain()
+        result = fc.run(audio, sr, phase_fns, target_score=0.78)
+    """
+    from backend.core.feedback_chain import get_feedback_chain as _get  # type: ignore[import]
+
+    return _get()
+
+
+def get_physical_ceiling_estimator():
+    """Return the ``PhysicalCeilingEstimator`` singleton (lazy).
+
+    Estimates the theoretical maximum quality achievable for a given
+    audio fragment given its material degradation state.
+    Terminates FeedbackChain when ceiling Δ < 3 % (§2.31).
+
+    Usage::
+
+        pce = get_physical_ceiling_estimator()
+        ceiling = pce.estimate(audio, sr, material_type)
+        assert ceiling.delta_achievable >= 0.03, "Ceiling reached — terminate"
+    """
+    from backend.core.physical_ceiling_estimator import (  # type: ignore[import]
+        get_physical_ceiling_estimator as _get,
+    )
+
+    return _get()
+
+
+def get_per_phase_musical_goals_gate():
+    """Return the ``PerPhaseMusicalGoalsGate`` singleton (lazy, §2.29 PMGG).
+
+    The PMGG wraps individual restoration phases and enforces Musical Goal
+    regression checks with retry cascades (P1 4 retries, P2 4 retries,
+    P3 1–3 retries, P4/P5 logged only).
+
+    Usage::
+
+        gate = get_per_phase_musical_goals_gate()
+        result_audio = gate.wrap_phase("phase_03", audio, sr, phase_fn, ...)
+    """
+    from backend.core.per_phase_musical_goals_gate import get_phase_gate  # type: ignore[import]
+
+    return get_phase_gate()
+
+
+def get_emotional_arc_metric():
+    """Return the ``EmotionalArcPreservationMetric`` singleton (lazy, §8.3).
+
+    Measures arousal/valence arc preservation (Pearson ≥ 0.85/0.80).
+    Also exposes ``correct_emotional_arc(original, restored, sr)`` post-MDEM
+    macro-gain correction.
+
+    Usage::
+
+        metric = get_emotional_arc_metric()
+        arc = metric.measure(audio, sr)
+        corrected = metric.correct(original, restored, sr)
+    """
+    from backend.core.emotional_arc_preservation import (  # type: ignore[import]
+        get_emotional_arc_metric as _get,
+    )
+
+    return _get()
+
+
+def get_micro_dynamics_em():
+    """Return the ``MicroDynamicsEnvelopeMorphing`` singleton (lazy, §8.3 MDEM).
+
+    400 ms LUFS-profile morphing: recovers micro-dynamic envelope lost
+    during denoising/dereverb.  Gain limit: 4 dB (Restoration), 6 dB (Studio).
+
+    Usage::
+
+        mdem = get_micro_dynamics_em()
+        morphed = mdem.morph(restored, original, sr)
+    """
+    from backend.core.micro_dynamics_envelope_morphing import get_mdem  # type: ignore[import]
+
+    return get_mdem()
+
+
+def get_goal_applicability_filter():
+    """Return the ``GoalApplicabilityFilter`` singleton (lazy, §2.31).
+
+    Determines which of the 14 Musical Goals are applicable for a given
+    audio fragment based on material, era, and content type.
+    Mono-era recordings have SpatialDepthMetric deactivated automatically.
+
+    Usage::
+
+        gaf = get_goal_applicability_filter()
+        result = gaf.evaluate(audio, sr, material_type, era_decade)
+        active_goals = result.active_goals  # set[str]
+    """
+    from backend.core.goal_applicability_filter import get_goal_filter  # type: ignore[import]
+
+    return get_goal_filter()
+
+
+def get_perceptual_salience_estimator():
+    """Return the ``PerceptualSalienceEstimator`` singleton (lazy, §9.1c).
+
+    Annotates each detected defect with a psychoacoustic salience score
+    (Fastl & Zwicker 2007).  Masked defects receive reduced severity:
+    ``severity * (0.3 + 0.7 * mean_salience)``.
+
+    Usage::
+
+        pse = get_perceptual_salience_estimator()
+        annotations = pse.annotate(defect_list, audio, sr)
+    """
+    from backend.core.perceptual_salience import (  # type: ignore[import]
+        get_perceptual_salience_estimator as _get,
+    )
+
+    return _get()
 
 
 # ---------------------------------------------------------------------------

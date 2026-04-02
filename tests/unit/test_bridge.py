@@ -463,3 +463,257 @@ class TestNormalizePipelineHealthState:
     def test_property_value_exists(self, bridge):
         result = bridge.normalize_pipeline_health_state("degraded")
         assert hasattr(result, "value"), "normalize_pipeline_health_state() muss Objekt mit .value-Attribut zurückgeben"
+
+
+# ---------------------------------------------------------------------------
+# 13. _AnalysisLruCache — LRU-Eviction + Content-Addressing
+# ---------------------------------------------------------------------------
+
+
+class TestAnalysisLruCache:
+    """_AnalysisLruCache: LRU-Eviction, Thread-Safety, Content-Addressing."""
+
+    def _make_cache(self, bridge, maxsize: int = 4):
+        return bridge._AnalysisLruCache(maxsize=maxsize)
+
+    def test_put_get_round_trip(self, bridge):
+        c = self._make_cache(bridge)
+        c.put("k1", {"a": 1})
+        assert c.get("k1") == {"a": 1}
+
+    def test_miss_returns_none(self, bridge):
+        c = self._make_cache(bridge)
+        assert c.get("no_such_key") is None
+
+    def test_lru_evicts_oldest_accessed(self, bridge):
+        """LRU evicts the least-recently *accessed* entry, not oldest *inserted*."""
+        c = self._make_cache(bridge, maxsize=3)
+        c.put("a", 1)
+        c.put("b", 2)
+        c.put("c", 3)
+        # Access 'a' so it becomes MRU
+        assert c.get("a") == 1
+        # Insert 'd' → 'b' should be evicted (LRU), not 'a'
+        c.put("d", 4)
+        assert c.get("b") is None, "LRU muss den am längsten nicht zugegriffenen Eintrag ('b') verdrängen"
+        assert c.get("a") == 1, "'a' wurde nach LRU-Zugriff fälschlicherweise verdrängt"
+        assert c.get("c") == 3
+        assert c.get("d") == 4
+
+    def test_put_updates_existing_promotes_to_mru(self, bridge):
+        c = self._make_cache(bridge, maxsize=2)
+        c.put("x", 1)
+        c.put("y", 2)
+        c.put("x", 99)  # update — should promote x to MRU
+        c.put("z", 3)   # evicts y (LRU), not x
+        assert c.get("x") == 99
+        assert c.get("y") is None
+        assert c.get("z") == 3
+
+    def test_path_alias_lookup(self, bridge):
+        c = self._make_cache(bridge)
+        c.put("content_hash_abc", "result_A", path_alias="/tmp/song.wav")
+        assert c.get_by_path("/tmp/song.wav") == "result_A"
+
+    def test_evicted_key_removes_path_alias(self, bridge):
+        c = self._make_cache(bridge, maxsize=2)
+        c.put("k1", "v1", path_alias="/tmp/one.wav")
+        c.put("k2", "v2", path_alias="/tmp/two.wav")
+        c.put("k3", "v3", path_alias="/tmp/three.wav")  # evicts k1
+        assert c.get_by_path("/tmp/one.wav") is None, "Alias für evicted key muss entfernt werden"
+
+    def test_remove_by_key(self, bridge):
+        c = self._make_cache(bridge)
+        c.put("del_me", "x")
+        c.remove("del_me")
+        assert c.get("del_me") is None
+
+    def test_remove_by_path_alias(self, bridge):
+        c = self._make_cache(bridge)
+        c.put("hash123", "v", path_alias="/tmp/rm.wav")
+        c.remove("/tmp/rm.wav")
+        assert c.get_by_path("/tmp/rm.wav") is None
+
+    def test_clear_empties_cache(self, bridge):
+        c = self._make_cache(bridge, maxsize=10)
+        for i in range(5):
+            c.put(f"k{i}", i)
+        c.clear()
+        assert len(c) == 0
+
+    def test_thread_safe_concurrent_operations(self, bridge):
+        c = self._make_cache(bridge, maxsize=50)
+        errors: list[Exception] = []
+
+        def worker(tid: int) -> None:
+            try:
+                for i in range(30):
+                    c.put(f"t{tid}_k{i}", (tid, i))
+                    _ = c.get(f"t{tid}_k{i}")
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(t,)) for t in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+        assert not errors, f"Thread-Safety-Verletzung in _AnalysisLruCache: {errors}"
+
+    def test_maxsize_never_exceeded(self, bridge):
+        c = self._make_cache(bridge, maxsize=5)
+        for i in range(20):
+            c.put(f"k{i}", i)
+        assert len(c) <= 5, f"Cache überschreitet maxsize: len={len(c)}"
+
+
+# ---------------------------------------------------------------------------
+# 14. content_cache_key — Content-Addressing Utility
+# ---------------------------------------------------------------------------
+
+
+class TestContentCacheKey:
+    """content_cache_key liefert stabile, kollisionsarme SHA-256-Schlüssel."""
+
+    def test_returns_64_char_hex_string(self, tmp_path, bridge):
+        f = tmp_path / "audio.wav"
+        f.write_bytes(b"\x00" * 100)
+        key = bridge.content_cache_key(str(f))
+        assert len(key) == 64
+        assert all(c in "0123456789abcdef" for c in key)
+
+    def test_same_file_same_key(self, tmp_path, bridge):
+        f = tmp_path / "stable.wav"
+        f.write_bytes(b"\x01\x02\x03" * 200)
+        k1 = bridge.content_cache_key(str(f))
+        k2 = bridge.content_cache_key(str(f))
+        assert k1 == k2, "content_cache_key muss für identische Datei stabil sein"
+
+    def test_different_content_different_key(self, tmp_path, bridge):
+        f1 = tmp_path / "a.wav"
+        f2 = tmp_path / "b.wav"
+        f1.write_bytes(b"\xAA" * 100)
+        f2.write_bytes(b"\xBB" * 100)
+        assert bridge.content_cache_key(str(f1)) != bridge.content_cache_key(str(f2))
+
+    def test_same_content_different_path_same_key(self, tmp_path, bridge):
+        """Selber Inhalt unter verschiedenem Pfad → gleicher Key (Content-Addressing)."""
+        data = b"\xFF\x00\x1A" * 512
+        f1 = tmp_path / "original.wav"
+        f2 = tmp_path / "renamed.wav"
+        f1.write_bytes(data)
+        f2.write_bytes(data)
+        assert bridge.content_cache_key(str(f1)) == bridge.content_cache_key(str(f2)), (
+            "Content-Addressing: gleicher Inhalt muss gleichen Key ergeben"
+        )
+
+    def test_missing_file_returns_path_fallback(self, bridge):
+        key = bridge.content_cache_key("/nonexistent/audio_xyz_12345.wav")
+        assert isinstance(key, str) and len(key) > 0, "Fehlende Datei darf kein Exception werfen"
+
+
+# ---------------------------------------------------------------------------
+# 15. LRU-Cache via Defect-Cache-API (Integrations-Test)
+# ---------------------------------------------------------------------------
+
+
+class TestDefectCacheLruIntegration:
+    """Defect-Cache-API verwendet jetzt LRU statt FIFO."""
+
+    def test_lru_keeps_recently_accessed_entry(self, bridge):
+        """LRU: ein früh eingefügter, aber kürzlich geholter Eintrag bleibt erhalten."""
+        bridge.clear_defect_cache()
+        # Fülle auf 64 Einträge
+        for i in range(64):
+            bridge.cache_defect_result(f"/tmp/lru_fill_{i:03d}.wav", {"idx": i})
+        # Greife auf den ersten Eintrag zu → wird MRU
+        _ = bridge.get_cached_defect_result("/tmp/lru_fill_000.wav")
+        # Füge einen weiteren ein → should evict entry #1 (LRU), not #0
+        bridge.cache_defect_result("/tmp/lru_new.wav", {"idx": 99})
+        assert bridge.get_cached_defect_result("/tmp/lru_fill_000.wav") is not None, (
+            "LRU darf den zuletzt zugegriffenen Eintrag nicht verdrängen"
+        )
+        assert bridge.get_cached_defect_result("/tmp/lru_fill_001.wav") is None, (
+            "LRU muss den am längsten nicht zugegriffenen Eintrag verdrängen"
+        )
+
+    def test_same_content_different_path_hits_cache(self, tmp_path, bridge):
+        """Selber Dateiinhalt unter zwei Pfaden → zweiter Aufruf trifft Cache."""
+        data = b"\xDE\xAD\xBE\xEF" * 2048
+        p1 = tmp_path / "original.wav"
+        p2 = tmp_path / "copy.wav"
+        p1.write_bytes(data)
+        p2.write_bytes(data)
+        sentinel = {"scores": {"HUM": 0.9}}
+        bridge.cache_defect_result(str(p1), sentinel)
+        result = bridge.get_cached_defect_result(str(p2))
+        assert result is sentinel, (
+            "Content-Addressed Cache miss: gleicher Dateiinhalt unter anderem Pfad nicht gefunden"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 16. Neue Bridge-Getter (§11 erweiterte Core-Module)
+# ---------------------------------------------------------------------------
+
+NEW_GETTER_NAMES = [
+    "get_german_schlager_classifier_fn",
+    "get_harmonic_preservation_guard",
+    "get_feedback_chain",
+    "get_physical_ceiling_estimator",
+    "get_per_phase_musical_goals_gate",
+    "get_emotional_arc_metric",
+    "get_micro_dynamics_em",
+    "get_goal_applicability_filter",
+    "get_perceptual_salience_estimator",
+]
+
+
+class TestNeueGetterVorhanden:
+    """Alle 9 neuen Core-Modul-Getter sind in bridge.__all__ und aufrufbar."""
+
+    @pytest.mark.parametrize("name", NEW_GETTER_NAMES)
+    def test_getter_in_all(self, bridge, name):
+        assert name in bridge.__all__, f"'{name}' fehlt in bridge.__all__"
+
+    @pytest.mark.parametrize("name", NEW_GETTER_NAMES)
+    def test_getter_is_callable(self, bridge, name):
+        fn = getattr(bridge, name, None)
+        assert fn is not None and callable(fn), f"'{name}' ist nicht callable"
+
+    @pytest.mark.parametrize("name", NEW_GETTER_NAMES)
+    def test_getter_returns_non_none(self, bridge, name):
+        fn = getattr(bridge, name)
+        result = fn()
+        assert result is not None, f"'{name}()' gibt None zurück — Core-Modul nicht verfügbar?"
+
+    def test_get_harmonic_preservation_guard_has_protect_or_guard(self, bridge):
+        guard = bridge.get_harmonic_preservation_guard()
+        has_method = (
+            hasattr(guard, "guard")
+            or hasattr(guard, "protect")
+            or hasattr(guard, "apply")
+            or hasattr(guard, "apply_correction")
+        )
+        assert has_method, "HarmonicPreservationGuard fehlt .guard/.protect/.apply/.apply_correction-Methode"
+
+    def test_get_feedback_chain_has_run_or_evaluate(self, bridge):
+        fc = bridge.get_feedback_chain()
+        has_method = hasattr(fc, "run") or hasattr(fc, "evaluate") or hasattr(fc, "optimize")
+        assert has_method, "FeedbackChain fehlt .run/.evaluate/.optimize-Methode"
+
+    def test_get_physical_ceiling_estimator_has_estimate(self, bridge):
+        pce = bridge.get_physical_ceiling_estimator()
+        assert hasattr(pce, "estimate"), "PhysicalCeilingEstimator fehlt .estimate()-Methode"
+
+    def test_get_mdem_has_morph(self, bridge):
+        mdem = bridge.get_micro_dynamics_em()
+        assert hasattr(mdem, "morph"), "MicroDynamicsEnvelopeMorphing fehlt .morph()-Methode"
+
+    def test_get_goal_filter_has_evaluate_or_filter(self, bridge):
+        gaf = bridge.get_goal_applicability_filter()
+        has_method = hasattr(gaf, "evaluate") or hasattr(gaf, "filter") or hasattr(gaf, "apply")
+        assert has_method, "GoalApplicabilityFilter fehlt .evaluate/.filter/.apply-Methode"
+
+    def test_content_cache_key_in_all(self, bridge):
+        assert "content_cache_key" in bridge.__all__

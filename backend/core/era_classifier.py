@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import hashlib
 import itertools
-import json
 import logging
 import math
 import threading
@@ -266,20 +265,50 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
 
 
 def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
-    """Effective recording bandwidth via 90th-percentile cumulative energy rolloff.
+    """Effective recording bandwidth via multi-estimator fusion (5 independent probes).
 
-    Uses the frequency below which 90 % of the total spectral energy is
-    contained.  For a 6th-order Butterworth low-pass filter (the model used in
-    the calibration tests) this gives rolloff ≈ 0.90 × cutoff_hz, which is
-    exactly the calibration basis for all thresholds in _dsp_fingerprint_decade().
+    Five independent spectral bandwidth estimators are computed and fused via a
+    weighted median.  This makes the result robust against individual estimator
+    failures such as bass-heavy spectral imbalance (which biases cumulative-energy
+    methods) or LP-filter skirt leakage (which biases spectral-edge methods).
 
-    Bass-heavy real-music correction: if the 90th-percentile falls below
-    8 kHz but the signal carries more than 2 % of its total energy above
-    8 kHz (meaning real HF content exists, not just filter roll-off), the
-    floor is raised to 8 kHz.  This prevents a 1990s bass-heavy Schlager MP3
-    from being mis-mapped to decade = 1890 while keeping the calibrated
-    physics-test cases intact (their LP-filtered noise has ≪ 0.01 % energy
-    above the filter cut-off).
+    Estimators
+    ----------
+    1. **E90** — cumulative 90th-percentile energy (kalibriert gegen
+       _dsp_fingerprint_decade Schwellwerte).  Highly reliable for
+       LP-filtered test signals; can under-estimate for bass-heavy music.
+       Weight: 0.35.
+
+    2. **E85** — cumulative 85th-percentile energy, conservative anchor.
+       Always ≤ E90; provides a lower-bound guard.
+       Weight: 0.20.
+
+    3. **Edge-30dB** — highest frequency still within -30 dB of the spectral
+       peak in 200 Hz – SR/2.  Reliable for full-band music; can over-estimate
+       for LP-filtered noise because the 6th-order Butterworth skirt extends
+       ~1.8× beyond the cutoff before reaching -30 dB.  Activated only when
+       the energy in the gap (between E90 and the edge) exceeds 15% of the
+       tail energy — this rejects LP-filter skirt artefacts while preserving
+       the correction for bass-heavy music.
+       Weight: 0.20.
+
+    4. **Slope-break** — largest downward gradient discontinuity in the
+       smoothed log-power spectrum (200 Hz – SR/2, log-frequency axis).  The
+       physical LP-filter pole cluster produces a sharp gradient change
+       exactly at the cutoff frequency; this estimator finds that change
+       directly from the spectral shape, independent of energy distribution.
+       Weight: 0.15.
+
+    5. **Flatness-onset** — lowest frequency above which the spectral flatness
+       of successive octave sub-bands drops below 0.15 (i.e. the band looks
+       like white noise/near-silence instead of structured audio content).
+       Identifies the onset of the noise floor, which typically starts just
+       above the recording bandwidth.
+       Weight: 0.10.
+
+    Fusion: weighted median over available estimators (estimators that fail
+    gracefully return None and are excluded).  Final result is clamped to
+    [200.0, SR/2].
 
     Args:
         audio_mono: Mono-Audio (1-D).
@@ -306,23 +335,26 @@ def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
         return float(sr) / 2.0
 
     freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+    nyquist = float(sr) / 2.0
 
-    # 90th-percentile energy rolloff — calibrated for _dsp_fingerprint_decade().
-    # All decade boundary thresholds are derived as the midpoint of 0.90 ×
-    # adjacent DECADE_HF_LIMITS entries, so the measurement method and the
-    # lookup table are consistent.
-    idx = int(np.searchsorted(cum_energy, 0.90 * total_energy))
-    idx = int(np.clip(idx, 0, len(avg_spec) - 1))
-    rolloff = float(freqs[idx])
+    # ── Estimator 1: Cumulative 90th-percentile energy (E90) ──────────────
+    # Calibrated: all decade thresholds in _dsp_fingerprint_decade() are derived
+    # from 0.90 × DECADE_HF_LIMITS, so E90 is the primary physics anchor.
+    idx90 = int(np.clip(np.searchsorted(cum_energy, 0.90 * total_energy), 0, len(avg_spec) - 1))
+    e90 = float(freqs[idx90])
 
-    # ── Spectral-edge detection (complementary to cumulative energy) ──
-    # For bass-heavy music (Schlager, hip-hop, heavily compressed MP3), the
-    # 90th-pctl cumulative energy is dominated by sub-1 kHz content and
-    # gives absurdly low rolloff values (e.g. 800 Hz for a 1977 tape).
-    # Spectral-edge: find the highest frequency where the power spectrum
-    # still exceeds -30 dB relative to the peak in the 200–SR/2 range.
-    # This directly measures where real content ends, regardless of
-    # spectral balance.
+    # ── Estimator 2: Cumulative 85th-percentile energy (E85) ──────────────
+    # Conservative lower-bound guard; always ≤ E90 by construction.
+    idx85 = int(np.clip(np.searchsorted(cum_energy, 0.85 * total_energy), 0, len(avg_spec) - 1))
+    e85 = float(freqs[idx85])
+
+    # ── Estimator 3: Spectral edge -30 dB with gap-energy guard ───────────
+    # The guard rejects LP-filter skirt artefacts: for a 6th-order Butterworth
+    # at cutoff F, the -30 dB spectral edge is at ~1.82 × F, but the energy in
+    # (E90, edge) is < 1 % of total (all in the filter's deep stop-band).
+    # For bass-heavy real music, the same gap contains genuine high-frequency
+    # content (> 15 % of the tail energy beyond E90).
+    edge_30db: float | None = None
     mask_music = freqs >= 200.0
     if np.any(mask_music) and np.any(avg_spec[mask_music] > 0):
         peak_power = float(np.max(avg_spec[mask_music]))
@@ -330,26 +362,133 @@ def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
             edge_threshold = peak_power * 1e-3  # -30 dB below peak
             above_edge = np.where((avg_spec > edge_threshold) & mask_music)[0]
             if len(above_edge) > 0:
-                spectral_edge = float(freqs[above_edge[-1]])
-                rolloff = max(rolloff, spectral_edge)
+                candidate = float(freqs[above_edge[-1]])
+                # Gap-energy guard: only use if real energy between E90 and edge
+                tail_energy = float(np.sum(avg_spec[idx90:])) + 1e-30
+                gap_mask = (freqs > e90) & (freqs <= candidate)
+                gap_energy = float(np.sum(avg_spec[gap_mask]))
+                if gap_energy / tail_energy > 0.15:
+                    edge_30db = candidate
 
-    # Bass-heavy content floor: if the rolloff is still below 8 kHz but
-    # > 0.5 % of the total energy sits above 8 kHz, the recording carries
-    # real high-frequency content.  Raise via 98th-percentile.
-    # Threshold lowered from 2% to 0.5% to catch lossy-encoded recordings
-    # (mp3_low, aac) where HF energy is sparse but present.
-    # Butterworth-filtered calibration signals have < 0.05 % energy above
-    # their cut-off, so this guard never triggers for them.
-    if rolloff < 8000.0:
-        hf_mask = freqs >= 8000.0
-        hf_fraction = float(np.sum(avg_spec[hf_mask])) / (total_energy + 1e-20)
-        if hf_fraction > 0.005:
-            idx98 = int(np.searchsorted(cum_energy, 0.98 * total_energy))
-            idx98 = int(np.clip(idx98, 0, len(avg_spec) - 1))
-            rolloff_98 = float(freqs[idx98])
-            rolloff = max(rolloff_98, 8000.0)
+    # ── Estimator 4: Spectral slope-break (largest gradient discontinuity) ─
+    # Smooth the log-power spectrum on a log-frequency axis, then find the bin
+    # with the steepest downward gradient change — this corresponds to the
+    # physical filter pole cluster (LP cutoff).
+    slope_break: float | None = None
+    try:
+        mask_range = (freqs >= 200.0) & (freqs <= nyquist * 0.97)
+        if np.sum(mask_range) >= 20:
+            f_range = freqs[mask_range]
+            s_range = avg_spec[mask_range]
+            # Smooth with 7-bin moving average in log-frequency space
+            log_s = 10.0 * np.log10(s_range + 1e-20)
+            kernel_size = min(7, len(log_s) // 4)
+            if kernel_size >= 3:
+                kernel = np.ones(kernel_size) / kernel_size
+                smoothed = np.convolve(log_s, kernel, mode="same")
+                # First derivative on log-frequency axis
+                log_f = np.log2(f_range + 1.0)
+                df = np.diff(log_f)
+                ds = np.diff(smoothed)
+                slope = ds / (df + 1e-10)
+                # Second derivative (gradient change)
+                d2slope = np.diff(slope)
+                # Find the most negative gradient change (steepest drop onset)
+                # in the 1 kHz – (SR/2 – 1 kHz) range to avoid bass artifacts
+                f_mid = 0.5 * (f_range[1:-1] + f_range[2:])  # bin centres for d2slope
+                valid_mask = (f_mid >= 1000.0) & (f_mid <= nyquist - 1000.0)
+                if np.any(valid_mask):
+                    d2_valid = d2slope[valid_mask]
+                    f_valid = f_mid[valid_mask]
+                    best_idx = int(np.argmin(d2_valid))
+                    slope_break = float(f_valid[best_idx])
+    except Exception:
+        slope_break = None
 
-    return rolloff
+    # ── Estimator 5: Spectral flatness change-point ────────────────────────
+    # Scan octave sub-bands upward from 1 kHz; find the lowest frequency where
+    # the band's spectral flatness (geometric/arithmetic mean ratio) drops
+    # below 0.15, indicating the band contains near-white noise or silence
+    # rather than structured audio.  That onset frequency is the recording BW.
+    flat_onset: float | None = None
+    try:
+        f_lo = 1000.0
+        while f_lo < nyquist * 0.85:
+            f_hi = min(f_lo * 2.0, nyquist)
+            band_mask = (freqs >= f_lo) & (freqs < f_hi) & (avg_spec > 0)
+            if np.sum(band_mask) < 4:
+                break
+            band = avg_spec[band_mask]
+            geom = float(np.exp(np.mean(np.log(band + 1e-30))))
+            arith = float(np.mean(band))
+            flatness = geom / (arith + 1e-30)
+            if flatness < 0.15:
+                flat_onset = f_lo
+                break
+            f_lo = f_hi
+    except Exception:
+        flat_onset = None
+
+    # ── Fusion: weighted median over available estimators ─────────────────
+    # Weights reflect calibration reliability (see docstring).
+    candidates: list[tuple[float, float]] = [(e90, 0.35), (e85, 0.20)]
+    if edge_30db is not None:
+        candidates.append((edge_30db, 0.20))
+    if slope_break is not None:
+        candidates.append((slope_break, 0.15))
+    if flat_onset is not None:
+        candidates.append((flat_onset, 0.10))
+
+    # ── Outlier-robust fusion: IQR-based down-weighting ───────────────────
+    # When estimators disagree strongly (e.g. bass-heavy music where E90 is
+    # dominated by LF content but edge-30dB sees genuine HF extension), the
+    # weighted median can be skewed by outlier estimators.  We down-weight
+    # any estimator whose value lies > 1.5× IQR from the median, preventing
+    # single-estimator flukes from dominating the fusion result.
+    if len(candidates) >= 3:
+        vals = np.array([v for v, _ in candidates])
+        med = float(np.median(vals))
+        q1, q3 = float(np.percentile(vals, 25)), float(np.percentile(vals, 75))
+        iqr = max(q3 - q1, 500.0)  # floor at 500 Hz to avoid zero-IQR for pure tones
+        adjusted: list[tuple[float, float]] = []
+        for val, w in candidates:
+            if abs(val - med) > 1.5 * iqr:
+                adjusted.append((val, w * 0.25))
+            else:
+                adjusted.append((val, w))
+        candidates = adjusted
+
+    # Bass-heavy override: when the cumulative-energy estimators (E85, E90) are
+    # dominated by sub-1 kHz bass content (e.g. heavily bass-boosted 1970s MP3),
+    # they under-estimate the recording bandwidth by a wide margin.  In this
+    # regime Edge-30dB is the only reliable measure of the true HF extension.
+    # Activation: E90 < 1.5 kHz AND the accepted edge-30dB > 5 kHz AND gap-energy
+    # fraction > 0.40 (substantial real content above E90, not just LP-skirt).
+    # The 1.5 kHz floor ensures LP-filtered calibration signals never trigger
+    # this path: a 3 kHz Butterworth LP gives E90 ≈ 2.8 kHz >> 1.5 kHz.
+    # Real bass-heavy Schlager/hip-hop typically has E90 < 1.2 kHz.
+    if edge_30db is not None and e90 < 1500.0 and edge_30db > 5000.0:
+        # Compute gap fraction (already accepted by the 0.15 guard above)
+        mask_music_loc = freqs >= 200.0
+        _peak = float(np.max(avg_spec[mask_music_loc])) if np.any(mask_music_loc) else 1e-20
+        _edge_cand = edge_30db
+        _tail = float(np.sum(avg_spec[idx90:])) + 1e-30
+        _gap = float(np.sum(avg_spec[(freqs > e90) & (freqs <= _edge_cand)]))
+        if _gap / _tail > 0.40:
+            return float(np.clip(edge_30db, 200.0, nyquist))
+
+    # Weighted median: sort by value, find where cumulative weight crosses 0.5
+    candidates.sort(key=lambda x: x[0])
+    total_w = sum(w for _, w in candidates)
+    cum_w = 0.0
+    rolloff = e90  # fallback
+    for val, w in candidates:
+        cum_w += w / total_w
+        if cum_w >= 0.50:
+            rolloff = val
+            break
+
+    return float(np.clip(rolloff, 200.0, nyquist))
 
 
 def _detect_stereo_properties(audio: np.ndarray, sr: int) -> tuple[bool, float]:
@@ -668,23 +807,25 @@ def _dsp_fingerprint_decade(
         decade = 1980  # LIMIT 20 kHz → expected rolloff ~18.0 kHz
     else:
         # Full-bandwidth (≥ 19 kHz): BW cannot distinguish 1990–2025.
-        # Use frame-energy SNR to differentiate digital decades.
-        # Conservative thresholds: real-music DR is ~15–30 dB lower than medium SNR.
-        #   2020 streaming: medium ~80 dB → typical music DR 50–65 dB
-        #   2010 streaming: medium ~75 dB → typical music DR 45–60 dB
-        #   2000 digital:   medium ~70 dB → typical music DR 33–50 dB
-        #   1990 CD:        medium ~65 dB → typical music DR 22–40 dB
-        #   1980 tape:      medium ~58 dB → typical music DR < 22 dB
-        if snr_db >= 50.0:
-            decade = 2020
-        elif snr_db >= 38.0:
-            decade = 2010
-        elif snr_db >= 28.0:
-            decade = 2000
-        elif snr_db >= 18.0:
-            decade = 1990
-        else:
-            decade = 1980
+        # Use Gaussian-weighted SNR scoring to select the most likely digital
+        # decade.  Each decade has a calibrated expected SNR (μ) derived from
+        # typical frame-energy dynamic range measurements.  The Gaussian
+        # likelihood penalises distance from μ; argmax gives the best match.
+        #
+        # Expected SNR values (frame-energy P90/P10 ratio in dB):
+        #   1980 tape: ~14 dB  |  1990 CD: ~24 dB  |  2000: ~34 dB
+        #   2010: ~44 dB       |  2020+: ~55 dB
+        # σ calibrated at ~8 dB covering typical DR variation within a decade.
+        _post90_snr = {1980: 14.0, 1990: 24.0, 2000: 34.0, 2010: 44.0, 2020: 55.0}
+        _post90_sigma = 8.0
+        best_dec, best_ll = 1980, -1e30
+        for dec, mu in _post90_snr.items():
+            z = (snr_db - mu) / _post90_sigma
+            ll = -0.5 * z * z
+            if ll > best_ll:
+                best_ll = ll
+                best_dec = dec
+        decade = best_dec
 
     # SNR micro-correction for vintage decades (Carbon/Ribbon-microphone heuristic)
     if snr_db < 20.0 and bw_khz < 6.0:
@@ -703,7 +844,7 @@ def _dsp_fingerprint_decade(
         expected_snr_cur = _decade_expected_snr(decade)
         expected_snr_next = _decade_expected_snr(next_decade)
         threshold_bw = DECADE_HF_LIMITS.get(next_decade, 20000.0) / 1000.0 * 0.9
-        bw_near_boundary = (threshold_bw - bw_khz) < 1.5  # within 1.5 kHz of next
+        bw_near_boundary = (threshold_bw - bw_khz) < 2.5  # within 2.5 kHz of next (covers tape→MP3 rolloff loss)
         snr_favors_next = abs(snr_db - expected_snr_next) < abs(snr_db - expected_snr_cur)
         if bw_near_boundary and snr_favors_next:
             decade = next_decade
@@ -760,7 +901,7 @@ def _dsp_fingerprint_decade(
     if decade in (1950, 1960, 1970):
         next_dec = decade + 10
         thr_bw = DECADE_HF_LIMITS.get(next_dec, 20000.0) / 1000.0 * 0.9
-        if (thr_bw - bw_khz) < 2.0:  # BW still borderline
+        if (thr_bw - bw_khz) < 2.5:  # BW borderline (2.5 kHz covers tape→MP3 HF compression headroom)
             votes_up = 0
             # Stereo vote
             if is_stereo and stereo_width >= 0.10:
@@ -777,7 +918,9 @@ def _dsp_fingerprint_decade(
                 decade = next_dec
 
     # (F) Noise-floor temporal modulation — wow/flutter proxy
-    if noise_modulation > 0.38 and decade in (1960, 1970) and bw_khz < 10.0:
+    # Guard: codec-limited recordings (narrow BW + steep tilt) produce high noise
+    # modulation via MP3/codec artifacts — this is NOT physical wow/flutter.
+    if noise_modulation > 0.38 and decade in (1960, 1970) and bw_khz < 10.0 and not _codec_limited:
         decade = min(decade, 1960)
     elif noise_modulation < 0.08 and decade in (1950, 1960) and bw_khz > 9.0:
         decade = max(decade, 1970)
@@ -1008,9 +1151,6 @@ def _microphone_type_decade(bark_energies: np.ndarray) -> tuple[int, float]:
 # Haupt-Klasse
 # ---------------------------------------------------------------------------
 
-CACHE_DIR = Path.home() / ".aurik" / "era_cache"
-_CACHE_VERSION = "v7"  # v7: multi-factor (stereo/tilt/DR) + consensus vote (25.03.2026)
-
 
 class EraClassifier:
     """Erkennt Aufnahme-Ära (1890–2025) und leitet epochenspezifische Priors ab.
@@ -1027,14 +1167,15 @@ class EraClassifier:
         - Konfidenz < 0.4 → material_prior = "unknown" (konservative Priors)
         - CLAP-Fallback auf DSP-Fingerprint wenn Import fehlschlägt
         - Decade-Label wird in RestorationResult.era_decade gespeichert
-        - Paläografie-Cache unter ~/.aurik/era_cache/<sha256_prefix>.json
+        - Ergebnisse werden ausschließlich im RAM gecacht (kein Disk-I/O)
     """
 
     def __init__(self) -> None:
         self._clap_plugin: object | None = None
         self._clap_loaded: bool = False
         self._clap_lock = threading.Lock()
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        self._ram_cache: dict[str, "EraResult"] = {}
+        self._ram_cache_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Öffentliche API
@@ -1060,13 +1201,13 @@ class EraClassifier:
         audio = np.clip(audio, -1.0, 1.0)
         audio_mono = np.mean(audio, axis=-1 if audio.shape[-1] <= 2 else 0) if audio.ndim > 1 else audio.copy()
 
-        # Cache-Key aus SHA256-Prefix
+        # RAM-Cache-Key aus SHA256-Prefix
         sha = hashlib.sha256(audio_mono.tobytes()).hexdigest()[:16]
-        cache_path = CACHE_DIR / f"{sha}_{_CACHE_VERSION}.json"
-        cached = self._load_cache(cache_path)
-        if cached:
+        with self._ram_cache_lock:
+            cached = self._ram_cache.get(sha)
+        if cached is not None:
             logger.debug(
-                "EraClassifier: Cache-Hit %s → Jahrzehnt=%d, Konfidenz=%.2f, Tier=%d",
+                "EraClassifier: RAM-Cache-Hit %s → Jahrzehnt=%d, Konfidenz=%.2f, Tier=%d",
                 sha,
                 cached.decade,
                 cached.confidence,
@@ -1136,7 +1277,8 @@ class EraClassifier:
         except Exception:
             pass
 
-        self._save_cache(cache_path, result)
+        with self._ram_cache_lock:
+            self._ram_cache[sha] = result
         logger.info(
             "🕰️ EraClassifier: Jahrzehnt=%d, Konfidenz=%.2f, Material=%s, Tier=%d",
             result.decade,
@@ -1190,9 +1332,9 @@ class EraClassifier:
         try:
             with self._clap_lock:
                 if not self._clap_loaded:
-                    from plugins.laion_clap_plugin import get_laion_clap_plugin  # type: ignore[import]
+                    from plugins.laion_clap_plugin import get_laion_clap  # type: ignore[import]
 
-                    self._clap_plugin = get_laion_clap_plugin()
+                    self._clap_plugin = get_laion_clap()
                     self._clap_loaded = True
             if self._clap_plugin is None:
                 return None
@@ -1291,34 +1433,10 @@ class EraClassifier:
             logger.debug("CLAP NN-Suche fehlgeschlagen: %s", exc)
             return 1960, 0.20
 
-    # ------------------------------------------------------------------
-    # Cache-Verwaltung
-    # ------------------------------------------------------------------
-
-    def _load_cache(self, path: Path) -> EraResult | None:
-        if not path.exists():
-            return None
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            return EraResult(
-                decade=int(data["decade"]),
-                era_label=str(data["era_label"]),
-                confidence=float(data["confidence"]),
-                material_prior=str(data["material_prior"]),
-                noise_profile=np.array(data["noise_profile"], dtype=np.float32),
-                tier_used=int(data.get("tier_used", 2)),
-                hf_rolloff_hz=float(data.get("hf_rolloff_hz", 20000.0)),
-            )
-        except Exception:
-            return None
-
-    def _save_cache(self, path: Path, result: EraResult) -> None:
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(result.as_dict(), f, ensure_ascii=False, indent=2)
-        except Exception as exc:
-            logger.debug("EraClassifier: Cache-Speichern fehlgeschlagen: %s", exc)
+    def clear_ram_cache(self) -> None:
+        """Leert den In-Memory-Cache (z. B. zum Testen oder nach Speicherengpass)."""
+        with self._ram_cache_lock:
+            self._ram_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -1352,12 +1470,24 @@ def classify_era(audio: np.ndarray, sr: int) -> EraResult:
     return get_era_classifier().classify(audio, sr)
 
 
+# Codec containers are encoding formats, not physical source media.
+# A 1977 vinyl digitized as mp3 is still from 1977 — the codec does not date
+# the content.  These are excluded from era-floor constraints.
+_CODEC_CONTAINERS: frozenset[str] = frozenset({
+    "mp3_low", "mp3_high", "aac", "streaming",
+})
+
+
 def constrain_era_to_medium(era_result: EraResult, medium: str) -> EraResult:
     """Applies a physical medium-based minimum decade floor to an EraResult.
 
     A tape recording cannot originate from 1890; a vinyl disc cannot predate
     1948.  This function corrects impossible decade assignments that arise when
     the EraClassifier operates on short or ambiguous audio segments.
+
+    Codec containers (mp3_low, mp3_high, aac, streaming) are explicitly
+    excluded — they are encoding formats, not physical origins.  A vinyl
+    recording from 1977 digitized as mp3 must retain its 1970er era.
 
     The corrected decade is the smallest VALID_DECADES entry >= the floor for
     the given medium.  Confidence is scaled down by 0.65 (indicating the
@@ -1368,11 +1498,15 @@ def constrain_era_to_medium(era_result: EraResult, medium: str) -> EraResult:
         era_result: EraResult produced by EraClassifier.classify().
         medium:     Physical medium string (e.g. 'tape', 'reel_tape', 'vinyl').
                     Case-insensitive; unknown medium strings are ignored.
+                    Codec containers are silently skipped.
 
     Returns:
         Original EraResult if no constraint applies; corrected EraResult otherwise.
     """
-    floor = MEDIUM_DECADE_FLOOR.get(medium.strip().lower(), 0)
+    medium_lower = medium.strip().lower()
+    if medium_lower in _CODEC_CONTAINERS:
+        return era_result
+    floor = MEDIUM_DECADE_FLOOR.get(medium_lower, 0)
     if floor == 0 or era_result.decade >= floor:
         return era_result
 
@@ -1392,7 +1526,7 @@ def constrain_era_to_medium(era_result: EraResult, medium: str) -> EraResult:
         new_conf = max(new_conf, 0.42)
     # Use the actually detected medium — not the decade-based prior which can
     # map e.g. 1960 → "vinyl" even though the medium was detected as "tape".
-    new_material = medium.strip().lower()
+    new_material = medium_lower
 
     logger.info(
         "EraClassifier medium-floor constraint: %dер → %d (medium=%s, floor=%d, confidence %.2f → %.2f)",

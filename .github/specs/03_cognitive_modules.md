@@ -10,7 +10,7 @@
 | Modul | Datei | Zweck |
 | --- | --- | --- |
 | `PerceptualEmbedder` | `backend/core/perceptual_embedder.py` | 256-dim L2-normalisierter Einbettungsraum |
-| `CausalDefectReasoner` | `backend/core/causal_defect_reasoner.py` | Bayesianisch: 32 DefectTypes → 34 Kausal-Ursachen |
+| `CausalDefectReasoner` | `backend/core/causal_defect_reasoner.py` | Bayesianisch: 32 DefectTypes → 35 Kausal-Ursachen |
 | `GPParameterOptimizer` | `backend/core/gp_parameter_optimizer.py` | RBF-GP + UCB + MOO Pareto-Front |
 | `PerceptualQualityScorer` | `backend/core/perceptual_quality_scorer.py` | Gammatone-NSIM+MCD+LUFS+MOS |
 | `MusicalGoalsChecker` | `backend/core/musical_goals/musical_goals_metrics.py` | 14 Qualitätsziele |
@@ -24,11 +24,17 @@
 | `HarmonicPreservationGuard` | `backend/core/harmonic_preservation_guard.py` | G_floor=0.85 an Harmonik-Bins |
 | `MusikalischerGlobalplanDienst` | `backend/core/musikalischer_globalplan.py` | Cross-Phase-Globalplan: 13 Ära-Profile × Genre-Modifikatoren, 17 Phase-Adjustments |
 | `PerPhaseMusicalGoalsGate` | `backend/core/per_phase_musical_goals_gate.py` | Rollback pro Phase |
+| `SongCalibrationProfile` | `backend/core/song_calibration.py` | §2.31a: materialadaptives Kalibrierungsprofil (global_scalar + family_scalars) vor Phasenkette |
+| `EraAuthenticPerceptualCompletion` | `backend/core/era_authentic_completion.py` | Ära-authentische Wahrnehmungs-Ergänzung (Quell-BW < 10 kHz); Studio-2026-Kette Schritt 8 |
+| `LyricsGuidedEnhancement` | `backend/core/lyrics_guided_enhancement.py` | §2.36 RELEASE_MUST: Whisper-Tiny ONNX → Phonem-Alignment → ContentAwareProcessor |
+| `SongCalibrationProfile` | `backend/core/song_calibration.py` | §2.31a: materialadaptives Kalibrierungsprofil (global_scalar + family_scalars) vor Phasenkette |
+| `EraAuthenticPerceptualCompletion` | `backend/core/era_authentic_completion.py` | Ära-authentische Wahrnehmungs-Ergänzung (Quell-BW < 10 kHz); Studio-2026-Kette Schritt 8 |
 | `EraClassifier` | `plugins/era_classifier_plugin.py` | Ära 1890–2025 |
 | `GermanSchlagerClassifier` | `backend/core/genre_classifier.py` | 6-Schicht Zero-Shot |
 | `RestorabilityEstimator` | `backend/core/restorability_estimator.py` | < 5 s Vor-Assessment |
 | `IntroducedArtifactDetector` | `backend/core/introduced_artifact_detector.py` | Post-Restaurierungs-Artefakte |
 | `MicroDynamicsEnvelopeMorphing` | `backend/core/micro_dynamics_envelope_morphing.py` | Letzter Schritt vor Export |
+| `LyricsGuidedEnhancement` | `backend/core/lyrics_guided_enhancement.py` | §2.36 RELEASE_MUST: Whisper-Tiny ONNX → Phonem-Alignment → ContentAwareProcessor |
 | `MertPlugin` | `plugins/mert_plugin.py` | Music Understanding + Naturalness |
 | `DiffWavePlugin` | `plugins/diffwave_plugin.py` | AR-Inpainting für Dropout-Lücken |
 | `CrepePlugin` | `plugins/crepe_plugin.py` | Pitch-Tracking f₀, CNN-basiert |
@@ -53,51 +59,12 @@ sim = embedding.cosine_similarity(other)  # ∈ [-1, 1]
 
 ---
 
-## §12 Best-Practice: Umgang mit verbleibenden Deferred-Phases (Recovery, Logging, Qualitätsstrategie)
-
-### 1. Logging und Reporting (Transparenz & Nachvollziehbarkeit)
-
-- Nach Abschluss von Stufe 2 (`MLRefinementThread`) werden alle verbleibenden Phasen in `deferred_phases` mit vollständigem Kontext geloggt.
-- Pflichtfelder pro Phase: `phase_id`, `phase_name`, `reason` (OOM, RT-Limit, Modellfehler, RAM, User-Abbruch), `timestamp`, `material`, `mode`, `ram_status`, `model`, `fallback_status`, `psychoacoustic_relevance`.
-- Im `RestorationResult.metadata` MUSS ein Feld `incomplete_phases` (List[dict]) mit allen Details stehen.
-- Ein Recovery-Report (z.B. .txt im Output) fasst alle betroffenen Phasen, Ursachen und die geschätzte Qualitätsauswirkung für den Nutzer verständlich zusammen.
-- Nutzer erhält eine explizite, verständliche Warnung im UI: „Restaurierung unvollständig: Phase X konnte nicht ausgeführt werden. Grund: ... Mögliche Auswirkung: ...“
-
-### 2. Qualitätsstrategie (Harmonie & Zielerreichung)
-
-- Export ist nur zulässig, wenn alle P1/P2-Ziele erfüllt sind (kein Rollback, kein Phase-Skip, keine Deferred-Phase mit Prio ≤ 2).
-- Für verbleibende Deferred-Phases der Priorität P3–P5 wird der Export als „unvollständig“ markiert (`restoration_complete: False`).
-- Die `quality_estimate` wird nicht pauschal, sondern kontextsensitiv reduziert:
-  - Psychoakustische Relevanz der Phase (z.B. via Perceptual Quality Scorer, Material- und Defekt-Analyse)
-  - −0.10 bis −0.02 pro fehlender P3-Phase (je nach Einfluss)
-  - −0.05 bis −0.01 pro fehlender P4/P5-Phase
-  - Niemals unter 0.55 (E2E-Gate)
-- Nutzer-individuelle Gewichtung: Nutzer kann optional angeben, welche Ziele besonders wichtig sind (z.B. „Bass wichtiger als Brillanz“), um Penalty und Warnungen zu gewichten.
-
-### 3. Recovery & Adaptive Re-Routing (Resilienz & Alternativen)
-
-- Für jede Deferred-Phase wird automatisch geprüft, ob eine ressourcenschonendere DSP-Alternative oder ein Notfall-Fallback möglich ist (adaptive Re-Routing).
-- Wenn keine Alternative möglich ist, wird die Phase als „endgültig deferred“ markiert und im Report hervorgehoben.
-- Optional: Automatischer Retry nach RAM-Freigabe oder Systemneustart, inkl. Nutzer-Reminder im UI.
-
-### 4. Nutzerzentrierte Kommunikation (Verständlichkeit & Motivation)
-
-- Recovery-Report und UI-Warnungen sind so formuliert, dass der Nutzer die Auswirkungen auf den Klang versteht („Phase X fehlt – das kann zu weniger Bass führen“).
-- Nach Systemneustart oder RAM-Upgrade wird der Nutzer aktiv erinnert, Deferred-Phases nachzuholen.
-- Bei systematisch wiederkehrenden Deferred-Phases erhält der Nutzer einen Hinweis auf mögliche Hardware-Limitierungen und Empfehlungen.
-
-### 5. Wissenschaftliche Fundierung & Feedback-Loop (Validierung & Weiterentwicklung)
-
-- Die Penalty- und Export-Strategie wird regelmäßig anhand von AMRB/MUSHRA-Tests und realem Nutzerfeedback validiert und angepasst.
-- Simulationen des Qualitätsverlusts durch gezieltes Weglassen von Phasen an Referenzmaterial werden durchgeführt und dokumentiert.
-- Die gesamte Deferred-Phase-Strategie ist so gestaltet, dass sie im Zusammenspiel mit allen anderen Features (Denker-Architektur, Musical Goals, Recovery, Logging, UI) eine harmonische, nachvollziehbare und für den Nutzer optimale Restaurierung garantiert.
-
----
-
 ## §2.4 CausalDefectReasoner
 
 ```python
-# 34 Kausal-Ursachen (≠ 32 DefectTypes des DefectScanners):
+# 35 Kausal-Ursachen (≠ 32 DefectTypes des DefectScanners):
+# Hinweis: transport_bump (v9.10.57b) und vocal_harshness (v9.10.77) als
+# eigenständige Ursachen ergänzt; Gruppe Pitch/Dynamik dadurch 4→5.
 #
 # ── Analoge Magnetband-Ursachen (10) ─────────────────────────────────────
 #   tape_dropout, tape_hiss, transport_bump, print_through,
@@ -121,8 +88,9 @@ sim = embedding.cosine_similarity(other)  # ∈ [-1, 1]
 # ── Stereo / Phase (2) ──────────────────────────────────────────────────
 #   stereo_imbalance, phase_issues
 #
-# ── Pitch / Dynamik (4) ─────────────────────────────────────────────────
-#   pitch_drift, reverb_excess, transient_smearing, sibilance
+# ── Pitch / Dynamik / Vokal (5) ──────────────────────────────────────────
+#   pitch_drift, reverb_excess, transient_smearing, sibilance,
+#   vocal_harshness  (v9.10.77 — Vokal-Härte/Übersteuerung/Kratzigkeit 2–6 kHz)
 #
 # ── Vintage (Schutz) (1) ────────────────────────────────────────────────
 #   soft_saturation  (BEWAHREN — P(phases) = leer)
@@ -183,7 +151,7 @@ class VoiceGender:
 
 **Vocal-Restaurierungskette (Reihenfolge zwingend):**
 
-```
+```text
 1. GenderDetector.detect() → VoiceCharacteristics (F₀, Formanten, Breathiness)
 2. FCPEPlugin (f₀) → CrepePlugin → pYIN-Fallback
 3. FormantTracker (LPC F1–F4) + WORLD-Vocoder-Quervalidierung
@@ -204,12 +172,12 @@ class VoiceGender:
 ## §2.9 Instrument-Phasen-Aktivierungsmatrix
 
 | PANNs-Kategorie | Phase | Schwellwert |
-|------------------------------|-------------------------------|-------|
-| Guitar / Electric Guitar     | `phase_44_guitar_enhancement` | ≥ 0.5 |
-| Brass / Trumpet / Saxophone  | `phase_45_brass_enhancement`  | ≥ 0.5 |
-| Drum / Percussion            | `phase_51_drums_enhancement`  | ≥ 0.5 |
-| Piano / Keyboard             | `phase_52_piano_restoration`  | ≥ 0.5 |
-| Singing voice / Vocals       | `phase_19` + `phase_42` + `phase_43` + VocalAIEnhancement             | ≥ 0.40                                |
+| --- | --- | --- |
+| Guitar / Electric Guitar | `phase_44_guitar_enhancement` | ≥ 0.5 |
+| Brass / Trumpet / Saxophone | `phase_45_brass_enhancement` | ≥ 0.5 |
+| Drum / Percussion | `phase_51_drums_enhancement` | ≥ 0.5 |
+| Piano / Keyboard | `phase_52_piano_restoration` | ≥ 0.5 |
+| Singing voice / Vocals | `phase_19` + `phase_42` + `phase_43` + VocalAIEnhancement | ≥ 0.40 |
 
 ---
 
@@ -238,7 +206,7 @@ class VoiceGender:
 **Erkennungs-Kaskade (kein vortrainiertes Schlager-Modell nötig):**
 
 | Tier | Methode | Schwellwert |
-|---|---|---|
+| --- | --- | --- |
 | 1: LAION-CLAP | 7 gewichtete Text-Prompts + 5 negative Prompts | clap_score ≥ 0.26 |
 | 2: Akkordeon-AM | Hilbert → Hüllkurven-FFT → Reed-Beating [5–15] Hz + Tremolo [4–8] Hz | accordion_score ≥ 0.60 |
 | 3: HSI | CQT-Chroma → Quintenkreis-Übergänge ≤ 2 Schritte → fraction ≥ 0.82 | hsi ≥ 0.82 |
@@ -381,14 +349,14 @@ SCORE_THRESHOLDS = {
 # LyricsTranscriber: Whisper-Tiny ONNX (39 MB, CPUExecutionProvider, kein Netzwerk)
 # Fallback bei Whisper nicht verfügbar: Energie-Segmentierung (DSP)
 
-# ContentAwareProcessor — Salienz-Boosts:
+# ContentAwareProcessor — Salienz-Boosts (§8.3 Tiefen-Immersion, kanonisch):
 SALIENCY_BOOST = {
-    "fricative_stressed":   2.0,   # G_floor = 0.90
-    "fricative_unstressed": 1.4,
-    "vowel_stressed":       1.6,
+    "fricative_stressed":   1.55,  # §8.3: fricative ×1.55
+    "fricative_unstressed": 1.55,  # §8.3: fricative ×1.55
+    "vowel_stressed":       1.35,  # §8.3: vowel_stressed ×1.35
     "vowel_unstressed":     1.0,
-    "plosive":              1.5,
-    "silence":              0.5,
+    "plosive":              1.40,  # §8.3: plosive ×1.40
+    "silence":              0.70,  # §8.3: silence ×0.70
 }
 
 # LyricsGuidedTimeline — Shortcut L (Overlay an/aus)
@@ -399,6 +367,57 @@ COLOR_MAP = {
     "silence":              "#B0BEC5",
 }
 # Datenschutz: Lyrics-Text NIEMALS geloggt, NIEMALS in RestorationResult.metadata
+```
+
+### §2.36a Phonem-spezifische DSP-Algorithmen (v9.10.90, [RELEASE_MUST])
+
+Einheitlicher SALIENCY_BOOST-Gain reicht nicht — Phonemklassen erfordern
+unterschiedliche Spektral-/Zeit-Behandlung.
+
+```python
+# ContentAwareProcessor._apply_phoneme_dsp(audio_segment, phoneme_type, sr, strength)
+#
+# FRIKATIVE ("fricative_stressed", "fricative_unstressed"):
+#   Charakteristik: breitbandiges Rauschen 4–8 kHz (turbulente Strömung)
+#   Anforderung:    Rauschen-Textur ERHALTEN, kein Smoothing!
+#   Algorithmus:    Spektrale Verstärkung mit frequenzabhängigem Gain
+#                   g(f) = 1.0 + strength × ramp(f; 4000 Hz, 8000 Hz)  # lineares Ramp-Gain
+#                   KEIN: NR-Glättung, kein Wiener-Filter im 4–8 kHz Band
+#                   Clip-Schutz: g(f) ≤ 2.5 × base_gain
+#
+# PLOSIVE ("plosive"):
+#   Charakteristik: explosiver Burst (1–5 ms) gefolgt von Stille + Vokal
+#                   Frequenzinhalte: 100–350 Hz Burst-Energie + 3–8 kHz Aspiration
+#   Anforderung:    Attack-Transient-Shape ERHALTEN, kein Gain-Smoothing am Onset
+#   Algorithmus:    TransientShapeGuard (onset_window = 5 ms):
+#                   1. Onset-Detektion via Energie-Differenz: Δt < 2 ms → Onset
+#                   2. Pre-Onset (−3 ms): kein Gain-Eingriff (Ruhephase)
+#                   3. Onset-Fenster (0–5 ms): gain = 1.0 (unveränderlich)
+#                   4. Post-Onset (5–40 ms, Burst): gain = strength × 1.40 im 100–350 Hz Band
+#                   5. Aspiration (40–150 ms): gain = strength × 1.20 im 3–8 kHz Band
+#   KEIN: Kompressionsglättung im Onset-Fenster, kein Fade-in
+#
+# VOWEL_STRESSED ("vowel_stressed"):
+#   Charakteristik: periodisch, F1–F4-Formanten, stimmhaft
+#   Anforderung:    Formant-Amplituden proportional anheben (nicht shiften!)
+#   Algorithmus:    LPC-Formanten (Burg Ord. 30–40) → peaks F1..F4 identifizieren
+#                   Gain: symmetrisches Shelving ±2 Halbton um jeden Formantpeak
+#                   g(F_k) = strength × 1.35   (k = 1..4)
+#
+# SILENCE ("silence"):
+#   Anforderung:    Aggressivere NR (OMLSA mit G_floor = 0.05 statt 0.10)
+#   Algorithmus:    OMLSA gain_floor = 0.05, DeepFilterNet energy_bias = −12 dB
+#                   Ziel: Atemgeräusche/Raumrauschen in Pausen entfernen
+#                   KEIN: Stille-Gate (Hard-Muting der Pause zerstört Raumtiefe)
+#
+# ORCHESTRIERUNG in ContentAwareProcessor.process():
+#   1. _build_sample_saliency() → saliency-Karte
+#   2. Für jedes WordTimestamp-Segment: _apply_phoneme_dsp(segment, word.phoneme_type)
+#   3. SALIENCY_BOOST × Phonem-DSP-Ergebnis (Multiplikativ — NUR wenn boost ≠ 1.0)
+#   4. PGHI nach jeder Spektral-Modifikation (PFLICHT)
+#
+# INVARIANTE: TimbralAuthenticityMetric nach phase_57 ≥ 0.87
+#             ArticulationMetric nach phase_57 ≥ 0.85 (Transient-Shape-Korrelation)
 ```
 
 ---
@@ -496,7 +515,7 @@ Jeder Sub-Denker folgt §3.2 Singleton-Pattern. SR-Invariante `assert sample_rat
 Die drei Ausführungs-Denker (Stufen 6–8 in `AurikDenker._orchestriere()`) haben **disjunkte Verantwortungen**. Jeder darf **ausschließlich** seine Domäne bearbeiten.
 
 | Stufe | Denker | Domäne | Zweck | Verboten |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 6 | **ReparaturDenker** | Defekt-Beseitigung | Gezielte DSP-Eingriffe an **bekannten Defekten** (Clicks, Hum, Clipping). Entfernt Störungen, ohne den musikalischen Inhalt zu verändern. | Rekonstruktion, Enhancement, Klangveränderung |
 | 7 | **RekonstruktionsDenker** | Rekonstruktion | **Erschafft, was fehlt** — füllt Lücken im Audio-Signal (Dropouts, Silence-Gaps, Tape-Aussetzer). Stellt verloren gegangene Signalanteile wieder her. Erzeugt `ReconstructionContext` mit Hinweisen für UV3. | Klangverbesserung, Defekt-Beseitigung |
 | 8 | **RestaurierDenker** | Restaurierung/Erhaltung | **Bewahrt und veredelt, was vorhanden ist** — orchestriert UV3 für die vollständige Restaurierungskette. Schützt den gewollten Klangcharakter (Vintage-Ästhetik, Raumeigenschaften, Dynamik). | Lücken-Füllung, gezielte Defekt-Reparatur |

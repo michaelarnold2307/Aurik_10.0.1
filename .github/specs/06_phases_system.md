@@ -7,7 +7,7 @@
 
 ## §7.1 Vollständige Phase-Liste (exakte Dateinamen in `backend/core/phases/`)
 
-```
+```text
 phase_01_click_removal.py           Clicks/Impulse (Median-Detektion)
 phase_02_hum_removal.py             Brumm 50/60 Hz + Obertöne (Kammfilter)
 phase_03_denoise.py                 Breitrauschen (OMLSA + DeepFilterNet)
@@ -51,8 +51,8 @@ phase_40_loudness_normalization.py  LUFS-Normierung (ITU-R BS.1770-5, −14 LUFS
 phase_41_output_format_optimization.py  Ausgabe-Format-Optimierung
 phase_42_vocal_enhancement.py       Gesangs-Enhancement
 phase_43_ml_deesser.py              ML-gestützter De-Esser
-phase_44_guitar_enhancement.py      Gitarren-Enhancement (PANNs conf ≥ 0.6)
-phase_45_brass_enhancement.py       Blechbläser-Enhancement (PANNs conf ≥ 0.6)
+phase_44_guitar_enhancement.py      Gitarren-Enhancement (PANNs conf ≥ 0.50)
+phase_45_brass_enhancement.py       Blechbläser-Enhancement (PANNs conf ≥ 0.50)
 phase_46_spatial_enhancement.py     Spatial-Enhancement (Raumklang)
 phase_47_truepeak_limiter.py        True-Peak-Limiter (EBU R128, −1.0 dBTP)
 phase_48_stereo_width_enhancer.py   Stereo-Breiten-Enhancer (MS, Blumlein, Schroeder)
@@ -65,6 +65,10 @@ phase_54_transparent_dynamics.py    Transparente Dynamik-Verarbeitung
 phase_55_diffusion_inpainting.py    DiffWave / CQTdiff+ / FlowMatching Inpainting
 phase_56_spectral_band_gap_repair.py HEAD_WEAR: Frequenzband-Lücken-Reparatur
                                     (SpectralBandGapRepair — nur bei conf ≥ 0.55)
+phase_57_lyrics_guided_enhancement.py Lyrics-gestütztes Enhancement
+                                    (Whisper-Tiny ONNX → wav2vec2-Phonem-Alignment →
+                                     ContentAwareProcessor; Latenz ≤ 8 s/min;
+                                     aktiviert wenn Vocals erkannt; §2.36 PFLICHT)
 ```
 
 ---
@@ -151,12 +155,14 @@ CAUSE_TO_PHASES = {
 ## §7.3 Instrument-Kontexterkennung (PANNs-Aktivierungsmatrix)
 
 | PANNs-Kategorie | Aktivierte Phase | Confidence-Schwelle |
-|---|---|---|
-| Guitar / Electric Guitar | `phase_44_guitar_enhancement` | ≥ 0.6 |
-| Brass / Trumpet / Saxophone | `phase_45_brass_enhancement` | ≥ 0.6 |
-| Drum / Percussion | `phase_51_drums_enhancement` | ≥ 0.5 |
-| Piano / Keyboard | `phase_52_piano_restoration` | ≥ 0.6 |
+| --- | --- | --- |
+| Guitar / Electric Guitar | `phase_44_guitar_enhancement` | ≥ 0.50 |
+| Brass / Trumpet / Saxophone | `phase_45_brass_enhancement` | ≥ 0.50 |
+| Drum / Percussion | `phase_51_drums_enhancement` | ≥ 0.50 |
+| Piano / Keyboard | `phase_52_piano_restoration` | ≥ 0.50 |
 | Singing / Vocals / Speech | `phase_19_de_esser` + `phase_42_vocal_enhancement` + `phase_43_ml_deesser` + VocalAIEnhancement | ≥ 0.40 (Speech: ≥ 0.35) |
+
+> **Invariante** (v9.10.83): Instrument-Schwelle ist einheitlich **0.50** für alle Instrumente. Höherer Wert (z.B. 0.60) blockiert Enhancement bei Ensemble-Aufnahmen mit mehreren gleichzeitigen Instrumenten. Änderungen hier → immer auch `backend/core/unified_restorer_v3.py` L≈5822 + `plugins/panns_plugin.py` Docstring anpassen.
 
 **Regel**: Instrument-Phasen IMMER nach Defektkorrektur, VOR Mastering.
 
@@ -188,7 +194,7 @@ Jede neue Phase **muss**:
 
 ## §7.5 Parallelisierungs-Invariante (Pipeline-Tiers)
 
-```
+```text
 TIER 0 + TIER 1: IMMER sequenziell (TransientDecoupledProcessing, Click-Removal)
 TIER 2–4: Dürfen parallelisieren; Merge via np.mean NUR wenn gleiche Frequenzzone
 TIER 6:   IMMER sequenziell (EQ → Polish → LUFS → TruePeak → Format)
@@ -199,7 +205,7 @@ TIER 6:   IMMER sequenziell (EQ → Polish → LUFS → TruePeak → Format)
 ## §7.6 Adaptive Chunk-Verarbeitung (ab 5 Minuten Dateilänge)
 
 | Defektdichte (lokal) | Chunk-Größe | Begründung |
-|---|---|---|
+| --- | --- | --- |
 | Hoch (severity ≥ 0.6) | **5 s** | Feingranulare Kontrolle |
 | Mittel (0.3 ≤ severity < 0.6) | **15 s** | Balance Qualität/Rechenzeit |
 | Niedrig (severity < 0.3) | **60 s** | Kontextkohärenz |
@@ -224,3 +230,45 @@ result = process_in_adaptive_chunks(
 ```
 
 **Defect-Locations-Flow** (v9.10.75): `_execute_pipeline` extrahiert `defect_locations` (dict[str, list[tuple[float,float]]]) und `max_defect_severity` (float) aus DefectScanner-Ergebnissen und übergibt sie als kwargs an jede Phase. Phasen können Locations als Hints für gezieltere Verarbeitung nutzen (opt-in), erkennen Defekte weiterhin auch eigenständig intern (Redundanz-Prinzip).
+
+---
+
+## §7.7 [RELEASE_MUST] PMGG Inference-Caching bei Retries (§2.29a — ML-deterministische Phasen)
+
+**Kernprinzip**: ML-Modelle sind deterministisch (gleicher Input → gleicher Output). Bei PMGG-Retries wird ML-Inferenz **NICHT** wiederholt. Erster Aufruf mit `strength=1.0` (volle Inferenz) → Cache `audio_full`. Retries variieren ausschließlich Wet/Dry-Blending: `audio_retry = dry + strength × (audio_full − dry)`.
+
+### ML-deterministische Phasen (gecachte Inferenz, nur Wet/Dry-Reblend bei Retry)
+
+| Phase | ML-Modell | Begründung |
+| --- | --- | --- |
+| `phase_03_denoise` | OMLSA + ResembleEnhance | ML-Hybrid: Inferenz-Output identisch bei gleichem Input |
+| `phase_06_frequency_restoration` | AudioSR | Neurale Bandwidth-Extension deterministisch |
+| `phase_09_crackle_removal` | BANQUET ONNX | Blind-Denoising deterministisch |
+| `phase_12_wow_flutter_fix` | FCPE/CREPE/pYIN | f₀-Schätzung deterministisch (Timing-Phase: kein Wet/Dry) |
+| `phase_18_noise_gate` | Silero VAD | Binary-Mask deterministisch |
+| `phase_20_reverb_reduction` | SGMSE+ (Primärpfad) | Reverb-Speech-Separation deterministisch (WPE-DSP-Fallback: muss re-run) |
+| `phase_23_spectral_repair` | AudioSR Inpainting | Spektral-Lückenfüllung deterministisch |
+| `phase_24_dropout_repair` | AudioSR | Audio-Generierung deterministisch |
+| `phase_29_tape_hiss_reduction` | DeepFilterNet v3 II | HF-Denoising deterministisch (OMLSA-DSP <2 kHz: muss re-run) |
+| `phase_42_vocal_enhancement` | BSRoFormer | Stem-Separation deterministisch |
+| `phase_55_diffusion_inpainting` | CQTdiff/FlowMatching | Diffusions-Inpainting deterministisch |
+| `phase_56_spectral_band_gap` | FCPE/CREPE + Synthese | Noten-Synthese deterministisch |
+
+### Strength-abhängige DSP-Phasen (MÜSSEN bei jedem Retry neu ausgeführt werden)
+
+Alle übrigen Phasen, bei denen `strength` Algorithmus-Parameter steuert (z. B. Filterfrequenz, Kompressionsratio, Sättigungsgrad). Beispiele: `phase_01`, `phase_02`, `phase_04`, `phase_10`, `phase_14`, `phase_17`, `phase_19`, `phase_22`, `phase_25`–`phase_28`, `phase_31`–`phase_41`, `phase_43`–`phase_54`.
+
+**Implementierung**: `PerPhaseMusicalGoalsGate._run_with_retry()` führt `_run_phase(phase, audio, 1.0, kwargs)` genau einmal aus. Retries nutzen `_wet_dry_blend(audio, audio_full, strength, phase)`.
+
+```python
+# Wet/Dry-Blend bei Retry (PMGG §2.29a Referenzimplementierung):
+def _wet_dry_blend(dry: np.ndarray, wet: np.ndarray, strength: float) -> np.ndarray:
+    return np.clip(dry + strength * (wet - dry), -1.0, 1.0)
+
+# Erster Aufruf (strength=1.0, gecacht):
+audio_full = _run_phase(phase, audio, strength=1.0, kwargs)  # einmal
+# Retries (nur Blend, kein erneuter ML-Run):
+audio_retry = _wet_dry_blend(audio, audio_full, retry_strength)
+```
+
+> **Invariante**: `phase_57_lyrics_guided_enhancement` ist NICHT ML-deterministisch im PMGG-Sinne — sie operiert als Post-Processing-Modul nach der PMGG-Kette und unterliegt eigenen Retry-Regeln (§2.36).

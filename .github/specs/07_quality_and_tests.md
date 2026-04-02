@@ -82,6 +82,27 @@ report = run_benchmark(config)
 assert report.passes_os_leadership_threshold(), f"Score: {report.overall_score}"
 ```
 
+### [RELEASE_MUST] AMRB Seeding-Invariante (v9.10.80 — deterministisch, MD5)
+
+`item_seed` für AMRB-Items MUSS via `_sid_offset(sid)` berechnet werden — **niemals** `hash(sid)`.
+Python's eingebautes `hash()` ist pro-Prozess randomisiert (PYTHONHASHSEED) → nicht reproduzierbar.
+
+```python
+import hashlib
+
+def _sid_offset(sid: str) -> int:
+    """Deterministisches Item-Seeding für AMRB via MD5.
+    RELEASE_MUST: Kein hash(sid) — Python hash() ist PYTHONHASHSEED-abhängig.
+    """
+    return int(hashlib.md5(sid.encode()).hexdigest(), 16) % (2**31)
+
+# Verwendung in MusicalRestorationBenchmark.run():
+item_seed = _sid_offset(scenario_id)  # RICHTIG
+# item_seed = hash(scenario_id)       # VERBOTEN — nicht reproduzierbar
+```
+
+**Nightly-Konfiguration**: `n_items ≥ 5`; Baseline-Key: `"iZotope RX 11 (commercial)"` (OQS 71.0).
+
 ---
 
 ## §8.2 Universelle Garantien
@@ -116,9 +137,42 @@ assert report.passes_os_leadership_threshold(), f"Score: {report.overall_score}"
 9. **Mikro-Dynamik**: Pearson LUFS-Profil (400 ms) ≥ 0.92, Crest-Faktor-Abw. ≤ 1.5 dB
 10. **Vintage Aesthetics**: Epochen-typische Klang-Charakteristika werden bewahrt (AuthentizitätMetric ≥ vor Restaurierung)
 
+### §8.3.1 Song-Selbstkalibrierung (phasenübergreifend, psychoakustisch priorisiert)
+
+- Für jeden Song MUSS ein Kalibrierungsprofil (`song_calibration_profile`) erzeugt und im Ergebnis abgelegt werden.
+- Profile müssen bounded sein (keine ungebremste Verstärkung), um Song-Overfitting zu verhindern.
+- Phasenfamilien-Skalierung MUSS P1/P2-Hörtreue priorisieren; P3–P5 dürfen nie zu Lasten von Natürlichkeit/Authentizität erzwungen werden.
+- Variationen in Tonträgerketten/Material/Defektbildern müssen zu unterschiedlichen, aber deterministischen Profilen führen.
+- Pflichtartefakt für Tests/Analysen: `RestorationResult.metadata["song_calibration"]`.
+
 ---
 
 ## §9 Performance-Budget (Desktop-Hardware, kein GPU)
+
+> **Kanonische Quelle für RT-Limits:** copilot-instructions.md §2.37 (LIMIT_BALANCED = 32.0× RT).
+> Die nachstehenden Werte gelten **pro Minute Audio** und sind mit PerformanceGuard-Toleranzen kalibriert.
+> VERBOTEN: niedrigere Limits aus Vorgängerversionen (DefectScanner ≤ 2 s, Pipeline ≤ 120 s) verwenden —
+> diese wurden mit v9.10.80 (Quality-First-Hauptlauf) auf die untenstehenden Werte angehoben.
+
+| Operation | Limit / Minute Audio |
+| --- | --- |
+| DefectScanner | ≤ **4 s** |
+| Phase-Pipeline gesamt | ≤ **240 s** |
+| FeedbackChain (alle Iterationen) | ≤ **120 s** |
+| ExcellenceOptimizer | ≤ **60 s** |
+| RestorabilityEstimator | ≤ **5 s** |
+| Export (FLAC 24-bit) | ≤ 10 s |
+
+**Absolutes Zeitlimit Stufe 1:** `MAX_ABSOLUTE_SECONDS = 5400.0` (90 Minuten).
+Nach Überschreitung: KMV Stufe 2 (`MLRefinementThread`) übernimmt automatisch.
+
+**FeedbackChain-Abbruch:**
+
+```python
+MAX_ITERATIONS = 5
+CONVERGENCE_DELTA = 0.02
+# Regression: |MOS_neu - MOS_alt| > 0.05 → sofortiger Rollback auf best_result
+```
 
 ### §9.1a [RELEASE_MUST] Stationäre vs. nicht-stationäre Defekt-Analyse (v9.10.73)
 

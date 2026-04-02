@@ -130,7 +130,14 @@ class MicroDynamicsEnvelopeMorphing:
                 G[k] = 0.0
                 continue
             if lo < self.MIN_LEVEL_LUFS:
-                G[k] = 0.0  # Stille: kein Gain-Boost
+                G[k] = 0.0  # Original silent: no adjustment
+                continue
+            if lr < self.MIN_LEVEL_LUFS:
+                # Restored is near-silent (denoising removed noise floor).
+                # Never apply positive boost here — that would re-amplify the
+                # cleaned noise floor, inflate integrated LUFS and force
+                # phase_40 to attenuate the musical content (regression).
+                G[k] = float(np.clip(lo - lr, -max_gain, 0.0))
                 continue
             G[k] = np.clip(lo - lr, -max_gain, max_gain)
 
@@ -211,6 +218,9 @@ class MicroDynamicsEnvelopeMorphing:
             lo, lr = L_orig[k], L_rest[k]
             if not (math.isfinite(lo) and math.isfinite(lr)) or lo < self.MIN_LEVEL_LUFS:
                 G[k] = 0.0
+            elif lr < self.MIN_LEVEL_LUFS:
+                # Restored near-silent: suppress positive boost (see morph() §2.30 guard)
+                G[k] = float(np.clip(lo - lr, -max_gain, 0.0))
             else:
                 G[k] = float(np.clip(lo - lr, -max_gain, max_gain))
         G_smooth = _savgol_smooth(G)

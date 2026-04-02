@@ -305,9 +305,23 @@ class ExzellenzDenker:
         if audio.size == 0:
             return {}
 
+        import concurrent.futures as _cf_mz
+
         try:
             checker = self._get_checker()
-            raw = checker.measure_all(audio, sr)
+            # Bug-Fix §10c: thread-based timeout — prevents O(N²) or deadlock
+            # in any metric from blocking the pipeline forever.  120 s covers
+            # all 14 metrics even on long tracks; normal run < 30 s.
+            with _cf_mz.ThreadPoolExecutor(max_workers=1) as _exec_mz:
+                _fut_mz = _exec_mz.submit(checker.measure_all, audio, sr)
+                try:
+                    raw = _fut_mz.result(timeout=120.0)
+                except _cf_mz.TimeoutError:
+                    logger.warning(
+                        "ExzellenzDenker: messe_ziele() Timeout (120 s) — "
+                        "leeres Dict zurückgegeben (Goal-Messung abgebrochen)"
+                    )
+                    return {}
             # Nur finite Werte behalten
             return {k: float(v) for k, v in raw.items() if np.isfinite(v)}
         except Exception as exc:

@@ -410,7 +410,11 @@ class TapeHissReductionPhase(PhaseInterface):
                 from backend.core.psychoacoustic_masking_model import compute_masking_threshold
 
                 _pmm = compute_masking_threshold(channel.astype(np.float32), sample_rate)
-            _pmm_gain_t = np.mean(_pmm.gain_modifier, axis=1).astype(np.float32)
+            # Use max over Bark bands: if ANY band has active signal, the frame must not be suppressed.
+            # mean() was incorrect — a 1 kHz sine only has energy in ~1 of 24 bands → mean ≈ 0.33,
+            # causing 3× RMS reduction on clean tonal signals. max() gives 1.0 for active frames,
+            # and correctly reduces only true silence frames (all bands near g_floor).
+            _pmm_gain_t = np.max(_pmm.gain_modifier, axis=1).astype(np.float32)
             _hop = 512  # entspricht nperseg=2048, noverlap=1536
             _pmm_centers = np.arange(len(_pmm_gain_t)) * float(_hop) + _hop * 0.5
             _pmm_x = np.arange(len(processed), dtype=np.float32)
