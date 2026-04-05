@@ -36,6 +36,7 @@ repos:
         args: [--allow-multiple-documents]
       - id: check-toml
       - id: check-json
+        exclude: ^\.vscode/
       - id: check-ast              # Python-Syntax vorab prüfen
       - id: check-merge-conflict
       - id: check-case-conflict
@@ -193,10 +194,7 @@ repos:
     rev: v1.37.0
     hooks:
       - id: yamllint
-        args:
-          - >-
-            --config-data={extends: default, rules: {line-length: {max: 120},
-            comments: {min-spaces-from-content: 1}, document-start: disable}}
+        args: [-c, .yamllint.yaml]
 
   # ---------------------------------------------------------------------------
   # 12. Prettier — JSON-Formatierung

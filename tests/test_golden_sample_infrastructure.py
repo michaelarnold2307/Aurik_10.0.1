@@ -462,6 +462,8 @@ class TestGoldenSampleBaselineValidator:
         assert len(report["anomalies"]) > 0
 
 
+@pytest.mark.ml
+@pytest.mark.slow
 def test_full_workflow_integration(temp_golden_samples_dir):
     """Integration test: full workflow from generation to regression testing."""
     # Step 1: Generate samples

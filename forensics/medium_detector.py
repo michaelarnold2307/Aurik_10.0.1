@@ -205,7 +205,7 @@ class MediumDetector:
     HF_ENERGY_THRESHOLD_FRACTION: float = 0.001  # < 0.1 % → kein HF
     _CODEC_ARTIFACT_THRESHOLD: float = 0.15  # ab hier: Codec-Layer erkannt
     _ANALOG_POSTERIOR_MIN: float = 0.08  # Mindest-Posterior für Analog-Layer
-    _SECONDARY_ANALOG_MIN: float = 0.12  # Mindest-Posterior für 2. Analog-Stufe
+    _SECONDARY_ANALOG_MIN: float = 0.08  # Mindest-Posterior für 2. Analog-Stufe
 
     # Analog-Materialtypen — können als Primärquelle in Ketten vorkommen
     _ANALOG_MATERIALS: frozenset[str] = frozenset(
@@ -516,14 +516,21 @@ class MediumDetector:
         # ── Cassette ─────────────────────────────────────────────────
         # Capstan/pinch-roller transport flutter: wow_flutter_index 0.30–2.5
         # Calibration from Bayesian model: cassette μ=1.5, σ=1.0.
-        # Vinyl itself has wow_depth μ=0.15, σ=0.15 → max vinyl flutter ≈ 0.30.
-        # Threshold > 0.30 prevents vinyl-own flutter from false-triggering cassette.
+        # Vinyl-only wow_depth μ=0.15, σ=0.15 → 99th-percentile vinyl flutter ≈ 0.30.
+        # When a disc source is already in the chain the combined vinyl+cassette flutter
+        # starts at ~0.18 even for high-quality decks (Nakamichi flutter spec 0.04 % WRMS,
+        # vinyl pitch-drift adds 0.10–0.15). Use a lower threshold in that case.
         has_disc = any(m in ("vinyl", "shellac", "lacquer_disc") for m, _ in sources)
+        _cass_flutter_thresh = 0.18 if has_disc else 0.30
         cassette_conf = 0.0
-        if fp.wow_flutter_index > 0.30:
-            cassette_conf = float(min((fp.wow_flutter_index - 0.30) / 1.20, 1.0))
-        # With disc already in chain: lower minimum (vinyl adds flutter; combined
-        # vinyl+cassette shows wow_flutter > 0.40 even for high-quality cassettes).
+        if fp.wow_flutter_index > _cass_flutter_thresh:
+            cassette_conf = float(min((fp.wow_flutter_index - _cass_flutter_thresh) / 1.20, 1.0))
+        # Bandwidth evidence: cassette tape limits HF to ~14.5–15.5 kHz due to azimuth
+        # misalignment and tape-formula roll-off.  Only use when codec artifacts are low
+        # (MP3 also limits HF; we must not conflate codec roll-off with cassette roll-off).
+        if has_disc and 5_000 < fp.effective_bandwidth_hz < 15_500 and fp.codec_artifact_score < 0.30:
+            _bw_conf = float(np.clip((15_500 - fp.effective_bandwidth_hz) / 6_000, 0.15, 0.55))
+            cassette_conf = max(cassette_conf, _bw_conf)
         _cassette_min = 0.15 if has_disc else 0.25
         if cassette_conf >= _cassette_min:
             sources.append(("cassette", float(np.clip(cassette_conf, _cassette_min, 0.85))))
@@ -1256,6 +1263,11 @@ class MediumDetector:
                 chain_confidences = [top_score]
                 evidence.append(f"Bayesian-Fallback: {top_mat} (posterior={top_score:.3f})")
 
+        # §6.1 [RELEASE_MUST] Material-Key-Normalisierung (v9.10.101):
+        # MediumDetector interne Bayesian-Schlüssel → SUPPORTED_MATERIALS-konforme Schlüssel.
+        # Betrifft alle Elemente der transfer_chain, nicht nur primary.
+        chain = [self._normalize_material_key(k) for k in chain]
+
         primary = chain[0]
         is_multi = len(chain) > 1
         # Weakest-link principle: a transfer chain is only as confident as its
@@ -1306,7 +1318,37 @@ class MediumDetector:
             classification_result=classification_result,
         )
 
-    # ── Hilfsmethode ─────────────────────────────────────────────────────
+    # ── Hilfsmethoden ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _normalize_material_key(key: str) -> str:
+        """Map internal Bayesian-Scorer keys to canonical SUPPORTED_MATERIALS keys (§6.1).
+
+        The Bayesian scorer uses some internal identifiers that differ from the
+        SUPPORTED_MATERIALS list consumed by UnifiedRestorerV3 / DefectScanner.
+        This method ensures all keys leaving detect() are spec-compliant.
+
+        Mapping (spec §6.1 kanonisch):
+            cassette         → tape           (Compact Cassette Typ I/II/IV)
+            reel_wire        → wire_recording (Drahtband 1940–1955)
+            cassette_digital → dat            (Digitalkassette; DAT-Pfad)
+            vhs_audio        → tape           (VHS-Tonspur)
+            composite        → composite (unchanged — caller must use transfer_chain[0])
+        """
+        _KEY_MAP: dict[str, str] = {
+            "cassette": "tape",
+            "reel_wire": "wire_recording",
+            "cassette_digital": "dat",
+            "vhs_audio": "tape",
+        }
+        normalized = _KEY_MAP.get(key, key)
+        if normalized != key:
+            logger.debug(
+                "MediumDetector._normalize_material_key: '%s' → '%s'",
+                key,
+                normalized,
+            )
+        return normalized
 
     @staticmethod
     def _to_mono(audio: np.ndarray) -> np.ndarray:

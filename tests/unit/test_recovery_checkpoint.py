@@ -298,6 +298,44 @@ class TestLoadCheckpointAudio:
         assert loaded_audio.shape == audio.shape
         np.testing.assert_allclose(loaded_audio, audio, atol=1e-5)
 
+    def test_original_audio_is_preferred_over_checkpoint_audio(self, sessions_tmp, sample_mono_audio, tmp_path):
+        from backend.core.recovery_checkpoint import (
+            RecoveryCheckpoint,
+            load_checkpoint_audio,
+            save_checkpoint,
+        )
+
+        import soundfile as sf
+
+        checkpoint_audio, sr = sample_mono_audio
+        t = np.linspace(0, 1.0, sr, endpoint=False, dtype=np.float32)
+        original_audio = (0.5 * np.sin(2 * np.pi * 880 * t)).astype(np.float32)
+
+        original_path = tmp_path / "original_source.wav"
+        sf.write(str(original_path), original_audio, sr, subtype="FLOAT", format="WAV")
+
+        result = save_checkpoint(
+            input_path=str(original_path),
+            output_path="/tmp/preferred_out.wav",
+            current_audio=checkpoint_audio,
+            sample_rate=sr,
+            phases_executed=["phase_01_click_removal"],
+            phases_remaining=["phase_02_hum_removal"],
+            failure_phase="phase_02_hum_removal",
+            mode="quality",
+            defect_result=_FakeDefectResult(),
+        )
+        assert result is not None
+
+        with open(result) as f:
+            data = json.load(f)
+        cp = RecoveryCheckpoint(**{k: v for k, v in data.items() if k in RecoveryCheckpoint.__dataclass_fields__})
+
+        loaded_audio = load_checkpoint_audio(cp)
+        assert loaded_audio is not None
+        assert loaded_audio.shape == original_audio.shape
+        np.testing.assert_allclose(loaded_audio, original_audio, atol=1e-5)
+
 
 class TestDeleteCheckpoint:
     """Tests for delete_checkpoint()."""

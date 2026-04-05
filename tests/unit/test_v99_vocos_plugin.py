@@ -16,6 +16,7 @@ import threading
 import unittest
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -35,6 +36,8 @@ from plugins.vocos_plugin import (
     VocosResult,
     get_vocos_plugin,
 )
+
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen

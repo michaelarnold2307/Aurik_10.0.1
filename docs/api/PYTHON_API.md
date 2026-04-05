@@ -1,6 +1,6 @@
 # Aurik 9.x.x — Python API Reference
 
-**Version:** 9.10.77c  
+**Version:** 9.10.102  
 **Datum:** 13. Februar 2026  
 **Status:** ✅ Production Ready
 
@@ -40,6 +40,7 @@ restored = restorer.restore(audio, sr)
 
 # Speichern
 sf.write('output.wav', restored, sr)
+
 ```
 
 ### Mit Processing Mode
@@ -61,6 +62,7 @@ restorer = UnifiedRestorerV2()
 
 restored = restorer.restore(audio, sr, mode=ProcessingMode.STUDIO_2026)
 sf.write('output_studio.wav', restored, 48000)
+
 ```
 
 ---
@@ -75,17 +77,22 @@ sf.write('output_studio.wav', restored, 48000)
 
 ```python
 UnifiedRestorerV2()
+
 ```
 
 **Parameter:**
+
 - Keine erforderlich (vollständig adaptiv)
 
 **Rückgabewert:**
+
 - `UnifiedRestorerV2` Instanz
 
 **Beispiel:**
+
 ```python
 restorer = UnifiedRestorerV2()
+
 ```
 
 ---
@@ -105,29 +112,33 @@ restore(
     enable_logging: bool = False,
     **kwargs
 ) -> np.ndarray
+
 ```
 
 **Parameter:**
 
-| Parameter        | Typ                    | Default                                             | Beschreibung                   |
-|------------------|------------------------|-----------------------------------------------------|--------------------------------|
-| `audio`          | `np.ndarray`           | **Required**                                        | Input Audio (mono oder stereo) |
-| `sr`             | `int`                  | **Required**                                        | Sample Rate (Hz)               |
-| `mode`           | `str`/`ProcessingMode` | `RESTORATION`  | Processing Mode (siehe [Processing Modes](#processing-modes))        |
-| `config`         | `ProcessingConfig`     | `None`                                              | Custom Configuration (überschreibt Mode-Defaults) |
-| `input_file`     | `str`                  | `None`         | Input-Dateiname (für Logging/Metadaten)                             |
-| `output_file`    | `str`                  | `None`         | Output-Dateiname (für Logging)                                      |
-| `enable_logging` | `bool`                 | `False`        | ProcessingLogger aktivieren (detaillierte Metriken)                 |
+| Parameter | Typ | Default | Beschreibung |
+| --- | --- | --- | --- |
+| `audio` | `np.ndarray` | **Required** | Input Audio (mono oder stereo) |
+| `sr` | `int` | **Required** | Sample Rate (Hz) |
+| `mode` | `str`/`ProcessingMode` | `RESTORATION` | Processing Mode (siehe [Processing Modes](#processing-modes)) |
+| `config` | `ProcessingConfig` | `None` | Custom Configuration (überschreibt Mode-Defaults) |
+| `input_file` | `str` | `None` | Input-Dateiname (für Logging/Metadaten) |
+| `output_file` | `str` | `None` | Output-Dateiname (für Logging) |
+| `enable_logging` | `bool` | `False` | ProcessingLogger aktivieren (detaillierte Metriken) |
 
 **Rückgabewert:**
+
 - `np.ndarray`: Restauriertes/Enhanced Audio (48 kHz, float32)
 
 **Audio Format:**
+
 - **Input:** Mono (`(samples,)`) oder Stereo (`(samples, 2)`)
 - **Output:** Immer 48 kHz (Professional Audio Standard)
 - **Dtype:** `float32`, Range: `[-1.0, 1.0]`
 
 **Beispiel:**
+
 ```python
 # Einfach
 restored = restorer.restore(audio, sr)
@@ -152,6 +163,7 @@ config = ProcessingConfig(
     aggressive=0.3,        # Konservative Restauration
 )
 restored = restorer.restore(audio, sr, config=config)
+
 ```
 
 ---
@@ -169,6 +181,7 @@ class ProcessingMode(Enum):
     FORENSIC = "forensic"
     VINTAGE_WARMTH = "vintage_warmth"
     ARCHIVAL = "archival"
+
 ```
 
 **Modi:**
@@ -178,14 +191,15 @@ class ProcessingMode(Enum):
 | `RESTORATION`    | Authentisch bewahren | 0.5        | 0.3     | 3.0         | Vinyl, Tape, historische Aufnahmen |
 | `STUDIO_2026`    | Modern & 3D          | 0.8        | 0.5     | 3.5         | Remastering, Commercial Release    |
 
-
 **Beispiel:**
+
 ```python
 # String-basiert
 restored = restorer.restore(audio, sr, mode='restoration')
 
 # Enum-basiert (empfohlen)
 restored = restorer.restore(audio, sr, mode=ProcessingMode.STUDIO_2026)
+
 ```
 
 ---
@@ -208,6 +222,7 @@ config = ProcessingConfig(
     enable_phase_10_soundstage: bool = None,
     enable_phase_11_binaural: bool = None,
 )
+
 ```
 
 **Parameter:**
@@ -225,6 +240,7 @@ config = ProcessingConfig(
 | `enable_phase_11_binaural`        | `bool`           | Mode-specific |      -      | Binaural & Emotional                |
 
 **Beispiel:**
+
 ```python
 # Conservative Restoration (für fragile Aufnahmen)
 config = ProcessingConfig(
@@ -245,6 +261,7 @@ config = ProcessingConfig(
     enable_phase_11_binaural=True,    # Binaural aktiviert
 )
 restored = restorer.restore(audio, sr, config=config)
+
 ```
 
 ---
@@ -256,24 +273,30 @@ restored = restorer.restore(audio, sr, config=config)
 **Zweck:** Authentische Restauration mit Charakter-Preservation
 
 **Charakteristika:**
+
 - ✅ Erhält Analog-Charakter (Vinyl-Wärme, Tape-Saturation)
 - ✅ Konservative Noise Reduction (keine "Digital Sound" Artifacts)
 - ✅ Schützt musikalische Nuancen (Breaths, Room Tone)
 - ✅ Balance zwischen Clean und Natural
 
 **Parameter:**
+
 ```python
 aggressive = 0.5
 denoise_strength = 0.3
 compression_ratio = 3.0
+
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(audio, sr, mode=ProcessingMode.RESTORATION)
+
 ```
 
 **Ideal für:**
+
 - Vinyl-Transfers
 - Tape-Digitalisierung
 - Historische Aufnahmen (1920s-1990s)
@@ -286,26 +309,32 @@ restored = restorer.restore(audio, sr, mode=ProcessingMode.RESTORATION)
 **Zweck:** Modern Mastering mit 3D Immersion & Air
 
 **Charakteristika:**
+
 - ✅ Phase 8: Air & Presence Enhancement (12-20 kHz sparkle)
 - ✅ Phase 10: Soundstage Depth (3-Layer Spatial Processing)
 - ✅ Phase 11: Binaural Processing (HRTF für Kopfhörer)
 - ✅ Emotional Resonance Enhancement (Warmth, Richness, Air)
 
 **Parameter:**
+
 ```python
 aggressive = 0.8
 denoise_strength = 0.5
 compression_ratio = 3.5
 enable_phase_10_soundstage = True
 enable_phase_11_binaural = True
+
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(audio, sr, mode=ProcessingMode.STUDIO_2026)
+
 ```
 
 **Ideal für:**
+
 - Remastering für Streaming (Spotify, Apple Music)
 - Commercial Releases
 - Pop, Rock, Electronic
@@ -318,28 +347,34 @@ restored = restorer.restore(audio, sr, mode=ProcessingMode.STUDIO_2026)
 **Zweck:** Minimale Veränderung für forensische Analyse
 
 **Charakteristika:**
+
 - ✅ Nur kritische Defekte entfernen (Clicks, Clipping)
 - ✅ Keine künstliche Enhancement
 - ✅ Beweis-taugliche Verarbeitung (Chain of Custody)
 - ✅ Transparency-Log (Processing-Steps dokumentiert)
 
 **Parameter:**
+
 ```python
 aggressive = 0.2
 denoise_strength = 0.1
 compression_ratio = 1.5
+
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(
     audio, sr,
     mode=ProcessingMode.FORENSIC,
     enable_logging=True  # Wichtig für Beweisführung
 )
+
 ```
 
 **Ideal für:**
+
 - Gerichtsverfahren (Stimmanalyse)
 - Police/FBI Aufnahmen
 - Wiretap Recordings
@@ -352,24 +387,30 @@ restored = restorer.restore(
 **Zweck:** Preserve & Enhance Analog-Charakter
 
 **Charakteristika:**
+
 - ✅ Sanftes Denoising (Rauschen als "Ambience")
 - ✅ Harmonic Exciter (Tube-Style Saturation)
 - ✅ Vinyl-Crackle-Preservation (wenn musikalisch)
 - ✅ Tape-Saturation-Emulation
 
 **Parameter:**
+
 ```python
 aggressive = 0.6
 denoise_strength = 0.25
 compression_ratio = 2.5
+
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(audio, sr, mode=ProcessingMode.VINTAGE_WARMTH)
+
 ```
 
 **Ideal für:**
+
 - Lo-Fi Hip-Hop
 - Indie/Alternative Music
 - Vintage Sound Preservation
@@ -382,24 +423,30 @@ restored = restorer.restore(audio, sr, mode=ProcessingMode.VINTAGE_WARMTH)
 **Zweck:** Langzeitarchivierung mit minimaler Veränderung
 
 **Charakteristika:**
+
 - ✅ Nur strukturell schädliche Defekte entfernen
 - ✅ Original-Dynamik bewahren
 - ✅ Keine künstliche Enhancement
 - ✅ High Bit-Depth Output (24-bit, 48 kHz)
 
 **Parameter:**
+
 ```python
 aggressive = 0.3
 denoise_strength = 0.2
 compression_ratio = 2.0
+
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(audio, sr, mode=ProcessingMode.ARCHIVAL)
+
 ```
 
 **Ideal für:**
+
 - Museen & Bibliotheken
 - Radio-Archives (BBC, ORF, ARD)
 - Historical Preservation
@@ -444,9 +491,11 @@ if hasattr(restorer, 'logger') and restorer.logger:
 
 # Ausgabe speichern
 sf.write('output.wav', restored, 48000)
+
 ```
 
 **Log-Format:**
+
 ```json
 {
   "session_id": "20260213_143022_abc123",
@@ -466,6 +515,7 @@ sf.write('output.wav', restored, 48000)
   "overall_thd_reduction": 58.3,
   "total_processing_time_sec": 8.5
 }
+
 ```
 
 ---
@@ -503,6 +553,7 @@ for file in tqdm(files, desc="Restoring Album"):
     sf.write(output_path, restored, 48000)
 
 print(f"✅ {len(files)} Tracks restored!")
+
 ```
 
 ---
@@ -544,6 +595,7 @@ print(f"12. Emotional Depth: {goals['emotional_depth']:.2f} / 1.00")
 # Check if all goals met
 all_goals_met = all(v >= 0.70 for v in goals.values())
 print(f"\n{'✅' if all_goals_met else '⚠️'} All Goals Met: {all_goals_met}")
+
 ```
 
 ---
@@ -563,9 +615,11 @@ except ValueError as e:
     print(f"Audio shape: {audio.shape}")
     print(f"Audio dtype: {audio.dtype}")
     print(f"Audio range: [{audio.min():.2f}, {audio.max():.2f}]")
+
 ```
 
 **Häufige Ursachen:**
+
 - Audio ist `None` oder leer
 - Sample Rate ist 0 oder negativ
 - Audio ist integer statt float (use `audio.astype(np.float32) / 32768.0`)
@@ -582,6 +636,7 @@ restored = restorer.restore(audio, 44100)  # ❌ FALSCH
 
 # Lösung: Verwende tatsächliche Sample Rate
 restored = restorer.restore(audio, sr_actual)  # ✅ KORREKT
+
 ```
 
 ---
@@ -618,6 +673,7 @@ def restore_large_file(input_file, output_file, chunk_size_sec=30):
                 f_out.write(restored)
 
     print(f"✅ Large file restored: {output_file}")
+
 ```
 
 ---
@@ -639,6 +695,7 @@ restored = restorer.restore(audio, sr)  # Langsam: 5-10s (einmalig)
 
 # Weitere restore() sind schnell
 restored2 = restorer.restore(audio2, sr)  # Schnell: 2-3s
+
 ```
 
 ---
@@ -662,9 +719,11 @@ else:
 # Aurik nutzt GPU automatisch wenn verfügbar
 restorer = UnifiedRestorerV2()
 restored = restorer.restore(audio, sr)  # Automatisch GPU wenn CUDA verfügbar
+
 ```
 
 **Performance-Vergleich:**
+
 - **CPU (i7-10700K):** 3-5x Echtzeit (3min Audio → 10min Processing)
 - **GPU (RTX 3090):** 0.5-1x Echtzeit (3min Audio → 2min Processing)
 
@@ -700,6 +759,7 @@ with ThreadPoolExecutor(max_workers=4) as executor:
     for future in futures:
         filename = future.result()
         print(f"✅ {filename}")
+
 ```
 
 **Speedup:** ~2-3x bei 4 Threads (I/O-bound Tasks profitieren)
@@ -729,6 +789,7 @@ print("✅ Vinyl transfer complete!")
 print("   - Click/Crackle removed")
 print("   - Rumble filtered")
 print("   - Vinyl warmth preserved")
+
 ```
 
 ---
@@ -758,6 +819,7 @@ restored = restorer.restore(audio, sr, config=config)
 sf.write('podcast_enhanced.wav', restored, 48000)
 
 print("✅ Podcast enhanced for Spotify/Apple Podcasts!")
+
 ```
 
 ---
@@ -788,6 +850,7 @@ if hasattr(restorer, 'logger'):
     restorer.logger.save_trace('archive_processing_report.json')
 
 print("✅ Archival master created!")
+
 ```
 
 ---

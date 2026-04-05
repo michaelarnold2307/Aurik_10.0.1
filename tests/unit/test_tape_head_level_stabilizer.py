@@ -179,6 +179,33 @@ class TestDefectScannerDetection:
             assert start_s >= 0.0
             assert end_s <= duration + 0.1  # small tolerance for framing
 
+    def test_16_dense_dips_over_1000_events_are_not_capped(self):
+        """Dense tape dip streams must preserve full core location lists (>1000)."""
+        from backend.core.defect_scanner import DefectScanner, MaterialType
+
+        scanner = DefectScanner.__new__(DefectScanner)
+        scanner.sample_rate = SR
+        scanner.material_type = MaterialType.TAPE
+
+        duration = 180.0
+        audio = _sine(duration=duration, amp=0.35)
+
+        # 1100 dips, evenly spaced, non-overlapping.
+        n_events = 1100
+        dip_times = [0.5 + i * 0.16 for i in range(n_events)]
+        dip_times = [t for t in dip_times if (t + 0.06) < duration]
+        dipped = _inject_level_dips(
+            audio,
+            dip_times=dip_times,
+            dip_duration_s=0.12,
+            dip_depth_db=14.0,
+        )
+
+        result = scanner._detect_tape_head_level_dips(dipped)
+        assert result.metadata.get("dip_count", 0) > 1000
+        assert len(result.locations) > 1000
+        assert result.metadata.get("locations_returned", 0) == len(result.locations)
+
 
 # ===========================================================================
 # Class 3: Phase 12 Tape Level Stabilizer

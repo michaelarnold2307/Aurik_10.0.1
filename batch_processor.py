@@ -29,8 +29,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-import soundfile as sf
 from tqdm import tqdm
+
+try:
+    from backend.file_import import load_audio_file as _load_audio_file
+except Exception:
+    _load_audio_file = None  # type: ignore[assignment]
 
 try:
     from backend.api.bridge import get_medium_type_enum as _get_medium_type_enum
@@ -147,7 +151,21 @@ class BatchProcessor:
 
             # Process via AurikDenker (Pflicht-Einstiegspunkt §2.2)
             logger.info(f"Processing: {input_file.name}")
-            audio_data, file_sr = sf.read(str(input_file))  # type: ignore[misc]
+            if _load_audio_file is None:
+                raise RuntimeError(
+                    "Audio-Importmodul nicht verfügbar. "
+                    "Ursache: backend.file_import.load_audio_file konnte nicht geladen werden. "
+                    "Lösung: Installation prüfen und Anwendung neu starten."
+                )
+
+            _res = _load_audio_file(str(input_file))
+            if _res is None or _res.get("error"):
+                raise RuntimeError(
+                    f"Audio-Import fehlgeschlagen: {(_res or {}).get('error', 'Unbekannter Fehler')}. "
+                    "Datei prüfen oder als WAV/FLAC neu exportieren."
+                )
+            audio_data = _res["audio"]
+            file_sr = _res["sr"]
 
             if _get_aurik_denker is None:
                 raise RuntimeError(
@@ -166,6 +184,40 @@ class BatchProcessor:
             )
             restorer_result = denker_result
             restored_audio = denker_result.audio
+
+            # Export-Quality-Gate (Spec §8.1, [RELEASE_MUST])
+            _qe = getattr(denker_result, "quality_estimate", None)
+            if _qe is not None and _qe < 0.55:
+                raise RuntimeError(
+                    f"Export abgebrochen: quality_estimate={_qe:.3f} < 0.55 (Mindestanforderung §8.1). "
+                    "Ursache: Restaurierungsqualität unzureichend. "
+                    "Lösung: Eingabedatei prüfen oder anderen Modus verwenden."
+                )
+            _P1_P2_THRESHOLDS = {
+                "natuerlichkeit": 0.90,
+                "authentizitaet": 0.88,
+                "tonal_center": 0.95,
+                "timbre_authentizitaet": 0.87,
+                "artikulation": 0.85,
+            }
+            _goals = getattr(denker_result, "musical_goals_scores", None) or {}
+            _failed_goals = [
+                f"{g}={_goals[g]:.3f}<{t}" for g, t in _P1_P2_THRESHOLDS.items() if g in _goals and _goals[g] < t
+            ]
+            if _failed_goals:
+                raise RuntimeError(
+                    f"Export abgebrochen: P1/P2-Musical-Goals nicht bestanden — {', '.join(_failed_goals)}. "
+                    "Ursache: Restaurierung hat Kernqualitätsziele verfehlt. "
+                    "Lösung: Material prüfen oder anderen Modus verwenden."
+                )
+
+            try:
+                import soundfile as sf
+            except Exception as exc:
+                raise RuntimeError(
+                    "Audio-Export fehlgeschlagen: soundfile konnte nicht geladen werden. "
+                    "Lösung: Installation prüfen und erneut starten."
+                ) from exc
 
             sf.write(str(output_file), restored_audio, file_sr)
 
@@ -224,30 +276,31 @@ class BatchProcessor:
         return results
 
     def print_summary(self, results: list[dict]):
-        """Print batch processing summary."""
+        """Log batch processing summary."""
         successful = [r for r in results if r["success"]]
         failed = [r for r in results if not r["success"]]
 
         total_time = sum(r["elapsed"] for r in results)
         avg_time = total_time / len(results) if results else 0
+        total = len(results)
+        success_pct = (len(successful) / total * 100.0) if total else 0.0
+        failed_pct = (len(failed) / total * 100.0) if total else 0.0
 
-        print("\n" + "=" * 80)
-        print("BATCH PROCESSING SUMMARY")
-        print("=" * 80)
-        print(f"Total Files:   {len(results)}")
-        print(f"Successful:    {len(successful)} ({len(successful) / len(results) * 100:.1f}%)")
-        print(f"Failed:        {len(failed)} ({len(failed) / len(results) * 100:.1f}%)")
-        print(f"Total Time:    {total_time:.1f}s")
-        print(f"Average Time:  {avg_time:.1f}s per file")
-        print()
+        logger.info("=" * 80)
+        logger.info("BATCH PROCESSING SUMMARY")
+        logger.info("=" * 80)
+        logger.info("Total Files:   %d", total)
+        logger.info("Successful:    %d (%.1f%%)", len(successful), success_pct)
+        logger.info("Failed:        %d (%.1f%%)", len(failed), failed_pct)
+        logger.info("Total Time:    %.1fs", total_time)
+        logger.info("Average Time:  %.1fs per file", avg_time)
 
         if failed:
-            print("Failed Files:")
+            logger.info("Failed Files:")
             for r in failed:
-                print(f"  - {os.path.basename(r['file'])}: {r['error']}")
-            print()
+                logger.info("  - %s: %s", os.path.basename(r["file"]), r["error"])
 
-        print("=" * 80)
+        logger.info("=" * 80)
 
 
 def main():

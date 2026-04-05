@@ -236,7 +236,7 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
         ndarray shape (24,) — normalisierte Energien (sum = 1).
     """
     n_fft = min(4096, len(audio_mono))
-    hop = n_fft // 4
+    hop = max(1, n_fft // 4)
     # STFT (kein scipy.signal für diesen einfachen Spektral-Pfad — numpy direkt)
     frames = []
     for start in range(0, len(audio_mono) - n_fft, hop):
@@ -1178,6 +1178,10 @@ class EraClassifier:
         self._clap_lock = threading.Lock()
         self._ram_cache: dict[str, EraResult] = {}
         self._ram_cache_lock = threading.Lock()
+        # Short clips are classified robustly via DSP tiers; loading Tier-1 CLAP
+        # for a few seconds of audio is disproportionally expensive and causes
+        # flaky timeout behavior in constrained test runs.
+        self._tier1_min_duration_s: float = 12.0
 
     # ------------------------------------------------------------------
     # Öffentliche API
@@ -1230,8 +1234,17 @@ class EraClassifier:
         lf_presence = _estimate_lf_presence(audio_mono, sr)
         highband_presence = _estimate_highband_presence(audio_mono, sr)
 
-        # Tier-1: CLAP (optional)
-        result = self._try_tier1(audio_mono, sr, bark, rolloff_hz, snr_db)
+        # Tier-1: CLAP (optional). Skip for short clips to keep latency bounded.
+        _audio_duration_s = float(audio_mono.size) / max(1.0, float(sr))
+        if _audio_duration_s >= self._tier1_min_duration_s:
+            result = self._try_tier1(audio_mono, sr, bark, rolloff_hz, snr_db)
+        else:
+            logger.debug(
+                "EraClassifier: skip Tier-1 (short clip %.2fs < %.2fs)",
+                _audio_duration_s,
+                self._tier1_min_duration_s,
+            )
+            result = None
 
         # Tier-2: DSP-Fingerprint (multi-factor)
         if result is None or result.confidence < 0.40:

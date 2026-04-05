@@ -166,12 +166,21 @@ item_seed = _sid_offset(scenario_id)  # RICHTIG
 **Absolutes Zeitlimit Stufe 1:** `MAX_ABSOLUTE_SECONDS = 5400.0` (90 Minuten).
 Nach Überschreitung: KMV Stufe 2 (`MLRefinementThread`) übernimmt automatisch.
 
-**FeedbackChain-Abbruch:**
+**FeedbackChain-Abbruch (Fix M, v9.10.100 — MOS-Metrik präzisiert):**
 
 ```python
 MAX_ITERATIONS = 5
 CONVERGENCE_DELTA = 0.02
-# Regression: |MOS_neu - MOS_alt| > 0.05 → sofortiger Rollback auf best_result
+# Regression-Trigger: PQS-MOS (PerceptualQualityScorer.score().mos) zwischen
+# aufeinanderfolgenden Iterationen: |mos_iter_n - mos_iter_n_minus_1| > 0.05
+# → sofortiger Rollback auf best_result (höchster PQS-MOS bisher)
+#
+# NICHT: Musical Goals Ø-Score (der wird separat über GoalPriorityProtocol überwacht)
+# NICHT: MERT-harmonicity-Proxy (zu niedrige Sampling-Frequenz für Iterations-Vergleich)
+# NICHT: Vergleich mit Baseline (nur Iteration-zu-Iteration, um Overshoot zu detektieren)
+#
+# Konvergenz-Abbruch (kein Rollback): |mos_iter_n - mos_iter_n_minus_1| < CONVERGENCE_DELTA
+# → weitere Iteration würde Qualität nicht verbessern → frühzeitiger Exit
 ```
 
 ### §9.1a [RELEASE_MUST] Stationäre vs. nicht-stationäre Defekt-Analyse (v9.10.73)
@@ -190,6 +199,10 @@ _audio_mono_full = audio_mono  # MUSS vor Center-Crop gesichert werden
 # ... Center-Crop ...
 scores[DefectType.DROPOUTS] = self._detect_dropouts(_audio_mono_full)  # volles Audio
 ```
+
+- Für synthetische Langsignale mit >50 nicht-stationären Events (z. B. Dropouts/Tape-Head-Level-Dips) MUSS `len(score.locations) > 50` gelten.
+- Eine künstliche Kappung der Core-Defektliste auf feste Grenzen (z. B. 50/100/256) ist als Regression zu werten.
+- Optional verdichtete Anzeige-Listen müssen in separaten UI-Tests validiert werden und dürfen die Core-Liste nicht beeinflussen.
 
 **Location-Offset**: Nicht-stationäre Detektoren erzeugen absolute Positionen → `_FULL_AUDIO_DETECTORS`-Set in der Offset-Korrektur ausschließen.
 
@@ -240,21 +253,9 @@ Jeder erkannte Defekt wird mit einem **psychoakustischen Salienz-Score** (0.0–
 - NaN/Inf-Guard auf allen numerischen Ausgaben
 - Thread-safe Singleton (double-checked locking)
 
-| Schritt | Limit pro Minute Audio |
-| --- | --- |
-| DefectScanner | ≤ 2 s |
-| Phase-Pipeline gesamt | ≤ 120 s |
-| FeedbackChain (alle Iterationen) | ≤ 60 s |
-| ExcellenceOptimizer | ≤ 30 s |
-| Export (FLAC 24-bit) | ≤ 10 s |
-
-**FeedbackChain-Abbruch:**
-
-```python
-MAX_ITERATIONS = 5
-CONVERGENCE_DELTA = 0.02
-# Regression: |MOS_neu - MOS_alt| > 0.05 → sofortiger Rollback auf best_result
-```
+> **Hinweis**: Die normativen Performance-Limits sind ausschließlich in §9 (oben) definiert.
+> VERBOTEN: Alte Limits (DefectScanner ≤ 2 s, Pipeline ≤ 120 s, FeedbackChain ≤ 60 s) —
+> diese wurden mit v9.10.80 (Quality-First-Hauptlauf, Fix I) angehoben und gelten nicht mehr.
 
 ### §8.3 [RELEASE_MUST] Psychoakustik & Gänsehaut-Prinzipien (v9.10.75)
 
@@ -282,6 +283,14 @@ CONVERGENCE_DELTA = 0.02
 
 1. MDEM korrigiert Mikro-Dynamik (400 ms Fenster)
 2. EmotionalArc Post-MDEM-Messung: `measure_emotional_arc(original, restored, sr)`
+   `arc_preserved = True` genau dann, wenn **beide** Bedingungen erfüllt:
+   (a) `arousal_pearson_global ≥ 0.85` (5-s-Fenster, gesamte Datei)
+   (b) kein einzelnes 5-s-Segment hat `Δarousal_local < −0.08`
+       (`Δarousal_local[i] = rms_restored[i] / rms_original[i] − 1`;
+        Normiert auf Original-RMS; Segment ≤ 3 s am Dateiende ignoriert).
+   Rationale: Globaler Pearson ≥ 0.85 kann trotz eines eingebrochenen Segments
+   (z.B. pp vor Refrain wird durch Kompression flachgelegt) bestehen. Die lokale
+   Schwelle −0.08 fängt Spannungspunkte, die Schauer auslösen würden.
 3. Falls `not arc_preserved`: `correct_emotional_arc()` mit Makro-Gain-Hüllkurve
 4. Safety-Revert: wenn Korrektur Arousal-Pearson um > 0.02 verschlechtert → Revert
 

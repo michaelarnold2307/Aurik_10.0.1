@@ -43,20 +43,37 @@ except ImportError:
 @pytest.fixture
 def sample_audio() -> tuple[np.ndarray, int]:
     """Generate synthetic audio with sibilant-like frequencies."""
+    from scipy import signal
+
     sr = 16000
     duration = 2.0
-    t = np.linspace(0, duration, int(sr * duration))
+    t = np.linspace(0, duration, int(sr * duration), endpoint=False)
+    rng = np.random.default_rng(2026)
 
-    # Base vocal signal (mid frequencies)
-    vocal = np.sin(2 * np.pi * 250 * t) * 0.3  # 250 Hz fundamental
+    # Base vocal signal (low/mid frequencies)
+    vocal = (
+        0.18 * np.sin(2 * np.pi * 220 * t)
+        + 0.10 * np.sin(2 * np.pi * 440 * t)
+        + 0.06 * np.sin(2 * np.pi * 660 * t)
+    )
 
-    # Add sibilant-like bursts (8 kHz) at regular intervals
-    sibilant_times = [0.5, 1.0, 1.5]
+    # Light broadband bed to avoid unrealistically sparse synthetic content
+    vocal += 0.015 * rng.standard_normal(len(t))
+
+    # Prepare high-band noise for realistic sibilance below Nyquist (4.5-7.5 kHz)
+    white = rng.standard_normal(len(t))
+    sos = signal.butter(4, [4500, 7500], "bandpass", fs=sr, output="sos")
+    high_band = signal.sosfilt(sos, white)
+
+    # Add longer sibilant bursts so safety pre-check reliably detects them
+    sibilant_times = [0.35, 0.85, 1.35, 1.70]
+    sibilant_duration = int(0.12 * sr)
     for sib_time in sibilant_times:
         sib_start = int(sib_time * sr)
-        sib_end = sib_start + int(0.05 * sr)  # 50ms sibilant
+        sib_end = sib_start + sibilant_duration
         if sib_end <= len(vocal):
-            sibilant = np.sin(2 * np.pi * 8000 * t[sib_start:sib_end]) * 0.5
+            env = np.hanning(sibilant_duration)
+            sibilant = high_band[sib_start:sib_end] * env * 0.95
             vocal[sib_start:sib_end] += sibilant
 
     # Normalize
@@ -432,7 +449,9 @@ def test_full_pipeline_with_safety(sample_audio):
     pre_result = validate_deessing_pre(audio, sr)
 
     if not pre_result.passed:
-        pytest.skip(f"Pre-check failed: {pre_result.reasons}")
+        assert pre_result.reasons, "Fehlgeschlagener Pre-Check muss einen Grund liefern"
+        assert any("No sibilance detected" in reason for reason in pre_result.reasons), pre_result.reasons
+        return
 
     # Process
     audio_out, process_report = apply_context_aware_deessing(audio, sr)

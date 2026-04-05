@@ -190,8 +190,7 @@ class TestTranslationCompleteness:
         import Aurik910.i18n as i18n_module
 
         translations = getattr(i18n_module, "_TRANSLATIONS", {})
-        if not translations:
-            pytest.skip("_TRANSLATIONS nicht im Modul — übersprungen")
+        assert translations, "_TRANSLATIONS muss im i18n-Modul definiert sein"
 
         de_keys = set(translations.get("de", {}).keys())
         en_keys = set(translations.get("en", {}).keys())
@@ -204,8 +203,7 @@ class TestTranslationCompleteness:
         import Aurik910.i18n as i18n_module
 
         translations = getattr(i18n_module, "_TRANSLATIONS", {})
-        if not translations:
-            pytest.skip("_TRANSLATIONS nicht im Modul — übersprungen")
+        assert translations, "_TRANSLATIONS muss im i18n-Modul definiert sein"
 
         for lang, d in translations.items():
             for key, value in d.items():

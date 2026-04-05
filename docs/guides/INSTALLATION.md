@@ -1,6 +1,6 @@
 # Aurik 9.x.x — Installation Guide
 
-**Version:** 9.10.77c  
+**Version:** 9.10.102  
 **Datum:** März 2026  
 **Status:** ✅ Production Ready
 
@@ -15,7 +15,7 @@
 - [System-Anforderungen](#system-anforderungen)
 - [Installation](#installation)
   - [1. Basis-Installation](#1-basis-installation)
-  - [2. GPU-Support (Optional)](#2-gpu-support-optional)
+  - [2. GPU-Support](#2-gpu-support)
   - [3. Entwicklungs-Installation](#3-entwicklungs-installation)
 - [Verifizierung](#verifizierung)
 - [Troubleshooting](#troubleshooting)
@@ -28,7 +28,7 @@
 ### Minimum Requirements
 
 | Komponente | Minimum | Empfohlen |
-|------------|---------|-----------|
+| --- | --- | --- |
 | **OS** | Linux (Ubuntu 20.04+) oder Windows 10/11 | Linux Ubuntu 22.04+ |
 | **Python** | 3.10+ | 3.10 |
 | **RAM** | 8 GB | 16 GB+ |
@@ -39,6 +39,7 @@
 ### Software-Abhängigkeiten
 
 **Python-Bibliotheken** (automatisch installiert):
+
 - PyTorch 2.2.x **+cpu** (CPU-only, kein CUDA erforderlich)
 - NumPy, SciPy, Librosa, SoundFile
 - onnxruntime (CPUExecutionProvider)
@@ -46,6 +47,7 @@
 - tqdm, pyyaml, requests
 
 **System-Bibliotheken** (manuell installieren):
+
 - **Linux:** `libsndfile1`, `ffmpeg`
 - **Windows:** Keine zusätzlichen Bibliotheken erforderlich
 
@@ -71,6 +73,7 @@ cd Aurik_Standalone
 #### Schritt 2: Virtual Environment erstellen
 
 **Linux/macOS:**
+
 ```bash
 # Virtual Environment erstellen
 python3.11 -m venv .venv_aurik
@@ -80,6 +83,7 @@ source .venv_aurik/bin/activate
 ```
 
 **Windows:**
+
 ```cmd
 # Virtual Environment erstellen
 python -m venv .venv_aurik
@@ -102,6 +106,7 @@ pip install -r requirements/requirements-dev.txt
 ```
 
 **requirements.txt Übersicht:**
+
 ```txt
 torch>=2.10.0
 torchaudio>=2.10.0
@@ -119,17 +124,20 @@ matplotlib>=3.9.0
 #### Schritt 4: System-Bibliotheken (Linux)
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt-get update
 sudo apt-get install libsndfile1 ffmpeg
 ```
 
 **Arch Linux:**
+
 ```bash
 sudo pacman -S libsndfile ffmpeg
 ```
 
 **Fedora/RHEL:**
+
 ```bash
 sudo dnf install libsndfile ffmpeg
 ```
@@ -142,7 +150,8 @@ python -c "from core.unified_restorer_v2 import UnifiedRestorerV2; print('✅ Au
 ```
 
 **Expected Output:**
-```
+
+```text
 ✅ Aurik installed successfully!
 ```
 
@@ -155,19 +164,21 @@ python -c "from core.unified_restorer_v2 import UnifiedRestorerV2; print('✅ Au
 > Torch-Modelle werden mit `model.to("cpu")` ausgeführt.
 >
 > Leistungserwartung auf Ryzen 7 (8C/16T, 32 GB RAM):
+>
 > - Standard-Modus (Balanced): 8× Echtzeit-Budget
 > - Quality-Modus: 10× Echtzeit-Budget
 > - Maximum-Modus: 15× Echtzeit-Budget
+
+```bash
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
-
 # Install CUDA Toolkit 12.8
-
 sudo apt-get install cuda-toolkit-12-8
 ```
 
 **Windows:**
-- Download CUDA Toolkit 12.8 von https://developer.nvidia.com/cuda-downloads
+
+- Download CUDA Toolkit 12.8 von [https://developer.nvidia.com/cuda-downloads](https://developer.nvidia.com/cuda-downloads)
 - Installer ausführen (wähle "Custom Installation" → nur CUDA Runtime & Libraries)
 
 #### Schritt 3: PyTorch mit CUDA installieren
@@ -196,13 +207,15 @@ python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); 
 ```
 
 **Expected Output (mit GPU):**
-```
+
+```text
 CUDA available: True
 GPU: NVIDIA GeForce RTX 3090
 ```
 
 **Expected Output (ohne GPU/CPU-only):**
-```
+
+```text
 CUDA available: False
 GPU: None
 ```
@@ -238,6 +251,7 @@ pytest tests/ --verbose
 ```
 
 **requirements-dev.txt:**
+
 ```txt
 pytest>=8.3.0
 pytest-cov>=5.0.0
@@ -290,7 +304,8 @@ print('✅ Restoration successful: test_audio_restored.wav')
 ```
 
 **Expected Output:**
-```
+
+```text
 📊 Phase 1: Audio-Analyse...
 🔊 Phase 0: Subsonic/Ultrasonic Filtering...
 🎵 Phase 2: Mechanische Artefakte...
@@ -319,11 +334,13 @@ pytest tests/test_e2e_magicbutton.py -v -s
 ### Problem 1: Import Error - torch
 
 **Symptom:**
-```
+
+```text
 ImportError: No module named 'torch'
 ```
 
 **Lösung:**
+
 ```bash
 pip install torch torchaudio
 ```
@@ -333,6 +350,7 @@ pip install torch torchaudio
 ### Problem 2: CUDA not available (GPU vorhanden)
 
 **Symptom:**
+
 ```python
 import torch
 print(torch.cuda.is_available())  # False
@@ -341,6 +359,7 @@ print(torch.cuda.is_available())  # False
 **Ursachen & Lösungen:**
 
 **1. PyTorch CPU-Version installiert:**
+
 ```bash
 # Check PyTorch version
 
@@ -353,6 +372,7 @@ pip install torch==2.10.0 torchaudio==2.10.0 --index-url https://download.pytorc
 ```
 
 **2. NVIDIA Driver nicht installiert:**
+
 ```bash
 # Check driver
 
@@ -365,6 +385,7 @@ sudo reboot
 ```
 
 **3. CUDA Version Mismatch:**
+
 ```bash
 # Check CUDA version
 
@@ -381,11 +402,13 @@ nvcc --version
 ### Problem 3: libsndfile not found (Linux)
 
 **Symptom:**
-```
+
+```text
 OSError: cannot load library 'libsndfile.so.1'
 ```
 
 **Lösung:**
+
 ```bash
 # Ubuntu/Debian
 
@@ -405,13 +428,15 @@ sudo dnf install libsndfile
 ### Problem 4: Out of Memory (CUDA)
 
 **Symptom:**
-```
+
+```text
 RuntimeError: CUDA out of memory
 ```
 
 **Lösungen:**
 
 **1. Reduziere Batch-Size / Chunk-Size:**
+
 ```python
 # Process in smaller chunks
 
@@ -433,6 +458,7 @@ sf.write('output.wav', restored, 48000)
 ```
 
 **2. Verwende CPU-only:**
+
 ```bash
 # Force CPU processing
 
@@ -442,6 +468,7 @@ python restore_audio.py
 ```
 
 **3. Upgrade GPU (mehr VRAM):**
+
 - 8 GB VRAM → 16 GB VRAM (RTX 4080)
 - 16 GB VRAM → 24 GB VRAM (RTX 3090/4090)
 
@@ -450,7 +477,8 @@ python restore_audio.py
 ### Problem 5: Slow Processing (CPU-only)
 
 **Symptom:**
-```
+
+```text
 Processing 3min audio takes 15min (5x realtime)
 ```
 
@@ -459,6 +487,7 @@ Processing 3min audio takes 15min (5x realtime)
 **1. Aktiviere GPU (siehe GPU-Support oben)**
 
 **2. Reduziere Processing Complexity:**
+
 ```python
 from core.processing_modes import ProcessingConfig, ProcessingMode
 
@@ -474,6 +503,7 @@ restored = restorer.restore(audio, sr, config=config)
 ```
 
 **3. Disable Phase 10/11 (3D Enhancement):**
+
 ```python
 config = ProcessingConfig(
     mode=ProcessingMode.RESTORATION,
@@ -489,13 +519,15 @@ restored = restorer.restore(audio, sr, config=config)
 ### Problem 6: Test Failures
 
 **Symptom:**
-```
+
+```text
 pytest tests/ → 15 failed, 172 passed
 ```
 
 **Lösungen:**
 
 **1. Missing Test Data:**
+
 ```bash
 # Check test audio files exist
 
@@ -503,6 +535,7 @@ ls audio_examples/  # Should contain test files
 ```
 
 **2. Model Download Failed:**
+
 ```bash
 # Models are downloaded on first use
 
@@ -517,6 +550,7 @@ model = AutoModel.from_pretrained('facebook/demucs')
 ```
 
 **3. Environment Issues:**
+
 ```bash
 # Clean virtual environment
 
@@ -560,7 +594,7 @@ sudo apt-get autoremove
 - **Quick Start:** [docs/guides/QUICKSTART_SUPPORT.md](QUICKSTART_SUPPORT.md)
 - **User Guide:** [docs/guides/USER_GUIDE.md](USER_GUIDE.md)
 - **Python API:** [docs/api/PYTHON_API.md](../api/PYTHON_API.md)
-- **Troubleshooting:** [docs/guides/TROUBLESHOOTING.md](TROUBLESHOOTING.md) *(to be created)*
+- **Troubleshooting:** [docs/guides/TROUBLESHOOTING.md](TROUBLESHOOTING.md) _(to be created)_
 
 ---
 

@@ -169,28 +169,19 @@ class TestMDEMMorph:
 
 class TestMDEMLufsProfile:
     def test_14_lufs_profile_shape(self, mdem, audio_5s):
-        try:
-            profile = mdem.compute_lufs_profile(audio_5s, SR)
-            assert isinstance(profile, np.ndarray)
-            assert profile.ndim == 1
-            assert len(profile) > 0
-        except AttributeError:
-            pytest.skip("compute_lufs_profile nicht öffentlich exponiert")
+        profile = mdem.compute_lufs_profile(audio_5s, SR)
+        assert isinstance(profile, np.ndarray)
+        assert profile.ndim == 1
+        assert len(profile) > 0
 
     def test_15_lufs_profile_no_nan(self, mdem, audio_5s):
-        try:
-            profile = mdem.compute_lufs_profile(audio_5s, SR)
-            assert np.isfinite(profile).all()
-        except AttributeError:
-            pytest.skip("compute_lufs_profile nicht öffentlich exponiert")
+        profile = mdem.compute_lufs_profile(audio_5s, SR)
+        assert np.isfinite(profile).all()
 
     def test_16_lufs_profile_silence_is_low(self, mdem, silence_2s):
-        try:
-            profile = mdem.compute_lufs_profile(silence_2s, SR)
-            # Stille → LUFS sehr niedrig (< -50)
-            assert np.mean(profile) < -10.0
-        except AttributeError:
-            pytest.skip("compute_lufs_profile nicht öffentlich exponiert")
+        profile = mdem.compute_lufs_profile(silence_2s, SR)
+        # Stille → LUFS sehr niedrig (< -50)
+        assert np.mean(profile) < -10.0
 
 
 # ---------------------------------------------------------------------------

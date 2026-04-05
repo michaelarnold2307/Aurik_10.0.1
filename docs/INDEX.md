@@ -1,12 +1,12 @@
 
 # 📚 Aurik 9.x.x — Projektdokumentation
 
-Offizielle Dokumentation von **Aurik 9.10.77c** — dem weltweit ersten intelligenten,
+Offizielle Dokumentation von **Aurik 9.10.102** — dem weltweit ersten intelligenten,
 kontextbewussten Musik- und Gesangs-Restaurierungs-, Reparatur- und
 Rekonstruktions-Denkersystem. Alle Inhalte sind an die KI-Programmierrichtlinien
 (`.github/copilot-instructions.md`) ausgerichtet.
 
-**Version:** 9.10.77c | **Phasen:** 56 | **Musical Goals:** 14 | **DefectTypes:** 32
+**Version:** 9.10.102 | **Phasen:** 64 | **Musical Goals:** 14 | **DefectTypes:** 32 | **Tests:** ~11.023
 
 > Hinweis: Verbindlicher Wahrheitsstand ist die Spezifikation in `.github/specs/01-08` plus `docs/CHANGELOG_HISTORY.md`. Wo Zahlen abweichen, gelten Specs/Changelog.
 
@@ -20,7 +20,8 @@ Rekonstruktions-Denkersystem. Alle Inhalte sind an die KI-Programmierrichtlinien
 - **[User Guide](guides/USER_GUIDE.md)** – Vollständiges Benutzerhandbuch
 - **[Configuration Guide](guides/CONFIGURATION.md)** – Modi (Restoration / Studio 2026) & Parameter
 - **[Troubleshooting Guide](guides/TROUBLESHOOTING.md)** – Problemlösung & FAQ
-- **[Quickstart Guide](guides/QUICKSTART_SUPPORT.md)** – Schnelleinstieg
+- **[Phoneme Processing Guide](guides/PHONEME_PROCESSING_GUIDE.md)** – §2.36 LyricsGuidedEnhancement + PhonemeTimeline
+- **[Processing Logger Usage](guides/PROCESSING_LOGGER_USAGE.md)** – Logging-System
 
 ### Für Entwickler
 
@@ -28,7 +29,7 @@ Rekonstruktions-Denkersystem. Alle Inhalte sind an die KI-Programmierrichtlinien
 - **[KI-Programmierrichtlinien](../.github/copilot-instructions.md)** – Bindende Systemregeln **(Pflicht!)**
 - **[Python API Reference](api/PYTHON_API.md)** – API-Dokumentation
 - **[Architecture Overview](architecture/ARCHITECTURE.md)** – Systemarchitektur (4 Schichten)
-- **[Phases Overview](architecture/PHASES_OVERVIEW.md)** – 56-Phasen-Pipeline (Defect-First)
+- **[Phases Overview](architecture/PHASES_OVERVIEW.md)** – 64-Phasen-Pipeline (Defect-First, Phase 01–64)
 - **[Pipeline Flow](architecture/PIPELINE_FLOW_ANALYSIS.md)** – Ablauf & Datenfluss
 - **[Contributing Guide](development/CONTRIBUTING.md)** – Beitrag leisten
 - **[Testing Guide](development/TESTING.md)** – Teststrategie & Best Practices
@@ -44,7 +45,7 @@ Rekonstruktions-Denkersystem. Alle Inhalte sind an die KI-Programmierrichtlinien
 
 ## 📁 Dokumentationsstruktur
 
-```
+```text
 docs/
 ├── guides/                     # Anwender-Guides
 │   ├── INSTALLATION.md        # Installation (Linux AppImage & Windows 10/11)
@@ -57,7 +58,7 @@ docs/
 │
 ├── architecture/               # Architektur-Dokumentation
 │   ├── ARCHITECTURE.md        # Systemarchitektur (4 Schichten)
-│   ├── PHASES_OVERVIEW.md     # 56-Phasen-Pipeline (Defect-First)
+│   ├── PHASES_OVERVIEW.md     # 64-Phasen-Pipeline (Defect-First, Phase 01–64)
 │   └── PIPELINE_FLOW_ANALYSIS.md
 │
 ├── api/                        # API-Dokumentation
@@ -103,14 +104,16 @@ docs/
 **Bindende Regeln:** `.github/copilot-instructions.md`
 
 Schlüsselbindungen (Auszug):
+
 - Interne SR: immer **48 000 Hz** — vor und nach jedem DSP-Schritt
 - **CPU-only**: keine GPU/CUDA — `providers=["CPUExecutionProvider"]`
 - **14 Musical Goals**: nach jeder Restaurierung zu prüfen, Regression = Feature ungültig
-- **56 Phasen** (Phase 01–56, Defect-First) in `backend/core/phases/`
+- **64 Phasen** (Phase 01–64, Defect-First) in `backend/core/phases/`
 - Material-adaptive Verarbeitung via `MediumClassifier`
 - **32 DefectTypes** — vollständiger Defektkatalog in `core/defect_scanner.py`
 - **Desktop-only (Linux AppImage + Windows 10/11)**: keine Cloud, kein Docker, kein pip für Endnutzer
-- **§2.36 LyricsGuidedEnhancement**: Whisper-Tiny ONNX + wav2vec2 Forced Alignment
+- **§2.36 LyricsGuidedEnhancement**: Whisper-Tiny ONNX + wav2vec2 Forced Alignment (Phase 58)
+- **§2.39 OOM-Recovery-Checkpoint**: Nahtlose Pipeline-Wiederaufnahme nach OOM-Kill
 - **ml_memory_budget.try_allocate() Pflicht** vor jedem ML-Modell-Laden
 - **AMRB-Benchmark**: Aurik ≥ iZotope RX 11 in ≥ 7/10 Szenarien [RELEASE_MUST]
 
@@ -147,7 +150,10 @@ Schlüsselbindungen (Auszug):
 
 ## 📅 Aktuelle Updates
 
-**März 2026 (v9.10.77c):**
+**April 2026 (v9.10.102):**
+
+- Genre-Phase-1 (GenreClassifier: Family+Top-k+Open-Set, Lyrics-Fusion, UI-Badge) integriert.
+- Normative Nachschärfung Lyrics-Produktivpfad (§2.36): Einziger Produktionspfad ist `backend/core/lyrics_guided_enhancement.py`.
 - Mode-differenzierte Musical-Goals-Härtung und Priority-Aware PMGG dokumentiert.
 - OOM-Recovery-Checkpoint-System (§2.39) und KMV (§2.38) als normative Pipeline-Bestandteile konsolidiert.
 - DefectScanner-/Kausalpfad auf aktuellen DefectType- und Ursachenumfang nachgezogen.
@@ -155,11 +161,6 @@ Schlüsselbindungen (Auszug):
 Historische Detailstände sind in `docs/CHANGELOG_HISTORY.md` aufgeführt.
 
 ---
-
-<div align="center">
-
-**Aurik 9.10.77c Projektdokumentation** | Letzte Aktualisierung: März 2026
+**Aurik 9.10.102 Projektdokumentation** | Letzte Aktualisierung: April 2026
 
 [🏠 Zurück zur README](../README.md)
-
-</div>

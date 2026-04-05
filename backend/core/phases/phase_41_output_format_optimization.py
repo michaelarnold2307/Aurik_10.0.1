@@ -421,8 +421,11 @@ class OutputFormatOptimization(PhaseInterface):
             return audio  # 32-bit float: no quantization noise
 
         # Two uniform random variables summed = triangular PDF (true TPDF)
-        dither1 = np.random.uniform(-dither_amplitude, dither_amplitude, audio.shape)
-        dither2 = np.random.uniform(-dither_amplitude, dither_amplitude, audio.shape)
+        # §2.40 Determinismus: content-derived seed for bit-exact reproducibility
+        _d41_seed = int(abs(float(np.sum(np.abs(audio[:min(len(audio.ravel()), 1024)])))) * 1e5 + bit_depth) % (2**31)
+        _rng41 = np.random.default_rng(seed=_d41_seed)
+        dither1 = _rng41.uniform(-dither_amplitude, dither_amplitude, audio.shape)
+        dither2 = _rng41.uniform(-dither_amplitude, dither_amplitude, audio.shape)
         dither = dither1 + dither2
 
         return audio + dither
@@ -436,9 +439,11 @@ class OutputFormatOptimization(PhaseInterface):
 
         dither_amplitude = 1.0 / (2**15)
 
-        # White dither
-        dither1 = np.random.uniform(-dither_amplitude, dither_amplitude, audio.shape)
-        dither2 = np.random.uniform(-dither_amplitude, dither_amplitude, audio.shape)
+        # White dither — §2.40 Determinismus: content-derived seed
+        _dns_seed = int(abs(float(np.sum(np.abs(audio[:min(len(audio.ravel()), 1024)])))) * 1e5 + 1) % (2**31)
+        _rng_ns = np.random.default_rng(seed=_dns_seed)
+        dither1 = _rng_ns.uniform(-dither_amplitude, dither_amplitude, audio.shape)
+        dither2 = _rng_ns.uniform(-dither_amplitude, dither_amplitude, audio.shape)
         dither = dither1 + dither2
 
         # High-pass filter (noise shaping)

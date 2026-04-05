@@ -286,16 +286,49 @@ def find_pending_checkpoints() -> list[RecoveryCheckpoint]:
 
 
 def load_checkpoint_audio(checkpoint: RecoveryCheckpoint) -> np.ndarray | None:
-    """§Punkt 5: Load checkpoint audio WAV; fallback to original if checkpoint corrupted.
+    """Load resume source audio with §2.39 priority rules.
 
-    Attempts to load intermediate audio from checkpoint file. If checkpoint WAV
-    is missing, corrupted, or unreadable, falls back to the original input file.
-    This ensures recovery is robust even if checkpoint file is damaged.
+    Priority:
+      1) Original input audio (full-quality resume path)
+      2) Checkpoint WAV only as emergency fallback if original is unavailable
+
+    Returns ``None`` only if both paths fail.
     """
     import soundfile as sf
 
-    exc = None
-    # Try checkpoint audio first
+    orig_exc: Exception | None = None
+
+    # Primary source per §2.39: original input audio
+    try:
+        from backend.file_import import load_audio_file
+
+        _res = load_audio_file(checkpoint.original_input_path)
+        if _res is not None and not _res.get("error"):
+            audio = np.asarray(_res["audio"], dtype=np.float32)
+            sr = int(_res["sr"])
+            if sr != checkpoint.sample_rate:
+                logger.warning(
+                    "Recovery: SR mismatch in Original — checkpoint %d Hz, Original %d Hz",
+                    checkpoint.sample_rate,
+                    sr,
+                )
+            logger.info(
+                "Recovery: Original-Datei als Primärquelle geladen "
+                "(Checkpoint nur Notfall-Fallback gemäß §2.39)."
+            )
+            return audio
+        orig_exc = RuntimeError(str((_res or {}).get("error", "load_audio_file returned invalid result")))
+    except Exception as _exc:
+        orig_exc = _exc
+
+    logger.warning(
+        "Recovery: Original-Datei konnte nicht geladen werden (%s) — "
+        "Notfall-Fallback auf Checkpoint-Audio: %s",
+        type(orig_exc).__name__ if orig_exc is not None else "UnknownError",
+        checkpoint.audio_wav_path,
+    )
+
+    # Emergency fallback: checkpoint audio WAV
     try:
         audio, sr = sf.read(checkpoint.audio_wav_path, dtype="float32")
         if sr != checkpoint.sample_rate:
@@ -305,40 +338,15 @@ def load_checkpoint_audio(checkpoint: RecoveryCheckpoint) -> np.ndarray | None:
                 sr,
             )
         logger.info(
-            "§2.39 OOM-Checkpoint-Ausnahme: Checkpoint-Audio wird als Quelle für die Wiederaufnahme verwendet, da das Original nicht verfügbar/lesbar ist. Dies ist ein Notfall gemäß copilot-instructions.md; Qualitätsverluste werden minimiert und im Log dokumentiert."
-        )
-        # soundfile returns (N,) for mono, (N, 2) for stereo
-        # UV3 expects (N,) mono or (N, 2) stereo — already correct
-        return audio
-    except Exception as _exc:
-        exc = _exc
-        logger.warning(
-            "Recovery: Checkpoint-Audio konnte nicht geladen werden (%s) — "
-            "Fallback zu Original-Datei: %s (Qualitätsverlust möglich, Notfallausnahme)",
-            type(exc).__name__,
-            checkpoint.original_input_path,
-        )
-
-    # Fallback: load original input file instead
-    try:
-        audio, sr = sf.read(checkpoint.original_input_path, dtype="float32")
-        if sr != checkpoint.sample_rate:
-            logger.warning(
-                "Recovery: SR mismatch in Original — checkpoint %d Hz, Original %d Hz",
-                checkpoint.sample_rate,
-                sr,
-            )
-        logger.info(
-            "Recovery: Original-Datei erfolgreich geladen als Fallback "
-            "(bereits %d Phasen abgeschlossen, werden erneut ausgeführt)",
-            len(checkpoint.phases_executed),
+            "§2.39 OOM-Checkpoint-Ausnahme aktiv: Checkpoint-Audio wird verwendet, "
+            "weil das Original nicht verfügbar/lesbar ist."
         )
         return audio
-    except Exception as orig_exc:
+    except Exception as cp_exc:
         logger.error(
-            "Recovery: Weder Checkpoint-Audio noch Original konnte geladen werden: Checkpoint: %s, Original: %s",
-            exc,
+            "Recovery: Weder Original noch Checkpoint-Audio konnte geladen werden: Original: %s, Checkpoint: %s",
             orig_exc,
+            cp_exc,
         )
         return None
 

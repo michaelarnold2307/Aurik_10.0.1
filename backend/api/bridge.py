@@ -92,6 +92,7 @@ __all__ = [
     # Medium-Cache
     "cache_medium_result",
     "get_cached_medium_result",
+    "clear_medium_cache",
     # Restorability-Cache
     "cache_restorability_result",
     "get_cached_restorability_result",
@@ -115,6 +116,7 @@ __all__ = [
     "get_genre_classifier_fn",
     "get_lyrics_guided_enhancement_fn",
     "get_medium_classifier_fn",
+    "get_medium_detector",          # §6.1 MediumDetector forensic chain
     "get_medium_type_enum",
     "get_ml_memory_budget_status",
     "get_mushra_evaluator",
@@ -155,6 +157,11 @@ __all__ = [
     "get_startup_check_result",
     # Content-Addressed LRU Cache — Utility
     "content_cache_key",
+    # Pre-Analysis — single authoritative entry point (§pre_analysis)
+    "run_pre_analysis",
+    "PreAnalysisResult",
+    # Audio-Import — canonical cascade (§11 VERBOTEN: sf.read / librosa.load direkt)
+    "get_load_audio_fn",
 ]
 
 # ---------------------------------------------------------------------------
@@ -375,6 +382,18 @@ def get_cached_medium_result(file_path: str) -> object | None:
     return result
 
 
+def clear_medium_cache(file_path: str | None = None) -> None:
+    """Invalidate medium cache entry for *file_path*, or entire cache when ``None``."""
+    if file_path is None:
+        _medium_lru.clear()
+        logger.debug("bridge: Medium-Cache vollst\u00e4ndig geleert.")
+    else:
+        key = content_cache_key(file_path)
+        _medium_lru.remove(key)
+        _medium_lru.remove(file_path)  # remove() handles path-alias too
+        logger.debug("bridge: Medium-Cache f\u00fcr '%s' geleert.", file_path)
+
+
 # ---------------------------------------------------------------------------
 # Restorability-Cache  (Thread-sicher, LRU, content-addressed)
 # ---------------------------------------------------------------------------
@@ -520,6 +539,32 @@ def get_restorability_estimator_class() -> type:
     from backend.core.restorability_estimator import RestorabilityEstimator  # type: ignore[import]
 
     return RestorabilityEstimator
+
+
+def get_medium_detector():
+    """Return the ``MediumDetector`` singleton (lazy import, §6.1 / §11.1).
+
+    Canonical forensic carrier-chain detector.  Preferred over
+    ``get_medium_classifier_fn()`` in all production paths because
+    ``MediumDetector.detect()`` supplies the required ``file_ext`` context
+    for codec-format digital-file prior adjustment (§6.7b).
+
+    Invariante: ``primary_material`` is always a key from SUPPORTED_MATERIALS
+    (cassette → tape, reel_wire → wire_recording, etc. normalised internally).
+
+    Usage::
+
+        md = get_medium_detector()
+        result = md.detect(audio, sr, file_ext=Path(file_path).suffix)
+        material = result.primary_material  # e.g. "tape", "vinyl"
+    """
+    try:
+        from forensics.medium_detector import get_medium_detector as _get  # type: ignore[import]
+
+        return _get()
+    except ImportError:
+        logger.debug("bridge: MediumDetector nicht importierbar — stub aktiv")
+        return None
 
 
 def get_carrier_forensics_fn():
@@ -1137,3 +1182,65 @@ def get_startup_check_result():
         return _fn()
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Pre-Analysis — single authoritative entry point re-export
+# ---------------------------------------------------------------------------
+
+def run_pre_analysis(
+    audio_native,
+    sr_native: int,
+    *,
+    audio_48k=None,
+    file_path: str = "",
+    progress_callback=None,
+    scan_progress_callback=None,
+    store_in_bridge_cache: bool = True,
+):
+    """Bridge re-export of backend.core.pre_analysis.run_pre_analysis.
+
+    See that module for full documentation.
+
+    Args:
+        scan_progress_callback: Optional ``(pct: float) -> None`` forwarded to
+            ``DefectScanner.scan()`` for fine-grained scan progress (0–100).
+    """
+    from backend.core.pre_analysis import run_pre_analysis as _fn
+    return _fn(
+        audio_native,
+        sr_native,
+        audio_48k=audio_48k,
+        file_path=file_path,
+        progress_callback=progress_callback,
+        scan_progress_callback=scan_progress_callback,
+        store_in_bridge_cache=store_in_bridge_cache,
+    )
+
+
+# PreAnalysisResult is imported lazily; expose as a module-level name via
+# a try-block so bridge consumers can do:
+#   from backend.api.bridge import PreAnalysisResult
+try:
+    from backend.core.pre_analysis import PreAnalysisResult  # noqa: F401
+except Exception:  # pragma: no cover
+    PreAnalysisResult = None  # type: ignore[assignment,misc]
+
+
+# ---------------------------------------------------------------------------
+# Audio-Import — Kaskade soundfile → pedalboard/FFmpeg → pydub
+# ---------------------------------------------------------------------------
+
+def get_load_audio_fn():
+    """Return ``load_audio_file`` from backend.file_import (lazy).
+
+    The returned function signature::
+
+        load_audio_file(filepath, target_sr=None, mono=False) -> dict | None
+
+    The dict contains keys ``audio`` (np.ndarray float32) and ``sr`` (int).
+    Falls back to ``None`` when the import chain fails so callers can degrade
+    gracefully.
+    """
+    from backend.file_import import load_audio_file  # type: ignore[import]
+    return load_audio_file

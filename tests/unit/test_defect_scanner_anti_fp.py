@@ -77,8 +77,8 @@ class TestClicksAntiFP:
         assert score.severity > 0.0
         assert len(score.locations) >= 3
 
-    def test_many_clicks_capped_at_50(self):
-        """200 injected clicks → locations list ≤ 50."""
+    def test_many_clicks_not_capped_at_50(self):
+        """200 injected clicks should not be truncated to 50 locations."""
         sc = _scanner()
         audio = _sine(440, 0.3)
         rng = np.random.default_rng(42)
@@ -86,7 +86,7 @@ class TestClicksAntiFP:
         for p in positions:
             audio[int(p)] = 0.99
         score = sc._detect_clicks(audio)
-        assert len(score.locations) <= 50
+        assert len(score.locations) > 50
         assert score.metadata["total_clicks"] > 50  # severity uses full count
 
     def test_drum_transient_not_click(self):

@@ -28,6 +28,17 @@ SUPPORTED_MATERIALS = [
     "unknown",       # Unbekannt: konservative Prior
 ]
 # Hinweis: lacquer_disc, wax_cylinder, wire_recording → historische Materialien (v9.9.5)
+# [RELEASE_MUST] Schlüssel-Mapping MediumDetector → SUPPORTED_MATERIALS (kanonisch):
+# MediumDetector (forensics/medium_detector.py) verwendet intern andere Schlüsselnamen.
+# MediumDetector.detect() MUSS diese Keys vor Rückgabe auf SUPPORTED_MATERIALS normieren:
+#   "cassette"         → "tape"           (Compact Cassette; Typ I/II/IV).
+#   "reel_wire"        → "wire_recording" (Drahtbandgerät 1940–1955)
+#   "cassette_digital" → "dat"            (Digitalkassette; DAT-Verarbeitungspfad greift)
+#   "vhs_audio"        → "tape"           (VHS-Tonspur; Kassetten-Restaurierungspfad)
+#   "composite"        → transfer_chain[0] normiert (erster Träger bestimmt primären Pfad)
+# Alle anderen MediumDetector-Schlüssel (vinyl, shellac, reel_tape, cd_digital, …)
+# entsprechen direkt den SUPPORTED_MATERIALS-Werten — kein Mapping nötig.
+# INVARIANTE: material_type in RestorationResult MUSS immer ein SUPPORTED_MATERIALS-Schlüssel sein.
 ```
 
 ---
@@ -38,7 +49,8 @@ SUPPORTED_MATERIALS = [
 | --- | --- | --- | --- |
 | `tape` | Dropout, Hiss, Wow/Flutter | phase_24, phase_29, phase_12 | MOS ≥ 4.2 |
 | `reel_tape` | Print-Through, Hiss, Dropout | phase_29, phase_03, phase_24, phase_55 | MOS ≥ 4.3 |
-| `vinyl` | Crackle, Warp, DC-Offset | phase_09, phase_12, phase_30 | MOS ≥ 4.0 |
+| `vinyl` | Crackle, Warp, Low-Freq-Rumble | phase_09, phase_12, phase_05 | MOS ≥ 4.0 |
+| | | **Begründung**: Vinyl erzeugt kein DC-Offset (Tape-/ADC-Defekt); typischer LF-Defekt ist Plattenteller-Lagergeräusch (LOW_FREQ_RUMBLE, 5–20 Hz) → phase_05 (Rumble-Filter, Hochpass < 20 Hz). VERBOTEN: phase_30 als Vinyl-Prioritätsphase. | |
 | `shellac` | Breites Rauschen, Bandbegr. | phase_03, phase_06, phase_01 | MOS ≥ 3.8 |
 | `dat` | Jitter, Dropout, ATRAC | phase_24, phase_02, phase_23 | MOS ≥ 4.4 |
 | `cd_digital` | Clipping, Quantisierung | phase_23, phase_06, phase_40 | MOS ≥ 4.5 |
@@ -251,7 +263,8 @@ Format:
 - True-Peak: **−1.0 dBTP** (ITU-R BS.1770-5) — immer vor Export
 - Metadaten (ID3, Vorbis Comments, BWF): vollständig übertragen + Restaurierungs-Metadaten
 
-**MP3-Export:** LAME über pydub/subprocess. Mono-Quellen bleiben Mono.
+**MP3-Export:** LAME VBR V0 via FFmpeg (`ffmpeg -q:a 0`, adaptiv bis 320 kbps, ≈245 kbps Ø). Mono-Quellen bleiben Mono.
+**VERBOTEN:** LAME CBR oder `pydub.export("out.mp3")` ohne explizite VBR-Parameter — CBR erzeugt Pre-Echo auf TDP-restaurierten Transienten (vgl. §4.5 Spec 04).
 
 ---
 
@@ -270,7 +283,7 @@ assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 
 ---
 
-## §6.6 Tonträgerketten-Erkennung (bindend ab v9.10.97)
+## §6.7 Tonträgerketten-Erkennung (bindend ab v9.10.97)
 
 **Modul**: `forensics/medium_detector.py` — `MediumDetector.detect(audio, sr, file_ext=...)` — einziges autoritatives System ab v9.10.97.
 
@@ -340,7 +353,7 @@ if result.transfer_chain:
 
 ---
 
-## §6.7 Importformate (Eingang)
+## §6.8 Importformate (Eingang)
 
 | Format | Erweiterungen |
 | --- | --- |

@@ -45,13 +45,13 @@ class MLModelPolicyEngine:
             goal: Restaurierungs-Ziel
 
         Returns:
-            Plugin-Name: 'resemble_enhance', 'deepfilternet', 'wpe', 'dccrn', 'banquet'
+            Plugin-Name: 'resemble_enhance', 'deepfilternet', 'wpe', 'mp_senet', 'banquet'
 
         Entscheidungslogik (🎯 Semantic-Aware):
         1. Vinyl Medium → Banquet (vinyl-specialized, hat Vorrang vor Quality-Override)
         2. Quality-Override / schlechte SNR → DeepFilterNet (erzwungen)
         3. Vocals/Speech → Resemble Enhance (SOTA for voice)
-        4. Drums/Transient-Rich → DCCRN (preserves transients)
+        4. Drums/Transient-Rich → MP-SENet (preserves transients)
         5. Ambient/Sustained → DeepFilterNet (aggressive smoothing)
         6. General → Resemble Enhance (balanced, high quality)
         """
@@ -81,13 +81,13 @@ class MLModelPolicyEngine:
             return "resemble_enhance"
 
         # Priority 3: Transient-rich content (drums, percussion)
-        # DCCRN excels at preserving sharp transients while removing noise
+        # MP-SENet is the normative transient-preserving denoise/repair model.
         has_drums = context.get("has_drums", False)
         content_character = context.get("content_character", "BALANCED")
 
         if has_drums or content_character in ["HIGHLY_TRANSIENT", "TRANSIENT"]:
-            self.logger.info(f"⚡ Transient-rich content ({content_character}) → DCCRN (transient-preserving)")
-            return "dccrn"
+            self.logger.info(f"⚡ Transient-rich content ({content_character}) → MP-SENet (transient-preserving)")
+            return "mp_senet"
 
         # Priority 4: Sustained/Ambient content
         # DeepFilterNet provides aggressive smoothing without harming sustained tones
@@ -104,8 +104,8 @@ class MLModelPolicyEngine:
         processing_strategy = context.get("processing_strategy", "BALANCED_PROCESSING")
 
         if processing_strategy == "PRESERVE_TRANSIENTS":
-            self.logger.info("🎯 Strategy: PRESERVE_TRANSIENTS → DCCRN")
-            return "dccrn"
+            self.logger.info("🎯 Strategy: PRESERVE_TRANSIENTS → MP-SENet")
+            return "mp_senet"
         elif processing_strategy == "AGGRESSIVE_SMOOTHING":
             self.logger.info("🎯 Strategy: AGGRESSIVE_SMOOTHING → DeepFilterNet")
             return "deepfilternet"
@@ -114,8 +114,8 @@ class MLModelPolicyEngine:
         dominant_instrument = context.get("dominant_instrument", "unknown")
 
         instrument_model_map = {
-            "DRUMS": "dccrn",  # Preserve attack/transients
-            "PERCUSSION": "dccrn",  # Preserve attack/transients
+            "DRUMS": "mp_senet",  # Preserve attack/transients
+            "PERCUSSION": "mp_senet",  # Preserve attack/transients
             "VOCALS": "resemble_enhance",  # Voice optimization
             "SPEECH": "resemble_enhance",  # Voice optimization
             "GUITAR": "resemble_enhance",  # Balanced, preserves harmonics
@@ -124,7 +124,7 @@ class MLModelPolicyEngine:
             "SYNTH": "deepfilternet",  # Broadband, synthetic
             "AMBIENT": "deepfilternet",  # Aggressive smoothing OK
             "STRINGS": "resemble_enhance",  # Balanced, preserve harmonics
-            "BRASS": "dccrn",  # Preserve attack
+            "BRASS": "mp_senet",  # Preserve attack
         }
 
         if dominant_instrument in instrument_model_map:
@@ -145,20 +145,13 @@ class MLModelPolicyEngine:
             goal: Restaurierungs-Ziel
 
         Returns:
-            Plugin-Name: 'dccrn', 'fullsubnet'
+            Plugin-Name: 'mp_senet'
 
         Entscheidungslogik:
-        - Speech → fullsubnet (ONNX-optimiert, SOTA für Speech)
-        - Music → dccrn (Complex Network für Music)
+        - Speech/Music → mp_senet (normatives SOTA-Modell, ersetzt DCCRN/FullSubNet+)
         """
-        # Speech-optimiert
-        if context.get("has_vocals", False):
-            self.logger.info("Speech erkannt → FullSubNet+ (Speech-optimiert)")
-            return "fullsubnet"
-
-        # Music-optimiert
-        self.logger.info("Music → DCCRN (Music-optimiert)")
-        return "dccrn"
+        self.logger.info("Repair/Declipping → MP-SENet (normativer Ersatz für DCCRN/FullSubNet+)")
+        return "mp_senet"
 
     def select_stem_separation_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """

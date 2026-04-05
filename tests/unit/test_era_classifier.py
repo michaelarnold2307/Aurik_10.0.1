@@ -66,6 +66,19 @@ def test_classify_returns_era_result(clf):
     assert isinstance(result, EraResult)
 
 
+def test_short_clip_skips_tier1(monkeypatch, clf):
+    calls = {"n": 0}
+
+    def _fake_tier1(*args, **kwargs):
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr(clf, "_try_tier1", _fake_tier1)
+    audio = np.random.randn(SR * 5).astype(np.float32) * 0.1
+    clf.classify(audio, SR)
+    assert calls["n"] == 0
+
+
 # ---------------------------------------------------------------------------
 # Decade-Werte immer gültig
 # ---------------------------------------------------------------------------

@@ -138,6 +138,68 @@ def _snap_to_beat(
     return snapped
 
 
+def _find_safe_boundary(
+    pos_samples: int,
+    audio: np.ndarray,
+    sr: int,
+    tol_ms: float = 20.0,
+    shift_ms: float = 25.0,
+    onset_threshold: float = 0.35,
+) -> int:
+    """Shift chunk boundary away from transients (§7.6a, spec Y3).
+
+    If onset_strength > *onset_threshold* within ±*tol_ms* ms of *pos_samples*,
+    the boundary is shifted +*shift_ms* ms forward to avoid cutting mid-transient.
+    Falls back to the original position if onset detection fails.
+
+    Args:
+        pos_samples:      Candidate boundary position (samples).
+        audio:            Full audio array (mono or stereo, shape [..., samples]).
+        sr:               Sample rate.
+        tol_ms:           Half-window length in ms for onset detection (±20 ms).
+        shift_ms:         Forward shift applied when transient is detected (25 ms).
+        onset_threshold:  onset_strength threshold above which a transient is assumed.
+
+    Returns:
+        Adjusted boundary position (samples); original position if no transient found.
+    """
+    tol_samples = max(1, int(tol_ms * sr / 1000.0))
+    shift_samples = int(shift_ms * sr / 1000.0)
+    n_total = audio.shape[-1] if audio.ndim >= 2 else len(audio)
+
+    window_start = max(0, pos_samples - tol_samples)
+    window_end = min(n_total, pos_samples + tol_samples)
+    if window_end <= window_start:
+        return pos_samples
+
+    try:
+        import librosa  # Available in .venv_aurik; lightweight import after first use
+
+        # Downmix to mono for onset detection
+        if audio.ndim == 2:
+            audio_window = audio[:, window_start:window_end].mean(axis=0).astype(np.float32)
+        else:
+            audio_window = audio[window_start:window_end].astype(np.float32)
+
+        hop_length = max(1, int(sr * 0.010))  # 10 ms hop
+        oenv = librosa.onset.onset_strength(y=audio_window, sr=sr, hop_length=hop_length)
+        if oenv.size > 0 and float(np.max(oenv)) > onset_threshold:
+            candidate = pos_samples + shift_samples
+            if candidate < n_total:
+                logger.debug(
+                    "§7.6a TransientGuard: onset %.3f > %.2f within ±%dms → boundary +%dms",
+                    float(np.max(oenv)),
+                    onset_threshold,
+                    int(tol_ms),
+                    int(shift_ms),
+                )
+                return candidate
+    except Exception as _exc:
+        logger.debug("_find_safe_boundary: onset detection skipped (%s)", _exc)
+
+    return pos_samples
+
+
 # ---------------------------------------------------------------------------
 # Dataclass
 # ---------------------------------------------------------------------------
@@ -226,9 +288,12 @@ def process_in_adaptive_chunks(
     fade_samples = max(1, int(crossfade_s * sr))
     hop_samples = max(1, chunk_samples - fade_samples)  # overlap = fade_samples
 
-    # Hanning fade windows
-    fade_in = np.linspace(0.0, 1.0, fade_samples, dtype=np.float32)
-    fade_out = np.linspace(1.0, 0.0, fade_samples, dtype=np.float32)
+    # Half-Hanning COLA-compliant crossfade windows (Lücke-E-Fix v9.10.100).
+    # w_in[i] = 0.5*(1 - cos(π*i/N))  rising Hanning half → smooth C¹ boundary
+    # w_out = 1 - w_in  → w_in + w_out = 1.0 for all i (COLA at 50 % overlap)
+    _t = np.arange(fade_samples, dtype=np.float32) / max(fade_samples, 1)
+    fade_in = (0.5 * (1.0 - np.cos(np.pi * _t))).astype(np.float32)
+    fade_out = (1.0 - fade_in).astype(np.float32)
 
     # Output buffer
     if is_stereo:
@@ -272,6 +337,9 @@ def process_in_adaptive_chunks(
 
         n_chunks += 1
         next_pos = pos + hop_samples
+        # §7.6a Chunk-Boundary-Transient-Guard (spec Y3): shift boundary away from
+        # transient onsets detected within ±20 ms of the candidate position.
+        next_pos = _find_safe_boundary(next_pos, audio, sr)
         if beat_times_s:
             # Snap next boundary to nearest beat within tolerance.
             # min_samples ensures we always advance by at least 1 sample.

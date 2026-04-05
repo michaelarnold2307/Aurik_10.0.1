@@ -54,10 +54,10 @@ DEFAULT_GOALS: list[GoalEntry] = [
     GoalEntry("bass_kraft", "Bass-Kraft", 0.85),
     GoalEntry("groove", "Groove", 0.88),
     GoalEntry("spatial_depth", "Raumtiefe", 0.75),
-    GoalEntry("timbre_authentizitaet", "Timbre", 0.87),
-    GoalEntry("tonal_center", "Tonales Zentrum", 0.95),
-    GoalEntry("micro_dynamics", "Mikro-Dynamik", 0.92),
-    GoalEntry("separation_fidelity", "Separation", 0.82),
+    GoalEntry("timbre_authentizitaet", "Klangfarbe", 0.87),
+    GoalEntry("tonal_center", "Tonart-Treue", 0.95),
+    GoalEntry("micro_dynamics", "Fein-Dynamik", 0.92),
+    GoalEntry("separation_fidelity", "Trennschärfe", 0.82),
     GoalEntry("artikulation", "Artikulation", 0.85),
 ]
 
@@ -330,13 +330,13 @@ class MusicalGoalsRadarWidget(QWidget):
         painter.drawRoundedRect(QRectF(4, 4, w - 8, h - 8), 8, 8)
 
         # Icon
-        font_icon = QFont("Segoe UI", 20)
+        font_icon = QFont(self.font().family(), 20)
         painter.setFont(font_icon)
         painter.setPen(QPen(QColor(80, 100, 140, 100)))
         painter.drawText(QRectF(0, h / 2 - 54, w, 40), Qt.AlignmentFlag.AlignCenter, "🎵")
 
         # Haupttext
-        font_main = QFont("Segoe UI", 8, QFont.Weight.Bold)
+        font_main = QFont(self.font().family(), 8, QFont.Weight.Bold)
         painter.setFont(font_main)
         painter.setPen(QPen(QColor(130, 150, 190, 180)))
         painter.drawText(
@@ -346,7 +346,7 @@ class MusicalGoalsRadarWidget(QWidget):
         )
 
         # Subtext
-        font_sub = QFont("Segoe UI", 7)
+        font_sub = QFont(self.font().family(), 7)
         painter.setFont(font_sub)
         painter.setPen(QPen(QColor(100, 120, 160, 140)))
         painter.drawText(
@@ -356,7 +356,7 @@ class MusicalGoalsRadarWidget(QWidget):
         )
 
         # Goal-Namen als gedimmte Vorschau
-        font_prev = QFont("Segoe UI", 6)
+        font_prev = QFont(self.font().family(), 6)
         painter.setFont(font_prev)
         painter.setPen(QPen(QColor(80, 95, 130, 80)))
         names = [g.label for g in self._goals]
@@ -386,7 +386,7 @@ class MusicalGoalsRadarWidget(QWidget):
                 n_fail += 1
 
         w = float(self.width())
-        font = QFont("Segoe UI", 7, QFont.Weight.Bold)
+        font = QFont(self.font().family(), 7, QFont.Weight.Bold)
         painter.setFont(font)
 
         parts: list[tuple[str, str, QColor]] = [
@@ -418,8 +418,8 @@ class MusicalGoalsRadarWidget(QWidget):
 
     def _draw_bars(self, painter: QPainter) -> None:
         """Zeichnet alle 14 Goal-Balken."""
-        font_label = QFont("Segoe UI", 6, QFont.Weight.Bold)
-        font_score = QFont("Segoe UI", 6)
+        font_label = QFont(self.font().family(), 6, QFont.Weight.Bold)
+        font_score = QFont(self.font().family(), 6)
 
         for idx, g in enumerate(self._goals):
             y = self._row_y(idx)
@@ -516,7 +516,7 @@ class MusicalGoalsRadarWidget(QWidget):
     def _draw_footer_legend(self, painter: QPainter) -> None:
         """Legende am unteren Rand."""
         y = float(self.height()) - self._PAD_BOT + 4
-        font = QFont("Segoe UI", 6)
+        font = QFont(self.font().family(), 6)
         painter.setFont(font)
 
         items = [

@@ -2,6 +2,274 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.10.110 — §2.39 End-to-End OOM-Resume-Verdrahtung (Apr 2026)
+
+### Zusammenfassung
+
+OOM-Recovery ist jetzt vollständig end-to-end verdrahtet: Der beim Startup bestätigte Checkpoint wird aus der UI-Queue bis in den Denker-Stack durchgereicht und im `RestaurierDenker` explizit über `restore_from_checkpoint()` ausgeführt.
+
+### 1. [RELEASE_MUST] UI → Queue → Denker: Checkpoint wird nicht mehr verloren
+
+- **Bug**: `ModernMainWindow._resume_from_checkpoint()` setzte nur `_pending_recovery_checkpoint`; der Wert wurde beim Batch-Run nicht konsumiert.
+- **Fix**:
+  - `_add_to_queue_with_mode()` hängt den pending Checkpoint als `settings["recovery_checkpoint"]` ans Queue-Item (one-shot consumption).
+  - `BatchProcessingThread.run()` übernimmt diesen Wert in `_denke_kwargs`.
+- **Datei**: `Aurik910/ui/modern_window.py`
+
+### 2. [RELEASE_MUST] AurikDenker-API erweitert um Recovery-Durchleitung
+
+- **Fix**:
+  - `AurikDenker.restauriere()` und `AurikDenker.denke()` akzeptieren `recovery_checkpoint`.
+  - `_orchestriere()` erhält denselben Parameter und reicht ihn an `get_restaurier_denker().restauriere(...)` weiter.
+  - Bei Recovery wird der direkte UV3-Resume-Zweig genutzt (keine erneute Reparatur-/Rekonstruktions-Vorverarbeitung).
+- **Datei**: `denker/aurik_denker.py`
+
+### 3. [RELEASE_MUST] RestaurierDenker nutzt explizit `restore_from_checkpoint()`
+
+- **Fix**:
+  - Neuer Parameter `recovery_checkpoint` in `RestaurierDenker.restauriere()`.
+  - Bei gesetztem Checkpoint: Short-Circuit auf `restorer.restore_from_checkpoint(...)`.
+  - Fallbacks bleiben robust, falls Restorer fehlt oder Resume fehlschlägt.
+- **Datei**: `denker/restaurier_denker.py`
+
+### 4. Tests
+
+- Neuer Unit-Test verifiziert, dass bei `recovery_checkpoint` tatsächlich `restore_from_checkpoint()` aufgerufen wird.
+- **Datei**: `tests/unit/test_denker/test_restaurier_denker.py`
+- Ergebnisse:
+  - `tests/unit/test_denker/test_restaurier_denker.py`: `20 passed`
+  - `tests/unit/test_denker/test_aurik_denker.py`: `53 passed`
+  - `tests/unit/test_recovery_checkpoint.py` + `tests/unit/test_per_channel_repair.py`: `38 passed`
+
+---
+
+## Version 9.10.109 — §2.39 Recovery-Source-Priorität + Batch-Import/Logging-Compliance (Apr 2026)
+
+### Zusammenfassung
+
+Fortsetzung des Spec-Audits mit drei harten Compliance-Fixes: OOM-Recovery lädt bei Wiederaufnahme primär das Original-Audio (Checkpoint nur Notfall), `batch_processor.py` nutzt keine verbotenen direkten `sf.read()`-Importpfade mehr und ersetzt `print()`-Ausgaben durch strukturiertes Logging.
+
+### 1. [RELEASE_MUST] §2.39 Recovery-Quelle korrekt priorisiert
+
+- **Bug**: `load_checkpoint_audio()` lud zuerst Checkpoint-WAV und erst danach Original-Datei.
+- **Fix**: Priorität umgedreht auf Original zuerst (`load_audio_file()`), Checkpoint-WAV nur noch Notfall-Fallback bei nicht verfügbarem/lesbarem Original.
+- **Datei**: `backend/core/recovery_checkpoint.py`
+
+### 2. [RELEASE_MUST] Verbotenes `sf.read()` im Batch-Import entfernt
+
+- **Bug**: `batch_processor.py` hatte direkten `soundfile.read`-Pfad im Import-Fallback.
+- **Fix**: Import läuft jetzt strikt über `backend.file_import.load_audio_file`; bei fehlendem Importmodul strukturierter Fehler mit Ursache/Lösung.
+- **Datei**: `batch_processor.py`
+
+### 3. [RELEASE_MUST] Verbotenes `print()` durch `logger.info()` ersetzt
+
+- **Bug**: Batch-Summary wurde via `print()` ausgegeben (nicht log-rotations-/severity-fähig).
+- **Fix**: Vollständige Summary auf `logger.info()` umgestellt (inkl. robustem Prozent-Handling bei `0` Dateien).
+- **Datei**: `batch_processor.py`
+
+### 4. Tests
+
+- Neuer Unit-Test: Original-Audio muss bei Recovery gegenüber Checkpoint-Audio bevorzugt werden.
+- Testdatei: `tests/unit/test_recovery_checkpoint.py`
+- Ergebnis: `17 passed`.
+
+---
+
+## Version 9.10.108 — §9.7.12/13/14 Metrik-Algorithmen korrigiert (Apr 2026)
+
+### Zusammenfassung
+
+Drei normative Metrik-Algorithmen in `musical_goals_metrics.py` spec-konform implementiert. Tests für die alten Algorithmen auf die neuen crest-factor-basierten Methoden aktualisiert (76 Tests grün).
+
+### 1. [RELEASE_MUST] §9.7.12 BrillanzMetric — p95/p50 Spectral Crest Factor (2–16 kHz)
+
+- **Bug**: `_measure_absolute()` verwendete ISO-226-gewichtete HF-Energie-Ratio 8–20 kHz plus Centroid/Brightness-Blend. Preservation-Penalty war laut Spec „kontraproduktiv".
+- **Fix**: Ersetzt durch p95/p50 Crest-Factor über STFT-Frequenzbins 2–16 kHz (zeitgemitteltes Magnitude-Spektrum). Normierung: `clip((crest − 1.5) / 13.5, 0, 1)`. `measure()` ruft nur noch `_measure_absolute()` auf (kein Preservation-Blend).
+- Wissenschaftliche Basis: Fastl & Zwicker 2007 §8.3.
+
+### 2. [RELEASE_MUST] §9.7.14 WaermeMetric — E(200-800 Hz)/E(800-3000 Hz)
+
+- **Bug**: `_measure_absolute()` nutzte 200–2000 Hz als Einzel-Band mit Sub-Bändern 200–500/500–1000/1000–2000 Hz. Reverb-sensitiv (ISO 226 mid/total-Ratio).
+- **Fix**: Ersetzt durch reverb-invariantes Sub-Band-Verhältnis `E(200–800 Hz) / E(800–3000 Hz)` (ISO-226-gewichtet). `warmth_ratio_score = clip(ratio / 1.5, 0, 1)`. Harmonic-Warmth-Anteil (H2/H4 + Spectral Flatness) mit Gewicht 0.30 beibehalten.
+- Wissenschaftliche Basis: Fletcher & Rossing; Moore & Glasberg 1983.
+
+### 3. [RELEASE_MUST] §9.7.13 TransparenzMetric — Multi-Band Spectral Crest (5 Oktavbänder)
+
+- **Bug**: `measure()` verwendete 75%-Rolloff-Proxy (SNR-sensitiv) + Spectral Contrast + Bandwidth-Score. Kein `reference=`-Parameter → TypeError in PMGG Precise-Override.
+- **Fix**: `measure(audio, sr, reference=None)` — 5 Oktavbänder (250–500, 500–1k, 1k–2k, 2k–4k, 4k–8k Hz); pro Band p95/p50-Crest-Factor; Score = Mittelwert der 5 Band-Crests.
+- Wissenschaftliche Basis: Moore & Glasberg 1983; ITU-T P.862.
+
+### 4. Test-Updates (76 Tests grün)
+
+Sieben Tests auf neue crest-factor-Algorithmen aktualisiert:
+
+- `TestBrillanzMetric::dull_audio` Fixture: white noise (score ≈ 0.0) statt Pure-Sine (crest ≈ 1.0)
+- `TestRegressionPrevention::test_reference_scores_stability`: Baselines für brillanz/waerme/transparenz neu kalibriert
+- `TestISO226WeightingAndVirtualPitch::test_waerme_presence_zone_weighted_above_body` → `test_waerme_warm_band_above_cool_band` (§9.7.14 E-Ratio statt ISO-226)
+- `TestBrillanzMetricV913Calibration`: Klasse komplett auf Sawtooth/Noise-Signale umgestellt (harmonisch reiches Signal → Crest ≈ 1.0)
+- `TestTransparenzMetricV913Calibration::test_broadband_music_above_old_regression_value`: 5-Band-Crest-Invariante (Bounds-Check) statt Rolloff-Formel
+
+---
+
+## Version 9.10.107 — §4.5c C80-Guard phase_20 + formant_pearson OPER-Guard (Apr 2026)
+
+### Zusammenfassung
+
+§4.5c Early-Reflection-Guard in phase_20 nachgezogen, formant_pearson ≥ 0.90 als Pflichtbedingung für OPER PANNs-Fallback-Aktivierung via "Singing" ≥ 0.50 implementiert.
+
+### 1. [RELEASE_MUST] §4.5c Early-Reflection-Guard in `phase_20_reverb_reduction.py`
+
+- **Fehlend**: `phase_49_advanced_dereverb.py` hatte vollständigen §4.5c C80/D50-Guard; `phase_20` nur transient preservation ohne C80-Limit.
+- **Fix**: DSP-Ausgabepfad von `process()` erhält C80-Guard (Kuttruff 2009):
+  - `ΔC80 < −2 dB` → Rollback auf Dry-Signal
+  - `ΔC80 > 6 dB` → Wet-Mix proportional skalieren (`6/ΔC80`, min 0.30)
+  - `4 dB < ΔC80 ≤ 6 dB` → 35 % Early-Reflection-Blend der ersten 50 ms
+- `metadata` gibt `delta_c80`, `c80_guard_triggered`, `early_blend_triggered` zurück.
+
+### 2. [RELEASE_MUST] OPER PANNs-Fallback: `formant_pearson ≥ 0.90` Aktivierungsguard (§2.20 v9.10.102)
+
+- **Fehlend**: `"Singing" ≥ 0.50` aktivierte OPER-Profil ohne die Spec-Pflichtbedingung `formant_pearson ≥ 0.90`.
+- **Fix**: Vor dem Aktivierungscheck wird `_formant_pearson` via `FormantTracker` auf einem 2s Zentrumssegment gemessen:
+  - F1-Trajektorie aus `confidence > 0.30` voiced Frames extrahiert
+  - `pearsonr(F1[:-1], F1[1:])` — Framekorrelation als Stabilitäts-Proxy
+  - Hohe Stabilität (r ≥ 0.90) = Opera; niedrige r = Chor/Pop/Speech
+- `"Opera" ≥ 0.45` ist weiterhin direkter Aktivierungspfad ohne formant_pearson.
+- Bei `formant_pearson`-Berechnungsfehler: konservativ `0.0` → OPER nicht via Singing aktiviert.
+
+---
+
+### Zusammenfassung
+
+Drei fehlende v9.10.100-Fixes: PGHI STFT/iSTFT-Boundary-Invariante (`n_samples`-Parameter), korrekte IS-NMF β=0-Notation, und COLA-konformes Hanning-Crossfade in `AdaptiveChunkProcessor`.
+
+### 1. [RELEASE_MUST] PGHI STFT/iSTFT-boundary-Invariante — `n_samples=len(audio_in)` (v9.10.100)
+
+Alle PGHI-Aufrufe, die `n_samples` nicht übergaben, wurden korrigiert. Ohne `n_samples` entstehen in den ersten/letzten ~10 ms 1–3 dB Amplitudenabfall durch Edge-Frame-Dämpfung.
+
+Betroffene Phasen:
+
+- `phase_06_frequency_restoration.py` L≈772: `n_samples=n`
+- `phase_20_reverb_reduction.py` L≈715: `n_samples=n_audio`
+- `phase_24_dropout_repair.py` L≈1390: `n_samples=gap_len`, Keyword-Args für sr/win_size/hop korrigiert
+- `phase_28_surface_noise_profiling.py` L≈279: `n_samples=len(audio)`
+- `phase_29_tape_hiss_reduction.py` L≈595: `n_samples=n`
+- `phase_31_speed_pitch_correction.py` L≈589: `n_samples=len(audio)`
+
+### 2. [RELEASE_MUST] Lücke-F-Fix v9.10.100 — β=0 IS-Divergenz-Notation in phase_24
+
+Docstring-Fehler in `phase_24_dropout_repair.py` korrigiert: Die NMF-IS-Update-Regeln wurden fälschlich als "β=1 = Itakura-Saito" kommentiert. Korrekt: β=0 = IS, β=1 = KL-Divergenz. Der Code selbst verwendete bereits die korrekten IS(β=0)-Update-Regeln. Kommentar und Modulheader angepasst.
+
+### 3. [RELEASE_MUST] Lücke-E-Fix v9.10.100 — Hanning-COLA-Crossfade in AdaptiveChunkProcessor
+
+`process_in_adaptive_chunks` verwendete lineare Rampen (`np.linspace`) als Fade-Fenster statt Hanning-Halffenstern. Ersetzt durch:
+
+```python
+_t = np.arange(fade_samples) / fade_samples
+fade_in  = 0.5 * (1 - cos(π · t))   # steigende Hanning-Hälfte
+fade_out = 1 - fade_in              # COLA: fade_in + fade_out = 1
+```
+
+Kein Amplitudeneinbruch mehr an Chunk-Grenzen; C¹-stetige Übergänge schützen Transient-Shape.
+
+---
+
+### Zusammenfassung
+
+Zwei fehlende v9.10.102-Invarianten implementiert: harter Genre-Profil-Override auf den Phasenplan + PANNs-basierte Fallback-Aktivierung wenn kein Genre per Klassifikator erkannt.
+
+### 1. [RELEASE_MUST] Genre-Profil-Override-Invariante (`backend/core/unified_restorer_v3.py`)
+
+- **Fehlend**: `*_enabled: False`-Keys in Genre-Profilen (z. B. `KLASSIK_RESTORATION_PROFILE["phase_20_dereverb_enabled"] = False`) wurden nicht auf den Phasenplan angewendet.
+- **Symptom**: `CausalDefectReasoner` aktivierte `phase_20`/`phase_49` bei `REVERB_EXCESS`, obwohl `KLASSIK_RESTORATION_PROFILE` dies verbietet → Konzertsaal-RT60 wurde zerstört.
+- **Fix**: Nach Phase-Selektion und vor `PerformanceGuard`-Start wird `_genre_profile` auf `*_enabled: False`-Keys geprüft. Betroffene Phasen werden aus `selected_phases` entfernt; Logging `genre_profile_override: phase=... disabled by genre=...`.
+- **Invariante**: Override ist final — kein automatischer Bypass, auch nicht bei Defekt-Score > 0.85. Nur manueller Studio-2026-Modus kann aufheben (per Spec §2.20).
+
+### 2. [RELEASE_MUST] PANNs-basierte Fallback-Genre-Aktivierung (v9.10.102, §2.20)
+
+- **Fehlend**: Wenn `GermanSchlagerClassifier` kein Genre erkannte (`open_set_unknown=True` / `"Unbekannt"`), wurden keine Genre-Profile aktiviert — PANNs-Tags wurden ignoriert.
+- **Aktivierungsregeln** (Priorität 2–5, höchste actuelle Priorität gewinnt):
+  - `OPER_RESTORATION_PROFILE`: PANNs `"Opera"` ≥ 0.45 oder `"Singing"` ≥ 0.50
+  - `KLASSIK_RESTORATION_PROFILE`: PANNs `"Orchestra"` ≥ 0.45 oder `"Classical music"` ≥ 0.40
+  - `JAZZ_RESTORATION_PROFILE`: PANNs `"Jazz"` ≥ 0.40 oder `"Blues"` ≥ 0.40
+  - `ROCK_RESTORATION_PROFILE`: PANNs `"Rock music"` ≥ 0.40 oder `"Electric guitar"` + `"Drum"` beide ≥ 0.35
+- Aktivierung nur wenn `_genre_profile` noch leer (kein Überschreiben des Klassifikator-Ergebnisses).
+- Logging `GENRE_PROFILE_PANNS_FALLBACK(...)`.
+
+---
+
+## Version 9.10.104 — PMGG Canonical Exclusions v9.10.96 + GoalApplicabilityFilter Fix K v9.10.100 (Apr 2026)
+
+### Zusammenfassung
+
+Strikter Abgleich des PMGG `PHASE_GOAL_EXCLUSIONS`-Dicts mit dem kanonischen Stand v9.10.96 sowie Umsetzung von Fix K v9.10.100 (`GoalApplicabilityFilter` SNR-Bedingung entfernt). Alle 135 PMGG-Tests grün.
+
+### 1. [RELEASE_MUST] PMGG `PHASE_GOAL_EXCLUSIONS` — kanonischer Stand v9.10.96 (`backend/core/per_phase_musical_goals_gate.py`)
+
+- **Fehler**: Folgende Phasen enthielten am 2026-03-31 nicht-kanonisch hinzugefügte Einträge, die in der Spec v9.10.96 nicht vorgesehen sind:
+  - `phase_03`: `"groove"` + `"emotionalitaet"` → **entfernt** (kanonisch: 5 Goals)
+  - `phase_29`: `"groove"` + `"emotionalitaet"` → **entfernt** (kanonisch: 5 Goals)
+  - `phase_24`: `"emotionalitaet"` → **entfernt** (kanonisch: 5 Goals)
+  - `phase_12`: `"groove"` → **entfernt** (kanonisch: 2 Goals)
+  - `phase_49`: `"emotionalitaet"` → **entfernt** (kanonisch: 1 Goal)
+  - `phase_20`: `"emotionalitaet"` → **entfernt** (kanonisch: 2 Goals)
+- **Begründung**: Die P3-Quick-Proxies für `groove` (LF-Onset-Autokorrelation §9.7.9) und `emotionalitaet` (Crest-Factor-Ratio) sind ausreichend robust gegenüber den betroffenen DSP-Operationen. Die 2026-03-31-Additions beruhten auf Einzelbeobachtungen bei schlechtem Testmaterial und wurden nicht in die normative Spec übernommen.
+
+### 2. [RELEASE_MUST] Fix K v9.10.100 — `GoalApplicabilityFilter` TonalCenter SNR-Bedingung entfernt (`backend/core/goal_applicability_filter.py`)
+
+- **Fehler**: `if snr_db < -5.0 or material == "wax_cylinder":` — die SNR-Bedingung widersprach §9.7.11 (K-S Key Detection ist SNR-invariant).
+- **Fix**: SNR-Bedingung entfernt → `if material == "wax_cylinder":` (ausschließlich Material-basiert).
+- **Neue Begründung**: K-S Key Profile (Krumhansl-Schmuckler 1990) misst Pitch-Class-Verteilung aus Chroma-Merkmal — die Normierung ist SNR-unabhängig. Nur `wax_cylinder` mit propriätärem Tonleitersystem liegt außerhalb des K-S-Geltungsbereichs.
+- Docstring der Klasse und betroffene Kommentare aktualisiert (Fix K v9.10.100).
+
+### 3. Tests (`tests/unit/test_per_phase_musical_goals_gate.py`)
+
+- `test_72_phase03_has_five_goals_excluded_v9_10_96`: Expected-Set auf 5 Goals aktualisiert.
+- `test_73_phase29_has_five_goals_excluded_v9_10_96`: Expected-Set auf 5 Goals aktualisiert.
+- `test_92_phase03_exclusions_v9_10_96`: Docstring + Expected-Set korrigiert (groove/emotionalitaet entfernt).
+- `test_93_phase29_exclusions_v9_10_96`: Docstring + Expected-Set korrigiert.
+- `test_94_phase49_exclusions_v9_10_92`: Expected-Set auf `{"authentizitaet"}` reduziert, Docstring aktualisiert.
+- Alle 135 PMGG-Tests grün.
+
+---
+
+## Version 9.10.103 — Fix X6 Material-Key-Normalisierung + MDEM-Fix + Bridge get_medium_detector (Apr 2026)
+
+### Zusammenfassung
+
+Drei spezifikationskonforme Korrekturen (§6.1 Fix X6, §2.30 Fix X2-minor, §11.1 Bridge-Gap) sowie ein neues Test-Modul mit 35 Tests.
+
+### 1. [RELEASE_MUST] Fix X6 — Material-Key-Normalisierung in MediumDetector (`forensics/medium_detector.py`)
+
+- **Bug**: `MediumDetector.detect()` konnte interne Bayesian-Scorer-Schlüssel wie `"cassette"`, `"reel_wire"`, `"cassette_digital"`, `"vhs_audio"` in `transfer_chain` und `primary_material` zurückgeben. `UnifiedRestorerV3` versuchte `MaterialType("cassette")` → `ValueError` → `MaterialType.UNKNOWN` → falscher Verarbeitungspfad.
+- **Fix**: Neue Staticmethod `_normalize_material_key(key)` normiert alle internen Keys auf SUPPORTED_MATERIALS-konforme Werte:
+  - `cassette` → `tape`
+  - `reel_wire` → `wire_recording`
+  - `cassette_digital` → `dat`
+  - `vhs_audio` → `tape`
+- Normalisierung wird auf alle Elemente von `chain` angewendet, bevor `MediumDetectionResult` gebaut wird.
+- Sektion "Hilfsmethoden" im Header `_to_mono` → `_normalize_material_key` + `_to_mono`.
+
+### 2. Fix X2-minor — MDEM `_morph_internal` Default 4.0 LU (`backend/core/micro_dynamics_envelope_morphing.py`)
+
+- **Bug**: `_morph_internal(max_gain: float = 3.0)` — verbotener einheitlicher 3.0 LU Default laut Spec §2.30.
+- **Fix**: Default auf `4.0` geändert (Restoration-Modus Spec-Wert). Docstring ergänzt mit Fix-X2-Verweis.
+- `morph()` hatte bereits die korrekten Werte `4.0`/`6.0` — nur der Default-Fallback war falsch.
+
+### 3. Bridge-Gap — `get_medium_detector` hinzugefügt (`backend/api/bridge.py`)
+
+- Neue Funktion `get_medium_detector()` gibt `MediumDetector`-Singleton via lazy import zurück (`forensics.medium_detector`).
+- In `__all__` eingetragen.
+- Sicherer Fallback auf `None` bei `ImportError` (z. B. wenn forensics-Modul nicht installiert).
+
+### 4. Tests — `tests/unit/test_material_key_normalization.py` (neu, 35 Tests)
+
+- `TestNormalizeMaterialKey` (15 Tests): alle 5 Key-Mappings + alle Passthrough-Keys.
+- `TestDetectSupportedMaterialsInvariant` (10 Tests): detect()-Rückgabe-Invariante, cassette/reel_wire verboten, Stereo-Input, .mp3/.wav file_ext, Konfidenz [0,1], transfer_chain nicht leer, primary==chain[0].
+- `TestBridgeMediumDetector` (3 Tests): Bridge importierbar, Singleton hat detect(), in `__all__`.
+- `tests/unit/test_forensics_medium_detector.py` Zeile 333: `("tape", "cassette", "reel_tape")` → `("tape", "reel_tape")` nach Normalisierung.
+
+---
+
 ## Version 9.10.102 — Genre-Phase-1: Family-Stage + Top-k + Open-Set + Lyrics-Hinweis (Apr 2026)
 
 ### Zusammenfassung

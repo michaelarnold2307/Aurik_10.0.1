@@ -1,6 +1,6 @@
 # Aurik 9.x.x — Configuration Guide
 
-**Version:** 9.10.77c  
+**Version:** 9.10.102  
 **Datum:** 13. Februar 2026  
 **Status:** ✅ Production Ready
 
@@ -23,7 +23,7 @@ Aurik bietet **5 vordefinierte Processing Modes** plus **Custom Configuration** 
 
 ### Configuration-Hierarchie
 
-```
+```text
 1. Processing Mode (Preset)
    ↓
 2. Custom Config (Override)
@@ -32,6 +32,7 @@ Aurik bietet **5 vordefinierte Processing Modes** plus **Custom Configuration** 
 ```
 
 **Beispiel:**
+
 ```python
 from core.unified_restorer_v2 import UnifiedRestorerV2
 from core.processing_modes import ProcessingConfig, ProcessingMode
@@ -58,7 +59,7 @@ restored = restorer.restore(audio, sr)  # Mode=RESTORATION (default)
 ### Übersicht
 
 | Mode | Zweck | Aggressive | Denoise | Comp. | Phase 10 | Phase 11 |
-|------|-------|------------|---------|-------|----------|----------|
+| --- | --- | --- | --- | --- | --- | --- |
 | **RESTORATION** | Authentisch | 0.5 | 0.3 | 3.0 | ❌ | ❌ |
 | **STUDIO_2026** | Modern/3D | 0.8 | 0.5 | 3.5 | ✅ | ✅ |
 | **FORENSIC** | Minimal | 0.2 | 0.1 | 1.5 | ❌ | ❌ |
@@ -70,12 +71,14 @@ restored = restorer.restore(audio, sr)  # Mode=RESTORATION (default)
 **Philosophie:** "Preserve the past, enhance the future"
 
 **Charakteristika:**
+
 - ✅ Vinyl/Tape-Charakter erhalten
 - ✅ Moderate Noise Reduction
 - ✅ Natural Dynamics
 - ✅ No artificial "digital sound"
 
 **Parameter:**
+
 ```python
 ProcessingConfig(
     mode=ProcessingMode.RESTORATION,
@@ -91,11 +94,13 @@ ProcessingConfig(
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(audio, sr, mode=ProcessingMode.RESTORATION)
 ```
 
 **Ideal für:**
+
 - Vinyl → Digital Transfer
 - Tape Digitalisierung
 - 1920s-1990s Recordings
@@ -108,12 +113,14 @@ restored = restorer.restore(audio, sr, mode=ProcessingMode.RESTORATION)
 **Philosophie:** "Immersive Audio for Modern Platforms"
 
 **Charakteristika:**
+
 - ✅ Phase 8: Air & Presence (12-20 kHz Sparkle)
 - ✅ Phase 10: Soundstage Depth (3-Layer Spatial)
 - ✅ Phase 11: Binaural (HRTF für Kopfhörer)
 - ✅ Emotional Resonance Enhancement
 
 **Parameter:**
+
 ```python
 ProcessingConfig(
     mode=ProcessingMode.STUDIO_2026,
@@ -129,11 +136,13 @@ ProcessingConfig(
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(audio, sr, mode=ProcessingMode.STUDIO_2026)
 ```
 
 **Ideal für:**
+
 - Remastering für Streaming (Spotify, Tidal, Apple Music)
 - Modern Pop, Rock, Electronic
 - Podcast Enhancement
@@ -146,12 +155,14 @@ restored = restorer.restore(audio, sr, mode=ProcessingMode.STUDIO_2026)
 **Philosophie:** "Just Fix What's Broken"
 
 **Charakteristika:**
+
 - ✅ Nur kritische Defekte (Clicks, Clipping)
 - ✅ Keine künstliche Enhancement
 - ✅ Chain of Custody (Logging empfohlen)
 - ✅ Beweis-tauglich
 
 **Parameter:**
+
 ```python
 ProcessingConfig(
     mode=ProcessingMode.FORENSIC,
@@ -167,6 +178,7 @@ ProcessingConfig(
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(
     audio, sr,
@@ -176,6 +188,7 @@ restored = restorer.restore(
 ```
 
 **Ideal für:**
+
 - Gerichtsverfahren (Voice Authentication)
 - Police/FBI Recordings
 - Wiretap Analysis
@@ -188,12 +201,14 @@ restored = restorer.restore(
 **Philosophie:** "Embrace the Imperfection"
 
 **Charakteristika:**
+
 - ✅ Sanftes Denoising (Rauschen als "Ambience")
 - ✅ Harmonic Exciter (Tube Saturation)
 - ✅ Preserve Vinyl Crackle (wenn musikalisch)
 - ✅ Analog-Aesthetic
 
 **Parameter:**
+
 ```python
 ProcessingConfig(
     mode=ProcessingMode.VINTAGE_WARMTH,
@@ -209,11 +224,13 @@ ProcessingConfig(
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(audio, sr, mode=ProcessingMode.VINTAGE_WARMTH)
 ```
 
 **Ideal für:**
+
 - Lo-Fi Hip-Hop
 - Indie/Alternative
 - Vintage Sound Preservation
@@ -226,12 +243,14 @@ restored = restorer.restore(audio, sr, mode=ProcessingMode.VINTAGE_WARMTH)
 **Philosophie:** "Preserve for Eternity"
 
 **Charakteristika:**
+
 - ✅ Nur strukturell schädliche Defekte entfernen
 - ✅ Original-Dynamik bewahren
 - ✅ Minimale Veränderung
 - ✅ Langzeitarchivierung (24-bit/48kHz)
 
 **Parameter:**
+
 ```python
 ProcessingConfig(
     mode=ProcessingMode.ARCHIVAL,
@@ -247,11 +266,13 @@ ProcessingConfig(
 ```
 
 **Verwendung:**
+
 ```python
 restored = restorer.restore(audio, sr, mode=ProcessingMode.ARCHIVAL)
 ```
 
 **Ideal für:**
+
 - Museen & Bibliotheken
 - Radio Archives (BBC, ORF, ARD)
 - Historical Preservation
@@ -305,12 +326,14 @@ restored = restorer.restore(audio, sr, config=config)
 **Beschreibung:** Kontrolliert die Restaurations-Aggressivität über alle Phasen hinweg.
 
 **Effekt:**
+
 - **0.0-0.3:** Sehr konservativ (minimal processing)
 - **0.3-0.5:** Moderat (balanced)
 - **0.5-0.7:** Aggressiv (strong restoration)
 - **0.7-1.0:** Sehr aggressiv (maximum enhancement)
 
 **Betroffene Phasen:**
+
 - Phase 2: Click/Crackle Removal Sensitivity
 - Phase 3: Noise Reduction Strength
 - Phase 4: Transient Restoration Intensity
@@ -318,6 +341,7 @@ restored = restorer.restore(audio, sr, config=config)
 - Phase 6: Dynamic Processing
 
 **Beispiel:**
+
 ```python
 # Fragile 1920s Shellac Recording
 config = ProcessingConfig(
@@ -339,16 +363,19 @@ config = ProcessingConfig(
 **Beschreibung:** Noise Reduction Stärke (Phase 3).
 
 **Effekt:**
+
 - **0.0-0.2:** Minimales Denoising (preserve noise floor)
 - **0.2-0.4:** Moderates Denoising (natural result)
 - **0.4-0.6:** Starkes Denoising (clean sound)
 - **0.6-1.0:** Sehr starkes Denoising (broadcast-clean)
 
 **Trade-Off:**
+
 - **Zu niedrig:** Hörbare Hintergrundgeräusche bleiben
 - **Zu hoch:** "Digital sound", Artifacts, Transient-Smearing
 
 **Beispiel:**
+
 ```python
 # Noisy room recording (Podcast)
 config = ProcessingConfig(
@@ -370,18 +397,21 @@ config = ProcessingConfig(
 **Beschreibung:** Dynamik-Kompression (Phase 6).
 
 **Effekt:**
+
 - **1.0:** Keine Kompression (original dynamics)
 - **1.5-2.5:** Sanfte Kompression (musical)
 - **2.5-4.0:** Moderate Kompression (Radio/Streaming)
 - **4.0-10.0:** Heavy Kompression (Broadcast/Mastering)
 
 **Verwendung:**
+
 - **1.0-2.0:** Classical, Jazz, Audiophile
 - **2.0-3.5:** Pop, Rock, General Music
 - **3.5-6.0:** Loudness War, Modern Mastering
 - **6.0-10.0:** Podcast, Voice-Over (extreme loudness)
 
 **Beispiel:**
+
 ```python
 # Classical Music (preserve dynamics)
 config = ProcessingConfig(
@@ -405,14 +435,17 @@ config = ProcessingConfig(
 **Beschreibung:** Sibilanz-Reduktion (Phase 5.1).
 
 **Effekt:**
+
 - **True:** Aggressive "s", "t", "f" Sounds werden gedämpft (5-8 kHz)
 - **False:** Keine Sibilanz-Reduktion
 
 **Verwendung:**
+
 - **True:** Vocals, Speech, Broadcast
 - **False:** Instrumental, Classical (keine Sibilanten)
 
 **Beispiel:**
+
 ```python
 # Podcast mit harschen Sibilanten
 config = ProcessingConfig(
@@ -434,6 +467,7 @@ config = ProcessingConfig(
 **Beschreibung:** Phase 2.2 Vocal Enhancement (5-Stage Pipeline).
 
 **Was macht es:**
+
 1. **Breath Intelligence:** Intelligente Atem-Reduktion
 2. **Formant System:** Vokal-Klarheit (Formanten-Anhebung)
 3. **Vocal Presence:** 2-5 kHz Präsenz-Boost
@@ -441,6 +475,7 @@ config = ProcessingConfig(
 5. **Dynamics Intelligence:** Voice-spezifische Kompression
 
 **Verwendung:**
+
 ```python
 # Podcast / Voice-Over
 config = ProcessingConfig(
@@ -456,6 +491,7 @@ config = ProcessingConfig(
 ```
 
 **Auto-Detection:**
+
 ```python
 # Default: Auto (wird nur aktiviert wenn Vocals detected)
 config = ProcessingConfig(
@@ -471,6 +507,7 @@ config = ProcessingConfig(
 **Beschreibung:** Phase 2.3 Instrumental Enhancement (6 System-Pipeline).
 
 **Was macht es:**
+
 1. **Bass Enhancement:** Sub-Bass Clarity (40-150 Hz)
 2. **Drums Enhancement:** Attack Sharpness, Transient Preservation
 3. **Guitar Enhancement:** String Clarity, Harmonic Richness
@@ -479,6 +516,7 @@ config = ProcessingConfig(
 6. **Spatial Enhancement:** Stereo Width, Depth Cues
 
 **Verwendung:**
+
 ```python
 # Rock Band
 config = ProcessingConfig(
@@ -500,6 +538,7 @@ config = ProcessingConfig(
 **Beschreibung:** Phase 10 Soundstage Depth (3D Immersion).
 
 **Was macht es:**
+
 - **Foreground (70%):** Direct Sound
 - **Midground (20%):** Early Reflections (15ms, 22.5ms, 30ms)
 - **Background (10%):** Diffuse Reverb (RT60=0.3s)
@@ -508,6 +547,7 @@ config = ProcessingConfig(
 **CPU-Cost:** ~+15% Processing Time
 
 **Verwendung:**
+
 ```python
 # Remastering für Streaming (3D Audio)
 config = ProcessingConfig(
@@ -529,6 +569,7 @@ config = ProcessingConfig(
 **Beschreibung:** Phase 11 Binaural & Emotional Enhancement.
 
 **Was macht es:**
+
 1. **Binaural Processing:**
    - ITD (Interaural Time Difference)
    - ILD (Interaural Level Difference)
@@ -544,6 +585,7 @@ config = ProcessingConfig(
 **CPU-Cost:** ~+10% Processing Time
 
 **Verwendung:**
+
 ```python
 # Headphone Mastering
 config = ProcessingConfig(
@@ -567,6 +609,7 @@ config = ProcessingConfig(
 **Problem:** 1960s Vinyl → Digital (mit Clicks, Crackle, Rumble)
 
 **Lösung:**
+
 ```python
 from core.unified_restorer_v2 import UnifiedRestorerV2
 from core.processing_modes import ProcessingMode
@@ -584,6 +627,7 @@ sf.write('vinyl_restored.wav', restored, 48000, subtype='PCM_24')
 ```
 
 **Ergebnis:**
+
 - ✅ Clicks/Crackle entfernt (Phase 2A)
 - ✅ Rumble gefiltert (Phase 0)
 - ✅ Vinyl-Wärme erhalten (moderate denoising)
@@ -595,6 +639,7 @@ sf.write('vinyl_restored.wav', restored, 48000, subtype='PCM_24')
 **Problem:** Noisy room recording, breaths, sibilance
 
 **Lösung:**
+
 ```python
 from core.processing_modes import ProcessingConfig, ProcessingMode
 
@@ -611,6 +656,7 @@ sf.write('podcast_enhanced.wav', restored, 48000)
 ```
 
 **Ergebnis:**
+
 - ✅ Room noise entfernt (Phase 3)
 - ✅ Sibilance gedämpft (Phase 5.1)
 - ✅ Breath-Intelligenz (Phase 2.2)
@@ -623,6 +669,7 @@ sf.write('podcast_enhanced.wav', restored, 48000)
 **Problem:** 78 RPM Shellac, extreme clicks, narrow bandwidth
 
 **Lösung:**
+
 ```python
 from core.processing_modes import ProcessingConfig, ProcessingMode
 
@@ -646,6 +693,7 @@ sf.write('archive_master.wav', restored, 48000, subtype='PCM_24')
 ```
 
 **Ergebnis:**
+
 - ✅ Nur kritische Clicks entfernt (Phase 2A, sanft)
 - ✅ Historical noise preserved
 - ✅ No artificial enhancement
@@ -658,6 +706,7 @@ sf.write('archive_master.wav', restored, 48000, subtype='PCM_24')
 **Problem:** Police recording, voice authentication, beweis-tauglich
 
 **Lösung:**
+
 ```python
 config = ProcessingConfig(
     mode=ProcessingMode.FORENSIC,
@@ -679,6 +728,7 @@ if hasattr(restorer, 'logger'):
 ```
 
 **Ergebnis:**
+
 - ✅ Minimale Veränderung (nur kritische Defekte)
 - ✅ Dokumentierte Processing Chain
 - ✅ Beweis-taugliche Verarbeitung

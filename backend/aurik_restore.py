@@ -41,22 +41,40 @@ from plugins.utmos_plugin import estimate_mos
 
 def load_importfile(importfile_path: str) -> tuple[np.ndarray, int, dict[str, Any]]:
     """Lädt das Importfile (Audio + Metadaten, beliebiges Audioformat)."""
-    import librosa
+    from backend.file_import import load_audio_file as _load_audio_file
 
     ext = os.path.splitext(importfile_path)[1].lower()
     if ext == ".json":
         with open(importfile_path) as f:
             data = json.load(f)
         audio_path = data["audio"]
-        audio, sr = librosa.load(audio_path, sr=None, mono=True)
+        _res = _load_audio_file(audio_path)
+        if _res is None or _res.get("error"):
+            raise RuntimeError(
+                f"Audio-Import fehlgeschlagen: {(_res or {}).get('error', 'Unbekannter Fehler')}. "
+                "Datei als WAV/FLAC prüfen oder neu exportieren."
+            )
+        audio, sr = _res["audio"], _res["sr"]
+        if _res["channels"] == 1 or audio.ndim == 1:
+            pass  # already mono
+        else:
+            audio = audio.mean(axis=-1)
         audio, sr = ensure_sr(audio, sr, 48000)
         # NaN/Inf-Guard (§3.1)
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
         audio = np.clip(audio, -1.0, 1.0)
         return audio, sr, data.get("metadata", {})
     else:
-        # Direktes Audiofile (mp3, wav, flac, ...)
-        audio, sr = librosa.load(importfile_path, sr=None, mono=True)
+        # Direct audio file (mp3, wav, flac, ...) — use robust decoder cascade
+        _res = _load_audio_file(importfile_path)
+        if _res is None or _res.get("error"):
+            raise RuntimeError(
+                f"Audio-Import fehlgeschlagen: {(_res or {}).get('error', 'Unbekannter Fehler')}. "
+                "Datei als WAV/FLAC prüfen oder neu exportieren."
+            )
+        audio, sr = _res["audio"], _res["sr"]
+        if audio.ndim > 1:
+            audio = audio.mean(axis=-1)
         audio, sr = ensure_sr(audio, sr, 48000)
         # NaN/Inf-Guard (§3.1)
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)

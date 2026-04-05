@@ -1,8 +1,8 @@
 # Aurik 9 — Intelligentes Musik-Restaurierungssystem
 
-**Version:** 9.10.77c | **Status:** ✅ Produktionsbereit — Weltführend
+**Version:** 9.10.102 | **Status:** ✅ Produktionsbereit — Weltführend
 
-**Datum:** März 2026
+**Datum:** April 2026
 
 > Hinweis: Verbindliche Detailstände liegen in `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
 
@@ -31,7 +31,7 @@
 - **[KI-Programmierrichtlinien](../.github/copilot-instructions.md)** — Bindende Systemregeln **(Pflicht!)**
 - **[Python API Reference](api/PYTHON_API.md)** — API-Dokumentation
 - **[Architecture Overview](architecture/ARCHITECTURE.md)** — Systemarchitektur (4 Schichten)
-- **[Phases Overview](architecture/PHASES_OVERVIEW.md)** — 56-Phasen-Pipeline
+- **[Phases Overview](architecture/PHASES_OVERVIEW.md)** — 64-Phasen-Pipeline
 - **[Contributing Guide](development/CONTRIBUTING.md)** — Beitrag leisten
 - **[Testing Guide](development/TESTING.md)** — Teststrategie und Qualitätssicherung
 
@@ -44,31 +44,31 @@
 
 ---
 
-## 🎯 Aurik 9.10.77c — Highlights
+## 🎯 Aurik 9.10.102 — Highlights
 
-### ✅ Produktionsbereit (März 2026)
+### ✅ Produktionsbereit (April 2026)
 
 **Kennzahlen:**
-- ✅ **Umfangreiche Testabdeckung** — Unit/Normative/Integration grün
-- ✅ **14 Musical Goals** — alle psychoakustisch geprüft
-- ✅ **56 Phasen** (Phase 01–56, Defect-First)
+- ✅ **~11.023 Tests** — Unit/Normative/Integration grün
+- ✅ **14 Musical Goals** — alle psychoakustisch geprüft, mode-differenziert (Restoration/Studio 2026)
+- ✅ **64 Phasen** (Phase 01–64, Defect-First)
 - ✅ **Material-adaptive Verarbeitung** über Medium-/Era-Kontext
 - ✅ **32 DefectTypes** erkannt und behandelt
 - ✅ **CPU-only** (Desktop-Hardware, kein GPU erforderlich)
 - ✅ **100 % offline** nach Installation (keine Cloud)
 
-**Schlüssel-Module (v9.10.77c):**
+**Schlüssel-Module (v9.10.102):**
 
 1. **14 Musical Goals** — Brillanz, Wärme, Natürlichkeit, Authentizität, Emotionalität, Transparenz, Bass-Kraft, Groove, Raumtiefe, Timbre-Authentizität, Tonales Zentrum, Mikro-Dynamik, Separation-Treue, Artikulation
 2. **Transient Decoupled Processing (TDP)** — Transienten separat durch Pipeline führen; GrooveMetric +0.03–0.06
 3. **HarmonicPreservationGuard (HPG)** — G_floor 0.85 an harmonischen Partials; Natürlichkeit +0.03–0.07
 4. **PerPhaseMusicalGoalsGate (PMGG)** — kein kumulativer Qualitätsverlust; max. 5 Retries pro Phase
 5. **MicroDynamicsEnvelopeMorphing (MDEM)** — originales Mikro-Dynamik-Profil wiederherstellen
-6. **GermanSchlagerClassifier** — 6-Schicht Zero-Shot: Akkordeon-Reed-Beating + HSI + Rhythmus + Formant-Prior
-7. **EraClassifier** — Aufnahme-Ära 1890–2025 erkennen; GP-Warmstart pro Epoche
-8. **RestorabilityEstimator** — Vor-Assessment < 5 s; Score 0–100 + predicted MOS
-9. **StemRemixBalancer** — LUFS-korrekter Re-Mix nach getrennter Stem-Verarbeitung
-10. **AudioFileValidator** — Sicherheitsprüfung vor jeder DSP-Verarbeitung (OWASP A03)
+6. **LyricsGuidedEnhancement** (§2.36) — Whisper-Tiny ONNX + Phonem-Alignment; Phase 58
+7. **GermanSchlagerClassifier** — 6-Schicht Zero-Shot: Akkordeon-Reed-Beating + HSI + Rhythmus
+8. **GenreClassifier** (Genre-Phase-1) — Family+Top-k+Open-Set, SongCal-Fusion, UI-Badge
+9. **OOM-Recovery-Checkpoint** (§2.39) — nahtlose Pipeline-Wiederaufnahme nach OOM-Kill
+10. **RestorabilityEstimator** — Vor-Assessment < 5 s; Score 0–100 + predicted MOS
 
 ---
 

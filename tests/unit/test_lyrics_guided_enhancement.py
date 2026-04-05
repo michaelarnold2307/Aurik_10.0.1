@@ -676,6 +676,28 @@ class TestLGEInternalCAP:
         sal = cap.compute_lyrics_saliency(base, result_obj, SR)
         assert np.all(np.isfinite(sal))
 
+    def test_lge_18b_vowel_stressed_dsp_is_not_passthrough(self) -> None:
+        """Regression guard for §2.36a vowel branch.
+
+        Ensures LPC/formant DSP stays active and does not silently fall back to
+        passthrough when optional helper APIs are unavailable.
+        """
+        cap = self._cap()
+        t = np.linspace(0.0, 0.20, int(0.20 * SR), endpoint=False)
+        # Harmonic-rich vocal-like segment (F0 + partials)
+        seg = (
+            0.45 * np.sin(2 * np.pi * 220.0 * t)
+            + 0.20 * np.sin(2 * np.pi * 660.0 * t)
+            + 0.12 * np.sin(2 * np.pi * 1320.0 * t)
+        ).astype(np.float32)
+        out = cap._apply_phoneme_dsp(seg, "vowel_stressed", SR, strength=0.9)
+
+        assert out.shape == seg.shape
+        assert np.all(np.isfinite(out))
+        # Must apply a measurable modification for vowel_stressed processing
+        delta = float(np.mean(np.abs(out - seg)))
+        assert delta > 1e-5
+
 
 class TestLGEEnhance:
     """LyricsGuidedEnhancement.enhance() Integration (DSP-Fallback-Pfad)."""

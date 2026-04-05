@@ -473,6 +473,63 @@ class ReverbReduction(PhaseInterface):
         if 0.0 < _effective_strength < 1.0:
             reduced = audio + _effective_strength * (reduced - audio)
             reduced = np.clip(reduced, -1.0, 1.0)
+
+        # §4.5c Early-Reflection-Guard (Spec §4.5c, v9.10.100)
+        # C80 = 10·log10(E_early80ms / E_late) — Kuttruff 2009; ΔC80 ≤ 6 dB
+        _c80_guard_triggered = False
+        _early_blend_triggered = False
+        _delta_c80 = 0.0
+        try:
+            _mono_in = audio[0] if audio.ndim == 2 else audio
+            _mono_out = reduced[0] if reduced.ndim == 2 else reduced
+            _e80 = int(sample_rate * 0.080)
+            if len(_mono_in) > _e80:
+                _c80_pre = 10.0 * float(np.log10(
+                    max(np.sum(_mono_in[:_e80] ** 2), 1e-12) / max(np.sum(_mono_in[_e80:] ** 2), 1e-12)
+                ))
+                _c80_post = 10.0 * float(np.log10(
+                    max(np.sum(_mono_out[:_e80] ** 2), 1e-12) / max(np.sum(_mono_out[_e80:] ** 2), 1e-12)
+                ))
+                _delta_c80 = _c80_post - _c80_pre
+                if _delta_c80 < -2.0:
+                    # C80 degraded → rollback to dry
+                    logger.warning(
+                        "Phase 20 §4.5c C80-guard: ΔC80=%.2f dB < −2 dB → rollback", _delta_c80
+                    )
+                    reduced = audio.copy()
+                    _c80_guard_triggered = True
+                elif _delta_c80 > 6.0:
+                    # Excessive clarity boost → scale wet proportionally
+                    _c80_wet_scale = float(np.clip(6.0 / (_delta_c80 + 1e-9), 0.30, 1.0))
+                    reduced = audio + _c80_wet_scale * (reduced - audio)
+                    reduced = np.clip(reduced, -1.0, 1.0)
+                    _c80_guard_triggered = True
+                    logger.info(
+                        "Phase 20 §4.5c C80-guard: ΔC80=%.2f dB > 6 dB → wet scaled to %.2f",
+                        _delta_c80, _c80_wet_scale,
+                    )
+                elif _delta_c80 > 4.0:
+                    # Moderate boost → blend 35 % early reflections back (spec α=0.35, 50 ms)
+                    _early_win = int(sample_rate * 0.050)
+                    _alpha = 0.35
+                    _rd = reduced.copy().astype(np.float64)
+                    _og = audio.astype(np.float64)
+                    if _rd.ndim == 2:
+                        for _ch in range(_rd.shape[0]):
+                            _e = min(_early_win, _rd.shape[1])
+                            _rd[_ch, :_e] = (1.0 - _alpha) * _rd[_ch, :_e] + _alpha * _og[_ch, :_e]
+                    else:
+                        _e = min(_early_win, len(_rd))
+                        _rd[:_e] = (1.0 - _alpha) * _rd[:_e] + _alpha * _og[:_e]
+                    reduced = np.clip(_rd.astype(np.float32), -1.0, 1.0)
+                    _early_blend_triggered = True
+                    logger.info(
+                        "Phase 20 §4.5c C80-guard: ΔC80=%.2f dB — early-reflection blend 35 %% applied",
+                        _delta_c80,
+                    )
+        except Exception as _c80_exc:
+            logger.debug("Phase 20 C80-guard skipped (non-critical): %s", _c80_exc)
+
         return PhaseResult(
             success=True,
             audio=reduced,
@@ -490,6 +547,9 @@ class ReverbReduction(PhaseInterface):
                 "hop_size": self.HOP_SIZE,
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
+                "delta_c80": float(_delta_c80),
+                "c80_guard_triggered": _c80_guard_triggered,
+                "early_blend_triggered": _early_blend_triggered,
             },
         )
 
@@ -712,7 +772,7 @@ class ReverbReduction(PhaseInterface):
         Zxx_processed = G_combined * np.abs(Zxx_ref) * np.exp(1j * np.angle(Zxx_ref))
         if _PGHI_AVAILABLE_P20:
             try:
-                audio_out = _pghi_p20(Zxx_processed.astype(np.complex64), sr=sample_rate, win_size=REF_WIN, hop=REF_HOP)
+                audio_out = _pghi_p20(Zxx_processed.astype(np.complex64), sr=sample_rate, win_size=REF_WIN, hop=REF_HOP, n_samples=n_audio)
             except Exception as pghi_exc:
                 logger.warning("MRSA Phase 20: PGHI failed, using iSTFT fallback: %s", pghi_exc)
                 _, audio_out = signal.istft(
@@ -727,7 +787,7 @@ class ReverbReduction(PhaseInterface):
         if len(audio_out) > n_audio:
             audio_out = audio_out[:n_audio]
         elif len(audio_out) < n_audio:
-            audio_out = np.pad(audio_out, (0, n_audio - len(audio_out)), mode="edge")
+            audio_out = np.pad(audio_out, (0, n_audio - len(audio_out)), mode="constant", constant_values=0.0)
 
         audio_out = np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0)
         audio_out = np.clip(audio_out, -1.0, 1.0)

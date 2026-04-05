@@ -43,7 +43,7 @@ ALGORITHM (Professional-Level):
 
 SCIENTIFIC FOUNDATION (Über-SOTA):
 ---------------------
-- **Févotte & Idier (2011)**: Algorithms for NMF with the β-Divergence (β=1, Itakura-Saito)
+- **Févotte & Idier (2011)**: Algorithms for NMF with the β-Divergence (β=0 = Itakura-Saito IS, β=1 = KL)
   → Spektrale Textur-Synthese für atonalen Inhalt (ersetzt einfache Rausch-Statistik)
 - **Perraudin et al. (2013)**: PGHI — Phase Gradient Heap Integration
   → Phasenkonsistenz nach spektraler Manipulation (ersetzt direktes ISTFT)
@@ -1387,7 +1387,7 @@ class DropoutRepairPhase(PhaseInterface):
             # Reconstruct zone fill segment
             try:
                 if _PGHI_AVAILABLE_P24:
-                    seg = _pghi_p24(Zxx_refined, eff_win, eff_hop, sr)
+                    seg = _pghi_p24(Zxx_refined, sr=sr, win_size=eff_win, hop=eff_hop, n_samples=gap_len)
                 else:
                     _, seg = _istft_fn(Zxx_refined, sr, nperseg=eff_win, noverlap=eff_win - eff_hop)
             except Exception:
@@ -1501,11 +1501,12 @@ class DropoutRepairPhase(PhaseInterface):
         """NMF-β Textur-Synthese für atonalen Inhalt (Févotte & Idier 2011).
 
         Févotte & Idier (2011): "Algorithms for Nonnegative Matrix Factorization
-        with the β-Divergence" (β=1 = Itakura-Saito-Divergenz).
+        with the β-Divergence" (β=0 = Itakura-Saito IS-Divergenz, PFLICHT für
+        kurze Lücken < 50 ms und Transient-Gaps per Lücke-F-Fix v9.10.100).
 
         Vereinfachtes NMF-β-Verfahren:
             1. STFT Kontext-Frames (V: F×T, nicht-negativ: Betragsspektrum)
-            2. NMF V ≈ W·H  (K=8 Komponenten, IS-Divergenz, 30 Iterationen)
+            2. NMF V ≈ W·H  (K=8 Komponenten, β=0 IS-Divergenz, 30 Iterationen)
             3. Aktivierungen H für Lückensegment linear extrapolieren
             4. V_fill = W · H_fill (spektrale Rekonstruktion)
             5. Zufällige Phase + ISTFT (atonaler Inhalt → inkohärente Phase OK)
@@ -1538,7 +1539,7 @@ class DropoutRepairPhase(PhaseInterface):
             W = rng.uniform(EPS, 1.0, (n_freq, K))
             H = rng.uniform(EPS, 1.0, (K, n_frames_ctx))
 
-            # Multiplikative IS-NMF Update-Regeln (β=1, Itakura-Saito)
+            # Multiplikative IS-NMF Update-Regeln (β=0, Itakura-Saito — PFLICHT per Lücke-F-Fix v9.10.100)
             # W += W * (((V / (W@H + EPS)^2) @ H.T) / ((W@H + EPS)^(-1) @ H.T))
             # Vereinfacht (MMSE-approximiert via IS-Schätzer):
             for _ in range(N_ITER):
@@ -1595,7 +1596,10 @@ class DropoutRepairPhase(PhaseInterface):
             logger.debug("NMF-β repair fehlgeschlagen: %s, Fallback Rausch-Synthese", exc)
             context = np.concatenate([before, after])
             noise_std = float(np.std(context)) + 1e-10
-            synthesized = noise_std * np.random.randn(gap_length)
+            # §2.40 Determinismus: content-derived seed for reproducible noise synthesis
+            _fb_seed = int(abs(float(np.sum(np.abs(context[:min(len(context), 64)])))) * 1e5 + gap_length) % (2**31)
+            _rng_fb = np.random.default_rng(seed=_fb_seed)
+            synthesized = noise_std * _rng_fb.standard_normal(gap_length)
             return np.clip(synthesized, -1.0, 1.0)
 
     def _repair_hybrid(self, before: np.ndarray, after: np.ndarray, gap_length: int) -> np.ndarray:

@@ -200,6 +200,25 @@ CAUSE_TO_PHASES = {
                                   "phase_29_tape_hiss_reduction", "phase_04_eq_correction"],
 }
 # PFLICHT: Jede neue Ursache → Eintrag hier UND in allen Material-Prior-Tabellen des DefectScanners.
+
+# [RELEASE_MUST] §7.2a Severity-Weighted Phase-Reorder bei ≥3 Simultandefekten (v9.10.100+):
+# Wenn CausalDefectReasoner für ein Audio-Segment ≥3 Ursachen mit
+# max_severity ≥ 0.70 identifiziert, DARF die kanonische CAUSE_TO_PHASES-Reihenfolge
+# durch folgende Regel überschrieben werden:
+#
+#   phase_order = sorted(all_activated_phases,
+#       key=lambda p: (severity_for_phase(p), -phase_number(p)), reverse=True)
+#
+# Rationale: Ein schwerer Dropout (severity=0.92) generiert nach phase_03_denoise mehr
+# Information (Stille statt Rauschen) als wenn Hum (severity=0.45) zuerst bearbeitet wird.
+# Die Defektinteraktion ist nicht linearkumulativ — frühe Schlüsselphasen erhöhen die
+# Qualität nachfolgender Phasen messbar.
+#
+# Implementierung in `CausalDefectReasoner.build_restoration_plan()`:
+#   if len([d for d in defects if d.severity >= 0.70]) >= 3:
+#       plan.phases = _severity_reorder(plan.phases, defect_severity_map)
+# Dabei gilt: PMGG-Exclusions und Phase-Validity-Regeln bleiben unverändert.
+# VERBOTEN: Reorder bei < 3 Hochseverity-Defekten (destabilisiert gut getestete Reihenfolge).
 ```
 
 ---
@@ -212,7 +231,7 @@ CAUSE_TO_PHASES = {
 | Brass / Trumpet / Saxophone | `phase_45_brass_enhancement` | ≥ 0.50 |
 | Drum / Percussion | `phase_51_drums_enhancement` | ≥ 0.50 |
 | Piano / Keyboard | `phase_52_piano_restoration` | ≥ 0.50 |
-| Singing / Vocals / Speech | `phase_19_de_esser` + `phase_42_vocal_enhancement` + `phase_43_ml_deesser` + VocalAIEnhancement | ≥ 0.40 (Speech: ≥ 0.35) |
+| Singing / Vocals / Speech | `phase_19_de_esser` + `phase_42_vocal_enhancement` + `phase_43_ml_deesser` + VocalAIEnhancement | ≥ 0.40 (Soft 0.35–0.40: 50 % Strength; Speech: ≥ 0.35) |
 
 > **Invariante** (v9.10.83): Instrument-Schwelle ist einheitlich **0.50** für alle Instrumente. Höherer Wert (z.B. 0.60) blockiert Enhancement bei Ensemble-Aufnahmen mit mehreren gleichzeitigen Instrumenten. Änderungen hier → immer auch `backend/core/unified_restorer_v3.py` L≈5822 + `plugins/panns_plugin.py` Docstring anpassen.
 
@@ -276,12 +295,34 @@ result = process_in_adaptive_chunks(
     max_severity=defect_severity,
     phase_kwargs={"material_type": material, ...},
 )
-# Crossfade: Hanning-Fenster 10 ms, Overlap-Add
+# Crossfade: Hanning-Fenster 10 ms @ 50% Overlap — COLA-konform (Lücke-E-Fix v9.10.100)
+#   COLA-Bedingung (Constant Overlap-Add): sum(w[n-H], w[n]) = 1.0 für alle n
+#   → Hanning + 50 % Overlap (Hop = fsize/2) ist COLA-konform — kein Amplitudeneinbruch
+#   → Konkret: fsize = 480 Samples (10 ms @ 48 kHz), hop = 240 Samples (5 ms)
+#   → Jeder Chunk-Rand-Sample ist genau einmal von Hanning = 1.0-Summe abgedeckt
+#   VERBOTEN: Hanning mit Hop > fsize/2 (erzeugt periodische −0.5–1.5 dB Dips @ jeder
+#             Chunk-Grenze — besonders hörbar bei 5-s-Chunks mit hoher Defektdichte)
 # Minimum: 2 s | Maximum: 120 s
 # Segment-Grenzen (SegmentAdaptiveProcessor) haben Vorrang vor Chunk-Grenzen
+#
+# [RELEASE_MUST] §7.6a Chunk-Boundary-Transient-Guard (v9.10.100+):
+# Liegt ein Transient (onset_strength > 0.35, aus librosa.onset.onset_strength) innerhalb
+# von ±20 ms einer geplanten Chunk-Grenze, MUSS die Grenze um +25 ms nach vorne verschoben
+# werden (weg vom Transient).
+# Begründung: Ein Drum-Hit oder Plosiv exakt auf der Crossfade-Grenze führt selbst bei
+# COLA-konformem Hanning zu hörbarem Transient-Smearing (±0.3–0.8 dB Amplitudenabweichung
+# im ersten Attack-Frame, ca. 1–22 ms). Beträgt der Shift mehr als halbe Chunk-Größe,
+# Grenze stattdessen um −25 ms nach hinten verschieben.
+# Implementierung: `adaptive_chunk_processor._find_safe_boundary(pos_samples, audio, sr)`
 ```
 
 **Defect-Locations-Flow** (v9.10.75): `_execute_pipeline` extrahiert `defect_locations` (dict[str, list[tuple[float,float]]]) und `max_defect_severity` (float) aus DefectScanner-Ergebnissen und übergibt sie als kwargs an jede Phase. Phasen können Locations als Hints für gezieltere Verarbeitung nutzen (opt-in), erkennen Defekte weiterhin auch eigenständig intern (Redundanz-Prinzip).
+
+**[RELEASE_MUST] Location-Completeness-Invariante**:
+
+- Im Core-Analyse- und Reparaturpfad sind harte Obergrenzen auf `defect_locations` unzulässig.
+- Bei hoher Ereignisdichte (auch >1000 Events) muss die vollständige Eventliste für Phasenrouting, PMGG und Nachverarbeitung erhalten bleiben.
+- Marker-Reduktion ist nur im UI-Layer erlaubt und darf nie die intern verwendete Defektliste verändern.
 
 ---
 

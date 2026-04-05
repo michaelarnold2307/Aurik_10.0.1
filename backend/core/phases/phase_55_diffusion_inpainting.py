@@ -208,11 +208,16 @@ def _inpaint_gap_dsp(
         x_env = np.abs(x) + 1e-10
         x = x * (env_target / x_env).clip(0.0, 2.0)
 
+    # §2.40 Determinismus: Seeded RNG, derived from left-context fingerprint + gap position.
+    # Ensures bit-exact reproducibility for identical inputs (same audio, same position).
+    _ctx_seed = int(abs(float(np.sum(np.abs(left_ctx[:min(len(left_ctx), 64)])))) * 1e5 + start) % (2**31)
+    _rng55 = np.random.default_rng(seed=_ctx_seed)
+
     # Reverse Diffusion (iteratives Denoising, T=n_steps Steps, adaptiv)
     for step in range(n_steps, 0, -1):
         sigma = _cosine_schedule(step, n_steps)
         if sigma > 0:
-            noise = np.random.randn(gap_len) * sigma
+            noise = _rng55.standard_normal(gap_len) * sigma
             # Denoising: Projektionsschritt zurück zum Prior
             x = x + noise * 0.2
             # Regularisierung: Low-pass smoothing bei hohem Rauschen

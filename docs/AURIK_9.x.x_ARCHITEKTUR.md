@@ -1,7 +1,7 @@
 # Aurik 9.x.x — Implementierte Architektur
 
-**Stand:** März 2026  
-**Version:** 9.10.77c  
+**Stand:** April 2026  
+**Version:** 9.10.102  
 **Status:** ✅ Produktionsbereit
 
 > Hinweis: Diese Seite ist eine Architekturübersicht. Normative Details stehen in `.github/specs/01-08`.
@@ -16,7 +16,7 @@ Aurik 9 verarbeitet Audio über eine streng geordnete kognitive Pipeline.
 Vor jeder Restaurierung wird das Material analysiert, die Ursache ermittelt
 (Bayesianische Kausalinferenz) und die Verarbeitungsparameter optimiert (GP-Optimizer).
 
-```
+```text
 TransientDecoupledProcessing (TDP)           ← Schritt 0: Trennung
   -> RestorabilityEstimator                   ← < 5 s Vor-Assessment
   -> EraClassifier (1890–2025)                ← Dekaden-Prior
@@ -27,7 +27,7 @@ TransientDecoupledProcessing (TDP)           ← Schritt 0: Trennung
   -> UncertaintyQuantifier                    ← Konfidenz
   -> GPParameterOptimizer (MOO-Pareto)        ← Parameter-Vorschlag
   -> HarmonicPreservationGuard                ← Partial-Masken
-  -> Phasen 01–56 (je via PMGG-Gate)         ← Verarbeitung
+  -> Phasen 01–64 (je via PMGG-Gate)         ← Verarbeitung
   -> EraAuthenticPerceptualCompletion         ← BW < 10 kHz
   -> IntroducedArtifactDetector               ← Artefakt-Check
   -> FeedbackChain (max. 5 Iter.)             ← Iterative Optimierung
@@ -52,6 +52,7 @@ bei Mono-Aufnahmen). GoalPriorityProtocol (Stufe 1–5) steuert Pareto-Kompromis
 ### 3. Numerische Robustheit (Pflicht)
 
 Jede Funktion die Audio oder Scores zurückgibt ist NaN/Inf-frei:
+
 ```python
 result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
 audio = np.clip(audio, -1.0, 1.0)
@@ -76,16 +77,17 @@ def get_my_module():
 ### 5. SR-Invariante (Pflicht)
 
 Interne Verarbeitung immer auf 48 000 Hz:
+
 ```python
 assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 ```
 
 ---
 
-## Wichtige neue Module (v9.9–v9.10.77c)
+## Wichtige neue Module (v9.9–v9.10.102)
 
 | Modul | Zweck | Position in Pipeline |
-|---|---|---|
+| --- | --- | --- |
 | `TransientDecoupledProcessing` | HPSS vor NR — Groove-Erhalt | Allererster Schritt |
 | `HarmonicPreservationGuard` | G_floor=0.85 an Partials | Vor phase_03 + phase_29 |
 | `PerPhaseMusicalGoalsGate` | Rollback bei Regression nach jeder Phase | Umhüllt alle Phasen |
@@ -93,14 +95,19 @@ assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 | `StemRemixBalancer` | LUFS-korrekter Re-Mix nach Stem-Separation | Studio 2026 |
 | `RestorabilityEstimator` | < 5 s Vor-Assessment, Score 0–100 | Vor Verarbeitung |
 | `RemasterDetector` | Erkennt bereits gemasterte Quellen | Teil von EraClassifier |
-| `EraAuthenticPerceptualCompletion` | DDSP-Synthese fehlender Partials | Nach phase_55 |
-| `MusikalischerGlobalplanDienst` | Cross-Phase-Globalplan, 13 Ära-Profile, 17 Phase-Adjustments | AurikDenker Stufe 4 |
+| `EraAuthenticPerceptualCompletion` | DDSP-Synthese fehlender Partials | Nach phase_56 |
+| `MusikalischerGlobalplanDienst` | Cross-Phase-Globalplan, 13 Ära-Profile | AurikDenker Stufe 4 |
+| `LyricsGuidedEnhancement` | Phonem-Alignment + Phonemklassen-DSP (§2.36) | Phase 58 |
+| `PhonemeTimeline` | Segment-Timeline: vowel\_stressed/fricative/plosive/silence | Phase 58 |
+| `GenreClassifier` | Genre-Phase-1: Family+Top-k+Open-Set + SongCal-Fusion | Nach EraClassifier |
+| `RecoveryCheckpoint` | OOM-Recovery-Checkpoint (atomisch, 7 Tage TTL) | §2.39, MemoryError-Handler |
+| `PerceptualSalienceEstimator` | Psychoakust. Salienz-Annotation je Defekt (§9.1c) | DefectScanner-Post |
 
 ---
 
 ## Softwareschichten-Architektur
 
-```
+```text
 ┌──────────────────────────────────────────┐
 │  Frontend (frontend/)   PyQt5 Dark Theme │
 ├──────────────────────────────────────────┤
@@ -122,7 +129,7 @@ Frontend kommuniziert ausschließlich über API-Schicht oder Qt-Signals/Slots.
 `denker/` enthält 10 Sub-Denker-Module die alle Kernmodule orchestrieren:
 
 | Modul | Zweck |
-|---|---|
+| --- | --- |
 | `aurik_denker.py` | Haupt-Orchestrator |
 | `tontraeger_denker.py` | MediumDetector / MediumClassifier |
 | `tontraegerkette_denker.py` | Tonträgerketten-Erkennung (§6.7) |
@@ -135,4 +142,4 @@ Frontend kommuniziert ausschließlich über API-Schicht oder Qt-Signals/Slots.
 
 ---
 
-*Aurik 9.10.77c — März 2026*
+**Aurik 9.10.102 — April 2026**

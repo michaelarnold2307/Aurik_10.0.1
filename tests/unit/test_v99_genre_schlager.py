@@ -511,7 +511,7 @@ def test_44_build_song_calibration_klassik_reduces_reverb():
     from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
     profile_default = UnifiedRestorerV3._build_song_calibration_profile(
-        material_type=MaterialType.VINYL_STANDARD,
+        material_type=MaterialType.VINYL,
         mode=QualityMode.QUALITY,
         restorability_score=70.0,
         input_snr_db=30.0,
@@ -520,7 +520,7 @@ def test_44_build_song_calibration_klassik_reduces_reverb():
         genre_label="",
     )
     profile_klassik = UnifiedRestorerV3._build_song_calibration_profile(
-        material_type=MaterialType.VINYL_STANDARD,
+        material_type=MaterialType.VINYL,
         mode=QualityMode.QUALITY,
         restorability_score=70.0,
         input_snr_db=30.0,
@@ -540,7 +540,7 @@ def test_45_build_song_calibration_oper_raises_vocal():
     from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
     _shared = {
-        "material_type": MaterialType.VINYL_STANDARD,
+        "material_type": MaterialType.VINYL,
         "mode": QualityMode.QUALITY,
         "restorability_score": 70.0,
         "input_snr_db": 30.0,
@@ -561,7 +561,7 @@ def test_46_build_song_calibration_rock_raises_transient():
     from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
     _shared = {
-        "material_type": MaterialType.VINYL_STANDARD,
+        "material_type": MaterialType.VINYL,
         "mode": QualityMode.QUALITY,
         "restorability_score": 70.0,
         "input_snr_db": 30.0,
@@ -582,7 +582,7 @@ def test_47_build_song_calibration_genre_label_stored():
     from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
     profile = UnifiedRestorerV3._build_song_calibration_profile(
-        material_type=MaterialType.VINYL_STANDARD,
+        material_type=MaterialType.VINYL,
         mode=QualityMode.QUALITY,
         restorability_score=70.0,
         input_snr_db=30.0,

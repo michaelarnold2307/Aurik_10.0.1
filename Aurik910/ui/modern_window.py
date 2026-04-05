@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,8 @@ logger = logging.getLogger(__name__)
 # Prevent unbounded thread buildup when audioread/GStreamer hangs inside librosa.
 # At most one librosa fallback probe may run at a time; timed-out probes keep the
 # gate occupied until they really exit.
-_LIBROSA_FALLBACK_GATE = threading.BoundedSemaphore(1)
+# _LIBROSA_FALLBACK_GATE was removed — librosa.load() is VERBOTEN per §11 spec for arbitrary audio formats.
+# Audio loading cascade is now strictly: soundfile → pedalboard/FFmpeg → pydub (mirroring backend.file_import).
 
 # ── Bridge: einzige erlaubte Schnittstelle zu backend/core/ (§11 Spec 08) ──
 # Frontend importiert Core-Module AUSSCHLIEßLICH über diese Bridge.
@@ -70,6 +72,9 @@ try:
     )
     from backend.api.bridge import (
         clear_era_genre_cache as _bridge_clear_era_genre_cache,
+    )
+    from backend.api.bridge import (
+        clear_medium_cache as _bridge_clear_medium_cache,
     )
     from backend.api.bridge import (
         export_guard as _export_guard,
@@ -120,7 +125,19 @@ try:
         get_recovery_checkpoint_fns as _bridge_get_recovery_checkpoint_fns,
     )
     from backend.api.bridge import (
+        get_quality_mode as _bridge_get_quality_mode,
+    )
+    from backend.api.bridge import (
+        get_restorer_classes as _bridge_get_restorer_classes,
+    )
+    from backend.api.bridge import (
+        PreAnalysisResult as _bridge_PreAnalysisResult,
+    )
+    from backend.api.bridge import (
         get_restorability_estimator_class as _bridge_get_restorability_estimator_class,
+    )
+    from backend.api.bridge import (
+        run_pre_analysis as _bridge_run_pre_analysis,
     )
     from backend.api.bridge import (
         normalize_pipeline_health_state as _bridge_normalize_pipeline_health_state,  # type: ignore[assignment]
@@ -134,10 +151,16 @@ try:
     from backend.api.bridge import (
         warmup_models_background as _warmup_models_background,
     )
+    from backend.api.bridge import (
+        get_load_audio_fn as _bridge_get_load_audio_fn,
+    )
 
     _BRIDGE_AVAILABLE = True
 except ImportError:
     _BRIDGE_AVAILABLE = False
+
+    _LoadAudioResult = dict[str, object]
+    _LoadAudioFn = Callable[[str], _LoadAudioResult | None]
 
     def _export_guard(audio):  # type: ignore[misc]
         audio = np.asarray(audio, dtype=np.float32)
@@ -174,6 +197,9 @@ except ImportError:
         return None
 
     def _bridge_clear_era_genre_cache(file_path: str | None = None) -> None:  # type: ignore[misc]
+        return  # no-op: Bridge nicht verfügbar
+
+    def _bridge_clear_medium_cache(file_path: str | None = None) -> None:  # type: ignore[misc]
         return  # no-op: Bridge nicht verfügbar
 
     def _warmup_models_background() -> None:  # type: ignore[misc]
@@ -230,6 +256,20 @@ except ImportError:
 
     def _bridge_get_restorability_estimator_class() -> type | None:  # type: ignore[misc]
         return None
+
+    def _bridge_get_quality_mode() -> object | None:  # type: ignore[misc]
+        return None
+
+    def _bridge_get_restorer_classes() -> object | None:  # type: ignore[misc]
+        return None
+
+    _bridge_PreAnalysisResult = None  # type: ignore[assignment,misc]
+
+    def _bridge_run_pre_analysis(*args, **kwargs) -> object | None:  # type: ignore[misc]
+        return None
+
+    def _bridge_get_load_audio_fn() -> _LoadAudioFn | None:  # type: ignore[misc]
+        return None  # no-op: Bridge nicht verfügbar — sf.read-Kaskade als Fallback
 
     def _bridge_normalize_pipeline_health_state(raw):  # type: ignore[misc,return-value]
         class _FallbackState:
@@ -454,6 +494,48 @@ class QualityMeterWidget(QWidget):
             p.drawText(bg_rect, Qt.AlignmentFlag.AlignCenter, "Klangqualität: Noch nicht gemessen")
 
         p.end()
+
+
+class _ElidingLabel(QLabel):
+    """Single-line label that elides long text instead of visually colliding."""
+
+    def __init__(self, text: str = "", parent=None) -> None:
+        super().__init__("", parent)
+        self._full_text = str(text or "")
+        self._base_tooltip = ""
+        self._apply_elided_text()
+
+    def setBaseToolTip(self, text: str) -> None:
+        self._base_tooltip = str(text or "")
+        self._update_tooltip(is_elided=False)
+
+    def setText(self, text: str) -> None:  # type: ignore[override]
+        self._full_text = str(text or "")
+        self._apply_elided_text()
+
+    def text(self) -> str:  # type: ignore[override]
+        return self._full_text
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_elided_text()
+
+    def _apply_elided_text(self) -> None:
+        _full = self._full_text
+        _width = max(24, self.contentsRect().width() - 4)
+        _fm = self.fontMetrics()
+        _elided = _fm.elidedText(_full, Qt.TextElideMode.ElideRight, _width)
+        QLabel.setText(self, _elided)
+        self._update_tooltip(is_elided=_elided != _full)
+
+    def _update_tooltip(self, is_elided: bool) -> None:
+        if is_elided and self._full_text:
+            if self._base_tooltip:
+                QLabel.setToolTip(self, f"{self._base_tooltip}<br><br><small>{self._full_text}</small>")
+            else:
+                QLabel.setToolTip(self, self._full_text)
+        else:
+            QLabel.setToolTip(self, self._base_tooltip)
 
 
 def _defect_analysis_to_display(scores: dict, status: str = "detected") -> dict:
@@ -792,108 +874,68 @@ def _default_export_sample_rate_for_format(fmt_key: str) -> int:
 
 
 def _load_audio_robust(file_path: str) -> tuple:
-    """Lädt Audio mit 4-stufiger Fallback-Kaskade (Spec §11.4 Audio-Lade-Kaskade).
+    """Load audio via bridge cascade (backend.file_import.load_audio_file).
 
-    Reihenfolge (immer soundfile zuerst, dann pedalboard):
-      ① soundfile    – WAV/FLAC/OGG/AIFF (libsndfile, verlustfrei, Stufe 1)
-      ② pedalboard   – MP3/M4A/AAC/WMA/OPUS (ffmpeg-Backend, Stufe 2)
-      ③ pydub/ffmpeg – universeller Fallback via ffmpeg Subprocess
-      ④ librosa      – letzter Fallback (audioread/GStreamer)
+    Delegates to backend.api.bridge.get_load_audio_fn() — canonical cascade:
+    soundfile → pedalboard/FFmpeg → pydub (§11 RELEASE_MUST).
+    Direct sf.read(path) / librosa.load(path) for arbitrary formats is VERBOTEN.
 
     Returns (audio: np.ndarray float32, sr: int).
-    Raises RuntimeError wenn alle Stufen scheitern.
+    Raises RuntimeError when all stages fail.
     """
+    _load_fn = _bridge_get_load_audio_fn() if callable(_bridge_get_load_audio_fn) else None
+    if _load_fn is not None and callable(_load_fn):
+        _result = _load_fn(file_path)
+        if _result is not None and _result.get("audio") is not None:
+            _audio = np.asarray(_result["audio"], dtype=np.float32)
+            return _normalize_audio(_audio), int(_result["sr"])
+        _err = _result.get("error") if _result else "load_audio_fn returned None"
+        raise RuntimeError(
+            f"'{Path(file_path).name}' konnte nicht geladen werden.\n\n"
+            f"Mögliche Ursachen:\n"
+            f"  • Datei ist beschädigt oder unvollständig\n"
+            f"  • Dateiformat nicht unterstützt (unterstützt: MP3, WAV, FLAC, M4A, AAC, WMA, OGG, AIFF)\n\n"
+            f"Technische Details:\n  • {_err}"
+        )
+    # Bridge not available — inline cascade as emergency fallback
     _errors: list[str] = []
-
-    # ── Stufe 1: soundfile (WAV, FLAC, OGG, AIFF …) ─────────────────────────
     try:
         import soundfile as _sf
-
         _audio_sf, _sr_sf = _sf.read(file_path, dtype="float32", always_2d=False)
         return _normalize_audio(_audio_sf), int(_sr_sf)
     except Exception as _e1:
         _errors.append(f"soundfile: {_e1}")
-
-    # ── Stufe 2: pedalboard (MP3/M4A/AAC/WMA/OPUS und universeller Fallback) ─
     try:
         from pedalboard.io import AudioFile as _PBAudioFile  # type: ignore
-
         with _PBAudioFile(file_path) as _f:
             _sr = int(_f.samplerate)
-            _frames = _f.frames
-            # Chunk-basiertes Lesen (verhindert OOM bei sehr langen Dateien)
-            _chunk_size = _sr * 300  # 300 s Chunks
             _parts: list[np.ndarray] = []
             _read = 0
-            while _read < _frames:
-                _block = _f.read(min(_chunk_size, _frames - _read))  # (ch, samples)
+            while _read < _f.frames:
+                _block = _f.read(min(_sr * 300, _f.frames - _read))
                 _parts.append(_block)
                 _read += _block.shape[-1]
         _raw = np.concatenate(_parts, axis=1) if len(_parts) > 1 else _parts[0]
         return _normalize_audio(_raw), _sr
     except Exception as _e2:
         _errors.append(f"pedalboard: {_e2}")
-
-    # ── Stufe 4: pydub via ffmpeg (universell, sehr robust) ──────────────────
     try:
         from pydub import AudioSegment as _AudioSeg  # type: ignore
-
         _seg = _AudioSeg.from_file(file_path)
         _sr_pd = _seg.frame_rate
         _samples_pd = np.array(_seg.get_array_of_samples(), dtype=np.float32)
-        # Normalisieren auf [-1, 1] (pydub gibt int16-Werte zurück)
-        _bit_depth = _seg.sample_width * 8
-        _samples_pd /= float(2 ** (_bit_depth - 1))
+        _samples_pd /= float(2 ** (_seg.sample_width * 8 - 1))
         if _seg.channels > 1:
             _samples_pd = _samples_pd.reshape(-1, _seg.channels)
         return _normalize_audio(_samples_pd), int(_sr_pd)
-    except Exception as _e4:
-        _errors.append(f"pydub: {_e4}")
-
-    # ── Stufe 5: librosa (audioread/GStreamer, letzter Ausweg) ────────────────
-    try:
-        import threading as _threading
-
-        import librosa as _librosa  # type: ignore
-
-        if not _LIBROSA_FALLBACK_GATE.acquire(blocking=False):
-            raise RuntimeError("librosa-Fallback läuft bereits (vorheriger Probe-Thread noch aktiv)")
-
-        _result: list = []
-        _err: list = []
-
-        def _lb_load():
-            try:
-                _y, _s = _librosa.load(file_path, sr=None, mono=False)
-                _result.append((_y, int(_s)))
-            except Exception as _le:
-                _err.append(_le)
-            finally:
-                try:
-                    _LIBROSA_FALLBACK_GATE.release()
-                except Exception:
-                    pass
-
-        _t = _threading.Thread(target=_lb_load, daemon=True)
-        _t.start()
-        _t.join(timeout=120)
-        if _t.is_alive():
-            raise RuntimeError("Timeout nach 120 s (audioread/GStreamer hängt)")
-        if _err:
-            raise _err[0]
-        _y_lb, _sr_lb = _result[0]
-        return _normalize_audio(_y_lb), _sr_lb
-    except Exception as _e5:
-        _errors.append(f"librosa: {_e5}")
-
-    # ── Alle Stufen gescheitert ───────────────────────────────────────────────
+    except Exception as _e3:
+        _errors.append(f"pydub: {_e3}")
     _detail = "\n  • ".join(_errors)
     raise RuntimeError(
         f"'{Path(file_path).name}' konnte nicht geladen werden.\n\n"
         f"Mögliche Ursachen:\n"
         f"  • Datei ist beschädigt oder unvollständig\n"
-        f"  • Dateiformat nicht unterstützt (unterstützt: MP3, WAV, FLAC, M4A, AAC, WMA, OGG, AIFF)\n"
-        f"  • Aurik konnte die Audiodaten nicht lesen (technisches Problem beim Entpacken)\n\n"
+        f"  • Dateiformat nicht unterstützt (unterstützt: MP3, WAV, FLAC, M4A, AAC, WMA, OGG, AIFF)\n\n"
         f"Technische Details:\n  • {_detail}"
     )
 
@@ -1084,6 +1126,34 @@ class BatchProcessingThread(QThread):
 
                 item.progress = 6
                 self.item_progress.emit(item.id, 600)
+
+                # Race Condition Guard: Hintergrundanalysen (Carrier, Ära, Genre, Defekte) laufen
+                # als Daemon-Threads nach dem Import. Bei sehr schnellem Button-Klick können die
+                # Caches noch leer sein. Warte kurz (max 20 s), bis alle Caches verfügbar sind.
+                import time as _time_cache_guard
+
+                _cg_deadline = _time_cache_guard.monotonic() + 20.0
+                while _time_cache_guard.monotonic() < _cg_deadline:
+                    if self.isInterruptionRequested():
+                        break
+                    _cg_ok = (
+                        get_cached_defect_result(item.input_file) is not None
+                        and get_cached_medium_result(item.input_file) is not None
+                        and get_cached_era_genre_result(item.input_file) is not None
+                    )
+                    if _cg_ok:
+                        logger.debug(
+                            "BatchProcessingThread: Import-Caches vollständig (%.1f s verbleibend)",
+                            _cg_deadline - _time_cache_guard.monotonic(),
+                        )
+                        break
+                    _time_cache_guard.sleep(0.3)
+                else:
+                    logger.info(
+                        "BatchProcessingThread: Import-Cache-Timeout überschritten — "
+                        "setze mit verfügbaren Analysedaten fort (%s)",
+                        item.input_file,
+                    )
 
                 # Defect analysis phase: Cache-First (kein Doppelscan, §9.4)
                 self.phase_step_update.emit(2, 0, "Schadensbewertung (Voranalyse)")
@@ -1292,12 +1362,16 @@ class BatchProcessingThread(QThread):
                                 if _uv3_total_known[0] > 0 and _sp2_done[0] >= _uv3_total_known[0]:
                                     all_phases_done = True
                             if all_phases_done:
-                                # Phases complete — hold near phase-end (≤83.5%).
-                                # UV3 post-processing callbacks (pct 86-98 → UI 83-98)
-                                # must still advance the bar via _on_batch_progress.
-                                # Sprinting to 100 here would trigger the monotonic guard
-                                # and freeze the bar at 98% for FeedbackChain + MusicalGoals.
-                                new_cur = min(cur + max(velocity * 0.4, 0.005), 83.5)
+                                # Phases complete — hold near phase-end (≤83.5%) while UV3
+                                # post-processing callbacks (pct 86-98 → UI 83-98) still advance
+                                # the bar via _on_batch_progress.
+                                # Exception: once target is set to ≥90 (post-denke() phase),
+                                # allow the bar to creep toward that target at normal velocity.
+                                if tgt >= 90.0:
+                                    _overshoot_cap = min(tgt + 1.5, 97.5)
+                                    new_cur = min(cur + velocity, _overshoot_cap)
+                                else:
+                                    new_cur = min(cur + max(velocity * 0.4, 0.005), 83.5)
                             else:
                                 # Main bar may drift only slightly ahead of the real target.
                                 # This preserves trust and leaves phase-local motion to the lower bar.
@@ -1462,8 +1536,8 @@ class BatchProcessingThread(QThread):
                     "dynamic_range_expansion": "Dynamikumfang wird erweitert",
                     "mono_to_stereo": "Mono wird zu Stereo erweitert",
                     "stereo_width_limiter": "Stereo-Breite wird begrenzt",
-                    "mid_side": "M/S-Verarbeitung wird angewendet",
-                    "multiband_compression": "Multiband-Kompression wird angewendet",
+                    "mid_side": "Links-Rechts-Klangtrennung wird angewendet",
+                    "multiband_compression": "Klangbereiche werden ausbalanciert",
                     "bass_enhancement": "Bass wird verbessert",
                     "presence_boost": "Präsenz wird angehoben",
                     "air_band": "Luft-Frequenzen werden angehoben",
@@ -1685,11 +1759,11 @@ class BatchProcessingThread(QThread):
                     if not _step_desc:
                         _step_desc = _re.sub(r"\s+‹[^›]+›\s*$", "", _display_msg).strip(" ✓…·").strip()
                     if pct < 4:
-                        _d_step = 4  # Tonträger (pct=2)
-                        _step_desc = _step_desc or "Tonträger wird erkannt"
+                        _d_step = 4  # Init + Resampling (pct=1–3)
+                        _step_desc = _step_desc or "Restaurierung wird initialisiert"
                     elif pct < 6:
-                        _d_step = 5  # Kette (pct=4)
-                        _step_desc = _step_desc or "Tonträgerkette wird analysiert"
+                        _d_step = 5  # Restorability (pct=4–5)
+                        _step_desc = _step_desc or "Restaurierbarkeit wird bestimmt"
                     elif pct < 8:
                         _d_step = 6  # Defekte (pct=6)
                         _step_desc = _step_desc or "Defekte werden bewertet"
@@ -1728,7 +1802,8 @@ class BatchProcessingThread(QThread):
                     self.phase_step_update.emit(_d_step, _d_total, _step_desc)
                     # Phasennachricht ohne eingebettete Zeit emittieren —
                     # _tick_heartbeat zählt die Zeit jede 500 ms live herunter.
-                    _base_text = f"{_display_msg}{_expl}"
+                    _user_phase_text = _expl.lstrip(" ·").strip() if _expl else ""
+                    _base_text = _user_phase_text or _display_msg
                     # ETA-Restzeit HIER berechnen (wenn pct sich ändert), damit
                     # _tick_heartbeat nur noch runterzählt statt die Formel mit
                     # wachsendem _elapsed und eingefrorenem _pct erneut auszuwerten.
@@ -1776,27 +1851,64 @@ class BatchProcessingThread(QThread):
                     "input_path": item.input_file,
                     "output_path": item.output_file,
                 }
-                # DefectScan-Cache: gecachten Scan an AurikDenker weiterreichen
-                # (kein Triple-Scan — §9.4 Cache-First-Invariante)
-                if _scan is not None:
-                    _denke_kwargs["cached_defect_result"] = _scan
-                _cached_eg = get_cached_era_genre_result(item.input_file)
-                if _cached_eg is not None:
-                    if _cached_eg.get("era_result") is not None:
-                        _denke_kwargs["cached_era_result"] = _cached_eg["era_result"]
-                    if _cached_eg.get("genre_result") is not None:
-                        _denke_kwargs["cached_genre_result"] = _cached_eg["genre_result"]
-                    logger.debug("BatchProcessingThread: Era/Genre aus Cache (%s)", item.input_file)
-                # Medium-Cache: UI-Vorabanalyse wiederverwenden (kein Doppellauf in UV3)
-                _cached_medium = get_cached_medium_result(item.input_file)
-                if _cached_medium is not None:
-                    _denke_kwargs["cached_medium_result"] = _cached_medium
-                    logger.debug("BatchProcessingThread: Medium aus Cache (%s)", item.input_file)
-                # Restorability-Cache: UI-Vorabanalyse wiederverwenden (kein Doppellauf in UV3)
-                _cached_restorability = get_cached_restorability_result(item.input_file)
-                if _cached_restorability is not None:
-                    _denke_kwargs["cached_restorability_result"] = _cached_restorability
-                    logger.debug("BatchProcessingThread: Restorability aus Cache (%s)", item.input_file)
+                _recovery_cp = item.settings.get("recovery_checkpoint")
+                if _recovery_cp is not None:
+                    _denke_kwargs["recovery_checkpoint"] = _recovery_cp
+                    logger.info(
+                        "BatchProcessingThread: OOM-Recovery aktiv für %s (remaining_phases=%d)",
+                        Path(item.input_file).name,
+                        len(getattr(_recovery_cp, "phases_remaining", []) or []),
+                    )
+                # Build a PreAnalysisResult from all bridge caches in one place.
+                # UV3 accepts pre_analysis_result and unpacks it automatically —
+                # no individual cached_* kwargs needed (no double analysis, no race).
+                try:
+                    if _bridge_PreAnalysisResult is None:
+                        raise RuntimeError("PreAnalysisResult bridge symbol unavailable")
+                    _pre = _bridge_PreAnalysisResult()
+                    _scan = get_cached_defect_result(item.input_file)
+                    if _scan is not None:
+                        _pre.defects = _scan
+                    _cached_eg = get_cached_era_genre_result(item.input_file)
+                    if _cached_eg is not None:
+                        _pre.era = _cached_eg.get("era_result")
+                        _pre.genre = _cached_eg.get("genre_result")
+                    _cached_medium = get_cached_medium_result(item.input_file)
+                    if _cached_medium is not None:
+                        _pre.medium = _cached_medium
+                    _cached_restorability = get_cached_restorability_result(item.input_file)
+                    if _cached_restorability is not None:
+                        _pre.restorability = _cached_restorability
+                    _pre.file_path = str(item.input_file)
+                    _pre.native_sr = sr
+                    _denke_kwargs["pre_analysis_result"] = _pre
+                    logger.debug(
+                        "BatchProcessingThread: PreAnalysisResult gebaut "
+                        "(medium=%s era=%s genre=%s defects=%s rest=%s)",
+                        "✓" if _pre.medium else "—",
+                        "✓" if _pre.era else "—",
+                        "✓" if _pre.genre else "—",
+                        "✓" if _pre.defects else "—",
+                        "✓" if _pre.restorability else "—",
+                    )
+                except Exception as _pa_exc:
+                    logger.warning("BatchProcessingThread: PreAnalysisResult-Aufbau fehlgeschlagen (%s) — Fallback auf Einzel-kwargs", _pa_exc)
+                    # Fallback: individual kwargs as before
+                    _scan = get_cached_defect_result(item.input_file)
+                    if _scan is not None:
+                        _denke_kwargs["cached_defect_result"] = _scan
+                    _cached_eg = get_cached_era_genre_result(item.input_file)
+                    if _cached_eg is not None:
+                        if _cached_eg.get("era_result") is not None:
+                            _denke_kwargs["cached_era_result"] = _cached_eg["era_result"]
+                        if _cached_eg.get("genre_result") is not None:
+                            _denke_kwargs["cached_genre_result"] = _cached_eg["genre_result"]
+                    _cached_medium = get_cached_medium_result(item.input_file)
+                    if _cached_medium is not None:
+                        _denke_kwargs["cached_medium_result"] = _cached_medium
+                    _cached_restorability = get_cached_restorability_result(item.input_file)
+                    if _cached_restorability is not None:
+                        _denke_kwargs["cached_restorability_result"] = _cached_restorability
 
                 # Quality-first policy: never reduce restoration quality due to
                 # RT budget in the main pass.
@@ -1807,12 +1919,16 @@ class BatchProcessingThread(QThread):
                     sr,
                     **_denke_kwargs,
                 )
-                item.progress = 98
-                # Stop smooth-emitter and let bar glide to 98 in one final step
+                item.progress = 90
+                # Post-processing starts: keep smooth emitter alive at 90 % target
+                # so the bar continues moving during defect analysis, export gate
+                # and file write (can total 5–15 s).  Kill emitter only at the
+                # very end, right before the final 100 % jump.
                 with _sp_lock:
-                    _sp["target"] = 98.0
-                    _sp["alive"] = False
-                self.item_progress.emit(item.id, 9800)
+                    _sp["target"] = 90.0
+                    _sp["last_jump"] = 2.0
+                    _sp["avg_phase_dur"] = 8.0  # generous — keeps creep visible
+                self.item_progress.emit(item.id, 9000)
 
                 # Phase 3: Post-Restore Defekt-Status + ML-Plugin-Anzeige aus RestorationResult
                 _post_scores = result.defect_scores if hasattr(result, "defect_scores") else {}
@@ -1855,6 +1971,12 @@ class BatchProcessingThread(QThread):
                 else:
                     self.ml_status_update.emit(bool(_active_ml), _active_ml)
 
+                # Step 90 → 93 %: defect/ML phase done
+                item.progress = 93
+                with _sp_lock:
+                    _sp["target"] = 93.0
+                self.item_progress.emit(item.id, 9300)
+
                 # RestorationResult im Item speichern (Musical Goals, Genealogie, …)
                 # → wird in _on_item_finished an _compute_and_show_quality weitergereicht
                 item.restoration_result = result
@@ -1865,6 +1987,11 @@ class BatchProcessingThread(QThread):
                 )
                 self.phase_step_update.emit(_final_total, _final_total, "Ergebnis wird gespeichert")
                 self.phase_update.emit("Ergebnis wird gespeichert …")
+                # Step 93 → 96 %: export quality gate done
+                item.progress = 96
+                with _sp_lock:
+                    _sp["target"] = 96.0
+                self.item_progress.emit(item.id, 9600)
                 # Handle RestorationResult object
                 if hasattr(result, "audio"):
                     restored_audio = result.audio
@@ -1937,6 +2064,12 @@ class BatchProcessingThread(QThread):
                     if os.path.exists(_tmp_path):
                         with contextlib.suppress(OSError):
                             os.remove(_tmp_path)
+                # File written: stop smooth emitter, glide 96 → 98 → 100 %
+                with _sp_lock:
+                    _sp["target"] = 98.0
+                    _sp["alive"] = False
+                item.progress = 98
+                self.item_progress.emit(item.id, 9800)
                 item.progress = 100
                 self.item_progress.emit(item.id, 10000)
 
@@ -2057,7 +2190,7 @@ class WaveformWidget(QWidget):
         "restaurierungsplan": ((100, 140, 210), "📋", "Restaurierungsplan"),
         "strategie": ((90, 130, 200), "🧭", "Strategie"),
         "vorverarbeitung": ((130, 100, 200), "⚙", "Vorverarbeitung"),
-        "dsp-reparatur": ((255, 152, 0), "⚡", "DSP-Reparatur"),
+        "dsp-reparatur": ((255, 152, 0), "⚡", "Automatische Reparatur"),
         "musik wird restauriert": ((150, 100, 220), "🎵", "Restaurierung"),
         # ── Analysis stages (UV3 internal) ──
         "analyse": ((0, 188, 212), "🔍", "Analyse"),
@@ -2081,7 +2214,7 @@ class WaveformWidget(QWidget):
         # Noise reduction
         "denoise": ((100, 181, 246), "🔇", "Rauschunterdrückung"),
         "tape_hiss": ((100, 181, 246), "🔇", "Bandrauschen-Entfernung"),
-        "noise_gate": ((100, 181, 246), "🔇", "Noise-Gate"),
+        "noise_gate": ((100, 181, 246), "🔇", "Stille bereinigen"),
         "surface_noise": ((100, 181, 246), "🔇", "Oberflächenrauschen"),
         "rumble_filter": ((96, 125, 139), "🔇", "Rumpel-Filter"),
         "advanced_dereverb": ((63, 137, 199), "reverb", "Nachhall-Entfernung"),
@@ -2148,68 +2281,119 @@ class WaveformWidget(QWidget):
         "defekte werden": "scan",
         "tonträger": "scan",
         "kette": "scan",
-        # Repair/Impact
-        "click": "repair",
-        "declick": "repair",
-        "crackle": "repair",
-        "declip": "repair",
-        "transport_bump": "repair",
-        "spectral_repair": "repair",
-        "hum_removal": "repair",
-        "dc_offset": "repair",
-        # Noise reduction
-        "denoise": "noise",
-        "tape_hiss": "noise",
-        "noise_gate": "noise",
-        "surface_noise": "noise",
-        "rumble_filter": "noise",
-        "advanced_dereverb": "noise",
-        "reverb_reduction": "noise",
-        # Dropout/Reconstruction
-        "dropout": "reconstruct",
-        "diffusion_inpainting": "reconstruct",
-        # Spectral/Frequency
-        "frequency_restoration": "spectral",
-        "spectral_band_gap": "spectral",
+        # DC offset — baseline drift snap
+        "dc_offset": "dc_offset",
+        # Hum removal — 50/60 Hz sine ghost
+        "hum_removal": "hum",
+        "hum": "hum",
+        "brummen": "hum",
+        # Click/Pop — impact flash
+        "click": "click",
+        "declick": "click",
+        "click_pop": "click",
+        "click_removal": "click",
+        # Crackle — spark burst scatter
+        "crackle": "crackle",
+        "crackle_removal": "crackle",
+        # Declip — ceiling artifact restore
+        "declip": "declip",
+        "clipping": "declip",
+        # Transport bump — shock wave
+        "transport_bump": "bump",
+        # Tape hiss — fine grain upward drift
+        "tape_hiss": "tape_hiss",
+        # Surface noise — dust particles falling
+        "surface_noise": "surface_noise",
+        # Rumble — low-freq standing waves
+        "rumble": "rumble",
+        "rumble_filter": "rumble",
+        # Noise gate — hard binary gates
+        "noise_gate": "gate",
+        # ML noise reduction — neural cloud dissolve
+        "denoise": "noise_ml",
+        "advanced_denoise": "noise_ml",
+        # Reverb ML (SGMSE+) — echo collapse
+        "reverb_reduction": "reverb_ml",
+        "sgmse": "reverb_ml",
+        # Reverb DSP — tail shadows fading
+        "advanced_dereverb": "reverb_dsp",
+        "dereverb": "reverb_dsp",
+        # Dropout — gap fill from center
+        "dropout": "dropout",
+        "dropout_repair": "dropout",
+        # Diffusion inpainting — cloud materializing
+        "diffusion_inpainting": "diffusion",
+        "flow_matching": "diffusion",
+        "cqtdiff": "diffusion",
+        # Spectral inpainting (AudioSR)
+        "spectral_repair": "inpainting",
+        # Frequency bandwidth extension
+        "frequency_restoration": "bandwidth",
+        "audiosr": "bandwidth",
+        # Harmonic series staircase
+        "harmonic_restoration": "harmonic",
+        # EQ frequency tilt
+        "eq_correction": "eq",
+        "final_eq": "eq",
+        # Spectral band gap
+        "spectral_band_gap": "bandgap",
+        # Spectral coherence
         "spectral_coherence": "spectral",
-        "harmonic_restoration": "spectral",
-        "eq_correction": "spectral",
-        "final_eq": "spectral",
-        # Vocal
+        # De-esser — sibilance taming
+        "de_esser": "deesser",
+        "ml_deesser": "deesser",
+        # Wow/Flutter — wavy warping correction
+        "wow_flutter": "wowflutter",
+        "speed_pitch": "wowflutter",
+        # Azimuth/phase alignment
+        "azimuth_correction": "azimuth",
+        "phase_correction": "azimuth",
+        # Print-through echo dissolving
+        "print_through": "print_through",
+        # Tape saturation — harmonic warmth glow
+        "tape_saturation": "saturation",
+        # Transient preservation — attack spikes
+        "transient": "transient",
+        # Vocal stem separation (BSRoFormer)
+        "vocal_enhancement": "stem_sep",
+        "bs_roformer": "stem_sep",
+        "mdx23c": "stem_sep",
+        # Vocal AI — formant + breath
+        "vocal_ai": "vocal_ai",
+        # Standard vocal (formant glow)
         "vocal": "vocal",
-        "de_esser": "vocal",
-        "ml_deesser": "vocal",
-        # Timing/Pitch
-        "wow_flutter": "timing",
-        "speed_pitch": "timing",
-        "azimuth_correction": "timing",
-        "phase_correction": "timing",
-        # Dynamics/Mastering
-        "compression": "dynamics",
-        "transient": "dynamics",
+        # Compression — gain envelope clamping
+        "compression": "compression",
+        "multiband_compression": "compression",
+        "transparent_dynamics": "compression",
+        # Dynamic range expansion
+        "dynamic_range_expansion": "expansion",
+        # Loudness normalization — amplitude arrows
+        "loudness_normalization": "lufs_norm",
+        "lufs": "lufs_norm",
+        # TruePeak limiting — ceiling clamp
+        "truepeak_limiter": "truepeak",
+        "limiting": "truepeak",
+        # Bass enhancement — sub pulses from bottom
+        "bass_enhancement": "bass_enh",
+        # Air/presence — HF sparkle top
+        "air_band": "air_enh",
+        "presence_boost": "air_enh",
+        "exciter": "air_enh",
+        # Stereo/spatial
+        "stereo_enhancement": "spatial",
+        "stereo_balance": "spatial",
+        "mono_to_stereo": "spatial",
+        "spatial_enhancement": "spatial",
+        "stereo_width_enhancer": "spatial",
+        "mid_side": "spatial",
+        # Instrument specific resonance
+        "guitar_enhancement": "instrument",
+        "brass_enhancement": "instrument",
+        "drums_enhancement": "instrument",
+        "piano_restoration": "instrument",
+        # Mastering
         "mastering_polish": "dynamics",
-        "loudness_normalization": "dynamics",
-        "truepeak_limiter": "dynamics",
-        "tape_saturation": "dynamics",
-        "limiting": "dynamics",
-        "stereo_enhancement": "dynamics",
-        "stereo_balance": "dynamics",
-        "exciter": "spectral",
-        "dynamic_range_expansion": "dynamics",
-        "mono_to_stereo": "dynamics",
-        "stereo_width_limiter": "dynamics",
-        "mid_side": "spectral",
-        "multiband_compression": "dynamics",
-        "bass_enhancement": "spectral",
-        "presence_boost": "spectral",
-        "air_band": "spectral",
-        "guitar_enhancement": "spectral",
-        "brass_enhancement": "spectral",
-        "spatial_enhancement": "spectral",
-        "stereo_width_enhancer": "dynamics",
-        "drums_enhancement": "dynamics",
-        "piano_restoration": "spectral",
-        "transparent_dynamics": "dynamics",
         # Quality
         "exzellenz": "quality",
         "versa": "quality",
@@ -2218,7 +2402,7 @@ class WaveformWidget(QWidget):
         # Pipeline/Processing
         "initialisierung": "process",
         "vorverarbeitung": "process",
-        "dsp-reparatur": "repair",
+        "dsp-reparatur": "click",
         "restaurierung startet": "process",
         "audio wird geladen": "process",
         "globalplan": "process",
@@ -2391,6 +2575,9 @@ class WaveformWidget(QWidget):
         self.is_loading = False  # Lade-Zustandsanzeige
         self.defects: dict = {}  # Defekte für Waveform-Overlay
         self._display_peak_reference: float | None = None
+        # Full-track peak cached at load time — used as fallback for view-window
+        # normalization so silence sections don't appear magnified when zoomed.
+        self._full_track_peak: float = 0.0
 
         # Zoom/Pan state (fractions 0.0–1.0 of total duration)
         self._view_start: float = 0.0
@@ -2455,6 +2642,13 @@ class WaveformWidget(QWidget):
         """Update waveform data and reset view window."""
         self.audio_data = audio
         self.sample_rate = sr
+        # Cache the full-track peak so _draw_channel can use it as fallback
+        # even when the view window is zoomed into a quiet section.
+        if isinstance(audio, np.ndarray) and audio.size > 0:
+            _fp = float(np.max(np.abs(audio)))
+            self._full_track_peak = _fp if _fp > 1e-6 else 0.0
+        else:
+            self._full_track_peak = 0.0
         # Reset zoom/pan to show full file on new load
         self._view_start = 0.0
         self._view_end = 1.0
@@ -2894,6 +3088,673 @@ class WaveformWidget(QWidget):
                 painter.setBrush(QBrush(QColor(r, g, b, da)))
                 painter.drawRect(px, center - eh, pw, eh * 2)
 
+        elif effect == "hum":
+            # 50/60 Hz sine-wave ghost dissolving — periodic oscillation being removed
+            _periods = 3
+            _ha = int(100 * fade)
+            painter.setPen(QPen(QColor(r, g, b, _ha), 1.5))
+            _ppx2, _ppy2 = None, None
+            for _xi in range(0, cw, 2):
+                _frac = _xi / max(1, cw)
+                _sin_val = math.sin(_frac * _periods * 2 * math.pi) * (ch * 0.22) * fade
+                _py = int(center + _sin_val)
+                if _ppx2 is not None:
+                    painter.drawLine(_ppx2, _ppy2, cx + _xi, _py)
+                _ppx2, _ppy2 = cx + _xi, _py
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "dc_offset":
+            # Baseline drift snapping to center — horizontal line descending to zero
+            _offset_h = int(ch * 0.15 * max(0.0, 1.0 - self._morph_t * 2))
+            _da = int(130 * fade)
+            if _offset_h > 1:
+                _dc_grad = QLinearGradient(cx, 0, cx + cw, 0)
+                _dc_grad.setColorAt(0.0, QColor(r, g, b, _da))
+                _dc_grad.setColorAt(1.0, QColor(r, g, b, _da // 4))
+                painter.setPen(QPen(QBrush(_dc_grad), 2.0))
+                _dc_y = center - _offset_h
+                painter.drawLine(cx, _dc_y, cx + cw, _dc_y)
+                _ax = cx + cw // 2
+                painter.drawLine(_ax, _dc_y, _ax, _dc_y + 8)
+                painter.drawLine(_ax, _dc_y + 8, _ax - 4, _dc_y + 4)
+                painter.drawLine(_ax, _dc_y + 8, _ax + 4, _dc_y + 4)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "click":
+            # Bright flash spots at highest-energy impact positions (clicks)
+            absp = np.abs(d_hi) + np.abs(d_lo)
+            thr = float(np.percentile(absp, 88)) if npx > 5 else pk * 0.3
+            ff = max(0.0, fade) ** 0.5
+            for i in range(npx):
+                if absp[i] < thr:
+                    continue
+                ins = min(1.0, float(absp[i]) / (pk * 2))
+                fa = int(210 * ins * ff)
+                if fa < 8:
+                    continue
+                px = int(cx + i * ps)
+                fz = 2.5 + 5.5 * ins * ff
+                painter.setBrush(QBrush(QColor(255, 255, 255, fa // 3)))
+                painter.drawEllipse(QPointF(px, center), fz * 2, ch * 0.25 * ins)
+                painter.setBrush(QBrush(QColor(r, g, b, fa)))
+                painter.drawEllipse(QPointF(px, center), fz, fz)
+                painter.setBrush(QBrush(QColor(255, 255, 255, int(fa * 0.5))))
+                painter.drawEllipse(QPointF(px, center), fz * 0.3, fz * 0.3)
+
+        elif effect == "crackle":
+            # Burst sparks scattered at random — denser than click, lower energy
+            _absp2 = np.abs(d_hi)
+            _thr2 = float(np.percentile(_absp2, 72)) if npx > 5 else pk * 0.25
+            _ff2 = max(0.0, fade) ** 0.6
+            for i in range(npx):
+                if _absp2[i] < _thr2 * 0.5:
+                    continue
+                _s2 = (i * 1031 + self._morph_frame * 7) & 0x3FFF
+                if _s2 % 5 < 2:
+                    continue
+                _ins2 = min(1.0, _absp2[i] / (pk + 1e-9))
+                _fa2 = int(180 * _ins2 * _ff2)
+                if _fa2 < 6:
+                    continue
+                _px2 = int(cx + i * ps)
+                _py2 = center + ((_s2 % 60) - 30) * max(1, int(ch * 0.012))
+                _sz2 = 0.8 + 2.5 * _ins2
+                painter.setBrush(QBrush(QColor(r, g, b, _fa2)))
+                painter.drawEllipse(QPointF(_px2, float(_py2)), _sz2, _sz2)
+                _dl2 = int(3 + 4 * _ins2)
+                _angle2 = (_s2 % 360) * math.pi / 180
+                painter.setPen(QPen(QColor(255, 255, 200, int(_fa2 * 0.5)), 0.8))
+                painter.drawLine(_px2, _py2, int(_px2 + math.cos(_angle2) * _dl2), int(_py2 + math.sin(_angle2) * _dl2))
+                painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "declip":
+            # Flat-top ceiling artifact dissolving — clipped peaks being restored
+            _clip_thr = 0.65
+            _clip_h = max(2, int(ch * 0.08))
+            _da3 = int(160 * fade)
+            _flat_count3, _flat_start3 = 0, 0
+            for i in range(npx):
+                if abs(float(d_hi[i])) > pk * _clip_thr:
+                    if _flat_count3 == 0:
+                        _flat_start3 = i
+                    _flat_count3 += 1
+                else:
+                    if _flat_count3 >= 2:
+                        _fx3 = int(cx + _flat_start3 * ps)
+                        _fw3 = int(_flat_count3 * ps)
+                        _fy3 = center - int(ch * 0.4 * fade)
+                        painter.setBrush(QBrush(QColor(255, 160, 80, int(_da3 * 0.6))))
+                        painter.drawRect(_fx3, _fy3, max(2, _fw3), _clip_h)
+                        _arlen3 = int(_clip_h * self._morph_t * 2.5)
+                        if _arlen3 > 1:
+                            painter.setPen(QPen(QColor(255, 200, 100, _da3), 1.2))
+                            for _xi3 in range(0, max(1, _flat_count3), max(1, _flat_count3 // 3)):
+                                _ax3 = _fx3 + int(_xi3 * _fw3 / max(1, _flat_count3))
+                                painter.drawLine(_ax3, _fy3 + _clip_h, _ax3, _fy3 + _clip_h + _arlen3)
+                            painter.setPen(Qt.PenStyle.NoPen)
+                    _flat_count3 = 0
+
+        elif effect == "tape_hiss":
+            # Fine grain dissolving upward — magnetic tape grain flying off
+            _npt3 = int(35 * fade)
+            for _p3 in range(_npt3):
+                _s3 = (self._morph_frame * 173 + _p3 * 337) & 0xFFFF
+                _pi3 = _s3 % max(1, npx)
+                _le3 = float(d_rms[_pi3]) * sc
+                if _le3 < 1.0:
+                    continue
+                _px3 = int(cx + _pi3 * ps)
+                _dr3 = -self._morph_t * ch * 0.5 * ((_s3 % 5 + 1) / 6.0)
+                _py3 = center + _dr3 + ((_s3 * 53 % 100) / 100.0 - 0.5) * _le3 * 0.5
+                _pa3 = int(70 * fade * min(1.0, _le3 / max(1, ch * 0.08)))
+                _sz3 = 0.5 + 0.7 * fade
+                painter.setBrush(QBrush(QColor(r, g, b, _pa3)))
+                painter.drawEllipse(QPointF(_px3, _py3), _sz3, _sz3)
+
+        elif effect == "surface_noise":
+            # Vinyl/shellac dust particles drifting downward — gravity effect
+            _npt4 = int(28 * fade)
+            for _p4 in range(_npt4):
+                _s4 = (self._morph_frame * 211 + _p4 * 419) & 0xFFFF
+                _pi4 = _s4 % max(1, npx)
+                _le4 = float(d_rms[_pi4]) * sc
+                if _le4 < 0.8:
+                    continue
+                _px4 = int(cx + _pi4 * ps)
+                _dr4 = self._morph_t * ch * 0.3 * ((_s4 % 6 + 1) / 7.0)
+                _py4 = center + _dr4 + ((_s4 * 71 % 100) / 100.0 - 0.5) * _le4
+                _pa4 = int(80 * fade * min(1.0, _le4 / max(1, ch * 0.10)))
+                _sz4 = 0.7 + 1.2 * (1.0 - self._morph_t)
+                painter.setBrush(QBrush(QColor(r, g, b, _pa4)))
+                painter.drawEllipse(QPointF(_px4, _py4), _sz4, _sz4)
+
+        elif effect == "rumble":
+            # Low-frequency standing wave dissolving — large slow oscillation fading
+            _rumble_hw = ch * 0.42 * fade
+            _period_px = max(40, cw // 2)
+            _ra = int(70 * fade)
+            painter.setPen(QPen(QColor(r, g, b, _ra), 2.5))
+            _ppx5, _ppy5 = None, None
+            for _xi5 in range(0, cw, 2):
+                _frac5 = _xi5 / max(1, cw)
+                _wave5 = math.sin(_frac5 * 2 * math.pi * (cw / _period_px)) * _rumble_hw * (1.0 - self._morph_t * 0.9)
+                _py5 = int(center + _wave5)
+                if _ppx5 is not None:
+                    painter.drawLine(_ppx5, _ppy5, cx + _xi5, _py5)
+                _ppx5, _ppy5 = cx + _xi5, _py5
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "gate":
+            # Hard noise-gate panels — vertical bars cutting to silence
+            _n_gates = max(3, min(12, npx // 30))
+            _ga = int(100 * fade)
+            _bar_w8 = max(2, cw // (_n_gates * 4))
+            for _gi in range(_n_gates):
+                _gx8 = cx + int(_gi * cw / _n_gates)
+                _gh8 = int(ch * 0.6 * (1.0 - self._morph_t * 0.8))
+                _gy8 = center - _gh8 // 2
+                painter.setBrush(QBrush(QColor(r, g, b, _ga)))
+                painter.drawRect(_gx8, _gy8, _bar_w8, _gh8)
+                painter.setBrush(QBrush(QColor(0, 0, 0, int(30 * fade))))
+                painter.drawRect(_gx8 + _bar_w8, _gy8, max(2, cw // _n_gates - _bar_w8), _gh8)
+
+        elif effect == "noise_ml":
+            # ML neural noise reduction — wave-dissolve cloud (DeepFilterNet)
+            _npt6 = int(30 * fade)
+            for _p6 in range(_npt6):
+                _s6 = (self._morph_frame * 151 + _p6 * 281) & 0xFFFF
+                _pi6 = _s6 % max(1, npx)
+                _le6 = float(d_rms[_pi6]) * sc
+                if _le6 < 1.5:
+                    continue
+                _px6 = int(cx + _pi6 * ps)
+                _dr6 = -self._morph_t * ch * 0.35 * ((_s6 % 8 + 1) / 9.0)
+                _py6 = center + _dr6 + ((_s6 * 43 % 100) / 100.0 - 0.5) * _le6 * 0.6
+                _pa6 = int(83 * fade * min(1.0, _le6 / max(1, ch * 0.10)))
+                _sz6 = 1.0 + 1.7 * fade
+                painter.setBrush(QBrush(QColor(r, g, b, _pa6)))
+                painter.drawEllipse(QPointF(_px6, _py6), _sz6, _sz6)
+                painter.setBrush(QBrush(QColor(r, g, b, _pa6 // 5)))
+                painter.drawEllipse(QPointF(_px6, _py6), _sz6 * 2.5, _sz6 * 2.5)
+
+        elif effect == "reverb_ml":
+            # SGMSE+ room reverb — decaying echo tails collapsing toward direct signal
+            _n_echoes = 4
+            _ea = int(75 * fade)
+            for _ei in range(1, _n_echoes + 1):
+                _echo_delay = int(npx * _ei * 0.08 * (1.0 - self._morph_t * 0.6))
+                if _echo_delay < 3 or _echo_delay >= npx:
+                    continue
+                _echo_alpha = int(_ea * (1.0 - _ei / (_n_echoes + 1)) * fade)
+                _ep = QPainterPath()
+                _ep.moveTo(cx, center - int(d_hi[_echo_delay] * sc * 0.28 * fade))
+                for _i7 in range(npx - _echo_delay):
+                    _ev7 = d_hi[_i7 + _echo_delay] * 0.22 * fade
+                    _ep.lineTo(int(cx + _i7 * ps), center - int(_ev7 * sc))
+                painter.setPen(QPen(QColor(r, g, b, _echo_alpha), 1.0))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(_ep)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "reverb_dsp":
+            # WPE DSP reverb — early reflection shadows fading
+            _n_echoes7 = 3
+            _ea7 = int(55 * fade)
+            for _ei7 in range(1, _n_echoes7 + 1):
+                _skip7 = int(npx * _ei7 * 0.12 * (1.0 - self._morph_t * 0.5))
+                if _skip7 < 2 or _skip7 >= npx:
+                    continue
+                _a7 = int(_ea7 * (1.0 - _ei7 / (_n_echoes7 + 1)))
+                _e2 = QPainterPath()
+                _e2.moveTo(cx, center)
+                for _i8 in range(npx - _skip7):
+                    _ev8 = d_hi[_i8 + _skip7] * 0.18 * fade if _i8 + _skip7 < npx else 0
+                    _e2.lineTo(int(cx + _i8 * ps), center - int(_ev8 * sc))
+                painter.setPen(QPen(QColor(r, g, b, _a7), 0.8))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(_e2)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "dropout":
+            # Gap fill: waveform segments growing from center into empty regions
+            gw = min(1.0, self._morph_t * 1.5)
+            ga = int(120 * fade)
+            stp = max(1, npx // 120)
+            pw2 = max(1, int(ps * 1.1))
+            painter.setPen(QPen(QColor(r, g, b, ga), pw2))
+            for i in range(0, npx, stp):
+                vt = float(d_hi[i]) * sc * gw
+                vb = float(d_lo[i]) * sc * gw
+                if abs(vt) < 1.5 and abs(vb) < 1.5:
+                    continue
+                _px_do = int(cx + i * ps)
+                painter.drawLine(_px_do, int(center - vt), _px_do, int(center - vb))
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "bandwidth":
+            # AudioSR frequency extension — HF content appearing at top edge
+            _nb8 = min(28, max(6, npx // 6))
+            for _i8b in range(_nb8):
+                _idx8 = min(int(_i8b * npx / _nb8), npx - 1)
+                _val8 = float(d_rms[_idx8]) * sc
+                _hf_w = (_i8b / _nb8) ** 1.5
+                _bh8 = int(_val8 * _hf_w * min(1.0, self._morph_t * 2.5))
+                if _bh8 < 2:
+                    continue
+                _bx8 = cx + int(_i8b * cw / _nb8)
+                _bw8 = max(2, cw // (_nb8 * 2))
+                _ba8 = int(90 * fade * _hf_w)
+                _bg8 = QLinearGradient(_bx8, cy, _bx8, cy + _bh8)
+                _bg8.setColorAt(0.0, QColor(min(255, r + 80), min(255, g + 80), min(255, b + 40), _ba8))
+                _bg8.setColorAt(1.0, QColor(r, g, b, _ba8 // 3))
+                painter.setBrush(QBrush(_bg8))
+                painter.drawRect(_bx8, cy, _bw8, _bh8)
+
+        elif effect == "harmonic":
+            # Overtone staircase — harmonic series building up
+            _n_harms = 7
+            _hbase = ch * 0.36
+            _ha9 = int(75 * fade)
+            for _hi9 in range(1, _n_harms + 1):
+                _amp9 = _hbase / _hi9 * fade
+                _h_frac9 = 1.0 - (_hi9 / (_n_harms + 1))
+                _h_alpha9 = int(_ha9 * _h_frac9)
+                if _h_alpha9 < 5:
+                    continue
+                _h_y9 = int(center - _amp9)
+                _h_h9 = max(1, int(_amp9 * 2))
+                _cs9 = min(50, _hi9 * 8)
+                _step9 = max(1, cw // (6 * _hi9))
+                painter.setBrush(QBrush(QColor(min(255, r + _cs9), max(0, g - _hi9 * 3), min(255, b + _hi9 * 4), _h_alpha9)))
+                for _bi9 in range(0, cw, _step9 * 2):
+                    painter.drawRect(cx + _bi9, _h_y9, _step9, _h_h9)
+
+        elif effect == "eq":
+            # EQ tilt correction — frequency spectrum leveling
+            _nb10 = min(20, max(4, npx // 10))
+            _tilt10 = (1.0 - self._morph_t) * ch * 0.22
+            _ea10 = int(88 * fade)
+            for _i10 in range(_nb10):
+                _idx10 = min(int(_i10 * npx / _nb10), npx - 1)
+                _val10 = float(d_rms[_idx10]) * sc
+                _tilt_f10 = (_i10 / _nb10 - 0.5) * 2.0
+                _bh10 = max(1, int(abs(_val10 + _tilt10 * _tilt_f10) * fade))
+                _bx10 = cx + int(_i10 * cw / _nb10)
+                _bw10 = max(2, cw // (_nb10 + 2))
+                _by10 = center - _bh10 if _val10 + _tilt10 * _tilt_f10 > 0 else center
+                _bg10 = QLinearGradient(_bx10, center, _bx10, _by10)
+                _bg10.setColorAt(0.0, QColor(r, g, b, _ea10 // 2))
+                _bg10.setColorAt(1.0, QColor(r, g, b, _ea10))
+                painter.setBrush(QBrush(_bg10))
+                painter.drawRect(_bx10, _by10, _bw10, _bh10)
+
+        elif effect == "bandgap":
+            # Spectral band gap filling — specific frequency band highlighted+filled
+            _bg_lo = cy + ch // 4
+            _bg_hi = cy + ch * 3 // 4
+            _bg_hh = _bg_hi - _bg_lo
+            _bg_a11 = int(95 * fade)
+            _bg_g11 = QLinearGradient(cx, _bg_lo, cx, _bg_hi)
+            _bg_g11.setColorAt(0.0, QColor(r, g, b, 0))
+            _bg_g11.setColorAt(0.3, QColor(r, g, b, _bg_a11))
+            _bg_g11.setColorAt(0.7, QColor(r, g, b, _bg_a11))
+            _bg_g11.setColorAt(1.0, QColor(r, g, b, 0))
+            painter.setBrush(QBrush(_bg_g11))
+            painter.drawRect(cx, _bg_lo, cw, _bg_hh)
+            _fill_w11 = int(cw * min(1.0, self._morph_t * 1.8))
+            _fill_g11 = QLinearGradient(cx, 0, cx + _fill_w11, 0)
+            _fill_g11.setColorAt(0.0, QColor(r, g, b, int(_bg_a11 * 1.3)))
+            _fill_g11.setColorAt(1.0, QColor(r, g, b, 0))
+            painter.setBrush(QBrush(_fill_g11))
+            _mid_y11 = (_bg_lo + _bg_hi) // 2 - 3
+            painter.drawRect(cx, _mid_y11, _fill_w11, 6)
+
+        elif effect == "deesser":
+            # Sibilance taming — bright HF sparks being controlled
+            _npt12 = int(18 * fade)
+            _da12 = int(155 * fade)
+            for _p12 in range(_npt12):
+                _s12 = (self._morph_frame * 89 + _p12 * 191) & 0xFFFF
+                _pi12 = _s12 % max(1, npx)
+                if float(d_rms[_pi12]) * sc < ch * 0.04:
+                    continue
+                _px12 = int(cx + _pi12 * ps)
+                _py12 = cy + int(ch * 0.12) + (_s12 % max(1, int(ch * 0.22)))
+                _ins12 = float(d_rms[_pi12]) / (pk + 1e-9)
+                _fa12 = int(_da12 * _ins12 * (1.0 - self._morph_t * 0.7))
+                if _fa12 < 8:
+                    continue
+                _sz12 = 0.8 + 1.4 * _ins12
+                painter.setBrush(QBrush(QColor(255, 240, 200, _fa12)))
+                painter.drawEllipse(QPointF(_px12, float(_py12)), _sz12, _sz12)
+
+        elif effect == "wowflutter":
+            # Wow/flutter correction — wavy pitch oscillation straightening
+            _period13 = max(20, cw // 4)
+            _amp13 = ch * 0.14 * fade
+            _wa13 = int(108 * fade)
+            _wave_amt13 = max(0.0, 1.0 - self._morph_t)
+            painter.setPen(QPen(QColor(r, g, b, _wa13), 1.5))
+            _ppx13, _ppy13 = None, None
+            for _xi13 in range(0, cw, 2):
+                _frac13 = _xi13 / max(1, cw)
+                _wave13 = math.sin(_frac13 * cw / _period13 * math.pi * 2) * _amp13 * _wave_amt13
+                _py13 = int(center + _wave13)
+                if _ppx13 is not None:
+                    painter.drawLine(_ppx13, _ppy13, cx + _xi13, _py13)
+                _ppx13, _ppy13 = cx + _xi13, _py13
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "azimuth":
+            # Azimuth/phase alignment — L/R channels converging
+            _aa14 = int(85 * fade)
+            _off14 = int(8 * (1.0 - self._morph_t))
+            if npx > 2 and _off14 > 0:
+                for _px_off14, _col_shift14 in [(+_off14, (min(255, r + 40), g, b)), (-_off14, (r, g, min(255, b + 40)))]:
+                    _ep14 = QPainterPath()
+                    _ep14.moveTo(cx + _px_off14, center - int(d_hi[0] * sc * 0.45))
+                    for _i14 in range(1, min(npx, cw)):
+                        _ep14.lineTo(cx + _i14 + _px_off14, center - int(d_hi[_i14 % npx] * sc * 0.38 * fade))
+                    painter.setPen(QPen(QColor(_col_shift14[0], _col_shift14[1], _col_shift14[2], _aa14), 1.0))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawPath(_ep14)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "print_through":
+            # Reel-tape print-through — phantom echo preceding dissolving
+            _pt_delay = max(1, npx // 8)
+            _pa15 = int(65 * fade)
+            _ghost15 = QPainterPath()
+            _gv0_15 = d_hi[_pt_delay] * 0.28 * fade if _pt_delay < npx else 0
+            _ghost15.moveTo(cx, center - int(_gv0_15 * sc))
+            for _i15 in range(npx - _pt_delay):
+                _gv15 = d_hi[_i15 + _pt_delay] * 0.25 * fade
+                _ghost15.lineTo(int(cx + _i15 * ps), center - int(_gv15 * sc))
+            painter.setPen(QPen(QColor(r, g, b, _pa15), 0.8, Qt.PenStyle.DashDotLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(_ghost15)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "saturation":
+            # Tape saturation — warm harmonic glow around high-energy regions
+            _sa16 = int(32 * fade)
+            _wr16, _wg16, _wb16 = min(255, r + 55), max(0, g - 18), max(0, b - 38)
+            for _i16 in range(0, npx, max(1, npx // 40)):
+                _val16 = abs(float(d_hi[_i16])) * sc
+                if _val16 < 2:
+                    continue
+                _px16 = int(cx + _i16 * ps)
+                _ins16 = abs(float(d_hi[_i16])) / (pk + 1e-9)
+                for _layer16 in range(3):
+                    _la16 = int(_sa16 * (1.0 - _layer16 * 0.3) * _ins16)
+                    _lr16 = _val16 * (1 + _layer16 * 0.8)
+                    painter.setBrush(QBrush(QColor(_wr16, _wg16, _wb16, _la16)))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawEllipse(QPointF(float(_px16), float(center)), _lr16, _lr16 * 0.4)
+
+        elif effect == "transient":
+            # Transient shaping — attack spike brightening (punch visualization)
+            _absp17 = np.abs(d_hi)
+            _thr17 = float(np.percentile(_absp17, 82)) if npx > 5 else pk * 0.4
+            _ff17 = max(0.0, fade) ** 0.45
+            for _i17 in range(npx):
+                if _absp17[_i17] < _thr17:
+                    continue
+                _ins17 = min(1.0, _absp17[_i17] / (pk + 1e-9))
+                _fa17 = int(195 * _ins17 * _ff17)
+                if _fa17 < 10:
+                    continue
+                _px17 = int(cx + _i17 * ps)
+                _spike17 = int(_ins17 * ch * 0.33 * _ff17)
+                _sg17 = QLinearGradient(_px17, center - _spike17, _px17, center + _spike17)
+                _sg17.setColorAt(0.0, QColor(r, g, b, 0))
+                _sg17.setColorAt(0.25, QColor(r, g, b, _fa17 // 2))
+                _sg17.setColorAt(0.5, QColor(255, 255, 255, _fa17))
+                _sg17.setColorAt(0.75, QColor(r, g, b, _fa17 // 2))
+                _sg17.setColorAt(1.0, QColor(r, g, b, 0))
+                painter.setPen(QPen(QBrush(_sg17), 2.0))
+                painter.drawLine(_px17, center - _spike17, _px17, center + _spike17)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "compression":
+            # Dynamic compression — gain ceiling descending over waveform
+            _ca18 = int(48 * fade)
+            for _i18 in range(0, npx, max(1, npx // 60)):
+                _rv18 = float(d_rms[_i18]) * sc
+                if _rv18 < 2:
+                    continue
+                _px18 = int(cx + _i18 * ps)
+                _eh18 = int(_rv18 * (1.0 - self._morph_t * 0.5))
+                _eg18 = QLinearGradient(_px18, center - _eh18, _px18, center + _eh18)
+                _eg18.setColorAt(0.0, QColor(r, g, b, _ca18))
+                _eg18.setColorAt(0.5, QColor(r, g, b, _ca18 // 3))
+                _eg18.setColorAt(1.0, QColor(r, g, b, _ca18))
+                painter.setBrush(QBrush(_eg18))
+                painter.drawRect(_px18, center - _eh18, max(2, int(ps * 1.5)), _eh18 * 2)
+            _gr18_y = center - int(ch * 0.3 * (1.0 - self._morph_t * 0.6))
+            painter.setPen(QPen(QColor(r, g, b, int(_ca18 * 1.8)), 1.0, Qt.PenStyle.DashLine))
+            painter.drawLine(cx, _gr18_y, cx + cw, _gr18_y)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "expansion":
+            # Dynamic range expansion — envelope spreading outward
+            _xa19 = int(52 * fade)
+            for _i19 in range(0, npx, max(1, npx // 60)):
+                _rv19 = float(d_rms[_i19]) * sc
+                if _rv19 < 1:
+                    continue
+                _px19 = int(cx + _i19 * ps)
+                _eh19 = int(_rv19 * (1.0 + self._morph_t * 0.4))
+                painter.setBrush(QBrush(QColor(r, g, b, _xa19)))
+                painter.drawRect(_px19, center - _eh19, max(2, int(ps * 1.5)), _eh19 * 2)
+
+        elif effect == "lufs_norm":
+            # Loudness normalization — amplitude arrows pointing to target
+            _la20 = int(52 * fade)
+            _target20 = int(ch * 0.44)
+            for _i20 in range(0, npx, max(1, npx // 40)):
+                _val20 = abs(float(d_hi[_i20])) * sc
+                if _val20 < 2:
+                    continue
+                _px20 = int(cx + _i20 * ps)
+                _cur20 = int(_val20)
+                _alen20 = int((_target20 - _cur20) * fade * 0.5)
+                if abs(_alen20) < 2:
+                    continue
+                _ay20 = center - _cur20
+                painter.setPen(QPen(QColor(r, g, b, _la20), 1.2))
+                painter.drawLine(_px20, _ay20, _px20, _ay20 - _alen20)
+                _ah20 = -3 if _alen20 > 0 else 3
+                painter.drawLine(_px20, _ay20 - _alen20, _px20 - 2, _ay20 - _alen20 + _ah20)
+                painter.drawLine(_px20, _ay20 - _alen20, _px20 + 2, _ay20 - _alen20 + _ah20)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "truepeak":
+            # TruePeak limiting — ceiling flash + peaks above threshold
+            _ta21 = int(118 * fade)
+            _ceil21 = int(cy + ch * 0.06)
+            painter.setPen(QPen(QColor(255, 120, 40, int(_ta21 * 1.2)), 1.5, Qt.PenStyle.DashLine))
+            painter.drawLine(cx, _ceil21, cx + cw, _ceil21)
+            for _i21 in range(npx):
+                _ph21 = int(abs(float(d_hi[_i21])) * sc)
+                if center - _ph21 < _ceil21 + 3:
+                    _px21 = int(cx + _i21 * ps)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    _ch21 = min(4, _ceil21 - (center - _ph21) + 4)
+                    painter.setBrush(QBrush(QColor(255, 80, 30, int(_ta21 * (1.0 - self._morph_t * 0.8)))))
+                    painter.drawRect(_px21, center - _ph21, max(2, int(ps)), _ch21)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "bass_enh":
+            # Bass enhancement — sub-frequency pulses growing from bottom
+            _nb22 = min(12, max(3, npx // 20))
+            for _i22 in range(_nb22):
+                _idx22 = min(int(_i22 * npx / _nb22), npx - 1)
+                _val22 = float(d_rms[_idx22]) * sc
+                _bh22 = int(_val22 * min(1.0, self._morph_t * 2) * 0.7)
+                if _bh22 < 2:
+                    continue
+                _bx22 = cx + int(_i22 * cw / _nb22)
+                _bw22 = max(3, cw // _nb22 - 2)
+                _bg22 = QLinearGradient(_bx22, cy + ch, _bx22, cy + ch - _bh22)
+                _bg22.setColorAt(0.0, QColor(r, g, b, int(118 * fade)))
+                _bg22.setColorAt(0.7, QColor(r, g, b, int(58 * fade)))
+                _bg22.setColorAt(1.0, QColor(r, g, b, 0))
+                painter.setBrush(QBrush(_bg22))
+                painter.drawRect(_bx22, cy + ch - _bh22, _bw22, _bh22)
+
+        elif effect == "air_enh":
+            # Air/presence boost — HF sparkle concentrated at top edge
+            _npt23 = int(20 * fade)
+            for _p23 in range(_npt23):
+                _s23 = (self._morph_frame * 107 + _p23 * 233) & 0xFFFF
+                _pi23 = _s23 % max(1, npx)
+                if float(d_rms[_pi23]) * sc < ch * 0.03:
+                    continue
+                _px23 = int(cx + _pi23 * ps)
+                _py23 = cy + 10 + (_s23 % max(1, int(ch * 0.26)))
+                _pa23 = int(88 * fade)
+                _sz23 = 0.6 + 1.1 * fade
+                painter.setBrush(QBrush(QColor(min(255, r + 80), min(255, g + 80), min(255, b + 60), _pa23)))
+                painter.drawEllipse(QPointF(float(_px23), float(_py23)), _sz23, _sz23)
+
+        elif effect == "diffusion":
+            # Diffusion inpainting — cloud converging from scattered to signal
+            _npt24 = int(25 * fade)
+            _conv_r24 = ch * 0.4 * (1.0 - self._morph_t) + ch * 0.05
+            for _p24 in range(_npt24):
+                _s24 = (self._morph_frame * 163 + _p24 * 307) & 0xFFFF
+                _pi24 = _s24 % max(1, npx)
+                _wf_y24 = float(center - d_hi[_pi24] * sc * self._morph_t)
+                _sdx24 = ((_s24 * 37 % 200) - 100) / 100.0 * _conv_r24 * 0.3
+                _sdy24 = ((_s24 * 71 % 200) - 100) / 100.0 * _conv_r24
+                _le24 = float(d_rms[_pi24]) * sc
+                _pa24 = int(88 * fade * min(1.0, _le24 / max(1, ch * 0.1)))
+                _sz24 = 0.8 + 1.4 * (1.0 - self._morph_t)
+                painter.setBrush(QBrush(QColor(r, g, b, _pa24)))
+                painter.drawEllipse(QPointF(float(cx + _pi24 * ps) + _sdx24, _wf_y24 + _sdy24), _sz24, _sz24)
+
+        elif effect == "inpainting":
+            # AudioSR spectral inpainting — rectangular gap being filled from edges
+            _gap_cx25 = cx + cw // 2
+            _gap_hw25 = max(8, cw // 5)
+            _ia25 = int(78 * fade)
+            painter.setBrush(QBrush(QColor(r, g, b, int(_ia25 * 0.3))))
+            painter.drawRect(_gap_cx25 - _gap_hw25, cy, _gap_hw25 * 2, ch)
+            _fill25 = int(_gap_hw25 * min(1.0, self._morph_t * 1.5))
+            if _fill25 > 0:
+                _fl25 = QLinearGradient(_gap_cx25 - _gap_hw25, 0, _gap_cx25 - _gap_hw25 + _fill25, 0)
+                _fl25.setColorAt(0.0, QColor(r, g, b, _ia25))
+                _fl25.setColorAt(1.0, QColor(r, g, b, 0))
+                painter.setBrush(QBrush(_fl25))
+                painter.drawRect(_gap_cx25 - _gap_hw25, cy + ch // 4, _fill25, ch // 2)
+
+        elif effect == "stem_sep":
+            # Vocal stem separation — two signal streams diverging then clean
+            _div25 = int(ch * 0.14 * self._morph_t)
+            _sa25 = int(75 * fade)
+            for _off25, _col25 in [(-_div25, (r, g, b)), (_div25, (min(255, r + 55), g, min(255, b + 38)))]:
+                _sp25 = QPainterPath()
+                _sp25.moveTo(cx, center + _off25 - int(d_hi[0] * sc * 0.38))
+                for _i25 in range(1, npx):
+                    _sp25.lineTo(int(cx + _i25 * ps), center + _off25 - int(d_hi[_i25] * sc * 0.33 * fade))
+                painter.setPen(QPen(QColor(_col25[0], _col25[1], _col25[2], _sa25), 1.0))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(_sp25)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "vocal_ai":
+            # VocalAI — layered formant glow + breath particles
+            _gw_h26 = ch // 4
+            _gy26 = center - _gw_h26 // 2
+            _va26 = int(28 * fade)
+            for _form_y26, _form_h26 in [(_gy26, _gw_h26), (_gy26 - _gw_h26 // 2, _gw_h26 // 2)]:
+                _fg26 = QLinearGradient(cx, _form_y26, cx, _form_y26 + _form_h26)
+                _fg26.setColorAt(0.0, QColor(r, g, b, 0))
+                _fg26.setColorAt(0.5, QColor(r, g, b, _va26))
+                _fg26.setColorAt(1.0, QColor(r, g, b, 0))
+                painter.setBrush(QBrush(_fg26))
+                painter.drawRect(cx, _form_y26, cw, _form_h26)
+            for _p26 in range(12):
+                _s26 = (self._morph_frame * 97 + _p26 * 179) & 0x3FFF
+                _pi26 = _s26 % max(1, npx)
+                _px26 = int(cx + _pi26 * ps)
+                _py26 = cy + int(ch * 0.14) + (_s26 % max(1, int(ch * 0.16)))
+                _pa26 = int(48 * fade * (d_rms[_pi26] / (pk + 1e-9)))
+                painter.setBrush(QBrush(QColor(255, 240, 220, _pa26)))
+                painter.drawEllipse(QPointF(float(_px26), float(_py26)), 0.7, 0.7)
+
+        elif effect == "spatial":
+            # Stereo/spatial enhancement — L/R divergence spreading
+            _div27 = int(ch * 0.11 * self._morph_t * fade)
+            _spa27 = int(68 * fade)
+            for _off27, _col27 in [(-_div27, (min(255, r + 28), g, b)), (_div27, (r, g, min(255, b + 28)))]:
+                _sp27 = QPainterPath()
+                _sp27.moveTo(cx, center + _off27)
+                for _i27 in range(1, min(npx, cw)):
+                    _sp27.lineTo(int(cx + _i27 * ps), center + _off27 - int(d_hi[_i27 % npx] * sc * 0.24 * fade))
+                painter.setPen(QPen(QColor(_col27[0], _col27[1], _col27[2], _spa27), 0.8))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(_sp27)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        elif effect == "instrument":
+            # Instrument resonance — mid-band energy bars (200 Hz – 4 kHz)
+            _mid_lo28 = cy + ch // 5
+            _mid_hi28 = cy + ch * 4 // 5
+            _mid_h28 = _mid_hi28 - _mid_lo28
+            _ia28 = int(62 * fade)
+            _nb28 = min(16, max(4, npx // 15))
+            for _i28 in range(_nb28):
+                _idx28 = min(int(_i28 * npx / _nb28), npx - 1)
+                _val28 = float(d_rms[_idx28]) * sc * 0.8
+                _bh28 = int(_val28 * min(1.0, self._morph_t * 2))
+                if _bh28 < 2:
+                    continue
+                _bx28 = cx + int(_i28 * cw / _nb28)
+                _bw28 = max(2, cw // (_nb28 + 2))
+                _by28 = max(_mid_lo28, _mid_lo28 + (_mid_h28 - _bh28) // 2)
+                _bh28 = min(_bh28, _mid_h28)
+                _bg28 = QLinearGradient(_bx28, _by28 + _bh28, _bx28, _by28)
+                _bg28.setColorAt(0.0, QColor(r, g, b, _ia28 // 2))
+                _bg28.setColorAt(1.0, QColor(r, g, b, _ia28))
+                painter.setBrush(QBrush(_bg28))
+                painter.drawRect(_bx28, _by28, _bw28, _bh28)
+
+        elif effect == "bump":
+            # Transport bump — radial shock wave dissolving
+            _ba29 = int(88 * fade)
+            _sc_ctr29 = cx + cw // 2
+            _sh_w29 = int(cw * 0.2 * (1.0 + self._morph_t * 1.4))
+            _sh_h29 = int(ch * 0.48 * (1.0 - self._morph_t * 0.66))
+            if _sh_w29 > 1 and _sh_h29 > 1:
+                _rg29 = QRadialGradient(_sc_ctr29, center, _sh_w29 // 2)
+                _rg29.setColorAt(0.0, QColor(r, g, b, _ba29))
+                _rg29.setColorAt(0.5, QColor(r, g, b, _ba29 // 3))
+                _rg29.setColorAt(1.0, QColor(r, g, b, 0))
+                painter.setBrush(QBrush(_rg29))
+                painter.drawEllipse(QPointF(float(_sc_ctr29), float(center)), float(_sh_w29 // 2), float(_sh_h29))
+
+        elif effect == "celebration":
+            # Post-restoration: golden particle fountain rising from waveform
+            _npt_cel = int(40 * fade)
+            for _p_cel in range(_npt_cel):
+                _s_cel = (self._morph_frame * 199 + _p_cel * 401) & 0xFFFF
+                _pi_cel = _s_cel % max(1, npx)
+                _le_cel = float(d_rms[_pi_cel]) * sc if _pi_cel < len(d_rms) else 1.0
+                _px_cel = int(cx + _pi_cel * ps)
+                # Particles rise upward and expand outward
+                _rise = self._morph_t * ch * 0.6 * ((_s_cel % 8 + 1) / 9.0)
+                _spread = ((_s_cel * 29 % 100) / 100.0 - 0.5) * ch * 0.3 * self._morph_t
+                _py_cel = center - _rise + _spread
+                _pa_cel = int(120 * (1.0 - self._morph_t) * min(1.0, _le_cel / max(1, ch * 0.05)))
+                _sz_cel = 1.0 + 2.5 * (1.0 - self._morph_t)
+                # Alternate gold, white, and orange
+                _colors_cel = [(255, 215, 0), (255, 255, 200), (255, 170, 30)]
+                _cr, _cg, _cb = _colors_cel[_p_cel % 3]
+                painter.setBrush(QBrush(QColor(_cr, _cg, _cb, _pa_cel)))
+                painter.drawEllipse(QPointF(float(_px_cel), _py_cel), _sz_cel, _sz_cel)
+
     def set_view(self, start: float, end: float) -> None:
         """Programmatic zoom/pan: set view window to [start, end] fraction of total audio.
 
@@ -3009,7 +3870,7 @@ class WaveformWidget(QWidget):
                 painter.drawRoundedRect(20, 20, w - 40, h - 40, 18, 18)
                 cy = h // 2
                 painter.setPen(QColor(255, 220, 100))
-                font_big = QFont("Segoe UI", 16, QFont.Weight.Bold)
+                font_big = QFont(self.font().family(), 16, QFont.Weight.Bold)
                 painter.setFont(font_big)
                 painter.drawText(
                     0,
@@ -3020,7 +3881,7 @@ class WaveformWidget(QWidget):
                     t("ui.waveform_loading_title"),
                 )
                 painter.setPen(QColor(180, 160, 80))
-                font_small = QFont("Segoe UI", 10)
+                font_small = QFont(self.font().family(), 10)
                 painter.setFont(font_small)
                 painter.drawText(
                     0,
@@ -3043,7 +3904,7 @@ class WaveformWidget(QWidget):
             cy = h // 2
             # Haupttext (16pt ≈ 24px → Mitte 30px über cy)
             painter.setPen(QColor(180, 190, 220))
-            font_big = QFont("Segoe UI", 16, QFont.Weight.Bold)
+            font_big = QFont(self.font().family(), 16, QFont.Weight.Bold)
             painter.setFont(font_big)
             painter.drawText(
                 0,
@@ -3055,7 +3916,7 @@ class WaveformWidget(QWidget):
             )
             # Subtext (10pt ≈ 16px → direkt unter Haupttext, 8px Abstand)
             painter.setPen(QColor(130, 150, 180))
-            font_small = QFont("Segoe UI", 10)
+            font_small = QFont(self.font().family(), 10)
             painter.setFont(font_small)
             painter.drawText(
                 0,
@@ -3067,7 +3928,7 @@ class WaveformWidget(QWidget):
             )
             # Formate (8pt ≈ 13px → 8px unter Subtext)
             painter.setPen(QColor(90, 110, 140))
-            font_tiny = QFont("Segoe UI", 8)
+            font_tiny = QFont(self.font().family(), 8)
             painter.setFont(font_tiny)
             painter.drawText(
                 0,
@@ -3137,7 +3998,7 @@ class WaveformWidget(QWidget):
             painter.setPen(Qt.PenStyle.NoPen)
 
             # Channel header pills — top-right of each channel area
-            _pill_font = QFont("Segoe UI", 7, QFont.Weight.Bold)
+            _pill_font = QFont(self.font().family(), 7, QFont.Weight.Bold)
             painter.setFont(_pill_font)
             _pfm = painter.fontMetrics()
             for _ch_lbl, _ch_y_top, _ch_clr in (
@@ -3217,7 +4078,7 @@ class WaveformWidget(QWidget):
                     _lx = _ph_x + 5 if _ph_x + 38 <= plot_x + plot_width else _ph_x - 36
                     _ts_y = (plot_y + 34) if self._active_stage else (plot_y + 12)
                     painter.setPen(QColor(255, 255, 200, 210))
-                    painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
+                    painter.setFont(QFont(self.font().family(), 7, QFont.Weight.Bold))
                     painter.drawText(_lx, _ts_y, _t_str)
 
         # ── Scan-Cursor: only visible while DefectScanner is actively reading ──
@@ -3274,14 +4135,18 @@ class WaveformWidget(QWidget):
             painter.setPen(QPen(QColor(100, 100, 120, 80), 1, Qt.PenStyle.DashLine))
             painter.drawLine(x, center_y, x + width, center_y)
             painter.setPen(QColor(180, 180, 200))
-            font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+            font = QFont(self.font().family(), 9, QFont.Weight.Bold)
             painter.setFont(font)
             painter.drawText(
                 x - 40, center_y - 10, 30, 20, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, label
             )
             return
 
-        display_peak = self._display_peak_reference or true_peak_amplitude
+        # Use the shared reference peak if set (A/B comparison keeps same scale).
+        # Fall back to the full-track peak (cached at load time) so zoom into a
+        # silent section does not magnify the noise floor.
+        _ftpk = self._full_track_peak if self._full_track_peak > 1e-6 else true_peak_amplitude
+        display_peak = self._display_peak_reference or _ftpk
         # Scale so the true peak fills 48 % of half-height → 96 % of channel
         half_h = height * 0.48
         px_scale = half_h / display_peak  # pixels per amplitude unit
@@ -3378,7 +4243,7 @@ class WaveformWidget(QWidget):
 
         # ── Channel label ─────────────────────────────────────────────────────
         painter.setPen(QColor(180, 180, 200))
-        font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+        font = QFont(self.font().family(), 9, QFont.Weight.Bold)
         painter.setFont(font)
         painter.drawText(
             x - 40, center_y - 10, 30, 20, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, label
@@ -3386,7 +4251,7 @@ class WaveformWidget(QWidget):
 
         # ── Adaptive dB scale (only ticks within visible range) ───────────────
         painter.setPen(QColor(150, 150, 170, 150))
-        font_small = QFont("Segoe UI", 7)
+        font_small = QFont(self.font().family(), 7)
         painter.setFont(font_small)
         # Guard: skip labels whose y-position would overlap the channel label (L/R/M).
         # The channel label occupies ±12 px around center_y in the left margin.
@@ -3408,7 +4273,7 @@ class WaveformWidget(QWidget):
         # ── Peak dBFS annotation (top-RIGHT of channel, away from left-side badge) ──
         peak_db = 20.0 * np.log10(true_peak_amplitude)
         painter.setPen(QColor(200, 220, 255, 130))
-        font_peak = QFont("Segoe UI", 7)
+        font_peak = QFont(self.font().family(), 7)
         painter.setFont(font_peak)
         painter.drawText(
             x + 4,
@@ -3431,7 +4296,7 @@ class WaveformWidget(QWidget):
         view_dur = max(1e-6, view_end_sec - view_start_sec)
 
         painter.setPen(QColor(150, 150, 170, 150))
-        font = QFont("Segoe UI", 8)
+        font = QFont(self.font().family(), 8)
         painter.setFont(font)
 
         _zoom_active = self._view_end - self._view_start < 0.99
@@ -3454,7 +4319,7 @@ class WaveformWidget(QWidget):
         if _zoom_active:
             zoom_factor = 1.0 / max(0.001, self._view_end - self._view_start)
             painter.setPen(QColor(102, 126, 234, 180))
-            font_z = QFont("Segoe UI", 7)
+            font_z = QFont(self.font().family(), 7)
             painter.setFont(font_z)
             painter.drawText(
                 int(x + width - 80),
@@ -3478,6 +4343,9 @@ class WaveformWidget(QWidget):
         """
         if self.audio_data is None:
             return
+
+        # Spec §11.4: each defect type must be rendered with a 5 px band.
+        BAND_H = 5
 
         _DEFECT_COLORS = {
             "clicks": QColor(255, 82, 82),
@@ -3650,6 +4518,7 @@ class WaveformWidget(QWidget):
                 rendering (e.g. weaker channel gets lower alpha).
                 """
                 _mw = max(3, _px1 - _px0)
+                _mh = max(BAND_H, int(_mh))
                 _a65 = int(65 * _alpha_scale)
                 _a35 = int(35 * _alpha_scale)
                 _a60 = int(60 * _alpha_scale)
@@ -3689,7 +4558,7 @@ class WaveformWidget(QWidget):
                         # Tiny channel badge ("L" / "R") on markers wide enough to hold it
                         if px1 - px0 >= 8:
                             painter.setPen(QColor(_br, _bg_c, _bb, 220))
-                            painter.setFont(QFont("Segoe UI", 5, QFont.Weight.Bold))
+                            painter.setFont(QFont(self.font().family(), 5, QFont.Weight.Bold))
                             painter.drawText(px0 + 2, int(ch_y) + 9, ch_label)
                         painter.setPen(Qt.PenStyle.NoPen)
             elif is_stereo and self.audio_data is not None and self.audio_data.ndim > 1:
@@ -3812,7 +4681,7 @@ class WaveformWidget(QWidget):
             painter.drawLine(_px0, int(_ry + _rh), _px1, int(_ry + _rh))
             if _show_check and _mw > 10:
                 painter.setPen(QColor(_tr, _tg, _tb, 200))
-                painter.setFont(QFont("Segoe UI", 6))
+                painter.setFont(QFont(self.font().family(), 6))
                 painter.drawText(_px0 + 2, int(_ry) + 9, "✓")
             painter.setPen(Qt.PenStyle.NoPen)
 
@@ -3889,7 +4758,7 @@ class WaveformWidget(QWidget):
                     _badge = f"⚠ Defektbehebung: {n_active} verblieben"
                 _badge_color = QColor(130, 200, 154, 230)
                 _badge_bg = QColor(20, 50, 35, 170)
-            _badge_font = QFont("Segoe UI", 7, QFont.Weight.Bold)
+            _badge_font = QFont(self.font().family(), 7, QFont.Weight.Bold)
             painter.setFont(_badge_font)
             _bfm = painter.fontMetrics()
             _btw = _bfm.horizontalAdvance(_badge)
@@ -3910,7 +4779,7 @@ class WaveformWidget(QWidget):
             _at_r, _at_g, _at_b = _atc[0]
             _at_icon = _atc[1]
             _at_text = f"{_at_icon} {self._active_tool}"
-            _at_font = QFont("Segoe UI", 7, QFont.Weight.Bold)
+            _at_font = QFont(self.font().family(), 7, QFont.Weight.Bold)
             painter.setFont(_at_font)
             _at_fm = painter.fontMetrics()
             _at_tw = _at_fm.horizontalAdvance(_at_text)
@@ -3932,7 +4801,7 @@ class WaveformWidget(QWidget):
         item_gap = 10
         legend_y = int(y + height) - legend_h - 1
 
-        label_font = QFont("Segoe UI", 7)
+        label_font = QFont(self.font().family(), 7)
         painter.setFont(label_font)
         _fm = painter.fontMetrics()
 
@@ -4171,12 +5040,12 @@ class WaveformWidget(QWidget):
                 _icon_drawn = True
         if not _icon_drawn:
             painter.setPen(QColor(r, g, b, 235))
-            painter.setFont(QFont("Segoe UI", 11))
+            painter.setFont(QFont(self.font().family(), 11))
             painter.drawText(_icon_x, text_y, _icon_size, text_h, Qt.AlignmentFlag.AlignVCenter, self._stage_icon)
 
-        _lbl_font = QFont("Segoe UI", 9, QFont.Weight.Bold)
-        QFont("Segoe UI", 8)
-        QFont("Segoe UI", 7)
+        _lbl_font = QFont(self.font().family(), 9, QFont.Weight.Bold)
+        QFont(self.font().family(), 8)
+        QFont(self.font().family(), 7)
 
         _pct_text = f"{int(progress * 100)} %" if progress > 0.01 else ""
         _show_pct = bool(_pct_text)
@@ -4243,7 +5112,7 @@ class WaveformWidget(QWidget):
 
         # ── 3c. Completed stage trail (right-aligned) ────────────────────────
         if self._stage_history:
-            painter.setFont(QFont("Segoe UI", 7))
+            painter.setFont(QFont(self.font().family(), 7))
             _fm_t = painter.fontMetrics()
             _trail_x = int(x + width) - 8
             for i, _cl in enumerate(reversed(self._stage_history)):
@@ -4576,7 +5445,7 @@ class SpectrogramWidget(QWidget):
         if self.spectrogram_data is None:
             # Draw premium placeholder
             painter.setPen(QColor(180, 180, 200))
-            font = QFont("Segoe UI", 11)
+            font = QFont(self.font().family(), 11)
             painter.setFont(font)
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "🎵 Spektrogramm wird berechnet...")
             return
@@ -5156,22 +6025,22 @@ class DefectStoryWidget(QFrame):
         "phase_issues": ("Phasenfehler", "zeitliche Kanal-Fehlanpassung", "Ortung und Druck verlieren Fokus"),
         "dropout": ("Tonaussetzer", "Signal bricht kurz weg", "musikalischer Fluss reißt"),
         "clipping": ("Übersteuerung", "Signalspitzen abgeschnitten", "raues, verzerrtes Timbre"),
-        "dc_offset": ("DC-Offset", "Null-Linie verschoben", "Headroom wird verschwendet"),
+        "dc_offset": ("Nulllinie-Versatz", "Null-Linie des Signals verschoben", "Headroom wird verschwendet"),
         "bandwidth_loss": ("Bandbreitenverlust", "Hochtonanteile fehlen", "Klang wirkt stumpf"),
         "pitch_drift": ("Tonhöhendrift", "konstante Geschwindigkeitsabweichung", "Tonzentrum verschiebt sich"),
         "reverb_excess": ("Übermäßiger Hall", "Raumanteil zu dominant", "Direktsignal verliert Kontur"),
         "print_through": ("Bandübersprechen", "Magnetische Vor-/Nachechos", "Einsätze werden verschmiert"),
         "quantization_noise": ("Quantisierungsrauschen", "zu grobe Pegelstufen", "leise Passagen klingen körnig"),
-        "jitter_artifacts": ("Jitter-Artefakte", "zeitliches Taktzittern", "Transienten werden unruhig"),
+        "jitter_artifacts": ("Digitales Taktzittern", "zeitliches Taktzittern im Digital-Signal", "Transienten werden unruhig"),
         "dynamic_compression_excess": ("Überkompression", "Dynamik zu stark gedrückt", "Musik atmet nicht mehr"),
         "soft_saturation": ("Soft-Sättigung", "analoge harmonische Anreicherung", "Charakter soll erhalten bleiben"),
         "head_wear": ("Tonkopf-Abnutzung", "bandabhängiger Kontaktfehler", "Höhen und Fokus brechen ein"),
-        "azimuth_error": ("Azimuth-Fehler", "Kopf-Winkel nicht ausgerichtet", "Stereo/HF verlieren Kohärenz"),
+        "azimuth_error": ("Tonkopf-Winkel", "Winkel des Tonkopfs nicht ausgerichtet", "Stereo/HF verlieren Kohärenz"),
         "transient_smearing": ("Transienten-Schmierung", "Anschläge zeitlich aufgeweicht", "Rhythmus wirkt träge"),
         "pre_echo": ("Pre-Echo", "Codec-Vorecho vor Transienten", "Impuls wirkt vorgezogen"),
-        "riaa_curve_error": ("RIAA-Kurvenfehler", "falsche Entzerrung", "Tonbalance kippt"),
-        "aliasing": ("Aliasing", "Spiegelfrequenzen durch Sampling", "metallischer Beiklang"),
-        "bias_error": ("Bias-Fehler", "Band-Vormagnetisierung falsch", "Rauschen und Verzerrung steigen"),
+        "riaa_curve_error": ("Vinyl-Entzerrungsfehler", "Entzerrungskurve falsch eingestellt", "Tonbalance kippt"),
+        "aliasing": ("Fremdtöne durch Abtastung", "Spiegelfrequenzen durch Sampling", "metallischer Beiklang"),
+        "bias_error": ("Band-Vormagnetisierung", "Bandspur-Einstellung falsch", "Rauschen und Verzerrung steigen"),
         "sibilance": ("Sibilanz", "überbetonte Zischlaute", "Stimmen stechen unangenehm"),
         "transport_bump": ("Transport-Bump", "kurzer Bandlauf-Impuls", "kurzer Tonhöhenruckler"),
         "vocal_harshness": ("Vocal-Härte", "2-6 kHz Überhärtung", "Gesang klingt scharf"),
@@ -5191,25 +6060,25 @@ class DefectStoryWidget(QFrame):
     }
 
     _METHODS: dict[str, str] = {
-        "clicks": "Impuls-Detektion + DeClick",
+        "clicks": "Knackser-Erkennung & Reparatur",
         "crackle": "spektrale Mikroentstörung",
-        "hum": "Notch-Filter + Harmonic-Tracking",
+        "hum": "Brumm-Entfernung",
         "wow": "Pitch-Trajektorien-Korrektur",
         "flutter": "Zeitachsen-Glättung",
         "stereo_imbalance": "kanaladaptive Pegelkorrektur",
-        "digital_artifacts": "artefaktsensitives Denoising",
+        "digital_artifacts": "Digitale Entstörung",
         "rumble": "subsonischer Hochpass",
         "noise_level": "Rauschprofil + adaptive Dämpfung",
         "compression_artifacts": "Transienten-Rekonstruktion",
-        "phase_issues": "M/S- und Phasen-Ausrichtung",
-        "dropout": "Inpainting + Kontext-Rekonstruktion",
+        "phase_issues": "Stereo-Korrektur",
+        "dropout": "KI-Lückenfüllung",
         "clipping": "declip + Oberton-Rekonstruktion",
         "dc_offset": "DC-Entfernung",
         "bandwidth_loss": "Frequenzrekonstruktion",
         "pitch_drift": "Pitch-Drift-Kompensation",
         "reverb_excess": "Dereverb",
-        "print_through": "bidirektionale Entkopplung",
-        "quantization_noise": "Denoise + Requantisierungsschutz",
+        "print_through": "Bandecho-Entfernung",
+        "quantization_noise": "Fein-Auflösungs-Reparatur",
         "jitter_artifacts": "zeitliche Stabilisierung",
         "dynamic_compression_excess": "mikrodynamische Expansion",
         "soft_saturation": "Erhalt statt Entfernung",
@@ -5218,8 +6087,8 @@ class DefectStoryWidget(QFrame):
         "transient_smearing": "Transienten-Shaping",
         "pre_echo": "Pre-Echo-Reduktion",
         "riaa_curve_error": "Entzerrungs-Korrektur",
-        "aliasing": "anti-aliased Rekonstruktion",
-        "bias_error": "Bias-kompensierte Korrektur",
+        "aliasing": "Fremdton-Beseitigung",
+        "bias_error": "Bandspur-Kalibrierung",
         "sibilance": "De-Esser",
         "transport_bump": "lokale Timing-Korrektur",
         "vocal_harshness": "formant-sensitives Vocal-Smoothing",
@@ -5315,7 +6184,7 @@ class DefectStoryWidget(QFrame):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         lay.addWidget(self._body)
-        self._body.setText("Noch keine Defekt-Story verfügbar.")
+        self._body.setText("Hier erscheinen die erkannten Schäden.")
 
     def _normalize(self, key: str, raw: float) -> float:
         max_v = self._NORMALIZE_MAX.get(key, 100.0)
@@ -5506,18 +6375,18 @@ class ModernTitleBar(QWidget):
 
         # Logo/Icon
         icon_label = QLabel("🎵")
-        icon_label.setFont(QFont("Segoe UI", 20))
+        icon_label.setFont(QFont(self.font().family(), 20))
         layout.addWidget(icon_label)
 
         # App Title
         self.title_label = QLabel(t("ui.app_title"))
-        self.title_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.title_label.setFont(QFont(self.font().family(), 12, QFont.Weight.Bold))
         self.title_label.setStyleSheet("color: #FFFFFF;")
         layout.addWidget(self.title_label)
 
         # Version Label
-        self.version_label = QLabel("v9.10.77")
-        self.version_label.setFont(QFont("Segoe UI", 8))
+        self.version_label = QLabel("v9.10.103")
+        self.version_label.setFont(QFont(self.font().family(), 8))
         self.version_label.setStyleSheet("color: rgba(255,255,255,0.38); padding: 0 2px;")
         layout.addWidget(self.version_label)
 
@@ -5531,7 +6400,7 @@ class ModernTitleBar(QWidget):
         # ── Recent Files button ──────────────────────────────────────────
         self.btn_recent = QPushButton("📋")
         self.btn_recent.setFixedSize(40, 30)
-        self.btn_recent.setFont(QFont("Segoe UI", 12))
+        self.btn_recent.setFont(QFont(self.font().family(), 12))
         self.btn_recent.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_recent.setObjectName("controlButton")
         self.btn_recent.setToolTip("Zuletzt geöffnete Dateien")
@@ -5567,7 +6436,7 @@ class ModernTitleBar(QWidget):
         """Create window control button"""
         btn = QPushButton(text)
         btn.setFixedSize(40, 30)
-        btn.setFont(QFont("Segoe UI", 14))
+        btn.setFont(QFont(self.font().family(), 14))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(signal)
 
@@ -5647,7 +6516,7 @@ class ModernButton(QPushButton):
         super().__init__(text, parent)
         self.primary = primary
         self.setMinimumHeight(45)
-        self.setFont(QFont("Segoe UI", 10, QFont.Weight.Medium))
+        self.setFont(QFont(QApplication.font().family(), 10, QFont.Weight.Medium))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Shadow effect
@@ -5987,7 +6856,7 @@ class ModernCard(QFrame):
         # Title
         if title:
             title_label = QLabel(title)
-            title_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+            title_label.setFont(QFont(self.font().family(), 14, QFont.Weight.Bold))
             title_label.setStyleSheet("color: #FFFFFF; margin-bottom: 10px;")
             self._card_layout.addWidget(title_label)
 
@@ -6230,10 +7099,7 @@ class ExportConfigDialog(QDialog):
         ("WAV 24-bit, 48 kHz (verlustfrei)", "wav24", ".wav"),
         ("WAV 16-bit, 44.1 kHz (CD-Qualität)", "wav16", ".wav"),
         ("AIFF 24-bit, 48 kHz (verlustfrei)", "aiff24", ".aiff"),
-        ("MP3 CBR – 320 kbps (höchste MP3-Qualität)", "mp3_cbr_320", ".mp3"),
-        ("MP3 CBR – 256 kbps", "mp3_cbr_256", ".mp3"),
-        ("MP3 CBR – 192 kbps", "mp3_cbr_192", ".mp3"),
-        ("MP3 VBR – V0 (~245 kbps, beste Qualität)", "mp3_vbr_v0", ".mp3"),
+        ("MP3 · bis 320 kbps, VBR (empfohlen für beste Qualität)", "mp3_vbr_v0", ".mp3"),
         ("MP3 VBR – V2 (~190 kbps)", "mp3_vbr_v2", ".mp3"),
         ("OGG Vorbis q9 (verlustbehaftet, offen)", "ogg9", ".ogg"),
     ]
@@ -6387,16 +7253,11 @@ class ExportConfigDialog(QDialog):
             "kompatibel mit CD-Brennern. Etwas weniger Dynamikumfang als 24-Bit.",
             "Apple-Format, verlustfrei. Technisch gleichwertig zu WAV 24-Bit, "
             "bevorzugt in macOS/iOS-Workflows und Logic Pro.",
-            "Höchste MP3-Qualität. Kompakt, universell kompatibel. "
-            "Für Aufnahmen bis 1970er empfohlen wenn Speicher begrenzt — kaum hörbarer Qualitätsverlust.",
-            "Guter MP3-Kompromiss. Für Podcasts, Demos oder Online-Sharing. "
-            "Kleiner als 320 kbps, leichter Qualitätsverlust bei kritischem Hören.",
-            "Kompakter MP3 für einfaches Streaming. Hörbarer Qualitätsverlust bei hochwertigen "
-            "Restaurierungen — nur wenn Dateigröße entscheidend ist.",
-            "Variable Bitrate, höchste MP3-Qualität (≈245 kbps Durchschnitt). "
-            "Weniger Speicher als CBR 320 kbps bei vergleichbarer Qualität. Nicht alle Player unterstützen VBR.",
-            "Variable Bitrate, guter Kompromiss (≈190 kbps). "
-            "Für Alltagsgebrauch ausreichend. Deutlicher Qualitätsverlust im Hochtonbereich.",
+            "Höchste MP3-Qualität mit LAME VBR V0 — bis zu 320 kbps bei komplexen Stellen, "
+            "≈245 kbps im Durchschnitt. Perceptually transparent, weniger Pre-Echo als CBR. "
+            "Empfohlen für alle restaurierten Aufnahmen wenn MP3-Format benötigt wird.",
+            "Variable Bitrate (≈190 kbps). Für Alltagsgebrauch ausreichend. "
+            "Deutlicher Qualitätsverlust im Hochtonbereich.",
             "Offenes Verlustformat, qualitativ besser als MP3 bei gleicher Bitrate. "
             "Ideal für Streaming-Plattformen und Open-Source-Workflows.",
         ]
@@ -6436,7 +7297,7 @@ class ExportConfigDialog(QDialog):
             """)
         self._fmt_combo.setToolTip(
             "Wählen Sie das Ausgabeformat. Für Archivierung: FLAC 24-Bit. "
-            "Für Weitergabe: MP3 320 kbps oder höher. Fahren Sie über einen Eintrag für mehr Details."
+            "Für Weitergabe: MP3 bis 320 kbps (VBR). Fahren Sie über einen Eintrag für mehr Details."
         )
         form.addRow(t("ui.export_cfg_format"), self._fmt_combo)
 
@@ -6448,6 +7309,33 @@ class ExportConfigDialog(QDialog):
         _default_sr_idx = self._sr_combo.findData(_default_sr)
         if _default_sr_idx >= 0:
             self._sr_combo.setCurrentIndex(_default_sr_idx)
+        # Enforce high-contrast popup list independent of desktop theme overrides (same as _fmt_combo).
+        _sr_view = self._sr_combo.view()
+        if _sr_view is not None:
+            _sr_view.setStyleSheet("""
+                QAbstractItemView {
+                    background: #0F172A;
+                    color: #F8FAFC;
+                    selection-background-color: #1565C0;
+                    selection-color: #FFFFFF;
+                    border: 1px solid #1976D2;
+                    outline: none;
+                }
+                QAbstractItemView::item {
+                    background: #0F172A;
+                    color: #F8FAFC;
+                    min-height: 28px;
+                    padding: 7px 12px;
+                }
+                QAbstractItemView::item:selected {
+                    background: #1565C0;
+                    color: #FFFFFF;
+                }
+                QAbstractItemView::item:hover {
+                    background: #0D47A1;
+                    color: #FFFFFF;
+                }
+            """)
         self._sr_combo.setToolTip(
             "Legt die Export-Abtastrate fest. 48,0 kHz ist Standard für Aurik, 44,1 kHz für CD-kompatible Exporte."
         )
@@ -6902,12 +7790,12 @@ class _AurikFileDialog(QDialog):
         _tb.setSpacing(8)
 
         _ico = QLabel("🎵")
-        _ico.setFont(QFont("Segoe UI", 16))
+        _ico.setFont(QFont(self.font().family(), 16))
         _ico.setCursor(Qt.CursorShape.SizeAllCursor)
         _tb.addWidget(_ico)
 
         _ttl = QLabel(title)
-        _ttl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        _ttl.setFont(QFont(self.font().family(), 10, QFont.Weight.Bold))
         _ttl.setStyleSheet("color: #FFFFFF; background: transparent;")
         _ttl.setCursor(Qt.CursorShape.SizeAllCursor)
         _tb.addWidget(_ttl)
@@ -6915,7 +7803,7 @@ class _AurikFileDialog(QDialog):
 
         _btn_x = QPushButton("×")
         _btn_x.setFixedSize(36, 28)
-        _btn_x.setFont(QFont("Segoe UI", 14))
+        _btn_x.setFont(QFont(self.font().family(), 14))
         _btn_x.setCursor(Qt.CursorShape.PointingHandCursor)
         _btn_x.setStyleSheet("""
             QPushButton { background:transparent; color:#FFF; border:none; border-radius:5px; }
@@ -6980,11 +7868,88 @@ class _AurikFileDialog(QDialog):
         super().mouseReleaseEvent(event)
 
 
+class _ToastNotification(QWidget):
+    """Floating toast notification — appears top-right of parent, fades out after timeout.
+
+    severity: 'success' | 'warning' | 'error' | 'info'
+    """
+
+    _COLORS = {
+        "success": ("#2E7D4F", "#4CAF50", "✓"),
+        "warning": ("#7A6020", "#E8C060", "⚠"),
+        "error":   ("#7A2E2E", "#EF5350", "✕"),
+        "info":    ("#1E3A5A", "#4FC3F7", "ℹ"),
+    }
+
+    def __init__(self, parent, message: str, severity: str = "info", duration_ms: int = 4000):
+        super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self._severity = severity
+        self._message = message
+        bg_color_hex, border_hex, icon = self._COLORS.get(severity, self._COLORS["info"])
+        lbl = QLabel(f"  {icon}  {message}  ", self)
+        lbl.setWordWrap(True)
+        lbl.setMaximumWidth(360)
+        lbl.setStyleSheet(f"""
+            color: {border_hex};
+            font-size: 9pt;
+            font-weight: 600;
+            padding: 4px 2px;
+            background: transparent;
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.addWidget(lbl)
+        self.setStyleSheet(f"""
+            background: {bg_color_hex};
+            border: 1px solid {border_hex};
+            border-radius: 8px;
+        """)
+        self.adjustSize()
+        # Fade-in
+        from PyQt5.QtWidgets import QGraphicsOpacityEffect as _GOE
+        self._opacity_effect = _GOE(self)
+        self.setGraphicsEffect(self._opacity_effect)
+        self._opacity_effect.setOpacity(0.0)
+        self._fade_in = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._fade_in.setDuration(200)
+        self._fade_in.setStartValue(0.0)
+        self._fade_in.setEndValue(1.0)
+        # Auto-dismiss
+        self._dismiss_timer = QTimer(self)
+        self._dismiss_timer.setSingleShot(True)
+        self._dismiss_timer.setInterval(duration_ms)
+        self._dismiss_timer.timeout.connect(self._fade_out_and_close)
+        self._fade_in.finished.connect(self._dismiss_timer.start)
+        self._fade_in.start()
+        self._reposition()
+
+    def _reposition(self):
+        parent = self.parent()
+        if parent:
+            pw, ph = parent.width(), parent.height()
+            tw, th = self.width(), self.height()
+            self.move(pw - tw - 16, 56)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition()
+
+    def _fade_out_and_close(self):
+        self._fade_out = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._fade_out.setDuration(350)
+        self._fade_out.setStartValue(1.0)
+        self._fade_out.setEndValue(0.0)
+        self._fade_out.finished.connect(self.deleteLater)
+        self._fade_out.start()
+
+
 class ModernMainWindow(QMainWindow):
     """Modern Frameless Main Window mit Premium Design"""
 
     # Thread-sicheres Signal: Hintergrundthread → Fortschrittsbalken im GUI-Thread
-    _load_progress = pyqtSignal(int)
+    _load_progress = pyqtSignal(float)
     # Thread-sicherer Callable-Dispatch in den GUI-Thread
     _gui_dispatch = pyqtSignal(object)
 
@@ -7177,8 +8142,11 @@ class ModernMainWindow(QMainWindow):
         ]
         for fam in preferred:
             if fam in available:
+                QApplication.setFont(QFont(fam, 9))
                 return fam
-        return QApplication.font().family()
+        fam = QApplication.font().family()
+        QApplication.setFont(QFont(fam, 9))
+        return fam
 
     def _compute_ui_scale(self, screen) -> float:
         """Compute a conservative UI scale factor for high-DPI and 4K screens."""
@@ -7437,10 +8405,10 @@ class ModernMainWindow(QMainWindow):
             self.btn_import.setFont(QFont(self._ui_font_family, int(round(self._pt(10.0)))))
 
         if hasattr(self, "defect_summary_scroll"):
-            self.defect_summary_scroll.setMinimumHeight(self._sp(230))
+            self.defect_summary_scroll.setMinimumHeight(self._sp(280))
         if hasattr(self, "radar_widget") and self.radar_widget is not None:
-            self.radar_widget.setMinimumHeight(self._sp(200))
-            self.radar_widget.setMaximumHeight(self._sp(280))
+            self.radar_widget.setMinimumHeight(self._sp(120))
+            self.radar_widget.setMaximumHeight(self._sp(180))
         if hasattr(self, "quality_meter_widget"):
             self.quality_meter_widget.setFixedHeight(self._sp(22))
 
@@ -7480,6 +8448,7 @@ class ModernMainWindow(QMainWindow):
                 _tone = str(_lbl.property("aurikCardTone") or "neutral")
                 self._set_info_card_state(_lbl, _tone, animate=False)
 
+        self._refresh_top_info_row(w)
         self._refresh_defect_summary_height()
 
     def _pulse_info_card(self, widget: QWidget) -> None:
@@ -7879,7 +8848,7 @@ class ModernMainWindow(QMainWindow):
         """)
         self.detected_medium_label.setToolTip("<b>Erkanntes Quellformat</b><br>Vinyl, Kassette, CD, MP3 …")
         self._set_info_card_state(self.detected_medium_label, "neutral", animate=False)
-        layout.addWidget(_section("Erkannter Tonträger:", self.detected_medium_label))
+        layout.addWidget(_section("Erkannte Aufnahme:", self.detected_medium_label))
 
         # ── Restaurierbarkeit (separat vom Tonträger, §11.4 Spec 08) ────────
         self.restorability_banner = QLabel("—")
@@ -7891,7 +8860,7 @@ class ModernMainWindow(QMainWindow):
             border-radius: 10px; border: 1px solid rgba(118, 146, 214, 0.35);
         """)
         self._set_info_card_state(self.restorability_banner, "neutral", animate=False)
-        layout.addWidget(_section("Restaurierbarkeit:", self.restorability_banner), 1)
+        layout.addWidget(_section("Klang-Zustand:", self.restorability_banner), 1)
 
         self.mode_recommendation_label = QLabel("—")
         self.mode_recommendation_label.setWordWrap(True)
@@ -7979,7 +8948,7 @@ class ModernMainWindow(QMainWindow):
         _dc_vbox.addWidget(_defect_header)
         _dc_vbox.addWidget(self.defect_summary_scroll)
         self._defect_container = _defect_container
-        layout.addWidget(_defect_container, 13)
+        layout.addWidget(_defect_container, 18)
 
         # ── Defekt-Story (WAS/WO/WIE/WANN/WESHALB) ───────────────────────
         self.defect_story_widget = DefectStoryWidget()
@@ -8038,8 +9007,8 @@ class ModernMainWindow(QMainWindow):
 
         if MusicalGoalsRadarWidget is not None:
             self.radar_widget = MusicalGoalsRadarWidget()
-            self.radar_widget.setMinimumHeight(self._sp(200))
-            self.radar_widget.setMaximumHeight(self._sp(280))
+            self.radar_widget.setMinimumHeight(self._sp(120))
+            self.radar_widget.setMaximumHeight(self._sp(180))
             qi.addWidget(self.radar_widget)
         else:
             self.radar_widget = None
@@ -8059,7 +9028,7 @@ class ModernMainWindow(QMainWindow):
         qi.addWidget(self.info_banner)
 
         self._music_goals_section = _section("Musikalische Ziele:", quality_frame)
-        layout.addWidget(self._music_goals_section, 2)
+        layout.addWidget(self._music_goals_section, 1)
         return panel
 
     def _refresh_defect_summary_height(self) -> None:
@@ -8105,22 +9074,22 @@ class ModernMainWindow(QMainWindow):
                 self.radar_widget.setMinimumHeight(self._sp(72))
                 self.radar_widget.setMaximumHeight(self._sp(96))
             if _layout is not None and _def_box is not None and _goals_box is not None:
-                _layout.setStretchFactor(_def_box, 16)
-                _layout.setStretchFactor(_goals_box, 5)
+                _layout.setStretchFactor(_def_box, 20)
+                _layout.setStretchFactor(_goals_box, 2)
             if hasattr(self, "defect_summary_scroll"):
-                self.defect_summary_scroll.setMaximumHeight(self._sp(340))
+                self.defect_summary_scroll.setMaximumHeight(self._sp(400))
         else:
             if _goals_box is not None:
                 _goals_box.setMinimumHeight(0)
                 _goals_box.setMaximumHeight(16777215)
             if self.radar_widget is not None:
-                self.radar_widget.setMinimumHeight(self._sp(200))
-                self.radar_widget.setMaximumHeight(self._sp(280))
+                self.radar_widget.setMinimumHeight(self._sp(120))
+                self.radar_widget.setMaximumHeight(self._sp(180))
             if _def_box is not None:
                 _def_box.setMinimumHeight(0)
             if _layout is not None and _def_box is not None and _goals_box is not None:
-                _layout.setStretchFactor(_def_box, 13)
-                _layout.setStretchFactor(_goals_box, 2)
+                _layout.setStretchFactor(_def_box, 18)
+                _layout.setStretchFactor(_goals_box, 1)
             if hasattr(self, "defect_summary_scroll"):
                 self.defect_summary_scroll.setMaximumHeight(16777215)
                 self.defect_summary_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -8419,12 +9388,74 @@ class ModernMainWindow(QMainWindow):
             f" {_border_css}"
         )
 
+    def _show_toast(self, message: str, severity: str = "info", duration_ms: int = 4000) -> None:
+        """Show a floating toast notification (top-right corner).
+
+        severity: 'success' | 'warning' | 'error' | 'info'
+        Stacks multiple toasts vertically.
+        """
+        try:
+            toast = _ToastNotification(self, message, severity, duration_ms)
+            # Stack below any existing toasts
+            _existing = [c for c in self.children() if isinstance(c, _ToastNotification) and c.isVisible()]
+            _y_offset = 56
+            for _t in _existing:
+                _y_offset += _t.height() + 6
+            toast.move(self.width() - toast.width() - 16, _y_offset)
+            toast.show()
+        except Exception as _te:
+            logger.debug("Toast failed: %s", _te)
+
+    def _next_progress_hint(self, pct: int) -> str:
+        """Return one concise next-step hint for the live progress status."""
+        if pct < 8:
+            return "gleich folgen Defektbild und Restaurierungsplan"
+        if pct < 19:
+            return "danach startet die eigentliche Klangbearbeitung"
+        if pct < 90:
+            return "anschließend folgen Qualitätsprüfung und Export"
+        if pct < 97:
+            return "gleich wird das Ergebnis final gesichert"
+        return "nur noch Abschluss und Speicherung"
+
+    def _refresh_top_info_row(self, window_width: int | None = None) -> None:
+        """Prevent collisions in the compact top row on narrow window widths."""
+        _w = int(window_width or self.width() or 0)
+        _compact = _w > 0 and _w < 1180
+        _very_compact = _w > 0 and _w < 980
+
+        _btn_cancel = getattr(self, "_btn_cancel", None)
+        if _btn_cancel is not None:
+            _btn_cancel.setText("■ Stoppen" if _compact else "■  Restaurierung stoppen")
+
+        _stats = getattr(self, "stats_label", None)
+        if _stats is not None:
+            _stats.setMaximumWidth(self._sp(120 if _very_compact else 170 if _compact else 260))
+            _batch_thread = getattr(self, "batch_thread", None)
+            _running = bool(_batch_thread is not None and _batch_thread.isRunning())
+            _has_stats = bool(str(_stats.text() or "").strip())
+            _stats_should_hide = _very_compact and _running
+            _stats.setVisible(_has_stats and not _stats_should_hide)
+
     def _recommend_mode_from_ui_context(self) -> tuple[str, str, str]:
-        """Leitet eine konservative UI-Empfehlung aus Analysemetadaten ab."""
+        """Derives mode recommendation from all four pre-analysis signal sources.
+
+        Signal sources (populated by background threads before mode selection):
+          1. Medium type   — from _carrier_bg  (MediumDetector)
+          2. Restorability — from _estimate_restorability_bg
+          3. Era/Genre     — from _detect_era_genre_bg
+          4. Defect scores — from _run_defect_scan_bg (DefectScanner, 32 types)
+
+        Score-based: independent RESTORATION/STUDIO_2026 points accumulate;
+        the higher score wins.  This avoids the old hard-coded if/else cascade
+        that ignored defect severity and gave the same recommendation for both
+        a pristine vinyl rip and a badly clipped tape dub.
+        """
         medium = str(getattr(self, "_raw_medium_type", "unknown") or "unknown").strip().lower()
         restorability = float(getattr(self, "_restorability_score", 50.0) or 50.0)
         badge = str(getattr(self, "_era_genre_badge", "") or "").lower()
 
+        # ── Signal-1: Medium type ─────────────────────────────────────────
         historical_materials = {
             "wax_cylinder",
             "shellac",
@@ -8442,36 +9473,84 @@ class ModernMainWindow(QMainWindow):
         is_schlager = "schlager" in badge
         is_modern_digital = medium in modern_digital
 
-        if is_historical or restorability < 65.0:
-            return (
-                "RESTORATION",
-                f"💿 Empfehlung: RESTORATION — sicherer für {medium or 'dieses Material'} bei {restorability:.0f}/100 Restaurierbarkeit.",
-                "color:#F6EFD9; font-size:8pt; font-weight:bold; padding:5px 8px;"
-                "background: rgba(255, 193, 7, 0.10); border-radius:8px;"
-                "border: 1px solid rgba(255, 193, 7, 0.28);",
-            )
+        # ── Signal-4: Defect severity (DefectScan — may not yet be available) ──
+        _ds: dict = getattr(self, "_defect_scan_scores", {}) or {}
+        _defect_heavy_keys = ("clipping", "hum", "dropout", "wow", "flutter", "rumble")
+        _heavy_defects = any(
+            isinstance(_ds.get(k), (int, float)) and float(_ds.get(k, 0)) > 0.35 for k in _defect_heavy_keys
+        )
+        _total_defect_load = sum(
+            float(v) for k, v in _ds.items() if k not in ("status", "_locations") and isinstance(v, (int, float))
+        )
+        _scan_available = bool(_ds)
+
+        # ── Score accumulation ────────────────────────────────────────────
+        studio_score = 0.0
+        restoration_score = 0.0
+        restoration_reasons: list[str] = []
+        studio_reasons: list[str] = []
+
+        # Medium signal
+        if is_modern_digital:
+            studio_score += 2.0
+            studio_reasons.append(medium or "Digital")
+        elif is_historical:
+            restoration_score += 2.5
+            restoration_reasons.append(medium or "Analogmaterial")
+
+        # Restorability signal
+        if restorability >= 72.0:
+            studio_score += 1.0
+            studio_reasons.append(f"{restorability:.0f}/100")
+        elif restorability < 55.0:
+            restoration_score += 1.5
+            restoration_reasons.append(f"{restorability:.0f}/100 Restaurierbarkeit")
+        else:
+            restoration_score += 0.5
+
+        # Defect severity signals (only if DefectScan has run)
+        if _scan_available:
+            if _heavy_defects:
+                restoration_score += 2.0
+                _heavy_names = [
+                    k
+                    for k in _defect_heavy_keys
+                    if isinstance(_ds.get(k), (int, float)) and float(_ds.get(k, 0)) > 0.35
+                ]
+                if _heavy_names:
+                    restoration_reasons.append(f"schwere Defekte: {', '.join(_heavy_names[:2])}")
+            elif _total_defect_load > 1.5:
+                restoration_score += 1.0
+                restoration_reasons.append("mehrere Defekte")
+            elif _total_defect_load < 0.30:
+                studio_score += 0.8
+                studio_reasons.append("keine signifikanten Defekte")
+
+        # Genre signal
         if is_schlager and not is_modern_digital:
-            return (
-                "RESTORATION",
-                f"💿 Empfehlung: RESTORATION — Schlager bleibt bei {medium or 'dieser Quelle'} musikalisch konservativ.",
-                "color:#F6EFD9; font-size:8pt; font-weight:bold; padding:5px 8px;"
-                "background: rgba(255, 193, 7, 0.10); border-radius:8px;"
-                "border: 1px solid rgba(255, 193, 7, 0.28);",
-            )
-        if is_modern_digital and restorability >= 70.0:
+            restoration_score += 1.0
+            restoration_reasons.append("Schlager")
+
+        # ── Decision ──────────────────────────────────────────────────────
+        if studio_score > restoration_score:
+            reason_str = " · ".join(studio_reasons) if studio_reasons else f"{restorability:.0f}/100"
             return (
                 "STUDIO_2026",
-                f"🎯 Empfehlung: STUDIO 2026 — stabiles Digitalmaterial mit {restorability:.0f}/100 Restaurierbarkeit.",
+                f"🎯 Empfehlung: STUDIO 2026 — {reason_str}.",
                 "color:#DDEFE1; font-size:8pt; font-weight:bold; padding:5px 8px;"
                 "background: rgba(76, 175, 80, 0.10); border-radius:8px;"
                 "border: 1px solid rgba(76, 175, 80, 0.28);",
             )
+
+        if not restoration_reasons:
+            restoration_reasons.append(f"{restorability:.0f}/100 Restaurierbarkeit")
+        reason_str = " · ".join(restoration_reasons)
         return (
             "RESTORATION",
-            f"💿 Empfehlung: RESTORATION — konservativer Standard bei {restorability:.0f}/100 Restaurierbarkeit.",
-            "color:#B0C4DE; font-size:8pt; font-weight:bold; padding:5px 8px;"
-            "background: rgba(102, 126, 234, 0.10); border-radius:8px;"
-            "border: 1px solid rgba(102, 126, 234, 0.22);",
+            f"💿 Empfehlung: RESTORATION — {reason_str}.",
+            "color:#F6EFD9; font-size:8pt; font-weight:bold; padding:5px 8px;"
+            "background: rgba(255, 193, 7, 0.10); border-radius:8px;"
+            "border: 1px solid rgba(255, 193, 7, 0.28);",
         )
 
     def _apply_mode_recommendation_visuals(self) -> None:
@@ -8484,7 +9563,11 @@ class ModernMainWindow(QMainWindow):
         self.mode_recommendation_label.setText(text)
         tone = "good" if recommended_mode == "STUDIO_2026" else "warn"
         self._set_info_card_state(self.mode_recommendation_label, tone, animate=True)
-        self.mode_recommendation_label.setVisible(bool(getattr(self, "current_file_path", None)))
+        _cfp = str(getattr(self, "current_file_path", "") or "")
+        _finalized_for = str(getattr(self, "_preanalysis_finalized_for", "") or "")
+        # Keep recommendation hidden until pre-analysis synchronization is finalized.
+        _show_recommendation = bool(_cfp) and (_finalized_for == _cfp)
+        self.mode_recommendation_label.setVisible(_show_recommendation)
 
         if hasattr(self, "btn_magic_restoration"):
             restoration_tip = (
@@ -8492,7 +9575,7 @@ class ModernMainWindow(QMainWindow):
                 "Erhält den historischen Klang, entfernt Artefakte ohne Klangveränderung."
             )
             if recommended_mode == "RESTORATION":
-                restoration_tip += "<br><b>Empfohlen für diese Quelle.</b>"
+                restoration_tip += f"<br><b>Empfohlen für diese Quelle.</b><br><small>{text}</small>"
             self.btn_magic_restoration.setToolTip(restoration_tip)
 
         if hasattr(self, "btn_magic_studio"):
@@ -8501,7 +9584,7 @@ class ModernMainWindow(QMainWindow):
                 "Modern, frisch, klar, kräftig — auf heutigen Referenzstandard gebracht."
             )
             if recommended_mode == "STUDIO_2026":
-                studio_tip += "<br><b>Empfohlen für diese Quelle.</b>"
+                studio_tip += f"<br><b>Empfohlen für diese Quelle.</b><br><small>{text}</small>"
             self.btn_magic_studio.setToolTip(studio_tip)
 
     def _process_with_mode(self, mode):
@@ -8812,8 +9895,8 @@ class ModernMainWindow(QMainWindow):
         vbox.addWidget(self.refinement_progress_bar)
         self._ml_refinement_thread = None  # MLRefinementThread | None (§2.38 KMV Stufe 2)
 
-        # Signal verbinden: _load_progress emittiert 0-100, Bar intern 0-10000
-        self._load_progress.connect(lambda v: self.progress_bar.setValue(v * 100))
+        # Signal verbinden: _load_progress emittiert 0-100
+        self._load_progress.connect(self._on_load_progress_update)
         # Callable-Dispatch-Signal verbinden
         self._gui_dispatch.connect(self._safe_gui_invoke)  # §11.4 Thread-Safety-Pattern (mit Exception-Logging)
 
@@ -8825,7 +9908,7 @@ class ModernMainWindow(QMainWindow):
         info_layout.setSpacing(8)
 
         # Compact stage counter label: "Stufe X · ..." — links, keine Zeilenumbrüche
-        self._phase_step_label = QLabel("")
+        self._phase_step_label = _ElidingLabel("")
         self._phase_step_label.setStyleSheet(
             "color: #7A90B0; font-size: 8pt; background: transparent; padding: 0px 2px;"
         )
@@ -8847,18 +9930,20 @@ class ModernMainWindow(QMainWindow):
         self._btn_cancel.clicked.connect(self._cancel_processing)
         info_layout.addWidget(self._btn_cancel)
 
-        self.stats_label = QLabel(t("status.stats", pending=0, completed=0, failed=0))
+        self.stats_label = _ElidingLabel(t("status.stats", pending=0, completed=0, failed=0))
         self.stats_label.setStyleSheet("color: #AAB8C6; font-size: 9pt; background: transparent;")
+        self.stats_label.setWordWrap(False)
+        self.stats_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         info_layout.addWidget(self.stats_label)
 
         vbox.addWidget(info_row)
 
         # ── Statuszeile: volle Breite, kein Zeilenumbruch ────────────
-        self.status_text = QLabel(t("status.ready"))
+        self.status_text = _ElidingLabel(t("status.ready"))
         self._apply_status_text_style("info")
         self.status_text.setWordWrap(False)
         self.status_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.status_text.setToolTip(
+        self.status_text.setBaseToolTip(
             "<b>Aktueller Systemstatus</b><br>"
             "Zeigt an, was Aurik 9 gerade tut — z.\u202fB. Datei laden, "
             "Defekte analysieren, Restaurierung durchführen oder Ergebnis speichern.<br>"
@@ -9580,6 +10665,7 @@ class ModernMainWindow(QMainWindow):
         # Nötig wenn dieselbe Datei nach einer Änderung erneut geöffnet wird.
         _bridge_clear_defect_cache(file_path)
         _bridge_clear_era_genre_cache(file_path)
+        _bridge_clear_medium_cache(file_path)
         # Lyrics-Overlay-Zustand zurücksetzen (neue Datei → kein altes Transkript)
         self._lyrics_overlay_visible = False
         self._lyrics_overlay_request_id += 1
@@ -9628,6 +10714,10 @@ class ModernMainWindow(QMainWindow):
             """)
             self.restorability_banner.setVisible(True)
         self._restorability_score = 50.0
+        self._defect_scan_scores = {}  # Reset on new file — prevents stale scores from previous file
+        self._preanalysis_flags: set[str] = set()  # "defect_scan" | "era_genre" | "carrier" added when done
+        self._preanalysis_timeout_fired = False  # True when 15 s fallback fires
+        self._preanalysis_finalized_for = ""  # file_path when finalized (double-fire guard)
         self._recommended_mode = "RESTORATION"
         if hasattr(self, "mode_recommendation_label"):
             self.mode_recommendation_label.setVisible(False)
@@ -9738,47 +10828,26 @@ class ModernMainWindow(QMainWindow):
                     _load_errors.append(f"pedalboard: {_e2}")
                     audio = None
 
-            # ── Stufe 3: librosa (letzter Fallback – audioread/GStreamer) ────
-            # ACHTUNG: audioread/GStreamer kann auf Linux-Systemen (Zorin OS, Ubuntu)
-            # unbegrenzt hängen → Timeout-Thread (90 s) verhindert Freeze + Absturz.
+            # ── Stufe 3: pydub (FFmpeg-Subprocess, letzter Fallback) ────────
+            # Spec-Kaskade §11: soundfile → pedalboard/FFmpeg → pydub
+            # VERBOTEN: librosa.load(path) direkt für beliebige Audio-Formate
             if audio is None:
                 try:
-                    import librosa  # type: ignore
+                    from pydub import AudioSegment as _AudioSeg  # type: ignore
 
-                    if not _LIBROSA_FALLBACK_GATE.acquire(blocking=False):
-                        raise RuntimeError("librosa-Fallback läuft bereits (vorheriger Probe-Thread noch aktiv)")
-
-                    _lib_result: list = []
-                    _lib_error: list = []
-
-                    def _librosa_load_fn() -> None:
-                        try:
-                            _set_progress(20)
-                            _y2, _sr2 = librosa.load(file_path, sr=None, mono=False)
-                            _lib_result.append((_y2, int(_sr2)))
-                        except Exception as _le:
-                            _lib_error.append(_le)
-                        finally:
-                            try:
-                                _LIBROSA_FALLBACK_GATE.release()
-                            except Exception:
-                                pass
-
-                    _lib_t = threading.Thread(target=_librosa_load_fn, daemon=True)
-                    _lib_t.start()
-                    _lib_t.join(timeout=90)  # max. 90 s – GStreamer hängt nicht ewig
-                    if _lib_t.is_alive():
-                        _load_errors.append("librosa: Timeout nach 90 s – Audiodatei konnte nicht gelesen werden.")
-                    elif _lib_error:
-                        _load_errors.append(f"librosa: {_lib_error[0]}")
-                    else:
-                        _y, _tmp_sr = _lib_result[0]
-                        sr = _tmp_sr
-                        _set_progress(90)
-                        audio = _y.T if _y.ndim == 2 else _y
-                        del _y  # Originalarray sofort freigeben (OOM-Schutz)
+                    _set_progress(20)
+                    _seg = _AudioSeg.from_file(file_path)
+                    sr = int(_seg.frame_rate)
+                    _samples = np.array(_seg.get_array_of_samples(), dtype=np.float32)
+                    _bit_depth = _seg.sample_width * 8
+                    _samples /= float(2 ** (_bit_depth - 1))
+                    if _seg.channels > 1:
+                        _samples = _samples.reshape(-1, _seg.channels)
+                    audio = _samples
+                    del _seg, _samples
+                    _set_progress(90)
                 except Exception as _e3:
-                    _load_errors.append(f"librosa: {_e3}")
+                    _load_errors.append(f"pydub: {_e3}")
 
             # ── Alle Stufen gescheitert ────────────────────────────────────────
             if audio is None:
@@ -9823,6 +10892,10 @@ class ModernMainWindow(QMainWindow):
 
             audio = _normalize_audio(audio)
 
+            # Keep native-SR audio for analysis modules (spec: no resampling before analysis)
+            _analysis_audio_native = audio
+            _analysis_sr_native = int(sr)
+
             # Resample to 48 kHz — Aurik internal SR (accepts any input SR)
             if sr != 48_000:
                 from scipy.signal import resample_poly as _rp
@@ -9856,164 +10929,14 @@ class ModernMainWindow(QMainWindow):
 
             self._dispatch_to_gui(_apply_loaded)
 
-            # Carrier-Forensics läuft NACH dem GUI-Update in separatem Thread
-            def _carrier_bg(_a=audio, _s=int(sr)):
-                # PNG-Icon-Pfad (relativ zu dieser Datei)
-                import os as _os
-
-                _ICONS_DIR = _os.path.join(
-                    _os.path.dirname(_os.path.dirname(__file__)),
-                    "resources",
-                    "carrier_icons",
-                )
-
-                def _html(icon_key: str, label: str) -> str:
-                    _svg = _os.path.join(_ICONS_DIR, f"{icon_key}.svg")
-                    _png = _os.path.join(_ICONS_DIR, f"{icon_key}.png")
-                    _p = _svg if _os.path.isfile(_svg) else _png
-                    return (
-                        f'<img src="file:///{_p}" width="22" height="22" style="vertical-align:middle;">&nbsp;{label}'
-                    )
-
-                # (icon_key, Anzeige-Name) je Trägermedium
-                _MEDIUM_DATA: dict[str, tuple[str, str]] = {
-                    "wax_cylinder": ("wax_cylinder", "Wachswalze"),
-                    "lacquer_disc": ("lacquer_disc", "Lackfolie"),
-                    "shellac": ("shellac", "Schellack"),
-                    "vinyl": ("vinyl", "Vinyl"),
-                    "wire_recording": ("wire_recording", "Drahtband"),
-                    "reel_tape": ("reel_tape", "Spulenband"),
-                    "tape": ("tape", "Magnetband"),
-                    "cassette": ("cassette", "Kassette"),
-                    "dat": ("dat", "DAT"),
-                    "cd_digital": ("cd_digital", "CD"),
-                    "cd": ("cd", "CD"),
-                    "digital": ("cd_digital", "Digital"),
-                    "minidisc": ("minidisc", "MiniDisc"),
-                    "mp3_low": ("mp3_low", "MP3 (schwach)"),
-                    "mp3_high": ("mp3_high", "MP3"),
-                    "damaged_mp3": ("damaged_mp3", "MP3 (defekt)"),
-                    "aac": ("aac", "AAC"),
-                    "streaming": ("streaming", "Streaming"),
-                    "unknown": ("unknown", "Unbekannt"),
-                }
-                # (icon_key, Anzeige-Name) je Dateicontainer
-                _EXT_DATA: dict[str, tuple[str, str]] = {
-                    ".mp3": ("mp3_high", "MP3"),
-                    ".m4a": ("aac", "M4A/AAC"),
-                    ".aac": ("aac", "AAC"),
-                    ".ogg": ("streaming", "OGG"),
-                    ".opus": ("streaming", "Opus"),
-                    ".wma": ("streaming", "WMA"),
-                    ".flac": ("cd_digital", "FLAC"),
-                    ".wav": ("cd_digital", "WAV"),
-                    ".aiff": ("cd_digital", "AIFF"),
-                    ".aif": ("cd_digital", "AIFF"),
-                }
-                # Analoge/physikalische Ursprungsmedien (Ära 0 + 1)
-                _ANALOG_MEDIA = frozenset(
-                    {
-                        "wax_cylinder",
-                        "lacquer_disc",
-                        "shellac",
-                        "vinyl",
-                        "wire_recording",
-                        "reel_tape",
-                        "tape",
-                        "cassette",
-                    }
-                )
-                _raw_medium = "unknown"
-                _score = 0
-                _mc_result_obj = None
-                _chain_keys: list[str] = []
-                # ── MediumDetector: forensische Ketten-Erkennung (§6.7) ──────
-                # Ohne file_ext → Forensik-Modus: erkennt analogen Ursprungsträger
-                # auch wenn die Datei bereits digital ist (z.B. Wachswalze → MP3).
-                # medium_classifier.classify_medium liefert für ambivalente Quellen
-                # häufig "unknown" da der Bayesian-Scorer ohne Kettenkontext arbeitet.
-                try:
-                    from forensics.medium_detector import get_medium_detector as _get_md  # type: ignore[import]
-
-                    # file_ext übergeben: Bayesian zeroes digital-only aber physikalische
-                    # Analog-Inferenz (_infer_analog_source_from_fingerprint) erkennt
-                    # Vinyl/Kassette/Tape-Kette aus Rumble/Flutter/Crackle-Features.
-                    _md = _get_md().detect(_a, _s, file_ext=Path(file_path).suffix)
-                    _raw_medium = _md.primary_material or "unknown"
-                    _score = round(float(_md.confidence) * 5)
-                    _chain_keys = list(_md.transfer_chain or [])
-                    _mc_result_obj = _md.classification_result  # ClassificationResult-Passthrough für Cache
-                except Exception as _md_exc:
-                    # MediumDetector import or detect() failed — log explicitly so
-                    # this silent fallback does not hide sys.path / runtime issues.
-                    logger.warning(
-                        "_carrier_bg: MediumDetector fehlgeschlagen (%s: %s) — "
-                        "Fallback auf medium_classifier (keine transfer_chain verfügbar).",
-                        type(_md_exc).__name__,
-                        _md_exc,
-                    )
-                    # Fallback: medium_classifier (kein Kettenkontext)
-                    try:
-                        _classify_medium = _bridge_get_medium_classifier_fn()
-                        if callable(_classify_medium):
-                            _mono = np.mean(_a, axis=1) if _a.ndim > 1 else _a
-                            _res = _classify_medium(_mono, _s)
-                            _mc_result_obj = _res
-                            _raw_medium = _res.material_type
-                            _score = round(_res.confidence * 5)
-                    except Exception as _fb_exc:
-                        logger.warning(
-                            "_carrier_bg: Fallback medium_classifier ebenfalls fehlgeschlagen (%s: %s).",
-                            type(_fb_exc).__name__,
-                            _fb_exc,
-                        )
-                # MediumDetector-Ergebnis im Bridge-Cache speichern, damit UV3
-                # es wiederverwenden kann statt Klassifikator erneut auszuführen.
-                if _mc_result_obj is not None:
-                    cache_medium_result(file_path, _mc_result_obj)
-                # HTML-Icon für Ursprungsträger
-                _orig_html = _html(*_MEDIUM_DATA.get(_raw_medium, ("unknown", _raw_medium)))
-                # Kettenanzeige: direkt aus transfer_chain (MediumDetector-Kette) oder
-                # Ext-Fallback wenn keine Kette verfügbar.
-                if _chain_keys and len(_chain_keys) > 1:
-                    _lbl = "&nbsp;&nbsp;→&nbsp;&nbsp;".join(
-                        _html(*_MEDIUM_DATA.get(k, ("unknown", k))) for k in _chain_keys
-                    )
-                else:
-                    _ext = Path(file_path).suffix.lower()
-                    _ext_entry = _EXT_DATA.get(_ext)
-                    if _ext_entry and _raw_medium in _ANALOG_MEDIA:
-                        _lbl = f"{_orig_html}&nbsp;&nbsp;→&nbsp;&nbsp;{_html(*_ext_entry)}"
-                    else:
-                        _lbl = _orig_html
-                # Zusätzlicher Fallback: wenn _chain_keys leer aber Primärträger analog
-                # → ergänze Dateiendung auch wenn nicht explizit in transfer_chain
-                if not _chain_keys and _raw_medium in _ANALOG_MEDIA:
-                    _ext = Path(file_path).suffix.lower()
-                    _ext_entry = _EXT_DATA.get(_ext)
-                    if _ext_entry:
-                        _lbl = f"{_orig_html}&nbsp;&nbsp;→&nbsp;&nbsp;{_html(*_ext_entry)}"
-                if getattr(self, "_file_load_token", 0) != _load_token:
-                    return
-                if str(getattr(self, "current_file_path", "") or "") != str(file_path):
-                    return
-                # Ergebnis vor GUI-Dispatch speichern (Race-Condition-Fix)
-                # _continue_file_loaded liest diesen Wert falls es NACH dem
-                # Dispatch ausgeführt wird und würde sonst "Wird analysiert…" anzeigen
-                self._carrier_bg_label = _lbl
-                self._carrier_bg_score = _score
-                self._raw_medium_type = _raw_medium  # raw MaterialType key (e.g. "shellac", "vinyl")
-                # Badge-Reset im GUI-Thread (Race-Condition-Fix: kein Direct-Write aus Bg-Thread)
-                self._dispatch_to_gui(
-                    lambda l=_lbl, sc=_score, fp=file_path, token=_load_token: self._update_carrier_display(
-                        l,
-                        sc,
-                        fp,
-                        load_token=token,
-                    )
-                )
-
-            threading.Thread(target=_carrier_bg, daemon=True).start()
+            # Temp-store native audio for _pre_analysis_bg (started in _continue_file_loaded).
+            # Cleared immediately when _pre_analysis_bg starts (avoids keeping large array on self).
+            # Spec: analysis modules run at native import SR — _analysis_audio_native is
+            # the pre-resample copy; _analysis_sr_native holds the original file SR.
+            self._pa_audio_native = _analysis_audio_native
+            self._pa_sr_native = _analysis_sr_native
+            # _pre_analysis_bg is defined in _continue_file_loaded and started there.
+            # It runs all analyses (medium, era, genre, restorability, defects) in one call.
 
         threading.Thread(target=_bg_load, daemon=True).start()
 
@@ -10028,6 +10951,30 @@ class ModernMainWindow(QMainWindow):
             fn()
         except Exception:
             logger.exception("Unhandled GUI callback exception was swallowed for stability")
+
+    def _on_load_progress_update(self, pct: float) -> None:
+        """Update load/pre-analysis progress bar with an anti-stall finalization state."""
+        if not hasattr(self, "progress_bar"):
+            return
+        _p = float(max(0.0, min(100.0, float(pct))))
+        _bar = self.progress_bar
+
+        # During pre-analysis the backend can spend a long time in heavy tail work
+        # after reporting 98%. Show an explicit indeterminate finalization state
+        # instead of a seemingly frozen fixed value.
+        _cur_file = str(getattr(self, "current_file_path", "") or "")
+        _finalized_for = str(getattr(self, "_preanalysis_finalized_for", "") or "")
+        _preanalysis_pending = bool(_cur_file and _finalized_for != _cur_file)
+
+        if _preanalysis_pending and _p >= 99.8:
+            _bar.setRange(0, 0)
+            _bar.setFormat("⏳ Analyse wird finalisiert …")
+            _bar.setVisible(True)
+            return
+
+        _bar.setRange(0, 10000)
+        _bar.setValue(int(round(_p * 100.0)))
+        _bar.setVisible(True)
 
     def _allow_action(self, action: str, cooldown_ms: int = 250) -> bool:
         """Simple flood protection for repeated clicks/shortcuts."""
@@ -10056,18 +11003,18 @@ class ModernMainWindow(QMainWindow):
         if str(getattr(self, "current_file_path", "") or "") != str(file_path):
             return
         if hasattr(self, "detected_medium_label"):
-            _stars = self._render_star_html(carrier_score)
+            _ampel = self._render_ampel_html(carrier_score)
             # Badge-Reset hier im GUI-Thread (war früher im Carrier-Bg-Thread → Race Condition)
             if not getattr(self, "_era_genre_badge", ""):  # nur bei leerem Badge zurücksetzen
                 self._era_genre_badge = ""
             # Era/Genre-Badge mitnehmen, falls bereits berechnet (Race-Condition-Fix)
             _badge = getattr(self, "_era_genre_badge", "")
-            self.detected_medium_label.setText(f"{carrier_label}   {_stars}{_badge}")
+            self.detected_medium_label.setText(f"{carrier_label}   {_ampel}{_badge}")
             self.detected_medium_label.setStyleSheet("""
                 color: #82B89A; font-size: 11pt; padding: 12px;
                 background: rgba(85, 155, 115, 0.10);
                 border-radius: 8px; border: 2px solid rgba(100, 168, 130, 0.26);
-                margin-top: 8px; font-weight: 600;
+                margin-top: 8px; font-weight: 600; line-height: 1.55;
             """)
         if hasattr(self, "current_detected_carrier"):
             self.current_detected_carrier = carrier_label
@@ -10094,6 +11041,27 @@ class ModernMainWindow(QMainWindow):
             _p = _full if i < score else _empty
             parts.append(f'<img src="file:///{_p}" width="{size}" height="{size}" style="vertical-align:middle;">')
         return "".join(parts)
+
+    @staticmethod
+    def _render_ampel_html(score: int) -> str:
+        """Render carrier detection confidence as a single Ampel (traffic-light) colour dot.
+
+        Replaces the 5-star display for the carrier badge because it is more
+        readable at small label sizes and visually consistent with the genre
+        confidence dot already used in the era/genre badge.
+
+        Score mapping (0-5):
+          4–5 → green  (#3ECF8E) — high detection confidence
+          2–3 → amber  (#F6C453) — medium confidence
+          0–1 → red    (#FF6B6B) — low / uncertain
+        """
+        if score >= 4:
+            _col = "#3ECF8E"
+        elif score >= 2:
+            _col = "#F6C453"
+        else:
+            _col = "#FF6B6B"
+        return f'<span style="color:{_col};font-size:13pt;vertical-align:middle;">&#9679;</span>'
 
     def _on_file_loaded(
         self,
@@ -10159,6 +11127,107 @@ class ModernMainWindow(QMainWindow):
             self._orig_sr = _sr
             self._rest_audio = None  # zurücksetzen nach neuem File
 
+            # ── Pre-Analyse-Synchronisation (Defektanalyse + Ära/Genre) ──────────
+            # Both analysis threads must complete before Magic Buttons are enabled.
+            # _finalize_preanalysis() is called when both flags are set (or 15 s timeout).
+            _cfk = str(file_path)  # canonical file-key for stale-signal guard
+            # Snap the load token so closures can detect when a NEWER load has started
+            # for the SAME file (same _cfk). This is the primary staleness guard.
+            _snap_token: int = int(load_token) if load_token is not None else 0
+
+            def _finalize_preanalysis() -> None:
+                """Enable magic buttons and show final status. Must run on GUI thread."""
+                # Primary guard: token mismatch means a newer _continue_file_loaded
+                # invocation exists for the same file — discard this stale closure.
+                if getattr(self, "_file_load_token", 0) != _snap_token:
+                    return
+                if str(getattr(self, "current_file_path", "")) != _cfk:
+                    return
+                if bool(self.batch_thread and self.batch_thread.isRunning()):
+                    return
+                if getattr(self, "_preanalysis_finalized_for", None) == _cfk:
+                    return  # double-fire guard
+                self._preanalysis_finalized_for = _cfk
+                self._apply_mode_recommendation_visuals()
+                # Self-healing sync: if background UI update arrived late, refresh
+                # cards from cached analysis state before announcing completion.
+                try:
+                    if hasattr(self, "defect_summary_label"):
+                        _cur_defect_txt = str(self.defect_summary_label.text() or "").strip()
+                        _still_analyzing = {
+                            t("status.defects_summary_analyzing"),
+                            t("status.analyzing_wait"),
+                            t("ui.no_analysis"),
+                            "Schäden werden analysiert …",
+                            "🔄\u2002Schäden werden analysiert …",
+                        }
+                        if _cur_defect_txt in _still_analyzing:
+                            _cached_scan = get_cached_defect_result(_cfk)
+                            if _cached_scan is not None and hasattr(_cached_scan, "scores"):
+                                _disp = _defect_analysis_to_display(_cached_scan.scores, status="detected")
+                                self._update_defects(_disp)
+                    if hasattr(self, "detected_medium_label"):
+                        _cur_med_txt = str(self.detected_medium_label.text() or "").strip()
+                        if _cur_med_txt in {"", t("status.analyzing_wait")}:
+                            _lbl = str(getattr(self, "_carrier_bg_label", "") or "").strip()
+                            _sc = int(getattr(self, "_carrier_bg_score", 0) or 0)
+                            if _lbl and _lbl != t("status.analyzing_wait"):
+                                self._update_carrier_display(_lbl, _sc, _cfk, load_token=_snap_token)
+                except Exception as _sync_exc:
+                    logger.debug("Pre-analysis finalize: UI sync fallback failed: %s", _sync_exc)
+                if hasattr(self, "progress_bar"):
+                    self.progress_bar.setRange(0, 10000)
+                    self.progress_bar.setValue(10000)
+                    self.progress_bar.setFormat(t("status.defect_scan_done"))
+
+                    def _reset_progress_if_idle() -> None:
+                        if self.batch_thread and self.batch_thread.isRunning():
+                            return
+                        self.progress_bar.setVisible(False)
+                        self.progress_bar.setValue(0)
+
+                    QTimer.singleShot(1500, _reset_progress_if_idle)
+                if hasattr(self, "status_text"):
+                    _fname = Path(getattr(self, "current_file_path", "") or "").name
+                    _rec = getattr(self, "_recommended_mode", "RESTORATION")
+                    _rec_lbl = "Restoration" if _rec == "RESTORATION" else "Studio 2026"
+                    _msg = (
+                        f"{_fname} — Analyse abgeschlossen. Empfehlung: {_rec_lbl} · Modus wählen und starten."
+                        if _fname
+                        else "Analyse abgeschlossen — Modus wählen und starten."
+                    )
+                    self.status_text.setText(_msg)
+                    self._apply_status_text_style("success")
+                self._set_magic_buttons_enabled(True)
+
+            def _try_signal_preanalysis_done(flag: str) -> None:
+                """Signal one pre-analysis step as done. Must run on GUI thread."""
+                # Primary guard: token mismatch → stale closure from previous load of same file.
+                if getattr(self, "_file_load_token", 0) != _snap_token:
+                    return
+                if str(getattr(self, "current_file_path", "")) != _cfk:
+                    return  # stale signal from previous file
+                if getattr(self, "_preanalysis_finalized_for", None) == _cfk:
+                    return  # already finalized — suppress duplicate calls
+                self._preanalysis_flags.add(flag)
+                _both_done = {"defect_scan", "era_genre"} <= self._preanalysis_flags
+                if _both_done or getattr(self, "_preanalysis_timeout_fired", False):
+                    _finalize_preanalysis()
+                elif "defect_scan" in self._preanalysis_flags:
+                    # Defect scan done but era/genre still running → indeterminate progress
+                    if hasattr(self, "progress_bar"):
+                        self.progress_bar.setRange(0, 0)  # indeterminate spinner
+                        self.progress_bar.setFormat("⏳  Ära & Genre werden erkannt …")
+                        self.progress_bar.setVisible(True)
+                    if hasattr(self, "status_text"):
+                        self.status_text.setText("Defekte analysiert — Ära und Genre werden noch ermittelt …")
+                        self._apply_status_text_style("warning")
+                elif "era_genre" in self._preanalysis_flags:
+                    # Era/genre done but defect scan still running → keep user trust
+                    if hasattr(self, "status_text"):
+                        self.status_text.setText("Ära und Genre erkannt — Defekte werden noch vollständig analysiert …")
+                        self._apply_status_text_style("warning")
+
             # Restaurierbarkeits-Banner zurücksetzen (neues File)
             if hasattr(self, "restorability_banner"):
                 self.restorability_banner.setText("— wird analysiert …")
@@ -10169,281 +11238,9 @@ class ModernMainWindow(QMainWindow):
                 """)
                 self.restorability_banner.setVisible(True)
 
-            try:
-                # Race-Condition-Fix: Falls _carrier_bg bereits ein Ergebnis
-                # gespeichert hat (schneller als Dialog-Close), dieses verwenden
-                # statt des Platzhalters "Wird analysiert …".
-                detected_carrier = getattr(self, "_carrier_bg_label", carrier_label)
-                confidence = getattr(self, "_carrier_bg_score", carrier_score)
-                _stars = self._render_star_html(confidence)
-                self.detected_medium_label.setText(f"{detected_carrier}   {_stars}")
-                self.detected_medium_label.setStyleSheet("""
-                    color: #82B89A; font-size: 11pt; padding: 12px;
-                    background: rgba(85, 155, 115, 0.10);
-                    border-radius: 8px; border: 2px solid rgba(100, 168, 130, 0.26);
-                    margin-top: 8px; font-weight: 600;
-                """)
-                self.current_detected_carrier = detected_carrier
-                self.current_carrier_confidence = confidence
-
-                # ── Ära- und Genre-Erkennung im Hintergrund ────────────────
-                # Kein .copy(): audio_mono wird von allen Hintergrundthreads nur gelesen
-                _sr2 = int(_sr)
-                _file_path_for_detection = str(file_path)
-                _base_text = f"{detected_carrier}   {_stars}"
-                # NOTE: _base_text used in _detect_era_genre_bg closure already contains star HTML
-
-                def _detect_era_genre_bg(
-                    _a=_audio,
-                    _s=_sr2,
-                    _bt=_base_text,
-                    _self=self,
-                    _file_key=_file_path_for_detection,
-                ):
-                    decade_label = ""
-                    genre_label = ""
-                    genre_confidence: float | None = None
-                    genre_lang_score: float | None = None
-                    genre_lang_dsp: float | None = None
-                    genre_lang_lyrics: float | None = None
-                    genre_family_label: str = ""
-                    genre_family_confidence: float | None = None
-                    genre_topk: list[tuple[str, float]] = []
-                    genre_open_set_unknown: bool | None = None
-                    _era_result_obj = None
-                    _genre_result_obj = None
-                    _raw_decade: int | None = None
-                    _floor_decade: int | None = None
-                    _era_floor_applied = False
-                    # Analyse-Module (EraClassifier, GenreClassifier) sind per Spec SR-agnostisch
-                    # (§2.37 / Performance-Budget) und laufen auf nativer Import-SR.
-                    _a_native, _s_native = _a, _s
-                    logger.info("_detect_era_genre_bg: start — file=%s sr=%d", _file_key, _s_native)
-                    try:
-                        _classify_era = _bridge_get_era_classifier_fn()
-                        if callable(_classify_era):
-                            er_raw = _classify_era(_a_native, _s_native)
-                            er = er_raw
-                            _raw_dec = getattr(er_raw, "decade", None) or (
-                                er_raw.get("decade") if isinstance(er_raw, dict) else None
-                            )
-                            if isinstance(_raw_dec, (int, float)):
-                                _raw_decade = int(_raw_dec)
-                            # §Medium-Floor-Constraint: Ära kann nicht vor Erfindung
-                            # des erkannten Mediums liegen (z. B. Magnetband ≠ 1890er).
-                            _raw_med = getattr(_self, "_raw_medium_type", None)
-                            if _raw_med and _raw_med not in ("unknown", ""):
-                                try:
-                                    _MEDIUM_DECADE_FLOOR, _era_floor = _bridge_get_era_medium_constraint()
-                                    er = _era_floor(er, str(_raw_med))
-                                    _floor_decade = _MEDIUM_DECADE_FLOOR.get(str(_raw_med).strip().lower())
-                                except Exception:
-                                    pass
-                            _era_result_obj = er_raw  # unconstrained for UV3 cache
-                            dec = getattr(er, "decade", None) or (er.get("decade") if isinstance(er, dict) else None)
-                            if dec:
-                                _dec_i = int(dec)
-                                if _raw_decade is not None and _dec_i != _raw_decade:
-                                    _era_floor_applied = True
-                                # UI preview should stay readable and design-consistent.
-                                # Show the constrained decade directly; the tooltip keeps the
-                                # floor-note for technical transparency.
-                                if _era_floor_applied and _floor_decade is not None and _dec_i == _floor_decade:
-                                    decade_label = f"{_floor_decade}er"
-                                else:
-                                    decade_label = f"{_dec_i}er"
-                    except Exception as _era_exc:
-                        logger.warning(
-                            "Era-Erkennung im Frontend fehlgeschlagen (Ursache: %s). "
-                            "Ära wird nach Restaurierung aus Ergebnis geladen.",
-                            _era_exc,
-                        )
-                    logger.info("_detect_era_genre_bg: era done — decade_label=%r", decade_label)
-                    try:
-                        _classify_genre = _bridge_get_genre_classifier_fn()
-                        if callable(_classify_genre):
-                            gr = _classify_genre(_a_native, _s_native)
-                            _genre_result_obj = gr
-                            _g_conf = getattr(gr, "confidence", None)
-                            if _g_conf is None and isinstance(gr, dict):
-                                _g_conf = gr.get("confidence")
-                            if isinstance(_g_conf, (int, float)):
-                                genre_confidence = float(_g_conf)
-                            _g_lang = getattr(gr, "vocal_language_score", None)
-                            if _g_lang is None and isinstance(gr, dict):
-                                _g_lang = gr.get("vocal_language_score")
-                            if isinstance(_g_lang, (int, float)):
-                                genre_lang_score = float(_g_lang)
-                            _g_lang_dsp = getattr(gr, "dsp_language_score", None)
-                            if _g_lang_dsp is None and isinstance(gr, dict):
-                                _g_lang_dsp = gr.get("dsp_language_score")
-                            if isinstance(_g_lang_dsp, (int, float)):
-                                genre_lang_dsp = float(_g_lang_dsp)
-                            _g_lang_lyrics = getattr(gr, "lyrics_language_hint", None)
-                            if _g_lang_lyrics is None and isinstance(gr, dict):
-                                _g_lang_lyrics = gr.get("lyrics_language_hint")
-                            if isinstance(_g_lang_lyrics, (int, float)):
-                                genre_lang_lyrics = float(_g_lang_lyrics)
-                            _g_family = getattr(gr, "genre_family", None)
-                            if _g_family is None and isinstance(gr, dict):
-                                _g_family = gr.get("genre_family")
-                            if isinstance(_g_family, str):
-                                genre_family_label = _g_family
-                            _g_family_conf = getattr(gr, "genre_family_confidence", None)
-                            if _g_family_conf is None and isinstance(gr, dict):
-                                _g_family_conf = gr.get("genre_family_confidence")
-                            if isinstance(_g_family_conf, (int, float)):
-                                genre_family_confidence = float(_g_family_conf)
-                            _g_top = getattr(gr, "top_genres", None)
-                            if _g_top is None and isinstance(gr, dict):
-                                _g_top = gr.get("top_genres")
-                            if isinstance(_g_top, (list, tuple)):
-                                for item in _g_top:
-                                    if isinstance(item, (list, tuple)) and len(item) == 2:
-                                        lbl = str(item[0])
-                                        sc = item[1]
-                                        if isinstance(sc, (int, float)):
-                                            genre_topk.append((lbl, float(sc)))
-                            _g_open = getattr(gr, "open_set_unknown", None)
-                            if _g_open is None and isinstance(gr, dict):
-                                _g_open = gr.get("open_set_unknown")
-                            if isinstance(_g_open, bool):
-                                genre_open_set_unknown = _g_open
-                            gl = getattr(gr, "genre_label", None) or (
-                                gr.get("genre_label") if isinstance(gr, dict) else None
-                            )
-                            if gl and gl.lower() not in ("unbekannt", "unknown", ""):
-                                genre_label = str(gl)
-                    except Exception as _genre_exc:
-                        logger.warning(
-                            "Genre-Erkennung im Frontend fehlgeschlagen (Ursache: %s). "
-                            "Genre wird nach Restaurierung aus Ergebnis geladen.",
-                            _genre_exc,
-                        )
-                    logger.info("_detect_era_genre_bg: genre done — genre_label=%r", genre_label)
-
-                    # Era/Genre-Ergebnisse im Bridge-Cache speichern, damit UV3 sie
-                    # wiederverwenden kann statt ML-Klassifikatoren erneut auszuführen.
-                    # WICHTIG: unkonstrained er_raw cachen (nicht das floor-korrigierte er),
-                    # damit UV3 den Medium-Floor mit seiner eigenen (genaueren) Medium-Analyse
-                    # selbst anwenden kann. Das Frontend-Badge zeigt nur eine Preview.
-                    if _file_key and (_era_result_obj is not None or _genre_result_obj is not None):
-                        cache_era_genre_result(_file_key, _era_result_obj, _genre_result_obj)
-                    # Era/Genre as a second line in the carrier label (never inline,
-                    # to avoid word-wrap splitting "1960er" across two lines).
-                    badge = ""
-                    if decade_label or genre_label:
-                        _era_segments = []
-                        if decade_label:
-                            _era_segments.append('<span style="color:#9FB6CE;">◷ ' + decade_label + "</span>")
-                        if genre_label:
-                            _g_conf = float(genre_confidence) if isinstance(genre_confidence, (int, float)) else None
-                            if _g_conf is None:
-                                _ampel_color = "#8A9AA9"
-                            elif _g_conf >= 0.70:
-                                _ampel_color = "#3ECF8E"
-                            elif _g_conf >= 0.50:
-                                _ampel_color = "#F6C453"
-                            else:
-                                _ampel_color = "#FF6B6B"
-                            _g_conf_txt = f" ({_g_conf:.2f})" if _g_conf is not None else ""
-                            _era_segments.append(
-                                '<span style="color:#C8B483;">Genre: '
-                                + genre_label
-                                + _g_conf_txt
-                                + '&nbsp;<span style="color:'
-                                + _ampel_color
-                                + ';">&#9679;</span></span>'
-                            )
-                        _era_sep = '<span style="color:#6E839D;">&nbsp;·&nbsp;</span>'
-                        _era_str = _era_sep.join(_era_segments)
-                        badge = (
-                            f'<br><span style="font-size:9pt;font-weight:600;letter-spacing:0.1px;">{_era_str}</span>'
-                        )
-                    logger.info(
-                        "_detect_era_genre_bg: badge=%r — dispatching=%s",
-                        badge[:60] if badge else "",
-                        bool(badge),
-                    )
-                    if not badge:
-                        return  # nichts zu ergänzen
-                    _carrier_name = detected_carrier
-                    tip = (
-                        f"<b>Träger-Forensik &amp; Aufnahme-Epoche</b><br>Erkanntes Medium: <b>{_carrier_name}</b><br>"
-                    )
-                    if decade_label:
-                        tip += f"Aufnahme-Ära: <b>{decade_label}</b><br>"
-                    if _era_floor_applied and _raw_decade is not None and _floor_decade is not None:
-                        tip += (
-                            f"<small>Hinweis: Rohschätzung {_raw_decade}er, "
-                            f"mediumbedingt auf &gt;= {_floor_decade}er begrenzt.</small><br>"
-                        )
-                    if genre_label:
-                        tip += f"Genre: <b>{genre_label}</b><br>"
-                    if genre_family_label:
-                        _fam_conf_txt = (
-                            f" ({genre_family_confidence:.2f})"
-                            if isinstance(genre_family_confidence, (int, float))
-                            else ""
-                        )
-                        tip += f"Genre-Familie: <b>{genre_family_label}</b>{_fam_conf_txt}<br>"
-                    if genre_topk:
-                        _topk_txt = " · ".join(f"{lbl} {score:.2f}" for lbl, score in genre_topk[:3])
-                        tip += f"Top-Genres: <b>{_topk_txt}</b><br>"
-                    if isinstance(genre_open_set_unknown, bool):
-                        tip += (
-                            "Open-Set: <b>unknown</b><br>" if genre_open_set_unknown else "Open-Set: <b>known</b><br>"
-                        )
-                    if genre_confidence is not None:
-                        tip += f"Genre-Konfidenz: <b>{genre_confidence:.2f}</b><br>"
-                    if genre_lang_score is not None:
-                        tip += f"DE-Sprachscore (gesamt): <b>{genre_lang_score:.2f}</b><br>"
-                    if genre_lang_dsp is not None or genre_lang_lyrics is not None:
-                        _dsp_txt = f"{genre_lang_dsp:.2f}" if genre_lang_dsp is not None else "—"
-                        _lyr_txt = f"{genre_lang_lyrics:.2f}" if genre_lang_lyrics is not None else "—"
-                        tip += f"Sprachanteile: DSP <b>{_dsp_txt}</b> · Lyrics <b>{_lyr_txt}</b><br>"
-                    tip += "<small>Die Ära-Erkennung passt alle Restaurierungs-Parameter historisch korrekt an.</small>"
-
-                    def _upd(_badge=badge, _tip=tip, _decade=decade_label, _genre=genre_label):
-                        if not hasattr(_self, "detected_medium_label"):
-                            logger.info("_upd: detected_medium_label fehlt — abgebrochen")
-                            return
-                        # Ignore stale background results after file switch.
-                        _cur_path = getattr(_self, "current_file_path", None)
-                        if _cur_path != _file_key:
-                            logger.info(
-                                "_upd: stale era/genre ignoriert (cur=%s key=%s)",
-                                _cur_path,
-                                _file_key,
-                            )
-                            return
-                        logger.info("_upd: era/genre wird gesetzt — decade=%s genre=%s", _decade or "—", _genre or "—")
-                        # Badge und Klartext-Genre merken (Klartext verhindert HTML-Korruption
-                        # beim späteren Neuaufbau in _on_item_finished_with_result).
-                        _self._era_genre_badge = _badge
-                        _self._era_genre_cached = str(_genre or "")
-                        # Aktuellen Carrier-Label lesen (kann inzwischen gesetzt worden sein)
-                        _cur_lbl = getattr(_self, "_carrier_bg_label", _bt)
-                        _cur_sc = getattr(_self, "_carrier_bg_score", 0)
-                        _cur_stars = _self._render_star_html(_cur_sc)
-                        _self.detected_medium_label.setText(f"{_cur_lbl}   {_cur_stars}{_badge}")
-                        _self.detected_medium_label.setToolTip(_tip)
-                        _self._apply_mode_recommendation_visuals()
-                        # Feed Prognose-Widget (era + genre)
-                        if getattr(_self, "prognose_widget", None) is not None:
-                            _dec_int = int(_decade) if isinstance(_decade, (int, float)) else None
-                            _self.prognose_widget.update_era_genre(_dec_int, _genre or None)  # type: ignore[union-attr]
-                        # ── Audio-Info-Bar Chips befüllen ────────────────────
-                        # chip_era wird NICHT gesetzt — Ära steht bereits im detected_medium_label
-                        if _genre and hasattr(_self, "chip_genre"):
-                            _self._show_chip(_self.chip_genre, _genre)
-
-                    _self._dispatch_to_gui(_upd)
-
-                threading.Thread(target=_detect_era_genre_bg, daemon=True).start()
-                # ── Ende Ära/Genre-Hintergrund ────────────────────────────
-
-            except Exception:
+            # Carrier placeholder — _pre_analysis_bg will fill detected_medium_label
+            # with the correct carrier chain + era/genre badge once all analyses complete.
+            if hasattr(self, "detected_medium_label"):
                 self.detected_medium_label.setText(t("status.analyzing_wait"))
                 self.detected_medium_label.setStyleSheet("""
                     color: #7B93B8; font-size: 11pt; padding: 12px;
@@ -10459,161 +11256,11 @@ class ModernMainWindow(QMainWindow):
             # A/B-Buttons aktivieren
             self._update_ab_player_state()
 
-            # ── Restaurierbarkeit-Vorschau im Hintergrund ──────────────────
-            # Nicht-blockierend (<3 s), aktualisiert das Banner über den
-            # Magic Buttons sobald das Ergebnis vorliegt.
-            # audio_mono wird nur gelesen – kein .copy() (OOM-Schutz)
-            _sr_cap = int(_sr)
-
-            def _estimate_restorability_bg(_a=audio_mono, _s=_sr_cap, _self=self):
-                _restorability_result_obj = None
-
-                # ── Schrittweise Fortschrittsanzeige im Banner ─────────────
-                _step_css = (
-                    "color: #90A4AE; font-size:10pt; font-weight:600;"
-                    " padding:10px 18px; border-radius:10px;"
-                    " background: rgba(144, 164, 174, 0.10);"
-                    " border: 1px solid rgba(144, 164, 174, 0.25);"
-                )
-                _steps = [
-                    "⏳  Signal wird analysiert …",
-                    "⏳  Rauschabstand wird gemessen …",
-                    "⏳  Clipping-Analyse …",
-                    "⏳  Frequenzbandbreite wird geprüft …",
-                    "⏳  Impuls-/Crackle-Dichte wird bestimmt …",
-                    "⏳  Restaurierbarkeit wird berechnet …",
-                ]
-
-                def _show_step(msg: str) -> None:
-                    def _do():
-                        if hasattr(_self, "restorability_banner"):
-                            _self.restorability_banner.setText(msg)
-                            _self.restorability_banner.setStyleSheet(_step_css)
-                            _self.restorability_banner.setVisible(True)
-
-                    _self._dispatch_to_gui(_do)
-
-                _show_step(_steps[0])
-
-                try:
-                    _RestorabilityEstimator = _bridge_get_restorability_estimator_class()
-                    if _RestorabilityEstimator is None:
-                        raise ImportError("RestorabilityEstimator nicht verfügbar")
-                    _estimator = _RestorabilityEstimator()
-
-                    # Schrittweise Analyse mit UI-Feedback zwischen den Stufen
-                    _mono_e = np.mean(_a, axis=0).astype(np.float32) if _a.ndim == 2 else _a.astype(np.float32)
-                    _mono_e = np.nan_to_num(_mono_e, nan=0.0, posinf=0.0, neginf=0.0)
-
-                    _show_step(_steps[1])
-                    _estimator._estimate_snr(_mono_e, _s)
-
-                    _show_step(_steps[2])
-                    _clip = float(np.mean(np.abs(_mono_e) >= 0.98))
-
-                    _show_step(_steps[3])
-                    _estimator._estimate_bandwidth(_mono_e, _s)
-
-                    _show_step(_steps[4])
-                    _estimator._estimate_crackle_rate(_mono_e, _s)
-
-                    _show_step(_steps[5])
-                    r = _estimator.estimate(_a, _s)
-                    _restorability_result_obj = r
-                    score100 = float(getattr(r, "restorability_score", 50.0))
-                    predicted_mos = float(getattr(r, "predicted_mos", 3.5))
-                    limiting = list(getattr(r, "limiting_defects", []))
-                except Exception:
-                    # DSP-Heuristik: SNR-basiert (läuft immer als Fallback)
-                    _mono = _a.astype(np.float64)
-                    rms = float(np.sqrt(np.mean(_mono**2))) + 1e-12
-                    noise = float(np.percentile(np.abs(_mono), 5)) + 1e-12
-                    snr_db = 20.0 * np.log10(rms / noise)
-                    score100 = float(np.clip((snr_db - 8.0) / 35.0 * 100.0, 5.0, 98.0))
-                    predicted_mos = round(1.0 + score100 / 100.0 * 4.0, 1)
-                    limiting = []
-
-                # Restorability-Ergebnis im Bridge-Cache speichern, damit UV3
-                # es wiederverwenden kann statt Estimator erneut auszuführen.
-                _fp = getattr(_self, "current_file_path", None)
-                if _fp and _restorability_result_obj is not None:
-                    cache_restorability_result(_fp, _restorability_result_obj)
-
-                # Kategorie
-                if score100 >= 70:
-                    _s_color = "#82B89A"
-                    bg = "rgba(85, 155, 115, 0.14)"
-                    border = "rgba(100, 168, 130, 0.36)"
-                    zeile1 = f"▶  Sehr gut restaurierbar  ({score100:.0f}\u202f/\u202f100)"
-                    detail = "Aurik kann diese Aufnahme auf exzellentem Niveau restaurieren."
-                elif score100 >= 40:
-                    _s_color = "#B8A068"
-                    bg = "rgba(150, 130, 68, 0.14)"
-                    border = "rgba(150, 130, 68, 0.36)"
-                    zeile1 = f"▶  Mäßig restaurierbar  ({score100:.0f}\u202f/\u202f100)"
-                    detail = "Deutliche Verbesserung möglich – Restdefekte können bleiben."
-                else:
-                    _s_color = "#B87A7A"
-                    bg = "rgba(148, 82, 82, 0.14)"
-                    border = "rgba(152, 88, 88, 0.36)"
-                    zeile1 = f"▶  Stark beschädigt  ({score100:.0f}\u202f/\u202f100)"
-                    detail = "Material ist sehr stark beschädigt – Aurik holt das physikalisch Mögliche heraus."
-
-                mos_str = f"{predicted_mos:.1f}"
-                banner_txt = (
-                    f"{zeile1}    ·    Erw. Qualität nach Restaurierung:  {mos_str}\u202f/\u202f5,0 MOS\n{detail}"
-                )
-                if limiting:
-                    banner_txt += f"    (Hauptdefekte: {', '.join(str(d) for d in limiting[:2])})"
-                # Detaillierte Messwerte für Tooltip zusammenstellen
-                _tip_details = ""
-                if _restorability_result_obj is not None:
-                    _snr_val = getattr(_restorability_result_obj, "snr_db", None)
-                    _grade_val = getattr(_restorability_result_obj, "grade", None)
-                    _time_est = getattr(_restorability_result_obj, "processing_time_estimate_s", None)
-                    if _snr_val is not None:
-                        _tip_details += f"SNR: <b>{_snr_val:.1f}\u202fdB</b><br>"
-                    if _grade_val is not None:
-                        _tip_details += f"Stufe: <b>{_grade_val}</b><br>"
-                    if _time_est is not None:
-                        _min = int(_time_est // 60)
-                        _sec = int(_time_est % 60)
-                        _tip_details += f"Gesch. Verarbeitungszeit: <b>~{_min}\u202fMin.\u202f{_sec}\u202fSek.</b><br>"
-                tip = (
-                    f"<b>Restaurierbarkeits-Vorschätzung</b><br>"
-                    f"Wert: <b>{score100:.0f}\u202f/\u202f100</b><br>"
-                    f"Erw. Qualität nach Restaurierung: <b>{mos_str} von 5,0 MOS</b><br>"
-                    f"{_tip_details}"
-                    f"<small>Schnelle Vorab-Analyse des Signals – "
-                    f"vor dem eigentlichen Restaurierungsvorgang.</small>"
-                )
-                css = (
-                    f"color:{_s_color}; font-size:10pt; font-weight:600;"
-                    f" padding:10px 18px; border-radius:10px;"
-                    f" background:{bg}; border:1px solid {border};"
-                )
-
-                def _update_ui():
-                    _self._restorability_score = score100
-                    if hasattr(_self, "restorability_banner"):
-                        _self.restorability_banner.setText(banner_txt)
-                        _self.restorability_banner.setStyleSheet(css)
-                        _self.restorability_banner.setToolTip(tip)
-                        _self.restorability_banner.setVisible(True)
-                    _self._apply_mode_recommendation_visuals()
-                    # Feed Prognose-Widget (vollständiges RestorabilityResult)
-                    if getattr(_self, "prognose_widget", None) is not None and _restorability_result_obj is not None:
-                        _self.prognose_widget.update_restorability(_restorability_result_obj)  # type: ignore[union-attr]
-
-                _self._dispatch_to_gui(_update_ui)
-
-            threading.Thread(target=_estimate_restorability_bg, daemon=True).start()
-            # ── Ende Restaurierbarkeit-Hintergrund ─────────────────────────
-
-            # ── Defekt-Analyse im Hintergrund nach Import ──────────────────
-            # DefectScanner.scan() läuft nicht-blockierend (<3 s) und befüllt
-            # sofort das Defekt-Panel — ohne dass der Nutzer den Magic Button
-            # drücken muss (§2.1 DefectScanner, §9.5 Performance-Budget).
+            # ── Unified pre-analysis background thread ─────────────────────
+            # Replaces _carrier_bg (ex _bg_load), _detect_era_genre_bg,
+            # _estimate_restorability_bg and _run_defect_scan_bg.
+            # run_pre_analysis() handles all 5 analyses (medium, era, genre,
+            # restorability, defects) in parallel at native import SR per spec.
 
             # Sofortiges Feedback im Haupt-Thread → Nutzer sieht direkt, dass
             # die Analyse läuft (kein leeres Label bis der Thread fertig ist).
@@ -10624,15 +11271,12 @@ class ModernMainWindow(QMainWindow):
                     background: rgba(144, 164, 174, 0.10);
                     border-radius: 10px; border: 1px solid rgba(144, 164, 174, 0.25);
                 """)
-            # Live-Zähler-Label beim Scan-Start sichtbar schalten
             if hasattr(self, "defect_count_live_label"):
                 self.defect_count_live_label.setText(t("status.analyzing_short"))
                 self.defect_count_live_label.setStyleSheet(
                     "color: #90A4AE; font-size: 8pt; background: transparent; padding: 0 2px;"
                 )
                 self.defect_count_live_label.setVisible(True)
-
-            # Pulsierender Fortschrittsbalken während Defektanalyse
             if hasattr(self, "progress_bar"):
                 self.progress_bar.setRange(0, 10000)
                 self.progress_bar.setValue(0)
@@ -10642,83 +11286,515 @@ class ModernMainWindow(QMainWindow):
                 self.status_text.setText(t("status.defects_analyzing"))
                 self._apply_status_text_style("warning")
 
-            # audio_mono wird nur gelesen – kein .copy() (OOM-Schutz)
-            _sr_scan = int(_sr)
+            _fp_pre = str(file_path)
+            _token_pre = int(_snap_token)
 
-            def _run_defect_scan_bg(_a=audio_mono, _s=_sr_scan, _self=self, _fp=file_path):
+            def _pre_analysis_bg(
+                _audio_48k=_audio,
+                _sr_48k=int(_sr),
+                _audio_native=getattr(self, "_pa_audio_native", _audio),
+                _sr_native=getattr(self, "_pa_sr_native", int(_sr)),
+                _self=self,
+                _file_key=_fp_pre,
+                _token=_token_pre,
+            ):
+                # Clear temporary native audio reference immediately to avoid keeping
+                # a large array on the instance beyond the lifetime of this thread.
+                _self._pa_audio_native = None
+                _self._pa_sr_native = 0
+
+                import os as _os
                 import logging as _log_
 
                 _logger_ = _log_.getLogger(__name__)
 
-                def _on_scan_progress(pct: int) -> None:
-                    """Leitet Scan-Fortschritt thread-sicher in den GUI-Thread weiter."""
-                    _self._load_progress.emit(int(pct))
+                # ── Icon/HTML helper ─────────────────────────────────────────
+                _ICONS_DIR = _os.path.join(
+                    _os.path.dirname(_os.path.dirname(__file__)),
+                    "resources",
+                    "carrier_icons",
+                )
 
-                try:
-                    _DS = _bridge_get_defect_scanner()
-                    if _DS is None:
-                        raise RuntimeError("DefectScanner über Bridge nicht verfügbar")
-                    _scan = _DS().scan(_a, _s, progress_callback=_on_scan_progress)
-                    # P1: Scan-Ergebnis in Bridge-Cache speichern (vermeidet Doppelscan in BatchThread)
-                    cache_defect_result(_fp, _scan)
-                    defects = _defect_analysis_to_display(_scan.scores, status="detected")
-                except Exception as _exc:
-                    # Fehler sichtbar machen (Debug-Log) + DSP-Fallback
-                    _logger_.warning("DefectScanner nach Import fehlgeschlagen: %s", _exc, exc_info=True)
-                    defects = {
-                        "clicks": 0,
-                        "crackle": 0,
-                        "pops": 0,
-                        "clipping": 0,
-                        "sibilance": 0,
-                        "dropout": 0,
-                        "hum": 0.0,
-                        "noise_level": 0.0,
-                        "wow": 0.0,
-                        "flutter": 0.0,
-                        "rumble": 0.0,
-                        "status": "detected",
+                def _html(icon_key: str, label: str) -> str:
+                    _svg = _os.path.join(_ICONS_DIR, f"{icon_key}.svg")
+                    _png = _os.path.join(_ICONS_DIR, f"{icon_key}.png")
+                    _p = _svg if _os.path.isfile(_svg) else _png
+                    return (
+                        f'<img src="file:///{_p}" width="22" height="22"'
+                        f' style="vertical-align:middle;">&nbsp;{label}'
+                    )
+
+                _MEDIUM_DATA: dict[str, tuple[str, str]] = {
+                    "wax_cylinder": ("wax_cylinder", "Wachswalze"),
+                    "lacquer_disc": ("lacquer_disc", "Lackfolie"),
+                    "shellac": ("shellac", "Schellack"),
+                    "vinyl": ("vinyl", "Vinyl-Schallplatte"),
+                    "wire_recording": ("wire_recording", "Drahtband"),
+                    "reel_tape": ("reel_tape", "Spulenband"),
+                    "tape": ("tape", "Kassette (Band)"),
+                    "cassette": ("tape", "Kassette (Band)"),
+                    "dat": ("dat", "DAT"),
+                    "cd_digital": ("cd_digital", "CD"),
+                    "cd": ("cd", "CD"),
+                    "digital": ("cd_digital", "Digital"),
+                    "minidisc": ("minidisc", "MiniDisc"),
+                    "mp3_low": ("mp3_low", "MP3 (schwach)"),
+                    "mp3_high": ("mp3_high", "MP3"),
+                    "damaged_mp3": ("damaged_mp3", "MP3 (defekt)"),
+                    "aac": ("aac", "AAC"),
+                    "streaming": ("streaming", "Streaming"),
+                    "unknown": ("unknown", "Unbekannt"),
+                }
+                _EXT_DATA: dict[str, tuple[str, str]] = {
+                    ".mp3": ("mp3_high", "MP3"),
+                    ".m4a": ("aac", "M4A/AAC"),
+                    ".aac": ("aac", "AAC"),
+                    ".ogg": ("streaming", "OGG"),
+                    ".opus": ("streaming", "Opus"),
+                    ".wma": ("streaming", "WMA"),
+                    ".flac": ("cd_digital", "FLAC"),
+                    ".wav": ("cd_digital", "WAV"),
+                    ".aiff": ("cd_digital", "AIFF"),
+                    ".aif": ("cd_digital", "AIFF"),
+                }
+                _ANALOG_MEDIA = frozenset({
+                    "wax_cylinder", "lacquer_disc", "shellac", "vinyl",
+                    "wire_recording", "reel_tape", "tape", "cassette",
+                })
+
+                def _on_scan_progress(pct: float) -> None:
+                    _self._load_progress.emit(float(pct))
+
+                # ── Run all analyses via unified backend entry point ──────────
+                if _bridge_run_pre_analysis is None:
+                    _logger_.error("_pre_analysis_bg: run_pre_analysis nicht importierbar")
+
+                    def _fail_signal():
+                        _try_signal_preanalysis_done("defect_scan")
+                        _try_signal_preanalysis_done("era_genre")
+
+                    _self._dispatch_to_gui(_fail_signal)
+                    return
+
+                _result = _bridge_run_pre_analysis(
+                    _audio_native,
+                    _sr_native,
+                    audio_48k=_audio_48k,
+                    file_path=_file_key,
+                    scan_progress_callback=_on_scan_progress,
+                    store_in_bridge_cache=True,
+                )
+
+                # Staleness guard — discard result if user switched file during analysis
+                if getattr(_self, "_file_load_token", 0) != _token:
+                    return
+                if str(getattr(_self, "current_file_path", "") or "") != _file_key:
+                    return
+
+                if _result is None:
+                    def _fail_pre():
+                        _try_signal_preanalysis_done("defect_scan")
+                        _try_signal_preanalysis_done("era_genre")
+                    _self._dispatch_to_gui(_fail_pre)
+                    return
+
+                # ── Build carrier HTML from result.medium ────────────────────
+                _med = _result.medium  # type: ignore[union-attr]
+                _raw_medium = getattr(_med, "primary_material", None) or "unknown"
+                _score = round(float(getattr(_med, "confidence", 0)) * 5) if _med else 0
+                _chain_keys: list[str] = list(getattr(_med, "transfer_chain", None) or [])
+                _orig_html = _html(*_MEDIUM_DATA.get(_raw_medium, ("unknown", _raw_medium)))
+                if _chain_keys and len(_chain_keys) > 1:
+                    _lbl = "&nbsp;&nbsp;→&nbsp;&nbsp;".join(
+                        _html(*_MEDIUM_DATA.get(k, ("unknown", k))) for k in _chain_keys
+                    )
+                else:
+                    _ext = Path(_file_key).suffix.lower()
+                    _ext_entry = _EXT_DATA.get(_ext)
+                    if _ext_entry and _raw_medium in _ANALOG_MEDIA:
+                        _lbl = f"{_orig_html}&nbsp;&nbsp;→&nbsp;&nbsp;{_html(*_ext_entry)}"
+                    else:
+                        _lbl = _orig_html
+                if not _chain_keys and _raw_medium in _ANALOG_MEDIA:
+                    _ext = Path(_file_key).suffix.lower()
+                    _ext_entry = _EXT_DATA.get(_ext)
+                    if _ext_entry:
+                        _lbl = f"{_orig_html}&nbsp;&nbsp;→&nbsp;&nbsp;{_html(*_ext_entry)}"
+
+                # ── Build era/genre badge ────────────────────────────────────
+                decade_label = ""
+                genre_label = ""
+                genre_confidence: float | None = None
+                genre_lang_score: float | None = None
+                genre_lang_dsp: float | None = None
+                genre_lang_lyrics: float | None = None
+                genre_family_label: str = ""
+                genre_family_confidence: float | None = None
+                genre_topk: list[tuple[str, float]] = []
+                genre_open_set_unknown: bool | None = None
+                _raw_decade: int | None = None
+                _floor_decade: int | None = None
+                _era_floor_applied = False
+
+                er = _result.era
+                if er is not None:
+                    _raw_dec = getattr(er, "decade", None) or (
+                        er.get("decade") if isinstance(er, dict) else None
+                    )
+                    if isinstance(_raw_dec, (int, float)):
+                        _raw_decade = int(_raw_dec)
+                    # §Medium-Floor-Constraint: displayed era >= medium invention date
+                    if _raw_medium and _raw_medium not in ("unknown", ""):
+                        try:
+                            _MEDIUM_DECADE_FLOOR, _era_floor_fn = _bridge_get_era_medium_constraint()
+                            er_constrained = _era_floor_fn(er, str(_raw_medium))
+                            _floor_decade = _MEDIUM_DECADE_FLOOR.get(str(_raw_medium).strip().lower())
+                            _cdec = getattr(er_constrained, "decade", None) or (
+                                er_constrained.get("decade") if isinstance(er_constrained, dict) else None
+                            )
+                            if _cdec:
+                                _dec_i = int(_cdec)
+                                if _raw_decade is not None and _dec_i != _raw_decade:
+                                    _era_floor_applied = True
+                                if _era_floor_applied and _floor_decade is not None and _dec_i == _floor_decade:
+                                    decade_label = f"{_floor_decade}er"
+                                else:
+                                    decade_label = f"{_dec_i}er"
+                        except Exception:
+                            if _raw_decade:
+                                decade_label = f"{_raw_decade}er"
+                    else:
+                        if _raw_decade:
+                            decade_label = f"{_raw_decade}er"
+
+                gr = _result.genre
+                if gr is not None:
+                    _g_conf = getattr(gr, "confidence", None)
+                    if isinstance(_g_conf, (int, float)):
+                        genre_confidence = float(_g_conf)
+                    _g_lang = getattr(gr, "vocal_language_score", None)
+                    if isinstance(_g_lang, (int, float)):
+                        genre_lang_score = float(_g_lang)
+                    _g_lang_dsp = getattr(gr, "dsp_language_score", None)
+                    if isinstance(_g_lang_dsp, (int, float)):
+                        genre_lang_dsp = float(_g_lang_dsp)
+                    _g_lang_lyrics = getattr(gr, "lyrics_language_hint", None)
+                    if isinstance(_g_lang_lyrics, (int, float)):
+                        genre_lang_lyrics = float(_g_lang_lyrics)
+                    _g_family = getattr(gr, "genre_family", None)
+                    if isinstance(_g_family, str):
+                        genre_family_label = _g_family
+                    _g_family_conf = getattr(gr, "genre_family_confidence", None)
+                    if isinstance(_g_family_conf, (int, float)):
+                        genre_family_confidence = float(_g_family_conf)
+                    _g_top = getattr(gr, "top_genres", None)
+                    if isinstance(_g_top, (list, tuple)):
+                        for _item in _g_top:
+                            if isinstance(_item, (list, tuple)) and len(_item) == 2:
+                                _gl, _gc = str(_item[0]), _item[1]
+                                if isinstance(_gc, (int, float)):
+                                    genre_topk.append((_gl, float(_gc)))
+                    _g_open = getattr(gr, "open_set_unknown", None)
+                    if isinstance(_g_open, bool):
+                        genre_open_set_unknown = _g_open
+                    _gl = getattr(gr, "genre_label", None) or (
+                        gr.get("genre_label") if isinstance(gr, dict) else None
+                    )
+                    if _gl and _gl.lower() not in ("unbekannt", "unknown", ""):
+                        genre_label = str(_gl)
+                    if not genre_label and getattr(gr, "is_schlager", False):
+                        genre_label = "Schlager"
+                    if not genre_label and genre_topk:
+                        _top_g, _top_c = genre_topk[0]
+                        if _top_g and _top_g.lower() not in ("unbekannt", "unknown", ""):
+                            genre_label = _top_g
+                            if genre_confidence is None:
+                                genre_confidence = _top_c
+
+                badge = ""
+                if decade_label or genre_label:
+                    _era_segs = []
+                    if decade_label:
+                        _era_segs.append('<span style="color:#82B89A;">◷ ' + decade_label + "</span>")
+                    if genre_label:
+                        _g_conf_v = float(genre_confidence) if isinstance(genre_confidence, (int, float)) else None
+                        if _g_conf_v is None:
+                            _ampel_color = "#8A9AA9"
+                        elif _g_conf_v >= 0.70:
+                            _ampel_color = "#3ECF8E"
+                        elif _g_conf_v >= 0.50:
+                            _ampel_color = "#F6C453"
+                        else:
+                            _ampel_color = "#FF6B6B"
+                        _era_segs.append(
+                            '<span style="color:#82B89A;">Genre: '
+                            + genre_label
+                            + '&nbsp;<span style="color:'
+                            + _ampel_color
+                            + ';">&#9679;</span></span>'
+                        )
+                    _era_sep = '<span style="color:#6E839D;">&nbsp;·&nbsp;</span>'
+                    badge = (
+                        '<br><span style="font-size:9pt;font-weight:600;letter-spacing:0.1px;">'
+                        + _era_sep.join(_era_segs)
+                        + "</span>"
+                    )
+
+                # ── Build era/genre tooltip ──────────────────────────────────
+                _carrier_name = _MEDIUM_DATA.get(_raw_medium, ("unknown", _raw_medium))[1]
+                tip_era = (
+                    f"<b>Träger-Forensik &amp; Aufnahme-Epoche</b><br>"
+                    f"Erkanntes Medium: <b>{_carrier_name}</b><br>"
+                )
+                if decade_label:
+                    tip_era += f"Aufnahme-Ära: <b>{decade_label}</b><br>"
+                if _era_floor_applied and _raw_decade is not None and _floor_decade is not None:
+                    tip_era += (
+                        f"<small>Hinweis: Rohschätzung {_raw_decade}er, "
+                        f"mediumbedingt auf &gt;= {_floor_decade}er begrenzt.</small><br>"
+                    )
+                if genre_label:
+                    tip_era += f"Genre: <b>{genre_label}</b><br>"
+                if genre_family_label:
+                    _fam_conf_txt = (
+                        f" ({genre_family_confidence:.2f})"
+                        if isinstance(genre_family_confidence, (int, float))
+                        else ""
+                    )
+                    tip_era += f"Genre-Familie: <b>{genre_family_label}</b>{_fam_conf_txt}<br>"
+                if genre_topk:
+                    _topk_txt = " · ".join(f"{lbl} {sc:.2f}" for lbl, sc in genre_topk[:3])
+                    tip_era += f"Top-Genres: <b>{_topk_txt}</b><br>"
+                if isinstance(genre_open_set_unknown, bool):
+                    tip_era += (
+                        "Open-Set: <b>unknown</b><br>" if genre_open_set_unknown
+                        else "Open-Set: <b>known</b><br>"
+                    )
+                if genre_confidence is not None:
+                    tip_era += f"Genre-Konfidenz: <b>{genre_confidence:.2f}</b><br>"
+                if genre_lang_score is not None:
+                    tip_era += f"DE-Sprachscore (gesamt): <b>{genre_lang_score:.2f}</b><br>"
+                if genre_lang_dsp is not None or genre_lang_lyrics is not None:
+                    _dsp_txt = f"{genre_lang_dsp:.2f}" if genre_lang_dsp is not None else "—"
+                    _lyr_txt = f"{genre_lang_lyrics:.2f}" if genre_lang_lyrics is not None else "—"
+                    tip_era += f"Sprachanteile: DSP <b>{_dsp_txt}</b> · Lyrics <b>{_lyr_txt}</b><br>"
+                tip_era += (
+                    "<small>Die Ära-Erkennung passt alle Restaurierungs-Parameter "
+                    "historisch korrekt an.</small>"
+                )
+
+                # ── Build restorability banner ───────────────────────────────
+                _rest_result = _result.restorability
+                score100: float = 50.0
+                predicted_mos: float = 3.5
+                limiting: list = []
+                if _rest_result is not None:
+                    score100 = float(getattr(_rest_result, "restorability_score", 50.0))
+                    predicted_mos = float(getattr(_rest_result, "predicted_mos", 3.5))
+                    limiting = list(getattr(_rest_result, "limiting_defects", []))
+                else:
+                    # DSP fallback
+                    _mono_fb = (
+                        np.mean(_audio_48k, axis=0) if _audio_48k.ndim == 2 else _audio_48k
+                    )
+                    _rms = float(np.sqrt(np.mean(_mono_fb.astype(np.float64) ** 2))) + 1e-12
+                    _noise = float(np.percentile(np.abs(_mono_fb.astype(np.float64)), 5)) + 1e-12
+                    _snr_db = 20.0 * np.log10(_rms / _noise)
+                    score100 = float(np.clip((_snr_db - 8.0) / 35.0 * 100.0, 5.0, 98.0))
+                    predicted_mos = round(1.0 + score100 / 100.0 * 4.0, 1)
+                if score100 >= 70:
+                    _s_color = "#82B89A"
+                    _bg_r = "rgba(85, 155, 115, 0.14)"
+                    _border_r = "rgba(100, 168, 130, 0.36)"
+                    _zeile1 = f"▶  Sehr gut restaurierbar  ({score100:.0f}\u202f/\u202f100)"
+                    _detail = "Aurik kann diese Aufnahme auf exzellentem Niveau restaurieren."
+                elif score100 >= 40:
+                    _s_color = "#B8A068"
+                    _bg_r = "rgba(150, 130, 68, 0.14)"
+                    _border_r = "rgba(150, 130, 68, 0.36)"
+                    _zeile1 = f"▶  Mäßig restaurierbar  ({score100:.0f}\u202f/\u202f100)"
+                    _detail = "Deutliche Verbesserung möglich – Restdefekte können bleiben."
+                else:
+                    _s_color = "#B87A7A"
+                    _bg_r = "rgba(148, 82, 82, 0.14)"
+                    _border_r = "rgba(152, 88, 88, 0.36)"
+                    _zeile1 = f"▶  Stark beschädigt  ({score100:.0f}\u202f/\u202f100)"
+                    _detail = "Material ist sehr stark beschädigt – Aurik holt das physikalisch Mögliche heraus."
+                _mos_str = f"{predicted_mos:.1f}"
+                _banner_txt = (
+                    f"{_zeile1}    ·    Erw. Qualität nach Restaurierung:"
+                    f"  {_mos_str}\u202f/\u202f5,0 MOS\n{_detail}"
+                )
+                if limiting:
+                    _banner_txt += f"    (Hauptdefekte: {', '.join(str(d) for d in limiting[:2])})"
+                _tip_rest_extra = ""
+                if _rest_result is not None:
+                    _snr_v = getattr(_rest_result, "snr_db", None)
+                    _grade_v = getattr(_rest_result, "grade", None)
+                    _time_v = getattr(_rest_result, "processing_time_estimate_s", None)
+                    if _snr_v is not None:
+                        _tip_rest_extra += f"SNR: <b>{_snr_v:.1f}\u202fdB</b><br>"
+                    if _grade_v is not None:
+                        _tip_rest_extra += f"Stufe: <b>{_grade_v}</b><br>"
+                    if _time_v is not None:
+                        _tip_rest_extra += (
+                            f"Gesch. Verarbeitungszeit: <b>~{int(_time_v // 60)}\u202fMin."
+                            f"\u202f{int(_time_v % 60)}\u202fSek.</b><br>"
+                        )
+                _tip_rest = (
+                    f"<b>Restaurierbarkeits-Vorschätzung</b><br>"
+                    f"Wert: <b>{score100:.0f}\u202f/\u202f100</b><br>"
+                    f"Erw. Qualität nach Restaurierung: <b>{_mos_str} von 5,0 MOS</b><br>"
+                    f"{_tip_rest_extra}"
+                    f"<small>Schnelle Vorab-Analyse des Signals – "
+                    f"vor dem eigentlichen Restaurierungsvorgang.</small>"
+                )
+                _css_rest = (
+                    f"color:{_s_color}; font-size:10pt; font-weight:600;"
+                    f" padding:10px 18px; border-radius:10px;"
+                    f" background:{_bg_r}; border:1px solid {_border_r};"
+                )
+
+                # ── Build defect display dict ────────────────────────────────
+                _scan = _result.defects
+                if _scan is not None:
+                    _defects = _defect_analysis_to_display(_scan.scores, status="detected")
+                else:
+                    _defects = {
+                        "clicks": 0, "crackle": 0, "pops": 0, "clipping": 0,
+                        "sibilance": 0, "dropout": 0, "hum": 0.0,
+                        "noise_level": 0.0, "wow": 0.0, "flutter": 0.0,
+                        "rumble": 0.0, "status": "detected",
                     }
 
-                def _apply():
-                    # Spec §11.4: Label beim Scan-Start (Datei-Öffnen-Pfad) sichtbar schalten
+                # ── Single GUI dispatch (all UI updates at once) ──────────────
+                def _update_all(
+                    _lbl=_lbl, _sc=_score, _raw_med=_raw_medium,
+                    _badge=badge, _tip_e=tip_era,
+                    _era_decade=decade_label, _era_genre=genre_label,
+                    _banner=_banner_txt, _css_r=_css_rest, _tip_r=_tip_rest,
+                    _rest_r=_rest_result, _rest_score=score100,
+                    _defects=_defects,
+                ):
+                    # Token guard inside GUI thread
+                    if getattr(_self, "_file_load_token", 0) != _token:
+                        return
+                    if str(getattr(_self, "current_file_path", "") or "") != _file_key:
+                        return
+
+                    # -- Carrier --
+                    _self._carrier_bg_label = _lbl
+                    _self._carrier_bg_score = _sc
+                    _self._raw_medium_type = _raw_med
+                    _self._update_carrier_display(_lbl, _sc, _file_key, load_token=_token)
+
+                    # -- Era/Genre badge appended to carrier label --
+                    _ampel_c = _self._render_ampel_html(_sc)
+                    _self._era_genre_badge = _badge
+                    _self._era_genre_cached = str(_era_genre or "")
+                    _self.detected_medium_label.setStyleSheet("""
+                        color: #82B89A; font-size: 11pt; padding: 12px;
+                        background: rgba(85, 155, 115, 0.10);
+                        border-radius: 8px; border: 2px solid rgba(100, 168, 130, 0.26);
+                        margin-top: 8px; font-weight: 600; line-height: 1.55;
+                    """)
+                    _self.detected_medium_label.setText(f"{_lbl}   {_ampel_c}{_badge}")
+                    _self.detected_medium_label.setToolTip(_tip_e)
+                    if getattr(_self, "prognose_widget", None) is not None:
+                        _dec_int: int | None = None
+                        try:
+                            if isinstance(_era_decade, str) and _era_decade.endswith("er"):
+                                _dec_int = int(_era_decade[:-2])
+                            elif isinstance(_era_decade, (int, float)):
+                                _dec_int = int(_era_decade)
+                        except (ValueError, TypeError):
+                            pass
+                        _self.prognose_widget.update_era_genre(_dec_int, _era_genre or None)  # type: ignore[union-attr]
+
+                    # -- Restorability banner --
+                    _self._restorability_score = _rest_score
+                    if hasattr(_self, "restorability_banner"):
+                        _self.restorability_banner.setText(_banner)
+                        _self.restorability_banner.setStyleSheet(_css_r)
+                        _self.restorability_banner.setToolTip(_tip_r)
+                        _self.restorability_banner.setVisible(True)
+                    if _rest_r is not None and getattr(_self, "prognose_widget", None) is not None:
+                        _self.prognose_widget.update_restorability(_rest_r)  # type: ignore[union-attr]
+
+                    # -- Defects --
                     if hasattr(_self, "defect_count_live_label"):
                         _self.defect_count_live_label.setText(t("status.analyzing_short"))
                         _self.defect_count_live_label.setVisible(True)
                     if hasattr(_self, "_update_defects"):
-                        _self._update_defects(defects)
-                    # Nur UI zurücksetzen wenn KEINE Restaurierung läuft.
-                    # Race Condition: _apply() kann über _gui_dispatch NACH batch_thread.start()
-                    # in der Event-Queue landen → würde Progress-Bar und Buttons falsch setzen.
+                        _self._update_defects(_defects)
+                    _self._defect_scan_scores = _defects
+                    if getattr(_self, "prognose_widget", None) is not None:
+                        with contextlib.suppress(Exception):
+                            _self.prognose_widget.update_defects(_defects)  # type: ignore[union-attr]
+                    _self._apply_mode_recommendation_visuals()
+
+                    # -- Gate signals --
+                    # era_genre: always; defect_scan: only when batch is not running
+                    _try_signal_preanalysis_done("era_genre")
                     _batch_running = bool(_self.batch_thread and _self.batch_thread.isRunning())
                     if not _batch_running:
-                        if hasattr(_self, "progress_bar"):
-                            _self.progress_bar.setRange(0, 10000)
-                            _self.progress_bar.setValue(10000)
-                            _self.progress_bar.setFormat(t("status.defect_scan_done"))
+                        _try_signal_preanalysis_done("defect_scan")
 
-                            def _reset_progress_if_idle():
-                                if _self.batch_thread and _self.batch_thread.isRunning():
-                                    return
-                                _self.progress_bar.setVisible(False)
-                                _self.progress_bar.setValue(0)
+                _self._dispatch_to_gui(_update_all)
 
-                            QTimer.singleShot(1500, _reset_progress_if_idle)
-                        if hasattr(_self, "status_text"):
-                            # Deliberately do NOT overwrite status_text here:
-                            # the "loaded_and_analyzing" message already shows the
-                            # filename and is more informative than the generic
-                            # "ready_to_restore" string.  Just update the colour.
-                            _self._apply_status_text_style("success")
-                        # ✔️ Defektanalyse fertig → Magic Buttons aktivieren
-                        _self._set_magic_buttons_enabled(True)
+            threading.Thread(target=_pre_analysis_bg, daemon=True).start()
+            # ── Ende Unified Pre-Analysis-Hintergrund ─────────────────────
 
-                # Thread-sicher in GUI-Thread dispatchen (QTimer.singleShot
-                # aus Background-Thread hat keine Event-Loop → _apply() würde nie laufen)
-                _self._dispatch_to_gui(_apply)
+            # ── Synchronisations-Timeout (15 s) ───────────────────────────
+            # Fallback: Falls Ära/Genre-Analyse nach 15 s kein Ergebnis liefert
+            # (z. B. Bridge nicht verfügbar, ClassifierException), werden die
+            # Magic Buttons dennoch freigegeben — kein ewiges Warten für den Nutzer.
+            def _preanalysis_timeout() -> None:
+                # Primary guard: ignore if a newer load of the same file has started.
+                if getattr(self, "_file_load_token", 0) != _snap_token:
+                    return
+                if str(getattr(self, "current_file_path", "")) != _cfk:
+                    return  # stale — user opened a different file
+                if bool(self.batch_thread and self.batch_thread.isRunning()):
+                    return  # processing already running, buttons managed elsewhere
+                # Mark era/genre timeout elapsed so the next completed signal can finalize.
+                # Do NOT call _finalize_preanalysis() here directly: if the defect scan is
+                # still running (common for files > ~60 s), the buttons would be enabled
+                # before defects are displayed.  Instead we set the flag and let
+                # _try_signal_preanalysis_done("defect_scan") pick it up when the scan
+                # finishes.  If defect scan is already done, finalize immediately.
+                self._preanalysis_timeout_fired = True
+                if "defect_scan" in self._preanalysis_flags:
+                    _finalize_preanalysis()
+                # else: wait — defect_scan will call _finalize_preanalysis via
+                # _try_signal_preanalysis_done once it completes.
 
-            threading.Thread(target=_run_defect_scan_bg, daemon=True).start()
-            # ── Ende Defekt-Analyse-Hintergrund ───────────────────────────
+            def _preanalysis_hard_timeout() -> None:
+                """Absolute fallback (45 s): never bypass defect-scan gate."""
+                if getattr(self, "_file_load_token", 0) != _snap_token:
+                    return
+                if str(getattr(self, "current_file_path", "")) != _cfk:
+                    return
+                if bool(self.batch_thread and self.batch_thread.isRunning()):
+                    return
+                self._preanalysis_timeout_fired = True
+                if "defect_scan" in self._preanalysis_flags:
+                    _finalize_preanalysis()
+                else:
+                    # Keep waiting for defect scan to avoid "analysis completed"
+                    # while detail cards still show analyzing placeholders.
+                    logger.warning(
+                        "Pre-analysis hard-timeout reached, waiting for defect_scan before finalization: file=%s",
+                        _cfk,
+                    )
+                    if hasattr(self, "status_text"):
+                        self.status_text.setText(
+                            "Analyse dauert länger als erwartet — Defekte werden noch vollständig ermittelt …"
+                        )
+                        self._apply_status_text_style("warning")
+
+            QTimer.singleShot(15_000, _preanalysis_timeout)       # era/genre soft timeout
+            QTimer.singleShot(45_000, _preanalysis_hard_timeout)  # absolute fallback
 
         except Exception as e:
             # Fehlerfall: Buttons sofort wieder freischalten (Defektanalyse startet nicht)
@@ -11492,6 +12568,19 @@ class ModernMainWindow(QMainWindow):
         # We only need to specify the processing mode and medium hint
         settings = {"mode": mode, "medium_hint": detected_medium}  # RESTORATION or STUDIO_2026
 
+        # §2.39 OOM-Recovery: pending checkpoint from startup dialog to queue item.
+        _pending_cp = getattr(self, "_pending_recovery_checkpoint", None)
+        if _pending_cp is not None:
+            _cp_input = str(getattr(_pending_cp, "input_path", "") or "")
+            if _cp_input and os.path.normpath(_cp_input) == os.path.normpath(str(file_path)):
+                settings["recovery_checkpoint"] = _pending_cp
+                self._pending_recovery_checkpoint = None
+                logger.info(
+                    "OOM-Recovery: Checkpoint an Queue-Item angehängt (%s, remaining_phases=%d)",
+                    Path(file_path).name,
+                    len(getattr(_pending_cp, "phases_remaining", []) or []),
+                )
+
         # Optional per-file export config from the import dialog.
         _cfg = getattr(self, "_export_config", None)
         _is_current_file = str(file_path) == str(getattr(self, "current_file_path", ""))
@@ -11778,8 +12867,17 @@ class ModernMainWindow(QMainWindow):
                         # ETA wurde beim letzten Callback berechnet — hier nur runterzählen.
                         _remaining_at_cb = _state.get("remaining_s", -1.0)
                         _eta_range = _state.get("eta_range", "")
+                        _time_since_cb = time.perf_counter() - _state["wall_time"]
+                        _next_hint = self._next_progress_hint(int(_pct))
+                        _reassure = ""
+                        if _time_since_cb >= 8.0:
+                            if _pct < 19:
+                                _reassure = t("status.processing_reassure_analysis")
+                            elif _pct < 90:
+                                _reassure = t("status.processing_reassure_long_phase")
+                            else:
+                                _reassure = t("status.processing_reassure_finalize")
                         if _remaining_at_cb >= 0:
-                            _time_since_cb = time.perf_counter() - _state["wall_time"]
                             _rem = max(0.0, _remaining_at_cb - _time_since_cb)
                             _eta_str = (
                                 f"noch ca. {int(_rem // 60)} Min. {int(_rem % 60):02d} Sek."
@@ -11787,13 +12885,21 @@ class ModernMainWindow(QMainWindow):
                                 else f"noch ca. {int(_rem)} Sek."
                             )
                             if _pct < 19 and _eta_range:
-                                _full = f"{_base}  ·  {_el} · {_eta_range}  –  noch {_eta_str}"
+                                _full = f"Jetzt: {_base}  ·  {_el} · {_eta_range}  –  {_eta_str}"
                             else:
-                                _full = f"{_base}  ·  {_el} · noch {_eta_str}"
+                                _full = f"Jetzt: {_base}  ·  {_el} · {_eta_str}"
+                            if _next_hint:
+                                _full += f"  ·  Danach: {_next_hint}"
+                            if _reassure:
+                                _full += f"  ·  {_reassure}"
                         else:
-                            _full = f"{_base}  ·  {_el}"
+                            _full = f"Jetzt: {_base}  ·  {_el}"
+                            if _next_hint:
+                                _full += f"  ·  Danach: {_next_hint}"
+                            if _reassure:
+                                _full += f"  ·  {_reassure}"
                     else:
-                        _full = f"{_base}  ·  {_el}"
+                        _full = f"Jetzt: {_base}  ·  {_el}"
                     self.status_text.setText(f"⚙️ {_full}")
                     self._apply_status_text_style("active", pill=True)
 
@@ -11803,6 +12909,21 @@ class ModernMainWindow(QMainWindow):
         if item:
             logger.info("Verarbeitung gestartet: %s (id=%s)", Path(item.input_file).name, item_id)
             self.status_text.setText(t("status.processing_item", file=Path(item.input_file).name))
+            # Narrative: Material + Ära in Statustext einbeziehen
+            _mat_text = ""
+            try:
+                import re as _re
+                _mat_label = getattr(self, "detected_medium_label", None)
+                if _mat_label is not None:
+                    _raw = _mat_label.text() or ""
+                    # Strip HTML tags
+                    _plain = _re.sub(r"<[^>]+>", "", _raw).strip()
+                    if _plain and len(_plain) > 2:
+                        _mat_text = f" · {_plain[:60]}"
+            except Exception:
+                pass
+            if _mat_text:
+                self.status_text.setText(t("status.processing_item", file=Path(item.input_file).name) + _mat_text)
 
     def _on_item_progress(self, item_id, progress):
         """Handle item progress update — obere Bar zeigt GESAMT-Batch-Fortschritt.
@@ -11972,9 +13093,9 @@ class ModernMainWindow(QMainWindow):
                             if _genre_part and _genre_part.lower() not in ("unbekannt", "unknown", ""):
                                 self._era_genre_cached = _genre_part
                     # HTML-Badge analog zur Voranalyse aufbauen (einheitliches Format).
-                    _era_segments = ['<span style="color:#9FB6CE;">◷ ' + _new_decade_label + "</span>"]
+                    _era_segments = ['<span style="color:#82B89A;">◷ ' + _new_decade_label + "</span>"]
                     if _genre_part and _genre_part.lower() not in ("unbekannt", "unknown", ""):
-                        _era_segments.append('<span style="color:#C8B483;">Genre: ' + _genre_part + "</span>")
+                        _era_segments.append('<span style="color:#82B89A;">Genre: ' + _genre_part + "</span>")
                     _era_sep = '<span style="color:#6E839D;">&nbsp;·&nbsp;</span>'
                     _era_str = _era_sep.join(_era_segments)
                     _new_badge = (
@@ -11984,7 +13105,7 @@ class ModernMainWindow(QMainWindow):
                     # Carrier-Label neu aufbauen (gleicher Aufbau wie Voranalyse)
                     _cur_lbl = getattr(self, "_carrier_bg_label", "")
                     _cur_sc = getattr(self, "_carrier_bg_score", 0)
-                    _cur_stars = self._render_star_html(_cur_sc)
+                    _cur_stars = self._render_ampel_html(_cur_sc)
                     self.detected_medium_label.setText(f"{_cur_lbl}   {_cur_stars}{_new_badge}")
                     # chip_era wird NICHT gesetzt — Ära steht bereits im detected_medium_label
                     if (
@@ -12126,6 +13247,8 @@ class ModernMainWindow(QMainWindow):
                 )
             else:
                 self.status_text.setText(_msg)
+            # ── Celebration: kurze Partikel-Animation auf der Waveform ─────
+            QTimer.singleShot(200, self._trigger_celebration)
             # defect_summary_label NICHT überschreiben: Defektliste bleibt sichtbar
         else:
             self.title_bar.set_status(t("status.completed_with_errors"), "#B8A068")
@@ -12188,6 +13311,31 @@ class ModernMainWindow(QMainWindow):
                     f"<span style='color:#B8A068;'>{t('batch.retry_hint', count=n_fail)}</span>"
                 )
                 self._result_banner.setVisible(True)
+
+    def _trigger_celebration(self) -> None:
+        """Brief celebration particle burst on the waveform after successful restoration."""
+        try:
+            if not hasattr(self, "waveform_widget") or self.waveform_widget is None:
+                return
+            ww = self.waveform_widget
+            # Trigger a synthetic morph animation with 'celebration' effect in gold
+            ww._morph_diff = getattr(ww, "audio_data", None)
+            if ww._morph_diff is None or not hasattr(ww._morph_diff, "size") or ww._morph_diff.size == 0:
+                return
+            ww._morph_frame = 0
+            ww._morph_t = 0.0
+            ww._morph_n_frames = 28  # ~1.2 s at 24fps
+            ww._morph_phase_type = "celebration"
+            ww._stage_color = (255, 215, 0)  # gold
+            if ww._morph_timer.isActive():
+                ww._morph_timer.stop()
+            ww._morph_timer.start(42)
+            # Show toast with success message
+            _stats = self.batch_queue.get_stats() if hasattr(self, "batch_queue") else {}
+            _n_ok = _stats.get("completed", 0)
+            self._show_toast(f"{_n_ok} Datei(en) vollständig restauriert ✓", severity="success", duration_ms=5000)
+        except Exception as _ce:
+            logger.debug("Celebration trigger failed: %s", _ce)
 
     # ── Batch-Retry für fehlgeschlagene Items ────────────────────────────────
 
@@ -12273,12 +13421,23 @@ class ModernMainWindow(QMainWindow):
             orig_audio = getattr(self, "_orig_audio", None)
         if orig_audio is None and str(input_path):
             try:
-                _arr, _sr = sf.read(str(input_path), always_2d=False)
-                _arr = np.asarray(_arr, dtype=np.float32)
+                # §11 VERBOTEN: sf.read(path) für beliebige Formate — bridge load_audio_fn nutzen
+                _load_fn = _bridge_get_load_audio_fn() if callable(_bridge_get_load_audio_fn) else None
+                if _load_fn is not None and callable(_load_fn):
+                    _load_result = _load_fn(str(input_path))
+                    if _load_result is not None:
+                        _arr = np.asarray(_load_result["audio"], dtype=np.float32)
+                        _sr_i = int(_load_result["sr"])
+                    else:
+                        raise RuntimeError("load_audio_file returned None")
+                else:
+                    # Bridge nicht verfügbar: soundfile als Fallback (nur verlustfreie Formate)
+                    _arr, _sr_raw = sf.read(str(input_path), always_2d=False)
+                    _arr = np.asarray(_arr, dtype=np.float32)
+                    _sr_i = int(_sr_raw)
                 if _arr.ndim == 2 and _arr.shape[1] == 1:
                     _arr = _arr[:, 0]
                 _arr = _normalize_audio(_arr)
-                _sr_i = int(_sr)
                 if _sr_i != 48_000:
                     from scipy.signal import resample_poly as _rp
 
@@ -12529,6 +13688,7 @@ class ModernMainWindow(QMainWindow):
                 fail_reason: str = ""
                 degradation_status: str = "ok"
                 primary_error_code: str = ""
+                runtime_fallback_original: bool = False
 
                 if restoration_result is not None:
                     r = restoration_result
@@ -12691,6 +13851,24 @@ class ModernMainWindow(QMainWindow):
                         or _meta.get("degradation_status", "")
                         or _stage_notes.get("degradation_status", "")
                     ).value
+                    # Runtime-fallback transparency: some runs return a high-level
+                    # result object but internally fall back to unchanged original.
+                    # Surface this as a degraded state to avoid false "success" UX.
+                    _warns = [str(w) for w in (getattr(r, "warnings", []) or [])]
+                    _proc_note = str(getattr(r, "processing_note", "") or "")
+                    _fail_tokens = (
+                        "original unverändert",
+                        "restaurierung fehlgeschlagen",
+                        "fallback auf original",
+                    )
+                    _warn_hit = next((w for w in _warns if any(tk in w.lower() for tk in _fail_tokens)), "")
+                    _note_hit = _proc_note if any(tk in _proc_note.lower() for tk in _fail_tokens) else ""
+                    if _warn_hit or _note_hit:
+                        runtime_fallback_original = True
+                        if not fail_reason:
+                            fail_reason = _warn_hit or _note_hit
+                        if degradation_status not in {"blocked", "critical_degraded", "degraded"}:
+                            degradation_status = "degraded"
 
                 # ── Schritt 3: Synthetische Goal-Schätzung wenn keine echten Daten ──
                 if not musical_goals:
@@ -12763,6 +13941,10 @@ class ModernMainWindow(QMainWindow):
                     banner_sections.append(f"🚫  Export blockiert: {fail_reason}")
                 elif degradation_status in {"blocked", "critical_degraded", "degraded"}:
                     banner_sections.append(f"⚠️  Degradation-Status: {degradation_status}")
+                if runtime_fallback_original:
+                    banner_sections.append(
+                        "⚠️  Laufzeit-Fallback: Restaurierung wurde nicht vollständig angewendet (Originalsignal übernommen)."
+                    )
                 if degradation_status in {"blocked", "critical_degraded", "degraded"} and primary_error_code:
                     if primary_error_code not in fail_reason:
                         banner_sections.append(f"🧩  Fehlercode: {primary_error_code}")
@@ -12977,6 +14159,7 @@ class ModernMainWindow(QMainWindow):
                                 )
                             else:
                                 _sum.append("✅  Restaurierung erfolgreich abgeschlossen")
+                                _sum.append("🛡️  Klangcharakter und Originalbalance wurden dabei bewusst geschützt")
 
                             # Was wurde behandelt — Hauptursache
                             _cause_map_de = {
@@ -13624,18 +14807,27 @@ class ModernMainWindow(QMainWindow):
         # NICHT auf 0 zurücksetzen und die Buttons NICHT vorzeitig freischalten.
         _batch_is_running = bool(self.batch_thread and self.batch_thread.isRunning())
         if not _batch_is_running:
-            # Analyse abgeschlossen → Magic Buttons freischalten
-            for _btn_name in ("btn_magic_restoration", "btn_magic_studio"):
-                if hasattr(self, _btn_name):
-                    _btn = getattr(self, _btn_name)
-                    _btn.setEnabled(True)
-                    _btn.update()
-            if hasattr(self, "progress_bar"):
-                self.progress_bar.setRange(0, 10000)
-                self.progress_bar.setValue(0)
-                self.progress_bar.setVisible(False)
-            if hasattr(self, "status_text") and hasattr(self, "current_file_path") and self.current_file_path:
-                self.status_text.setText(t("status.analysis_done_prompt", file=Path(self.current_file_path).name))
+            # §11.4 Sync-Gate: Buttons erst aktivieren, wenn BEIDE Pre-Analyse-Threads
+            # abgeschlossen sind (Defektscan UND Ära/Genre). _finalize_preanalysis() im
+            # _continue_file_loaded-Closure übernimmt die finale Freigabe.
+            # Solange Preanalysis noch läuft, hier NICHT enablen — sonst erscheinen die
+            # Buttons vor dem Ära/Genre-Badge (Bug §11.4 Synchronisations-Gate).
+            _cfp = str(getattr(self, "current_file_path", "") or "")
+            _finalized_for = str(getattr(self, "_preanalysis_finalized_for", "") or "")
+            _preanalysis_done = (not _cfp) or (_finalized_for == _cfp)
+            if _preanalysis_done:
+                # Analyse abgeschlossen → Magic Buttons freischalten
+                for _btn_name in ("btn_magic_restoration", "btn_magic_studio"):
+                    if hasattr(self, _btn_name):
+                        _btn = getattr(self, _btn_name)
+                        _btn.setEnabled(True)
+                        _btn.update()
+                if hasattr(self, "progress_bar"):
+                    self.progress_bar.setRange(0, 10000)
+                    self.progress_bar.setValue(0)
+                    self.progress_bar.setVisible(False)
+                if hasattr(self, "status_text") and hasattr(self, "current_file_path") and self.current_file_path:
+                    self.status_text.setText(t("status.analysis_done_prompt", file=Path(self.current_file_path).name))
 
     def _tick_defect_reveal(self) -> None:
         """QTimer slot: animate defect scores counting up from 0 to scan values (22 frames × 85 ms)."""
@@ -14122,7 +15314,7 @@ class ModernMainWindow(QMainWindow):
 
         # Format-Auswahl
         fmt_group_label = QLabel(t("ui.export_format"))
-        fmt_group_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        fmt_group_label.setFont(QFont(self.font().family(), 10, QFont.Weight.Bold))
         dlg_layout.addWidget(fmt_group_label)
 
         # Format-Konfig: fmt_key → (real_ext, bit_depth, extra_export_kwargs)
@@ -14163,7 +15355,7 @@ class ModernMainWindow(QMainWindow):
             dlg_layout.addWidget(rb)
 
         sr_label = QLabel("Abtastrate")
-        sr_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        sr_label.setFont(QFont(self.font().family(), 10, QFont.Weight.Bold))
         dlg_layout.addWidget(sr_label)
 
         sr_combo = QComboBox(dlg)
@@ -14481,7 +15673,6 @@ class ModernMainWindow(QMainWindow):
         if _pending == 0 and _completed == 0 and _failed == 0:
             self.stats_label.setVisible(False)
             return
-        self.stats_label.setVisible(True)
         self.stats_label.setText(
             t(
                 "status.stats",
@@ -14490,6 +15681,7 @@ class ModernMainWindow(QMainWindow):
                 failed=_failed,
             )
         )
+        self._refresh_top_info_row()
 
     # Window resize events
     def mousePressEvent(self, event):
@@ -14510,7 +15702,7 @@ def main():
     app = QApplication(sys.argv)
 
     # Set app-wide font
-    app.setFont(QFont("Segoe UI", 10))
+    app.setFont(QFont(app.font().family(), 10))
 
     # Create window
     window = ModernMainWindow()

@@ -212,8 +212,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "authentizitaet",
         "artikulation",
         "timbre_authentizitaet",
-        "emotionalitaet",
-    },  # Dropout repair: synthesised HF content; timbre_authentizitaet: AudioSR synthesis creates new spectral content → MFCC correlation against damaged reference is meaningless; emotionalitaet: AudioSR fills silent dropout gaps → RMS/arousal envelope intentionally differs from damaged reference → false P3 regression
+    },  # Dropout repair: synthesised HF content; timbre_authentizitaet: AudioSR synthesis creates new spectral content → MFCC correlation against damaged reference is meaningless
     "phase_28": set(),  # Noise reduction variant: handled by correlation
     # Diffusion inpainting: synthesised content has no transient reference →
     # ArticulationMetric correlation vs pre-inpainting fragment is meaningless.
@@ -272,9 +271,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "authentizitaet",
         "tonal_center",
         "timbre_authentizitaet",
-        "groove",
-        "emotionalitaet",
-    },  # OMLSA/ResembleEnhance (§9.7.13: crest-factor brillanz+transparenz SNR-robust; §9.7.11 ext: K-S NOT invariant for shaped NR → tonal_center excluded v9.10.95; timbre_authentizitaet: MFCC-Pearson + centroid-CV proxy disturbed by spectral-envelope change after NR — confirmed in logs 2026-03-30; groove: broadband NR reduces inter-beat LF noise → RMS autocorr[lag_05] drops → false P3 regression; emotionalitaet: NR lowers noise floor in quiet segments → crest-factor ratio shifts → false P3 regression (Δ0.17 observed) — identical mechanism to phase_18 noise gate — confirmed 2026-03-31)
+    },  # OMLSA/ResembleEnhance: CREPE-Load-State + transient-shape mismatch + K-S NOT invariant for shaped NR §9.7.11 ext + MFCC-Pearson/Centroid-CV disturbed by spectral-envelope change after NR (v9.10.96 canonical — groove/emotionalitaet entfernt: P3-Quick-Proxy-Robustheit hinreichend)
     # DeepFilterNet HF-removal intentionally reduces HF energy → brillanz drops.
     # artikulation excluded for same reason as phase_03: reference=hissy_tape vs
     # denoised output gives misleadingly low transient-correlation score.
@@ -298,9 +295,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "natuerlichkeit",
         "tonal_center",
         "timbre_authentizitaet",
-        "groove",
-        "emotionalitaet",
-    },  # DeepFilterNet (§9.7.13: crest-factor SNR-robust; §9.7.11 ext: K-S NOT invariant for HF-selective NR → tonal_center excluded v9.10.95; timbre_authentizitaet: HF-selective filtering shifts centroid-CV + MFCC envelope — same root-cause as phase_03; groove+emotionalitaet: HF-selective NR same mechanisms as phase_03 broadband NR for LF-crest/crest-factor false P3 regressions — confirmed by analogy 2026-03-31)
+    },  # DeepFilterNet Tape-Hiss — gleiche Root-Causes wie phase_03: MFCC-Pearson + centroid-CV + K-S shaped-NR-instabilität (v9.10.96 canonical — groove/emotionalitaet entfernt)
     # Phases with RADICAL spectral changes where even correlation can't help:
     # phase_04 EQ: redistributes the entire spectrum — brillanz (HF cut/boost)
     # and waerme (mid cut/boost) are intentional outcomes, not regressions.
@@ -485,6 +480,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     # selectively at sibilant positions → local crest-factor ratio shifts → false P3
     # regression despite intended timbral improvement.
     "phase_58_lyrics_guided_enhancement": {
+        "tonal_center",           # §Y5: fricative ramp-gain (4–8 kHz) shifts HF energy profile → K-S key-label flip (SNR-sensitive K-S already excluded from shaped-NR phases)
         "timbre_authentizitaet",
         "artikulation",
         "emotionalitaet",
@@ -684,8 +680,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     # regression triggering unnecessary strength reductions.
     "phase_49": {
         "authentizitaet",
-        "emotionalitaet",
-    },  # Advanced dereverb (§9.7.11 K-S: tonal_center resolved; §9.7.12/13/14: brillanz+transparenz crest proxies + warmth-ratio waerme proxy → removed; emotionalitaet: reverb tail adds energy to quiet segments → after removal crest-factor ratio shifts → false P3, identical mechanism to phase_20/phase_03)
+    },  # Advanced dereverb: K-S tonal_center resolved (§9.7.11); brillanz+transparenz crest proxies SNR-robust (§9.7.12/13); waerme warmth-ratio reverb-invariant (§9.7.14) — v9.10.96 canonical: emotionalitaet entfernt
     # Reverb reduction (SGMSE+ primary / WPE-DSP fallback): mechanistically identical
     # to phase_49 Advanced Dereverb — both remove room impulse response energy.
     # brillanz excluded: reverb tail contributes diffuse HF energy across the spectrum
@@ -706,8 +701,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     "phase_20": {
         "authentizitaet",
         "natuerlichkeit",
-        "emotionalitaet",
-    },  # SGMSE+ reverb reduction (§9.7.12/13/14: brillanz+transparenz crest proxies + warmth-ratio waerme proxy are SNR/reverb-robust → removed; emotionalitaet: reverb tail raises energy in quiet segments → scores_before crest-factor elevated; after SGMSE+ quiet segments become true silence → crest-factor ratio shifts → false P3 regression, identical mechanism to phase_03/phase_18/phase_49)
+    },  # SGMSE+ reverb reduction: §9.7.12/13/14 brillanz+transparenz+waerme proxies SNR/reverb-robust — v9.10.96 canonical: emotionalitaet entfernt
     # Spectral inpainting (AudioSR gap-fill): synthesises new frequency content for
     # spectral holes (codec artefacts, digital clipping reconstruction, missing HF).
     # Identical synthesised-content mechanism to phase_24 (AudioSR dropout repair).
@@ -738,8 +732,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     "phase_12": {
         "tonal_center",
         "timbre_authentizitaet",
-        "groove",
-    },  # Wow/flutter fix: K-S volatile after pitch/speed correction + centroid-CV disturbed; groove: time-stretching shifts absolute RMS-peak timing → autocorr[lag_05] changes even with musically correct rhythm (confirmed 2026-03-30)
+    },  # Wow/flutter fix: K-S volatile after pitch/speed correction + centroid-CV disturbed (v9.10.96 canonical — groove entfernt)
     # Speed/pitch correction: global time-stretch + resampling — mechanistically
     # identical to phase_12 for all proxy false-regression root causes.
     # tonal_center excluded: global pitch-shift moves ALL chroma bins proportionally
@@ -1931,6 +1924,7 @@ class PerPhaseMusicalGoalsGate:
         phase: Any,  # PhaseInterface-Instanz
         audio: np.ndarray,
         sr: int,
+        phase_id: str | None = None,
         scores_before: dict[str, float] | None = None,
         phase_kwargs: dict[str, Any] | None = None,
         restorability_score: float = 70.0,
@@ -1945,6 +1939,8 @@ class PerPhaseMusicalGoalsGate:
             phase: PhaseInterface-Instanz mit process(audio) → PhaseResult
             audio: Input-Audio (float32)
             sr: 48000 Hz
+            phase_id: Optional explicit phase id for backward-compatible callers.
+                      If omitted, id is resolved from phase metadata.
             scores_before: Bekannte Scores vor der Phase (werden gemessen
                            wenn nicht übergeben)
             phase_kwargs: Zusätzliche kwargs für den Phase-Aufruf (z.B. sample_rate, material_type)
@@ -1969,7 +1965,7 @@ class PerPhaseMusicalGoalsGate:
         if phase_kwargs is None:
             phase_kwargs = {}
 
-        phase_id = self._get_phase_id(phase)
+        phase_id = phase_id or self._get_phase_id(phase)
         t0 = time.time()
 
         # Adaptiven Threshold bestimmen (§2.29)
@@ -2701,6 +2697,7 @@ def wrap_phase(
     phase: Any,
     audio: np.ndarray,
     sr: int,
+    phase_id: str | None = None,
     scores_before: dict[str, float] | None = None,
     restorability_score: float = 70.0,
     applicable_goals: set[str] | None = None,
@@ -2713,6 +2710,7 @@ def wrap_phase(
         phase: PhaseInterface-Instanz
         audio: Input-Audio (float32, 48 kHz)
         sr: 48000 Hz
+        phase_id: Optional explicit phase id for backward-compatible callers.
         scores_before: Vorherige Goal-Scores (optional)
         restorability_score: RestorabilityEstimator-Score ∈ [0, 100], bestimmt
                              adaptiven REGRESSION_THRESHOLD (§2.29).
@@ -2726,7 +2724,8 @@ def wrap_phase(
         phase,
         audio,
         sr,
-        scores_before,
+        phase_id=phase_id,
+        scores_before=scores_before,
         restorability_score=restorability_score,
         applicable_goals=applicable_goals,
         is_studio_2026=is_studio_2026,

@@ -9,7 +9,7 @@ Prüft die konkreten neuen Verhaltensweisen aus dem ML-Modell-Audit (Feb 2026):
   P4  DiffWave → NMF-β DSP-Inpainting als primärer Pfad
   P5  HTDemucs 6s korrekt als experimentell/stub markiert
   P6  HiFiGAN → Griffin-Lim-Fallback, Vocos als primärer Vocoder
-  P10 UTMOSv2 → sota_upgrade; CDPAM als Standard-Metrik
+    P10 UTMOSv2-Compat bleibt, VERSA ist Standard-Metrik
 
 Namenskonvention §5.2: tests/unit/test_p1_p10_changes.py
 Alle Tests: synthetische Signale, kein reales Audio, kein Netzwerk.
@@ -464,24 +464,25 @@ class TestManifestIntegritaet:
             "mert_instrument_detector hat kein sota_upgrade-Feld"
         )
 
-    # --- P10: UTMOSv2 / CDPAM -----------------------------------------------
+    # --- P10: VERSA / UTMOSv2 -----------------------------------------------
 
-    def test_08_utmos_entry_exists(self):
-        """P10: 'utmos'-Eintrag (CDPAM + UTMOSv2-sota_upgrade) muss im Manifest sein."""
+    def test_08_versa_entry_exists(self):
+        """P10: 'versa' (primäre Non-Reference-Metrik) muss im Manifest sein."""
+        models = _manifest_by_name()
+        assert "versa" in models, "'versa' Eintrag fehlt im Manifest"
+
+    def test_09_versa_is_bundled_primary(self):
+        """P10: VERSA muss bundled=True sein (primäre Musik-Qualitätsmetrik)."""
+        models = _manifest_by_name()
+        entry = models["versa"]
+        assert entry.get("bundled") is True, "VERSA ist nicht bundled"
+
+    def test_10_utmosv2_declared(self):
+        """P10: UTMOSv2 muss weiterhin im Manifest deklariert sein (legacy/compat Pfad)."""
         models = _manifest_by_name()
         assert "utmos" in models, "'utmos' Eintrag fehlt im Manifest"
-
-    def test_09_cdpam_is_bundled_primary(self):
-        """P10: CDPAM muss bundled=True sein (primäre Musik-Qualitätsmetrik)."""
-        models = _manifest_by_name()
-        entry = models["utmos"]  # CDPAM ist als 'utmos'-Eintrag gespeichert
-        assert entry.get("bundled") is True, "CDPAM (utmos) ist nicht bundled"
-
-    def test_10_utmosv2_is_sota_upgrade(self):
-        """P10: UTMOSv2 muss im sota_upgrade-Feld von 'utmos' deklariert sein."""
-        models = _manifest_by_name()
         entry = models["utmos"]
-        assert "sota_upgrade" in entry, "utmos-Eintrag hat kein sota_upgrade-Feld für UTMOSv2"
+        assert entry.get("bundled") is True, "utmos-Eintrag muss bundled bleiben"
 
     # --- Vocos als primärer Vocoder -----------------------------------------
 

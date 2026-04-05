@@ -78,7 +78,8 @@ class GoalApplicabilityFilter:
     Deaktivierungs-Regeln:
         SpatialDepthMetric:  Mono-Aufnahme (decade <= 1950 oder mono-Material)
         BrillanzMetric:      Quell-BW < 8 kHz
-        TonalCenterMetric:   SNR < -5 dB oder wax_cylinder
+        TonalCenterMetric:   wax_cylinder (Fix K v9.10.100: SNR-Bedingung entfernt —
+                             K-S-Key-Detection ist SNR-invariant gemäß §9.7.11)
         GrooveMetric:        <10 s oder keine Percussion
         MicroDynamicsMetric: <20 s oder stark komprimiert
         SeparationFidelityMetric: Mono oder <2 Instrumente
@@ -171,10 +172,15 @@ class GoalApplicabilityFilter:
             )
 
         # REGEL: TonalCenterMetric
-        if snr_db < -5.0 or material == "wax_cylinder":
+        # Fix K (v9.10.100): SNR-Bedingung entfernt — K-S-Key-Detection ist SNR-invariant
+        # gemäß §9.7.11; Deaktivierung bei SNR < −5 dB war inkonsistent mit der
+        # K-S-Invarianz-Aussage und hätte tonal_center auf stark degradiertem Material
+        # blind abgeschaltet. Nur WAX_CYLINDER wird weiterhin deaktiviert (proprietäres
+        # Tonleitersystem mit festen K, kein Western-Durtonart-Profil anwendbar).
+        if material == "wax_cylinder":
             inapplicable["tonal_center"] = (
-                "Aufnahme zu stark beschaedigt, um die Tonart zuverlaessig "
-                "zu vergleichen — Tonalitaet wird geschuetzt, nicht gemessen."
+                "Wachswalze — K-S-Durtonart-Profil nicht anwendbar: "
+                "proprietäres Tonleitersystem, kein Western-Key."
             )
 
         # REGEL: GrooveMetric

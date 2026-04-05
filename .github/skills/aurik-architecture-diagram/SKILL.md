@@ -10,6 +10,7 @@ Erzeugt hochdetaillierte Mermaid-Flowcharts der Aurik-9-Systemarchitektur.
 Das Tool `renderMermaidDiagram` rendert das Ergebnis als hochauflösendes PNG.
 
 ## Wann verwenden
+
 - „Zeig mir die Architektur von Aurik"
 - „Erstelle ein Pipeline-Diagramm"
 - „Mermaid-Übersicht der Kernmodule"
@@ -92,13 +93,17 @@ Für das vollständige Diagramm müssen die Module exakt in dieser Reihenfolge e
 ## Vorgehen Schritt für Schritt
 
 ### 1. Scope klären
+
 Frage den Nutzer (wenn kein Argument übergeben):
+
 - **Vollständige Pipeline** (Standard): alle 6 Stufen
 - **Einzelmodul-Fokus**: z.B. nur Musical Goals, nur Plugins, nur Denker
 - **Vergleichsdiagramm**: Restoration-Modus vs. Studio 2026-Modus
 
 ### 2. Codebase inspizieren
+
 Relevante Pfade für aktuelle Informationen:
+
 ```
 core/                    # Kernmodule (Dateinamen = Modulnamen)
 core/phases/             # 56 Phasen (phase_01_*.py … phase_56_*.py)
@@ -110,6 +115,7 @@ models/manifest.json     # ML-Modell-Größen und Pfade
 ```
 
 Schnelle Inspektion:
+
 ```python
 list_dir("core/")          # Alle Kernmodule
 list_dir("core/phases/")   # Alle Phase-Dateien
@@ -122,6 +128,7 @@ grep_search("bundled_path|size_bytes", "models/manifest.json")
 **Mermaid-Typ**: immer `flowchart TD` (top-down)
 
 **Pflichten**:
+
 - `classDef` immer am Anfang (Farbschema oben)
 - Module in `subgraph`-Blöcken nach Stufen gruppieren
 - Haupt-Datenfluss mit `-->` (solid)
@@ -131,17 +138,22 @@ grep_search("bundled_path|size_bytes", "models/manifest.json")
 - Emojis für schnelle visuelle Orientierung (optional)
 
 **Größenkontrolle**: Wenn Diagramm zu komplex → aufteilen in:
+
 1. Pipeline-Übersicht (Blöcke ohne Detail)
 2. Detail-Diagramm je Stufe
 
 ### 4. Rendern
+
 ```
 renderMermaidDiagram(markup=..., title="Aurik 9 — ...")
 ```
+
 Das Tool gibt die Mermaid-Syntax als Code-Block zurück (in VS Code als Preview sichtbar).
 
 ### 5. Qualitätsprüfung
+
 Checkliste:
+
 - [ ] Alle 6 Pipeline-Stufen vorhanden (bei Voll-Diagramm)
 - [ ] Kanonische Reihenfolge eingehalten (§2.2)
 - [ ] PMGG als roter Knoten sichtbar (es ist kritisch)
@@ -155,6 +167,7 @@ Checkliste:
 ## Teilvarianten
 
 ### Nur Musical Goals
+
 ```mermaid
 flowchart LR
     classDef metric fill:#0f7a3e,color:#fff,stroke:#085e2e
@@ -162,19 +175,22 @@ flowchart LR
 ```
 
 ### Nur Software-Schichten
+
 ```mermaid
 flowchart TD
-    Frontend["PyQt5 Frontend"] --> API["FastAPI REST"] 
+    Frontend["PyQt5 Frontend"] --> API["FastAPI REST"]
     API --> Denker["Denker-Orchestrierung"]
     Denker --> Core["core/ · plugins/ · dsp/"]
 ```
 
 ### Nur ML-Plugins
+
 Zeige alle Plugins aus `models/manifest.json` mit Größe, Fallback-Kaskade und Phasenzuordnung.
 
 ---
 
 ## Referenzen
+
 - [copilot-instructions.md §2.2](../.github/copilot-instructions.md) — Pipeline-Ablauf
 - [copilot-instructions.md §1.2](../.github/copilot-instructions.md) — 14 Musical Goals
 - [copilot-instructions.md §4.4](../.github/copilot-instructions.md) — SOTA-Entscheidungsmatrix

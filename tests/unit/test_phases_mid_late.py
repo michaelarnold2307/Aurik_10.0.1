@@ -447,6 +447,7 @@ class TestPhase20ReverbReduction:
                 raise RuntimeError("Sizes of tensors must match except in dimension 1")
 
         monkeypatch.setattr(phase20_mod, "ML_HYBRID_AVAILABLE", True)
+        monkeypatch.setattr(phase20_mod, "RESOURCE_MANAGER_AVAILABLE", False)  # ensure ML path is taken regardless of machine load
         monkeypatch.setattr(phase20_mod, "HybridDereverb", _ExplodingHybrid)
 
         # First call hits ML failure once and should switch phase instance to DSP-only.

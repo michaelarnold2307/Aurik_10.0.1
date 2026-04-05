@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
 
 try:
     from backend.api.bridge import get_aurik_denker_class, get_aurik_denker_instance
+    from backend.api.bridge import get_load_audio_fn as _bridge_get_load_audio_fn
 
     _BRIDGE_AVAILABLE = True
 except ImportError:
@@ -31,6 +32,9 @@ except ImportError:
         return None
 
     def get_aurik_denker_instance() -> Any:  # type: ignore[misc]
+        return None
+
+    def _bridge_get_load_audio_fn() -> Any:  # type: ignore[misc]
         return None
 
 
@@ -72,17 +76,26 @@ class AudioPreviewThread(QThread):
 
             self.progress.emit(10)
 
-            # Load audio — resample to 48 kHz (Aurik internal SR)
-            audio, sr = sf.read(self.input_file)
-            audio = np.asarray(audio, dtype=np.float32)
-            if sr != 48_000:
-                import math as _math
-
-                from scipy.signal import resample_poly as _rp
-
-                _gcd = _math.gcd(sr, 48_000)
-                audio = _rp(audio, 48_000 // _gcd, sr // _gcd, axis=0 if audio.ndim > 1 else -1).astype(np.float32)
-                sr = 48_000
+            # Load audio via bridge cascade (soundfile → pedalboard/FFmpeg → pydub)
+            # VERBOTEN: sf.read() direkt (§Architektur-RELEASE_MUST)
+            _load_fn = _bridge_get_load_audio_fn()
+            if _load_fn is not None:
+                _loaded = _load_fn(self.input_file, target_sr=48_000)
+                if _loaded is None:
+                    raise RuntimeError(f"Audio-Datei konnte nicht geladen werden: {self.input_file}")
+                audio = np.asarray(_loaded["audio"], dtype=np.float32)
+                sr = int(_loaded["sr"])
+            else:
+                # Bridge nicht verfügbar — sf.read als Notfall-Fallback
+                audio, sr = sf.read(self.input_file)
+                audio = np.asarray(audio, dtype=np.float32)
+                if sr != 48_000:
+                    import math as _math
+                    from scipy.signal import resample_poly as _rp
+                    _gcd = _math.gcd(sr, 48_000)
+                    audio = _rp(audio, 48_000 // _gcd, sr // _gcd,
+                                axis=0 if audio.ndim > 1 else -1).astype(np.float32)
+                    sr = 48_000
             self.progress.emit(30)
 
             self.progress.emit(50)
@@ -354,7 +367,16 @@ class AudioPlayer(QWidget):
         try:
             self.stop()
 
-            audio, sr = sf.read(filepath)
+            # Load via bridge cascade (soundfile → pedalboard/FFmpeg → pydub)
+            _load_fn = _bridge_get_load_audio_fn()
+            if _load_fn is not None:
+                _loaded = _load_fn(filepath)
+                if _loaded is None:
+                    raise RuntimeError(f"Audio-Datei konnte nicht geladen werden: {filepath}")
+                audio = np.asarray(_loaded["audio"], dtype=np.float32)
+                sr = int(_loaded["sr"])
+            else:
+                audio, sr = sf.read(filepath)
             self.audio_before = audio
             self.sr = sr
             self.audio_after = None

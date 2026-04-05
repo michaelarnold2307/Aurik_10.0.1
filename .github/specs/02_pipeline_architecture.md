@@ -94,7 +94,8 @@ class StemRemixBalancer:
 
 ### §2.2.2 SCHLAGER_RESTORATION_PROFILE — Definition (GermanSchlagerClassifier)
 
-Wird aktiviert wenn `GermanSchlagerClassifier.is_schlager == True` (Konfidenz ≥ 0.65).
+Wird aktiviert wenn `GermanSchlagerClassifier.is_schlager == True` (Gesamt-Konfidenz ≥ 0.52, gem. §2.19 Spec 03).
+**Invariante**: Aktivierungsschwelle ist **0.52** — kein abweichender Wert darf im Code verwendet werden.
 Enthält adjustierte GP-Priors und aktivierte Pflicht-Phasen für das Genre.
 
 ```python
@@ -135,6 +136,8 @@ SCHLAGER_RESTORATION_PROFILE = {
 
 **Invariante**: `SCHLAGER_RESTORATION_PROFILE["family_scalars_override"]` überschreibt SongCalibrationProfile-Defaults, wird aber durch denselben `global_scalar`-Bound begrenzt (Anti-Overfitting). `SCHLAGER_RESTORATION_PROFILE` wird in `RestorationResult.metadata["schlager_profile_active"]` als `True` protokolliert.
 
+> **Kreuzreferenz Spec 03 §2.19**: Die obige strukturierte Definition (GP-Priors, forced_phases, family_scalars_override, vocal_intimacy_guard) ist die autoritative Spec-02-Vollform. Spec 03 §2.19 ergänzt flache Zielwerte (`groove_dtw_max_ms`, `deessing_strength_cap`, `waerme_target`, `brillanz_target`) — diese sind additive Qualitätsziele, kein Ersatz für GP-Priors und forced_phases. **Implementierungen MÜSSEN beide Spec-Abschnitte konsultieren.** Konflikte: Spec 02 hat Vorrang bei strukturellen Feldern (forced_phases, family_scalars_override); Spec 03 §2.19 bei metrischen Zielwerten.
+
 - TIER 2–4: dürfen parallelisieren; Merge via `np.mean` NUR wenn gleiche Frequenzzone
 - TIER 6: IMMER sequenziell (EQ → Polish → LUFS → TruePeak → Format)
 
@@ -147,7 +150,18 @@ Audio-Eingang (mono/stereo, beliebige SR)
     │ Invariante: Kein Processing auf Nicht-48k
     ↓
 [DCOffsetPreRemoval]  ← PFLICHT-VORSTUFE vor jeder FFT-Analyse (kein phase_30!)
-    │ scipy.signal.lfilter([1, -1], [1, -0.9999]) — Hochpass-IIR 5 Hz
+    │ Standard (alle Materialien): scipy.signal.lfilter([1, -1], [1, -0.9999])
+    │   → Hochpass-IIR 1. Ordnung, Pol bei z=0.9999, fc ≈ 0.76 Hz @ 48 kHz
+    │   → Sicher für BassKraftMetric: Cutoff << 20 Hz, kein Energieverlust im Bassband
+    │ Material-Sonderfall reel_tape (Lücke-H-Fix v9.10.100):
+    │   Tape-Transport erzeugt DYNAMISCHEN DC-Drift (Geschwindigkeitsschwankungen
+    │   → Pitch-/Amplitudenmodulation → langsame Basislinienwanderung 0.1–2 Hz).
+    │   Für material_type == "reel_tape" MUSS segmentweise DC-Entfernung erfolgen:
+    │   scipy.signal.lfilter([1, -1], [1, -0.9995])  — aggressiverer Pol (fc ≈ 3.8 Hz)
+    │   ODER: scipy.signal.filtfilt([1, -1], [1, -0.9995]) — zero-phase (bevorzugt)
+    │   Begründung: causales lfilter erzeugt Phasendrehung < 10 Hz → verfälscht Onset-
+    │   Zeitstempel in WowFlutter-Erkennung; filtfilt vermeidet das.
+    │   VERBOTEN bei Tape: globale Mittelwert-Subtraktion (np.mean) — erfasst keinen Drift.
     │ Invariante: np.abs(np.mean(audio)) < 1e-6 nach Entfernung
     │ Begründung: DC-Offset verfälscht STFT Bin 0+1 und damit alle
     │   Spektralanalysen (OMLSA-Profil, DefectScanner, HarmonicPreservationGuard).
@@ -166,6 +180,14 @@ Audio-Eingang (mono/stereo, beliebige SR)
     │ Output: global_scalar + family_scalars
     │ Familien: denoise | reverb | reconstruction | dynamics_eq | transient | general
     │ Invariante: bounded scalars (anti-overfitting) + deterministische Berechnung
+    │
+    │ [RELEASE_MUST] Bounds (Lücke-G-Fix v9.10.100):
+    │   global_scalar       ∈ [0.50, 1.50]  — kein Wert < 0.50 (neutralisiert alle Phasen)
+    │                                          kein Wert > 1.50 (Soft-Saturation-Guard umgangen)
+    │   family_scalars[*]   ∈ [0.30, 1.80]  — Untergrenze schützt vor Komplettunterdrückung
+    │                                          einer Familie; Obergrenze verhindert Überamplitude
+    │   VERBOTEN: np.clip(scalar, 0.0, 2.0) — zu weite Grenzen; nur enge Clipping erlaubt
+    │   Pflicht: assert 0.50 <= global_scalar <= 1.50 vor Phasen-Ausführung
     ↓
 [EraClassifier]  → EraResult (decade, material_prior, confidence)
     ↓
@@ -195,6 +217,26 @@ Audio-Eingang (mono/stereo, beliebige SR)
 [HarmonicPreservationGuard]  ← NACH TDP, VOR phase_03/phase_29
     │ extract_harmonic_mask(audio_harmonic, sr) → protected_bins[t,f]
     │ G_floor = 0.85 an Harmonik-Bins, 0.10 sonst
+    │
+    │ [RELEASE_MUST] Mask-Gültigkeit (Fix L, v9.10.100):
+    │ Die Maske ist gültig für phase_03 (Denoise) und phase_29 (Tape-Hiss).
+    │ Für alle übrigen Phasen (EQ, Pitch, Stem-Sep, Dereverb etc.) darf die
+    │ initiale Maske NICHT unverändert wiederverwendet werden — das harmonische
+    │ Spektrum verschiebt sich nach Pitch-Korrektur, EQ und Stem-Separation.
+    │ Regel:
+    │   (a) phase_03: initiale Maske (berechnet aus audio_harmonic, prä-Denoise).
+    │   (a.1) phase_29 (Tape-Hiss): wenn UV3 nach phase_03 einen SNR-Gewinn
+    │         > 12 dB misst (snr_after_03 − snr_before_03 > 12.0 dB), MUSS die
+    │         Maske VOR phase_29 neu berechnet werden (rauschverdeckte Transienten
+    │         sind nach Denoise freigelegt; alte Maske schützt Rauschartefakte
+    │         statt echter Harmonik). Übergabe: `recompute_harmonic_mask=True`.
+    │         Bei SNR-Gewinn ≤ 12 dB: initiale Maske weiterverwendbar.
+    │   (b) phase_42/43 (Vocal), phase_44–45 (Instrument): Maske NEU aus
+    │       dem zum Zeitpunkt der Phase aktuellen audio berechnen
+    │       (Übergabe als `recompute_harmonic_mask=True` an HPG).
+    │   (c) alle übrigen Phasen: kein HPG-Eingriff (Verarbeitungs-Semantik
+    │       der Phase definiert selbst ihren Amplituden-Schutz).
+    │ VERBOTEN: Globale Maske ohne Ggültigkeit über alle 64 Phasen propagieren.
     ↓
 [UnifiedRestorerV3._select_phases()]
     ↓
@@ -204,7 +246,7 @@ Audio-Eingang (mono/stereo, beliebige SR)
     │ 5-s-Sample → measure_quick(6 Ziele) → Rollback bei Δ > REGRESSION_THRESHOLD
     │ SongCalibrationProfile skaliert phasenfamilien-basiert strength/wet-dry
     │ (psychoakustisch priorisiert: P1/P2-Stabilität, Maskierung, Transienten)
-    │ MAX_RETRIES = 5; STRENGTHS = [0.65, 0.50, 0.35, 0.20, 0.10]
+    │ MAX_RETRIES = 5; STRENGTHS = [0.65, 0.50, 0.35, 0.25, 0.15]   # kanonisch gem. §2.29 _RETRY_STRENGTHS
     ↓
 [EraAuthenticPerceptualCompletion]  (wenn Quell-BW < 10 kHz)
     ↓
@@ -485,6 +527,12 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     "phase_26": {"micro_dynamics", "artikulation"}, "phase_36": {"micro_dynamics", "artikulation"},
     # Passthrough / analysis-only phases: no musical scoring required.
     "phase_28": set(), "phase_05": set(), "phase_30": set(),
+    # LyricsGuidedEnhancement (phase_58): Fricative-Ramp-Gain (4–8 kHz) verändert Spektralenveloppe
+    # wie shaped NR → K-S-Key-Label-Flip möglich (tonal_center).
+    # Vowel-LPC-Shelving und Plosive-Burst ändern MFCC-Pearson/Centroid-CV (timbre_authentizitaet).
+    # HINWEIS: Key muss "phase_58_lyrics_guided_enhancement" lauten — NICHT "phase_57"
+    # (würde via startswith-Präfix-Matching phase_57_print_through_reduction treffen).
+    "phase_58_lyrics_guided_enhancement": {"tonal_center", "timbre_authentizitaet", "artikulation", "emotionalitaet"},
 }
 ```
 
@@ -890,6 +938,7 @@ Zusammenfassung aller Stabilitäts-Invarianten. Jede Verletzung einer dieser Reg
 - `ml_memory_budget.try_allocate()` vor ML-Load mit `release()` in Fehler-Pfad (S-13).
 - Kein `ThreadPoolExecutor` ohne Shutdown in Cleanup (S-04).
 - `_check_audio_buffer_size()` bei direktem `soundfile.read()` (S-07).
+- **[RELEASE_MUST] Längen-Invariante**: `len(phase_output) == len(phase_input)` — Phasen dürfen die Signallänge nicht verändern. `_execute_pipeline()` korrigiert akkumulierten Längendrift am Ausgang (Trim bei Überlänge, Zero-Pad bei Unterlänge). Dies betrifft insbesondere PGHI-basierte Phasen mit `padded=False` (letztes unvollständiges Fenster wird weggelassen) — Abhilfe: `n_samples=len(audio_in)` immer an `pghi_reconstruct_from_stft()` übergeben.
 
 ### Invarianten
 

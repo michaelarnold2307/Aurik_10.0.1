@@ -530,10 +530,13 @@ class MasteringPolishPhase(PhaseInterface):
             polished *= ceiling_linear / current_peak
 
         # 3. TPDF Dithering (minimal, 16-bit target)
+        # §2.40 Determinismus: content-derived seed ensures bit-exact reproducibility
         lsb = 1.0 / (2**15)
         dither_amplitude = lsb * 0.5  # Half LSB
-        r1 = np.random.uniform(-1, 1, polished.shape)
-        r2 = np.random.uniform(-1, 1, polished.shape)
+        _dith_seed17 = int(abs(float(np.sum(np.abs(polished[:min(len(polished), 1024)])))) * 1e5) % (2**31)
+        _rng17 = np.random.default_rng(seed=_dith_seed17)
+        r1 = _rng17.uniform(-1, 1, polished.shape)
+        r2 = _rng17.uniform(-1, 1, polished.shape)
         tpdf_noise = (r1 + r2) * dither_amplitude
         polished = polished + tpdf_noise
 

@@ -306,7 +306,9 @@ def _harmonic_interpolate_gap(
                         mag_out[b_fill], amp_interp * gauss_weight * np.ones(stft_mag.shape[1], dtype=np.float32)
                     )
                     # Zufällige Phase — PGHI wird danach aufgerufen
-                    phase_out[b_fill] = np.random.uniform(-np.pi, np.pi, size=stft_mag.shape[1]).astype(np.float32)
+                    # §2.40 Determinismus: seed from current partial bin + magnitude context
+                    _ph_seed56 = int(abs(float(np.sum(np.abs(stft_mag[bin_n, :min(stft_mag.shape[1], 4)])))) * 1e5 + bin_n) % (2**31)
+                    phase_out[b_fill] = np.random.default_rng(seed=_ph_seed56).uniform(-np.pi, np.pi, size=stft_mag.shape[1]).astype(np.float32)
 
         n_partial += 1
         if n_partial > 40:  # Sicherheits-Stop
@@ -366,8 +368,11 @@ def _pghi_phase_reconstruction(mag: np.ndarray, n_fft: int, hop: int) -> np.ndar
     n_bins, n_frames = mag.shape
     freq_per_bin = 2.0 * np.pi / n_fft  # normiert
 
+    # §2.40 Determinismus: content-derived seed for IF-fallback phase init
+    _if_seed = int(abs(float(np.sum(np.abs(mag[:, :min(n_frames, 4)])))) * 1e5 + n_fft) % (2**31)
+    _rng_if = np.random.default_rng(seed=_if_seed)
     phase = np.zeros_like(mag)
-    phase[:, 0] = np.random.uniform(-np.pi, np.pi, size=n_bins)
+    phase[:, 0] = _rng_if.uniform(-np.pi, np.pi, size=n_bins)
 
     for t in range(1, n_frames):
         d_mag_dt = mag[:, t] - mag[:, t - 1]

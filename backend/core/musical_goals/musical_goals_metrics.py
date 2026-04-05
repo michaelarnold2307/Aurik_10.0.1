@@ -450,15 +450,14 @@ class BassKraftMetric:
 
 class BrillanzMetric:
     """
-    Brillanz: High-Frequency Clarity & Sparkle (8-20 kHz)
+    Brillanz: High-Frequency Clarity & Sparkle
 
-    Misst:
-    - HF Energy (8-20 kHz)
-    - Spectral Centroid
-    - Brightness Score
-    - v9.12 Hybrid: Referenz-bewusste HF-Präservierungs-Gewichtung
+    §9.7.12 HF Spectral Crest Factor (2–16 kHz).
+    Noise hebt p50-Median; musikalische Peaks dominieren p95 ->
+    Crest nach Denoise steigt, nie false drop.
+    Wiss. Basis: Fastl & Zwicker 2007 §8.3.
 
-    Threshold: 0.85
+    Threshold: 0.85 (Restoration: >= 0.78, Studio 2026: >= 0.85)
     """
 
     def __init__(self, threshold: float = 0.85) -> None:
@@ -467,118 +466,64 @@ class BrillanzMetric:
     def measure(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> float:
         """Measure brillanz score (0.0 - 1.0).
 
-        Args:
-            audio:     Processed audio signal.
-            sr:        Sample rate.
-            reference: Optional original audio for preservation-weighted scoring.
+        §9.7.12: HF Spectral Crest Factor (2-16 kHz).  The reference-aware
+        preservation-penalty blend (Hybrid v9.12) was kontraproduktiv — it
+        penalised genuine HF improvements (e.g. phase_06 SBR synthesis) and
+        caused false P4 regressions after denoising.  Absolute crest-factor
+        score is used directly.  The reference parameter is accepted for API
+        compatibility but ignored.
         """
-        score = self._measure_absolute(audio, sr)
-        if reference is None:
-            return score
-
-        # --- Hybrid v9.12: Reference-aware HF preservation ---
-        ref_score = self._measure_absolute(reference, sr)
-        # Preservation bonus: if restoration preserved or improved brillanz
-        if ref_score > 0.01:
-            preservation = score / (ref_score + 1e-10)
-            # preservation > 1.0 = improved, 1.0 = preserved, < 1.0 = degraded
-            # Mild penalty for degradation, mild bonus for improvement (capped)
-            pres_factor = float(np.clip(preservation, 0.5, 1.1))
-            # Blend: 80% absolute score + 20% preservation-weighted
-            score = 0.80 * score + 0.20 * (score * pres_factor)
-            score = float(np.clip(score, 0.0, 1.0))
-        return score
+        return self._measure_absolute(audio, sr)
 
     def _measure_absolute(self, audio: np.ndarray, sr: int) -> float:
-        """Core absolute brillanz measurement (ISO 226 weighted)."""
+        """Core absolute brillanz measurement.
+
+        §9.7.12 HF Spectral Crest Factor (2-16 kHz):
+            score = clip((p95 / p50 - 1.5) / 13.5, 0.0, 1.0)
+
+        Noise lifts the median (p50) while musical peaks dominate p95 ->
+        crest INCREASES after denoising -> no false regression.
+        Scientific basis: Fastl & Zwicker 2007 §8.3 (crest factor as
+        perceptual brightness indicator).
+        Calibration: crest 1.5 -> score 0.0; crest 15.0 -> score 1.0.
+        """
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
 
         # §9.7.6 Audio-Cap — brillanz is spectrally stationary; 15 s centre segment sufficient.
-        # _safe_centre_crop falls back to track start if centre is silent (pipeline bug guard).
         _MAX_BRILLANZ_SAMPLES = int(sr * 15)
         audio = _safe_centre_crop(audio, _MAX_BRILLANZ_SAMPLES)
 
-        # STFT
+        # STFT magnitude (unweighted — crest factor is scale-invariant)
         stft = librosa.stft(audio, n_fft=2048, hop_length=512)
-        magnitude = np.abs(stft)
-
-        # Frequency bins
+        magnitude = np.abs(stft)  # shape (F, T)
         freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
 
-        # ISO 226:2023 Equal-Loudness weighting (Spec §8.1 — kein lineares Energiemessen)
-        _w = _iso226_weights(freqs)
-        magnitude_w = magnitude * _w[:, None]  # perceptually-weighted magnitude (F, T)
+        # HF band 2-16 kHz — mean across time frames, then crest factor
+        hf_mask = (freqs >= 2000) & (freqs <= 16000)
+        hf_mean = np.mean(magnitude[hf_mask, :], axis=1) if np.any(hf_mask) else np.empty(0)
 
-        # HF band (8-20 kHz)
-        hf_mask = (freqs >= 8000) & (freqs <= 20000)
+        if len(hf_mean) > 20:
+            p95 = float(np.percentile(hf_mean, 95))
+            p50 = float(np.median(hf_mean)) + 1e-9
+            crest = p95 / p50
+            score = float(np.clip((crest - 1.5) / 13.5, 0.0, 1.0))
+        else:
+            score = 0.5  # fallback for very short clips
 
-        # Full spectrum energy (perceptual)
-        full_energy = np.sum(magnitude_w**2)
-
-        # HF energy (perceptual)
-        hf_energy = np.sum(magnitude_w[hf_mask] ** 2)
-
-        # HF Energy Ratio
-        hf_ratio = hf_energy / (full_energy + 1e-10)
-
-        # Spectral Centroid (higher = brighter)
-        centroid = librosa.feature.spectral_centroid(y=audio, sr=sr, n_fft=2048, hop_length=512)[0]
-        mean_centroid = np.mean(centroid)
-        # FIXED v9.10: recalibrated — 3500 Hz centroid = 1.0 (bright, mastered music)
-        # (was: (centroid-1000)/7000 required 8000 Hz centroid for max score)
-        centroid_normalized = min(1.0, max(0.0, (mean_centroid - 800.0) / 2700.0))
-
-        # Brightness (weighted HF bands)
-        # 8-12 kHz: 40% (presence)
-        # 12-16 kHz: 35% (air)
-        # 16-20 kHz: 25% (sparkle)
-        bright_mask_1 = (freqs >= 8000) & (freqs <= 12000)
-        bright_mask_2 = (freqs >= 12000) & (freqs <= 16000)
-        bright_mask_3 = (freqs >= 16000) & (freqs <= 20000)
-
-        bright_1 = np.sum(magnitude_w[bright_mask_1] ** 2)
-        bright_2 = np.sum(magnitude_w[bright_mask_2] ** 2)
-        bright_3 = np.sum(magnitude_w[bright_mask_3] ** 2)
-
-        hf_total = bright_1 + bright_2 + bright_3 + 1e-10
-        brightness = 0.40 * (bright_1 / hf_total) + 0.35 * (bright_2 / hf_total) + 0.25 * (bright_3 / hf_total)
-
-        # BUG FIX v9.10: brightness ∈ [0.25, 0.40] — normalize to [0, 1] so formula
-        # ceiling is 1.0 (was: max 0.82 — mathematically impossible to reach 0.85 threshold!)
-        # Normalization: (brightness - min) / (max - min) = (brightness - 0.25) / 0.15
-        brightness_normalized = min(1.0, max(0.0, (brightness - 0.25) / 0.15))
-
-        # HF energy score: ISO 226-weighted HF/total ratio threshold.
-        # Calibration v9.13: After perceptual weighting (ISO 226), HF bins (8-20 kHz)
-        # are de-emphasized by ~0.06-0.63x (14-16 kHz: weight ≈ 0.06-0.10).
-        # Typical well-mastered music (phase_39 air-band enhanced) →
-        # ISO-weighted hf_ratio ≈ 0.5-1.0%.  Old threshold 3.0% was in the
-        # RAW domain and caused systematic underscoring.
-        # Fix: 0.5% ISO-weighted threshold → score=1.0 for proper HF content.
-        hf_score = min(1.0, hf_ratio / 0.005)
-
-        # Final score — FIXED v9.10: ceiling raised from 0.82 → 1.0
-        # 0.40 * hf_score + 0.35 * centroid_normalized + 0.25 * brightness_normalized
-        score = 0.40 * hf_score + 0.35 * centroid_normalized + 0.25 * brightness_normalized
-
-        score = min(
-            1.0, max(0.0, score)
-        )  # v9.11: kein Floor — HF-Armut muss messbar bleiben (war: max(0.85,...) → blind)
-        return score
+        return float(np.clip(score, 0.0, 1.0))
 
 
 class WaermeMetric:
     """
-    Wärme: Mid-Range Richness (200-2000 Hz)
+    Wärme: Mid-Range Richness
 
-    Misst:
-    - Mid Energy (200-2000 Hz)
-    - Harmonic Warmth (2nd/3rd harmonics)
-    - Low-Mid Presence (200-500 Hz)
-    - v9.12 Hybrid: Referenz-bewusst + optionale MERT-Harmonizität
+    §9.7.14 Warmth Ratio E(200-800 Hz) / E(800-3000 Hz) — reverb-invariant.
+    Nachhall addiert Energie proportional in beiden Baendern -> Ratio stabil.
+    Nicht 200-2000 Hz Einband-Messung (veraltet, reverb-sensitiv).
+    Wiss. Basis: Fletcher & Rossing; Moore & Glasberg 1983.
 
-    Threshold: 0.80
+    Threshold: 0.80 (Restoration: >= 0.75, Studio 2026: >= 0.80)
     """
 
     def __init__(self, threshold: float = 0.80) -> None:
@@ -606,12 +551,14 @@ class WaermeMetric:
 
         # --- Optional MERT harmonicity refinement (v9.12 hybrid, guard fixed v9.10.98) ---
         # Runs only in the reference-aware path where harmonic context is most meaningful.
-        # Guard: _model_type != "dsp_fallback" — never triggers lazy MERT load.
+        # Guard: _model_type != "dsp_fallback".
+        # NOTE: Use module-level attribute lookup (plugins.mert_plugin.get_mert_plugin) so
+        # that unittest.mock.patch("plugins.mert_plugin.get_mert_plugin") is effective.
         try:
-            from plugins.mert_plugin import get_mert_plugin
+            import plugins.mert_plugin as _mert_mod
 
-            mert = get_mert_plugin()
-            if mert._model_type != "dsp_fallback":
+            mert = _mert_mod.get_mert_plugin()
+            if mert is not None and mert._model_type != "dsp_fallback":
                 analysis = mert.analyze(audio, sr)
                 # MERT harmonicity refines warmth: weight 10% (gentle blend)
                 mert_warmth = float(np.clip(analysis.harmonicity, 0.0, 1.0))
@@ -627,12 +574,20 @@ class WaermeMetric:
         return float(np.clip(score, 0.0, 1.0))
 
     def _measure_absolute(self, audio: np.ndarray, sr: int) -> float:
-        """Core absolute wärme measurement (ISO 226 weighted)."""
+        """Core absolute waerme measurement.
+
+        §9.7.14 Warmth Ratio E(200-800 Hz) / E(800-3000 Hz) — reverb-invariant.
+        Reverb adds diffuse energy proportionally in both bands -> ratio stable
+        during dereverb -> no false P4 regression.
+        Not 200-2000 Hz single-band measurement (legacy, reverb-sensitive).
+        Scientific basis: Fletcher & Rossing vocal formant structure;
+        Moore & Glasberg (1983) auditory filter bandwidths.
+        Calibration: ratio 1.5 -> score 1.0 (warm body); ratio 0 -> score 0.0 (thin).
+        """
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
 
-        # §9.7.6 Audio-Cap — wärme is spectrally stationary; 15 s centre segment sufficient.
-        # _safe_centre_crop falls back to track start if centre is silent (pipeline bug guard).
+        # §9.7.6 Audio-Cap — waerme is spectrally stationary; 15 s centre segment sufficient.
         _MAX_WAERME_SAMPLES = int(sr * 15)
         audio = _safe_centre_crop(audio, _MAX_WAERME_SAMPLES)
 
@@ -643,49 +598,31 @@ class WaermeMetric:
         # Frequency bins
         freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
 
-        # ISO 226:2023 Equal-Loudness weighting (Spec §8.1 — kein lineares Energiemessen)
+        # ISO 226:2023 Equal-Loudness weighting (perceptual energy)
         _w = _iso226_weights(freqs)
-        magnitude_w = magnitude * _w[:, None]  # perceptually-weighted magnitude (F, T)
+        magnitude_w = magnitude * _w[:, None]  # shape (F, T)
 
-        # Mid band (200-2000 Hz)
-        mid_mask = (freqs >= 200) & (freqs <= 2000)
-        low_mid_mask = (freqs >= 200) & (freqs <= 500)  # Body
-        mid_mid_mask = (freqs >= 500) & (freqs <= 1000)  # Presence
-        upper_mid_mask = (freqs >= 1000) & (freqs <= 2000)  # Clarity
+        # §9.7.14 Warmth sub-bands: E(200-800 Hz) and E(800-3000 Hz)
+        warm_low_mask = (freqs >= 200) & (freqs < 800)
+        warm_high_mask = (freqs >= 800) & (freqs < 3000)
 
-        # Full spectrum energy (perceptual)
-        full_energy = np.sum(magnitude_w**2)
+        warmth_low_energy = np.sum(magnitude_w[warm_low_mask] ** 2)
+        warmth_high_energy = np.sum(magnitude_w[warm_high_mask] ** 2)
 
-        # Mid energies (perceptual)
-        mid_energy = np.sum(magnitude_w[mid_mask] ** 2)
-        low_mid_energy = np.sum(magnitude_w[low_mid_mask] ** 2)
-        mid_mid_energy = np.sum(magnitude_w[mid_mid_mask] ** 2)
-        upper_mid_energy = np.sum(magnitude_w[upper_mid_mask] ** 2)
+        # Warmth ratio — reverb-invariant (both bands affected proportionally by reverb)
+        warmth_ratio = warmth_low_energy / (warmth_high_energy + 1e-10)
+        # Calibration: ratio 1.5 -> score 1.0 (warm body energy ~ upper-mid energy)
+        warmth_ratio_score = float(np.clip(warmth_ratio / 1.5, 0.0, 1.0))
 
-        # Mid Energy Ratio
-        mid_ratio = mid_energy / (full_energy + 1e-10)
-
-        # Weighted mid components
-        # Low-mid (200-500 Hz): 45% (warmth body)
-        # Mid-mid (500-1000 Hz): 35% (presence)
-        # Upper-mid (1000-2000 Hz): 20% (clarity)
-        weighted_mid = (
-            0.45 * (low_mid_energy / (mid_energy + 1e-10))
-            + 0.35 * (mid_mid_energy / (mid_energy + 1e-10))
-            + 0.20 * (upper_mid_energy / (mid_energy + 1e-10))
-        )
-
-        # Harmonic warmth: spectral flatness proxy + H2/H4 even-harmonic overtone ratio
-        # H2/H4 even-harmonic dominance indicates tube/tape warmth character (Spec §WaermeMetric)
+        # H2/H4 harmonic warmth: tube/tape even-harmonic character (supplementary)
         spectral_flatness = librosa.feature.spectral_flatness(y=audio, n_fft=2048, hop_length=512)[0]
         mean_flatness = np.mean(spectral_flatness)
         harmonic_warmth = 0.5 * (1.0 - mean_flatness) + 0.5 * WaermeMetric._h2h4_warmth(audio, sr)
 
-        # Final score
-        score = 0.40 * (mid_ratio * 15) + 0.35 * weighted_mid + 0.25 * harmonic_warmth  # Normalize mid ratio
+        # Final score: 70% sub-band ratio (reverb-invariant), 30% harmonic character
+        score = 0.70 * warmth_ratio_score + 0.30 * harmonic_warmth
 
-        score = min(1.0, max(0.0, score))
-        return score
+        return float(np.clip(score, 0.0, 1.0))
 
     @staticmethod
     def _h2h4_warmth(audio: np.ndarray, sr: int) -> float:
@@ -1068,10 +1005,10 @@ class EmotionalitaetMetric:
         # never triggers a lazy MERT load.  One-directional: MERT can only raise the
         # score (never reduce a high-dynamic DSP score for synthetic audio).
         try:
-            from plugins.mert_plugin import get_mert_plugin
+            from plugins.mert_plugin import get_loaded_mert_plugin
 
-            mert = get_mert_plugin()
-            if mert._model_type != "dsp_fallback":
+            mert = get_loaded_mert_plugin()
+            if mert is not None and mert._model_type != "dsp_fallback":
                 analysis = mert.analyze(audio, sr)
                 # naturalness_score captures harmonic + tonal expressiveness
                 mert_emotion = float(np.clip(analysis.naturalness_score, 0.0, 1.0))
@@ -1093,19 +1030,32 @@ class TransparenzMetric:
     """
     Transparenz: Clarity & Separation
 
-    Misst:
-    - Spectral Clarity Score
-    - Frequency Masking Analysis
-    - Separation Quality (wenn Stems verfügbar)
+    §9.7.13 Multi-Band Spectral Crest Factor (5 Oktavbaender 250 Hz-8 kHz).
+    Noise füllt jeden Bandbo_den (hebt p50 in Richtung p95) -> niedriger Crest
+    vor Denoising; nach Rauschentfernung sinkt p50 -> Crest steigt -> kein false drop.
+    Wiss. Basis: Moore & Glasberg 1983; ITU-T P.862.
 
-    Threshold: 0.89
+    Threshold: 0.89 (Restoration: >= 0.82, Studio 2026: >= 0.89)
     """
 
     def __init__(self, threshold: float = 0.89) -> None:
         self.threshold = threshold
 
-    def measure(self, audio: np.ndarray, sr: int) -> float:
-        """Measure transparenz score (0.0 - 1.0)."""
+    def measure(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> float:
+        """Measure transparenz score (0.0 - 1.0).
+
+        §9.7.13 Multi-Band Spectral Crest Factor (5 Oktavbaender 250 Hz-8 kHz).
+        Noise fills each band's floor (raises p50 toward p95) -> low crest;
+        after noise removal p50 drops -> crest rises -> no false regression.
+        Scientific basis: Moore & Glasberg (1983); ITU-T P.862 spectral clarity.
+        Calibration: mean crest 1.2 -> score 0.0; mean crest 10.0 -> score 1.0.
+
+        Args:
+            audio:     Processed audio signal.
+            sr:        Sample rate.
+            reference: Accepted for API compatibility (unused; crest-factor is
+                       reference-free by design — symmetric before/after).
+        """
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
 
@@ -1115,64 +1065,22 @@ class TransparenzMetric:
             _tr_start = (len(audio) - _MAX_TRANSP_SAMPLES) // 2
             audio = audio[_tr_start : _tr_start + _MAX_TRANSP_SAMPLES]
 
-        # Spectral Clarity: 75% rolloff threshold gives higher values → more music-realistic
-        # FIXED v9.10: roll_percent=0.75 (was: 0.85 default) + recalibrated normalization
-        # Typical 75%-rolloff for well-mastered music with HF enhancement: 4000–7000 Hz
-        rolloff = librosa.feature.spectral_rolloff(y=audio, sr=sr, n_fft=2048, hop_length=512, roll_percent=0.75)[0]
-        mean_rolloff = np.mean(rolloff)
-        # 5500 Hz = 1.0 (recalibrated; was: (rolloff-2000)/6000 max at 8000 Hz)
-        clarity_score = min(1.0, max(0.0, (mean_rolloff - 1500.0) / 4000.0))
+        # Compute magnitude spectrum (single FFT of full segment)
+        fft_mag = np.abs(np.fft.rfft(audio.astype(np.float32)))
+        freqs_t = np.fft.rfftfreq(len(audio), d=1.0 / sr)
 
-        # Spectral Contrast (separation between peaks and valleys)
-        contrast = librosa.feature.spectral_contrast(y=audio, sr=sr, n_fft=2048, hop_length=512)
-        mean_contrast = np.mean(contrast)
-        # FIXED v9.10: recalibrated — tonal music has 25–40 dB contrast
-        # Fix v9.13: denominator 22 → 14 — typical music contrast is 20-25 dB;
-        # old formula scored 23 dB as 0.68, 25 dB as 0.77 (threshold 0.89 unreachable).
-        # New calibration: 22 dB → 1.0  (20 dB → 0.86, 18 dB → 0.71).
-        contrast_score = min(1.0, max(0.0, (mean_contrast - 8.0) / 14.0))
+        # 5 octave bands: 250-500, 500-1k, 1k-2k, 2k-4k, 4k-8k Hz
+        _oct_bands = [(250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000)]
+        _band_crests: list[float] = []
+        for _fl, _fh in _oct_bands:
+            _bins = fft_mag[(freqs_t >= _fl) & (freqs_t < _fh)]
+            if len(_bins) > 5:
+                _p95 = float(np.percentile(_bins, 95))
+                _p50 = float(np.median(_bins)) + 1e-9
+                _band_crests.append(float(np.clip((_p95 / _p50 - 1.2) / 8.8, 0.0, 1.0)))
 
-        # Spectral Bandwidth — wider bandwidth = more full-spectrum transparency
-        # FIXED v9.10: was penalizing deviation from 3000 Hz → penalized good wide-spectrum music
-        # New: reward bandwidth ≥ 4000 Hz (full-range audio after phase_39 air-band enhancement)
-        bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr, n_fft=2048, hop_length=512)[0]
-        mean_bandwidth = np.mean(bandwidth)
-        # ≥4000 Hz → 1.0, 1500 Hz → 0.0 (music after HF-enhancement: typically 3500–6000 Hz)
-        if mean_bandwidth >= 4000.0:
-            bandwidth_score = 1.0
-        elif mean_bandwidth >= 1500.0:
-            bandwidth_score = (mean_bandwidth - 1500.0) / 2500.0
-        else:
-            bandwidth_score = 0.0
-
-        # Frequency Masking (lower bands masking higher bands)
-        # Use spectral flatness in different bands
-        stft = librosa.stft(audio, n_fft=2048, hop_length=512)
-        magnitude = np.abs(stft)
-        freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
-
-        # Check energy balance between low/mid/high
-        low_mask = freqs < 500
-        mid_mask = (freqs >= 500) & (freqs < 2000)
-        high_mask = freqs >= 2000
-
-        low_energy = np.sum(magnitude[low_mask] ** 2)
-        mid_energy = np.sum(magnitude[mid_mask] ** 2)
-        high_energy = np.sum(magnitude[high_mask] ** 2)
-
-        total_energy = low_energy + mid_energy + high_energy + 1e-10
-
-        # Balanced energy distribution = less masking
-        energy_balance = 1.0 - np.std(
-            [low_energy / total_energy, mid_energy / total_energy, high_energy / total_energy]
-        )
-
-        # Final score
-        score = 0.30 * clarity_score + 0.30 * contrast_score + 0.20 * bandwidth_score + 0.20 * energy_balance
-        score = min(
-            1.0, max(0.0, score)
-        )  # v9.11: kein Floor — mangelnde Transparenz muss messbar bleiben (war: max(0.89,...) → blind)
-        return score
+        score = float(np.mean(_band_crests)) if _band_crests else 0.5
+        return float(np.clip(score, 0.0, 1.0))
 
 
 # =============================================================================

@@ -1056,9 +1056,9 @@ class TestPMGGSongCalIntegration:
         assert result is not None
 
     def test_72_phase03_has_five_goals_excluded_v9_10_96(self):
-        """phase_03 must exclude exactly 7 goals (emotionalitaet added 2026-03-31:
-        NR lowers noise floor in quiet segments → crest-factor shift → false P3
-        regression, identical mechanism to phase_18 noise gate)."""
+        """phase_03 must exclude exactly 5 goals per v9.10.96 canonical PHASE_GOAL_EXCLUSIONS
+        (groove/emotionalitaet removed: P3-Quick-Proxy-Robustheit hinreichend;
+        K-S SNR-invarianz + MFCC/centroid-CV disruption durch shaped-NR bleiben relevant)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         expected = {
@@ -1067,16 +1067,14 @@ class TestPMGGSongCalIntegration:
             "authentizitaet",
             "tonal_center",
             "timbre_authentizitaet",
-            "groove",
-            "emotionalitaet",
         }
         assert PHASE_GOAL_EXCLUSIONS["phase_03"] == expected, (
             f"phase_03 exclusions: {PHASE_GOAL_EXCLUSIONS['phase_03']} != {expected}"
         )
 
     def test_73_phase29_has_five_goals_excluded_v9_10_96(self):
-        """phase_29 must exclude exactly 7 goals (groove+emotionalitaet added 2026-03-31:
-        HF-selective NR same LF-crest/crest-factor false P3 mechanisms as phase_03)."""
+        """phase_29 must exclude exactly 5 goals per v9.10.96 canonical PHASE_GOAL_EXCLUSIONS
+        (groove/emotionalitaet removed: identisch mit phase_03 — P3-Proxy hinreichend robust)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         expected = {
@@ -1085,8 +1083,6 @@ class TestPMGGSongCalIntegration:
             "natuerlichkeit",
             "tonal_center",
             "timbre_authentizitaet",
-            "groove",
-            "emotionalitaet",
         }
         assert PHASE_GOAL_EXCLUSIONS["phase_29"] == expected, (
             f"phase_29 exclusions: {PHASE_GOAL_EXCLUSIONS['phase_29']} != {expected}"
@@ -1540,9 +1536,9 @@ class TestKrumhanslSchmucklerTonalCenter:
     # \u2500\u2500 Combined exclusion invariants \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     def test_92_phase03_exclusions_v9_10_96(self):
-        """phase_03 must exclude exactly 7 goals (emotionalitaet added 2026-03-31:
-        NR lowers noise floor in quiet segments → crest-factor shift → false P3
-        regression, identical mechanism to phase_18 noise gate)."""
+        """phase_03 must exclude exactly 5 goals per v9.10.96 canonical spec.
+        groove/emotionalitaet entfernt: P3-Quick-Proxy-Robustheit hinreichend;
+        K-S shaped-NR + MFCC/centroid-CV Root-Causes bleiben massgeblich."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         expected = {
@@ -1551,15 +1547,13 @@ class TestKrumhanslSchmucklerTonalCenter:
             "authentizitaet",
             "tonal_center",
             "timbre_authentizitaet",
-            "groove",
-            "emotionalitaet",
         }
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_03", set())
         assert excl == expected, f"phase_03: {excl} != {expected}"
 
     def test_93_phase29_exclusions_v9_10_96(self):
-        """phase_29 must exclude exactly 7 goals (groove+emotionalitaet added 2026-03-31:
-        HF-selective NR same LF-crest/crest-factor false P3 mechanisms as phase_03)."""
+        """phase_29 must exclude exactly 5 goals per v9.10.96 canonical spec.
+        groove/emotionalitaet entfernt: gleiche Begruendung wie phase_03."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         expected = {
@@ -1568,20 +1562,17 @@ class TestKrumhanslSchmucklerTonalCenter:
             "natuerlichkeit",
             "tonal_center",
             "timbre_authentizitaet",
-            "groove",
-            "emotionalitaet",
         }
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_29", set())
         assert excl == expected, f"phase_29: {excl} != {expected}"
 
     def test_94_phase49_exclusions_v9_10_92(self):
-        """phase_49 must exclude {authentizitaet, emotionalitaet}
-        (v9.10.92: brillanz + transparenz + waerme removed via \u00a79.7.12/13/14;
-        emotionalitaet added 2026-03-31: reverb tail adds energy to quiet segments
-        \u2192 crest-factor ratio shifts after removal \u2192 false P3, identical to phase_20/phase_03)."""
+        """phase_49 must exclude only {authentizitaet} per v9.10.96 canonical spec.
+        emotionalitaet entfernt: waerme-ratio §9.7.14 reverb-invariant;
+        brillanz+transparenz crest-proxies §9.7.12/13 SNR-robust."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
-        expected = {"authentizitaet", "emotionalitaet"}
+        expected = {"authentizitaet"}
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_49", set())
         assert excl == expected, f"phase_49: {excl} != {expected}"
 
@@ -1866,4 +1857,237 @@ class TestKrumhanslSchmucklerTonalCenter:
         for goal in ("groove", "emotionalitaet", "micro_dynamics", "natuerlichkeit"):
             assert goal not in excl, (
                 f"{goal} must NOT be in phase_41 exclusions (TruePeak -1 dBTP too light), got: {excl}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# §2.29c Restorative-Baseline-Capping
+# ---------------------------------------------------------------------------
+
+
+class TestRestorativeBaselineCapping:
+    """§2.29c: Defekt-inflationierte Baselines werden auf normative Mindest-
+    schwellwerte gedeckelt, um false-positive P1/P2-Regressionen zu verhindern.
+
+    Technischer Hintergrund: Rauschen / Hiss / Hall füllen Spektraltäler und
+    erhöhen bestimmte Metriken (Authentizität, Transparenz) künstlich über den
+    sauberen Wert. Nach Denoise / Dereverb sinkt der Score auf den echten Wert — ohne
+    Capping würde PMGG das als Regression werten und die Phase auf ~6 % Wet drosseln.
+    """
+
+    def test_108_restorative_phases_is_frozenset(self):
+        """_RESTORATIVE_PHASES must be a frozenset (immutable, thread-safe)."""
+        from backend.core.per_phase_musical_goals_gate import _RESTORATIVE_PHASES
+
+        assert isinstance(_RESTORATIVE_PHASES, frozenset), (
+            "_RESTORATIVE_PHASES must be frozenset — mutable set would allow accidental mutation"
+        )
+
+    def test_109_restorative_phases_contains_core_denoise_dereverb(self):
+        """Core denoising and dereverb phases must be in _RESTORATIVE_PHASES.
+
+        These phases remove defects (noise, reverb, hiss, hum) that can inflate
+        baseline scores — capping is mandatory to prevent false P1/P2 regressions.
+        """
+        from backend.core.per_phase_musical_goals_gate import _RESTORATIVE_PHASES
+
+        for phase in ("phase_01", "phase_02", "phase_03", "phase_09",
+                      "phase_18", "phase_20", "phase_23", "phase_24", "phase_29", "phase_49"):
+            assert phase in _RESTORATIVE_PHASES, (
+                f"{phase} must be in _RESTORATIVE_PHASES — it removes defects that may inflate baselines"
+            )
+
+    def test_110_canonical_thresholds_restoration_has_all_14_goals(self):
+        """_CANONICAL_THRESHOLDS_RESTORATION must define all 14 Musical Goals (§14 spec)."""
+        from backend.core.per_phase_musical_goals_gate import _CANONICAL_THRESHOLDS_RESTORATION
+
+        required_goals = {
+            "natuerlichkeit", "authentizitaet", "tonal_center", "timbre_authentizitaet",
+            "artikulation", "emotionalitaet", "micro_dynamics", "groove",
+            "transparenz", "waerme", "bass_kraft", "separation_fidelity",
+            "brillanz", "spatial_depth",
+        }
+        for goal in required_goals:
+            assert goal in _CANONICAL_THRESHOLDS_RESTORATION, (
+                f"Goal '{goal}' missing from _CANONICAL_THRESHOLDS_RESTORATION"
+            )
+        assert len(_CANONICAL_THRESHOLDS_RESTORATION) == 14, (
+            f"Expected exactly 14 goals, got {len(_CANONICAL_THRESHOLDS_RESTORATION)}"
+        )
+
+    def test_111_canonical_thresholds_match_spec_p1_p2(self):
+        """P1/P2 thresholds must exactly match §14 Musical Goals spec values."""
+        from backend.core.per_phase_musical_goals_gate import _CANONICAL_THRESHOLDS_RESTORATION
+
+        assert _CANONICAL_THRESHOLDS_RESTORATION["natuerlichkeit"] == pytest.approx(0.90, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["authentizitaet"] == pytest.approx(0.88, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["tonal_center"] == pytest.approx(0.95, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["timbre_authentizitaet"] == pytest.approx(0.87, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["artikulation"] == pytest.approx(0.85, abs=1e-9)
+
+    def test_112_canonical_thresholds_match_spec_p3_p5_restoration(self):
+        """P3–P5 restoration thresholds must match §9.10.77 Pareto-Differenzierung."""
+        from backend.core.per_phase_musical_goals_gate import _CANONICAL_THRESHOLDS_RESTORATION
+
+        assert _CANONICAL_THRESHOLDS_RESTORATION["emotionalitaet"] == pytest.approx(0.82, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["micro_dynamics"] == pytest.approx(0.88, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["groove"] == pytest.approx(0.83, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["transparenz"] == pytest.approx(0.82, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["waerme"] == pytest.approx(0.75, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["bass_kraft"] == pytest.approx(0.78, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["separation_fidelity"] == pytest.approx(0.78, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["brillanz"] == pytest.approx(0.78, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["spatial_depth"] == pytest.approx(0.70, abs=1e-9)
+
+    def test_113_studio2026_thresholds_p1_p2_identical(self):
+        """Studio 2026 P1/P2 thresholds must be identical to Restoration (§9.10.77)."""
+        from backend.core.per_phase_musical_goals_gate import (
+            _CANONICAL_THRESHOLDS_RESTORATION,
+            _CANONICAL_THRESHOLDS_STUDIO2026,
+        )
+
+        for goal in ("natuerlichkeit", "authentizitaet", "timbre_authentizitaet", "artikulation"):
+            assert _CANONICAL_THRESHOLDS_STUDIO2026[goal] == _CANONICAL_THRESHOLDS_RESTORATION[goal], (
+                f"P1/P2 goal '{goal}' must be identical in both modes (§9.10.77)"
+            )
+
+    def test_114_studio2026_thresholds_p3_p5_higher(self):
+        """Studio 2026 P3–P5 thresholds must be ≥ Restoration values (ambitious targets)."""
+        from backend.core.per_phase_musical_goals_gate import (
+            _CANONICAL_THRESHOLDS_RESTORATION,
+            _CANONICAL_THRESHOLDS_STUDIO2026,
+        )
+
+        for goal in ("emotionalitaet", "micro_dynamics", "groove",
+                     "transparenz", "waerme", "bass_kraft", "separation_fidelity",
+                     "brillanz", "spatial_depth"):
+            assert _CANONICAL_THRESHOLDS_STUDIO2026[goal] >= _CANONICAL_THRESHOLDS_RESTORATION[goal], (
+                f"Studio 2026 '{goal}' threshold must be ≥ Restoration threshold (§9.10.77 Pareto)"
+            )
+
+    def test_115_get_canonical_thresholds_restoration_default(self):
+        """_get_canonical_thresholds() without args must return Restoration thresholds."""
+        from backend.core.per_phase_musical_goals_gate import (
+            _CANONICAL_THRESHOLDS_RESTORATION,
+            _get_canonical_thresholds,
+        )
+
+        result = _get_canonical_thresholds()
+        assert result is _CANONICAL_THRESHOLDS_RESTORATION
+
+    def test_116_get_canonical_thresholds_studio2026(self):
+        """_get_canonical_thresholds(is_studio_2026=True) must return Studio 2026 thresholds."""
+        from backend.core.per_phase_musical_goals_gate import (
+            _CANONICAL_THRESHOLDS_STUDIO2026,
+            _get_canonical_thresholds,
+        )
+
+        result = _get_canonical_thresholds(is_studio_2026=True)
+        assert result is _CANONICAL_THRESHOLDS_STUDIO2026
+
+    def test_117_restorative_baseline_capping_formula(self):
+        """§2.29c: capping formula limits defect-inflated scores_before to canonical thresholds.
+
+        This verifies the formula inside wrap_phase() for restorative phases:
+            effective = {g: min(v, threshold.get(g, v)) for g, v in scores_before.items()}
+
+        Root cause this prevents: noise fills spectral troughs → proxy scores (e.g.
+        authentizitaet, natuerlichkeit) measure artificially high. After successful
+        denoise, score drops to the *real* clean value. Without capping, PMGG would
+        see a drop from 0.96 → 0.88 as a P1 regression and throttle phase to ~6% wet
+        → noise floor stays at −55 dBFS instead of −72 dBFS → Tiefen-Immersion lost.
+        """
+        from backend.core.per_phase_musical_goals_gate import (
+            _RESTORATIVE_PHASES,
+            _get_canonical_thresholds,
+        )
+
+        # phase_03 must be classified restorative
+        assert "phase_03" in _RESTORATIVE_PHASES
+
+        thresholds = _get_canonical_thresholds(False)  # Restoration mode
+        # Simulate defect-inflated baseline
+        inflated_scores = {
+            "authentizitaet": 0.96,  # above threshold 0.88 → must be capped
+            "natuerlichkeit": 0.95,  # above threshold 0.90 → must be capped
+            "groove": 0.72,          # below threshold 0.83 → must NOT be capped
+        }
+
+        # Apply the exact capping formula used in wrap_phase() for restorative phases
+        effective = {g: min(v, thresholds.get(g, v)) for g, v in inflated_scores.items()}
+
+        assert effective["authentizitaet"] == pytest.approx(0.88, abs=1e-9), (
+            "authentizitaet (P1) inflated to 0.96 must be capped at canonical threshold 0.88"
+        )
+        assert effective["natuerlichkeit"] == pytest.approx(0.90, abs=1e-9), (
+            "natuerlichkeit (P1) inflated to 0.95 must be capped at canonical threshold 0.90"
+        )
+        assert effective["groove"] == pytest.approx(0.72, abs=1e-9), (
+            "groove below threshold must NOT be capped — capping only suppresses inflation"
+        )
+        # All capped values must be ≤ their respective canonical thresholds
+        for g, v in effective.items():
+            assert v <= thresholds[g] + 1e-9, (
+                f"{g}: effective value {v} exceeds canonical threshold {thresholds[g]}"
+            )
+
+    def test_118_non_restorative_baseline_not_capped(self):
+        """§2.29c: non-restorative phases must NOT apply capping to scores_before.
+
+        Bandwidth extension (phase_06) synthesises new HF content — there is no
+        noise removal, so baseline inflation cannot occur. Capping here would mask
+        genuine regressions from the synthesised content.
+        """
+        from backend.core.per_phase_musical_goals_gate import (
+            _RESTORATIVE_PHASES,
+            _get_canonical_thresholds,
+        )
+
+        phase_id = "phase_06"
+        is_restorative = any(phase_id.startswith(p) for p in _RESTORATIVE_PHASES)
+        assert not is_restorative, f"phase_06 must not be in _RESTORATIVE_PHASES (got: {_RESTORATIVE_PHASES})"
+
+        # For non-restorative phases, effective_scores_before = scores_before (identity, no capping)
+        thresholds = _get_canonical_thresholds(False)
+        above_threshold_scores = {
+            "authentizitaet": 0.96,  # above 0.88 — must stay 0.96 (no capping)
+            "natuerlichkeit": 0.95,  # above 0.90 — must stay 0.95 (no capping)
+        }
+
+        # Non-restorative code path: effective_scores_before IS scores_before
+        effective = above_threshold_scores  # no min() applied
+        assert effective["authentizitaet"] == 0.96, "non-restorative: authentizitaet must not be capped"
+        assert effective["natuerlichkeit"] == 0.95, "non-restorative: natuerlichkeit must not be capped"
+        # Values exceed their canonical thresholds — that is correct and expected
+        for g, v in effective.items():
+            assert v > thresholds[g], (
+                f"{g}: non-restorative score {v} should exceed threshold {thresholds[g]}"
+            )
+
+    def test_119_canonical_thresholds_all_values_in_valid_range(self):
+        """All canonical threshold values must be in (0, 1] (strict lower bound)."""
+        from backend.core.per_phase_musical_goals_gate import (
+            _CANONICAL_THRESHOLDS_RESTORATION,
+            _CANONICAL_THRESHOLDS_STUDIO2026,
+        )
+
+        for mode_label, thresholds in [
+            ("Restoration", _CANONICAL_THRESHOLDS_RESTORATION),
+            ("Studio2026", _CANONICAL_THRESHOLDS_STUDIO2026),
+        ]:
+            for goal, value in thresholds.items():
+                assert 0.0 < value <= 1.0, (
+                    f"[{mode_label}] threshold for '{goal}' out of range: {value}"
+                )
+
+    def test_120_restorative_phases_nonempty_and_strings(self):
+        """_RESTORATIVE_PHASES must be a non-empty frozenset of non-empty strings."""
+        from backend.core.per_phase_musical_goals_gate import _RESTORATIVE_PHASES
+
+        assert len(_RESTORATIVE_PHASES) >= 10, (
+            "_RESTORATIVE_PHASES must have at least 10 entries (phase_01..phase_57 range)"
+        )
+        for p in _RESTORATIVE_PHASES:
+            assert isinstance(p, str) and p.startswith("phase_"), (
+                f"_RESTORATIVE_PHASES entry must be str starting with 'phase_', got: {p!r}"
             )

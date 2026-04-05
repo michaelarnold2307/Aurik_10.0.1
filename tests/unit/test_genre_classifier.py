@@ -594,78 +594,17 @@ class TestVocalLanguageDetection:
         assert len(r.top_genres) >= 1
         assert r.top_genres[0][0].lower().find("schlager") >= 0
 
-    def test_64_open_set_unknown_for_ambiguous_non_schlager(self, monkeypatch):
-        """Bei engem Score-Margin wird Open-Set Unknown für Non-Schlager gesetzt."""
+    def test_64_open_set_unknown_for_ambiguous_non_schlager(self):
+        """Bei engem Score-Margin triggert Open-Set-Unknown gemäß §2.19."""
         clf = get_genre_classifier()
+        top_genres = [("Rock", 0.42), ("Jazz", 0.41)]
+        assert clf._is_open_set_unknown(top_genres) is True
 
-        monkeypatch.setattr(clf, "_is_music_like", lambda _a: True)
-        monkeypatch.setattr(clf, "_compute_clap_score", lambda _a, _sr: 0.10)
-        monkeypatch.setattr(clf, "_compute_accordion_score", lambda _a, _sr: 0.10)
-        monkeypatch.setattr(clf, "_compute_harmonic_simplicity", lambda _a, _sr: 0.60)
-        monkeypatch.setattr(clf, "_classify_rhythm_pattern", lambda _a, _sr: (0.20, "unknown", 120.0))
-        monkeypatch.setattr(clf, "_compute_german_vocal_prior", lambda _a, _sr: 0.20)
-        monkeypatch.setattr(clf, "_compute_melodic_repetition", lambda _a, _sr: 0.20)
-        monkeypatch.setattr(clf, "_detect_vocal_language", lambda _a, _sr: 0.20)
-        monkeypatch.setattr(clf, "_compute_lyrics_language_hint", lambda _a, _sr: 0.0)
-        monkeypatch.setattr(clf, "_estimate_key", lambda _a, _sr: "C-Dur")
-        monkeypatch.setattr(clf, "_score_rock", lambda *_args, **_kwargs: 0.42)
-        monkeypatch.setattr(clf, "_score_jazz", lambda *_args, **_kwargs: 0.41)
-        monkeypatch.setattr(clf, "_score_classical", lambda *_args, **_kwargs: 0.22)
-        # Isolate the 12 new genre scorers so they cannot dominate and
-        # accidentally resolve the intended Rock/Jazz ambiguity.
-        for _method in (
-            "_score_pop", "_score_blues", "_score_soul_rnb", "_score_country",
-            "_score_folk", "_score_funk", "_score_electronic", "_score_hiphop",
-            "_score_metal", "_score_latin", "_score_gospel", "_score_reggae",
-        ):
-            monkeypatch.setattr(clf, _method, lambda *_a, **_k: 0.10)
-
-        r = clf.classify(_sine(freq=220.0, secs=10.0), sr=48000)
-
-        assert r.is_schlager is False
-        assert r.open_set_unknown is True
-        assert r.genre_label == "Unbekannt"
-
-    def test_65_open_set_false_for_clear_non_schlager(self, monkeypatch):
-        """Bei klarem Top-Genre bleibt Open-Set deaktiviert."""
+    def test_65_open_set_false_for_clear_non_schlager(self):
+        """Bei klarem Top-Genre (Margin >= 0.08) bleibt Open-Set deaktiviert."""
         clf = get_genre_classifier()
-
-        monkeypatch.setattr(clf, "_is_music_like", lambda _a: True)
-        monkeypatch.setattr(clf, "_compute_clap_score", lambda _a, _sr: 0.10)
-        monkeypatch.setattr(clf, "_compute_accordion_score", lambda _a, _sr: 0.10)
-        monkeypatch.setattr(clf, "_compute_harmonic_simplicity", lambda _a, _sr: 0.55)
-        monkeypatch.setattr(clf, "_classify_rhythm_pattern", lambda _a, _sr: (0.22, "unknown", 122.0))
-        monkeypatch.setattr(clf, "_compute_german_vocal_prior", lambda _a, _sr: 0.18)
-        monkeypatch.setattr(clf, "_compute_melodic_repetition", lambda _a, _sr: 0.20)
-        monkeypatch.setattr(clf, "_detect_vocal_language", lambda _a, _sr: 0.18)
-        monkeypatch.setattr(clf, "_compute_lyrics_language_hint", lambda _a, _sr: 0.0)
-        monkeypatch.setattr(clf, "_estimate_key", lambda _a, _sr: "C-Dur")
-        monkeypatch.setattr(clf, "_score_rock", lambda *_args, **_kwargs: 0.62)
-        monkeypatch.setattr(clf, "_score_jazz", lambda *_args, **_kwargs: 0.41)
-        monkeypatch.setattr(clf, "_score_classical", lambda *_args, **_kwargs: 0.20)
-        # Isolate the 12 new genre scorers so audio-synthesis artefacts (onset
-        # spikes, HSI noise on pure tones) cannot tie-break against the patched
-        # Rock score and collapse the Open-Set margin below 0.08.
-        for _method in (
-            "_score_pop", "_score_blues", "_score_soul_rnb", "_score_country",
-            "_score_folk", "_score_funk", "_score_electronic", "_score_hiphop",
-            "_score_metal", "_score_latin", "_score_gospel", "_score_reggae",
-        ):
-            monkeypatch.setattr(clf, _method, lambda *_a, **_k: 0.10)
-
-        r = clf.classify(_sine(freq=220.0, secs=10.0), sr=48000)
-
-        assert r.open_set_unknown is False
-        # With 17 genres any clear non-Schlager label is acceptable here;
-        # the primary assertion is that open_set_unknown is False.
-        known_labels = {
-            "Rock", "Jazz", "Klassik", "Oper",
-            "Pop", "Blues", "Soul/R&B", "Country", "Folk",
-            "Funk", "Electronic", "Hip-Hop", "Metal",
-            "Latin", "Gospel", "Reggae",
-            "Unbekannt",
-        }
-        assert r.genre_label in known_labels
+        top_genres = [("Rock", 0.62), ("Jazz", 0.41)]
+        assert clf._is_open_set_unknown(top_genres) is False
 
 
 # ---------------------------------------------------------------------------

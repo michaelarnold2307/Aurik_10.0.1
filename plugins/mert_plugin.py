@@ -755,6 +755,16 @@ def get_mert_plugin() -> MertPlugin:
     return _mert_instance
 
 
+def get_loaded_mert_plugin() -> MertPlugin | None:
+    """Returns the already loaded singleton without triggering model/plugin initialization.
+
+    This is used by optional hybrid metrics that may use MERT signals only if
+    MERT is already active in the current process. It must not cause a lazy-load
+    on hot metric paths.
+    """
+    return _mert_instance
+
+
 def analyze_naturalness(audio: np.ndarray, sample_rate: int) -> MertAnalysis:
     """
     Convenience-Funktion: Analysiert Audio mit dem globalen MertPlugin-Singleton.

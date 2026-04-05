@@ -59,44 +59,44 @@ class PhaseResult:
 class PhaseInterface(ABC):
     """
     Abstract base class for all restoration phases.
-    
+
     All 41 phases must implement this interface.
     """
-    
+
     @abstractmethod
-    def process(self, audio: np.ndarray, sample_rate: int, 
+    def process(self, audio: np.ndarray, sample_rate: int,
                 material: MaterialType) -> PhaseResult:
         """
         Process audio with material-adaptive parameters.
-        
+
         Args:
             audio: Audio samples (mono: [samples], stereo: [samples, 2])
             sample_rate: Sample rate in Hz
             material: Material type for adaptive thresholds
-        
+
         Returns:
             PhaseResult with processed audio and metrics
         """
         pass
-    
+
     @abstractmethod
     def get_metadata(self) -> PhaseMetadata:
         """
         Get phase metadata (ID, dependencies, priority, etc.).
-        
+
         Returns:
             PhaseMetadata describing this phase
         """
         pass
-    
+
     def validate_input(self, audio: np.ndarray, sample_rate: int) -> bool:
         """
         Validate input audio before processing.
-        
+
         Args:
             audio: Audio samples to validate
             sample_rate: Sample rate to validate
-        
+
         Returns:
             True if valid, raises ValueError otherwise
         """
@@ -105,14 +105,14 @@ class PhaseInterface(ABC):
         if sample_rate <= 0:
             raise ValueError(f"Invalid sample rate: {sample_rate}")
         return True
-    
+
     def estimate_time(self, audio_duration: float) -> float:
         """
         Estimate processing time for given audio duration.
-        
+
         Args:
             audio_duration: Audio duration in seconds
-        
+
         Returns:
             Estimated processing time in seconds
         """
@@ -138,16 +138,16 @@ class ClickRemovalPhase(PhaseInterface):
         MaterialType.CD: 0.30,        # Least sensitive (digital rarely has clicks)
         MaterialType.STREAMING: 0.40, # Only detect very obvious clicks
     }
-    
-    def process(self, audio: np.ndarray, sample_rate: int, 
+
+    def process(self, audio: np.ndarray, sample_rate: int,
                 material: MaterialType) -> PhaseResult:
         # Get material-specific threshold
         threshold = self.THRESHOLDS.get(material, 0.10)  # Default: vinyl
-        
+
         # Use threshold in algorithm
         clicks_detected = self._detect_clicks(audio, sample_rate, threshold)
         restored = self._repair_clicks(audio, clicks_detected)
-        
+
         return PhaseResult(
             success=True,
             processed_audio=restored,
@@ -163,24 +163,24 @@ Some phases use **different algorithms** per material:
 
 ```python
 class FrequencyRestorationPhase(PhaseInterface):
-    def process(self, audio: np.ndarray, sample_rate: int, 
+    def process(self, audio: np.ndarray, sample_rate: int,
                 material: MaterialType) -> PhaseResult:
         if material == MaterialType.SHELLAC:
             # Shellac has severe high-frequency rolloff (>5kHz)
             restored = self._restore_highs_aggressive(audio, cutoff=5000)
-        
+
         elif material == MaterialType.VINYL:
             # Vinyl has moderate rolloff (>12kHz)
             restored = self._restore_highs_moderate(audio, cutoff=12000)
-        
+
         elif material == MaterialType.TAPE:
             # Tape has good high-freq response, minimal restoration
             restored = self._restore_highs_gentle(audio, cutoff=15000)
-        
+
         else:  # CD, Streaming
             # Digital sources don't need frequency restoration
             return PhaseResult(success=True, processed_audio=audio, ...)
-        
+
         return PhaseResult(success=True, processed_audio=restored, ...)
 ```
 
@@ -273,14 +273,14 @@ class ClickRemovalPhase(PhaseInterface):
     def get_metadata(self) -> PhaseMetadata:
         # Base priority: HIGH
         priority = 8
-        
+
         # Adjust based on material (if known during init)
         if hasattr(self, 'material'):
             if self.material == MaterialType.SHELLAC:
                 priority = 9  # CRITICAL for shellac (many clicks)
             elif self.material == MaterialType.CD:
                 priority = 3  # LOW for CD (rare clicks)
-        
+
         return PhaseMetadata(..., priority=priority, ...)
 ```
 
@@ -337,34 +337,34 @@ if actual > estimated * 1.5:
 ```python
 class ClickRemovalPhase(PhaseInterface):
     """Remove sharp transient clicks from audio."""
-    
+
     THRESHOLDS = {
         MaterialType.SHELLAC: 0.05,
         MaterialType.VINYL: 0.10,
         MaterialType.TAPE: 0.20,
         MaterialType.CD: 0.30,
     }
-    
-    def process(self, audio: np.ndarray, sample_rate: int, 
+
+    def process(self, audio: np.ndarray, sample_rate: int,
                 material: MaterialType) -> PhaseResult:
         self.validate_input(audio, sample_rate)
         start_time = time.time()
-        
+
         # Get material threshold
         threshold = self.THRESHOLDS.get(material, 0.10)
-        
+
         # Detect clicks (inter-sample difference > threshold)
         mono = audio if audio.ndim == 1 else np.mean(audio, axis=1)
         diffs = np.abs(np.diff(mono))
         click_indices = np.where(diffs > threshold)[0]
-        
+
         # Repair clicks (median filter interpolation)
         restored = audio.copy()
         for idx in click_indices:
             if 2 <= idx < len(mono) - 2:
                 neighbors = [mono[idx-2], mono[idx-1], mono[idx+1], mono[idx+2]]
                 restored[idx] = np.median(neighbors)
-        
+
         return PhaseResult(
             success=True,
             processed_audio=restored,
@@ -376,7 +376,7 @@ class ClickRemovalPhase(PhaseInterface):
             processing_time=time.time() - start_time,
             metadata={"algorithm": "inter_sample_diff"}
         )
-    
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_01_click_removal",
@@ -393,37 +393,37 @@ class ClickRemovalPhase(PhaseInterface):
 ```python
 class HumRemovalPhase(PhaseInterface):
     """Remove 50/60 Hz power line hum and harmonics."""
-    
+
     Q_FACTORS = {
         MaterialType.TAPE: 30,     # Aggressive (tape hum very tonal)
         MaterialType.VINYL: 20,    # Moderate
         MaterialType.SHELLAC: 15,  # Gentle (avoid musical damage)
         MaterialType.CD: 10,       # Very gentle (rare on digital)
     }
-    
-    def process(self, audio: np.ndarray, sample_rate: int, 
+
+    def process(self, audio: np.ndarray, sample_rate: int,
                 material: MaterialType) -> PhaseResult:
         self.validate_input(audio, sample_rate)
         start_time = time.time()
-        
+
         # Auto-detect hum frequency (50 or 60 Hz)
         hum_freq = self._detect_hum_frequency(audio, sample_rate)
         if hum_freq is None:
             # No hum detected
             return PhaseResult(success=True, processed_audio=audio, ...)
-        
+
         # Get material-specific Q factor
         q = self.Q_FACTORS.get(material, 20)
-        
+
         # Design cascaded notch filters for harmonics
         harmonics = [hum_freq * i for i in range(1, 7)]  # 6 harmonics
         restored = audio.copy()
         for harmonic in harmonics:
             restored = self._apply_notch_filter(restored, sample_rate, harmonic, q)
-        
+
         # Measure reduction
         reduction_db = self._measure_hum_reduction(audio, restored, hum_freq)
-        
+
         return PhaseResult(
             success=True,
             processed_audio=restored,
@@ -435,7 +435,7 @@ class HumRemovalPhase(PhaseInterface):
             processing_time=time.time() - start_time,
             metadata={"q_factor": q, "material": material.value}
         )
-    
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_02_hum_removal",
@@ -452,43 +452,43 @@ class HumRemovalPhase(PhaseInterface):
 ```python
 class DenoisePhase(PhaseInterface):
     """Reduce broadband noise using Wiener filtering."""
-    
+
     STRENGTH = {
         MaterialType.TAPE: 0.8,      # Aggressive (tape hiss very audible)
         MaterialType.VINYL: 0.6,     # Moderate (surface noise)
         MaterialType.SHELLAC: 0.5,   # Moderate (surface noise + recording noise)
         MaterialType.CD: 0.3,        # Gentle (minimal noise on digital)
     }
-    
-    def process(self, audio: np.ndarray, sample_rate: int, 
+
+    def process(self, audio: np.ndarray, sample_rate: int,
                 material: MaterialType) -> PhaseResult:
         self.validate_input(audio, sample_rate)
         start_time = time.time()
-        
+
         # Get material-specific strength
         strength = self.STRENGTH.get(material, 0.6)
-        
+
         # STFT-based Wiener filtering
         from scipy.signal import stft, istft
-        
+
         f, t, Zxx = stft(audio, fs=sample_rate, nperseg=2048)
-        
+
         # Estimate noise floor (first 10% of audio)
         noise_frames = int(0.1 * Zxx.shape[1])
         noise_floor = np.median(np.abs(Zxx[:, :noise_frames]), axis=1)
-        
+
         # Wiener filter
         for i in range(Zxx.shape[1]):
             magnitude = np.abs(Zxx[:, i])
             wiener_gain = np.maximum(0, 1 - strength * (noise_floor / (magnitude + 1e-8)))
             Zxx[:, i] *= wiener_gain
-        
+
         # Reconstruct audio
         _, restored = istft(Zxx, fs=sample_rate)
-        
+
         # Measure noise reduction (>8kHz band)
         reduction_db = self._measure_high_freq_reduction(audio, restored, sample_rate)
-        
+
         return PhaseResult(
             success=True,
             processed_audio=restored[:len(audio)],  # Trim to original length
@@ -499,7 +499,7 @@ class DenoisePhase(PhaseInterface):
             processing_time=time.time() - start_time,
             metadata={"algorithm": "wiener_stft", "material": material.value}
         )
-    
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_03_denoise",
@@ -525,7 +525,7 @@ import time
 
 class MyNewPhase(PhaseInterface):
     """Brief description of what this phase does."""
-    
+
     # Material-adaptive parameters
     PARAM_A = {
         MaterialType.SHELLAC: value_shellac,
@@ -533,22 +533,22 @@ class MyNewPhase(PhaseInterface):
         MaterialType.TAPE: value_tape,
         MaterialType.CD: value_cd,
     }
-    
-    def process(self, audio: np.ndarray, sample_rate: int, 
+
+    def process(self, audio: np.ndarray, sample_rate: int,
                 material: MaterialType) -> PhaseResult:
         """Process audio with material-adaptive algorithm."""
         self.validate_input(audio, sample_rate)
         start_time = time.time()
-        
+
         # 1. Get material-specific parameters
         param = self.PARAM_A.get(material, default_value)
-        
+
         # 2. Process audio
         restored = self._my_algorithm(audio, sample_rate, param)
-        
+
         # 3. Calculate metrics
         metric_value = self._calculate_metric(audio, restored)
-        
+
         # 4. Return result
         return PhaseResult(
             success=True,
@@ -557,7 +557,7 @@ class MyNewPhase(PhaseInterface):
             processing_time=time.time() - start_time,
             metadata={"param_used": param, "material": material.value}
         )
-    
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_XX_my_new_phase",
@@ -567,8 +567,8 @@ class MyNewPhase(PhaseInterface):
             dependencies=["phase_YY_dependency"],  # List dependencies
             estimated_time_factor=0.05  # Estimate as fraction of audio duration
         )
-    
-    def _my_algorithm(self, audio: np.ndarray, sample_rate: int, 
+
+    def _my_algorithm(self, audio: np.ndarray, sample_rate: int,
                       param: float) -> np.ndarray:
         """Implement your restoration algorithm here."""
         # Your code here
@@ -582,19 +582,19 @@ def test_my_new_phase():
     """Unit test for MyNewPhase."""
     # Generate test audio
     audio = generate_sine_wave(duration=10, frequency=440, sr=44100)
-    
+
     # Add synthetic defect
     audio_with_defect = inject_my_defect(audio)
-    
+
     # Run phase
     phase = MyNewPhase()
     result = phase.process(audio_with_defect, 44100, MaterialType.VINYL)
-    
+
     # Validate result
     assert result.success
     assert result.processing_time < 1.0  # Should be fast for 10s audio
     assert result.metrics["my_metric"] > expected_threshold
-    
+
     # Validate metadata
     metadata = phase.get_metadata()
     assert metadata.phase_id == "phase_XX_my_new_phase"
@@ -676,7 +676,7 @@ def sort_phases_by_dependencies(phases: List[PhaseInterface]) -> List[PhaseInter
     # Build dependency graph
     graph = {p.get_metadata().phase_id: p for p in phases}
     deps = {p.get_metadata().phase_id: p.get_metadata().dependencies for p in phases}
-    
+
     # Topological sort (Kahn's algorithm)
     sorted_phases = []
     while graph:
@@ -684,16 +684,16 @@ def sort_phases_by_dependencies(phases: List[PhaseInterface]) -> List[PhaseInter
         no_deps = [pid for pid, d in deps.items() if not d]
         if not no_deps:
             raise DependencyCycleError("Circular dependency detected!")
-        
+
         # Add to sorted list
         for pid in no_deps:
             sorted_phases.append(graph.pop(pid))
             deps.pop(pid)
-        
+
         # Remove from other dependencies
         for pid in deps:
             deps[pid] = [d for d in deps[pid] if d not in no_deps]
-    
+
     return sorted_phases
 ```
 

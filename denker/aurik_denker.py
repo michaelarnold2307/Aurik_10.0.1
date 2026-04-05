@@ -223,6 +223,7 @@ class AurikDenker:
         cached_defect_result: Any | None = None,
         cached_medium_result: Any | None = None,
         cached_restorability_result: Any | None = None,
+        recovery_checkpoint: Any | None = None,
         input_path: str = "",
         output_path: str = "",
         no_rt_limit: bool = False,
@@ -284,6 +285,7 @@ class AurikDenker:
                 cached_defect_result=cached_defect_result,
                 cached_medium_result=cached_medium_result,
                 cached_restorability_result=cached_restorability_result,
+                recovery_checkpoint=recovery_checkpoint,
                 input_path=input_path,
                 output_path=output_path,
                 no_rt_limit=no_rt_limit,
@@ -328,6 +330,7 @@ class AurikDenker:
             cached_defect_result=kwargs.get("cached_defect_result"),
             cached_medium_result=kwargs.get("cached_medium_result"),
             cached_restorability_result=kwargs.get("cached_restorability_result"),
+            recovery_checkpoint=kwargs.get("recovery_checkpoint"),
             # §2.39 OOM-Recovery: Pfade für Checkpoint-Persistierung durchreichen
             input_path=kwargs.get("input_path", ""),
             output_path=kwargs.get("output_path", ""),
@@ -573,6 +576,7 @@ class AurikDenker:
         cached_defect_result: Any | None = None,
         cached_medium_result: Any | None = None,
         cached_restorability_result: Any | None = None,
+        recovery_checkpoint: Any | None = None,
         input_path: str = "",
         output_path: str = "",
         no_rt_limit: bool = False,
@@ -657,27 +661,43 @@ class AurikDenker:
             return _rt() < _mode_limit * 0.90
 
         # ── Stufe 1: Tonträger-Erkennung ─────────────────────────────────────
-        _emit(2, "Tonträger wird erkannt …")
+        # Skip full TontraegerDenker run when the frontend has already analysed the
+        # carrier (cached_medium_result from _carrier_bg / bridge cache) — avoids a
+        # redundant MediumDetector pass that the user sees as "Tonträger wird erkannt".
         material = "unknown"
-        try:
-            toni = get_tontraeger_denker().erkenne(aktuelles_audio, sr, file_path=input_path)
-            material = toni.material_type
-            stage_notes["tontraeger"] = f"{material} (Konfidenz: {toni.confidence:.2f})"
+        if cached_medium_result is not None:
+            material = str(getattr(cached_medium_result, "material_type", "unknown") or "unknown")
+            stage_notes["tontraeger"] = (
+                f"{material} (Cache, Konfidenz: {getattr(cached_medium_result, 'confidence', 0.0):.2f})"
+            )
             phases_executed.append("tontraeger_erkennung")
-            logger.info("AurikDenker [1/10] Träger: %s (%.2f)", material, toni.confidence)
-            # §6.7 v9.10.97: Bayesian ClassificationResult aus Stufe 1 als cached_medium_result
-            # für UV3 übernehmen — eliminiert redundante MediumClassifier-Aufrufe.
-            if cached_medium_result is None and getattr(toni, "classification_result", None) is not None:
-                cached_medium_result = toni.classification_result
-                logger.info(
-                    "AurikDenker: MediumDetector-ClassificationResult als cached_medium_result übernommen "
-                    "(material=%s, conf=%.2f)",
-                    getattr(cached_medium_result, "material_type", material),
-                    getattr(cached_medium_result, "confidence", toni.confidence),
-                )
-        except Exception as exc:
-            _record_stage_failure("tontraeger", "TontraegerDenker", exc)
-            logger.warning("AurikDenker [1/10] TontraegerDenker: %s", exc)
+            logger.info(
+                "AurikDenker [1/10] Träger aus Frontend-Cache: %s (%.2f)",
+                material,
+                getattr(cached_medium_result, "confidence", 0.0),
+            )
+            _emit(2, f"Tonträger erkannt: {material} (Cache)")
+        else:
+            _emit(2, "Tonträger wird erkannt …")
+            try:
+                toni = get_tontraeger_denker().erkenne(aktuelles_audio, sr, file_path=input_path)
+                material = toni.material_type
+                stage_notes["tontraeger"] = f"{material} (Konfidenz: {toni.confidence:.2f})"
+                phases_executed.append("tontraeger_erkennung")
+                logger.info("AurikDenker [1/10] Träger: %s (%.2f)", material, toni.confidence)
+                # §6.7 v9.10.97: Bayesian ClassificationResult aus Stufe 1 als cached_medium_result
+                # für UV3 übernehmen — eliminiert redundante MediumClassifier-Aufrufe.
+                if getattr(toni, "classification_result", None) is not None:
+                    cached_medium_result = toni.classification_result
+                    logger.info(
+                        "AurikDenker: MediumDetector-ClassificationResult als cached_medium_result übernommen "
+                        "(material=%s, conf=%.2f)",
+                        getattr(cached_medium_result, "material_type", material),
+                        getattr(cached_medium_result, "confidence", toni.confidence),
+                    )
+            except Exception as exc:
+                _record_stage_failure("tontraeger", "TontraegerDenker", exc)
+                logger.warning("AurikDenker [1/10] TontraegerDenker: %s", exc)
 
         # ── Stufe 2: Tonträgerketten-Analyse ──────────────────────────────────
         _emit(4, "Tonträgerkette analysiert …")
@@ -920,6 +940,47 @@ class AurikDenker:
                         logger.debug("Operation failed (non-critical): %s", _exc)
                     try:
                         _work_audio = aktuelles_audio.copy()
+
+                        # §2.39 OOM-Recovery: bei vorhandenem Checkpoint direkte
+                        # Wiederaufnahme in UV3 (ohne erneute Reparatur-/Rekonstruktionsstufen).
+                        if recovery_checkpoint is not None:
+                            def _resume_cb(pct: int, msg: str, elapsed: float = 0.0) -> None:
+                                if pct <= 19:
+                                    d = 13 + int(pct * 7 / 19) if pct > 0 else 13
+                                elif pct <= 85:
+                                    d = 20 + int((pct - 20) * 67 / 65)
+                                else:
+                                    d = 87 + int((pct - 86) * 7 / 14)
+                                _emit(min(94, d), msg)
+
+                            _emit(13, "OOM-Recovery wird fortgesetzt …")
+                            _result_box.append(
+                                get_restaurier_denker().restauriere(
+                                    _work_audio,
+                                    sr,
+                                    material=material,
+                                    mode=_mode,
+                                    global_plan=_globalplan,
+                                    chain_info=chain_info or None,
+                                    defekt_hint=_defekt_hint,
+                                    progress_callback=_resume_cb if progress_callback is not None else None,
+                                    audio_update_callback=audio_update_callback,
+                                    cached_era_result=cached_era_result,
+                                    cached_genre_result=cached_genre_result,
+                                    cached_defect_result=(
+                                        cached_defect_result
+                                        or (getattr(defekt, "raw_scan_result", None) if defekt is not None else None)
+                                    ),
+                                    cached_medium_result=cached_medium_result,
+                                    cached_restorability_result=cached_restorability_result,
+                                    recovery_checkpoint=recovery_checkpoint,
+                                    input_path=input_path,
+                                    output_path=output_path,
+                                    no_rt_limit=no_rt_limit,
+                                )
+                            )
+                            return
+
                         # §G1: Pre-Repair-Referenz sichern — echtes Original VOR
                         # ReparaturDenker/RekonstruktionsDenker für referenz-basierte
                         # Musical Goals (Authentizität, Groove, Timbre, Artikulation).

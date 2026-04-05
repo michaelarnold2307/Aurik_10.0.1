@@ -180,6 +180,12 @@ class MicroDynamicsEnvelopeMorphing:
                 ramp = np.linspace(linear_gain, nxt_gain, ce - start, dtype=np.float32)
                 gain_envelope[start:ce] = ramp
 
+        # §2.30 tail-gap fix: Samples nach dem letzten Frame-Ende erhalten den
+        # abschliessenden Gain-Wert des letzten Frames (bis zu hop-1 = ~200 ms).
+        _last_covered = min((n_frames - 1) * hop + fsize, n)
+        if _last_covered < n and _last_covered > 0:
+            gain_envelope[_last_covered:] = gain_envelope[_last_covered - 1]
+
         # Auf Stereo/Mono anwenden
         if is_stereo:
             out = res * gain_envelope[np.newaxis, : res.shape[1]] if res.shape[0] == 2 else res
@@ -217,8 +223,34 @@ class MicroDynamicsEnvelopeMorphing:
                     n_s = min(len(res[ch]), len(gain2))
                     out_retry[ch, :n_s] = res[ch, :n_s] * gain2[:n_s]
                     out_retry[ch, n_s:] = res[ch, n_s:]
-                return np.clip(np.nan_to_num(out_retry), -self.TRUE_PEAK_LIMIT, self.TRUE_PEAK_LIMIT).astype(np.float32)
-            return out2.astype(np.float32)
+                final = np.clip(np.nan_to_num(out_retry), -self.TRUE_PEAK_LIMIT, self.TRUE_PEAK_LIMIT).astype(np.float32)
+            else:
+                final = out2.astype(np.float32)
+            # §8.2 Observability: log final pearson after retry (universal guarantee ≥ 0.92)
+            _final_mono = final.mean(axis=0) if final.ndim == 2 else final
+            r_final = self._pearson(orig_mono[: len(_final_mono)], _final_mono[: len(orig_mono)])
+            if r_final < 0.92:
+                logger.warning(
+                    "§8.2 MDEM Mikro-Dynamik-Guarantee VERFEHLT: pearson=%.4f < 0.92 "
+                    "(max_gain=%.1f dB, mode=%s) — Rohausgabe nicht unterdrückt",
+                    r_final,
+                    max_gain,
+                    "retry",
+                )
+            else:
+                logger.info("§8.2 MDEM Micro-Dynamics pearson=%.4f ≥ 0.92 (retry, r_before=%.4f)", r_final, r)
+            return final
+
+        # §8.2 Observability: log final pearson (universal guarantee ≥ 0.92)
+        if r < 0.92:
+            logger.warning(
+                "§8.2 MDEM Mikro-Dynamik-Guarantee VERFEHLT: pearson=%.4f < 0.92 "
+                "(max_gain=%.1f dB) — Rohausgabe nicht unterdrückt",
+                r,
+                max_gain,
+            )
+        else:
+            logger.debug("§8.2 MDEM Micro-Dynamics pearson=%.4f ≥ 0.92 (max_gain=%.1f dB)", r, max_gain)
 
         return out.astype(np.float32)
 
@@ -226,9 +258,13 @@ class MicroDynamicsEnvelopeMorphing:
         self,
         res_mono: np.ndarray,
         orig_mono: np.ndarray,
-        max_gain: float = 3.0,
+        max_gain: float = 4.0,
     ) -> np.ndarray:
-        """Interne Gain-Envelope-Berechnung und -Anwendung auf Mono-Signale (kein Retry)."""
+        """Interne Gain-Envelope-Berechnung und -Anwendung auf Mono-Signale (kein Retry).
+
+        Default max_gain = 4.0 LU (Restoration mode, §2.30 v9.10.79).
+        VERBOTEN: einheitliches 3.0 LU — nicht spec-konform (Fix X2 §2.30).
+        """
         L_orig = self.compute_lufs_profile(orig_mono)
         L_rest = self.compute_lufs_profile(res_mono)
         n_frames = min(len(L_orig), len(L_rest))
@@ -254,6 +290,12 @@ class MicroDynamicsEnvelopeMorphing:
             lg = float(10.0 ** (G_smooth[k] / 20.0))
             nxt = float(10.0 ** (G_smooth[k + 1] / 20.0)) if k + 1 < n_frames else lg
             gain_envelope[start:ce] = np.linspace(lg, nxt, ce - start, dtype=np.float32)
+
+        # §2.30 tail-gap fix: Samples jenseits des letzten Frame-Endes fortsetzen.
+        _last_covered = min((n_frames - 1) * hop + self.FRAME_SIZE_SAMPLES, n)
+        if _last_covered < n and _last_covered > 0:
+            gain_envelope[_last_covered:] = gain_envelope[_last_covered - 1]
+
         out = res_mono.copy()
         n_s = min(n, len(gain_envelope))
         out[:n_s] = res_mono[:n_s] * gain_envelope[:n_s]

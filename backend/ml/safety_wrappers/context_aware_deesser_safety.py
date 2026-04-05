@@ -303,6 +303,11 @@ class ContextAwareDeEsserSafety:
         # Ensure mono for analysis (average if stereo)
         audio_mono = np.mean(audio, axis=0) if audio.ndim > 1 else audio
 
+        # Always compute baseline intelligibility so metadata remains complete,
+        # even when pre-check exits early (e.g. no sibilance detected).
+        baseline_intelligibility = measure_intelligibility(audio_mono, sr)
+        metrics["baseline_intelligibility"] = baseline_intelligibility
+
         # Check for sibilance
         has_sibilance, sibilance_intensity, sibilance_metrics = detect_phoneme_based_sibilance(audio_mono, sr)
         metrics.update(sibilance_metrics)
@@ -320,10 +325,6 @@ class ContextAwareDeEsserSafety:
 
         if sibilance_intensity < 0.3:
             warnings_list.append(f"Low sibilance intensity ({sibilance_intensity:.2f}). Consider using GENTLE mode.")
-
-        # Measure baseline intelligibility
-        baseline_intelligibility = measure_intelligibility(audio_mono, sr)
-        metrics["baseline_intelligibility"] = baseline_intelligibility
 
         if baseline_intelligibility < 0.5:
             warnings_list.append(

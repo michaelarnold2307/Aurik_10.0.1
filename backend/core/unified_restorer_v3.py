@@ -505,7 +505,9 @@ class UnifiedRestorerV3:
         # Material-type base multipliers (psychoacoustic + restoration constraints).
         # Overrides are narrow (±0.10 max) to stay conservative and not over-ride
         # per-phase material_initial_strengths (from defect_phase_mapper).
-        _mat_val = material_type.value if material_type is not None and hasattr(material_type, "value") else "unknown"
+        from backend.core.material_canonical import canonical_material_key
+
+        _mat_val = canonical_material_key(material_type)
         _mat_denoise = 1.00
         _mat_reverb = 1.00
         _mat_reconstruct = 1.00
@@ -515,22 +517,21 @@ class UnifiedRestorerV3:
             _mat_denoise = 1.08  # broad-band shellac noise → slightly more aggressive denoise
             _mat_reverb = 0.90  # shellac has no room reverb character worth removing
             _mat_reconstruct = 1.05  # wide BW loss → more reconstruction
-        elif _mat_val in ("vinyl_standard", "vinyl_premium"):
+        elif _mat_val in ("vinyl",):
             _mat_denoise = 1.00
             _mat_reverb = 0.95
-        elif _mat_val in ("tape_standard", "tape_studio", "reel_tape"):
+        elif _mat_val in ("tape", "reel_tape"):
             _mat_denoise = 1.03  # tape hiss layer → slightly higher denoise
             _mat_reverb = 1.05  # tape reverb / room often worth reducing
-        elif _mat_val in ("cd_digital", "dat", "digital"):
+        elif _mat_val in ("cd_digital", "dat"):
             _mat_denoise = 0.85  # clean digital → gentle denoise family
             _mat_reverb = 0.92
             _mat_reconstruct = 0.88
-        elif _mat_val in ("mp3_low", "mp3_standard"):
+        elif _mat_val in ("mp3_low", "mp3_high"):
             _mat_reconstruct = 1.08  # codec artefacts → more reconstruction
             _mat_dynamics = 1.05  # lossy compression → restore dynamics
-        elif _mat_val in ("cassette_standard", "cassette_chrome"):
-            _mat_denoise = 1.05  # moderate tape hiss
-            _mat_reverb = 0.95
+        elif _mat_val in ("aac", "minidisc", "streaming"):
+            _mat_reconstruct = 1.05
 
         # §Per-defect calibration: boost the relevant family if a specific defect
         # dominates this song. Uses weighted severity (0=none, 1=heavy).
@@ -701,8 +702,14 @@ class UnifiedRestorerV3:
         _global *= 0.90 + 0.10 * (1.0 - _snr)
         _global *= 0.92 + 0.16 * _conf
         _global *= _diversity_penalty
-        _global = float(np.clip(_global, 0.70, 1.10))
+        # [RELEASE_MUST] Lücke-G-Fix v9.10.100: global_scalar ∈ [0.50, 1.50]
+        # Unteres Limit 0.50 verhindert Neutralisierung aller Phasen.
+        # Oberes Limit 1.50 verhindert Umgehung des Soft-Saturation-Guards.
+        _global = float(np.clip(_global, 0.50, 1.50))
 
+        # [RELEASE_MUST] Lücke-G-Fix v9.10.100: family_scalars[*] ∈ [0.30, 1.80]
+        # Untergrenze 0.30 schützt vor Komplettunterdrückung einer Familie.
+        # Obergrenze 1.80 verhindert Überamplitude in einzelnen Verarbeitungsstufen.
         _family = {
             "denoise": float(
                 np.clip(
@@ -713,11 +720,11 @@ class UnifiedRestorerV3:
                     * _sf_denoise_boost
                     * _soft_sat_guard
                     * _genre_denoise_factor,
-                    0.60,
-                    1.12,
+                    0.30,
+                    1.80,
                 )
             ),
-            "reverb": float(np.clip(_global * _mat_reverb * (0.90 + 0.14 * _def) * _genre_reverb_factor, 0.60, 1.12)),
+            "reverb": float(np.clip(_global * _mat_reverb * (0.90 + 0.14 * _def) * _genre_reverb_factor, 0.30, 1.80)),
             "reconstruction": float(
                 np.clip(
                     _global
@@ -725,8 +732,8 @@ class UnifiedRestorerV3:
                     * (0.88 + 0.16 * (1.0 - _conf))
                     * _sf_reconstruct_boost
                     * _schlager_recon_factor,
-                    0.55,
-                    1.10,
+                    0.30,
+                    1.80,
                 )
             ),
             "dynamics_eq": float(
@@ -737,8 +744,8 @@ class UnifiedRestorerV3:
                     * _sf_dynq_boost
                     * _schlager_dynamics
                     * _genre_dynamics_factor,
-                    0.65,
-                    1.08,
+                    0.30,
+                    1.80,
                 )
             ),
             "transient": float(
@@ -749,8 +756,8 @@ class UnifiedRestorerV3:
                     * _soft_sat_transient_guard
                     * _schlager_transient
                     * _genre_transient_factor,
-                    0.75,
-                    1.10,
+                    0.30,
+                    1.80,
                 )
             ),
             "vocal": float(
@@ -761,11 +768,11 @@ class UnifiedRestorerV3:
                     * _panns_vocal_boost
                     * _schlager_vocal_boost
                     * _genre_vocal_factor,
-                    0.55,
-                    1.12,
+                    0.30,
+                    1.80,
                 )
             ),
-            "instrument": float(np.clip(_global * (0.90 + 0.10 * _rest) * _panns_instrument_boost, 0.60, 1.10)),
+            "instrument": float(np.clip(_global * (0.90 + 0.10 * _rest) * _panns_instrument_boost, 0.30, 1.80)),
             "general": _global,
         }
 
@@ -773,10 +780,10 @@ class UnifiedRestorerV3:
         # transient shaping and vocal enhancement (higher quality budget).
         _mode_str = getattr(mode, "value", str(mode)).lower()
         if "studio" in _mode_str or "maximum" in _mode_str:
-            _family["reconstruction"] = float(np.clip(_family["reconstruction"] * 1.08, 0.55, 1.10))
-            _family["transient"] = float(np.clip(_family["transient"] * 1.05, 0.75, 1.10))
-            _family["vocal"] = float(np.clip(_family["vocal"] * 1.05, 0.55, 1.12))
-            _family["instrument"] = float(np.clip(_family["instrument"] * 1.05, 0.60, 1.10))
+            _family["reconstruction"] = float(np.clip(_family["reconstruction"] * 1.08, 0.30, 1.80))
+            _family["transient"] = float(np.clip(_family["transient"] * 1.05, 0.30, 1.80))
+            _family["vocal"] = float(np.clip(_family["vocal"] * 1.05, 0.30, 1.80))
+            _family["instrument"] = float(np.clip(_family["instrument"] * 1.05, 0.30, 1.80))
 
         if restorability_score < 40.0:
             _tier = "poor"
@@ -844,7 +851,8 @@ class UnifiedRestorerV3:
             _scalar = float(_raw)
         except Exception:
             _scalar = 1.0
-        return float(np.clip(_scalar, 0.60, 1.10))
+        # [RELEASE_MUST] Lücke-G-Fix v9.10.100: family_scalars ∈ [0.30, 1.80]
+        return float(np.clip(_scalar, 0.30, 1.80))
 
     @staticmethod
     def _mid_pipeline_calibration_step(
@@ -882,9 +890,9 @@ class UnifiedRestorerV3:
         _changes: dict[str, float] = {}
 
         def _adj(family: str, factor: float) -> None:
-            """Apply a bounded multiplicative adjustment, clamped to [0.60, 1.10]."""
-            _old = float(np.clip(float(_new_fam.get(family, 1.0)), 0.60, 1.10))
-            _new_val = float(np.clip(_old * factor, 0.60, 1.10))
+            """Apply a bounded multiplicative adjustment, clamped to [0.30, 1.80] (Lücke-G-Fix v9.10.100)."""
+            _old = float(np.clip(float(_new_fam.get(family, 1.0)), 0.30, 1.80))
+            _new_val = float(np.clip(_old * factor, 0.30, 1.80))
             if abs(_new_val - _old) >= 0.005:  # ignore sub-0.5 % noise
                 _new_fam[family] = _new_val
                 _changes[family] = round(_new_val - _old, 4)
@@ -1102,6 +1110,23 @@ class UnifiedRestorerV3:
         _gp_kwarg = kwargs.pop("global_plan", None)
         _chain_kwarg = kwargs.pop("chain_info", None)
         _defekt_hint_kwarg = kwargs.pop("defekt_hint", None)
+        # Pre-analysis result (PreAnalysisResult from backend.core.pre_analysis).
+        # When provided, individual cached_* kwargs are populated from it automatically
+        # so callers only need to pass one object.
+        _pre_analysis = kwargs.pop("pre_analysis_result", None)
+        if _pre_analysis is not None:
+            # Unpack sub-results into the individual cache kwargs, but do NOT
+            # overwrite kwargs that were already set explicitly by the caller.
+            if kwargs.get("cached_medium_result") is None and getattr(_pre_analysis, "medium", None) is not None:
+                kwargs["cached_medium_result"] = _pre_analysis.medium
+            if kwargs.get("cached_era_result") is None and getattr(_pre_analysis, "era", None) is not None:
+                kwargs["cached_era_result"] = _pre_analysis.era
+            if kwargs.get("cached_genre_result") is None and getattr(_pre_analysis, "genre", None) is not None:
+                kwargs["cached_genre_result"] = _pre_analysis.genre
+            if kwargs.get("cached_defect_result") is None and getattr(_pre_analysis, "defects", None) is not None:
+                kwargs["cached_defect_result"] = _pre_analysis.defects
+            if kwargs.get("cached_restorability_result") is None and getattr(_pre_analysis, "restorability", None) is not None:
+                kwargs["cached_restorability_result"] = _pre_analysis.restorability
         _cached_era_kwarg = kwargs.pop("cached_era_result", None)
         _cached_genre_kwarg = kwargs.pop("cached_genre_result", None)
         _cached_defect_kwarg = kwargs.pop("cached_defect_result", None)
@@ -1384,12 +1409,20 @@ class UnifiedRestorerV3:
             import concurrent.futures as _cf
 
             def _run_mc(a: np.ndarray, sr: int) -> object | None:
+                # §6.7 v9.10.97: MediumDetector ist das einzige autoritative System.
+                # MediumClassifier (legacy) nur als Fallback wenn MediumDetector n.v.
+                try:
+                    from forensics.medium_detector import get_medium_detector as _get_md
+
+                    return _get_md().detect(a, sr, file_ext=_file_ext_for_scan)
+                except Exception as _e:
+                    logger.debug("MediumDetector nicht verfügbar, Fallback auf MediumClassifier: %s", _e)
                 try:
                     from backend.core.medium_classifier import classify_medium
 
                     return classify_medium(a, sr=sr, use_ml=True)
-                except Exception as _e:
-                    logger.debug("MediumClassifier nicht verfügbar: %s", _e)
+                except Exception as _e2:
+                    logger.debug("MediumClassifier nicht verfügbar: %s", _e2)
                     return None
 
             def _run_era(a: np.ndarray, sr: int) -> object | None:
@@ -1422,8 +1455,8 @@ class UnifiedRestorerV3:
                     _futures["mc"] = _pool.submit(_run_mc, analysis_audio, analysis_sample_rate)
                 else:
                     logger.info(
-                        "MediumClassifier: verwende gecachtes Ergebnis (material=%s, conf=%.2f)",
-                        getattr(_cached_medium_kwarg, "material_type", getattr(_cached_medium_kwarg, "material", "?")),
+                        "MediumDetector: verwende gecachtes Ergebnis (material=%s, conf=%.2f)",
+                        getattr(_cached_medium_kwarg, "primary_material", getattr(_cached_medium_kwarg, "material_type", getattr(_cached_medium_kwarg, "material", "?"))),
                         float(getattr(_cached_medium_kwarg, "confidence", 0.0)),
                     )
                 if not _era_cached:
@@ -1446,9 +1479,11 @@ class UnifiedRestorerV3:
                 _era_result_par = _cached_era_kwarg if _era_cached else _futures["era"].result()
                 _schlager_result_par = _cached_genre_kwarg if _genre_cached else _futures["genre"].result()
 
-            # MediumClassifier-Ergebnis verarbeiten
+            # MediumDetector/MediumClassifier-Ergebnis verarbeiten
+            # Duck-type: cached result may be a full MediumDetectionResult (primary_material)
+            # or a MediumClassificationResult (material) — handle both.
             if _mc_result is not None and _mc_result.confidence >= 0.30:
-                _raw_mat = _mc_result.material
+                _raw_mat = getattr(_mc_result, "primary_material", None) or getattr(_mc_result, "material", None)
                 # Bug-16a-Fix: ClassificationResult.material kann ein String sein
                 # (forensics/medium_detector.py baut ClassificationResult mit material=primary_string).
                 # _classified_material.value würde AttributeError werfen → stille Ausnahme →
@@ -1467,7 +1502,7 @@ class UnifiedRestorerV3:
                     except ValueError:
                         _classified_material = MaterialType.UNKNOWN
                 logger.info(
-                    "🔍 MediumClassifier: Material=%s Konfidenz=%.2f Quelle=%s",
+                    "🔍 MediumDetector: Material=%s Konfidenz=%.2f Quelle=%s",
                     _classified_material.value,
                     _mc_result.confidence,
                     getattr(_mc_result, "classifier_source", "cached"),
@@ -1825,6 +1860,92 @@ class UnifiedRestorerV3:
                     )
             except Exception as _gp_genre_exc:
                 logger.debug("GENRE_RESTORATION_PROFILE nicht geladen: %s", _gp_genre_exc)
+        elif not _genre_profile:
+            # §2.20 PANNs-basierte Fallback-Aktivierung (v9.10.102): wenn kein Genre via
+            # Klassifikator erkannt (open_set_unknown / Unbekannt / None), PANNs-Tags direkt prüfen.
+            # Aktivierungsregeln (Priorität 2–5, höchste actuelle Priorität gewinnt):
+            #   OPER:    PANNs "Opera" ≥ 0.45 oder "Singing" ≥ 0.50 + formant_pearson ≥ 0.90
+            #   KLASSIK: PANNs "Orchestra" ≥ 0.45 oder "Classical music" ≥ 0.40
+            #   JAZZ:    PANNs "Jazz" ≥ 0.40 oder "Blues" ≥ 0.40
+            #   ROCK:    PANNs "Rock music" ≥ 0.40 oder "Electric guitar" + "Drum" beide ≥ 0.35
+            _pt = kwargs.get("panns_tags") or {}
+            if not isinstance(_pt, dict):
+                _pt = {}
+            _panns_fallback_profile_key: str | None = None
+            _panns_opera = max(_pt.get("Opera", 0.0), _pt.get("opera", 0.0))
+            _panns_singing = max(_pt.get("Singing", 0.0), _pt.get("Singing voice", 0.0))
+            _panns_orchestra = max(_pt.get("Orchestra", 0.0), _pt.get("orchestra", 0.0))
+            _panns_classical = max(_pt.get("Classical music", 0.0), _pt.get("classical music", 0.0))
+            _panns_jazz = max(_pt.get("Jazz", 0.0), _pt.get("jazz", 0.0))
+            _panns_blues = max(_pt.get("Blues", 0.0), _pt.get("blues", 0.0))
+            _panns_rock = max(_pt.get("Rock music", 0.0), _pt.get("rock", 0.0))
+            _panns_guitar = max(_pt.get("Electric guitar", 0.0), _pt.get("Guitar", 0.0))
+            _panns_drum = max(_pt.get("Drum", 0.0), _pt.get("Drums", 0.0), _pt.get("Percussion", 0.0))
+            # §2.20 OPER "Singing ≥ 0.50" path requires formant_pearson ≥ 0.90 guard
+            # (Spec 03 v9.10.102): formant stability Pearson proxy via FormantTracker
+            # on a 2s segment — high r (opera) vs low r (speech/choir jumping formants).
+            _formant_pearson: float = 0.0
+            if _panns_singing >= 0.50 and _panns_opera < 0.45:
+                try:
+                    from plugins.formant_tracker import get_formant_tracker as _get_ft
+                    from scipy.stats import pearsonr as _pearsonr
+                    _ft = _get_ft()
+                    _ft_sr = sample_rate
+                    _ft_audio = audio
+                    if _ft_audio.ndim > 1:
+                        _ft_audio = _ft_audio[0]
+                    # Use 2s center segment for speed
+                    _ft_len = min(len(_ft_audio), int(2.0 * _ft_sr))
+                    _ft_start = max(0, (len(_ft_audio) - _ft_len) // 2)
+                    _ft_seg = _ft_audio[_ft_start : _ft_start + _ft_len]
+                    _ft_result = _ft.track(_ft_seg.astype(np.float32), _ft_sr)
+                    # Extract F1 trajectory from confident voiced frames
+                    _f1_vals = [
+                        fr.frequencies[0]
+                        for fr in _ft_result.formant_tracks
+                        if len(fr.frequencies) > 0
+                        and math.isfinite(fr.frequencies[0])
+                        and fr.frequencies[0] > 200.0
+                        and len(fr.confidences) > 0
+                        and fr.confidences[0] > 0.30
+                    ]
+                    if len(_f1_vals) >= 4:
+                        _f1a = np.array(_f1_vals[:-1])
+                        _f1b = np.array(_f1_vals[1:])
+                        _fp_r, _ = _pearsonr(_f1a, _f1b)
+                        _formant_pearson = float(_fp_r) if math.isfinite(_fp_r) else 0.0
+                    logger.debug(
+                        "§2.20 formant_pearson probe: n_frames=%d r=%.3f",
+                        len(_f1_vals),
+                        _formant_pearson,
+                    )
+                except Exception as _fp_exc:
+                    logger.debug("formant_pearson computation skipped: %s", _fp_exc)
+            if _panns_opera >= 0.45 or (_panns_singing >= 0.50 and _formant_pearson >= 0.90):
+                _panns_fallback_profile_key = "oper"
+            elif _panns_orchestra >= 0.45 or _panns_classical >= 0.40:
+                _panns_fallback_profile_key = "klassik"
+            elif _panns_jazz >= 0.40 or _panns_blues >= 0.40:
+                _panns_fallback_profile_key = "jazz"
+            elif _panns_rock >= 0.40 or (_panns_guitar >= 0.35 and _panns_drum >= 0.35):
+                _panns_fallback_profile_key = "rock"
+            if _panns_fallback_profile_key:
+                try:
+                    from backend.core.genre_classifier import get_restoration_profile as _grf_fb
+                    _genre_profile = _grf_fb(_panns_fallback_profile_key) or {}
+                    if _genre_profile:
+                        _gp_material_key = str(_genre_profile.get("gp_memory_key", _gp_material_key))
+                        logger.info(
+                            "🪧 GENRE_PROFILE_PANNS_FALLBACK(%s): gp_key=%s opera=%.2f orch=%.2f jazz=%.2f rock=%.2f",
+                            _panns_fallback_profile_key,
+                            _gp_material_key,
+                            _panns_opera,
+                            _panns_orchestra,
+                            _panns_jazz,
+                            _panns_rock,
+                        )
+                except Exception as _gp_fb_exc:
+                    logger.debug("PANNs-Fallback Genre-Profil nicht geladen: %s", _gp_fb_exc)
 
         # §2.14+ Kontextfluss: Ära, Genre, BPM und Genre-Profil auf self speichern,
         # damit _profiled_phase_call sie zentral in ALLE Phase-kwargs injizieren kann.
@@ -1895,26 +2016,59 @@ class UnifiedRestorerV3:
         except Exception as _qa_pre_exc:
             logger.debug("QualityAnalyzer (Vorher) nicht verfügbar: %s", _qa_pre_exc)
 
-        # §DCOffsetPreRemoval — IIR-Hochpass 5 Hz (Spec §2.2): PFLICHT vor jeder FFT/HPSS-Analyse.
-        # Entfernt DC-Versatz und sehr niedrige Frequenzen (< 5 Hz), die HPSS/FFT-Artefakte erzeugen.
+        # §DCOffsetPreRemoval — IIR-Hochpass (Spec §2.2): PFLICHT vor jeder FFT/HPSS-Analyse.
+        # Entfernt DC-Versatz und sehr niedrige Frequenzen, die HPSS/FFT-Artefakte erzeugen.
+        # [RELEASE_MUST] Lücke-H-Fix v9.10.100: reel_tape benötigt aggressiveren,
+        # zero-phase Filter wegen dynamischem DC-Drift durch Geschwindigkeitsschwankungen.
+        # Standard: lfilter([1,-1],[1,-0.9999]) — fc ≈ 0.76 Hz @ 48 kHz (kausal)
+        # Tape:     filtfilt([1,-1],[1,-0.9995]) — fc ≈ 3.8 Hz @ 48 kHz (zero-phase,
+        #           kein Phasenversatz, sicherer für Onset-Zeitstempel in WowFlutter)
+        # VERBOTEN bei Tape: globale Mittelwert-Subtraktion (np.mean) — erfasst keinen Drift.
         try:
+            from scipy.signal import filtfilt as _filtfilt
             from scipy.signal import lfilter as _lfilter
 
-            _dc_b = np.array([1.0, -1.0], dtype=np.float64)
-            _dc_a = np.array([1.0, -0.9999], dtype=np.float64)  # f_c ≈ 5 Hz @ 48 kHz (Spec §2.2)
-            if audio.ndim == 1:
-                audio = _lfilter(_dc_b, _dc_a, audio.astype(np.float64)).astype(np.float32)
-            else:
-                # Channel-first (2, N) format after stereo normalization
-                audio = np.stack(
-                    [
-                        _lfilter(_dc_b, _dc_a, audio[c].astype(np.float64)).astype(np.float32)
-                        for c in range(audio.shape[0])
-                    ],
-                    axis=0,
+            _is_reel_tape = (
+                _classified_material is not None
+                and (
+                    _classified_material == MaterialType.REEL_TAPE
+                    or getattr(_classified_material, "value", "") == "reel_tape"
                 )
+            )
+            if _is_reel_tape:
+                # Tape: aggressiverer HP (fc ≈ 3.8 Hz), zero-phase (filtfilt)
+                _dc_b = np.array([1.0, -1.0], dtype=np.float64)
+                _dc_a = np.array([1.0, -0.9995], dtype=np.float64)
+                if audio.ndim == 1:
+                    audio = _filtfilt(_dc_b, _dc_a, audio.astype(np.float64)).astype(np.float32)
+                else:
+                    audio = np.stack(
+                        [
+                            _filtfilt(_dc_b, _dc_a, audio[c].astype(np.float64)).astype(np.float32)
+                            for c in range(audio.shape[0])
+                        ],
+                        axis=0,
+                    )
+                logger.debug(
+                    "§DCOffsetPreRemoval [reel_tape]: filtfilt fc≈3.8 Hz (|mean|=%.2e)",
+                    float(np.abs(np.mean(audio))),
+                )
+            else:
+                # Alle anderen Materialien: fc ≈ 0.76 Hz, kausal
+                _dc_b = np.array([1.0, -1.0], dtype=np.float64)
+                _dc_a = np.array([1.0, -0.9999], dtype=np.float64)
+                if audio.ndim == 1:
+                    audio = _lfilter(_dc_b, _dc_a, audio.astype(np.float64)).astype(np.float32)
+                else:
+                    audio = np.stack(
+                        [
+                            _lfilter(_dc_b, _dc_a, audio[c].astype(np.float64)).astype(np.float32)
+                            for c in range(audio.shape[0])
+                        ],
+                        axis=0,
+                    )
+                logger.debug("§DCOffsetPreRemoval: DC-Offset entfernt (|mean|=%.2e)", float(np.abs(np.mean(audio))))
             audio = np.clip(audio, -1.0, 1.0)
-            logger.debug("§DCOffsetPreRemoval: DC-Offset entfernt (|mean|=%.2e)", float(np.abs(np.mean(audio))))
         except Exception as _dc_exc:
             logger.debug("DCOffsetPreRemoval Fehler (scipy nicht verfügbar): %s", _dc_exc)
 
@@ -1976,7 +2130,11 @@ class UnifiedRestorerV3:
             logger.info("Step 1/4: Verwende gecachten DefectScan (kein Mehrfach-Scan).")
         else:
             defect_result = self.defect_scanner.scan(
-                analysis_audio, analysis_sample_rate, _classified_material, file_ext=_file_ext_for_scan
+                analysis_audio,
+                analysis_sample_rate,
+                _classified_material,
+                file_ext=_file_ext_for_scan,
+                forensic_medium_result=_mc_result if hasattr(_mc_result, "transfer_chain") else None,
             )
         if defect_result is None:
             logger.error(
@@ -2250,6 +2408,12 @@ class UnifiedRestorerV3:
                     _panns_conf.get("Female singing", 0.0),
                 )
                 self._restoration_context["panns_vocals_confidence"] = _panns_vocal_max
+        # [RELEASE_MUST] Lücke-G-Fix v9.10.100: assert global_scalar ∈ [0.50, 1.50]
+        _gs_assert = float(self._song_calibration_profile.get("global_scalar", 1.0))
+        assert 0.50 <= _gs_assert <= 1.50, (
+            f"global_scalar={_gs_assert:.4f} out of bounds [0.50, 1.50] — "
+            "SongCalibrationProfile violated invariant (Lücke-G-Fix v9.10.100)"
+        )
         logger.info(
             "🎛️ SongCalibration: material=%s era=%s tier=%s global=%.3f denoise=%.3f conf=%.2f",
             self._song_calibration_profile.get("material", "unknown"),
@@ -2413,6 +2577,32 @@ class UnifiedRestorerV3:
                     len(selected_phases),
                 )
 
+        # §2.20 Genre-Profil-Override-Invariante (v9.10.102): Harter Phase-Block via *_enabled: False
+        # Wird NACH CausalDefectReasoner und Phase-Selection angewendet.
+        # Genre-Profil hat absolute Priorität über CausalDefectReasoner für *_enabled: False-Keys.
+        # Invariante: Selbst bei Defekt-Score > 0.85 (kritisch) bleibt der Override final —
+        # nur ein manueller Studio-2026-Modus darf diesen Override aufheben (kein automatischer Bypass).
+        if _genre_profile:
+            for _gp_key, _gp_val in _genre_profile.items():
+                if _gp_key.endswith("_enabled") and _gp_val is False:
+                    # Map key → phase_id prefix; e.g. "phase_20_dereverb_enabled" → "phase_20_"
+                    _gp_phase_prefix = _gp_key[: -len("_enabled")]  # "phase_20_dereverb"
+                    _gp_phase_prefix_base = "_".join(_gp_phase_prefix.split("_")[:2]) + "_"  # "phase_20_"
+                    _gp_blocked = [
+                        p
+                        for p in selected_phases
+                        if p == _gp_phase_prefix or p.startswith(_gp_phase_prefix_base)
+                    ]
+                    if _gp_blocked:
+                        selected_phases = [p for p in selected_phases if p not in _gp_blocked]
+                        for _gp_bp in _gp_blocked:
+                            logger.info(
+                                "genre_profile_override: phase=%s disabled by genre=%s (key=%s)",
+                                _gp_bp,
+                                _genre_profile.get("gp_memory_key", "unknown"),
+                                _gp_key,
+                            )
+
         # Step 3: Performance Guard Setup
         audio_duration = audio.shape[-1] / sample_rate  # shape[-1] works for both mono (N,) and stereo (2, N)
         if self.performance_guard:
@@ -2559,7 +2749,9 @@ class UnifiedRestorerV3:
         try:
             from backend.core.defect_phase_mapper import get_material_initial_strength as _get_mat_strength
 
-            _mat_val = material_type.value if hasattr(material_type, "value") else str(material_type)
+            from backend.core.material_canonical import canonical_material_key as _canonical_material_key
+
+            _mat_val = _canonical_material_key(material_type)
             # Alle bekannten Phase-IDs aus beiden Quellen konsolidieren
             _all_phase_ids = set(_vintage_phase_strength_caps.keys())
             # Alle Phase-IDs aus MaterialPhaseFactors für dieses Material ermitteln
@@ -2659,7 +2851,9 @@ class UnifiedRestorerV3:
         try:
             from backend.core.physical_ceiling_estimator import PhysicalCeilingEstimator as _FCEarly
 
-            _fc_mat_val = material_type.value if material_type is not None else "unknown"
+            from backend.core.material_canonical import canonical_material_key as _canonical_material_key
+
+            _fc_mat_val = _canonical_material_key(material_type)
             _fc_pce_result = _FCEarly().estimate(restored_audio, sample_rate, {}, _fc_mat_val)
             # Natürlichkeit-Ceiling als konservativer Gesamt-Proxy (niedrigster relevanter Wert)
             _fc_ceiling_val = float(_fc_pce_result.ceiling.get("natuerlichkeit", 0.98))
@@ -3246,12 +3440,38 @@ class UnifiedRestorerV3:
                     "dat": "piano_mid",
                     "minidisc": "piano_mid",
                 }.get(material_type.value, "unknown")
+                # §Y2 HPG SNR-Guard: if phase_03 strongly denoised the audio (noise floor
+                # reduction > 12 dB), the pre-pipeline harmonic mask was extracted from noisy
+                # audio and may include harmonic-band noise peaks. Recompute mask from the
+                # restored (denoised) audio to get a clean harmonic reference.
+                _hpg_ref_audio = original_audio_for_goals
+                try:
+                    _hpg_nf_original = 20.0 * np.log10(
+                        max(float(np.percentile(np.abs(original_audio_for_goals.flatten()), 5)), 1e-12)
+                    )
+                    _hpg_nf_restored = 20.0 * np.log10(
+                        max(float(np.percentile(np.abs(restored_audio.flatten()), 5)), 1e-12)
+                    )
+                    _hpg_snr_gain = _hpg_nf_original - _hpg_nf_restored  # positive = noise floor reduced
+                    if _hpg_snr_gain > 12.0:
+                        _hpg_ref_audio = restored_audio
+                        _hpg_pre_mask, _hpg_pre_href = None, None  # force fresh extraction from denoised audio
+                        logger.info(
+                            "§Y2 HPG SNR-Guard: noise floor reduced %.1f dB (%.1f → %.1f dBFS) > 12 dB "
+                            "→ recomputing HPG mask from denoised audio",
+                            _hpg_snr_gain,
+                            _hpg_nf_original,
+                            _hpg_nf_restored,
+                        )
+                except Exception as _hpg_snr_exc:
+                    logger.debug("HPG SNR-Guard measurement failed (non-critical): %s", _hpg_snr_exc)
+
                 if _hpg_pre_mask is not None and _hpg_pre_href is not None:
                     _hpg_mask, _hpg_href = _hpg_pre_mask, _hpg_pre_href
                     logger.debug("§2.28 HPG: Pre-Phase-Maske wiederverwendet")
                 else:
                     _hpg_mask, _hpg_href = _hpg.extract_harmonic_mask(
-                        original_audio_for_goals, sample_rate, instrument_tag=_hpg_instrument_tag
+                        _hpg_ref_audio, sample_rate, instrument_tag=_hpg_instrument_tag
                     )
                 restored_audio = _hpg.apply_correction(restored_audio, _hpg_href, _hpg_mask, sample_rate)
                 restored_audio = np.clip(np.nan_to_num(restored_audio, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
@@ -7416,6 +7636,20 @@ class UnifiedRestorerV3:
             return panns_tags.get(tag, 0.0) >= threshold
 
         vocals_detected = panns("Singing voice", 0.40) or panns("Vocals", 0.40) or panns("Speech", 0.35)
+        # §2.9a Soft-Activation (spec Y6): vocal_prob ∈ [0.35, 0.40) → activate vocal
+        # phases at 50% strength to capture quiet ensemble vocals without false positives.
+        _vocal_prob_max = max(panns_tags.get("Singing voice", 0.0), panns_tags.get("Vocals", 0.0))
+        if not vocals_detected and _vocal_prob_max >= 0.35:
+            vocals_detected = True
+            _vocal_strength_scale: float = 0.5
+            logger.info(
+                "§2.9a PANNs Vocal Soft-Activation: vocal_prob=%.3f ∈ [0.35, 0.40) → strength_scale=0.5",
+                _vocal_prob_max,
+            )
+        else:
+            _vocal_strength_scale = 1.0
+        if isinstance(getattr(self, "_restoration_context", None), dict):
+            self._restoration_context["vocal_strength_scale"] = _vocal_strength_scale
         guitar_detected = panns("Guitar", 0.50) or panns("Electric guitar", 0.50)
         brass_detected = panns("Brass instrument", 0.50) or panns("Trumpet", 0.50) or panns("Saxophone", 0.50)
         drums_detected = panns("Drum", 0.50) or panns("Percussion", 0.50)
@@ -8570,7 +8804,7 @@ class UnifiedRestorerV3:
             "phase_31_stem_separation": (0.70, 0.85, 0.95),
             "phase_32_vocal_isolation": (0.72, 0.87, 0.95),
             "phase_33_music_enhancement": (0.65, 0.78, 0.85),
-            "phase_34_lyrics_guided_enhancement": (0.70, 0.82, 0.75),
+            "phase_34_mid_side_processing": (0.62, 0.72, 0.65),  # M/S dynamics (stereo-field restoration, moderate impact)
             "phase_35_psychoacoustic_enhancement": (0.55, 0.68, 0.60),
             "phase_36_spatial_enhancement": (0.52, 0.65, 0.70),
             "phase_37_codec_artifact_removal": (0.80, 0.87, 0.55),
@@ -8591,7 +8825,7 @@ class UnifiedRestorerV3:
             "phase_55_diffusion_inpainting": (0.70, 0.82, 0.90),
             "phase_56_reference_mastering": (0.55, 0.70, 0.85),
             "phase_57_print_through_reduction": (0.65, 0.75, 0.50),
-            "phase_58_flow_matching_inpainting": (0.72, 0.84, 0.95),
+            "phase_58_lyrics_guided_enhancement": (0.72, 0.82, 0.75),  # LGE §2.36: phoneme-aligned DSP → high vocal quality impact
             "phase_59_modulation_noise_reduction": (0.68, 0.78, 0.55),
             "phase_60_inner_groove_distortion_repair": (0.65, 0.75, 0.50),
             "phase_61_groove_echo_cancellation": (0.62, 0.72, 0.55),
@@ -8770,6 +9004,9 @@ class UnifiedRestorerV3:
             MaterialType.TAPE: SourceMedium.CASSETTE,  # Map tape to cassette (most common)
             MaterialType.REEL_TAPE: SourceMedium.REEL_TAPE,
             MaterialType.SHELLAC: SourceMedium.SHELLAC,
+            MaterialType.WAX_CYLINDER: SourceMedium.SHELLAC,  # Closest groove-era profile for skipper heuristics
+            MaterialType.LACQUER_DISC: SourceMedium.SHELLAC,  # Disc medium with shellac-like skip behavior
+            MaterialType.WIRE_RECORDING: SourceMedium.CASSETTE,  # Tape-like transport/noise profile
             MaterialType.DAT: SourceMedium.DAT,
             MaterialType.CD_DIGITAL: SourceMedium.DIGITAL,
             MaterialType.MP3_LOW: SourceMedium.MP3_LOW,
@@ -9157,6 +9394,8 @@ class UnifiedRestorerV3:
             logger.debug("_execute_pipeline: NaN/Inf im Input-Audio bereinigt")
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.9, neginf=-0.9)
         audio = np.clip(audio, -1.0, 1.0)
+        # §Längen-Guard: Originalsamplelänge merken — Phasen dürfen die Länge nicht verändern.
+        _input_n_samples: int = audio.shape[-1] if audio.ndim >= 2 else len(audio)
         _active_quality_mode = quality_mode_override or self.config.mode
         _quality_mode_value = _active_quality_mode.value
         current_audio = audio.copy()
@@ -10204,6 +10443,28 @@ class UnifiedRestorerV3:
                     break
         self._pmgg_log_entries = _pmgg_log_entries
         self._pipeline_ml_guard_events = list(pipeline_ml_guard_events)
+
+        # §Längen-Guard: Phasen-akkumulierten Längen-Drift korrigieren (Trim oder Zero-Pad).
+        # Schützt vor PGHI/padded=False-bedingtem Längen-Drift über viele Phasen.
+        _out_n = current_audio.shape[-1] if current_audio.ndim >= 2 else len(current_audio)
+        if _out_n != _input_n_samples:
+            logger.debug(
+                "_execute_pipeline: Längen-Drift %d→%d Samples — korrigiert",
+                _out_n,
+                _input_n_samples,
+            )
+            if current_audio.ndim >= 2:
+                if _out_n > _input_n_samples:
+                    current_audio = current_audio[..., :_input_n_samples]
+                else:
+                    pad_w = _input_n_samples - _out_n
+                    current_audio = np.pad(current_audio, [(0, 0)] * (current_audio.ndim - 1) + [(0, pad_w)])
+            else:
+                if _out_n > _input_n_samples:
+                    current_audio = current_audio[:_input_n_samples]
+                else:
+                    current_audio = np.pad(current_audio, (0, _input_n_samples - _out_n))
+
         return current_audio, executed, skipped, deferred
 
     @staticmethod

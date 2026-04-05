@@ -34,6 +34,7 @@ from scipy.signal import resample_poly as _resample_poly
 
 try:
     from backend.api.bridge import get_aurik_denker_class, get_aurik_denker_instance
+    from backend.api.bridge import get_load_audio_fn as _bridge_get_load_audio_fn
 
     _BRIDGE_AVAILABLE = True
 except ImportError:
@@ -43,6 +44,9 @@ except ImportError:
         return None
 
     def get_aurik_denker_instance() -> Any:  # type: ignore[misc]
+        return None
+
+    def _bridge_get_load_audio_fn() -> Any:  # type: ignore[misc]
         return None
 
 
@@ -92,9 +96,19 @@ class ProcessingThread(QThread):
 
             self.progress.emit(10)
 
-            # Load audio — resample to 48 kHz (Aurik internal SR)
-            audio, sr = sf.read(self.input_file)
-            audio, sr = _resample_to_48k(np.asarray(audio, dtype=np.float32), sr)
+            # Load audio via bridge cascade (soundfile → pedalboard/FFmpeg → pydub)
+            # VERBOTEN: sf.read() direkt — nutze stets load_audio_file (§importkaskade)
+            _load_fn = _bridge_get_load_audio_fn()
+            if _load_fn is not None:
+                _loaded = _load_fn(self.input_file, target_sr=_TARGET_SR)
+                if _loaded is None:
+                    raise RuntimeError(f"Audio-Datei konnte nicht geladen werden: {self.input_file}")
+                audio = np.asarray(_loaded["audio"], dtype=np.float32)
+                sr = int(_loaded["sr"])
+            else:
+                # Bridge nicht verfügbar — sf.read als Notfall-Fallback
+                audio, sr = sf.read(self.input_file)
+                audio, sr = _resample_to_48k(np.asarray(audio, dtype=np.float32), sr)
             self.progress.emit(20)
 
             # §RELEASE_MUST: Canonical entrypoint via AurikDenker.denke() — no UV3 bypass
@@ -153,9 +167,19 @@ class BatchProcessingThread(QThread):
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 0)
                 self.item_started.emit(item.id)
 
-                # Load audio — resample to 48 kHz (Aurik internal SR)
-                audio, sr = sf.read(item.input_file)
-                audio, sr = _resample_to_48k(np.asarray(audio, dtype=np.float32), sr)
+                # Load audio via bridge cascade (soundfile → pedalboard/FFmpeg → pydub)
+                # VERBOTEN: sf.read() direkt — nutze stets load_audio_file (§importkaskade)
+                _load_fn = _bridge_get_load_audio_fn()
+                if _load_fn is not None:
+                    _loaded = _load_fn(item.input_file, target_sr=_TARGET_SR)
+                    if _loaded is None:
+                        raise RuntimeError(f"Audio-Datei konnte nicht geladen werden: {item.input_file}")
+                    audio = np.asarray(_loaded["audio"], dtype=np.float32)
+                    sr = int(_loaded["sr"])
+                else:
+                    # Bridge nicht verfügbar — sf.read als Notfall-Fallback
+                    audio, sr = sf.read(item.input_file)
+                    audio, sr = _resample_to_48k(np.asarray(audio, dtype=np.float32), sr)
                 self.item_progress.emit(item.id, 20)
                 self.queue_manager.update_item_status(item.id, QueueStatus.PROCESSING, 20)
 
@@ -504,7 +528,7 @@ class MainWindow(QMainWindow):
                     border: 2px solid #444;
                     border-radius: 10px;
                     text-align: center;
-                    font: bold 14px "Segoe UI", "Arial";
+                    font: bold 14px "Noto Sans", "DejaVu Sans", "Segoe UI", "Arial";
                     color: #fff;
                     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                         stop:0 #232526, stop:1 #414345);

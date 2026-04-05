@@ -269,6 +269,7 @@ class RestaurierDenker:
         cached_defect_result: Any | None = None,
         cached_medium_result: Any | None = None,
         cached_restorability_result: Any | None = None,
+        recovery_checkpoint: Any | None = None,
         reconstruction_context: Any | None = None,
         pre_repair_reference: np.ndarray | None = None,
         input_path: str = "",
@@ -310,6 +311,35 @@ class RestaurierDenker:
             audio = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         else:
             audio = audio.astype(np.float32)
+
+        # §2.39 OOM-Recovery: explicit resume path via persisted checkpoint.
+        if recovery_checkpoint is not None:
+            logger.info(
+                "RestaurierDenker: OOM-Recovery-Wiederaufnahme aktiv "
+                "(remaining_phases=%d, failure_phase=%s)",
+                len(getattr(recovery_checkpoint, "phases_remaining", []) or []),
+                getattr(recovery_checkpoint, "failure_phase", "?"),
+            )
+            restorer = self._get_restorer(mode=mode)
+            if restorer is None:
+                return self._fallback(audio, material or "unknown", "Kein Restorer für OOM-Recovery verfügbar")
+            if not hasattr(restorer, "restore_from_checkpoint"):
+                return self._fallback(
+                    audio,
+                    material or "unknown",
+                    "OOM-Recovery nicht verfügbar: restore_from_checkpoint fehlt",
+                )
+            try:
+                raw = restorer.restore_from_checkpoint(
+                    recovery_checkpoint,
+                    progress_callback=progress_callback,
+                    audio_update_callback=audio_update_callback,
+                    no_rt_limit=no_rt_limit,
+                )
+                return self._konvertiere(raw, material=material)
+            except Exception as cp_exc:
+                logger.warning("RestaurierDenker: OOM-Recovery fehlgeschlagen: %s", cp_exc)
+                return self._fallback(audio, material or "unknown", f"OOM-Recovery fehlgeschlagen: {cp_exc}")
 
         # ── v9.10.72: Direkt-UV3-Pfad (kein ARE-Umweg) ─────────────────────
         # AurikDenker hat Preprocessing (ReparaturDenker + RekonstruktionsDenker)

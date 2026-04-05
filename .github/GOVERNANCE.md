@@ -10,14 +10,18 @@ Der Hauptentwickler ist Michael Arnold. Externe Beiträge sind herzlich willkomm
 ## Entscheidungsstruktur
 
 ### Hauptentwickler (Benevolent Dictator)
+
 Michael Arnold entscheidet über:
+
 - Architekturentscheidungen (Pipeline, Musical Goals, API-Stabilität)
 - Release-Zeitplan und Versioning
 - Akzeptanz oder Ablehnung von Pull Requests mit Architektur-Konsequenzen
 - Modell-Auswahl und SOTA-Upgrades
 
 ### Community-Beitragende
+
 Beiträge werden nach folgenden Kriterien bewertet:
+
 1. **Korrektheit** — Alle bestehenden Tests grün, Musical Goals nicht verletzt
 2. **Spec-Konformität** — Einhaltung von copilot-instructions.md
 3. **Out-of-the-Box-Pflicht** — Keine neuen Netzwerkabhängigkeiten zur Laufzeit
@@ -44,6 +48,7 @@ Fork → Feature-Branch → Pre-Commit läuft durch → Tests grün → PR öffn
 ```
 
 **Pflicht-Checkliste für jeden PR:**
+
 - [ ] `pre-commit run --all-files` ohne Fehler
 - [ ] `pytest tests/unit -q --timeout=30` grün
 - [ ] Keine neuen ruff/mypy-Fehler
@@ -63,6 +68,7 @@ Aurik 9 verpflichtet sich zu **Plugin-API-Stabilität** innerhalb einer Hauptver
 ```
 
 **Deprecation-Policy:**
+
 1. Veraltete API: 2 Minor-Releases lang mit `DeprecationWarning`
 2. Dann: Entfernung erst in der nächsten Hauptversion (10.x)
 3. Deprecation-Hinweis immer in `CHANGELOG.md` und im Docstring
@@ -89,10 +95,11 @@ Aurik 9 ist kostenlos und Open Source. Freiwillige Spenden sind möglich:
 → [.github/FUNDING.yml](.github/FUNDING.yml)
 
 Gespendete Mittel fließen in:
+
 - Server/Build-Infrastruktur
 - ML-Modell-Lizenz-Anfragen (z. B. CC BY-NC-SA → Apache für Gewichte)
 - Community-Events
 
 ---
 
-*Stand: März 2026 — Aurik 9.10.51*
+_Stand: März 2026 — Aurik 9.10.51_

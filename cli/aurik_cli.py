@@ -115,7 +115,38 @@ def process_audio(input_path: str, output_path: str, verbose: bool = True, mode:
             len(result.phases_executed),
         )
 
-    # ── 4. Ergebnis speichern ─────────────────────────────────────────────────
+    # ── 4. Export-Quality-Gate (Spec §8.1, [RELEASE_MUST]) ─────────────────────
+    # quality_estimate < 0.55 → harter Abbruch (normative E2E-Pflicht)
+    _qe = getattr(result, "quality_estimate", None)
+    if _qe is not None and _qe < 0.55:
+        logger.error(
+            "Export abgebrochen: quality_estimate=%.3f < 0.55 (Mindestanforderung §8.1). "
+            "Ursache: Restaurierungsqualität unzureichend. "
+            "Lösung: Eingabedatei prüfen oder anderen Modus verwenden.",
+            _qe,
+        )
+        sys.exit(7)
+
+    # P1/P2 Musical Goals dürfen nicht unter Schwellwert liegen
+    _P1_P2_THRESHOLDS = {
+        "natuerlichkeit": 0.90,
+        "authentizitaet": 0.88,
+        "tonal_center": 0.95,
+        "timbre_authentizitaet": 0.87,
+        "artikulation": 0.85,
+    }
+    _goals = getattr(result, "musical_goals_scores", None) or {}
+    _failed_goals = [f"{g}={_goals[g]:.3f}<{t}" for g, t in _P1_P2_THRESHOLDS.items() if g in _goals and _goals[g] < t]
+    if _failed_goals:
+        logger.error(
+            "Export abgebrochen: P1/P2-Musical-Goals nicht bestanden — %s. "
+            "Ursache: Restaurierung hat Kernqualitätsziele verfehlt. "
+            "Lösung: Material prüfen, anderen Modus verwenden oder Eingabedatei verbessern.",
+            ", ".join(_failed_goals),
+        )
+        sys.exit(8)
+
+    # ── 5. Ergebnis speichern ─────────────────────────────────────────────────
     restored = result.audio
     try:
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)

@@ -927,6 +927,320 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
             "harshness_reduction_band_hz": [2000, 6000],
         },
     ),
+    # ------------------------------------------------------------------
+    # DOLBY_NR_MISMATCH — falsche Dolby-De/Enkodierungs-Kette
+    # ------------------------------------------------------------------
+    DefectType.DOLBY_NR_MISMATCH: PhaseAssignment(
+        defect_type=DefectType.DOLBY_NR_MISMATCH,
+        primary_phases=[
+            "phase_04_eq_correction",
+            "phase_14_phase_correction",
+        ],
+        secondary_phases=[
+            "phase_06_frequency_restoration",
+        ],
+        description=(
+            "Kompensiert Dolby-NR-Fehlanwendung (Encode/Decode-Mismatch) mit spektraler und phasenbezogener "
+            "Korrektur, um HF-Überbetonung und Fehlfärbungen zu stabilisieren."
+        ),
+        config_delta={
+            "denoise_strength": 0.10,
+            "high_freq_boost_db": 1.2,
+            "declip_strength": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # TAPE_HEAD_LEVEL_DIP — graduelle Bandkopf-Pegeleinbrüche
+    # ------------------------------------------------------------------
+    DefectType.TAPE_HEAD_LEVEL_DIP: PhaseAssignment(
+        defect_type=DefectType.TAPE_HEAD_LEVEL_DIP,
+        primary_phases=[
+            "phase_12_wow_flutter_fix",
+            "phase_24_dropout_repair",
+        ],
+        secondary_phases=[
+            "phase_03_denoise",
+        ],
+        description=(
+            "Stabilisiert langsam driftende Pegeleinbrüche aus Kopfkontakt-Variationen per timing-adaptiver "
+            "Korrektur und segmentweiser Rekonstruktion."
+        ),
+        config_delta={
+            "denoise_strength": 0.20,
+            "click_removal_sensitivity": 0.10,
+            "declip_strength": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # MODULATION_NOISE — signalabhängiges Bandrauschen
+    # ------------------------------------------------------------------
+    DefectType.MODULATION_NOISE: PhaseAssignment(
+        defect_type=DefectType.MODULATION_NOISE,
+        primary_phases=[
+            "phase_59_modulation_noise_reduction",
+            "phase_03_denoise",
+        ],
+        secondary_phases=[
+            "phase_29_tape_hiss_reduction",
+        ],
+        description=(
+            "Reduziert signalmoduliertes Rauschen in Bandmaterial über adaptives Spektral-Gating plus "
+            "breitbandige Rest-Rauschreduktion."
+        ),
+        config_delta={
+            "denoise_strength": 0.45,
+            "declip_strength": 0.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # INNER_GROOVE_DISTORTION — innenrillenbedingte Verzerrung
+    # ------------------------------------------------------------------
+    DefectType.INNER_GROOVE_DISTORTION: PhaseAssignment(
+        defect_type=DefectType.INNER_GROOVE_DISTORTION,
+        primary_phases=[
+            "phase_60_inner_groove_distortion_repair",
+            "phase_23_spectral_repair",
+        ],
+        secondary_phases=[
+            "phase_04_eq_correction",
+        ],
+        description=(
+            "Korrigiert positionsabhängige Innenrillen-Verzerrungen bei Rillenmedien mit THD-orientierter "
+            "Reparatur und spektraler Nachglättung."
+        ),
+        config_delta={
+            "denoise_strength": 0.20,
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.60,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # GROOVE_ECHO — Rillen-Pre-Echo
+    # ------------------------------------------------------------------
+    DefectType.GROOVE_ECHO: PhaseAssignment(
+        defect_type=DefectType.GROOVE_ECHO,
+        primary_phases=[
+            "phase_61_groove_echo_cancellation",
+            "phase_03_denoise",
+        ],
+        secondary_phases=[
+            "phase_23_spectral_repair",
+        ],
+        description=(
+            "Unterdrückt rillenbedingtes Pre-Echo per RPM-adaptiver Cancelation und reduziert verbleibende "
+            "Ghost-Energie in kritischen Passagen."
+        ),
+        config_delta={
+            "denoise_strength": 0.35,
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.50,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # CROSSTALK — Kanalübersprechen
+    # ------------------------------------------------------------------
+    DefectType.CROSSTALK: PhaseAssignment(
+        defect_type=DefectType.CROSSTALK,
+        primary_phases=[
+            "phase_62_crosstalk_cancellation",
+            "phase_15_stereo_balance",
+        ],
+        secondary_phases=[
+            "phase_34_mid_side_processing",
+        ],
+        description=(
+            "Reduziert kanalübergreifendes Übersprechen über BSS-/Dekorrelationstechniken und stabilisiert "
+            "die resultierende Stereo-Balance."
+        ),
+        config_delta={
+            "stereo_width_factor": 0.75,
+            "denoise_strength": 0.05,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # INTERMODULATION_DISTORTION — nichtlineare Mischprodukte
+    # ------------------------------------------------------------------
+    DefectType.INTERMODULATION_DISTORTION: PhaseAssignment(
+        defect_type=DefectType.INTERMODULATION_DISTORTION,
+        primary_phases=[
+            "phase_63_intermodulation_reduction",
+            "phase_23_spectral_repair",
+        ],
+        secondary_phases=[
+            "phase_04_eq_correction",
+        ],
+        description=(
+            "Dämpft IMD-Mischprodukte aus nichtlinearen Ketten mit modellierter Reduktion und spektraler "
+            "Rekonsolidierung."
+        ),
+        config_delta={
+            "denoise_strength": 0.20,
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.55,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # TAPE_SPLICE_ARTIFACT — Bandschnitt-Artefakte
+    # ------------------------------------------------------------------
+    DefectType.TAPE_SPLICE_ARTIFACT: PhaseAssignment(
+        defect_type=DefectType.TAPE_SPLICE_ARTIFACT,
+        primary_phases=[
+            "phase_64_tape_splice_repair",
+            "phase_24_dropout_repair",
+        ],
+        secondary_phases=[
+            "phase_01_click_removal",
+        ],
+        description=(
+            "Behandelt Klebestellen-Artefakte (Klick, Pegelsprung, Phasendiskontinuität) mit splice-spezifischer "
+            "Reparatur und lokaler Rekonstruktion."
+        ),
+        config_delta={
+            "click_removal_sensitivity": 0.55,
+            "denoise_strength": 0.10,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # HF_REMANENCE_LOSS — magnetische HF-Alterung
+    # ------------------------------------------------------------------
+    DefectType.HF_REMANENCE_LOSS: PhaseAssignment(
+        defect_type=DefectType.HF_REMANENCE_LOSS,
+        primary_phases=[
+            "phase_06_frequency_restoration",
+            "phase_07_harmonic_restoration",
+        ],
+        secondary_phases=[
+            "phase_39_air_band_enhancement",
+        ],
+        description=(
+            "Rekonstruiert alterungsbedingt verlorene Höhen und Obertöne bei Bandremanenz-Verlust mit "
+            "vorsichtiger Air-Band-Nachführung."
+        ),
+        config_delta={
+            "denoise_strength": 0.10,
+            "high_freq_boost_db": 2.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # STYLUS_DAMAGE — nadelinduzierte Verzerrung
+    # ------------------------------------------------------------------
+    DefectType.STYLUS_DAMAGE: PhaseAssignment(
+        defect_type=DefectType.STYLUS_DAMAGE,
+        primary_phases=[
+            "phase_09_crackle_removal",
+            "phase_23_spectral_repair",
+        ],
+        secondary_phases=[
+            "phase_50_spectral_repair",
+        ],
+        description=(
+            "Mildert asymmetrische Verzerrungen und mikroskopische Rillenartefakte aus Nadelschäden mit "
+            "zweistufiger Spektralreparatur."
+        ),
+        config_delta={
+            "denoise_strength": 0.20,
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.60,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # STICKY_SHED_RESIDUE — binderbedingte Tape-Residuen
+    # ------------------------------------------------------------------
+    DefectType.STICKY_SHED_RESIDUE: PhaseAssignment(
+        defect_type=DefectType.STICKY_SHED_RESIDUE,
+        primary_phases=[
+            "phase_24_dropout_repair",
+            "phase_29_tape_hiss_reduction",
+        ],
+        secondary_phases=[
+            "phase_03_denoise",
+        ],
+        description=(
+            "Kompensiert kurze Pegel- und Spektralstörungen aus Sticky-Shed-Rückständen mit Dropout-Repair "
+            "und tape-spezifischer Hiss-Reduktion."
+        ),
+        config_delta={
+            "denoise_strength": 0.40,
+            "click_removal_sensitivity": 0.20,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # MULTIBAND_WOW_FLUTTER — frequenzabhängige Gleichlaufschwankung
+    # ------------------------------------------------------------------
+    DefectType.MULTIBAND_WOW_FLUTTER: PhaseAssignment(
+        defect_type=DefectType.MULTIBAND_WOW_FLUTTER,
+        primary_phases=[
+            "phase_12_wow_flutter_fix",
+        ],
+        secondary_phases=[
+            "phase_08_transient_preservation",
+            "phase_31_speed_pitch_correction",
+        ],
+        description=(
+            "Korrigiert frequenzabhängige Wow/Flutter-Komponenten und schützt Transienten nach Pitch-Zeit-Korrektur."
+        ),
+        config_delta={
+            "denoise_strength": 0.10,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # GENERATION_LOSS — kumulativer Kopierverlust
+    # ------------------------------------------------------------------
+    DefectType.GENERATION_LOSS: PhaseAssignment(
+        defect_type=DefectType.GENERATION_LOSS,
+        primary_phases=[
+            "phase_03_denoise",
+            "phase_06_frequency_restoration",
+            "phase_23_spectral_repair",
+        ],
+        secondary_phases=[
+            "phase_07_harmonic_restoration",
+        ],
+        description=(
+            "Adressiert Mehrgenerationen-Verluste (Rauschen, Bandbreite, Spektral-Glättung) durch kombinierte "
+            "NR-, Restore- und Spektralstrategie."
+        ),
+        config_delta={
+            "denoise_strength": 0.45,
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.60,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # MOTOR_INTERFERENCE — mechanische Motorstörungen
+    # ------------------------------------------------------------------
+    DefectType.MOTOR_INTERFERENCE: PhaseAssignment(
+        defect_type=DefectType.MOTOR_INTERFERENCE,
+        primary_phases=[
+            "phase_02_hum_removal",
+            "phase_05_rumble_filter",
+        ],
+        secondary_phases=[
+            "phase_04_eq_correction",
+        ],
+        description=(
+            "Entfernt motorinduzierte Interferenzanteile im Tiefton-/Brummbereich und glättet den verbleibenden "
+            "Frequenzgang."
+        ),
+        config_delta={
+            "denoise_strength": 0.15,
+            "low_freq_rolloff_hz": 30,
+            "preserve_analog_character": True,
+        },
+    ),
 }
 
 

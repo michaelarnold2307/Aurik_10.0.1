@@ -390,18 +390,21 @@ class TestUnifiedRestorerGuards:
         duration = 8.0
         t = np.linspace(0.0, duration, int(sr * duration), endpoint=False)
         envelope = np.where(t < 2.5, 0.25, np.where(t < 5.0, 0.55, 0.12)).astype(np.float32)
+        # Must include frequencies up to ~20 kHz to reliably meet 78% Nyquist requirement (48 kHz → 18.72 kHz)
         mono = envelope * (
             0.60 * np.sin(2 * np.pi * 220 * t)
             + 0.25 * np.sin(2 * np.pi * 1760 * t)
             + 0.08 * np.sin(2 * np.pi * 6400 * t)
-            + 0.03 * np.sin(2 * np.pi * 12000 * t)
+            + 0.04 * np.sin(2 * np.pi * 12000 * t)
+            + 0.06 * np.sin(2 * np.pi * 19000 * t)  # Increased amplitude & frequency to ensure presence
         )
         audio = np.stack([mono, mono], axis=1).astype(np.float32)
 
         guarded, metrics = UnifiedRestorerV3._is_benign_digital_source(audio, sr, MaterialType.MP3_HIGH)
 
         assert guarded is True
-        assert float(metrics["effective_bandwidth_hz"]) >= 12000.0
+        # Bandwidth must meet Nyquist-relative threshold: 0.78 * (48000 / 2) = 18720 Hz
+        assert float(metrics["effective_bandwidth_hz"]) >= 18000.0
         assert float(metrics["dyn_std_db"]) >= 3.5
 
     def test_clean_digital_guard_rejects_noise_like_signal(self):

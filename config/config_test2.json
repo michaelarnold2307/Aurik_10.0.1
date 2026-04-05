@@ -1,1 +1,9 @@
-{"dsp":{"n_fft":4096,"hop":1024},"qa":{"threshold":0.9}}
+{
+  "dsp": {
+    "hop": 1024,
+    "n_fft": 4096
+  },
+  "qa": {
+    "threshold": 0.9
+  }
+}

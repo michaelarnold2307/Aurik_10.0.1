@@ -42,6 +42,8 @@ import time
 import numpy as np
 import pytest
 
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
+
 # ---------------------------------------------------------------------------
 # Globale Testsignale
 # ---------------------------------------------------------------------------

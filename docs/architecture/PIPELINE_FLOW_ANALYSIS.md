@@ -1,8 +1,8 @@
 # Aurik 9.x.x — Pipeline Flow Analysis
 
-**Stand:** März 2026  
-**Version:** 9.10.77c  
-**Status:** 56-Phasen-Defect-First-Pipeline, vollständig implementiert
+**Stand:** April 2026  
+**Version:** 9.10.102  
+**Status:** 64-Phasen-Defect-First-Pipeline, vollständig implementiert
 
 > Hinweis: Verbindlicher Ist-Stand liegt in `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
 
@@ -17,7 +17,7 @@ CausalReasoner), dann optimiert intervenieren (GP-Optimizer), dann verifizieren
 
 ## Signal-Fluss
 
-```
+```text
 [Rohes Audio]
     |
     v
@@ -74,7 +74,7 @@ CausalReasoner), dann optimiert intervenieren (GP-Optimizer), dann verifizieren
 
 ## Studio 2026-Modus: Zusätzliche Stem-Verarbeitung
 
-```
+```text
 [MDX23C Stem-Separation] --> Vocals + Instrumente
     |
     v
@@ -99,7 +99,7 @@ CausalReasoner), dann optimiert intervenieren (GP-Optimizer), dann verifizieren
 ## Qualitätsgrenzen
 
 | Metrik | Hard-Fail-Schwelle | Weltklasse-Ziel |
-|---|---|---|
+| --- | --- | --- |
 | PQS MOS | >= 3.8 | >= 4.5 |
 | NSIM | >= 0.70 | >= 0.90 |
 | MCD | <= 8.0 dB | <= 3.0 dB |
@@ -109,4 +109,4 @@ CausalReasoner), dann optimiert intervenieren (GP-Optimizer), dann verifizieren
 
 ---
 
-*Aurik 9.10.77c — März 2026*
+_Aurik 9.10.102 — April 2026_

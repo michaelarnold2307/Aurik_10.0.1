@@ -1,18 +1,16 @@
 import numpy as np
-import pytest
 
 
-def test_mert_instrument_detector_plugin_desktop():
-    """Testet, ob MERTInstrumentDetectorPlugin instanziiert werden kann und eine Dummy-Audioverarbeitung durchführt (Desktop-Only)."""
-    try:
-        from plugins.mert_instrument_detector_plugin import (
-            MERTInstrumentDetectorPlugin,  # type: ignore[import-not-found]
-        )
-    except ImportError:
-        pytest.skip("MERTInstrumentDetectorPlugin nicht verfügbar oder nicht installiert.")
-    plugin = MERTInstrumentDetectorPlugin()
-    sr = 16000
-    t = np.linspace(0, 1, sr)
+def test_mert_plugin_desktop():
+    """Smoke-Test für das kanonische MERT-Plugin (Naturalness-Analyse)."""
+    from plugins.mert_plugin import get_mert_plugin
+
+    plugin = get_mert_plugin()
+    sr = 24000
+    t = np.linspace(0, 1, sr, endpoint=False)
     audio = 0.5 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
-    result = plugin.process(audio, sr)
+    result = plugin.analyze(audio, sr)
+
     assert result is not None
+    assert 0.0 <= float(result.naturalness_score) <= 1.0
+    assert result.analysis_frames >= 0

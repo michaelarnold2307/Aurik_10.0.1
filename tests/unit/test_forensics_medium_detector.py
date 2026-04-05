@@ -323,14 +323,14 @@ class TestMediumDetector:
         audio = np.random.randn(48000).astype(np.float32) * 0.1
         result = detector.detect(audio, sr=48000)
 
-        # Bayesian model may pick tape or cassette — both are tape-family
+        # §6.1 Fix X6: 'cassette' is normalized to 'tape' by _normalize_material_key()
+        # — only 'tape' and 'reel_tape' are valid SUPPORTED_MATERIALS keys in this family.
         assert result.primary_material in (
             "tape",
-            "cassette",
             "reel_tape",
-        ), f"Expected tape-family, got {result.primary_material}"
+        ), f"Expected tape-family (cassette normalised to tape), got {result.primary_material}"
         assert len(result.transfer_chain) >= 1
-        assert result.transfer_chain[0] in ("tape", "cassette", "reel_tape")
+        assert result.transfer_chain[0] in ("tape", "reel_tape")
 
     def test_25_stereo_shape_2_N_conversion(self):
         """Stereo-Array shape (2, N) → korrekte Mono-Konversion."""

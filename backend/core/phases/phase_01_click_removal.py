@@ -762,15 +762,48 @@ class ClickRemovalPhase(PhaseInterface):
             pred_bwd_r, _ = lfilter([1.0], a_bwd, np.zeros(click_len), zi=zi_bwd)
             pred_bwd = pred_bwd_r[::-1]
 
-            # Spektraler Energieausgleich: Magnitude der Vorhersagen homogenisieren
-            # (verhindert Sprünge bei sehr unterschiedlichen Amplituden vor/nach Lücke)
+            # LPC instability guard: AR poles near/outside the unit circle cause
+            # exponential growth in predictions (especially in short contexts).
+            # Clip to 2× context peak before normalization to prevent silence-region
+            # artifacts from exploding forward/backward predictions.
+            _ctx_n = min(32, len(before), len(after))
+            ctx_peak = max(
+                float(np.max(np.abs(before[-_ctx_n:]))),
+                float(np.max(np.abs(after[:_ctx_n]))),
+                1e-6,
+            )
+            pred_fwd = np.clip(pred_fwd, -ctx_peak * 2.0, ctx_peak * 2.0)
+            pred_bwd = np.clip(pred_bwd, -ctx_peak * 2.0, ctx_peak * 2.0)
+
+            # Spektraler Energieausgleich mit Silence-Gate (~-80 dBFS).
+            # Bug-Fix: 1/rms_pred_fwd explodiert wenn LPC fast null ist → rms_pred≈1e-10
+            # → scale = rms_ctx/1e-10 = 1e4+ → minimalstes Rauschen auf hörbaren Pegel.
+            # Lösung: bei Stille-Kontext direkt auf Null setzen; bei Audio→Stille-Übergang
+            # linear ausblenden, damit kein Vorwärts-LPC-Artefakt in die Stille gejagt wird.
+            _SILENCE_RMS_FLOOR = 1e-4  # ~-80 dBFS
             if click_len >= 8:
-                rms_fwd = np.sqrt(np.mean(before[-8:] ** 2)) + 1e-10
-                rms_bwd = np.sqrt(np.mean(after[:8] ** 2)) + 1e-10
-                rms_pred_fwd = np.sqrt(np.mean(pred_fwd**2)) + 1e-10
-                rms_pred_bwd = np.sqrt(np.mean(pred_bwd**2)) + 1e-10
-                pred_fwd = pred_fwd * (rms_fwd / rms_pred_fwd)
-                pred_bwd = pred_bwd * (rms_bwd / rms_pred_bwd)
+                rms_fwd = np.sqrt(np.mean(before[-8:] ** 2))
+                rms_bwd = np.sqrt(np.mean(after[:8] ** 2))
+                fwd_silent = rms_fwd <= _SILENCE_RMS_FLOOR
+                bwd_silent = rms_bwd <= _SILENCE_RMS_FLOOR
+
+                if not fwd_silent:
+                    rms_pred_fwd = np.sqrt(np.mean(pred_fwd**2)) + 1e-10
+                    pred_fwd = pred_fwd * (rms_fwd / rms_pred_fwd)
+                    if bwd_silent:
+                        # Audio→Stille: Vorwärtsvorhersage über Gap ausblenden
+                        pred_fwd = pred_fwd * np.linspace(1.0, 0.0, click_len)
+                else:
+                    pred_fwd = np.zeros_like(pred_fwd)
+
+                if not bwd_silent:
+                    rms_pred_bwd = np.sqrt(np.mean(pred_bwd**2)) + 1e-10
+                    pred_bwd = pred_bwd * (rms_bwd / rms_pred_bwd)
+                    if fwd_silent:
+                        # Stille→Audio: Rückwärtsvorhersage über Gap einblenden
+                        pred_bwd = pred_bwd * np.linspace(0.0, 1.0, click_len)
+                else:
+                    pred_bwd = np.zeros_like(pred_bwd)
 
             # Cosinus-Blend (Hann-Form) statt linearer Gewichtung
             alpha = 0.5 * (1.0 - np.cos(np.pi * np.arange(click_len) / click_len))

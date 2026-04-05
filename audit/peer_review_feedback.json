@@ -1,25 +1,24 @@
 {
-  "info": "Hier können Peer-Review- und Community-Feedback-Einträge zu jedem Audit-Log-Schritt ergänzt werden.",
-  "example": [
-    {
-      "step": "spectral_repair",
-      "reviewer": "experte@aurik.com",
-      "feedback": "Natürlichkeit und Authentizität sind erhalten, keine Artefakte hörbar.",
-      "rating": 5
-    }
-  ],
   "automated_reviews": [
     {
-      "step": "ab_comparison",
-      "reviewer": "system",
-      "feedback": "Automatisiertes Experten-Review: Musikalitäts-Score und objektive Metriken dokumentiert.",
-      "musicality_score": "<score_wird_automatisch_eingetragen>",
       "details": {
         "mos_lqo": "<wert>",
-        "pesq": "<wert>",
-        "nisqa": "<wert>"
-      }
+        "nisqa": "<wert>",
+        "pesq": "<wert>"
+      },
+      "feedback": "Automatisiertes Experten-Review: Musikalit\u00e4ts-Score und objektive Metriken dokumentiert.",
+      "musicality_score": "<score_wird_automatisch_eingetragen>",
+      "reviewer": "system",
+      "step": "ab_comparison"
     }
-  ]
-  ]
+  ],
+  "example": [
+    {
+      "feedback": "Nat\u00fcrlichkeit und Authentizit\u00e4t sind erhalten, keine Artefakte h\u00f6rbar.",
+      "rating": 5,
+      "reviewer": "experte@aurik.com",
+      "step": "spectral_repair"
+    }
+  ],
+  "info": "Hier k\u00f6nnen Peer-Review- und Community-Feedback-Eintr\u00e4ge zu jedem Audit-Log-Schritt erg\u00e4nzt werden."
 }

@@ -200,7 +200,9 @@ class PghiReconstructor:
         initial_phase = np.angle(stft_modified)
 
         if use_original_phase:
-            audio = self._istft(stft_modified, win_size or self.win_size, hop or self.hop)
+            audio = self._istft(
+                stft_modified, win_size or self.win_size, hop or self.hop, boundary=True
+            )
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0).astype(np.float32)
             return PghiResult(
@@ -212,7 +214,25 @@ class PghiReconstructor:
                 method_used="original_phase",
             )
 
-        return self.reconstruct(magnitude, win_size, hop, initial_phase)
+        # use_original_phase=False: PGHI-Phasenneuberechnung aus Betrag.
+        # _istft mit boundary=True, da der externe STFT mit boundary='zeros'
+        # berechnet wurde (scipy-Standard in allen Aufruf-Phasen).
+        result = self.reconstruct(magnitude, win_size, hop, initial_phase)
+        # Rekonstruiere Audio mit korrekter boundary-Behandlung
+        stft_pghi = result.stft_complex
+        ws = win_size or self.win_size
+        h = hop or self.hop
+        audio_pghi = self._istft(stft_pghi, ws, h, boundary=True)
+        audio_pghi = np.nan_to_num(audio_pghi, nan=0.0, posinf=0.0, neginf=0.0)
+        audio_pghi = np.clip(audio_pghi, -1.0, 1.0).astype(np.float32)
+        return PghiResult(
+            audio=audio_pghi,
+            stft_complex=stft_pghi,
+            n_frames=stft_pghi.shape[1],
+            win_size=ws,
+            hop=h,
+            method_used=result.method_used,
+        )
 
     # ------------------------------------------------------------------
     # PGHI-Kern
@@ -427,11 +447,22 @@ class PghiReconstructor:
         win_size: int,
         hop: int,
         n_samples: int = -1,
+        boundary: bool = False,
     ) -> np.ndarray:
         """Vectorised inverse STFT via scipy.signal.istft. Returns float32 audio.
 
         Replaces the previous frame-loop OLA implementation with a single batched
         call — approx. 10× faster and uses the same OLA normalisation as scipy.
+
+        Args:
+            stft_complex: [n_bins, n_frames], complex
+            win_size:     Analysis window size (must match STFT)
+            hop:          Hop size (win_size - noverlap)
+            n_samples:    If > 0, trim/pad output to this length
+            boundary:     Pass True when stft_complex was computed with
+                          scipy.signal.stft's default boundary='zeros' padding.
+                          scipy then strips the synthetic edge frames and
+                          reconstructs the original-length signal correctly.
         """
         import warnings as _warnings
 
@@ -451,7 +482,7 @@ class PghiReconstructor:
                 nperseg=win_size,
                 noverlap=win_size - hop,
                 nfft=win_size,
-                boundary=False,
+                boundary=boundary,
             )
         if n_samples > 0:
             if len(audio) > n_samples:
@@ -536,6 +567,7 @@ def pghi_reconstruct_from_stft(
     win_size: int = 2048,
     hop: int = 256,
     use_original_phase: bool = False,
+    n_samples: int = -1,
 ) -> np.ndarray:
     """Rekonstruiert Audio aus modifiziertem STFT mit optionaler Phasen-Neuberechnung.
 
@@ -547,13 +579,21 @@ def pghi_reconstruct_from_stft(
         win_size:         STFT-Fenstergröße
         hop:              Hop-Größe
         use_original_phase: True → alte Phasen behalten (schneller, weniger konsistent)
+        n_samples:        Wenn >0, Ausgabe auf diese Länge trimmen/padden
+                          (sollte len(original_audio) sein für exakte Längetreue).
 
     Returns:
         Audio [n_samples], float32, ∈ [-1, 1]
     """
     rec = get_pghi_reconstructor(sr, win_size, hop)
     result = rec.reconstruct_from_stft(stft_modified, win_size, hop, use_original_phase)
-    return result.audio
+    audio = result.audio
+    if n_samples > 0:
+        if len(audio) > n_samples:
+            audio = audio[:n_samples]
+        elif len(audio) < n_samples:
+            audio = np.pad(audio, (0, n_samples - len(audio)))
+    return audio
 
 
 def griffin_lim_reconstruct(

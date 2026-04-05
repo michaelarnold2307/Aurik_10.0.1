@@ -87,7 +87,7 @@ def test_denoise_selections():
                 "sample_rate": 48000,
             },
             "goal": {"target_quality": 0.85},
-            "expected": "dccrn",  # Preserves transients
+            "expected": "mp_senet",  # Preserves transients
         },
         {
             "name": "Ambient/Drone (Sustained)",
@@ -131,13 +131,13 @@ def test_repair_selections():
             "name": "Speech with Clipping",
             "context": {"has_vocals": True},
             "goal": {"target_quality": 0.85},
-            "expected": "fullsubnet",
+            "expected": "mp_senet",
         },
         {
             "name": "Music with Clipping",
             "context": {"has_vocals": False},
             "goal": {"target_quality": 0.85},
-            "expected": "dccrn",
+            "expected": "mp_senet",
         },
     ]
 

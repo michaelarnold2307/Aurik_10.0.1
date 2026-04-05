@@ -159,11 +159,21 @@ Kritische Architekturnotiz (Stand März 2026):
 ### Inpainting (Phase 24, 55)
 
 ```text
-Kurze Lücken < 50 ms: NMF mit β-Divergenz (β=1, Itakura-Saito) + PGHI
+Kurze Lücken < 50 ms: NMF mit β-Divergenz (β=0, Itakura-Saito) + PGHI
+    β-Wert-Referenz (normativ, Lücke-F-Fix v9.10.100):
+        β=0 → Itakura-Saito-Divergenz (IS): minimiert relative Energiefehler,
+               gewichtet kleine Energieunterschiede stark → OPTIMAL für impulsive
+               Lücken (Klicks < 50 ms) und Transienten (Attack-Bins).
+        β=1 → Kullback-Leibler-Divergenz (KL): bessere Approximation bei harmonischen,
+               tonal-stationären Lücken — NICHT für impulsive Transienten verwenden.
+        β=2 → Euklidisch: nur für breitbandige stationäre Rekonstruktion.
+    Transient-Lücken (< 50 ms, Onset-Kontext): β=0 (IS) — PFLICHT (Artikel-/MicroDyn-Schutz)
+    Harmonische/tonale Lücken (< 50 ms, Stationär-Kontext): β=1 (KL) erlaubt.
+    VERBOTEN: β=1 für kurze Transient-Lücken (zerstört Attack-Energie-Verteilung).
 Lange Lücken 50–999 ms: CQTdiff+ (Moliner & Välimäki, ICASSP 2023)
     - CQT-Domänen-Diffusion konditioniert auf Phrasen-Kontext ±30 s
     - PGHI für phasenkonsistente Rücktransformation
-    Fallback: CQTdiff+ → DiffWave → NMF-β
+    Fallback: CQTdiff+ → DiffWave → NMF-β (β=0)
 VERBOTEN: VoiceFixer v2 (Sprach-only, VCTK-Korpus)
 VERBOTEN: VampNet (kein gebündeltes Plugin, kein stabiler ONNX-Export)
 ```
@@ -248,8 +258,9 @@ ZONES = {
 
 ```text
 4-stufige Fallback-Kaskade (Studio-2026):
-    1. Vocos 48 kHz nativ — vocos_mel_spec_24khz.onnx (CPUExecutionProvider)
+    1. Vocos 48 kHz nativ — vocos_mel_spec_48khz.onnx (CPUExecutionProvider)
        Mel-Bins 80; True-Peak −1.0 dBTP nach Synthese
+       # VERBOTEN: vocos_mel_spec_24khz.onnx (24-kHz-Variante — SR-Mismatch zu processing_sr=48000)
     2. BigVGAN-v2 — bigvgan_v2 (0,4 GB, ONNX/PyTorch, CPU-only)
     3. HiFi-GAN (3,6 MB ONNX) — Tertiär-Fallback
     4. PGHI-ISTFT — DSP-Endfall-Fallback
@@ -337,12 +348,44 @@ Fallback: Griffin-Lim ≥ 32 Iterationen
 ABSOLUT VERBOTEN: Direkte ISTFT auf modifiziertem Betragsspektrum
 ```
 
+**PGHI-Compliance-Status (Stand April 2026):**
+Phasen mit PGHI-Rekonstruktion: `phase_03`, `phase_06`, `phase_20`, `phase_23`, `phase_24`, `phase_28`, `phase_29`, `phase_31`.
+Alle anderen STFT-nutzenden Phasen verwenden kein modifiziertes Betragsspektrum (nur Analyse-STFT ohne Rücktransformation).
+
+**[RELEASE_MUST] PGHI STFT/iSTFT-boundary-Invariante (v9.10.100):**
+Jeder PGHI-Rekonstruktionsaufruf nach einer STFT-Modifikation MUSS `boundary`-konsistent sein:
+
+```python
+# PFLICHT-Regel: Externes STFT mit scipy-Standard (boundary='zeros') MUSS
+# mit iSTFT boundary=True rekonstruiert werden.
+# Internes STFT (PGHI-intern mit boundary=None) nutzt boundary=False in iSTFT.
+#
+# FALSCH (Amplitude am Rand ~1–3 dB zu niedrig, erste/letzte ~10 ms abgedämpft):
+audio_out = pghi_reconstruct_from_stft(Zxx)  # ohne n_samples
+# RICHTIG:
+audio_out = pghi_reconstruct_from_stft(Zxx, n_samples=len(audio_in))
+#   n_samples=: Exakte Längetreue durch Trim/Pad auf Originallänge.
+#   dsp/pghi.py::_istft() erhält boundary=True wenn STFT extern (scipy-Standard)
+#   und boundary=False nur für intern berechnete STFT-Frames.
+#
+# VERBOTEN: mode='edge' beim Padding von iSTFT-Kurzausgaben — klont gedämpften Endwert.
+# PFLICHT: mode='constant', constant_values=0.0 (Stille statt Artefakt-Klon).
+```
+
 ### Dithering (24→16 bit Export)
 
 ```text
 PRIMÄR: POW-r Typ 3 (Wannamaker et al. 1992) — ~+6 dB effektiver SNR
 FALLBACK: TPDF-Dithering (±1 LSB)
 VERBOTEN: Truncation ohne Dithering
+```
+
+### MP3-Export
+
+```text
+PRIMÄR: LAME VBR V0 via FFmpeg (q:a=0) — adaptiv bis 320 kbps, ≈245 kbps Ø
+VERBOTEN: CBR für Restaurierungsausgaben — CBR erzeugt Pre-Echo auf restaurierten
+          Transienten (TDP §7.x, MDEM §8.3)
 ```
 
 ---

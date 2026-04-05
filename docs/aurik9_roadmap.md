@@ -1,13 +1,12 @@
-# Aurik 9.x.x Roadmap – Stand März 2026 (Snapshot)
+# Aurik 9.x.x Roadmap – Stand April 2026 (Historischer Snapshot + aktueller Stand)
 
-> **Aurik 9 ist das weltweit erste intelligente, kontextbewusste Musik- und Gesangs-Restaurierungs-, Reparatur- und Rekonstruktions-System. Die Musikalische Exzellenz-Phase (v9.9.0–v9.10.46) ist vollständig abgeschlossen.**
-
-> Hinweis: Diese Roadmap bildet einen historischen Planungsstand ab. Für den aktuellen normativen Zustand gelten `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
+> **Aurik 9 ist das weltweit erste intelligente, kontextbewusste Musik- und Gesangs-Restaurierungs-, Reparatur- und Rekonstruktions-System. Aktuelle Version: 9.10.102 (April 2026), 64 Phasen, ~11.023 Tests.**
+> Hinweis: Diese Roadmap bildet überwiegend einen historischen Planungsstand ab. Für den aktuellen normativen Zustand gelten `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
 
 ## Abgeschlossene Versionen (Highlights)
 
 | Version | Milestone | Tests |
-|---|---|---|
+| --- | --- | --- |
 | v9.0 | UnifiedRestorerV3, Material-Auto-Detektion | 6 |
 | v9.7 | Kognitive Architektur (5 Kernmodule), VoiceGender, PANNs | 206 |
 | v9.8 | Über-SOTA DSP (OMLSA/IMCRA, pYIN, NMF-β, PGHI) | 222 |
@@ -24,10 +23,15 @@
 | v9.10.49 | Performance: SHA256-Cache, parallele Eingangs-Analyse, PMGG-Sample-Dauer, Warmup-Thread | 6312 |
 | v9.10.50 | §Dach MusikalischerGlobalplan: 13 Ära-Profile, 7 Genre-Modifikatoren, 17 Phase-Adjustments | 6312 |
 | v9.10.x | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | historischer Teststand |
+| v9.10.77 | PMGG Phase-Skip-Verbot, Stable-Metric-Invariante (§2.29b), Song-Kalibrierung (§2.31a) | ~8.919+ |
+| v9.10.85 | SongCal-PMGG-Integration (§2.31b), Material-adaptive PHASE\_GOAL\_EXCLUSIONS | ~9.200+ |
+| v9.10.91 | K-S tonal\_center Proxy (§9.7.11), SNR-robuste brillanz/transparenz/waerme (§9.7.12–14) | ~10.000+ |
+| v9.10.96 | §2.29c Restorative-Phase-Baseline-Capping, PMGG 122 Tests | ~10.700+ |
+| v9.10.102 | Genre-Phase-1 (Family+Top-k+Open-Set), LyricsGuidedEnhancement Pflichtmodul, 64 Phasen | ~11.023+ |
 
 ---
 
-# Todo List
+## Todo List
 
 **Letzte Aktualisierung:** 8. März 2026 (v9.10.46 — Musikalische Exzellenz-Phase vollständig abgeschlossen 🎯)
 
@@ -37,48 +41,48 @@
 - [x] Modularisierung aller Phasen (56) im Backend
 - [x] Lazy Loading & asynchrone Verarbeitung implementieren
 - [x] Multi-Core-Unterstützung integrieren (GPU: nein, wegen Inkompatibilitäten)
-- [x] **AdaptiveCoreScheduler implementiert** (4-Core Parallelisierung, +20% Performance) ✅ *15.02.2026*
-- [x] **48 kHz Standardisierung** (Unified Pipeline, alle 56 Phasen) ✅ *16.02.2026*
+- [x] **AdaptiveCoreScheduler implementiert** (4-Core Parallelisierung, +20% Performance) ✅ **15.02.2026**
+- [x] **48 kHz Standardisierung** (Unified Pipeline, alle 56 Phasen) ✅ **16.02.2026**
 - [x] Profiling aller Algorithmen (DSP, ML, IO)
 - [x] NumPy/Cython-Optimierung für DSP (kein CUDA, reiner CPU-Betrieb)
 - [x] Batch- und Streaming-Processing für große Dateien
 
 ## 2. Performance-Optimierung
 
-- [x] **Material-adaptive Thresholds rollout** (17 von 56 Phasen) ✅ *15.02.2026*
-- [x] **PerformanceGuard implementiert** (3× RT Enforcement, Adaptive Skipping) ✅ *15.02.2026*
-- [x] **Codebase-Cleanup abgeschlossen** (keine corrupted backups) ✅ *15.02.2026*
-- [x] **Performance Tests optimiert** (FAST <1.0×, BALANCED <3.0×, MAXIMUM <5.0×) ✅ *16.02.2026*
+- [x] **Material-adaptive Thresholds rollout** (17 von 56 Phasen) ✅ **15.02.2026**
+- [x] **PerformanceGuard implementiert** (3× RT Enforcement, Adaptive Skipping) ✅ _15.02.2026_
+- [x] **Codebase-Cleanup abgeschlossen** (keine corrupted backups) ✅ _15.02.2026_
+- [x] **Performance Tests optimiert** (FAST <1.0×, BALANCED <3.0×, MAXIMUM <5.0×) ✅ _16.02.2026_
 - [x] Entwicklung psychoakustischer, musikalischer und emotionaler Metriken (50+ wissenschaftliche Metriken: SNR, THD, LUFS, Tonalität, Harmonie, Valenz, Arousal, etc.)
-- [x] **Vollständige V3 Aktivierung** (UnifiedRestorerV3 als Standard) ✅ *16.02.2026*
-- [x] **CPU-Multicore Acceleration** für STFT-intensive Phasen (Phase 20 Reverb Reduction) ✅ *16.02.2026*
+- [x] **Vollständige V3 Aktivierung** (UnifiedRestorerV3 als Standard) ✅ _16.02.2026_
+- [x] **CPU-Multicore Acceleration** für STFT-intensive Phasen (Phase 20 Reverb Reduction) ✅ _16.02.2026_
 
 ## 3. KI & Maschinelles Lernen
 
-- [x] **ML-Hybrid Architecture Complete** (10/10 kritische Phasen) ✅ *16.02.2026*
+- [x] **ML-Hybrid Architecture Complete** (10/10 kritische Phasen) ✅ _16.02.2026_
   - [x] Phase 01: Click Removal + DeepFilterNet
   - [x] Phase 02: Hum Removal + DeepFilterNet
-  - [x] **Phase 03: Denoise + OMLSA + Resemble Enhance** ✅ *16.02.2026*
-  - [x] Phase 06/07: Frequency Restoration + NVSR ✅ *16.02.2026*
+  - [x] **Phase 03: Denoise + OMLSA + Resemble Enhance** ✅ _16.02.2026_
+  - [x] Phase 06/07: Frequency Restoration + NVSR ✅ _16.02.2026_
   - [x] Phase 09: Crackle Removal + BANQUET (Vinyl)
-  - [x] **Phase 12: Wow/Flutter + YIN + CREPE** ✅ *16.02.2026*
+  - [x] **Phase 12: Wow/Flutter + YIN + CREPE** ✅ _16.02.2026_
   - [x] Phase 18: Noise Gate + Silero VAD
-  - [x] **Phase 19: De-Esser + Phoneme Detection** ✅ *16.02.2026*
-  - [x] **Phase 20: Reverb Reduction + DSP + DCCRN** ✅ *16.02.2026*
+  - [x] **Phase 19: De-Esser + Phoneme Detection** ✅ _16.02.2026_
+  - [x] **Phase 20: Reverb Reduction + DSP + DCCRN** ✅ _16.02.2026_
   - [x] Phase 23: Spectral Repair + AudioSR
   - [x] Phase 24: Dropout Repair + AudioSR
   - [x] Phase 29: Tape Hiss + DeepFilterNet
-- [x] **Material Auto-Detection** (100% Accuracy, 12 Material-Typen) ✅ *16.02.2026*
+- [x] **Material Auto-Detection** (100% Accuracy, 12 Material-Typen) ✅ _16.02.2026_
   - Analog: Shellac, Vinyl, Tape, Reel-Tape
   - Digital: CD, DAT
   - Compressed: MP3_LOW, MP3_HIGH, AAC, MiniDisc
   - Streaming: Online/Adaptive
 - [x] DefectScanner mit 11 Defekttypen implementiert (Defect-First Architecture)
-- [x] **Quality Feedback Loop** (Psychoacoustic Metrics, adaptive tuning) ✅ *16.02.2026*
-- [x] **Phase Skipping - Performance-basiert** (PerformanceGuard in V3) ✅ *15.02.2026*
-- [x] **Resemble Enhance Plugin** (Docker-basiert, 286 Zeilen) ✅ *Existiert*
-- [x] **Hybrid ML Denoising** (OMLSA + Resemble Enhance, 450 Zeilen) ✅ *16.02.2026*
-- [x] **Phase Skipping - Defect-basiert** (Integration in V3, 4/4 Tests passing) ✅ *16.02.2026*
+- [x] **Quality Feedback Loop** (Psychoacoustic Metrics, adaptive tuning) ✅ _16.02.2026_
+- [x] **Phase Skipping - Performance-basiert** (PerformanceGuard in V3) ✅ _15.02.2026_
+- [x] **Resemble Enhance Plugin** (Docker-basiert, 286 Zeilen) ✅ _Existiert_
+- [x] **Hybrid ML Denoising** (OMLSA + Resemble Enhance, 450 Zeilen) ✅ _16.02.2026_
+- [x] **Phase Skipping - Defect-basiert** (Integration in V3, 4/4 Tests passing) ✅ _16.02.2026_
   - Intelligente Phase-Auswahl basierend auf Defekten
   - 20-40% Speedup für clean Audio
   - Conservative/Aggressive Modi
@@ -87,46 +91,46 @@
 
 ## 4. Processing-Pipeline
 
-- [x] Integration aller Phasen in die Processing-Pipeline (keine Dummys/Mocks) ✅ *16.02.2026*
-- [x] Tier 2 Integration Testing abgeschlossen (alle Tests passing) ✅ *16.02.2026*
-- [x] **Fallbacks auf lightweight-Algorithmen** (bei Ressourcenknappheit) ✅ *16.02.2026*
+- [x] Integration aller Phasen in die Processing-Pipeline (keine Dummys/Mocks) ✅ _16.02.2026_
+- [x] Tier 2 Integration Testing abgeschlossen (alle Tests passing) ✅ _16.02.2026_
+- [x] **Fallbacks auf lightweight-Algorithmen** (bei Ressourcenknappheit) ✅ _16.02.2026_
 - [x] Automatisierte Quality Gates für jede Phase (technisch & psychoakustisch)
 
 ## 5. GUI & User Experience
 
-- [x] **Frameless, laienbedienbare GUI entwerfen** (Magic Buttons, Window Controls) ✅ *16.02.2026*
-- [x] **Magic Buttons (Restoration/Studio 2026) als Icons/Grafiken implementiert** ✅ *16.02.2026*
-- [x] **Premium-Visualisierung:** Wellenform, Spektrogramm, Defekt-Legenden, Echtzeit-Metriken ✅ *16.02.2026*
-- [x] **Transparenz:** Logs, Defekte, Phasen-Status, Resource Monitor in Echtzeit ✅ *16.02.2026*
+- [x] **Frameless, laienbedienbare GUI entwerfen** (Magic Buttons, Window Controls) ✅ _16.02.2026_
+- [x] **Magic Buttons (Restoration/Studio 2026) als Icons/Grafiken implementiert** ✅ _16.02.2026_
+- [x] **Premium-Visualisierung:** Wellenform, Spektrogramm, Defekt-Legenden, Echtzeit-Metriken ✅ _16.02.2026_
+- [x] **Transparenz:** Logs, Defekte, Phasen-Status, Resource Monitor in Echtzeit ✅ _16.02.2026_
 - [ ] GUI/UX-Testing & Accessibility (optional)
 
 ## 6. Testing & Qualitätssicherung
 
-- [x] **End-to-End Test Suite** (6/6 Tests passing) ✅ *16.02.2026*
+- [x] **End-to-End Test Suite** (6/6 Tests passing) ✅ _16.02.2026_
   - [x] test_01: Vinyl Full Pipeline (BALANCED)
   - [x] test_02: Tape Full Pipeline (BALANCED)
   - [x] test_03: Fast Mode Fallback (DSP-only)
   - [x] test_04: Maximum Mode Quality (Full ML)
   - [x] test_05: Material Auto-Detection (100% accuracy)
   - [x] test_06: Performance Comparison (RT <3.0×)
-- [x] **Phase 3b Validation Infrastructure** ✅ *16.02.2026*
+- [x] **Phase 3b Validation Infrastructure** ✅ _16.02.2026_
   - [x] Automated benchmark script (vs. iZotope RX, CEDAR, SpectraLayers)
   - [x] Quality metrics collection framework
   - [x] Performance analysis tools
   - [x] Benchmarks documentation (README.md)
-- [x] **Phase 3b: ML-Hybrid Validation Complete** ✅ *16.02.2026*
+- [x] **Phase 3b: ML-Hybrid Validation Complete** ✅ _16.02.2026_
   - [x] Direct Phase Testing: Phase 03, 12, 20 (synthetisches Testaudio)
   - [x] 9/9 Testkonfigurationen passing (FAST/BALANCED/MAXIMUM)
   - [x] Performance validiert (0.04× - 1.09× RT)
   - [x] Quality Mode Routing funktioniert konsistent
   - [x] Graceful DSP Fallback validiert
   - [x] Test-Skript: test_ml_hybrid_validation.py (232 Zeilen)
-  - [x] **Report Generation & Documentation** ✅ *16.02.2026*
+  - [x] **Report Generation & Documentation** ✅ _16.02.2026_
   - **Status:** Production Ready ✅
 - [ ] Normative Tests für alle 42 Phasen erweitern
 - [ ] Regressionstests für ML-Hybrid Phasen
 - [ ] UI-Tests auf Verständlichkeit und musikalische Qualität
-- [x] **CI/CD-Pipeline für automatisierte Builds, Tests, Releases** ✅ *16.02.2026*
+- [x] **CI/CD-Pipeline für automatisierte Builds, Tests, Releases** ✅ _16.02.2026_
   - [x] GitHub Actions Workflows (ci_enhanced.yml, release.yml)
   - [x] Multi-Platform Release Automation (Windows, Linux, macOS)
   - [x] Automated Testing, Linting, Security Scans
@@ -137,9 +141,9 @@
 
 ## 7. Community & Open Source
 
-- [x] **Lizenz wählen und Projekt veröffentlichen** (MIT) ✅ *16.02.2026*
-- [x] **Dokumentation und Contribution-Guides erstellen** ✅ *16.02.2026*
-- [x] **Issue-Tracking und Community-Feedback einrichten** ✅ *16.02.2026*
+- [x] **Lizenz wählen und Projekt veröffentlichen** (MIT) ✅ _16.02.2026_
+- [x] **Dokumentation und Contribution-Guides erstellen** ✅ _16.02.2026_
+- [x] **Issue-Tracking und Community-Feedback einrichten** ✅ _16.02.2026_
   - [x] GitHub Issue Templates (bug_report, feature_request, performance_issue, documentation)
   - [x] Label-System (26 Labels: type, priority, area, status, quality)
   - [x] Issue Management Dokumentation (.github/ISSUE_MANAGEMENT.md)
@@ -163,7 +167,7 @@
 
 > **Hinweis:** Für alle Gesangsverbesserungs-Module (Vocal Enhancement Suite) wird eine Hybrid-Architektur (DSP + ML) ausdrücklich empfohlen. Nur so werden moderne Qualitätsstandards (Natürlichkeit, Transparenz, Kontextsensitivität) erreicht. Rein DSP-basierte Lösungen sind für Exzellenz nicht mehr ausreichend.
 
-- [x] **Vocal Enhancement Suite** (Phase 2.2) - 6 Module ✅ *Phase 19 v4.0 (1244 Zeilen)*
+- [x] **Vocal Enhancement Suite** (Phase 2.2) - 6 Module ✅ _Phase 19 v4.0 (1244 Zeilen)_
   - [x] **VocalPresenceEnhancer** (2-4 kHz Präsenz, Verständlichkeit) ✅ Stage 4
   - [x] **BreathIntelligence** (natürliche Atem-Reduktion) ✅ Stage 2
   - [x] **FormantSystem** (Vocal-Tuning ohne Autotune-Sound) ✅ Stage 3
@@ -172,14 +176,14 @@
   - [x] **ContextAwareDeesserV2** (Phonem-basierte Sibilanten-Reduktion) ✅ Stage 7
   - [ ] ML-basierter De-Esser: Deep Learning-Modul für Sibilanten-Reduktion (noch nicht integriert)
   - **Zusatz:** Gender-Awareness (Female/Male/Child), Musical Goals (7 Ziele), Stage 8 Quality Gates
-- [x] **Transparent Dynamics & Micro-Dynamics** ✅ *Komplett (MicroDynamics + Transparent beide fertig)*
-  - [x] **TransparentDynamicsProcessor** (unhörbare Kompression) ✅ *Phase 53 (680 Zeilen)*
+- [x] **Transparent Dynamics & Micro-Dynamics** ✅ _Komplett (MicroDynamics + Transparent beide fertig)_
+  - [x] **TransparentDynamicsProcessor** (unhörbare Kompression) ✅ _Phase 53 (680 Zeilen)_
     - Psychoacoustic Masking Detection (versteckt Kompression in leisen Passagen)
     - Genre-Adaptive Time Constants (Classical/Jazz/Rock/Electronic)
     - Intelligent Transient Detection (preserviert Drums, Piano, Plucks)
     - Material-Specific Ceiling (Shellac gentle → Streaming ultra-transparent)
-  - [x] **MicroDynamicsEnhancer** (Detail-Verstärkung) ✅ *Phase 26 (Dynamic Range Expansion, 379 Zeilen)*
-- [x] **Instrumental Enhancement Suite** (Phase 2.3) - Selektiv ✅ *16.02.2026*
+  - [x] **MicroDynamicsEnhancer** (Detail-Verstärkung) ✅ _Phase 26 (Dynamic Range Expansion, 379 Zeilen)_
+- [x] **Instrumental Enhancement Suite** (Phase 2.3) - Selektiv ✅ _16.02.2026_
   - [x] **BassEnhancementSystem** (40-200 Hz, Fundament) ⭐ PRIORITY 1 ✅
     - Integriert als Phase 37 (phase_37_bass_enhancement_v2_professional)
     - Material-adaptive Konfiguration für alle Materialtypen
@@ -189,7 +193,7 @@
   - [x] **VocalEnhancementV9** (Clarity, Presence) ✅
     - Integriert als Phase 42 (phase_42_vocal_enhancement_v2_professional)
     - Multi-stage: De-essing, Presence Boost, Formant Enhancement
-  - [x] **PianoRestorationSystem** (Klassik) ⭐ PRIORITY 3 ✅ *Phase 52 (579 Zeilen)*
+  - [x] **PianoRestorationSystem** (Klassik) ⭐ PRIORITY 3 ✅ _Phase 52 (579 Zeilen)_
     - Hammer Transient Enhancement (Attack Clarity, 2-8 kHz)
     - String Resonance Enhancement (Sympathetic Vibrations, Sustain)
     - Pedal Noise Reduction (Mechanical Noise 100-500 Hz)
@@ -209,7 +213,7 @@
 
 ### Tier 3: INNOVATION ✅ Teilweise abgeschlossen (v9.9–v9.10.46)
 
-- [x] **Semantic Audio Understanding** ✅ *v9.9 — implementiert und normativ spezifiziert*
+- [x] **Semantic Audio Understanding** ✅ _v9.9 — implementiert und normativ spezifiziert_
   - [x] GenreDetector → **GermanSchlagerClassifier** (§2.19, 6-Schicht Zero-Shot DSP+CLAP, kein vortrainiertes Modell; Recall ≥ 90 %) ✅
   - [x] StructureAnalyzer → **MusicalStructureAnalyzer** (SSM/Novelty-Kurve nach Foote 2000, §2.17, Chorus als Inpainting-Prior) ✅
   - [x] ProcessingProfileSelector → Genre-Restaurierungsprofile (§2.20: Jazz/Klassik/Oper/Rock/Schlager) ✅
@@ -399,7 +403,7 @@
   - [x] Benchmark script (`benchmark_vs_commercial.sh`)
   - [x] Metrics collection framework
   - [x] Benchmarks documentation
-- [x] **CI/CD Pipeline** ✅ *16.02.2026*
+- [x] **CI/CD Pipeline** ✅ _16.02.2026_
   - [x] GitHub Actions Workflows (ci_enhanced.yml, release.yml)
   - [x] Multi-Platform Builds (Windows, Linux, macOS)
   - [x] Automated Testing & Security Audits
@@ -415,7 +419,7 @@
 - [x] Lizenz wählen (MIT) ✅
 - [x] Documentation (README, CONTRIBUTING) ✅
 - [x] Contribution Guides ✅
-- [x] **Issue-Tracking Setup** ✅ *16.02.2026*
+- [x] **Issue-Tracking Setup** ✅ _16.02.2026_
   - [x] Issue Templates (bug, feature, performance, docs)
   - [x] Label-System (26 Labels)
   - [x] Issue Management Dokumentation
@@ -437,21 +441,20 @@
 
 ## 📊 Fortschritts-Übersicht
 
-
-| **Bereich**     | **Status** | **Fortschritt** | **Aktueller Fokus**                          |
-|-----------------|------------|-----------------|----------------------------------------------|
-| **Architektur** |     ✅     |       97%       | **Phase 3b Complete - V3 Active**            |
-| **Performance** |     ✅     |       97%       | Excellence Achieved (0.88-0.90)              |
-| **KI & ML**     |     ✅     |       99%       | **Tier 2 ML-Hybrid Complete**                |
-| **Pipeline**    |     ✅     |       100%      | **Tier 2 Integration, alle Tests passing**    |
-| **GUI**         |     ✅     |       90%       | **Icons implementiert, V3 Integration complete** |
-| **Testing**     |     ✅     |       97%       | **6312 Tests grün, E2E + Normative Tests** |
-| **Community**   |     ✅     |       75%       | **Issue-Tracking Complete, Feedback-Loop pending** |
-| **Release**     |     🟡     |       60%       | Production Ready, Alpha Release pending      |
+| **Bereich** | **Status** | **Fortschritt** | **Aktueller Fokus** |
+| --- | --- | --- | --- |
+| **Architektur** | ✅ | 97% | **Phase 3b Complete - V3 Active** |
+| **Performance** | ✅ | 97% | Excellence Achieved (0.88-0.90) |
+| **KI & ML** | ✅ | 99% | **Tier 2 ML-Hybrid Complete** |
+| **Pipeline** | ✅ | 100% | **Tier 2 Integration, alle Tests passing** |
+| **GUI** | ✅ | 90% | **Icons implementiert, V3 Integration complete** |
+| **Testing** | ✅ | 97% | **6312 Tests grün, E2E + Normative Tests** |
+| **Community** | ✅ | 75% | **Issue-Tracking Complete, Feedback-Loop pending** |
+| **Release** | 🟡 | 60% | Production Ready, Alpha Release pending |
 
 **Gesamt-Fortschritt:** ~97% — v9.10.46 (8. März 2026)
-*Phase 4 „Musikalische Exzellenz" (v9.9–v9.10.46) vollständig abgeschlossen.*
-*Verbleibend: Lyrics-Guided Enhancement Implementation (v10.0-R&D), AutoMix/AutoMaster (v10.0-R&D), Alpha/Beta-Release.*
+_Phase 4 „Musikalische Exzellenz" (v9.9–v9.10.46) vollständig abgeschlossen._
+_Verbleibend: Lyrics-Guided Enhancement Implementation (v10.0-R&D), AutoMix/AutoMaster (v10.0-R&D), Alpha/Beta-Release._
 
 **Status:** 🎉 **Musikalische Exzellenz-Phase abgeschlossen — Ready for Alpha Release**
 
@@ -463,24 +466,28 @@
 
 ### ✅ **ABGESCHLOSSEN: Phase 3b - ML-Hybrid Validation**
 
-**Sprint 2 (16. Februar 2026): Validation Complete** ✅ *COMPLETE*
+**Sprint 2 (16. Februar 2026): Validation Complete** ✅ _COMPLETE_
+
 - ✅ Direct Phase Testing (Phase 03, 12, 20)
 - ✅ 9/9 Testkonfigurationen passing (FAST/BALANCED/MAXIMUM)
 - ✅ Performance Validation (0.04× - 1.09× RT)
 - ✅ Quality Mode Routing validated
 - ✅ Graceful DSP Fallback validated
 - ✅ Test-Skript: test_ml_hybrid_validation.py (232 Zeilen)
-- **Result:** ML-Hybrid Tier 1 Production Ready! 🚀
+
+**Result:** ML-Hybrid Tier 1 Production Ready! 🚀
 
 ### ✅ **ABGESCHLOSSEN: Phase 3a - Integration & Optimization**
 
-**Sprint 1 (16. Februar 2026): Excellence Achieved** ✅ *COMPLETE*
+**Sprint 1 (16. Februar 2026): Excellence Achieved** ✅ _COMPLETE_
+
 - ✅ 48 kHz Standardisierung (Unified Pipeline)
 - ✅ Material Auto-Detection Fix (0% → 100% accuracy)
 - ✅ Performance Optimization (BALANCED 1.5× RT)
 - ✅ End-to-End Tests (6/6 passing)
 - ✅ ML-Hybrid Complete (10/10 critical phases)
-- **Result:** Overall Quality 0.88-0.90, Excellence Target erreicht!
+
+**Result:** Overall Quality 0.88-0.90, Excellence Target erreicht!
 
 ### 🎯 **NÄCHSTER SCHRITT: Entscheidung zwischen 3 Optionen**
 
@@ -495,6 +502,7 @@
 - Erwarteter Gewinn: +0.13 Quality, 25% more ML coverage
 
 **Alternative:** **Production Release** (wenn Validation erfolgreich)
+
 - Status: Excellence achieved (0.88-0.90)
 - Competitive with iZotope RX @ $0
 - 6/6 tests passing
@@ -509,6 +517,7 @@
 **Sprint 4-5: Core Enhancement Features**
 
 **Sprint 4 (Wochen 1-2): Dynamics & Vocals**
+
 - Woche 1-2: Transparent Dynamics + Micro-Dynamics (schneller Gewinn)
   - TransparentDynamicsProcessor implementieren
   - MicroDynamicsEnhancer implementieren
@@ -519,6 +528,7 @@
   - Unit Tests + Quality Gates
 
 **Sprint 5 (Wochen 3-4): Instrumental Foundation**
+
 - Woche 1-2: Bass + Drums Enhancement
   - BassEnhancementSystem (40-200 Hz, Fundament)
   - DrumsEnhancementSystem (Transient Shaping)
@@ -532,6 +542,7 @@
 ### Option 3: Musical Excellence Phase 2 (2-3 Wochen) 🎼 Optional
 
 **Sprint 6 (Optional): Spezialisierte Enhancement Features**
+
 - Woche 1-2: Vocal Suite Complete
   - FormantSystem (Vocal-Tuning)
   - VocalDynamicsIntelligence (Kompression)
@@ -543,11 +554,11 @@
 
 ### Option 4: GUI Enhancement (3-4 Wochen)
 
-- [x] **UnifiedRestorerV3 Integration** (Migration von V2) ✅ *16.02.2026*
-- [x] **Resource Status Display** (CPU/Memory/Mode Monitor) ✅ *16.02.2026*
-- [x] **ML/DSP Processing Indicators** (Real-time Plugin Status) ✅ *16.02.2026*
-- [x] **Magic Button Design finalisiert** (Frameless UI, Premium Look) ✅ *16.02.2026*
-- [x] **Real-time Visualisierungen** (Waveform, Spectrogram, Defects) ✅ *16.02.2026*
+- [x] **UnifiedRestorerV3 Integration** (Migration von V2) ✅ _16.02.2026_
+- [x] **Resource Status Display** (CPU/Memory/Mode Monitor) ✅ _16.02.2026_
+- [x] **ML/DSP Processing Indicators** (Real-time Plugin Status) ✅ _16.02.2026_
+- [x] **Magic Button Design finalisiert** (Frameless UI, Premium Look) ✅ _16.02.2026_
+- [x] **Real-time Visualisierungen** (Waveform, Spectrogram, Defects) ✅ _16.02.2026_
 - [ ] User Testing & Accessibility (optional)
 
 **Status:** 85% Complete (5/6 items) 🚀
@@ -610,7 +621,7 @@
   - Docker Build & Trivy Security Scanning
   - Dependency Audit (Safety, pip-audit)
 - **Release Automation:**
-  - Automatische Builds bei Git-Tags (v*.*.*)
+  - Automatische Builds bei Git-Tags (v_._.*)
   - PyInstaller Builds für alle Plattformen
   - Artifact-Upload zu GitHub Releases
   - Release Notes Generation aus CHANGELOG.md
@@ -770,7 +781,7 @@
   - Quality Impact: 0.92 (High impact auf Dynamics)
   - Scientific References: Zwicker & Fastl, Painter & Spanias, Moore, Reiss
 - **Integration:**
-  - __init__.py: TransparentDynamicsV1 export hinzugefügt
+  - `__init__.py`: TransparentDynamicsV1 export hinzugefügt
   - unified_restorer_v3.py: phase_53 in Tier 1 Section
   - Conditional selection: Digital sources always, Analog if distortion >0.3
   - Pipeline log: 5 Tier 1 Phasen (Bass, Drums, Piano, Transparent, Vocal) ✅
@@ -805,7 +816,7 @@
   - Lösung: None-checks für self.performance_guard in 9 Stellen der Pipeline
   - Betroffene Methoden: start_monitoring, should_skip_phase, start/end_phase, check_early_exit
 - **Integration:**
-  - __init__.py: PianoRestorationV1 export hinzugefügt
+  - `__init__.py`: PianoRestorationV1 export hinzugefügt
   - unified_restorer_v3.py: phase_52 in Tier 1 Section (nach Drums, vor Vocal)
   - Anti-Clipping: Soft limiter at 0.95 (verhindert Übersteuerung bei stark-processiertem Material)
 - **Test-Update:**
@@ -838,168 +849,169 @@
   - Multi-stage: De-essing, Presence Boost (2-4 kHz), Formant Enhancement
   - Harmonic enhancement, Air band (12-20 kHz), Broadcast clarity (3-8 kHz)
   - Priority: 7 (Tier 1 KRITISCH)
+
 ## Phase 43 - ML-De-Esser
 
-  - phase_id: `phase_43_ml_deesser`
-  - ML-basiertes De-Esser-Modul zur automatisierten Sibilanten-Reduktion
-  - Deep Learning, Phoneme Detection, adaptive Thresholds
-  - Integration: Vocal Enhancement Suite, Stage 8 Quality Gates
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_43_ml_deesser`
+- ML-basiertes De-Esser-Modul zur automatisierten Sibilanten-Reduktion
+- Deep Learning, Phoneme Detection, adaptive Thresholds
+- Integration: Vocal Enhancement Suite, Stage 8 Quality Gates
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 
 ## Phase 44 - Guitar Enhancement
 
-  - phase_id: `phase_44_guitar_enhancement`
-  - Erweiterte Instrumentenmodul: Gitarre (Klangverbesserung, Transienten, Genre-Adaption)
-  - ML/DSP-Hybrid, adaptive Genre-Parameter
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_44_guitar_enhancement`
+- Erweiterte Instrumentenmodul: Gitarre (Klangverbesserung, Transienten, Genre-Adaption)
+- ML/DSP-Hybrid, adaptive Genre-Parameter
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 
 ## Phase 45 - Brass Enhancement
 
-  - phase_id: `phase_45_brass_enhancement`
-  - Erweiterte Instrumentenmodul: Bläser (Klangverbesserung, Genre-Adaption, Dynamik)
-  - ML/DSP-Hybrid, adaptive Genre-Parameter
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_45_brass_enhancement`
+- Erweiterte Instrumentenmodul: Bläser (Klangverbesserung, Genre-Adaption, Dynamik)
+- ML/DSP-Hybrid, adaptive Genre-Parameter
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 
 ## Phase 46 - Spatial Enhancement
 
-  - phase_id: `phase_46_spatial_enhancement`
-  - 3D-Stereo/Spatial Enhancement (Räumliche Erweiterung, immersive Klanglandschaften)
-  - ML/DSP-Hybrid, immersive Parameter
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_46_spatial_enhancement`
+- 3D-Stereo/Spatial Enhancement (Räumliche Erweiterung, immersive Klanglandschaften)
+- ML/DSP-Hybrid, immersive Parameter
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 
 ## Phase 47 - TruePeak Limiter
 
-  - phase_id: `phase_47_truepeak_limiter`
-  - TruePeak Limiter (Mastering, Pegelbegrenzung, Clipping-Prävention)
-  - ITU-R BS.1770, ML/DSP-Hybrid
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_47_truepeak_limiter`
+- TruePeak Limiter (Mastering, Pegelbegrenzung, Clipping-Prävention)
+- ITU-R BS.1770, ML/DSP-Hybrid
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 
 ## Phase 48 - Stereo Width Enhancer
 
-  - phase_id: `phase_48_stereo_width_enhancer`
-  - Stereo Width Enhancer (Mastering, Stereobreite, Mix-Optimierung)
-  - MS-Processing, ML/DSP-Hybrid
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_48_stereo_width_enhancer`
+- Stereo Width Enhancer (Mastering, Stereobreite, Mix-Optimierung)
+- MS-Processing, ML/DSP-Hybrid
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 
 ## Phase 49 - Multiband Compressor
 
-  - phase_id: `phase_49_multiband_compressor`
-  - Multiband-Kompressor (Mastering, Frequenzselektive Dynamikbearbeitung)
-  - ML/DSP-Hybrid, adaptive Frequenzbänder
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_49_multiband_compressor`
+- Multiband-Kompressor (Mastering, Frequenzselektive Dynamikbearbeitung)
+- ML/DSP-Hybrid, adaptive Frequenzbänder
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 
 ## Phase 50 - Spectral Repair
 
-  - phase_id: `phase_50_spectral_repair`
-  - Spectral Repair (Restoration, spektrale Fehlerkorrektur, Artefaktentfernung)
-  - ML/DSP-Hybrid, spektrale Inpainting
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_50_spectral_repair`
+- Spectral Repair (Restoration, spektrale Fehlerkorrektur, Artefaktentfernung)
+- ML/DSP-Hybrid, spektrale Inpainting
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 
 ## Phase 51 - Semantic Audio
 
-  - phase_id: `phase_51_semantic_audio`
-  - Semantic Audio (Genre-Detection, Struktur-Analyse, Lyrics-Guided Processing, R&D-Innovation)
-  - ML/NLP, adaptive Profile Selection
-  - Status: Entwicklung abgeschlossen, Integration in Pipeline
+- phase_id: `phase_51_semantic_audio`
+- Semantic Audio (Genre-Detection, Struktur-Analyse, Lyrics-Guided Processing, R&D-Innovation)
+- ML/NLP, adaptive Profile Selection
+- Status: Entwicklung abgeschlossen, Integration in Pipeline
 - **Integration in UnifiedRestorerV3:**
-  - TIER 1 ML-HYBRID section in `_select_phases()` hinzugefügt
-  - Material-adaptive selection logic: Bass (always), Drums (conditional), Vocal (always)
-  - Logging: Tier 1 Enhancement status tracking
-  - Position: Nach Tier 4 (Mastering), vor Tier 5 (Output)
+- TIER 1 ML-HYBRID section in `_select_phases()` hinzugefügt
+- Material-adaptive selection logic: Bass (always), Drums (conditional), Vocal (always)
+- Logging: Tier 1 Enhancement status tracking
+- Position: Nach Tier 4 (Mastering), vor Tier 5 (Output)
 - **Tests:**
-  - `test_tier1_integration.py` erstellt (330+ Zeilen)
-  - TEST 1: Phase Selection Logic ✅ PASS (18 Phasen selected, 3 Tier 1 phasen enthalten)
-  - TEST 2-4: Skipped (Performance Guard Bug - überspringt alle Phasen trotz enforce_3x_rt=False)
-  - Phase ID Inkonsistenz behoben: phase_42 verwendet jetzt korrekte ID
+- `test_tier1_integration.py` erstellt (330+ Zeilen)
+- TEST 1: Phase Selection Logic ✅ PASS (18 Phasen selected, 3 Tier 1 phasen enthalten)
+- TEST 2-4: Skipped (Performance Guard Bug - überspringt alle Phasen trotz enforce_3x_rt=False)
+- Phase ID Inkonsistenz behoben: phase_42 verwendet jetzt korrekte ID
 - **Phase ID Fixes:**
-  - phase_42_vocal_enhancement.py: phase_id `phase_43` → `phase_42` korrigiert
-  - unified_restorer_v3.py: Alle Referenzen auf phase_42 aktualisiert
-  - test_tier1_integration.py: Test assertions korrigiert
+- phase_42_vocal_enhancement.py: phase_id `phase_43` → `phase_42` korrigiert
+- unified_restorer_v3.py: Alle Referenzen auf phase_42 aktualisiert
+- test_tier1_integration.py: Test assertions korrigiert
 - **Code-Statistiken:**
-  - phase_51_drums_enhancement.py: 327 Zeilen (NEU)
-  - __init__.py: +3 Zeilen (DrumsEnhancementV1 export)
-  - unified_restorer_v3.py: +35 Zeilen (Tier 1 Integration)
-  - test_tier1_integration.py: 330 Zeilen (NEU)
+- phase_51_drums_enhancement.py: 327 Zeilen (NEU)
+- `__init__.py`: +3 Zeilen (DrumsEnhancementV1 export)
+- unified_restorer_v3.py: +35 Zeilen (Tier 1 Integration)
+- test_tier1_integration.py: 330 Zeilen (NEU)
 - **Tier 1 Progress:** 12/14 Module implementiert (86%) 🎉 **ALLE KRITISCHEN MODULE FERTIG**
-  - ✅ **Vocal Enhancement Suite:** 6/6 (100%) - Phase 19 (De-Esser) + Phase 42 (Presence/Formant)
-  - ✅ **Instrumental Enhancement:** 4/6 (67%) - Bass, Drums, Vocal, Piano ✅
-  - ✅ **Transparent Dynamics:** 2/2 (100%) - MicroDynamics ✅, Transparent ✅
-  - ⏸️ **Optional (Low Priority):** Guitar/Brass Enhancement (2 Module)
+- ✅ **Vocal Enhancement Suite:** 6/6 (100%) - Phase 19 (De-Esser) + Phase 42 (Presence/Formant)
+- ✅ **Instrumental Enhancement:** 4/6 (67%) - Bass, Drums, Vocal, Piano ✅
+- ✅ **Transparent Dynamics:** 2/2 (100%) - MicroDynamics ✅, Transparent ✅
+- ⏸️ **Optional (Low Priority):** Guitar/Brass Enhancement (2 Module)
 - **Performance Target:** <0.15× RT pro Tier 1 Phase (Phase 51 estimated)
 - **Known Issues:**
-  - Performance Guard Bug: Überspringt Phasen trotz `enforce_3x_rt=False` und `enable_performance_guard=False`
-  - Workaround für Tests: QualityMode.BALANCED mit enforce_3x_rt=False
-  - Phase Execution in FAST mode verhindert Tier 1 Validation (Tests erfolgreich, aber keine Execution)
+- Performance Guard Bug: Überspringt Phasen trotz `enforce_3x_rt=False` und `enable_performance_guard=False`
+- Workaround für Tests: QualityMode.BALANCED mit enforce_3x_rt=False
+- Phase Execution in FAST mode verhindert Tier 1 Validation (Tests erfolgreich, aber keine Execution)
 - **Roadmap Update:** Instrumental Enhancement Suite 0% → 25% (3/12 modules)
 - **Overall Progress:** 92% → 93% (54/59 items)
 - **Next Steps:**
-  - Fix Performance Guard Bug (respektiere enforce_3x_rt=False)
-  - PianoRestorationSystem implementieren (PRIORITY 3)
-  - VocalPresenceEnhancer implementieren (Tier 1 Vocal Suite)
-  - Remaining 6 Vocal Suite modules
-  - Test Tier 1 Integration End-to-End (mit echten Audio-Dateien)
+- Fix Performance Guard Bug (respektiere enforce_3x_rt=False)
+- PianoRestorationSystem implementieren (PRIORITY 3)
+- VocalPresenceEnhancer implementieren (Tier 1 Vocal Suite)
+- Remaining 6 Vocal Suite modules
+- Test Tier 1 Integration End-to-End (mit echten Audio-Dateien)
 
 ### 16. Februar 2026 - ML-Hybrid Tier 1 Complete: Phase 03, 20, 12 🚀
 
 - **Status:** ✅ 3 neue ML-Hybrid Phasen implementiert (10/10 kritische Phasen total)
 - **Phase 03 Denoise v3.0:**
-  - DSP: Spectral Subtraction + Wiener (1.2× RT)
-  - ML: OMLSA + Resemble Enhance (1.5× RT BALANCED)
-  - Strategy: FAST → DSP, BALANCED → Adaptive, MAXIMUM → Full ML
-  - Quality Mode Routing: Graceful fallback bei ML-Fehler
-  - Test: 3/3 modes passing ✅
+- DSP: Spectral Subtraction + Wiener (1.2× RT)
+- ML: OMLSA + Resemble Enhance (1.5× RT BALANCED)
+- Strategy: FAST → DSP, BALANCED → Adaptive, MAXIMUM → Full ML
+- Quality Mode Routing: Graceful fallback bei ML-Fehler
+- Test: 3/3 modes passing ✅
 - **Phase 20 Reverb Reduction v3.0:**
-  - DSP: Spectral gating + transient preservation (0.3× RT)
-  - ML: DCCRN (Deep Complex CRN) dereverb (~2.0× RT)
-  - Hybrid: DSP → DCCRN refinement für hallige Aufnahmen
-  - Reverb Detection: RT60-ähnliche Analyse (0-1 scale)
-  - Test: 3/3 modes passing ✅
+- DSP: Spectral gating + transient preservation (0.3× RT)
+- ML: DCCRN (Deep Complex CRN) dereverb (~2.0× RT)
+- Hybrid: DSP → DCCRN refinement für hallige Aufnahmen
+- Reverb Detection: RT60-ähnliche Analyse (0-1 scale)
+- Test: 3/3 modes passing ✅
 - **Phase 12 Wow/Flutter Fix v3.0:**
-  - DSP: YIN pitch detection + Phase Vocoder (0.7× RT)
-  - ML: CREPE (CNN ±1 cent accuracy) (~2-3× RT)
-  - Hybrid: YIN → CREPE nur bei niedrigem Confidence
-  - Adaptive Strategy: CREPE übersprungen wenn YIN Confidence >0.7
-  - Test: 3/3 modes passing, YIN confidence 0.993 ✅
+- DSP: YIN pitch detection + Phase Vocoder (0.7× RT)
+- ML: CREPE (CNN ±1 cent accuracy) (~2-3× RT)
+- Hybrid: YIN → CREPE nur bei niedrigem Confidence
+- Adaptive Strategy: CREPE übersprungen wenn YIN Confidence >0.7
+- Test: 3/3 modes passing, YIN confidence 0.993 ✅
 - **Code-Statistiken:**
-  - `dsp/hybrid_ml_denoiser.py`: 450 Zeilen (Phase 03)
-  - `dsp/hybrid_dereverb.py`: 420 Zeilen (Phase 20)
-  - `dsp/hybrid_wow_flutter.py`: 425 Zeilen (Phase 12)
-  - Phase Updates: +370 Zeilen (Quality Mode Routing)
-  - Tests: 3 neue Integration Tests (100% passing)
+- `dsp/hybrid_ml_denoiser.py`: 450 Zeilen (Phase 03)
+- `dsp/hybrid_dereverb.py`: 420 Zeilen (Phase 20)
+- `dsp/hybrid_wow_flutter.py`: 425 Zeilen (Phase 12)
+- Phase Updates: +370 Zeilen (Quality Mode Routing)
+- Tests: 3 neue Integration Tests (100% passing)
 - **ML-Plugin Support:**
-  - Resemble Enhance: Docker-basiert, Denoising + Enhancement
-  - DCCRN: Docker-basiert, Dereverberation
-  - CREPE: Docker-basiert, Pitch Detection (±1 cent)
-  - Graceful Fallbacks: Alle 3 Phasen fallback zu DSP bei ML-Fehler
+- Resemble Enhance: Docker-basiert, Denoising + Enhancement
+- DCCRN: Docker-basiert, Dereverberation
+- CREPE: Docker-basiert, Pitch Detection (±1 cent)
+- Graceful Fallbacks: Alle 3 Phasen fallback zu DSP bei ML-Fehler
 - **Performance Impact:**
-  - FAST Mode: Keine Änderung (pure DSP)
-  - BALANCED Mode: +0.3-0.5× RT (Adaptive ML, intelligent)
-  - MAXIMUM Mode: +1.5-2.0× RT (Full ML pipeline)
+- FAST Mode: Keine Änderung (pure DSP)
+- BALANCED Mode: +0.3-0.5× RT (Adaptive ML, intelligent)
+- MAXIMUM Mode: +1.5-2.0× RT (Full ML pipeline)
 - **Quality Improvement:**
-  - Phase 03: +0.05-0.10 für stark verrauschtes Material
-  - Phase 20: +0.10 Klarheit für hallige Aufnahmen
-  - Phase 12: +0.05-0.08 für Tape mit Wow/Flutter
-  - Erwarteter Gesamt-Gewinn: +0.20-0.28 Quality für kritische Materialien
+- Phase 03: +0.05-0.10 für stark verrauschtes Material
+- Phase 20: +0.10 Klarheit für hallige Aufnahmen
+- Phase 12: +0.05-0.08 für Tape mit Wow/Flutter
+- Erwarteter Gesamt-Gewinn: +0.20-0.28 Quality für kritische Materialien
 - **KI & ML Progress:** 98% → 99% (10/10 critical items, nur Custom Model Training offen)
 - **Overall Progress:** 76% → 78% (43/54 items)
 - **Next Steps:**
-  - Tier 2 ML-Hybrid Candidates (Phase 06/07 NVSR, Phase 19 Phoneme Detection)
-  - Phase 3b Real-World Validation (Quick Test empfohlen)
-  - Production Release Candidate
+- Tier 2 ML-Hybrid Candidates (Phase 06/07 NVSR, Phase 19 Phoneme Detection)
+- Phase 3b Real-World Validation (Quick Test empfohlen)
+- Production Release Candidate
 
 ### 16. Februar 2026 - Phase 3b Validation Complete ✅🚀
 
 - **Status:** ML-Hybrid Tier 1 vollständig validiert - alle Tests passing
 - **Validierungsmethode:** Direkter Test der 3 ML-Hybrid Phasen mit synthetischem Audio
 - **Test-Konfiguration:**
-  - 3 Phasen: Phase 03 (Denoise), Phase 12 (Wow/Flutter), Phase 20 (Reverb)
-  - 3 Quality Modes pro Phase: FAST, BALANCED, MAXIMUM
-  - Gesamt: 9 Testkonfigurationen (100% passing)
-  - Testaudio: 3.0s mit synthetischen Defekten
+- 3 Phasen: Phase 03 (Denoise), Phase 12 (Wow/Flutter), Phase 20 (Reverb)
+- 3 Quality Modes pro Phase: FAST, BALANCED, MAXIMUM
+- Gesamt: 9 Testkonfigurationen (100% passing)
+- Testaudio: 3.0s mit synthetischen Defekten
 - **Validierungsergebnisse:**
-  - **Phase 03 Denoise:** FAST 0.04× RT (SNR +1.84 dB), BALANCED/MAXIMUM ML aktiv
-  - **Phase 12 Wow/Flutter:** FAST 0.40× RT (YIN DSP), BALANCED/MAXIMUM Adaptive ML
-  - **Phase 20 Reverb:** FAST 0.34× RT, BALANCED 0.88× RT, MAXIMUM 1.09× RT (RMS -19.72 dB)
+- **Phase 03 Denoise:** FAST 0.04× RT (SNR +1.84 dB), BALANCED/MAXIMUM ML aktiv
+- **Phase 12 Wow/Flutter:** FAST 0.40× RT (YIN DSP), BALANCED/MAXIMUM Adaptive ML
+- **Phase 20 Reverb:** FAST 0.34× RT, BALANCED 0.88× RT, MAXIMUM 1.09× RT (RMS -19.72 dB)
 - **Performance:** Alle Modi im Zielbereich (FAST <0.5×, BALANCED <1.5×, MAXIMUM <3×)
 - **Quality:** Acoustische Verbesserungen messbar (SNR, RMS, Pitch Detection)
 - **Architektur:** Quality Mode Routing funktioniert konsistent in allen 3 Phasen
@@ -1037,11 +1049,11 @@
 - **V2 Feature-Analyse:** 23 Premium-Features analysiert ([V2_VS_V3_FEATURE_COMPARISON.md](V2_VS_V3_FEATURE_COMPARISON.md))
 - **V2 Code-Größe:** 6.971 Zeilen (14× größer als V3 mit 497 Zeilen)
 - **Key Findings:**
-  - Phase 2.2: Vocal Enhancement Suite (6 Module) - KRITISCH für musikalische Exzellenz
-  - Phase 2.3: Instrumental Enhancement (6 Module) - Bass + Drums prioritär
-  - Transparent Dynamics: Unhörbare Kompression - schneller Gewinn
-  - Professional Mastering: TruePeakLimiter, Stereo Width - Broadcasting-Standard
-  - World-First Innovations: Semantic Understanding + Lyrics-Guided (R&D für später)
+- Phase 2.2: Vocal Enhancement Suite (6 Module) - KRITISCH für musikalische Exzellenz
+- Phase 2.3: Instrumental Enhancement (6 Module) - Bass + Drums prioritär
+- Transparent Dynamics: Unhörbare Kompression - schneller Gewinn
+- Professional Mastering: TruePeakLimiter, Stereo Width - Broadcasting-Standard
+- World-First Innovations: Semantic Understanding + Lyrics-Guided (R&D für später)
 - **Empfehlung:** Musical Excellence Phase 1 (4 Wochen) nach V3 Launch
 - **Erwarteter Gewinn:** +40% musikalische Qualität, 90% Genre-Abdeckung
 - **Roadmap Update:** Optionen 2-3 erweitert mit Enhancement Features
@@ -1068,11 +1080,14 @@
 ## 🧪 Roadmap-Feature: Normative Tests für alle 42 Phasen
 
 **Ziel:**
+
 - Vollständige Testabdeckung (Unit, Integration, Regression) für jede Phase
 - Sicherstellung von Robustheit, Korrektheit und musikalischer Qualität
 **Nutzen:**
+
 - Fehler früh erkennen, Qualität sichern, Refactoring erleichtern
 **Status:**
+
 - [ ] Testfälle für alle Phasen definieren
 - [ ] Automatisierte Testskripte (pytest, coverage)
 - [ ] Testdatenbank mit Referenz-Audio
@@ -1082,11 +1097,14 @@
 ## 🔁 Roadmap-Feature: Regressionstests für ML-Hybrid Phasen
 
 **Ziel:**
+
 - Rückfalltests für alle ML-basierten Phasen (z.B. Click, Hum, Spectral Repair)
 - Sicherstellen, dass ML-Modelle nach Updates weiterhin korrekt funktionieren
 **Nutzen:**
+
 - Verhindert „Silent Failures“ bei ML-Updates, sichert Qualität
 **Status:**
+
 - [ ] Regressionstest-Suite für ML-Phasen
 - [ ] Golden Sample Library aufbauen
 - [ ] Automatisierte CI-Integration
@@ -1096,11 +1114,14 @@
 ## 🖥️ Roadmap-Feature: UI-Tests auf Verständlichkeit und musikalische Qualität
 
 **Ziel:**
+
 - User-Experience- und Qualitätsvalidierung der GUI
 - Fokus: Verständlichkeit, Workflow, musikalische Ergebnisse
 **Nutzen:**
+
 - Höhere Nutzerzufriedenheit, weniger Supportaufwand
 **Status:**
+
 - [ ] Usability-Testszenarien definieren
 - [ ] Test-User einbinden (Feedback)
 - [ ] Automatisierte GUI-Tests (z.B. Selenium, PyAutoGUI)
@@ -1110,11 +1131,14 @@
 ## 📚 Roadmap-Feature: Dokumentation & Tutorials (API, GUI, Best Practices)
 
 **Ziel:**
+
 - Umfassende Doku und Tutorials für Nutzer und Entwickler
 - API-Referenz, GUI-HowTos, Best Practices
 **Nutzen:**
+
 - Schnellere Einarbeitung, weniger Fehler, Community-Wachstum
 **Status:**
+
 - [ ] API-Referenz vervollständigen
 - [ ] GUI-Tutorials schreiben
 - [ ] Best-Practice-Guides erstellen
@@ -1124,25 +1148,30 @@
 ## 🤖 Roadmap-Feature: ML-Enhanced Quality Prediction (optional)
 
 **Ziel:**
+
 - Entwicklung eines ML-Moduls zur automatischen Qualitätsbewertung von Audio
 - Ziel: „Quality Score“ vor/nach Processing, Feedback für User
 **Nutzen:**
+
 - Automatisierte Qualitätskontrolle, Benchmarking, User-Feedback
 **Status:**
- - [x] ML-Architektur ausgewählt und integriert (Wav2Vec2, Container, Script laufen fehlerfrei)
- - [x] Testdaten integriert, Qualitätsvorhersage wird ausgegeben (z.B. Quality Prediction: 0)
- - [ ] Integration in GUI (Quality Meter, Feedback) – bereit für Workflow/UI-Einbindung
+- [x] ML-Architektur ausgewählt und integriert (Wav2Vec2, Container, Script laufen fehlerfrei)
+- [x] Testdaten integriert, Qualitätsvorhersage wird ausgegeben (z.B. Quality Prediction: 0)
+- [ ] Integration in GUI (Quality Meter, Feedback) – bereit für Workflow/UI-Einbindung
 
 ---
 
 ## 🎸 Roadmap-Feature: Erweiterte Instrumentenmodule (Guitar/Brass/Spatial)
 
 **Ziel:**
+
 - Entwicklung spezialisierter Module für Gitarre, Bläser, 3D-Stereo, Streicher, Percussion
 - Fokus: Transienten, Obertöne, Artefakt-Reduktion, Räumlichkeit
 **Nutzen:**
+
 - Komplettiert die Instrumental Enhancement Suite, neue Zielgruppen, Alleinstellungsmerkmal
 **Status:**
+
 - [ ] Anforderungsanalyse (Material, Defekte, musikalische Ziele)
 - [ ] Prototyp-Algorithmen (DSP/ML)
 - [ ] Integration in Pipeline
@@ -1152,11 +1181,14 @@
 ## 📈 Roadmap-Feature: ML-Quality Prediction & Feedback
 
 **Ziel:**
+
 - Entwicklung eines ML-Moduls zur automatischen Qualitätsbewertung und User-Feedback
 - Quality Score, intelligentes Benchmarking, adaptive Empfehlungen
 **Nutzen:**
+
 - Automatisierte Qualitätskontrolle, User-Feedback, kontinuierliche Verbesserung
 **Status:**
+
 - [ ] ML-Architektur auswählen (AudioSet, OpenL3, eigene Modelle)
 - [ ] Trainingsdaten aufbauen (Audio + Quality-Labels)
 - [ ] Integration in GUI (Quality Meter, Feedback)
@@ -1166,11 +1198,14 @@
 ## 🧠 Roadmap-Feature: Eigene Deep-Learning-Modelle (beyond Open Source)
 
 **Ziel:**
+
 - Entwicklung eigener KI-Modelle für alle Kernbereiche (Restaurierung, Mastering, Source Separation, Style Transfer)
 - Volle Kontrolle über Architektur, Training, Qualitätsziele
 **Nutzen:**
+
 - Innovationsvorsprung, Anpassung an Aurik-typische Defekte, kreative Features
 **Status:**
+
 - [ ] Forschungsphase: Stand der Technik analysieren (Demucs, Bandit, Encodec, DiffWave, Open-Unmix)
 - [ ] Eigene Trainingsdatenbank (Stems, Defekt-Labels, Remastering-Paare)
 - [ ] Prototyping & Integration
@@ -1180,11 +1215,14 @@
 ## 🎚️ Roadmap-Feature: Advanced Mastering & Restoration Tools (Tier 2)
 
 **Ziel:**
+
 - Entwicklung von TruePeakLimiter, StereoWidthEnhancer, MultibandCompressor, SpectralRepair, AdvancedDereverb
 - Fokus: Broadcast-Standards, professionelle Mastering-Qualität
 **Nutzen:**
+
 - Konkurrenz zu iZotope RX, CEDAR, SpectraLayers, neue Zielgruppen
 **Status:**
+
 - [ ] Anforderungsanalyse (Mastering, Restoration)
 - [ ] Prototyp-Algorithmen (DSP/ML)
 - [ ] Integration in Pipeline
@@ -1194,11 +1232,14 @@
 ## 🧬 Roadmap-Feature: Semantische & Automatisierte Audioverarbeitung
 
 **Ziel:**
+
 - Entwicklung von GenreDetector, StructureAnalyzer, ProcessingProfileSelector, ContentAwareProcessor
 - Fokus: Adaptive, intelligente, kontextbewusste Verarbeitung
 **Nutzen:**
+
 - „Next-Gen“-User Experience, Automatisierung, smarte Workflows
 **Status:**
+
 - [ ] R&D-Prototypen (ML, Deep Learning, NLP)
 - [ ] Integration in GUI/Workflow
 
@@ -1207,14 +1248,17 @@
 ## 🤖 Roadmap-Feature: Adaptive Intelligenz & Automatisierung
 
 **Ziel:**
+
 - Entwicklung von AutoMix, AutoMaster, Smart Timeline, Lyrics-Guided Enhancement
 - Fokus: Automatisierte, intelligente Musikbearbeitung und kreative Features
 **Nutzen:**
+
 - Zeitersparnis, neue kreative Möglichkeiten, Alleinstellungsmerkmal
 **Status:**
+
 - [ ] Prototyp-Algorithmen (DSP/ML/NLP)
 - [ ] Integration in Pipeline/GUI
 
 ---
 
-# ...existing code...
+<!-- existing code -->

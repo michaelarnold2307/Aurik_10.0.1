@@ -69,6 +69,17 @@ import scipy.signal as signal
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 
+logger = logging.getLogger(__name__)
+
+# PGHI phase reconstruction after spectral modification (Spec §DSP — PFLICHT)
+try:
+    from dsp.pghi import pghi_reconstruct_from_stft as _pghi_p31
+
+    _PGHI_AVAILABLE_P31 = True
+except Exception:
+    _PGHI_AVAILABLE_P31 = False
+    logger.warning("PGHI not available; scipy.signal.istft fallback active for phase_31")
+
 # ML-Hybrid imports (Phase 31 v3.0)
 ML_HYBRID_AVAILABLE = False
 try:
@@ -77,8 +88,6 @@ try:
     ML_HYBRID_AVAILABLE = True
 except ImportError:
     pass
-
-logger = logging.getLogger(__name__)
 
 
 class SpeedPitchCorrectionPhase(PhaseInterface):
@@ -573,8 +582,16 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             if 0 <= new_bin < num_bins:
                 Zxx_shifted[i, :] = magnitude[new_bin, :] * np.exp(1j * phase[new_bin, :])
 
-        # ISTFT
-        _, audio_shifted = signal.istft(Zxx_shifted, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        # PGHI-Rekonstruktion (Perraudin 2013) — bewahrt Phasenkohärenz nach Freq-Shift
+        # Direkt iSTFT würde IPD-Relationen zerstören → Phantom-Center-Zusammenbruch (Spec §8.3)
+        if _PGHI_AVAILABLE_P31:
+            try:
+                audio_shifted = _pghi_p31(Zxx_shifted, sr=self.sample_rate, win_size=nperseg, hop=noverlap, n_samples=len(audio))
+            except Exception as _pghi_exc:
+                logger.debug("phase_31 PGHI failed, fallback to istft: %s", _pghi_exc)
+                _, audio_shifted = signal.istft(Zxx_shifted, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        else:
+            _, audio_shifted = signal.istft(Zxx_shifted, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
 
         # Match original length
         if len(audio_shifted) > len(audio):

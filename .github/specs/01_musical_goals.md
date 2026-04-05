@@ -21,7 +21,7 @@ aufgerufen via `MusicalGoalsChecker.measure_all(audio, sr)`.
 | **Mikro-Dynamik** (`MicroDynamicsMetric`) | Momentane LUFS-Profil-Korrelation (400 ms-Fenster), Crest-Faktor-Erhalt ≤ 1.5 dB | **3** | ≥ **0.88** | ≥ **0.92** |
 | **Groove** (`GrooveMetric`) | Mikro-Timing, Swing, Event-Onset-Präzision (DTW ≤ 8 ms RMS) | **3** | ≥ **0.83** | ≥ **0.88** |
 | **Transparenz** (`TransparenzMetric`) | Klarheit, Trennung der Klangelemente | **4** | ≥ **0.82** | ≥ **0.89** |
-| **Wärme** (`WaermeMetric`) | Mid-Range-Fülle, 200–2000 Hz | **4** | ≥ **0.75** | ≥ **0.80** |
+| **Wärme** (`WaermeMetric`) | Warmth Ratio E(200–800 Hz) E(800–3000 Hz) — reverb-invariantes Sub-Band-Verhältnis (§9.7.14); **nicht** 200–2000 Hz Einband-Messung (veraltet, SNR-sensitiv) | **4** | ≥ **0.75** | ≥ **0.80** |
 | **Bass-Kraft** (`BassKraftMetric`) | Bassenergie 20–250 Hz + Virtual Pitch (Missing Fundamental, Obertöne 120–500 Hz) | **4** | ≥ **0.78** | ≥ **0.85** |
 | **Separation-Treue** (`SeparationFidelityMetric`) | SDR ≥ 8 dB / SIR ≥ 12 dB nach NMF-Dekomposition | **4** | ≥ **0.78** | ≥ **0.82** |
 | **Brillanz** (`BrillanzMetric`) | HF-Klarheit, 8–20 kHz — Sparkle & Air | **5** | ≥ **0.78** | ≥ **0.85** |
@@ -134,7 +134,7 @@ ALWAYS_APPLICABLE: frozenset[str] = frozenset({
 | --- | --- |
 | `SpatialDepthMetric` | EraResult.decade ≤ 1950 UND M/S-Korrelation ≥ 0.95 (Mono-Aufnahme) |
 | `BrillanzMetric` | Quell-Bandbreite < 8 kHz UND AudioSR nicht geladen |
-| `TonalCenterMetric` | Original-SNR < −5 dB ODER MaterialType = WAX_CYLINDER |
+| `TonalCenterMetric` | MaterialType = WAX_CYLINDER (Fix K, v9.10.100: SNR-Bedingung entfernt — K-S-Key-Detection ist SNR-invariant gemäß §9.7.11; Deaktivierung bei SNR < −5 dB war inkonsistent mit der K-S-Invarianz-Aussage und hätte tonal_center auf stark degradiertem Material blind abgeschaltet) |
 | `GrooveMetric` | Dateilänge < 10 s ODER PANNs Percussion confidence < 0.15 |
 | `MicroDynamicsMetric` | Dateilänge < 20 s ODER Original-LUFS-Varianz < 0.5 LU |
 | `SeparationFidelityMetric` | Mono-Quelle ODER PANNs < 2 Instrumente mit confidence ≥ 0.4 |

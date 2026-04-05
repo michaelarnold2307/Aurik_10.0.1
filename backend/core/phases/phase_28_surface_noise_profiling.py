@@ -59,6 +59,15 @@ from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, Phase
 
 logger = logging.getLogger(__name__)
 
+# PGHI phase reconstruction after spectral gain application (Spec §DSP — PFLICHT)
+try:
+    from dsp.pghi import pghi_reconstruct_from_stft as _pghi_from_stft
+
+    _PGHI_AVAILABLE = True
+except Exception:
+    _PGHI_AVAILABLE = False
+    logger.warning("PGHI not available; scipy.signal.istft fallback active for phase_28")
+
 
 class SurfaceNoiseProfiling(PhaseInterface):
     """
@@ -263,8 +272,18 @@ class SurfaceNoiseProfiling(PhaseInterface):
         cleaned_mag = magnitude * gain_smooth
         cleaned_stft = cleaned_mag * np.exp(1j * phase)
 
-        # Step 6: ISTFT
-        _, denoised = signal.istft(cleaned_stft, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann")
+        # Step 6: PGHI-Rekonstruktion (Perraudin 2013) — bevorzugt statt direktem iSTFT
+        # PGHI bewahrt interaurale Phasendifferenzen → Raumtiefe + Tiefen-Immersion (Spec §8.3)
+        if _PGHI_AVAILABLE:
+            try:
+                denoised = _pghi_from_stft(cleaned_stft, sr=sample_rate, win_size=nperseg, hop=noverlap, n_samples=len(audio))
+            except Exception as _pghi_exc:
+                logger.debug("phase_28 PGHI failed, fallback to istft: %s", _pghi_exc)
+                _, denoised = signal.istft(
+                    cleaned_stft, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann"
+                )
+        else:
+            _, denoised = signal.istft(cleaned_stft, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann")
 
         # Länge anpassen + NaN/Clipping-Schutz
         denoised = denoised[: len(audio)]

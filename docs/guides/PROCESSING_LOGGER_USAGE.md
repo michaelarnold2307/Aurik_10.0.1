@@ -130,9 +130,9 @@ class UnifiedRestorerV2:
         self.enable_logging = enable_logging
         self.log_dir = log_dir
         self.logger = None
-        
+
         # ... existing init code ...
-    
+
     def restore(self, audio, sr, mode='restoration', input_file=None):
         """Restore audio with optional logging."""
         # Optional: Initialize logger
@@ -148,13 +148,13 @@ class UnifiedRestorerV2:
                 processing_mode=mode,
                 sample_rate=sr
             )
-        
+
         # Phase 1F: Declipping
         import time
         start = time.time()
         audio_declipped = self.declip(audio, sr)
         duration_ms = (time.time() - start) * 1000
-        
+
         if self.logger:
             self.logger.log_step(
                 step_id="phase_1f_declipping",
@@ -166,12 +166,12 @@ class UnifiedRestorerV2:
                 processing_time_ms=duration_ms,
                 parameters={'threshold': -3.0}
             )
-        
+
         # Phase 2A: Click Removal
         start = time.time()
         audio_declick = self.remove_clicks(audio_declipped, sr)
         duration_ms = (time.time() - start) * 1000
-        
+
         if self.logger:
             self.logger.log_step(
                 step_id="phase_2a_declick",
@@ -183,9 +183,9 @@ class UnifiedRestorerV2:
                 processing_time_ms=duration_ms,
                 parameters={'sensitivity': 0.7}
             )
-        
+
         # ... more phases ...
-        
+
         # Finalize
         if self.logger:
             trace = self.logger.end_session(output_file="output.wav")
@@ -193,7 +193,7 @@ class UnifiedRestorerV2:
             print(f"   SNR Improvement: {trace.overall_snr_improvement():.1f} dB")
             print(f"   THD Reduction: {trace.overall_thd_reduction():.1f}%")
             print(f"   Total Time: {trace.total_processing_time_sec:.1f}s")
-        
+
         return audio_final
 ```
 
@@ -203,7 +203,7 @@ class UnifiedRestorerV2:
 # orchestrator_and_cli.py
 from core.unified_restorer_v2 import UnifiedRestorerV2
 
-parser.add_argument('--enable-logging', action='store_true', 
+parser.add_argument('--enable-logging', action='store_true',
                    help='Enable ProcessingLogger for transparency')
 parser.add_argument('--log-dir', default='logs/processing',
                    help='Directory for processing logs')
@@ -391,10 +391,10 @@ results = []
 for threshold in thresholds:
     logger = ProcessingLogger(session_id=f"denoise_thresh_{threshold}")
     logger.start_session(input_file="test.wav", processing_mode="ab_testing", sample_rate=sr)
-    
+
     # Apply denoising
     audio_denoised = deepfilternet_denoise(audio, sr, reduction_db=threshold)
-    
+
     logger.log_step(
         step_id="denoise",
         phase="Denoising",
@@ -405,7 +405,7 @@ for threshold in thresholds:
         processing_time_ms=450.0,
         parameters={'reduction_db': threshold}
     )
-    
+
     trace = logger.end_session()
     results.append({
         'threshold': threshold,

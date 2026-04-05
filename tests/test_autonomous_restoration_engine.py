@@ -552,6 +552,25 @@ class TestDefectPhaseMapper:
         assert isinstance(desc, str)
         assert "dropout" in desc.lower() or "phase_24" in desc.lower()
 
+    @pytest.mark.parametrize(
+        ("defect_type", "expected_primary_phase"),
+        [
+            (DefectType.GROOVE_ECHO, "phase_61_groove_echo_cancellation"),
+            (DefectType.INNER_GROOVE_DISTORTION, "phase_60_inner_groove_distortion_repair"),
+            (DefectType.TAPE_SPLICE_ARTIFACT, "phase_64_tape_splice_repair"),
+            (DefectType.MODULATION_NOISE, "phase_59_modulation_noise_reduction"),
+        ],
+    )
+    def test_new_sota_defects_have_target_primary_phase(self, defect_type: DefectType, expected_primary_phase: str):
+        """Neue Defekttypen müssen im Mapper auf ihre dedizierten Kernphasen zeigen."""
+        from backend.core.defect_phase_mapper import DefectPhaseMapper
+
+        mapper = DefectPhaseMapper()
+        primary = mapper.get_primary_phases(defect_type)
+
+        assert isinstance(primary, list)
+        assert expected_primary_phase in primary
+
 
 # ===========================================================================
 # IntrinsicAudioQualityScorer Tests

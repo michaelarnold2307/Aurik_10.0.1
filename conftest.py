@@ -3,29 +3,10 @@
 # existieren. Sie werden aus der pytest-Collection ausgeschlossen um
 # Collection-Errors zu vermeiden. Neue Unit-Tests gehören nach tests/unit/.
 collect_ignore = [
-    "tests/test_backend_core.py",
-    "tests/test_explainability_engine.py",
-    "tests/test_human_in_the_loop.py",
-    "tests/test_hybrid_ml_denoiser.py",
-    "tests/test_material_detection_debug.py",
-    "tests/test_module_communication_bus.py",
-    "tests/test_multi_model_ensemble.py",
-    "tests/test_multimodal_decision_engine.py",
-    "tests/test_optimization_balanced.py",
-    "tests/test_phase_29_ml_hybrid.py",
-    "tests/test_policy_engine_extended.py",
-    "tests/test_realtime_feedback_bus.py",
-    "tests/test_restoration_workflow.py",
-    "tests/test_transfer_learning.py",
-    "tests/test_validate_musical_goals.py",
-    "tests/musical_goals/test_musical_goals_monitor_api.py",
-    "tests/musical_goals/test_uncertainty_quantification.py",
     # Script-style Dateien (kein pytest-konformes Test-Layout, Modul-Level-Code):
-    "tests/test_phase_02_ml_hybrid.py",
     # ONNX-Tests benötigen torch (OSError: libcupti.so.12 in dieser venv):
     "tests/onnx/test_onnx_advanced.py",
     "tests/onnx/test_onnx_runtime.py",
-    "tests/onnx/test_plugin_manager.py",
 ]
 
 
@@ -75,6 +56,7 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+os.environ.setdefault("TERM", "xterm-256color")
 
 _VSCODE_LAST_FILE: str = ""
 _VSCODE_TEST_COUNTER: int = 0
@@ -231,6 +213,7 @@ _LEGACY_IGNORE_BASENAMES: set[str] = {p.replace("\\", "/").split("/")[-1].lower(
 
 
 _HEAVY_TEST_PATH_HINTS: tuple[str, ...] = (
+    "test_defect_scanner_long_audio_crop_rescue.py",
     "test_memory_leaks_v3.py",
     "test_full_chain_ml_hybrid.py",
     "test_e2e_v9_10_41.py",
@@ -282,7 +265,15 @@ def _is_heavy_test_item(item) -> bool:
         3) Explicit timeout markers (>= 30 s).
         4) e2e marker.
     """
-    path = str(getattr(item, "fspath", "")).replace("\\", "/").lower()
+    # Pytest 8/9 compatibility: some collectors expose `path`, others `fspath`.
+    # Fall back to nodeid to keep heavy-test isolation deterministic.
+    _path_obj = getattr(item, "path", None)
+    if _path_obj is not None:
+        path = str(_path_obj).replace("\\", "/").lower()
+    else:
+        path = str(getattr(item, "fspath", "")).replace("\\", "/").lower()
+    if not path:
+        path = str(getattr(item, "nodeid", "")).replace("\\", "/").lower()
     if any(hint in path for hint in _HEAVY_TEST_PATH_HINTS):
         return True
 

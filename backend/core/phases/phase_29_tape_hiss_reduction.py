@@ -592,7 +592,7 @@ class TapeHissReductionPhase(PhaseInterface):
         Zxx_proc = G_combined * np.abs(Zxx_ref) * np.exp(1j * np.angle(Zxx_ref))
         if _PGHI_AVAILABLE_P29:
             try:
-                audio_out = _pghi_p29(Zxx_proc.astype(np.complex64), sr=sample_rate, win_size=REF_WIN, hop=REF_HOP)
+                audio_out = _pghi_p29(Zxx_proc.astype(np.complex64), sr=sample_rate, win_size=REF_WIN, hop=REF_HOP, n_samples=n)
             except Exception as pghi_exc:
                 logger.warning("MRSA Phase 29: PGHI failed, iSTFT fallback: %s", pghi_exc)
                 _, audio_out = signal.istft(

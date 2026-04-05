@@ -1,7 +1,7 @@
 # DefectScanner Specification - Aurik 9.x.x
 
-**Version:** 9.10.77c  
-**Stand:** März 2026  
+**Version:** 9.10.102  
+**Stand:** April 2026  
 **Status:** ✅ Production-Ready  
 **Location:** `core/defect_scanner.py` (~2500 lines)
 
@@ -12,6 +12,7 @@
 ## 1. Purpose
 
 The **DefectScanner** is the entry point for Aurik 9’s **Defect-First** restoration workflow. It analyzes audio to:
+
 - Detect **32 defect types** with severity scores (0.0–1.0) and temporal locations
 - Automatically identify material context (material-adaptive detection/thresholding)
 - Provide **material-adaptive** thresholds for each defect
@@ -22,7 +23,7 @@ The **DefectScanner** is the entry point for Aurik 9’s **Defect-First** restor
 
 ## 2. Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      DefectScanner                          │
 │  ┌───────────────────────────────────────────────────────┐  │
@@ -56,7 +57,7 @@ The **DefectScanner** is the entry point for Aurik 9’s **Defect-First** restor
 
 ## 3. Defect Types
 
-### 3.1 Enum Definition (32 DefectTypes, Stand v9.10.77c)
+### 3.1 Enum Definition (32 DefectTypes, Stand v9.10.102)
 
 ```python
 class DefectType(Enum):
@@ -94,6 +95,7 @@ class DefectType(Enum):
 ```
 
 **Kritische Unterscheidung CLIPPING vs. SOFT_SATURATION:**
+
 - `CLIPPING`: Flat-Tops, ungerade Obertöne (H3, H5 …) → reparieren
 - `SOFT_SATURATION`: abgerundete Scheitel, gerade Obertöne (H2, H4) → **bewahren**
 
@@ -115,8 +117,8 @@ Beispiel-Auszug (vollständige Tabelle in `core/defect_scanner.py`):
 | riaa_curve_error          | 0.10    | 0.25  | 1.00 | 1.00       | 1.00    |
 | bias_error                | 1.00    | 1.00  | 0.20 | 1.00       | 1.00    |
 
-*Schwellwert = 1.0 bedeutet: Defekttyp kommt bei diesem Material nicht vor (N/A).*
-*wax_cylinder, wire_recording, lacquer_disc: eigene Prior-Tabellen.*
+_Schwellwert = 1.0 bedeutet: Defekttyp kommt bei diesem Material nicht vor (N/A)._
+_wax_cylinder, wire_recording, lacquer_disc: eigene Prior-Tabellen._
 
 ---
 
@@ -140,7 +142,7 @@ def _detect_material_type(self, audio: np.ndarray, sr: int) -> Tuple[MaterialTyp
 
 ### 4.2 Decision Logic
 
-```
+```text
 High-freq energy <0.02 + transients >0.15 + rumble >0.20  → Shellac (78 RPM)
 Transients >0.08 + rumble >0.10 + stereo                  → Vinyl (LP)
 Low-freq rolloff >0.15 + high-freq noise >0.15            → Tape (cassette/reel)
@@ -165,6 +167,7 @@ PERFORMANCE_OVERHEAD_MAX = 0.10  # <10% of audio duration
 ```
 
 **Example:**
+
 - 3-minute audio (180s) → DefectScanner must complete in <18s
 - **Tested:** 225s audio → 20s scan time = **8.9% overhead ✅**
 

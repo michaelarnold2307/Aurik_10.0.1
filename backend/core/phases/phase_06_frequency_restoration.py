@@ -769,7 +769,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         Zxx_refined = G_combined * mag_in_ref * np.exp(1j * np.angle(Zxx_in))
         if _PGHI_AVAILABLE_P06:
             try:
-                audio_refined = _pghi_p06(Zxx_refined.astype(np.complex64), sr=sr, win_size=REF_WIN, hop=REF_HOP)
+                audio_refined = _pghi_p06(Zxx_refined.astype(np.complex64), sr=sr, win_size=REF_WIN, hop=REF_HOP, n_samples=n)
             except Exception:
                 _, audio_refined = signal.istft(Zxx_refined, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)
         else:
@@ -1116,12 +1116,15 @@ class FrequencyRestorationPhase(PhaseInterface):
         transient_mask = flux > 0.5
 
         # Synthesize HF transients (white noise burst)
+        # §2.40 Determinismus: content-derived seed for reproducible HF synthesis
+        _hf_seed = int(abs(float(np.sum(np.abs(Zxx[:rolloff_bin, :4])))) * 1e5 + rolloff_bin) % (2**31)
+        _rng_hf = np.random.default_rng(seed=_hf_seed)
         for t_idx in np.where(transient_mask)[0]:
             # Generate white noise in HF region
             noise_amplitude = flux[t_idx] * strength * 0.3
-            hf_noise = np.random.randn(extension_end_bin - rolloff_bin) * noise_amplitude
+            hf_noise = _rng_hf.standard_normal(extension_end_bin - rolloff_bin) * noise_amplitude
             Zxx[rolloff_bin:extension_end_bin, t_idx] += hf_noise * np.exp(
-                1j * np.random.rand(len(hf_noise)) * 2 * np.pi
+                1j * _rng_hf.uniform(0, 2 * np.pi, len(hf_noise))
             )
 
         return Zxx

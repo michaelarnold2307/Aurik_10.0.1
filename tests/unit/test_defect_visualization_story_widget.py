@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 
 import pytest
 
+pytestmark = pytest.mark.gui
+
 
 @dataclass
 class _DummyDefectScore:

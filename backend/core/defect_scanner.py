@@ -25,6 +25,8 @@ import numpy as np
 import scipy.fft as fft
 import scipy.signal as signal
 
+from backend.core.material_canonical import canonical_material_key
+
 # §6.3 CLIPPING vs SOFT_SATURATION discrimination via THD analysis (lazy import)
 try:
     from backend.core.clipping_detection import ClippingType as _ClippingType
@@ -152,6 +154,7 @@ class MaterialType(Enum):
 
     SHELLAC = "shellac"
     VINYL = "vinyl"
+    VINYL_STANDARD = "vinyl"  # alias → canonical key "vinyl" (material_canonical.py)
     TAPE = "tape"  # Cassette Tape
     REEL_TAPE = "reel_tape"  # Professional reel-to-reel (Studio)
     DAT = "dat"  # Digital Audio Tape (Professional)
@@ -918,6 +921,10 @@ class DefectScanner:
         },
     }
 
+    # Location caps are disabled (0 = uncapped) to avoid losing valid events
+    # on long recordings with very dense defect activity.
+    _LOCATION_CAP_UNCAPPED = 0
+
     def __init__(self, sample_rate: int = 44100, material_type: MaterialType | None = None):
         """
         Initialisiert DefectScanner.
@@ -940,8 +947,9 @@ class DefectScanner:
         audio: np.ndarray,
         sample_rate: int | None = None,
         material_type: MaterialType | None = None,
-        progress_callback: Optional["Callable[[int, str], None]"] = None,
+        progress_callback: Optional["Callable[[float, str], None]"] = None,
         file_ext: str = "",
+        forensic_medium_result: object | None = None,
     ) -> DefectAnalysisResult:
         """
         Hauptmethode: Scannt Audio-Daten und erkennt alle 20 Defekttypen.
@@ -964,7 +972,7 @@ class DefectScanner:
         # → TRANSPORT_BUMP wird nie übersprungen → 150+ falsche Bumps auf MP3-Dateien.
         if isinstance(material_type, str):
             try:
-                material_type = MaterialType(material_type.lower())
+                material_type = MaterialType(canonical_material_key(material_type))
             except ValueError:
                 logger.debug(
                     "DefectScanner.scan(): material_type='%s' unbekannt — auf None gesetzt.",
@@ -1074,24 +1082,70 @@ class DefectScanner:
                 _location_offset_s,
             )
 
-        def _prog(pct: int, name: str = "") -> None:
+        def _prog(pct: float, name: str = "") -> None:
+            _pct = float(np.clip(pct, 0.0, 100.0))
             if progress_callback is not None:
                 with contextlib.suppress(Exception):
                     try:
-                        progress_callback(pct, name)
+                        progress_callback(_pct, name)
                     except TypeError:
-                        progress_callback(pct)  # type: ignore[call-arg]
+                        progress_callback(_pct)  # type: ignore[call-arg]
+
+        _tail_steps_done = 0
+        _TAIL_STEP_BUDGET = 34
+        _DIGITAL_FAST_TAIL: frozenset[MaterialType] = frozenset(
+            {
+                MaterialType.CD_DIGITAL,
+                MaterialType.MP3_LOW,
+                MaterialType.MP3_HIGH,
+                MaterialType.AAC,
+                MaterialType.STREAMING,
+                MaterialType.DAT,
+                MaterialType.MINIDISC,
+            }
+        )
+        _ANALOG_DEEP_TAIL: frozenset[MaterialType] = frozenset(
+            {
+                MaterialType.WAX_CYLINDER,
+                MaterialType.LACQUER_DISC,
+                MaterialType.SHELLAC,
+                MaterialType.VINYL,
+                MaterialType.WIRE_RECORDING,
+                MaterialType.REEL_TAPE,
+                MaterialType.TAPE,
+            }
+        )
+        if material_type in _DIGITAL_FAST_TAIL:
+            _tail_start = 93.0
+        elif material_type in _ANALOG_DEEP_TAIL:
+            _tail_start = 88.0
+        else:
+            _tail_start = 90.0
+        _tail_span = 99.9 - _tail_start
+
+        def _lead_pct(base_pct: float) -> float:
+            """Map legacy lead progress (5..90) into the material-adaptive lead range."""
+            _b = float(np.clip(base_pct, 5.0, 90.0))
+            _ratio = (_b - 5.0) / 85.0
+            return 5.0 + _ratio * (_tail_start - 5.0)
+
+        def _tail_tick(name: str = "") -> None:
+            """Fine-grained progress updates for heavy post-90% scan blocks."""
+            nonlocal _tail_steps_done
+            _tail_steps_done += 1
+            _frac = min(1.0, _tail_steps_done / float(_TAIL_STEP_BUDGET))
+            _prog(_tail_start + _tail_span * _frac, name)
 
         # Alle 28 Defekttypen sequentiell — nach jedem Schritt Fortschritt melden
         scores = {}
 
-        _prog(5, "Klicks")
+        _prog(_lead_pct(5), "Klicks")
         scores[DefectType.CLICKS] = self._detect_clicks(audio_mono if not is_stereo else audio)
-        _prog(10, "Knistern")
+        _prog(_lead_pct(9), "Knistern")
         scores[DefectType.CRACKLE] = self._detect_crackle(audio_mono)
-        _prog(16, "Brummen")
+        _prog(_lead_pct(15), "Brummen")
         scores[DefectType.HUM] = self._detect_hum(audio_mono)
-        _prog(22, "Tonhöhenschwankung")
+        _prog(_lead_pct(20), "Tonhöhenschwankung")
         scores[DefectType.WOW] = self._detect_wow(audio_mono)  # IEC 60386 < 0.5 Hz
         scores[DefectType.FLUTTER] = self._detect_flutter(audio_mono)  # IEC 60386 0.5–200 Hz
         # v9.10.97 §9.1b-ext: Tape-Intro-Supplement for WOW/FLUTTER.
@@ -1123,75 +1177,97 @@ class DefectScanner:
                 scores[DefectType.FLUTTER] = _flutter_intro
                 scores[DefectType.FLUTTER].metadata["intro_supplement"] = True
         scores[DefectType.AZIMUTH_ERROR] = self._detect_azimuth_error(audio)  # PHD-Slope L/R
-        _prog(28, "Stereo-Ungleichgewicht")
+        _prog(_lead_pct(26), "Stereo-Ungleichgewicht")
         scores[DefectType.STEREO_IMBALANCE] = (
             self._detect_stereo_imbalance(audio) if is_stereo else DefectScore(DefectType.STEREO_IMBALANCE, 0.0, 0.0)
         )
-        _prog(34, "Digitalartefakte")
+        _prog(_lead_pct(31), "Digitalartefakte")
         scores[DefectType.DIGITAL_ARTIFACTS] = self._detect_digital_artifacts(audio_mono)
-        _prog(40, "Tieffrequenz-Rumpeln")
+        _prog(_lead_pct(37), "Tieffrequenz-Rumpeln")
         scores[DefectType.LOW_FREQ_RUMBLE] = self._detect_low_freq_rumble(audio_mono)
-        _prog(46, "Hochfrequenzrauschen")
+        _prog(_lead_pct(42), "Hochfrequenzrauschen")
         scores[DefectType.HIGH_FREQ_NOISE] = self._detect_high_freq_noise(audio_mono)
-        _prog(52, "Kompressions-Artefakte")
+        _prog(_lead_pct(48), "Kompressions-Artefakte")
         scores[DefectType.COMPRESSION_ARTIFACTS] = self._detect_compression_artifacts(audio_mono)
-        _prog(58, "Phasenfehler")
+        _prog(_lead_pct(53), "Phasenfehler")
         scores[DefectType.PHASE_ISSUES] = (
             self._detect_phase_issues(audio) if is_stereo else DefectScore(DefectType.PHASE_ISSUES, 0.0, 0.0)
         )
-        _prog(64, "Aussetzer")
+        _prog(_lead_pct(59), "Aussetzer")
         # §9.7.5a — Dropout detection runs on FULL audio (not center-cropped).
         # Tape dropouts occur anywhere (intro, leader, splice points).
         scores[DefectType.DROPOUTS] = self._detect_dropouts(_audio_mono_full)
-        _prog(70, "Übersteuerung")
+        _prog(_lead_pct(64), "Übersteuerung")
         # --- Weltklasse-Erweiterung: 4 neue Defekttypen ---
         scores[DefectType.CLIPPING] = self._detect_clipping(audio_mono)
-        _prog(75, "DC-Versatz")
+        _prog(_lead_pct(69), "DC-Versatz")
         scores[DefectType.DC_OFFSET] = self._detect_dc_offset(audio_mono)
-        _prog(80, "Bandbreitenverlust")
+        _prog(_lead_pct(74), "Bandbreitenverlust")
         scores[DefectType.BANDWIDTH_LOSS] = self._detect_bandwidth_loss(audio_mono)
-        _prog(84, "Tonhöhendrift")
+        _prog(_lead_pct(78), "Tonhöhendrift")
         scores[DefectType.PITCH_DRIFT] = self._detect_pitch_drift(audio_mono)
-        _prog(88, "Übermäßiger Hall")
+        _prog(_lead_pct(82), "Übermäßiger Hall")
         scores[DefectType.REVERB_EXCESS] = self._detect_reverb_excess(audio_mono)
-        _prog(91, "Durchkopieren")
+        _prog(_lead_pct(84), "Durchkopieren")
         scores[DefectType.PRINT_THROUGH] = self._detect_print_through(audio_mono)
-        _prog(94, "Quantisierungsrauschen")
+        _prog(_lead_pct(87), "Quantisierungsrauschen")
         # --- Weltklasse-Erweiterung Runde 3 ---
         scores[DefectType.QUANTIZATION_NOISE] = self._detect_quantization_noise(audio_mono)
-        _prog(96, "Jitter-Artefakte")
+        _prog(_lead_pct(89), "Jitter-Artefakte")
         scores[DefectType.JITTER_ARTIFACTS] = self._detect_jitter_artifacts(audio_mono)
-        _prog(98, "Überkompression")
+        _prog(_lead_pct(90), "Überkompression")
         scores[DefectType.DYNAMIC_COMPRESSION_EXCESS] = self._detect_dynamic_compression_excess(audio_mono)
         # --- Vollständige 28-Typen-Erweiterung (F-7) ---
         scores[DefectType.SOFT_SATURATION] = self._detect_soft_saturation(audio_mono)
+        _tail_tick("Soft-Sättigung")
         scores[DefectType.SIBILANCE] = self._detect_sibilance(audio_mono)
+        _tail_tick("Sibilanz")
         scores[DefectType.VOCAL_HARSHNESS] = self._detect_vocal_harshness(audio_mono)
+        _tail_tick("Vokalhärte")
         scores[DefectType.BIAS_ERROR] = self._detect_bias_error(audio_mono)
+        _tail_tick("Bias-Fehler")
         scores[DefectType.DOLBY_NR_MISMATCH] = self._detect_dolby_nr_mismatch(audio_mono)
+        _tail_tick("Dolby-NR-Mismatch")
         scores[DefectType.RIAA_CURVE_ERROR] = self._detect_riaa_curve_error(audio_mono)
+        _tail_tick("RIAA-Kurve")
         scores[DefectType.HEAD_WEAR] = self._detect_head_wear(audio_mono)
+        _tail_tick("Kopfverschleiß")
         scores[DefectType.TRANSIENT_SMEARING] = self._detect_transient_smearing(audio_mono)
+        _tail_tick("Transienten-Schmierung")
         scores[DefectType.PRE_ECHO] = self._detect_pre_echo(audio_mono)
+        _tail_tick("Pre-Echo")
         scores[DefectType.ALIASING] = self._detect_aliasing(audio_mono)
+        _tail_tick("Aliasing")
 
         # ── v9.10.98: 12 newly added defect detectors ─────────────────────────
         scores[DefectType.MODULATION_NOISE] = self._detect_modulation_noise(audio_mono)
+        _tail_tick("Modulationsrauschen")
         scores[DefectType.INNER_GROOVE_DISTORTION] = self._detect_inner_groove_distortion(audio_mono)
+        _tail_tick("Innenrillen-Verzerrung")
         scores[DefectType.GROOVE_ECHO] = self._detect_groove_echo(audio_mono)
+        _tail_tick("Rillenecho")
         # Crosstalk needs stereo input
         if is_stereo:
             scores[DefectType.CROSSTALK] = self._detect_crosstalk(audio)
         else:
             scores[DefectType.CROSSTALK] = DefectScore(DefectType.CROSSTALK, 0.0, 0.5, metadata={"reason": "mono"})
+        _tail_tick("Übersprechen")
         scores[DefectType.INTERMODULATION_DISTORTION] = self._detect_intermodulation_distortion(audio_mono)
+        _tail_tick("Intermodulation")
         scores[DefectType.TAPE_SPLICE_ARTIFACT] = self._detect_tape_splice_artifact(audio_mono)
+        _tail_tick("Band-Spleiß")
         scores[DefectType.HF_REMANENCE_LOSS] = self._detect_hf_remanence_loss(audio_mono)
+        _tail_tick("HF-Remanenz")
         scores[DefectType.STYLUS_DAMAGE] = self._detect_stylus_damage(audio_mono)
+        _tail_tick("Nadelschaden")
         scores[DefectType.STICKY_SHED_RESIDUE] = self._detect_sticky_shed_residue(audio_mono)
+        _tail_tick("Sticky-Shed")
         scores[DefectType.MULTIBAND_WOW_FLUTTER] = self._detect_multiband_wow_flutter(audio_mono)
+        _tail_tick("Multiband Wow/Flutter")
         scores[DefectType.GENERATION_LOSS] = self._detect_generation_loss(audio_mono)
+        _tail_tick("Generationsverlust")
         scores[DefectType.MOTOR_INTERFERENCE] = self._detect_motor_interference(audio_mono)
+        _tail_tick("Motor-Interferenz")
 
         # §9.1a — TRANSPORT_BUMP is non-stationary (impulsive micro-speed jumps).
         # MUST run on FULL audio, same as DROPOUTS.
@@ -1215,6 +1291,7 @@ class DefectScanner:
             )
         else:
             scores[DefectType.TRANSPORT_BUMP] = self._detect_transport_bump(_audio_mono_full)
+        _tail_tick("Transport-Bump")
 
         # §9.1a — TAPE_HEAD_LEVEL_DIP is non-stationary (gradual level dips from
         # head-contact pressure variation).  MUST run on FULL audio.
@@ -1230,6 +1307,7 @@ class DefectScanner:
             scores[DefectType.TAPE_HEAD_LEVEL_DIP] = self._detect_tape_head_level_dips(_audio_mono_full)
         else:
             scores[DefectType.TAPE_HEAD_LEVEL_DIP] = DefectScore(DefectType.TAPE_HEAD_LEVEL_DIP, 0.0, 0.95)
+        _tail_tick("Tape-Head-Level-Dip")
 
         # ── Full-Audio Location Re-Detection ───────────────────────────────────
         # The center-crop analysis (60 s) produces locations ONLY in the middle
@@ -1250,6 +1328,9 @@ class DefectScanner:
                 (DefectType.CLIPPING, self._detect_clipping),
                 (DefectType.SIBILANCE, self._detect_sibilance),
                 (DefectType.VOCAL_HARSHNESS, self._detect_vocal_harshness),
+                (DefectType.TAPE_SPLICE_ARTIFACT, self._detect_tape_splice_artifact),
+                (DefectType.STICKY_SHED_RESIDUE, self._detect_sticky_shed_residue),
+                (DefectType.GROOVE_ECHO, self._detect_groove_echo),
             ]
             # Long-audio center-crop misses are most critical for cheap impulse
             # detectors; always re-check them on full audio to avoid blind spots.
@@ -1258,6 +1339,9 @@ class DefectScanner:
                 DefectType.CRACKLE,
                 DefectType.CLIPPING,
                 DefectType.SIBILANCE,
+                DefectType.TAPE_SPLICE_ARTIFACT,
+                DefectType.STICKY_SHED_RESIDUE,
+                DefectType.GROOVE_ECHO,
             }
             for _edt, _edet_fn in _EVENT_DETECTORS:
                 if _edt not in scores:
@@ -1289,6 +1373,7 @@ class DefectScanner:
                         scores[_edt].locations = [
                             (t0 + _location_offset_s, t1 + _location_offset_s) for t0, t1 in scores[_edt].locations
                         ]
+                _tail_tick("Vollaudio-Recheck (Events)")
 
             # Full-audio severity rescue for center-crop-sensitive defects.
             # These defects can be concentrated in intro/outro and may be under-estimated
@@ -1301,6 +1386,8 @@ class DefectScanner:
                 (DefectType.HEAD_WEAR, self._detect_head_wear),
                 (DefectType.TRANSIENT_SMEARING, self._detect_transient_smearing),
                 (DefectType.PRE_ECHO, self._detect_pre_echo),
+                (DefectType.INNER_GROOVE_DISTORTION, self._detect_inner_groove_distortion),
+                (DefectType.STYLUS_DAMAGE, self._detect_stylus_damage),
             ]
             for _sdt, _sdet_fn in _FULL_AUDIO_SEVERITY_RECHECK:
                 if _sdt not in scores:
@@ -1327,6 +1414,7 @@ class DefectScanner:
                 except Exception as _exc:
                     logger.debug("Non-stationary recheck failed for %s: %s", _sdt, _exc)
                     # Keep center-crop value on recheck errors.
+                _tail_tick("Vollaudio-Recheck (Severity)")
 
             # DROPOUTS + TRANSPORT_BUMP + TAPE_HEAD_LEVEL_DIP already use full audio — no correction needed.
             # Event detectors re-detected above — no correction needed.
@@ -1339,6 +1427,7 @@ class DefectScanner:
                 DefectType.CLIPPING,
                 DefectType.SIBILANCE,
                 DefectType.VOCAL_HARSHNESS,
+                DefectType.GROOVE_ECHO,
             }
             if is_stereo:
                 _SKIP_OFFSET.add(DefectType.CLICKS)  # redundant but explicit
@@ -1497,6 +1586,7 @@ class DefectScanner:
                         _per_channel_locs.setdefault("vocal_harshness", {})[_ch_label] = list(_ch_harsh.locations)
                 except Exception as _exc:
                     logger.debug("Per-channel vocal_harshness detection failed (%s): %s", _ch_label, _exc)
+                _tail_tick(f"Kanal-Analyse {_ch_label}")
             # Store per-channel info as metadata on the combined scores
             for _dk, _ch_dict in _per_channel_locs.items():
                 _dt_key = {v: k for k, v in _DT_TO_KEY.items()}.get(_dk)
@@ -1536,6 +1626,7 @@ class DefectScanner:
                         "original_severity": _riaa_orig,
                     },
                 )
+            _tail_tick("Medium-Gate")
 
         # ── §9.1c Perceptual Salience — psychoacoustic masking annotation ───────
         # Annotates each defect with a 'perceptual_salience' score (0.0–1.0).
@@ -1561,6 +1652,7 @@ class DefectScanner:
             scores = _pse_result.scores
         except Exception as _pse_err:
             logger.warning("PerceptualSalienceEstimator failed (non-critical): %s", _pse_err)
+        _tail_tick("Perceptual Salience")
 
         # Post-calibration: material-aware confidence stabilization and
         # transparent locality limits for long center-crop scans.
@@ -1569,6 +1661,7 @@ class DefectScanner:
             material_type=material_type,
             used_center_crop=(_location_offset_s > 0.0),
         )
+        _tail_tick("Post-Kalibrierung")
 
         _prog(99)
 
@@ -1579,25 +1672,38 @@ class DefectScanner:
             f"DefectScan completed: {analysis_time:.2f}s für {duration:.1f}s Audio ({analysis_time / duration * 100:.1f}% overhead)"
         )
 
-        # Forensische Tonträgerkettenerkennung (MediumDetector, DSP-basiert)
+        # Forensische Tonträgerkettenerkennung (MediumDetector, DSP-basiert).
+        # Wenn UV3 bereits ein vollständiges MediumDetectionResult aus dem Bridge-Cache
+        # übergeben hat (forensic_medium_result), wird KEIN zweiter Detector-Aufruf
+        # ausgeführt — Redundanz-Fix (Erkennung einmalig nach Import, nicht nochmals beim
+        # Klick auf Restoration / Studio 2026).
         _fmd_result: object = {}
-        try:
-            from backend.core.forensics.medium_detector import MediumDetector as _ForensicMD
-
-            # Für lange Dateien: nur erste 30 s analysieren (Geschwindigkeit)
-            _max_forensic = sr * 30
-            _audio_forensic = audio_mono[:_max_forensic] if len(audio_mono) > _max_forensic else audio_mono
-            logger.debug(f"[SCAN] MediumDetector.detect() → {len(_audio_forensic) / sr:.1f}s Audio …")
-            _fmd_result = _ForensicMD().detect(_audio_forensic, sr, file_ext=file_ext)
-            # MediumDetectionResult ist ein Dataclass — getattr statt .get()
-            _multi = getattr(_fmd_result, "is_multi_generation", None)
-            _chain_val = getattr(_fmd_result, "transfer_chain", None) or getattr(_fmd_result, "chain", "?")
+        if forensic_medium_result is not None and hasattr(forensic_medium_result, "transfer_chain"):
+            _fmd_result = forensic_medium_result
             logger.debug(
-                f"[SCAN] MediumDetector OK: multi={_multi}, chain={_chain_val}",
+                "[SCAN] ForensicMediumDetector: gecachtes Ergebnis verwendet — kein erneuter Detect-Aufruf "
+                "(primary_material=%s, chain=%s)",
+                getattr(_fmd_result, "primary_material", "?"),
+                getattr(_fmd_result, "transfer_chain", "?"),
             )
-        except Exception as _fmd_err:
-            logger.debug(f"[SCAN] MediumDetector FEHLER: {_fmd_err}")
-            logger.debug("ForensicMediumDetector nicht verfügbar: %s", _fmd_err)
+        else:
+            try:
+                from backend.core.forensics.medium_detector import MediumDetector as _ForensicMD
+
+                # Für lange Dateien: nur erste 30 s analysieren (Geschwindigkeit)
+                _max_forensic = sr * 30
+                _audio_forensic = audio_mono[:_max_forensic] if len(audio_mono) > _max_forensic else audio_mono
+                logger.debug(f"[SCAN] MediumDetector.detect() → {len(_audio_forensic) / sr:.1f}s Audio …")
+                _fmd_result = _ForensicMD().detect(_audio_forensic, sr, file_ext=file_ext)
+                # MediumDetectionResult ist ein Dataclass — getattr statt .get()
+                _multi = getattr(_fmd_result, "is_multi_generation", None)
+                _chain_val = getattr(_fmd_result, "transfer_chain", None) or getattr(_fmd_result, "chain", "?")
+                logger.debug(
+                    f"[SCAN] MediumDetector OK: multi={_multi}, chain={_chain_val}",
+                )
+            except Exception as _fmd_err:
+                logger.debug(f"[SCAN] MediumDetector FEHLER: {_fmd_err}")
+                logger.debug("ForensicMediumDetector nicht verfügbar: %s", _fmd_err)
 
         _prog(100)
         _scan_result = DefectAnalysisResult(
@@ -1966,12 +2072,14 @@ class DefectScanner:
 
     @staticmethod
     def _sample_locations_evenly(locations: list, max_n: int) -> list:
-        """Return up to max_n locations sampled evenly across the full duration.
+        """Return evenly sampled locations, optionally uncapped.
 
-        Instead of truncating with [:max_n] (which biases markers to the start of
-        the recording), this method picks representatives at uniform stride so that
-        the returned positions span the entire audio length.
+        If max_n <= 0, return all locations (no cap).
+        Otherwise, pick representatives at uniform stride so returned positions
+        span the full audio length without start-bias.
         """
+        if max_n <= 0:
+            return locations
         if len(locations) <= max_n:
             return locations
         step = len(locations) / max_n
@@ -2044,7 +2152,7 @@ class DefectScanner:
             )
 
         # Convert to timestamps — sample evenly across full duration (not just first 50)
-        MAX_LOCATIONS = 50
+        MAX_LOCATIONS = self._LOCATION_CAP_UNCAPPED
         all_locations = [(group[0] / self.sample_rate, group[-1] / self.sample_rate) for group in verified_groups]
         locations = self._sample_locations_evenly(all_locations, MAX_LOCATIONS)
 
@@ -2134,7 +2242,7 @@ class DefectScanner:
             defect_type=DefectType.CRACKLE,
             severity=severity,
             confidence=confidence,
-            locations=self._sample_locations_evenly(locations, 50),
+            locations=self._sample_locations_evenly(locations, self._LOCATION_CAP_UNCAPPED),
             metadata={
                 "crackle_percentage": severity_raw * 100,
                 "hp_kurtosis": hp_kurtosis,
@@ -2268,7 +2376,7 @@ class DefectScanner:
                     t0 = si * (n - seg_len) / max(1, n_segs - 1) / self.sample_rate if n_segs > 1 else 0.0
                     t1 = t0 + seg_dur
                     locations.append((t0, min(t1, n / self.sample_rate)))
-            locations = self._sample_locations_evenly(locations, 20)
+            locations = self._sample_locations_evenly(locations, self._LOCATION_CAP_UNCAPPED)
 
         return DefectScore(
             defect_type=DefectType.HUM,
@@ -3166,9 +3274,10 @@ class DefectScanner:
             defect_type=DefectType.DROPOUTS,
             severity=severity,
             confidence=confidence,
-            locations=self._sample_locations_evenly(locations, 50),
+            locations=self._sample_locations_evenly(locations, self._LOCATION_CAP_UNCAPPED),
             metadata={
                 "dropout_count": len(locations),
+                "locations_returned": len(locations),
                 "dropout_rate": round(event_rate, 3),
                 "total_dropout_s": round(total_dropout_s, 4),
                 "threshold_ratio": _threshold_ratio,
@@ -3224,7 +3333,7 @@ class DefectScanner:
                         clip_indices,
                         np.where(np.diff(clip_indices) > int(0.005 * self.sample_rate))[0] + 1,
                     )
-                    for g in groups[:50]:
+                    for g in groups:
                         locations.append((float(g[0]) / self.sample_rate, float(g[-1]) / self.sample_rate))
                 logger.debug(
                     "§6.3 _detect_clipping: CLIPPING erkannt (odd-harmonic profile) — severity=%.3f flat_tops=%.4f",
@@ -3272,7 +3381,7 @@ class DefectScanner:
                 clip_indices,
                 np.where(np.diff(clip_indices) > int(0.005 * self.sample_rate))[0] + 1,
             )
-            for g in groups[:50]:
+            for g in groups:
                 locations.append((float(g[0]) / self.sample_rate, float(g[-1]) / self.sample_rate))
         return DefectScore(
             defect_type=DefectType.CLIPPING,
@@ -3803,7 +3912,7 @@ class DefectScanner:
             defect_type=DefectType.PRINT_THROUGH,
             severity=severity,
             confidence=confidence,
-            locations=locations[:50],
+            locations=locations,
             metadata={
                 "pre_echo_events": len(alpha_pre_list),
                 "post_echo_events": len(alpha_post_list),
@@ -4306,7 +4415,7 @@ class DefectScanner:
             severity = float(np.clip(raw_severity, 0.0, 1.0))
 
             confidence = float(np.clip(0.65 + 0.20 * min(1.0, sev_frac), 0.50, 0.88))
-            locations = self._sample_locations_evenly(locations, 50)
+            locations = self._sample_locations_evenly(locations, self._LOCATION_CAP_UNCAPPED)
 
             return DefectScore(
                 defect_type=DefectType.SIBILANCE,
@@ -4462,7 +4571,7 @@ class DefectScanner:
                             in_event = False
                 if in_event:
                     locations.append((ev_start, n / self.sample_rate))
-                locations = self._sample_locations_evenly(locations, 50)
+                locations = self._sample_locations_evenly(locations, self._LOCATION_CAP_UNCAPPED)
 
             confidence = 0.70 if severity > 0.3 else 0.55
 
@@ -4794,9 +4903,10 @@ class DefectScanner:
                 defect_type=DefectType.TAPE_HEAD_LEVEL_DIP,
                 severity=severity,
                 confidence=confidence,
-                locations=self._sample_locations_evenly(locations, 50),
+                locations=self._sample_locations_evenly(locations, self._LOCATION_CAP_UNCAPPED),
                 metadata={
                     "dip_count": n_dips,
+                    "locations_returned": n_dips,
                     "event_rate_per_s": round(event_rate, 3),
                     "mean_depth_db": round(mean_depth, 2),
                     "max_depth_db": round(float(np.max(dip_depths)), 2) if dip_depths else 0.0,
@@ -5163,7 +5273,7 @@ class DefectScanner:
             for idx in transient_idxs[1:]:
                 if idx - deduped[-1] > min_gap:
                     deduped.append(idx)
-            transient_idxs = deduped[:20]
+            transient_idxs = deduped
 
             # Material check for analysis routing
             _mat = getattr(self, "material_type", None)
@@ -5486,10 +5596,11 @@ class DefectScanner:
             for p in peaks[1:]:
                 if p - deduped[-1] > min_gap:
                     deduped.append(p)
-            peaks = deduped[:15]
+            peaks = deduped
 
             best_ratios = []
             best_corrs = []
+            echo_locations: list[tuple[float, float]] = []
             for delay_s_val in delay_samples:
                 for idx in peaks:
                     ghost_start = max(0, idx - delay_s_val - int(0.05 * sr))
@@ -5501,6 +5612,7 @@ class DefectScanner:
                     ratio = ghost_energy / baseline
                     if ratio > 1.5:
                         best_ratios.append(ratio)
+                        echo_locations.append((ghost_start / sr, ghost_end / sr))
                         # Spectral similarity
                         trans_seg = audio[idx : min(n, idx + int(0.03 * sr))]
                         ghost_seg = audio[ghost_start : ghost_start + len(trans_seg)]
@@ -5531,6 +5643,7 @@ class DefectScanner:
                 DefectType.GROOVE_ECHO,
                 float(np.clip(raw_sev, 0.0, 1.0)),
                 confidence,
+                locations=self._sample_locations_evenly(echo_locations, self._LOCATION_CAP_UNCAPPED),
                 metadata={
                     "mean_ratio": round(mean_ratio, 4),
                     "spectral_corr": round(mean_corr, 4),
@@ -5738,7 +5851,7 @@ class DefectScanner:
             # For each jump: check for impulse (high-frequency energy burst)
             splice_events = []
             locations = []
-            for ji in jump_indices[:20]:  # Limit
+            for ji in jump_indices:
                 sample_idx = ji * hop
                 if sample_idx < 64 or sample_idx > n - 64:
                     continue
@@ -5777,7 +5890,7 @@ class DefectScanner:
                 DefectType.TAPE_SPLICE_ARTIFACT,
                 float(np.clip(raw_sev, 0.0, 1.0)),
                 confidence,
-                locations=locations[:20],
+                locations=locations,
                 metadata={"n_splices": len(splice_events), "mean_jump_db": round(mean_jump, 2)},
             )
         except Exception:
@@ -5989,7 +6102,7 @@ class DefectScanner:
             threshold = self.thresholds.get(DefectType.STICKY_SHED_RESIDUE, 0.5)
             if raw_sev < threshold * 0.1:
                 return DefectScore(DefectType.STICKY_SHED_RESIDUE, 0.0, 0.5)
-            locations = [(d[0] * hop / sr, d[1] * hop / sr) for d in dip_events[:20]]
+            locations = [(d[0] * hop / sr, d[1] * hop / sr) for d in dip_events]
             confidence = float(np.clip(0.4 + event_rate * 0.1, 0.3, 0.90))
             return DefectScore(
                 DefectType.STICKY_SHED_RESIDUE,

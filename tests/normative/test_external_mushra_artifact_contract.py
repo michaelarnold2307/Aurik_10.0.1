@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -73,6 +74,16 @@ MIN_LISTENERS: int = 8
 _WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 _REPORTS_DIR = _WORKSPACE_ROOT / "reports"
 _MUSHRA_ARTIFACT_PATH = _REPORTS_DIR / "mushra_artifact.json"
+
+
+def _strict_artifact_mode_enabled() -> bool:
+    """Strict mode makes missing artifact a hard failure instead of skip."""
+    return os.environ.get("AURIK_STRICT_MUSHRA_ARTIFACT", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -466,26 +477,34 @@ class TestArtifactPathContract:
         """Artefakt-Pfad muss unter reports/ liegen."""
         assert _REPORTS_DIR in _MUSHRA_ARTIFACT_PATH.parents or _MUSHRA_ARTIFACT_PATH.parent == _REPORTS_DIR
 
-    @pytest.mark.skipif(
-        not _MUSHRA_ARTIFACT_PATH.exists(),
-        reason=(
-            "mushra_artifact.json nicht vorhanden — "
-            "SKIP: Artefakt nur bei Kern-Änderungen erforderlich (§8.4). "
-            "Vor Release muss reports/mushra_artifact.json angelegt werden."
-        ),
-    )
     def test_existing_mushra_artifact_is_valid_json(self):
         """Wenn mushra_artifact.json vorhanden, muss es valides JSON sein."""
+        if not _MUSHRA_ARTIFACT_PATH.exists():
+            if _strict_artifact_mode_enabled():
+                pytest.fail(
+                    "mushra_artifact.json nicht vorhanden — STRICT MODE aktiv. "
+                    "Für Release-Audits muss reports/mushra_artifact.json vorhanden sein (§8.4)."
+                )
+            pytest.skip(
+                "mushra_artifact.json nicht vorhanden — "
+                "SKIP: Artefakt nur bei Kern-Änderungen erforderlich (§8.4). "
+                "Vor Release muss reports/mushra_artifact.json angelegt werden."
+            )
+
         content = _MUSHRA_ARTIFACT_PATH.read_text(encoding="utf-8")
         artifact = json.loads(content)  # raises on invalid JSON
         assert isinstance(artifact, dict)
 
-    @pytest.mark.skipif(
-        not _MUSHRA_ARTIFACT_PATH.exists(),
-        reason=("mushra_artifact.json nicht vorhanden — SKIP: Artefakt nur bei Kern-Änderungen erforderlich (§8.4)."),
-    )
     def test_existing_mushra_artifact_passes_schema_validation(self):
         """Wenn mushra_artifact.json vorhanden, muss es das Schema erfüllen (§8.4)."""
+        if not _MUSHRA_ARTIFACT_PATH.exists():
+            if _strict_artifact_mode_enabled():
+                pytest.fail(
+                    "mushra_artifact.json nicht vorhanden — STRICT MODE aktiv. "
+                    "Für Release-Audits muss reports/mushra_artifact.json vorhanden sein (§8.4)."
+                )
+            pytest.skip("mushra_artifact.json nicht vorhanden — SKIP: Artefakt nur bei Kern-Änderungen erforderlich (§8.4).")
+
         content = _MUSHRA_ARTIFACT_PATH.read_text(encoding="utf-8")
         artifact = json.loads(content)
         result = validate_mushra_artifact(artifact)

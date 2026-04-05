@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 # Setup path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -23,6 +24,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from backend.core.phases.phase_03_denoise import DenoisePhase
 from backend.core.phases.phase_12_wow_flutter_fix import WowFlutterFix
 from backend.core.phases.phase_20_reverb_reduction import ReverbReduction
+
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 
 def create_test_audio(duration=3.0, sr=48000):

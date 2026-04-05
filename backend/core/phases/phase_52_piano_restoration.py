@@ -570,6 +570,36 @@ class PianoRestorationV1(PhaseInterface):
         # Boost harmonics with decay_factor
         Zxx[string_mask, :] *= 1.0 + (decay_factor - 1.0) * intensity
 
+        # §4.5b Piano inharmonicity integration:
+        # f_n = n * f0 * sqrt(1 + B * n^2)
+        # Apply a subtle frequency-selective lift around inharmonic partial targets
+        # to preserve realistic piano string stiffness behavior.
+        try:
+            mag_mean = np.mean(np.abs(Zxx), axis=1)
+            f0_search = (f >= 55.0) & (f <= 1500.0)
+            if np.any(f0_search):
+                search_idx = np.where(f0_search)[0]
+                peak_rel = int(np.argmax(mag_mean[f0_search]))
+                f0_idx = int(search_idx[peak_rel])
+                f0_hz = float(f[f0_idx])
+                if f0_hz > 0.0:
+                    b_coeff = float(self._get_piano_B_coefficient(f0_hz))
+                    partial_mask = np.zeros_like(f, dtype=np.float64)
+                    nyq = self.sample_rate * 0.5
+                    max_n = int(min(16, nyq / max(f0_hz, 1e-9)))
+                    for n in range(2, max_n + 1):
+                        target_hz = float(self._fletcher_partial_correction(n * f0_hz, n, f0_hz, b_coeff))
+                        if target_hz <= 0.0 or target_hz > nyq:
+                            continue
+                        sigma_hz = 18.0 + 2.5 * n
+                        partial_mask += np.exp(-0.5 * ((f - target_hz) / sigma_hz) ** 2)
+                    if np.any(partial_mask > 0.0):
+                        partial_mask /= float(np.max(partial_mask))
+                        lift = 1.0 + 0.12 * float(intensity) * partial_mask[:, None]
+                        Zxx *= lift
+        except Exception as _inh_exc:
+            logger.debug("Phase 52 inharmonic partial shaping skipped: %s", _inh_exc)
+
         # Inverse STFT
         _, audio_enhanced = signal.istft(Zxx, fs=self.sample_rate, nperseg=nperseg, noverlap=noverlap)
 

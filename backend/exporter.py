@@ -353,7 +353,9 @@ def export_audio(
                 sf.write(tmp_wav, audio, sr, format="WAV")
             out_args = {"format": format.lower()}
             if format.lower() == "mp3":
-                out_args["audio_bitrate"] = "320k"
+                # LAME VBR V0 — perceptually transparent, adaptive bitrate (~245 kbps Ø).
+                # Avoids CBR pre-echo on transients restored by TDP/MDEM (spec §DSP / §8.3).
+                out_args["q:a"] = "0"
             (ffmpeg.input(tmp_wav).output(tmp_out, **out_args).run(overwrite_output=True, quiet=True))
             os.replace(tmp_out, export_path)
             _size_mb = os.path.getsize(export_path) / (1024 * 1024)

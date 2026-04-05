@@ -120,7 +120,7 @@ class PerformanceGuard:
         self.audio_duration = audio_duration
         self.mode = mode
         self.rt_limit = RT_LIMITS[mode]
-    
+
     def get_current_rt_factor(self) -> float:
         """Calculate current RT factor during execution."""
         elapsed = time.time() - self.start_time
@@ -143,25 +143,25 @@ class PhasePriority:
 def should_skip_phase(current_rt: float, priority: int, mode: QualityMode) -> bool:
     """
     Determine if a phase should be skipped based on current performance.
-    
+
     Args:
         current_rt: Current RT factor (e.g., 1.2)
         priority: Phase priority (1-9)
         mode: Quality mode (FAST/BALANCED/QUALITY)
-    
+
     Returns:
         True if phase should be skipped, False otherwise
     """
     limit = RT_LIMITS[mode]
-    
+
     # QUALITY mode: never skip
     if mode == QualityMode.QUALITY:
         return False
-    
+
     # CRITICAL phases: never skip
     if priority >= 9:
         return False
-    
+
     # Calculate threshold as percentage of limit
     if mode == QualityMode.FAST:
         # FAST mode: aggressive skipping
@@ -171,12 +171,12 @@ def should_skip_phase(current_rt: float, priority: int, mode: QualityMode) -> bo
             return True
         if current_rt >= 0.95 * limit and priority <= 8: # 95% limit, HIGH
             return True
-    
+
     elif mode == QualityMode.BALANCED:
         # BALANCED mode: moderate skipping (only LOW)
         if current_rt >= 0.8 * limit and priority <= 3:  # 80% limit, LOW
             return True
-    
+
     return False
 ```
 
@@ -215,7 +215,7 @@ Phase 3 (priority 6, MEDIUM): 400s elapsed
 
 Phase 4 (priority 3, LOW): 600s elapsed
     → RT = 2.0× → Threshold: 1.92× → SKIP ⏭️
-    
+
 Phase 5 (priority 3, LOW): Still 600s elapsed
     → RT = 2.0× → SKIP ⏭️
 
@@ -235,27 +235,27 @@ from contextlib import contextmanager
 def measure_phase(self, phase_id: str, priority: int):
     """
     Context manager for measuring phase execution time.
-    
+
     Usage:
         with perf_guard.measure_phase("phase_01_click_removal", priority=8) as status:
             if status.should_skip:
                 logger.warning(f"Skipping {phase_id}")
                 continue
-            
+
             # Execute phase
             result = phase.process(audio, sr, material)
     """
     # Check if should skip before execution
     current_rt = self.get_current_rt_factor()
     should_skip = self._should_skip(current_rt, priority)
-    
+
     status = PhaseStatus(should_skip=should_skip, current_rt=current_rt)
-    
+
     if not should_skip:
         phase_start = time.time()
         yield status
         phase_time = time.time() - phase_start
-        
+
         # Record phase performance
         self.phase_performances[phase_id] = PhasePerformance(
             phase_id=phase_id,
@@ -286,13 +286,13 @@ class PerformanceReport:
     status: PerformanceStatus              # OPTIMAL | APPROACHING | LIMIT_EXCEEDED
     mode: QualityMode                      # Mode used (FAST/BALANCED/QUALITY)
     rt_limit: float                        # RT limit for mode
-    
+
     phases_executed: int                   # Number of phases run
     phases_skipped: int                    # Number of phases skipped
     skipped_phase_ids: List[str]           # IDs of skipped phases
-    
+
     phase_breakdown: List[PhasePerformance] # Per-phase performance details
-    
+
     limit_exceeded: bool                   # True if RT > limit
 
 class PerformanceStatus(Enum):
@@ -315,16 +315,16 @@ PerformanceReport(
     status=PerformanceStatus.OPTIMAL,
     mode=QualityMode.BALANCED,
     rt_limit=2.4,             # 2.4× RT limit
-    
+
     phases_executed=3,
     phases_skipped=0,
     skipped_phase_ids=[],
-    
+
     phase_breakdown=[
         PhasePerformance(phase_id="defect_scan", time_seconds=20.04, skipped=False),
         PhasePerformance(phase_id="phase_02_hum_removal", time_seconds=2.27, skipped=False),
     ],
-    
+
     limit_exceeded=False      # ✅ Within limit
 )
 ```
@@ -341,37 +341,37 @@ class UnifiedRestorerV3:
         # Step 1: Start monitoring
         audio_duration = len(audio) / sample_rate
         self.perf_guard.start_monitoring(audio_duration, self.config.mode)
-        
+
         # Step 2: Scan defects
         defect_result = self.scanner.scan(audio, sample_rate)
-        
+
         # Step 3: Select phases
         selected_phases = self._select_phases(defect_result)
-        
+
         # Step 4: Execute with monitoring
         restored = audio.copy()
         for phase in selected_phases:
             metadata = phase.get_metadata()
-            
+
             with self.perf_guard.measure_phase(metadata.phase_id, metadata.priority) as status:
                 if status.should_skip:
                     logger.warning(f"⏭️  Skipping {metadata.phase_id} (priority {metadata.priority}) - RT: {status.current_rt:.2f}×")
                     continue
-                
+
                 # Execute phase
                 result = phase.process(restored, sample_rate, defect_result.material_type)
                 restored = result.processed_audio
                 logger.info(f"✅ {metadata.phase_id} completed ({result.processing_time:.2f}s)")
-        
+
         # Step 5: Generate report
         perf_report = self.perf_guard.get_report()
-        
+
         # Step 6: Validate limit
         if perf_report.limit_exceeded:
             logger.error(f"❌ Performance limit exceeded: {perf_report.rt_factor:.2f}× > {perf_report.rt_limit}×")
             if self.config.mode != QualityMode.QUALITY:
                 raise PerformanceError(f"Exceeded {perf_report.mode.value} mode limit")
-        
+
         return RestorationResult(
             restored_audio=restored,
             performance_report=perf_report,
@@ -388,7 +388,7 @@ def _log_progress(self, phase_id: str, status: PhaseStatus):
     current_rt = status.current_rt
     limit = RT_LIMITS[self.mode]
     percentage = (current_rt / limit) * 100
-    
+
     if current_rt < 1.0:
         level = "INFO"
         emoji = "🚀"
@@ -405,7 +405,7 @@ def _log_progress(self, phase_id: str, status: PhaseStatus):
         level = "ERROR"
         emoji = "❌"
         status_text = "LIMIT EXCEEDED"
-    
+
     logger.log(level, f"{emoji} {phase_id} | RT: {current_rt:.2f}× ({percentage:.0f}% of {limit}×) | {status_text}")
 ```
 
@@ -424,40 +424,40 @@ class PerformanceGuard:
         self.mode = None
         self.rt_limit = None
         self.phase_performances = {}
-    
+
     def start_monitoring(self, audio_duration: float, mode: QualityMode):
         """
         Start performance monitoring session.
-        
+
         Args:
             audio_duration: Audio duration in seconds
             mode: Quality mode (FAST/BALANCED/QUALITY)
         """
-    
+
     def measure_phase(self, phase_id: str, priority: int) -> PhaseStatus:
         """
         Context manager for measuring phase execution.
-        
+
         Args:
             phase_id: Unique phase identifier
             priority: Phase priority (1-9)
-        
+
         Yields:
             PhaseStatus with should_skip flag and current_rt
         """
-    
+
     def get_current_rt_factor(self) -> float:
         """
         Get current RT factor during execution.
-        
+
         Returns:
             RT factor (elapsed_time / audio_duration)
         """
-    
+
     def get_report(self) -> PerformanceReport:
         """
         Generate comprehensive performance report.
-        
+
         Returns:
             PerformanceReport with all metrics
         """
@@ -559,12 +559,12 @@ predicted_rt = 202.5 / 225 = 0.90× ✅
 Instead of reactive skipping, **predict** which phases to skip **before** execution:
 
 ```python
-def predict_phases_to_skip(phases: List[PhaseInterface], 
+def predict_phases_to_skip(phases: List[PhaseInterface],
                            audio_duration: float,
                            mode: QualityMode) -> List[str]:
     """
     Predict which phases to skip based on estimated times.
-    
+
     Algorithm:
     1. Sum estimated times for all phases
     2. If sum > RT limit, remove lowest-priority phases until within limit

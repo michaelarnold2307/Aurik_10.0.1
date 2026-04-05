@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.gui
+
 
 @pytest.fixture(autouse=True)
 def _reset_singleton():

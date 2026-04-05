@@ -40,6 +40,7 @@ def breath_audio(sample_rate):
     sr = sample_rate
     duration = 1.0
     t = np.linspace(0, duration, int(sr * duration))
+    rng = np.random.default_rng(0)
 
     # Base silence
     audio = np.zeros_like(t)
@@ -52,7 +53,7 @@ def breath_audio(sample_rate):
     # Filtered noise (200-3000 Hz range)
     from scipy import signal
 
-    noise = np.random.randn(breath_duration) * 0.05
+    noise = rng.standard_normal(breath_duration) * 0.05
     sos = signal.butter(4, [200, 3000], "bandpass", fs=sr, output="sos")
     breath = signal.sosfilt(sos, noise)
 
@@ -100,34 +101,100 @@ def transient_audio(sample_rate):
     """Generate audio with synthetic transient (drum hit)."""
     sr = sample_rate
     duration = 1.0
+    audio = np.zeros(int(sr * duration), dtype=np.float32)
+
+    # Verified fixture: a short noisy click with exponential decay plus a low tonal body.
+    # This shape is reliably detected by the current librosa-based onset pipeline.
+    transient_start = int(0.4 * sr)
+    attack_duration = int(0.002 * sr)  # 2ms attack
+    decay_duration = int(0.08 * sr)  # 80ms decay
+    total_duration = attack_duration + decay_duration
+
+    rng = np.random.default_rng(0)
+    click_noise = rng.standard_normal(total_duration).astype(np.float32)
+    click_env = np.concatenate(
+        [
+            np.linspace(0.0, 1.0, attack_duration, endpoint=False, dtype=np.float32),
+            np.exp(-np.linspace(0.0, 10.0, decay_duration)).astype(np.float32),
+        ]
+    )
+    transient = click_noise * click_env * 0.9
+
+    body_t = np.arange(decay_duration, dtype=np.float32) / sr
+    body = np.sin(2 * np.pi * 180.0 * body_t).astype(np.float32)
+    body *= np.exp(-np.linspace(0.0, 8.0, decay_duration)).astype(np.float32) * 0.4
+
+    audio[transient_start : transient_start + total_duration] = transient
+    audio[transient_start + attack_duration : transient_start + total_duration] += body
+
+    return audio, sr
+
+
+@pytest.fixture
+def plosive_audio(sample_rate):
+    """Generate audio with synthetic plosive."""
+    sr = sample_rate
+    duration = 1.0
     t = np.linspace(0, duration, int(sr * duration))
 
     # Base silence
     audio = np.zeros_like(t)
 
-    # Add transient at 0.4s (very sharp attack)
-    transient_start = int(0.4 * sr)
-    attack_duration = int(0.005 * sr)  # 5ms attack (more detectable)
-    decay_duration = int(0.15 * sr)  # 150ms decay
-    total_duration = attack_duration + decay_duration
+    # Add plosive at 0.5s (rapid attack, short burst)
+    plosive_start = int(0.5 * sr)
+    attack_duration = int(0.01 * sr)  # 10ms attack
+    burst_duration = int(0.05 * sr)  # 50ms total
 
-    # Generate drum-like sound with harmonics
-    fundamental = 150  # Hz
-    t_segment = np.arange(total_duration) / sr
-    transient = (
-        0.5 * np.sin(2 * np.pi * fundamental * t_segment)
-        + 0.3 * np.sin(2 * np.pi * fundamental * 2 * t_segment)
-        + 0.2 * np.sin(2 * np.pi * fundamental * 3 * t_segment)
-    )
+    # Generate burst (broadband)
+    burst = np.random.randn(burst_duration) * 0.3
 
-    # Very sharp attack + exponential decay
-    attack_env = np.linspace(0, 1, attack_duration) ** 3
-    decay_env = np.exp(-np.linspace(0, 6, decay_duration))
+    # Sharp attack envelope
+    attack_env = np.linspace(0, 1, attack_duration)
+    decay_env = np.exp(-np.linspace(0, 5, burst_duration - attack_duration))
     envelope = np.concatenate([attack_env, decay_env])
 
-    transient = transient * envelope * 0.6
+    burst = burst * envelope
+
+    audio[plosive_start : plosive_start + burst_duration] = burst
+
+    return audio, sr
+
+
+@pytest.fixture
+def transient_audio(sample_rate):
+    """Generate audio with synthetic transient (drum hit)."""
+    sr = sample_rate
+    duration = 1.0
+    audio = np.zeros(int(sr * duration), dtype=np.float64)
+
+    # Add transient at 0.4s with clear onset and percussive tail
+    transient_start = int(0.4 * sr)
+    attack_duration = int(0.008 * sr)  # 8ms attack
+    decay_duration = int(0.12 * sr)  # 120ms decay
+    total_duration = attack_duration + decay_duration
+
+    # Deterministic random component for robust CI behavior
+    rng = np.random.default_rng(1337)
+    t_segment = np.arange(total_duration) / sr
+
+    # Drum-like body (harmonics) + noisy burst
+    fundamental = 170
+    tonal = (
+        0.55 * np.sin(2 * np.pi * fundamental * t_segment)
+        + 0.30 * np.sin(2 * np.pi * fundamental * 2 * t_segment)
+        + 0.15 * np.sin(2 * np.pi * fundamental * 3 * t_segment)
+    )
+    noise = 0.35 * rng.standard_normal(total_duration)
+    transient = tonal + noise
+
+    # Controlled onset rise that matches detector attack-time constraints
+    attack_env = np.linspace(0, 1, attack_duration) ** 1.2
+    decay_env = np.exp(-np.linspace(0, 6, decay_duration))
+    envelope = np.concatenate([attack_env, decay_env])
+    transient *= envelope * 0.9
 
     audio[transient_start : transient_start + total_duration] = transient
+    audio = np.clip(audio, -1.0, 1.0)
 
     return audio, sr
 
@@ -240,19 +307,15 @@ class TestTransientDetector:
 
         transients = detector.detect(audio, sr)
 
-        # Should detect at least one transient
-        # Note: Detection depends on synthetic audio characteristics
-        # Real drum samples would be more reliably detected
-        if len(transients) >= 1:
-            transient = transients[0]
-            assert isinstance(transient, TransientEvent)
-            assert transient.sharpness > 0
-            assert 0 < transient.confidence <= 1.0
-            assert transient.attack_time_ms >= 0.5
-        else:
-            # Allow test to pass if synthetic audio doesn't trigger detection
-            # This would be caught with real test samples
-            pytest.skip("Synthetic transient not detected - needs real drum samples")
+        # The fixture contains an explicit onset click + percussive tail,
+        # so at least one transient must be detected.
+        assert len(transients) >= 1
+
+        transient = transients[0]
+        assert isinstance(transient, TransientEvent)
+        assert transient.sharpness > 0
+        assert 0 < transient.confidence <= 1.0
+        assert transient.attack_time_ms >= 0.5
 
     def test_no_false_positives_silence(self, sample_rate):
         """Test that silence doesn't trigger false transients."""
@@ -402,12 +465,8 @@ class TestCriticalRequirements:
         processed = audio * 0.99  # Very slight attenuation only
         retention, orig, proc = metrics.compute_breath_retention(audio, processed, sr)
 
-        # With minimal processing, should meet threshold
-        if len(orig) > 0:
-            assert retention >= 0.7, f"Breath retention {retention:.1%} below 95% target!"
-        else:
-            # If no breaths detected in synthetic audio, skip
-            pytest.skip("No breaths detected in synthetic audio")
+        assert len(orig) > 0, "Synthetisches Breath-Audio muss mindestens ein Breath-Event erzeugen"
+        assert retention >= 0.7, f"Breath retention {retention:.1%} below 95% target!"
 
     def test_plosive_retention_threshold(self, plosive_audio):
         """CRITICAL: Verify plosive retention threshold (>95%)."""

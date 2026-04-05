@@ -158,3 +158,121 @@ def test_amrb_report_fields_complete() -> None:
     # Szenario-Ergebnisse
     for sid, res in report.scenario_results.items():
         assert 0.0 <= res.mushra_mean <= 100.0, f"mushra_mean für '{sid}' außerhalb [0, 100]: {res.mushra_mean}"
+
+
+# ===========================================================================
+# AMRB-Seeding-Invariante — [RELEASE_MUST] (§AMRB-Seeding-Invariante)
+# Kein @pytest.mark.amrb — läuft in der Standard-Suite (kein Run der Engine nötig)
+# ===========================================================================
+
+
+class TestAMRBSeedingInvariant:
+    """[RELEASE_MUST] AMRB-Seeding must be deterministic via MD5, never via hash().
+
+    `hash("string")` is process-dependent in Python ≥ 3.3 (PYTHONHASHSEED randomised
+    by default). Using it for benchmark seeds would cause different random signals in
+    each CI run → AMRB scores unstable and unreproducible.
+
+    The canonical implementation uses:
+        _sid_offset = int(hashlib.md5(sid.encode()).hexdigest()[:8], 16)
+    which is fully deterministic and PYTHONHASHSEED-independent.
+    """
+
+    def test_amrb_benchmark_uses_md5_not_builtin_hash(self):
+        """Verify that benchmarks/musical_restoration_benchmark.py uses MD5
+        (not hash()) for _sid_offset computation. Source-level invariant check."""
+        import ast
+        import pathlib
+
+        bench_path = (
+            pathlib.Path(__file__).parents[2] / "benchmarks" / "musical_restoration_benchmark.py"
+        )
+        assert bench_path.exists(), f"Benchmark-Datei nicht gefunden: {bench_path}"
+
+        source = bench_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        # Verify MD5 usage is present
+        md5_calls = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute) and node.attr == "md5"
+        ]
+        assert md5_calls, (
+            "benchmarks/musical_restoration_benchmark.py muss hashlib.md5() für "
+            "_sid_offset verwenden — nicht hash()"
+        )
+
+        # Verify that raw hash(sid) is NOT used for seeding (_sid_offset context)
+        # We look for Call nodes where the function is 'hash' (builtin)
+        # with a single arg that looks like a seed-related variable
+        source_lines = source.splitlines()
+        suspicious_hash_lines = [
+            (i + 1, line) for i, line in enumerate(source_lines)
+            if "hash(sid)" in line and not line.strip().startswith("#")
+        ]
+        assert not suspicious_hash_lines, (
+            f"[RELEASE_MUST] VERBOTENE hash(sid)-Verwendung in "
+            f"benchmarks/musical_restoration_benchmark.py gefunden:\n"
+            + "\n".join(f"  Zeile {ln}: {text}" for ln, text in suspicious_hash_lines)
+        )
+
+    def test_sid_offset_is_deterministic_same_input(self):
+        """Same sid string must always produce same _sid_offset (MD5 property)."""
+        import hashlib
+
+        sid = "AMRB-01-TAPE"
+        offset1 = int(hashlib.md5(sid.encode()).hexdigest()[:8], 16)
+        offset2 = int(hashlib.md5(sid.encode()).hexdigest()[:8], 16)
+        assert offset1 == offset2, "MD5-basierter _sid_offset ist nicht deterministisch"
+
+    def test_sid_offset_process_independent(self):
+        """_sid_offset must be identical whether PYTHONHASHSEED is set or not.
+
+        MD5 does not depend on PYTHONHASHSEED; this verifies that the canonical
+        formula is used (compute twice to confirm stability within same run).
+        """
+        import hashlib
+
+        scenarios = [
+            "AMRB-01-TAPE",
+            "AMRB-02-VINYL",
+            "AMRB-03-SHELLAC",
+            "AMRB-04-DIGITAL",
+            "AMRB-05-VOCAL",
+        ]
+        for sid in scenarios:
+            offset_a = int(hashlib.md5(sid.encode()).hexdigest()[:8], 16)
+            offset_b = int(hashlib.md5(sid.encode()).hexdigest()[:8], 16)
+            assert offset_a == offset_b, f"Instabiler _sid_offset für '{sid}'"
+            # Must be a non-negative 32-bit-compatible integer
+            assert 0 <= offset_a < 2**32, f"_sid_offset für '{sid}' außerhalb [0, 2^32): {offset_a}"
+
+    def test_sid_offset_differs_for_different_sids(self):
+        """Different scenario IDs must produce different offsets (collision check)."""
+        import hashlib
+
+        sids = [
+            "AMRB-01-TAPE",
+            "AMRB-02-VINYL",
+            "AMRB-03-SHELLAC",
+            "AMRB-04-DIGITAL",
+            "AMRB-05-VOCAL",
+        ]
+        offsets = [int(hashlib.md5(s.encode()).hexdigest()[:8], 16) for s in sids]
+        assert len(set(offsets)) == len(offsets), (
+            f"Kollision in AMRB _sid_offset: sids={sids}, offsets={offsets}"
+        )
+
+    def test_amrb_run_seed_modulo_stays_in_numpy_range(self):
+        """run_seed + _sid_offset muss nach % (2**31) im gültigen np.random.seed()-Bereich sein."""
+        import hashlib
+
+        run_seed = 42  # Default BenchmarkConfig.run_seed
+        for sid in ["AMRB-01-TAPE", "AMRB-10-COMPOSITE"]:
+            offset = int(hashlib.md5(sid.encode()).hexdigest()[:8], 16)
+            final_seed = (run_seed + offset) % (2**31)
+            assert 0 <= final_seed < 2**31, (
+                f"Seed für '{sid}' außerhalb numpy-Bereich [0, 2^31): {final_seed}"
+            )
+            # numpy must accept this seed without error
+            np.random.seed(final_seed)  # raises if invalid

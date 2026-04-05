@@ -110,14 +110,13 @@ class GermanSchlagerClassifier:
         if not np.isfinite(audio).all():
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # Mono-Konvertierung + Resampling auf 22050 Hz für Analyse
+        # Mono-Konvertierung
         mono = self._to_mono(audio)
-        mono = self._resample(mono, sr, 22050)
-        sr_a = 22050
 
-        # Spektrale Flachheit (Wiener-Entropie) als Rausch-Vorfilter.
-        # Weißes Rauschen hat Flatness ≈ 1.0; echte Musik typisch ≤ 0.4.
-        # Ist das Signal rauschartig, kann es kein Schlager sein.
+        # Spektrale Flachheit (Wiener-Entropie) als Rausch-Vorfilter — VOR Resampling.
+        # After downsampling from 48 kHz to 22050 Hz the anti-alias LP filter causes
+        # band-limited noise to have lower flatness (~0.38) than true white noise (~0.57).
+        # Running the check on the PRE-resampled native-SR mono avoids this false pass.
         if not self._is_music_like(mono):
             return SchlagerClassificationResult(
                 is_schlager=False,
@@ -134,6 +133,10 @@ class GermanSchlagerClassifier:
                 key="?",
                 reasoning="Signal ist rauschähnlich (hohe spektrale Flachheit) — kein Schlager.",
             )
+
+        # Resampling to 22050 Hz for all downstream analysis tiers.
+        mono = self._resample(mono, sr, 22050)
+        sr_a = 22050
 
         # Tier-1: CLAP (optional)
         clap_score = self._compute_clap_score(mono, sr_a)
@@ -362,34 +365,52 @@ class GermanSchlagerClassifier:
     # ---- Tier-2: Akkordeon-Reed-Beating-Fingerprint ----
 
     def _is_music_like(self, mono: np.ndarray) -> bool:
-        """Prüft via spektrale Flachheit (Wiener-Entropie) ob das Signal musikähnlich ist.
+        """Check via spectral flatness (Wiener entropy) whether the signal is music-like.
 
-        Weißes Rauschen hat Flatness ≈ 1.0; Musik typisch ≤ 0.40.
-        Stille (alle Nullen) wird als nicht-musikähnlich behandelt.
+        White noise yields periodogram flatness ≈ 0.56 (empirical, Blackman window,
+        2048 samples — NOT 1.0 as the theoretical ideal; chi-squared(2) periodogram
+        variance causes this bias).  Tonal music typically < 0.35.
+        Silence is treated as non-music.
+
+        The threshold 0.50 is calibrated against three sample positions to reduce
+        statistical variance and reliably separate white/coloured noise from music.
 
         Returns:
-            True  → Signal ist musikähnlich, Klassifikation fortsetzen.
-            False → Signal ist rauschähnlich/still, sofort non-Schlager.
+            True  → signal is music-like, continue classification.
+            False → signal is noise-like/silent, return non-Schlager immediately.
         """
         if len(mono) < 32:
-            return True  # zu kurz für die Analyse — konservativ fortsetzen
+            return True  # too short for analysis — err on the side of caution
         rms = float(np.sqrt(np.mean(mono**2)))
         if rms < 1e-6:
-            return False  # Stille
+            return False  # silence
         try:
-            # Spektrale Flachheit = geometrischer / arithmetischer Mittelwert |X(f)|²
-            window = np.blackman(min(2048, len(mono)))
-            n = len(window)
-            segment = mono[:n] * window
-            spectrum = np.abs(np.fft.rfft(segment)) ** 2
-            spectrum = np.clip(spectrum, 1e-30, None)
-            log_mean = float(np.exp(np.mean(np.log(spectrum))))
-            arith_mean = float(np.mean(spectrum))
-            flatness = float(log_mean / (arith_mean + 1e-30))
-            # Flatness > 0.65 → rauschähnlich → kein Schlager möglich
-            return flatness <= 0.65
+            n = min(2048, len(mono))
+            window = np.blackman(n)
+            # Sample at 9 evenly-spaced positions across the signal.
+            # Using only 3 positions produced high variance (σ≈0.06 for white noise), which let
+            # seed-42 Gaussian noise (flatness ≈ 0.50 at unlucky positions) slip below the
+            # former 0.50 threshold and produce a false-positive Schlager classification.
+            # 9 positions reduce the standard error ~3× (σ/√9) → reliable separation.
+            n_pos = min(9, max(1, (len(mono) - n) // max(1, n // 2) + 1))
+            step = max(1, (len(mono) - n) // max(1, n_pos - 1)) if n_pos > 1 else 0
+            positions = [min(i * step, len(mono) - n) for i in range(n_pos)]
+            flatnesses: list[float] = []
+            for pos in positions:
+                pos = max(0, min(pos, len(mono) - n))
+                segment = mono[pos : pos + n] * window
+                spectrum = np.abs(np.fft.rfft(segment)) ** 2
+                spectrum = np.clip(spectrum, 1e-30, None)
+                log_mean = float(np.exp(np.mean(np.log(spectrum))))
+                arith_mean = float(np.mean(spectrum))
+                flatnesses.append(log_mean / (arith_mean + 1e-30))
+            flatness = float(np.mean(flatnesses))
+            # Empirical calibration: white noise ≈ 0.56 (Blackman window, 2048 pts),
+            # music typically ≤ 0.40.  Threshold 0.42 increases safety margin against
+            # stochastic borderline-noise segments while keeping tonal/music material.
+            return flatness <= 0.42
         except Exception:
-            return True  # bei Fehler: konservativ fortsetzen
+            return True  # on error: conservative — continue classification
 
     def _compute_accordion_score(self, mono: np.ndarray, sr: int) -> float:
         """Akkordeon-Reed-Beating via AM-Demodulation.
@@ -458,7 +479,7 @@ class GermanSchlagerClassifier:
                             continue
                         sos_s = butter(4, [lo_s, hi_s], btype="band", output="sos")
                         filt_s = sosfilt(sos_s, mono)
-                        env_s = np.abs(hilbert(np.asarray(filt_s, dtype=np.float64)))[::hop].astype(np.float32)
+                        env_s = np.abs(hilbert(np.asarray(filt_s, dtype=np.float64)))[::hop].astype(np.float32)  # type: ignore[arg-type]
                         env_s = np.nan_to_num(env_s)
                         if len(env_s) < 10:
                             continue
@@ -545,7 +566,7 @@ class GermanSchlagerClassifier:
                 return 0.35, "unknown", 120.0
 
             tempo, _beats = librosa.beat.beat_track(y=audio, sr=sr)
-            bpm = float(np.asarray(tempo).flat[0])
+            bpm = float(np.asarray(tempo, dtype=np.float64).flat[0])
             if bpm <= 0:
                 return 0.35, "unknown", 120.0
 

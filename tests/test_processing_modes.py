@@ -169,9 +169,9 @@ class TestPredefinedConfigs:
 
     def test_forensic_mode(self):
         """FORENSIC mode wurde aus dem aktuellen System entfernt (nur 2 Modi: restoration + studio_2026)."""
-        import pytest
-
-        pytest.skip("FORENSIC-Modus nicht in aktuellem ProcessingMode-System vorhanden")
+        assert not hasattr(ProcessingMode, "FORENSIC")
+        with pytest.raises(ValueError):
+            ProcessingMode.from_string("forensic")
 
     def test_all_configs_valid(self):
         """Verify all predefined configs pass validation."""
@@ -251,9 +251,9 @@ class TestCriticalRequirements:
 
     def test_forensic_mode_minimal_processing(self):
         """FORENSIC mode wurde aus dem System entfernt."""
-        import pytest
-
-        pytest.skip("FORENSIC-Modus nicht vorhanden")
+        assert "forensic" not in list_available_modes()
+        with pytest.raises(ValueError):
+            get_config_by_name("forensic")
 
 
 def test_mode_demo():

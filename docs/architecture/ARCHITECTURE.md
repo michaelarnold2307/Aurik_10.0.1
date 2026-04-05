@@ -1,7 +1,7 @@
 # Aurik 9.x.x — Architektur-Überblick
 
-**Stand:** März 2026  
-**Version:** 9.10.77c  
+**Stand:** April 2026  
+**Version:** 9.10.102  
 **Status:** ✅ Produktionsbereit
 
 > Hinweis: Verbindlicher Ist-Stand ist in `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md` dokumentiert.
@@ -11,7 +11,7 @@
 ## Zentrale Komponenten
 
 | Komponente | Datei | Zweck |
-|---|---|---|
+| --- | --- | --- |
 | `UnifiedRestorerV3` | `core/unified_restorer_v3.py` | Haupt-Pipeline-Orchestrator |
 | `DefectScanner` | `core/defect_scanner.py` | 32 DefectTypes, material-adaptive Priors |
 | `CausalDefectReasoner` | `core/causal_defect_reasoner.py` | 34 Kausal-Ursachen (Bayes) |
@@ -72,7 +72,7 @@ class RestorationResult:
 ## Musical Goals Prioritätsstufen
 
 | Stufe | Goals | Verhalten bei Verfehlung |
-|---|---|---|
+| --- | --- | --- |
 | 1 (Unverhandelbar) | Natürlichkeit, Authentizität | Sofortiger Rollback |
 | 2 (Kritisch) | TonalCenter, Timbre-Authentizität, Artikulation | Priorisiert in MOO |
 | 3 (Wichtig) | Emotionalität, MicroDynamics, Groove | Nach Stufe 1+2 |
@@ -81,4 +81,4 @@ class RestorationResult:
 
 ---
 
-*Aurik 9.10.77c — März 2026*
+_Aurik 9.10.102 — April 2026_

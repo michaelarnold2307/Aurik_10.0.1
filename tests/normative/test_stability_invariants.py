@@ -92,6 +92,7 @@ class TestS01InferenceTimeout:
 # =============================================================================
 
 
+@pytest.mark.gui
 class TestS02SigtermHandler:
     """§3.9.2: main.py must register a SIGTERM handler."""
 

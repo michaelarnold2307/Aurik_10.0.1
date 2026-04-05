@@ -1,6 +1,6 @@
 # Aurik 9.x.x — Testing Guide
 
-**Version:** 9.10.77c  
+**Version:** 9.10.102  
 **Datum:** März 2026  
 **Status:** ✅ Production Ready
 
@@ -40,7 +40,7 @@ Aurik verwendet **pytest** als Test-Framework mit umfassender Test-Coverage für
 
 ## Test-Struktur
 
-```
+```text
 tests/
 ├── test_unified_restorer.py          # Core Restorer Tests
 ├── test_unified_restorer_modes.py    # Processing Modes Tests
@@ -86,7 +86,8 @@ Fuer reproduzierbare CI-Laeufe mit minimalen vermeidbaren Skips:
 ```
 
 **Erwartete Ausgabe (Beispiel):**
-```
+
+```text
 6571 passed, 2 skipped, 21 deselected
 ```
 
@@ -134,6 +135,7 @@ pytest -m gpu
 ```
 
 **Verfügbare Marker:**
+
 - `@pytest.mark.unit` — Unit Tests (schnell, isoliert)
 - `@pytest.mark.integration` — Integration Tests (mehrere Komponenten)
 - `@pytest.mark.e2e` — End-to-End Tests (vollständige Pipeline, nur mit `--run-heavy-tests`)
@@ -238,6 +240,7 @@ class TestAdaptiveDenoiser:
 ```
 
 **Struktur (Arrange-Act-Assert):**
+
 1. **Arrange:** Setup (Audio, Parameter)
 2. **Act:** Funktion aufrufen
 3. **Assert:** Ergebnis prüfen
@@ -404,6 +407,7 @@ class TestMagicButtonE2E:
 ### 4. Test mit Fixtures (pytest.ini)
 
 **pytest.ini:**
+
 ```ini
 [pytest]
 testpaths = tests
@@ -457,7 +461,8 @@ pytest --cov=backend --cov-report=html
 ```
 
 **Output:**
-```
+
+```text
 Name                           Stmts   Miss  Cover
 -------------------------------------------------
 backend/__init__.py               12      0   100%
@@ -481,6 +486,7 @@ firefox htmlcov/index.html
 ```
 
 **Vorteile:**
+
 - Zeige welche Zeilen nicht getestet wurden (rot)
 - Visualisiere Coverage-Gaps
 - Navigiere durch Projektstruktur
@@ -490,7 +496,7 @@ firefox htmlcov/index.html
 ### 3. Coverage-Ziele
 
 | Modul | Ziel | Aktuell |
-|-------|------|---------|
+| --- | --- | --- |
 | `core/` | >90% | 92% ✅ |
 | `backend/` | >85% | 88% ✅ |
 | `dsp/` | >80% | 83% ✅ |
@@ -516,6 +522,7 @@ pytest tests/test_e2e_magicbutton.py -v
 ```
 
 **Was wird getestet:**
+
 1. Audio einlesen (WAV/FLAC/MP3)
 2. UnifiedRestorerV2 initialisieren
 3. .restore() mit RESTORATION/STUDIO_2026
@@ -532,7 +539,8 @@ python run_quick_e2e_test.py
 ```
 
 **Output:**
-```
+
+```text
 === Quick E2E Test ===
 ✅ Input: test_audio/vinyl_sample.wav (3.2s, 48kHz)
 ⏳ Processing with RESTORATION mode...
@@ -553,6 +561,7 @@ bash run_e2e_magic_button_tests.sh
 ```
 
 **Getestete Medien:**
+
 - Vinyl (Clicks, Crackle)
 - Cassette (Hiss, Dropout)
 - CD (Clean)
@@ -605,6 +614,7 @@ class TestProcessingBenchmarks:
 ```
 
 **Run Benchmarks:**
+
 ```bash
 pytest tests/performance/ -v
 ```
@@ -701,6 +711,7 @@ repos:
 ```
 
 **Installation:**
+
 ```bash
 pip install pre-commit
 pre-commit install
@@ -715,6 +726,7 @@ pre-commit install
 ### 1. Test-Naming
 
 **Konventionen:**
+
 ```python
 # ✅ GOOD
 def test_denoiser_reduces_noise_floor():
@@ -738,6 +750,7 @@ def test_stuff():
 ### 2. Fixtures vs. Setup/Teardown
 
 **Prefer Fixtures:**
+
 ```python
 # ✅ GOOD (Fixtures)
 @pytest.fixture
@@ -763,6 +776,7 @@ class TestDenoiser:
 ### 3. Parametrized Tests
 
 **Teste mehrere Werte gleichzeitig:**
+
 ```python
 @pytest.mark.parametrize("mode", [
     ProcessingMode.RESTORATION,
@@ -813,6 +827,7 @@ def test_denoiser_strength_10():
 ### 5. Assertions
 
 **Spezifische Assertions:**
+
 ```python
 # ✅ GOOD
 assert restored.shape == audio.shape
@@ -829,11 +844,13 @@ assert len(restored) > 0      # Too general
 ### 6. Test-Dauer
 
 **Ziele:**
+
 - Unit Tests: < 1s pro Test
 - Integration Tests: < 10s pro Test
 - E2E Tests: < 60s pro Test
 
 **Markiere langsame Tests:**
+
 ```python
 @pytest.mark.slow
 def test_full_restoration_pipeline():
@@ -842,6 +859,7 @@ def test_full_restoration_pipeline():
 ```
 
 **Skippe in CI:**
+
 ```bash
 pytest -m "not slow"  # Skippe langsame Tests
 ```

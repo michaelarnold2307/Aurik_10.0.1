@@ -830,7 +830,15 @@ class DenoisePhase(PhaseInterface):
         # PGHI phase reconstruction (Perraudin 2013) — replaces direct iSTFT
         if _PGHI_AVAILABLE:
             try:
-                audio_out = _pghi_from_stft(Zxx_processed.astype(np.complex64), sr=sr, win_size=REF_WIN, hop=REF_HOP)
+                # n_samples=n_samples: exakte Längetreue; PGHI iSTFT nutzt
+                # boundary=True passend zum scipy-Standard-STFT oben (boundary='zeros').
+                audio_out = _pghi_from_stft(
+                    Zxx_processed.astype(np.complex64),
+                    sr=sr,
+                    win_size=REF_WIN,
+                    hop=REF_HOP,
+                    n_samples=n_samples,
+                )
             except Exception as pghi_exc:
                 logger.warning("PGHI reconstruction failed, using istft fallback: %s", pghi_exc)
                 _, audio_out = signal.istft(Zxx_processed, sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)

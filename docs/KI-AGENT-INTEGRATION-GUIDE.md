@@ -1,7 +1,7 @@
 # KI-Agent Integration Guide — AURIK 9.x.x
 
-**Erstellt:** 15. Februar 2026 | **Aktualisiert:** 27. März 2026  
-**Version:** 9.x.x  
+**Erstellt:** 15. Februar 2026 | **Aktualisiert:** 3. April 2026  
+**Version:** 9.10.102  
 **Zielgruppe:** KI-Agenten (GitHub Copilot, Claude, GPT) die an AURIK arbeiten  
 **Status:** 🟢 AKTIV — Verbindlich für alle KI-Agenten
 
@@ -36,7 +36,7 @@ Dieses Dokument liefert **praktische Ergänzungen** zu den Richtlinien.
 | `PerceptualQualityScorer` | `core/perceptual_quality_scorer.py` | Gammatone-NSIM + MCD + LUFS + MOS |
 | `MusicalGoalsChecker` | `backend/core/musical_goals/musical_goals_metrics.py` | 14 Ziele, `measure_all(audio, sr)` |
 | `DefectScanner` | `core/defect_scanner.py` | 32 DefectTypes, material-adaptive Klassifikation |
-| `UnifiedRestorerV3` | `core/unified_restorer_v3.py` | 56-Phasen-Pipeline-Orchestrator |
+| `UnifiedRestorerV3` | `core/unified_restorer_v3.py` | 64-Phasen-Pipeline-Orchestrator |
 | `VocalAIEnhancement` | `core/vocal_ai_enhancement.py` | `VoiceGender` (MALE/FEMALE/CHILD/ANDROGYNOUS) |
 | `ExcellenceOptimizer` | `core/excellence_optimizer.py` | `optimize_for_excellence()` |
 | `FeedbackChain` | `core/feedback_chain.py` | Iterative PQS-Schleife, max. 5 Iterationen |
@@ -59,7 +59,7 @@ Eingang (beliebige SR, mono/stereo)
     │
     ▼ [PerceptualEmbedder.embed_audio()] → AudioEmbedding (256-dim, L2-normalisiert)
     │
-    ▼ Phase 01–56 ausführen (core/phases/phase_NN_*.py)
+    ▼ Phase 01–64 ausführen (core/phases/phase_NN_*.py)
     │
     ▼ [FeedbackChain.run()] → iteriert bis MOS konvergiert (|ΔMOS| < 0.02)
     │
@@ -93,22 +93,22 @@ if not all(scores[g] >= checker.thresholds[g] for g in checker.thresholds):
 
 **Schwellwerte + Prioritätsstufen:**
 
-| Ziel | Schwellwert | Priorität |
-|------|-------------|----------|
-| Natürlichkeit | ≥ 0.90 | **Stufe 1** (Rollback bei Regression) |
-| Authentizität | ≥ 0.88 | **Stufe 1** (Rollback bei Regression) |
-| Tonales Zentrum | ≥ 0.95 | Stufe 2 |
-| Timbre-Authentizität | ≥ 0.87 | Stufe 2 |
-| Artikulation | ≥ 0.85 | Stufe 2 |
-| Emotionalität | ≥ 0.87 | Stufe 3 |
-| Mikro-Dynamik | ≥ 0.92 | Stufe 3 |
-| Groove | ≥ 0.88 | Stufe 3 |
-| Transparenz | ≥ 0.89 | Stufe 4 |
-| Wärme | ≥ 0.80 | Stufe 4 |
-| Bass-Kraft | ≥ 0.85 | Stufe 4 |
-| Separation-Treue | ≥ 0.82 | Stufe 4 |
-| Brillanz | ≥ 0.85 | Stufe 5 (best-effort) |
-| Raumtiefe | ≥ 0.75 | Stufe 5 (best-effort) |
+| Ziel | Restoration-Schwellwert | Studio-2026-Schwellwert | Priorität |
+|------|-------------|----------|-----------|
+| Natürlichkeit | ≥ 0.90 | ≥ 0.90 | **P1** (Rollback bei Regression) |
+| Authentizität | ≥ 0.88 | ≥ 0.88 | **P1** (Rollback bei Regression) |
+| Tonales Zentrum | ≥ 0.95 | ≥ 0.97 | P2 |
+| Timbre-Authentizität | ≥ 0.87 | ≥ 0.87 | P2 |
+| Artikulation | ≥ 0.85 | ≥ 0.85 | P2 |
+| Emotionalität | ≥ 0.82 | ≥ 0.87 | P3 |
+| Mikro-Dynamik | ≥ 0.88 | ≥ 0.92 | P3 |
+| Groove | ≥ 0.83 | ≥ 0.88 | P3 |
+| Transparenz | ≥ 0.82 | ≥ 0.89 | P4 |
+| Wärme | ≥ 0.75 | ≥ 0.80 | P4 |
+| Bass-Kraft | ≥ 0.78 | ≥ 0.85 | P4 |
+| Separation-Treue | ≥ 0.78 | ≥ 0.82 | P4 |
+| Brillanz | ≥ 0.78 | ≥ 0.85 | P5 (best-effort) |
+| Raumtiefe | ≥ 0.70 | ≥ 0.75 | P5 (best-effort) |
 
 **Stufe 1+2** verschlechtern → sofortiger Iterations-Abbruch + Rollback auf `best_result`.  
 **Stufe 5** verschlechtern → Warnung loggen, Pipeline weiterführen.
@@ -136,7 +136,7 @@ ls core/*.py | grep -i "mein_bereich"
 
 ---
 
-## 🗂️ Phasen-System (56 Phasen, Phase 01–56)
+## 🗂️ Phasen-System (64 Phasen, Phase 01–64)
 
 Alle Phasen liegen in `core/phases/phase_NN_<beschreibung>.py` (backend/core/phases/).
 
@@ -171,7 +171,7 @@ tape · reel_tape · vinyl · shellac · wax_cylinder · wire_recording · lacqu
 dat · cd_digital · mp3_low · mp3_high · aac · minidisc · streaming · unknown
 ```
 
-**32 DefectTypes (vollständig, Stand v9.10.77c):**
+**32 DefectTypes (vollständig, Stand v9.10.102):**
 ```
 CLICKS · CRACKLE · HUM · WOW · FLUTTER · LOW_FREQ_RUMBLE · DROPOUTS
 STEREO_IMBALANCE · PHASE_ISSUES · DIGITAL_ARTIFACTS
@@ -451,5 +451,5 @@ Jede neue DSP-Funktion MUSS auf mindestens einem dieser Prinzipien basieren:
 
 ---
 
-*KI-Agent Integration Guide — Aurik 9.10.77c — März 2026*
-*Bindend für: GitHub Copilot, Claude, GPT-Instanzen*
+**KI-Agent Integration Guide — Aurik 9.10.102 — April 2026**
+**Bindend für: GitHub Copilot, Claude, GPT-Instanzen**

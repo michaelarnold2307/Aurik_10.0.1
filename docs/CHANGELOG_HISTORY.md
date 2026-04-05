@@ -7,9 +7,97 @@
 >
 > Historische Versions- und Metrikangaben in dieser Datei sind bewusst als Zeitstände erhalten.
 >
-> Stand: März 2026 — Aurik 9.10.83
+> Stand: April 2026 — Aurik 9.10.102
 
 ---
+
+## v9.10.104 (4. April 2026) — Defect-Locations-Completeness (Core uncapped)
+
+- **instructions_version**: 4.1 -> **4.2**
+- **copilot-instructions.md**: Defect-Locations-Flow um normative Completeness-Invariante ergänzt: harte Caps auf `defect_locations` im Analyse-/Reparaturpfad verboten; UI-Dichte-Reduktion nur als Anzeige erlaubt.
+- **Spec 06** (`.github/specs/06_phases_system.md`): `[RELEASE_MUST] Location-Completeness-Invariante` ergänzt (Core uncapped, vollständige Eventlisten auch bei hoher Dichte, keine UI-Rückwirkung auf Routingdaten).
+- **Spec 07** (`.github/specs/07_quality_and_tests.md`): Pflicht-Testfall ergänzt: synthetische Signale mit >50 non-stationary Events müssen >50 `locations` liefern; feste Core-Caps (50/100/256) gelten als Regression.
+
+## v9.10.103 (4. April 2026) — Genre-Phase-2: 17-Genre-Härtung + Disambiguation-Gates
+
+- **instructions_version**: 4.0 -> **4.1**
+- **copilot-instructions.md**: Neuer Abschnitt `§2.19 Genre-Classifier-Härtung (17 Genres, [RELEASE_MUST])`.
+- **Spec 03** (`.github/specs/03_cognitive_modules.md`): Normative Erweiterung der Non-Schlager-Open-Set-Logik und Anti-Falsifikations-Matrix bestätigt.
+- **Bindende Disambiguation-Gates**: `Funk` (warmes Centroid-Fenster), `Latin` (BPM-kontextierter Centroid-Bonus + Mindest-Centroid), `Electronic` (Synth-Centroid-Gate), `Hip-Hop` (Vokal/Sample-Centroid-Gate), `Reggae` (Tempo-Gate), `Folk` (DR-Guard), `Jazz` (HSI-Guard).
+- **Testhärtung**: Unit-Test-Isolierung dokumentiert (nicht getestete neue `_score_*`-Methoden auf Neutralwert patchen), um Open-Set-Margin-Kollapse durch Feature-Artefakte zu verhindern.
+
+## v9.10.102 (3. April 2026) — Genre-Phase-1: Family-Stage + Top-k + Open-Set + Lyrics-Fusion
+
+- **Code** (`backend/core/genre_classifier.py`):
+  - `SchlagerClassificationResult` erweitert: `genre_family`, `genre_family_confidence`, `top_genres`, `open_set_unknown`
+  - Neue interne Stufen: `_compute_non_schlager_scores()`, `_infer_genre_family()`, `_build_top_genres()`, `_is_open_set_unknown()`
+  - Open-Set-Regel: zu niedriger Top-Score oder zu geringe Top1-Top2-Margin → `genre_label="Unbekannt"`
+- **Lyrics-Fusion**: DSP-Sprachscore + §2.36-Lyrics-Hinweis (max-basierter Merge) → reduziert Jazz-Fehlklassifikation bei deutschsprachigen Schlager-Aufnahmen
+- **UI** (`Aurik910/ui/modern_window.py`): Tooltip zeigt Genre-Familie, Top-k, Open-Set-Status; Genre-Badge mit Ampelpunkt (Grün ≥0.70 / Gelb 0.50–0.69 / Rot < 0.50)
+- **Tests**: 3 neue Tests für Family/Top-k/Open-Set
+
+## v9.10.101 (3. April 2026) — Dokumentations-Sync: Phasen 01–64 + Kausal-Mapping
+
+- **Spec 06** (`.github/specs/06_phases_system.md`): Phasenliste auf **01–64** aktualisiert; `phase_57` (Print-Through) / `phase_58` (Lyrics) korrekt zugeordnet; Phase 59–64 ergänzt; `CAUSE_TO_PHASES` um neue Defektursachen (modulation_noise, inner_groove_distortion, groove_echo, crosstalk, intermodulation_distortion, tape_splice_artifact) erweitert
+- **Spec 02**: `processing_sr=48000` auf Phasen 01–64 aktualisiert
+- **Spec 08**: `phase_output_guard`-Scope auf 01–64 aktualisiert
+- **copilot-instructions.md**: UV3-Kernreihenfolge und SR-Regeln auf 64 Phasen vereinheitlicht
+
+## v9.10.100 (3. April 2026) — Normative Nachschärfung: Tonträgerkette + Lyrics-Produktivpfad
+
+- **copilot-instructions.md**: Autoritatives Produktionsmodul auf `backend/core/lyrics_guided_enhancement.py` festgelegt; Docker-/MFA-Altpfade aus `backend/lyrics_guided/` als nicht-normativ markiert
+- **Datenschutz-Guard**: Unzulässige Persistenz von Worttext/Transkript in Logs, metadata, Checkpoints explizit verboten
+- `_carrier_bg`-Pflicht-Invariante: `get_medium_detector().detect()` statt `medium_classifier.classify_medium()` (file_ext-Kontext)
+
+## v9.10.99 (3. April 2026) — EmotionalitaetMetric MERT-Blend + WaermeMetric-Guard + AMRB-Codec-Kalibrierung
+
+- **Code** (`backend/core/musical_goals/musical_goals_metrics.py`): `EmotionalitaetMetric` erhält MERT-Arousal-Blend; `WaermeMetric` mit reverb-invariantem Sub-Band-Verhältnis (§9.7.14 Nachfolge)
+- **AMRB-05 Pre-Echo**: Spec 01 Baselines für CODEC-Szenarien kalibriert
+
+## v9.10.98 (3. April 2026) — Codec-Reparatur: Apollo DSP-Fallback + Phase-23-Integration + AMRB-05-Pre-Echo
+
+- **Phase 23**: AudioSR-Inpainting erhält expliziten Fallback-Pfad über Apollo-Plugin für Codec-Artefakte
+- **Apollo DSP-Fallback**: Strukturierter Fallback in `plugins/apollo_plugin.py` für OOM-Szenarien
+- **AMRB-05**: Pre-Echo-Szenario Baseline-Kalibrierung für `mp3_low`/`aac`
+
+## v9.10.97 (3. April 2026) — AMRB-Kalibrierung SHELLAC/CODEC/VOCAL + P4-AudioLDM2-Cascade
+
+- **AMRB**: Shellac/Codec/Vocal-Szenarien (AMRB-01, 05, 09) mit aktualisierten Baselines kalibriert
+- **AudioLDM2-Kaskade**: P4-Inpainting-Fallback für AMRB-05-Pre-Echo-Reparatur dokumentiert
+
+## v9.10.96 (30. März 2026) — §2.29c Restorative-Phase-Baseline-Capping + PMGG Exclusion-Fixes
+
+- **instructions_version**: 4.0
+- **§2.29c** (neu): Defekt-inflationierte Baselines werden gedeckelt (`_RESTORATIVE_PHASES` + `_CANONICAL_THRESHOLDS` + `effective_scores_before`)
+- **§2.31b Material-adaptive PHASE_GOAL_EXCLUSIONS**: `cd_digital`/`dat` → phase_03/phase_29 auf `{"natuerlichkeit", "artikulation"}` reduziert; brillanz/transparenz/waerme (§9.7.12/13/14 SNR-robust) aus allen Materialausschlüssen entfernt
+- **Tests**: 122 PMGG-Tests in `test_per_phase_musical_goals_gate.py`
+
+## v9.10.95 (30. März 2026) — §9.7.11 ext: tonal_center in phase_03/phase_29 PMGG-Exclusions
+
+- `tonal_center` und `timbre_authentizitaet` zu phase_03/phase_29 PHASE_GOAL_EXCLUSIONS hinzugefügt (shaped NR → K-S volatile + Centroid-CV-Disturbance)
+
+## v9.10.94 (30. März 2026) — §2.31a Iterative Mid-Pipeline-Kalibrierung
+
+- `_build_song_calibration_profile()` kann während der Phasenkette iterativ aktualisiert werden; Kalib.-Profil-Invalidierung bei starken Defektänderungen
+
+## v9.10.93 (30. März 2026) — §9.7.11 K-S + TonalCenterMetric aus _PRECISE_METRICS + K-S Hanning-Fix
+
+- `TonalCenterMetric` aus `_PRECISE_METRICS` entfernt; Krumhansl-Schmuckler-KDE mit korrektem Hanning-Window implementiert
+
+## v9.10.91 (30. März 2026) — PMGG tonal_center §9.7.11 Krumhansl-Schmuckler-Proxy
+
+- **instructions_version**: 3.9 → **4.0**
+- `tonal_center`-Proxy auf Krumhansl-Schmuckler-Key-Detection umgestellt (SNR-invariant); alle früheren tonal_center-Exclusions für phase_02/03/04/08/18/29/49 entfernt
+
+## v9.10.89 (30. März 2026) — PMGG phase_20/phase_23 Exclusions + phase_29 analog timbre
+
+- phase_20: `{"authentizitaet", "natuerlichkeit"}` Exclusions (SGMSE+ Reverb-Reduction)
+- phase_23/24: `{"natuerlichkeit", "brillanz", "authentizitaet", "artikulation", "timbre_authentizitaet"}` (AudioSR Inpainting: synthetisierter Inhalt)
+- phase_29: `timbre_authentizitaet` Exclusion für analoge Materialien ergänzt
+
+## v9.10.88 (30. März 2026) — PMGG phase_02 Exclusions erweitert
+
+- phase_02: Exclusion-Set auf `{"bass_kraft", "authentizitaet", "natuerlichkeit", "transparenz", "groove", "timbre_authentizitaet"}` erweitert (Kammfilter Hum-Removal Root-Causes)
 
 ## v9.10.87 (30. März 2026) — Dual-SR-Vertrag + 48-kHz-Fail-fast-Härtung
 

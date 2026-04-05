@@ -7,8 +7,11 @@ import logging
 import sys
 
 import numpy as np
+import pytest
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 
 def test_phase20_ml_routing():

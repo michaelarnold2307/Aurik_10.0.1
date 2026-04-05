@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.gui
+
 pytest.importorskip("PyQt5")
 
 from Aurik910.ui import modern_window

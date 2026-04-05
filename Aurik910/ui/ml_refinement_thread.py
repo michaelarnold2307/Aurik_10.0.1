@@ -22,7 +22,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -63,7 +63,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from backend.core.deferred_refinement_job import DeferredRefinementJob
+    DeferredRefinementJob = Any
 else:
     try:
         from backend.api.bridge import get_deferred_refinement_job_class as _get_drj_class

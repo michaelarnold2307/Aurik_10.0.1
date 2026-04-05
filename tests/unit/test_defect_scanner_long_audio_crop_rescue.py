@@ -8,6 +8,7 @@ for cheap event detectors (clicks, clipping).
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import backend.core.defect_scanner as defect_scanner_module
 from backend.core.defect_scanner import DefectScanner, DefectType
@@ -22,6 +23,7 @@ def _long_base_audio(duration_s: float = 70.0) -> np.ndarray:
     return audio.astype(np.float32)
 
 
+@pytest.mark.slow
 def test_clicks_outside_center_crop_are_detected() -> None:
     """Clicks at intro (outside center 60 s crop) must still be detected."""
     audio = _long_base_audio()
@@ -40,6 +42,7 @@ def test_clicks_outside_center_crop_are_detected() -> None:
     assert any(loc[0] < 5.0 for loc in score.locations)
 
 
+@pytest.mark.slow
 def test_clipping_outside_center_crop_is_detected(monkeypatch) -> None:
     """Hard clipping near outro (outside center crop) must still be detected."""
     # Keep this test deterministic: use amplitude fallback detector path.
@@ -95,6 +98,7 @@ def test_sibilance_outside_center_crop_is_detected() -> None:
     assert any(loc[0] < 5.0 for loc in score.locations)
 
 
+@pytest.mark.slow
 def test_long_audio_center_crop_marks_locality_limited_for_non_rechecked_type() -> None:
     """Long audio scan should mark crop-locality limits for center-crop-only defect locations."""
     audio = _long_base_audio(duration_s=70.0)

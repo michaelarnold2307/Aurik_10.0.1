@@ -76,15 +76,15 @@ from backend.adaptive_pipeline import AdaptiveProcessingPipeline
 def process_file(input_path: str, output_path: str):
     """Verarbeitet Audio-Datei direkt ohne Server"""
     print(f"📂 Lade: {input_path}")
-    
+
     # Audio laden
     with open(input_path, "rb") as f:
         audio_bytes = f.read()
-    
+
     # Pipeline initialisieren
     print("🔧 Starte Processing Pipeline...")
     pipeline = AdaptiveProcessingPipeline()
-    
+
     # Verarbeiten
     result = pipeline.run(
         audio_bytes,
@@ -92,12 +92,12 @@ def process_file(input_path: str, output_path: str):
         user_profile={},
         reference_audio=None
     )
-    
+
     # Speichern
     audio_out = result["processed_audio"]
     audio_orig, sr = sf.read(input_path)
     sf.write(output_path, audio_out, sr)
-    
+
     print(f"✅ Gespeichert: {output_path}")
     return result
 
@@ -105,12 +105,12 @@ def main():
     if len(sys.argv) < 3:
         print("Usage: python aurik_cli.py <input.wav> <output.wav>")
         sys.exit(1)
-    
+
     input_file = sys.argv[1]
     output_file = sys.argv[2]
-    
+
     result = process_file(input_file, output_file)
-    
+
     print(f"\n📊 Verarbeitete Steps: {len(result.get('steps', []))}")
     print(f"📈 Quality Score: {result.get('quality', {})}")
 
@@ -180,7 +180,7 @@ let backendProcess;
 function createWindow() {
   // Starte Python Backend
   backendProcess = spawn('python', [
-    '-m', 'uvicorn', 
+    '-m', 'uvicorn',
     'backend.api.rest.api:app',
     '--port', '8000'
   ], {

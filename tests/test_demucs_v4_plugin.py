@@ -1,6 +1,9 @@
 import numpy as np
+import pytest
 
 from plugins.demucs_v4_plugin import DemucsV4Plugin
+
+pytestmark = [pytest.mark.ml, pytest.mark.slow]
 
 
 def test_demucs_v4_plugin_aurik90():

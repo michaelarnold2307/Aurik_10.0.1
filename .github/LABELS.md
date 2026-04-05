@@ -5,6 +5,7 @@ This file documents the label structure used in the Aurik project for issue and 
 ## How to Apply Labels
 
 ### Automatic (via GitHub CLI)
+
 ```bash
 # Install GitHub CLI if not already installed
 # https://cli.github.com/
@@ -43,6 +44,7 @@ gh label create "invalid" --color "e4e669" --description "Invalid issue or PR"
 ```
 
 ### Manual (via GitHub Web UI)
+
 1. Go to: Repository → Issues → Labels
 2. Create each label with the specified color and description
 3. Apply to issues/PRs as needed
@@ -50,6 +52,7 @@ gh label create "invalid" --color "e4e669" --description "Invalid issue or PR"
 ## Label Categories
 
 ### Type Labels (Primary Classification)
+
 | Label | Color | Description | Usage |
 |-------|-------|-------------|-------|
 | `bug` | `#d73a4a` | Something isn't working | Any unexpected behavior, crashes, errors |
@@ -58,6 +61,7 @@ gh label create "invalid" --color "e4e669" --description "Invalid issue or PR"
 | `documentation` | `#0075ca` | Documentation improvement | Missing, incorrect, or unclear documentation |
 
 ### Priority Labels
+
 | Label | Color | Description | When to Use |
 |-------|-------|-------------|-------------|
 | `priority: critical` | `#b60205` | Must fix immediately | Crashes, data loss, security issues |
@@ -66,6 +70,7 @@ gh label create "invalid" --color "e4e669" --description "Invalid issue or PR"
 | `priority: low` | `#0e8a16` | Nice to have | Minor improvements, cosmetic issues |
 
 ### Area Labels (Component-Based)
+
 | Label | Color | Description | Component |
 |-------|-------|-------------|-----------|
 | `area: dsp` | `#c5def5` | DSP algorithms and processing | core/, dsp/, processing/ |
@@ -77,6 +82,7 @@ gh label create "invalid" --color "e4e669" --description "Invalid issue or PR"
 | `area: ci-cd` | `#c5def5` | CI/CD and automation | .github/workflows/ |
 
 ### Status Labels (Workflow)
+
 | Label | Color | Description | When to Apply |
 |-------|-------|-------------|---------------|
 | `triage` | `#ffffff` | Needs initial review and classification | Automatically applied to new issues |
@@ -85,6 +91,7 @@ gh label create "invalid" --color "e4e669" --description "Invalid issue or PR"
 | `status: needs-discussion` | `#d4c5f9` | Requires community discussion | Complex decisions, design questions |
 
 ### Quality Labels (Specific Issue Types)
+
 | Label | Color | Description | Usage |
 |-------|-------|-------------|-------|
 | `quality: regression` | `#e11d21` | Broken functionality that worked before | Features that stopped working |
@@ -92,12 +99,14 @@ gh label create "invalid" --color "e4e669" --description "Invalid issue or PR"
 | `quality: audio` | `#1d76db` | Audio quality or artifact issues | Distortion, artifacts, quality degradation |
 
 ### Community Labels
+
 | Label | Color | Description | Usage |
 |-------|-------|-------------|-------|
 | `good first issue` | `#7057ff` | Good for newcomers | Easy issues for new contributors |
 | `help wanted` | `#008672` | Extra attention is needed | Need community help or expertise |
 
 ### Resolution Labels
+
 | Label | Color | Description | Usage |
 |-------|-------|-------------|-------|
 | `duplicate` | `#cfd3d7` | This issue or PR already exists | Link to original issue, close |
@@ -107,6 +116,7 @@ gh label create "invalid" --color "e4e669" --description "Invalid issue or PR"
 ## Label Application Guidelines
 
 ### For Bug Reports
+
 ```
 Required: bug, triage
 Add: priority: [critical/high/medium/low]
@@ -115,11 +125,13 @@ Optional: quality: [regression/crash/audio]
 ```
 
 **Example:** Bug in ML model inference
+
 ```
 Labels: bug, triage, priority: high, area: ml
 ```
 
 ### For Feature Requests
+
 ```
 Required: enhancement, triage
 Add: priority: [high/medium/low]
@@ -128,11 +140,13 @@ Optional: status: needs-discussion
 ```
 
 **Example:** Request for new DSP algorithm
+
 ```
 Labels: enhancement, triage, priority: medium, area: dsp
 ```
 
 ### For Performance Issues
+
 ```
 Required: performance, triage
 Add: priority: [high/medium/low]
@@ -140,11 +154,13 @@ Add: area: [dsp/ml/gui/cli] (where slowness occurs)
 ```
 
 **Example:** Slow GUI responsiveness
+
 ```
 Labels: performance, triage, priority: high, area: gui
 ```
 
 ### For Documentation Issues
+
 ```
 Required: documentation, triage
 Add: priority: [medium/low]
@@ -152,6 +168,7 @@ Optional: good first issue (if simple fix)
 ```
 
 **Example:** Missing API documentation
+
 ```
 Labels: documentation, triage, priority: medium, area: api
 ```
@@ -159,6 +176,7 @@ Labels: documentation, triage, priority: medium, area: api
 ## Label Workflow
 
 ### New Issue Workflow
+
 1. **Auto-apply:** `triage` (via template)
 2. **Maintainer reviews:**
    - Verify issue type label (bug/enhancement/performance/documentation)
@@ -170,6 +188,7 @@ Labels: documentation, triage, priority: medium, area: api
 4. **If resolved:** Close issue, optionally add `duplicate`, `wontfix`, or `invalid`
 
 ### Pull Request Workflow
+
 1. **PR creator:** Add relevant area labels
 2. **Maintainer:** Add priority if urgent
 3. **During review:** Add `status: needs-discussion` if needed
@@ -178,6 +197,7 @@ Labels: documentation, triage, priority: medium, area: api
 ## Color Scheme
 
 **Color Palette:**
+
 - Red tones (`#b60205`, `#d73a4a`, `#e11d21`): Urgent, critical, bugs
 - Orange/Yellow (`#d93f0b`, `#fbca04`): Warnings, performance
 - Blue tones (`#0075ca`, `#1d76db`, `#c5def5`): Information, areas
@@ -197,6 +217,7 @@ Labels: documentation, triage, priority: medium, area: api
 ## Automation
 
 ### GitHub Actions (Future Enhancement)
+
 ```yaml
 # Auto-label based on file changes
 - uses: actions/labeler@v4
@@ -219,6 +240,7 @@ Labels: documentation, triage, priority: medium, area: api
 ## Statistics & Metrics
 
 Track label usage to understand project health:
+
 - **Bug density:** Count of `bug` labels vs total issues
 - **Performance issues:** Track `performance` labels over time
 - **Community engagement:** `help wanted` + `good first issue` activity

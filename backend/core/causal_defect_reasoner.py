@@ -2343,6 +2343,33 @@ class CausalDefectReasoner:
                 if param not in merged_params:
                     merged_params[param] = val
 
+        # §7.2a Severity-Weighted Phase-Reorder (spec Y1):
+        # When ≥3 defects have severity ≥ 0.70, reorder phases so that phases
+        # belonging to the highest-posterior causes are processed first.
+        _high_sev_defects = [k for k, v in defect_scores.items() if v >= 0.70]
+        if len(_high_sev_defects) >= 3:
+            import re as _re
+
+            _phase_priority: dict[str, float] = {}
+            for _cause_k, _cause_prob in ranked[:10]:
+                for _phase_k in CAUSE_TO_PHASES.get(_cause_k, []):
+                    _phase_priority[_phase_k] = max(_phase_priority.get(_phase_k, 0.0), _cause_prob)
+
+            def _phase_num(_p: str) -> int:
+                _m = _re.search(r"phase_(\d+)", _p)
+                return int(_m.group(1)) if _m else 99
+
+            ordered_phases = sorted(
+                ordered_phases,
+                key=lambda _p: (_phase_priority.get(_p, 0.0), -_phase_num(_p)),
+                reverse=True,
+            )
+            logger.info(
+                "§7.2a Severity-Reorder: %d high-severity defects (≥0.70) → reordered %d phases by cause posterior",
+                len(_high_sev_defects),
+                len(ordered_phases),
+            )
+
         reasoning = self._build_reasoning(primary_cause, ranked, sf, material)
 
         return RestorationPlan(

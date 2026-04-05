@@ -383,6 +383,8 @@ except Exception as exc:
 
 **Pflicht**: Nach `soundfile.read()` / `pedalboard.read()`, vor Pipeline-Übergabe:
 
+> **Audio-Import-Kaskade (kanonisch, Stand April 2026):** Alle Einstiegspunkte (`batch_processor.py`, `backend/aurik_restore.py`, `backend/meta_router.py`, `Aurik910/ui/modern_window.py`) MÜSSEN `load_audio_file(filepath)` aus `backend.file_import` verwenden — **nicht** `sf.read(path)` oder `librosa.load(path)` direkt. Die Kaskade: `soundfile` (WAV/FLAC/OGG) → `pedalboard/FFmpeg` (MP3/AAC/WMA/Opus) → `pydub` (universell). `sf.read(io.BytesIO(...))` auf interne PCM-Puffer ist zulässig.
+
 ```python
 MAX_AUDIO_BYTES_RAM: int = 2 * 1024**3  # 2 GB absolutes RAM-Limit für einen Audio-Buffer
 
@@ -775,11 +777,14 @@ python -m pip install --dry-run -r requirements/requirements_aurik.txt
 
 ```python
 # §9.7.1: SHA256-Cache für DefectScanner + PANNs (§3.8-Muster, max. 128 Einträge)
-# §9.7.2: Parallele Eingangs-Analyse (MediumClassifier + EraClassifier + GenreClassifier)
+# §9.7.2: Parallele Eingangs-Analyse (MediumDetector + EraClassifier + GenreClassifier)
+# PFLICHT: _run_medium_detector nutzt get_medium_detector().detect(audio, sr, file_ext=...)
+# VERBOTEN: _run_medium_classifier (MediumClassifier.classify_medium() kennt kein file_ext
+#           → gibt bei codec-enkodiertem Analog-Material 'unknown' zurück)
 with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-    fut_mc  = pool.submit(_run_medium_classifier, audio, sr)
-    fut_era = pool.submit(_run_era_classifier,    audio, sr)
-    fut_sc  = pool.submit(_run_genre_classifier,  audio, sr)
+    fut_mc  = pool.submit(_run_medium_detector, audio, sr, file_ext)  # get_medium_detector().detect()
+    fut_era = pool.submit(_run_era_classifier,  audio, sr)
+    fut_sc  = pool.submit(_run_genre_classifier, audio, sr)
 
 # §9.7.3: Phasen-adaptive PMGG-Sample-Dauer
 PHASE_SAMPLE_DURATIONS = {

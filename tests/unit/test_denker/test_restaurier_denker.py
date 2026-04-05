@@ -189,3 +189,48 @@ class TestRestaurierDenkerMock:
         audio = np.stack([_sine(), _sine()], axis=0)
         result = RestaurierDenker().restauriere(audio, SR)
         assert isinstance(result, RestaurierErgebnis)
+
+
+class TestRestaurierDenkerCheckpointResume:
+    def test_21_uses_restore_from_checkpoint_when_provided(self):
+        from denker.restaurier_denker import RestaurierDenker
+
+        class _Material:
+            value = "vinyl"
+
+        class _Raw:
+            def __init__(self):
+                self.audio = _sine(0.5)
+                self.rt_factor = 1.2
+                self.quality_estimate = 0.9
+                self.phases_executed = ["phase_01_click_removal"]
+                self.phases_skipped = []
+                self.musical_goals = {"natuerlichkeit": 0.95}
+                self.warnings = []
+                self.confidence = 0.92
+                self.winning_variant = None
+                self.rollback_triggered = False
+                self.total_time_seconds = 0.5
+                self.material_type = _Material()
+
+        class _FakeRestorer:
+            def __init__(self):
+                self.called = False
+                self.received_checkpoint = None
+
+            def restore_from_checkpoint(self, checkpoint, **kwargs):
+                self.called = True
+                self.received_checkpoint = checkpoint
+                return _Raw()
+
+        denker = RestaurierDenker()
+        fake_restorer = _FakeRestorer()
+        checkpoint_obj = object()
+
+        with patch.object(RestaurierDenker, "_get_restorer", return_value=fake_restorer):
+            result = denker.restauriere(_sine(), SR, recovery_checkpoint=checkpoint_obj)
+
+        assert fake_restorer.called is True
+        assert fake_restorer.received_checkpoint is checkpoint_obj
+        assert isinstance(result.audio, np.ndarray)
+        assert result.phases_executed == ["phase_01_click_removal"]

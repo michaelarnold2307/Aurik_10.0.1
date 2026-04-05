@@ -95,7 +95,7 @@ class _ScoreDial(QWidget):
 
         # Value label
         p.setPen(QColor(_C_TEXT))
-        font = QFont("Segoe UI", 14, QFont.Weight.Bold)
+        font = QFont(self.font().family(), 14, QFont.Weight.Bold)
         p.setFont(font)
         p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, f"{int(self._score)}")
         p.end()
@@ -183,8 +183,8 @@ _MATERIAL_NAMES: dict[str, str] = {
     "vinyl": "Vinyl",
     "wire_recording": "Drahtband",
     "reel_tape": "Spulenband",
-    "tape": "Magnetband",
-    "cassette": "Kassette",
+    "tape": "Kassette (Band)",
+    "cassette": "Kassette (Band)",
     "dat": "DAT",
     "cd_digital": "CD / Digital",
     "cd": "CD",
@@ -713,9 +713,3 @@ def _print_prognose_terminal(
 
     report = "\n".join(lines)
     logger.info("PROGNOSE_REPORT:\n%s", report)
-
-    # Also print directly for CLI usage (sys.stdout not redirected in normal runs)
-    import sys
-
-    if sys.stdout.isatty():
-        print(report)

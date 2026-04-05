@@ -35,11 +35,11 @@ class TestDenoiseModelSelection:
         model = policy_engine.select_denoise_model(context, {})
         assert model == "resemble_enhance"
 
-    def test_drums_selects_dccrn(self, policy_engine):
-        """Drums/Transients should select DCCRN (transient-preserving)."""
+    def test_drums_selects_mp_senet(self, policy_engine):
+        """Drums/Transients should select MP-SENet (transient-preserving)."""
         context = {"has_drums": True, "content_character": "HIGHLY_TRANSIENT"}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "dccrn"
+        assert model == "mp_senet"
 
     def test_ambient_selects_deepfilternet(self, policy_engine):
         """Ambient content should select DeepFilterNet (aggressive smoothing)."""
@@ -51,12 +51,12 @@ class TestDenoiseModelSelection:
         """Processing strategy should override other factors."""
         context = {"processing_strategy": "PRESERVE_TRANSIENTS"}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "dccrn"
+        assert model == "mp_senet"
 
     def test_dominant_instrument_mapping(self, policy_engine):
         """Dominant instrument should guide model selection."""
         test_cases = [
-            ("DRUMS", "dccrn"),
+            ("DRUMS", "mp_senet"),
             ("VOCALS", "resemble_enhance"),
             ("BASS", "deepfilternet"),
             ("STRINGS", "resemble_enhance"),
@@ -76,17 +76,17 @@ class TestDenoiseModelSelection:
 class TestRepairModelSelection:
     """Test repair/declipping model selection."""
 
-    def test_speech_selects_fullsubnet(self, policy_engine):
-        """Speech should select FullSubNet+."""
+    def test_speech_selects_mp_senet(self, policy_engine):
+        """Speech should select MP-SENet."""
         context = {"has_vocals": True}
         model = policy_engine.select_repair_model(context, {})
-        assert model == "fullsubnet"
+        assert model == "mp_senet"
 
-    def test_music_selects_dccrn(self, policy_engine):
-        """Music should select DCCRN."""
+    def test_music_selects_mp_senet(self, policy_engine):
+        """Music should select MP-SENet."""
         context = {"has_vocals": False}
         model = policy_engine.select_repair_model(context, {})
-        assert model == "dccrn"
+        assert model == "mp_senet"
 
 
 class TestStemSeparationSelection:
@@ -293,7 +293,7 @@ class TestMediumSpecific:
         goal = {}
         model = policy_engine.select_medium_specific_model(context, goal)
         # Should return one of the denoise models
-        assert model in ["resemble_enhance", "deepfilternet", "dccrn", "wpe", "banquet"]
+        assert model in ["resemble_enhance", "deepfilternet", "mp_senet", "wpe", "banquet"]
 
 
 class TestSelectAllModels:
@@ -381,8 +381,8 @@ class TestEdgeCases:
         separation = policy_engine.select_stem_separation_model(context, goal)
 
         # All should return valid model names
-        assert denoise in ["resemble_enhance", "deepfilternet", "dccrn", "wpe", "banquet"]
-        assert repair in ["dccrn", "fullsubnet"]
+        assert denoise in ["resemble_enhance", "deepfilternet", "mp_senet", "wpe", "banquet"]
+        assert repair in ["mp_senet"]
         assert separation in ["mdx23c", "demucs", "uvr_mdxnet"]
 
     def test_conflicting_context_signals(self, policy_engine):

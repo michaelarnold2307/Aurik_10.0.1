@@ -82,6 +82,44 @@ class ContentAwareProcessor:
         "mixed": 1.0,
     }
 
+    @staticmethod
+    def _lpc_burg_coeffs(signal: np.ndarray, order: int) -> np.ndarray:
+        """Estimate LPC coefficients with Burg recursion (stable AR fit).
+
+        Returns polynomial A(z) with A[0] = 1.0 and length order+1.
+        Falls back to [1.0] for degenerate inputs.
+        """
+        x = np.asarray(signal, dtype=np.float64)
+        n = int(x.size)
+        if order < 1 or n <= (order + 2):
+            return np.array([1.0], dtype=np.float64)
+
+        ef = x[1:].copy()
+        eb = x[:-1].copy()
+        a = np.zeros(order + 1, dtype=np.float64)
+        a[0] = 1.0
+
+        for m in range(order):
+            if ef.size < 2 or eb.size < 2:
+                break
+
+            den = float(np.dot(ef, ef) + np.dot(eb, eb) + 1e-12)
+            k = float(-2.0 * np.dot(eb, ef) / den)
+            k = float(np.clip(k, -0.995, 0.995))
+
+            a_prev = a.copy()
+            for i in range(1, m + 1):
+                a[i] = a_prev[i] + k * a_prev[m + 1 - i]
+            a[m + 1] = k
+
+            ef_new = ef[1:] + k * eb[1:]
+            eb_new = eb[:-1] + k * ef[:-1]
+            ef, eb = ef_new, eb_new
+
+        if not np.isfinite(a).all() or abs(a[0]) < 1e-12:
+            return np.array([1.0], dtype=np.float64)
+        return a
+
     def _apply_phoneme_dsp(
         self,
         segment: np.ndarray,
@@ -173,14 +211,14 @@ class ContentAwareProcessor:
             seg_out = seg_out[:n]
 
         elif phoneme_type == "vowel_stressed":
-            # LPC Burg Ord. 36 → F1–F4 → symmetric shelving ±2 semitones
+            # LPC Burg Ord. 30–40 → F1–F4 → symmetric shelving ±2 semitones
             try:
-                from scipy.signal import lfilter, lpc
+                from scipy.signal import lfilter
 
                 order = min(36, n // 4)  # Ord 30–40 preferred; cap for short segments
-                A = lpc(seg - np.mean(seg), order)
+                A = self._lpc_burg_coeffs(seg - np.mean(seg), order)
                 # Guard: degenerate LPC polynomial triggers LAPACK DLASCL via np.roots companion matrix
-                if not np.isfinite(A).all():
+                if A.size < 2 or not np.isfinite(A).all():
                     raise ValueError("Degenerate LPC polynomial — passthrough")
                 roots = np.roots(A)
                 roots = roots[(np.abs(roots) < 1.0) & (np.imag(roots) > 0)]
@@ -265,6 +303,9 @@ class ContentAwareProcessor:
         if transcription.fallback_used or not transcription.words:
             return audio
 
+        # §2.36 Datenschutz-Guard: sicherstellen, dass kein Lyrics-Text in Logs landet
+        _assert_no_lyrics_in_log(transcription.words)
+
         out = np.asarray(audio, dtype=np.float32).copy()
         n_samples = out.shape[0]
         is_stereo = out.ndim == 2
@@ -344,34 +385,103 @@ class LyricsGuidedTimeline:
         widget_width_px: int,
         audio_duration_s: float,
     ) -> None:
-        """Zeichnet farbige Wort-Overlays auf den WaveformWidget-Canvas.
+        """Renders phoneme-type color bands on the WaveformWidget canvas.
 
-        Kein Overlay wenn fallback_used=True oder words leer.
-        Tooltip-Text zeigt nur Phonem-Typ — kein Transkriptions-Text.
+        Each phoneme category has a unique visual treatment:
+        - fricative_stressed:   orange band with top triangle marker (sibilant energy indicator)
+        - fricative_unstressed: amber band (softer sibilants)
+        - plosive:              cyan band with diamond marker (onset indicator at start)
+        - vowel_stressed:       green band with filled bar (formant prominence)
+        - silence:              very subtle dark band (NR zone indicator)
+
+        Privacy: no transcription text rendered — phoneme_type labels only.
         """
         if transcription.fallback_used or not transcription.words:
             return
         if audio_duration_s <= 0 or widget_width_px <= 0:
             return
-        # Qt-Painter-Aufrufe nur wenn QApplication vorhanden (GUI-Kontext)
         try:
-            from PyQt5.QtCore import QRectF
-            from PyQt5.QtGui import QColor
+            from PyQt5.QtCore import QRectF, Qt
+            from PyQt5.QtCore import QPointF
+            from PyQt5.QtGui import QBrush, QColor, QPen, QPolygonF
+
+            OVERLAY_H = 44  # px height of overlay band at top of waveform
+            BAR_H = {
+                "vowel_stressed": OVERLAY_H,
+                "fricative_stressed": 30,
+                "fricative_unstressed": 22,
+                "plosive": OVERLAY_H,
+                "silence": 10,
+            }
+            ALPHA = {
+                "vowel_stressed": 75,
+                "fricative_stressed": 95,
+                "fricative_unstressed": 60,
+                "plosive": 85,
+                "silence": 22,
+            }
+
+            if not hasattr(painter, "fillRect"):
+                return
 
             for word in transcription.words:
-                color_hex = self.COLOR_MAP.get(word.phoneme_type, "")
+                ptype = word.phoneme_type
+                color_hex = self.COLOR_MAP.get(ptype, "")
                 if not color_hex:
                     continue
+
                 x_start = int(word.start_s / audio_duration_s * widget_width_px)
-                x_end = int(word.end_s / audio_duration_s * widget_width_px)
-                width = max(1, x_end - x_start)
-                color = QColor(color_hex)
-                color.setAlpha(80)
-                # painter muss ein aktiver QPainter sein (Guard außerhalb)
-                if hasattr(painter, "fillRect"):
-                    painter.fillRect(QRectF(x_start, 0, width, 40), color)  # type: ignore[arg-type]
-        except ImportError:
-            pass  # Kein Qt verfügbar — kein Rendering, kein Absturz
+                x_end = max(x_start + 2, int(word.end_s / audio_duration_s * widget_width_px))
+                width = x_end - x_start
+                bh = BAR_H.get(ptype, 20)
+                alpha = ALPHA.get(ptype, 60)
+
+                c = QColor(color_hex)
+                c.setAlpha(alpha)
+                painter.fillRect(QRectF(x_start, 0, width, bh), c)  # type: ignore[arg-type]
+
+                # Phoneme type accent decorations
+                if ptype == "plosive":
+                    # Diamond onset marker at segment start
+                    dia_x = x_start + 1
+                    dia_y = bh // 2
+                    diamond = QPolygonF()
+                    diamond.append(QPointF(dia_x, dia_y - 5))
+                    diamond.append(QPointF(dia_x + 4, dia_y))
+                    diamond.append(QPointF(dia_x, dia_y + 5))
+                    diamond.append(QPointF(dia_x - 4, dia_y))
+                    accent = QColor(color_hex)
+                    accent.setAlpha(200)
+                    painter.setBrush(QBrush(accent))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawPolygon(diamond)
+
+                elif ptype == "fricative_stressed":
+                    # Small triangles at top — sibilance energy markers
+                    acc2 = QColor(color_hex)
+                    acc2.setAlpha(200)
+                    n_marks = max(1, width // 8)
+                    for mi in range(n_marks):
+                        tx = x_start + int((mi + 0.5) * width / n_marks)
+                        tri = QPolygonF()
+                        tri.append(QPointF(tx, 0))
+                        tri.append(QPointF(tx - 3, 6))
+                        tri.append(QPointF(tx + 3, 6))
+                        painter.setBrush(QBrush(acc2))
+                        painter.setPen(Qt.PenStyle.NoPen)
+                        painter.drawPolygon(tri)
+
+                elif ptype == "vowel_stressed":
+                    # Horizontal line at 60% height — formant prominence indicator
+                    acc3 = QColor(color_hex)
+                    acc3.setAlpha(160)
+                    painter.setPen(QPen(acc3, 1.5))
+                    _line_y = int(bh * 0.6)
+                    painter.drawLine(x_start, _line_y, x_end, _line_y)
+                    painter.setPen(Qt.PenStyle.NoPen)
+
+        except (ImportError, Exception):
+            pass  # No Qt or rendering error — silent fallback
 
 
 _transcriber: LyricsTranscriber | None = None

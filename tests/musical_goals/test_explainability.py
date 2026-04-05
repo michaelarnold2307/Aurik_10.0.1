@@ -394,6 +394,7 @@ class TestExplanationGeneration:
 class TestRecommendations:
     """Test recommendation generation."""
 
+    @pytest.mark.slow
     def test_recommendations_for_failed_goals(self, explainer, processing_chain):
         """Should provide recommendations for failed goals."""
         chain, sr = processing_chain
@@ -411,6 +412,7 @@ class TestRecommendations:
             # All achieved - should say so
             assert len(explanation.recommendations) >= 0
 
+    @pytest.mark.slow
     def test_recommendations_are_actionable(self, explainer, processing_chain):
         """Recommendations should mention steps or actions."""
         chain, sr = processing_chain
@@ -480,6 +482,7 @@ class TestSimpleExplanation:
 class TestIntegration:
     """Integration tests for complete workflow."""
 
+    @pytest.mark.slow
     def test_full_workflow(self, explainer, processing_chain):
         """Test complete tracking and explanation workflow."""
         chain, sr = processing_chain

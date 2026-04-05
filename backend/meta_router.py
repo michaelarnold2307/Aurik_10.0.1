@@ -62,7 +62,22 @@ def _load_audio(path: str) -> tuple[np.ndarray, int]:
 
     Cascade: soundfile → scipy.io.wavfile → synthetic silence (fallback).
     """
-    # soundfile (supports WAV, FLAC, AIFF, OGG, …)
+    # Stufe 1: backend.file_import — robust cascade (soundfile → pedalboard → pydub)
+    try:
+        from backend.file_import import load_audio_file as _load_audio_file
+
+        _res = _load_audio_file(path)
+        if _res and not _res.get("error"):
+            audio = _res["audio"]
+            sr = _res["sr"]
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            return np.ascontiguousarray(audio, dtype=np.float32), int(sr)
+        logger.warning("_load_audio: file_import returned error for %s: %s", path, (_res or {}).get("error"))
+    except Exception as exc:
+        logger.warning("_load_audio: file_import failed for %s: %s — trying soundfile", path, exc)
+
+    # Stufe 2: soundfile direct (WAV, FLAC, AIFF, OGG, …)
     if sf is not None:
         try:
             audio, sr = sf.read(path, dtype="float32", always_2d=False)
@@ -72,7 +87,7 @@ def _load_audio(path: str) -> tuple[np.ndarray, int]:
         except Exception as exc:
             logger.warning("soundfile failed for %s: %s — trying scipy", path, exc)
 
-    # scipy fallback (WAV only)
+    # Stufe 3: scipy fallback (WAV only)
     try:
         from scipy.io import wavfile
 

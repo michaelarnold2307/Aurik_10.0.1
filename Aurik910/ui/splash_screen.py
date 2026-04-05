@@ -33,7 +33,10 @@ from PyQt5.QtWidgets import QApplication, QWidget
 
 _RES = Path(__file__).parent.parent / "resources"
 
-_VERSION = "9.10.77"
+try:
+    from Aurik910 import __version__ as _VERSION  # type: ignore[attr-defined]
+except Exception:
+    _VERSION = "9.10.103"
 
 
 class AurikSplashScreen(QWidget):
@@ -201,7 +204,7 @@ class AurikSplashScreen(QWidget):
 
         # Pick best available bold font
         font = QFont("Arial", 56, QFont.Bold)  # type: ignore[attr-defined]
-        for family in ("Segoe UI", "Ubuntu", "Helvetica Neue", "Arial"):
+        for family in ("Inter", "Noto Sans", "Ubuntu", "Segoe UI", "Helvetica Neue", "Arial"):
             candidate = QFont(family, 56, QFont.Bold)  # type: ignore[attr-defined]
             candidate.setLetterSpacing(QFont.AbsoluteSpacing, 10)  # type: ignore[attr-defined]
             if QFontMetrics(candidate).horizontalAdvance("M") > 25:
@@ -245,7 +248,7 @@ class AurikSplashScreen(QWidget):
     # ── Tagline ───────────────────────────────────────────────────────────────
 
     def _draw_tagline(self, p: QPainter, w: int, h: int) -> None:
-        text = "INTELLIGENTE MUSIK- & GESANGS-RESTAURATION"
+        text = "AUDIO RESTAURATION UND INTELLIGENTE KORREKTUR"
 
         font = QFont("Arial", 9)
         font.setLetterSpacing(QFont.AbsoluteSpacing, 3.2)  # type: ignore[attr-defined]
@@ -377,11 +380,3 @@ class AurikSplashScreen(QWidget):
         vt = f"v{_VERSION}"
         p.setPen(QPen(QColor(82, 108, 158, 138)))
         p.drawText(w - fm_v.horizontalAdvance(vt) - 14, h - 18, vt)
-
-        # "PROFESSIONAL" badge — top right corner
-        font_p = QFont("Arial", 7)
-        font_p.setLetterSpacing(QFont.AbsoluteSpacing, 1.5)  # type: ignore[attr-defined]
-        p.setFont(font_p)
-        pt = "PROFESSIONAL"
-        p.setPen(QPen(QColor(208, 158, 48, 130)))
-        p.drawText(w - QFontMetrics(font_p).horizontalAdvance(pt) - 14, 20, pt)

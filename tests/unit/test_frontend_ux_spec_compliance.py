@@ -16,17 +16,13 @@ Deckt ab:
 """
 
 import sys
+import importlib.util
 
 import pytest
 
 # ─── Qt-Import Guard ─────────────────────────────────────────────────────────
 # modern_window.py uses PyQt5 — must match to avoid Qt5/Qt6 double-load crash (SIGABRT)
-try:
-    from PyQt5.QtWidgets import QApplication
-
-    _QT_AVAILABLE = True
-except ImportError:
-    _QT_AVAILABLE = False
+_QT_AVAILABLE = importlib.util.find_spec("PyQt5") is not None
 
 _HAS_DISPLAY = False
 if _QT_AVAILABLE:
@@ -129,7 +125,11 @@ class TestModernProgressBarDeltaFilter:
     @pytest.mark.skipif(not _HAS_DISPLAY, reason="Kein Display verfügbar (headless)")
     def test_setValue_filters_small_delta(self):
         """Qt-Test: setValue(50) danach setValue(55) → kein Update (Δ=5<10)."""
-        self._app = QApplication.instance() or QApplication(sys.argv)  # keep ref alive — GC would destroy it otherwise
+        qt_widgets = importlib.import_module("PyQt5.QtWidgets")
+        app_cls = getattr(qt_widgets, "QApplication", None)
+        if app_cls is None:
+            pytest.skip("QApplication nicht verfügbar")
+        self._app = app_cls.instance() or app_cls(sys.argv)  # keep ref alive — GC would destroy it otherwise
         MPB = getattr(_MW_MODULE, "ModernProgressBar", None) if _MW_MODULE_LOADED else None
         if MPB is None:
             pytest.skip("ModernProgressBar nicht verfügbar")

@@ -188,6 +188,23 @@ class EmotionalArcPreservationMetric:
         klimax_level_dev = abs(orig_peak_db - rest_peak_db)
 
         # ----------------------------------------------------------------
+        # §Y4 Local segment Δarousal check: no segment should drop > 8%
+        # Ignore the last ≤3 s tail segment (under-filled HOP window)
+        # ----------------------------------------------------------------
+        _n_tail_segs = max(0, int(3.0 / self.HOP_S))  # segments covering last 3 s
+        _check_segs = n_segs - _n_tail_segs
+        _local_drop_ok = True
+        _worst_local_drop = 0.0
+        _worst_seg_idx = -1
+        if _check_segs > 0:
+            _orig_clip = np.maximum(arousal_orig[:_check_segs], 1e-9)
+            _delta_local = arousal_rest[:_check_segs] / _orig_clip - 1.0
+            _worst_local_drop = float(np.min(_delta_local))
+            _worst_seg_idx = int(np.argmin(_delta_local))
+            if _worst_local_drop < -0.08:
+                _local_drop_ok = False
+
+        # ----------------------------------------------------------------
         # Urteil
         # ----------------------------------------------------------------
         arc_preserved = (
@@ -195,6 +212,7 @@ class EmotionalArcPreservationMetric:
             and val_pearson >= self.THRESHOLD_VALENCE
             and klimax_dev <= self.MAX_KLIMAX_DEVIATION
             and klimax_level_dev <= self.MAX_KLIMAX_LEVEL_DB
+            and _local_drop_ok  # §Y4: no segment arousal collapsed by > 8%
         )
 
         reason_parts = []
@@ -206,6 +224,11 @@ class EmotionalArcPreservationMetric:
             reason_parts.append(f"Klimax-Verschiebung: {klimax_dev} Segmente (Max: {self.MAX_KLIMAX_DEVIATION})")
         if klimax_level_dev > self.MAX_KLIMAX_LEVEL_DB:
             reason_parts.append(f"Klimax-Pegel-Abweichung: {klimax_level_dev:.1f} dB")
+        if not _local_drop_ok:
+            reason_parts.append(
+                f"Lokaler Arousal-Einbruch Segment {_worst_seg_idx + 1}/{_check_segs}: "
+                f"Δ={_worst_local_drop:.3f} (Schwelle: -0.08)"
+            )
 
         reason = (
             "Emotionaler Bogen vollständig erhalten."

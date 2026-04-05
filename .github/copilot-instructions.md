@@ -4,7 +4,7 @@
 > kontextbewusstes Musik- und Gesangs-Restaurations-, Reparatur- und
 > Rekonstruktions-Denkersystem.* Stand: März 2026 — Version **9.10.83**
 >
-> **instructions_version: 4.1** — komprimiert 04.04.2026
+> **instructions_version: 4.2** — komprimiert 04.04.2026
 >
 > Bump-Regel: neue RELEASE_MUST-Zeile, neues Gate oder §-Änderung → `instructions_version` inkrementieren + `docs/CHANGELOG_HISTORY.md` Eintrag.
 >
@@ -663,6 +663,8 @@ Studio 2026: Stem-Sep → Vocal-AI → Instrumente → [Reference Mastering] →
 - Beide werden als `kwargs` an jede Phase übergeben (`defect_locations=`, `max_defect_severity=`)
 - Phasen können Location-Hints für gezieltere Verarbeitung nutzen (opt-in)
 - Phasen erkennen Defekte weiterhin auch eigenständig intern (Redundanz-Prinzip)
+- **Location-Completeness-Invariante**: In Analyse- und Reparaturpfaden sind harte Caps auf `defect_locations` verboten. Auch bei sehr vielen Events (hundert bis tausend) muss die vollständige Ereignisliste erhalten bleiben.
+- UI/Visualisierung darf Marker verdichten oder sampeln, aber ausschließlich als Anzeige-Optimierung. Die zugrunde liegende Defektliste für PMGG/Phasenrouting bleibt unverändert vollständig.
 
 **Psychoakustische Pflicht-Invarianten**:
 - Intro-Salienz (§9.1b): Defekte in den ersten 5 s → Severity ×1.5
