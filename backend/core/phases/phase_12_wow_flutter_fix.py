@@ -263,7 +263,7 @@ class WowFlutterFix(PhaseInterface):
 
         if use_ml_hybrid:
             try:
-                logger.info(f"Phase 12 ML-Hybrid: mode={quality_mode}, material={material.value}")
+                logger.info("Phase 12 ML-Hybrid: mode=%s, material=%s", quality_mode, material.value)
 
                 # Configure ML pitch detector strategy
                 if quality_mode in ["quality", "maximum"]:
@@ -302,7 +302,7 @@ class WowFlutterFix(PhaseInterface):
 
         # DSP-Only (Fast-Modus oder Fallback): pYIN
         if not _poly_applied and not use_ml_hybrid:
-            logger.info(f"Phase 12 pYIN DSP: material={material.value}")
+            logger.info("Phase 12 pYIN DSP: material=%s", material.value)
             pitch_trajectory, confidence = self._estimate_pitch_yin(mono, sample_rate)
 
         # Continue with standard wow/flutter correction pipeline
@@ -1705,11 +1705,11 @@ if __name__ == "__main__":
     audio += 0.15 * np.sin(2 * phase)  # 2nd harmonic
     audio += 0.10 * np.sin(3 * phase)  # 3rd harmonic
 
-    logger.debug(f"Generated {duration}s test audio @ {sample_rate} Hz")
+    logger.debug("Generated %ss test audio @ %s Hz", duration, sample_rate)
     logger.debug("Base frequency: 440 Hz with harmonics (2nd, 3rd)")
-    logger.debug(f"Wow: {wow_freq} Hz, Depth: {wow_depth * 100:.2f}%")
-    logger.debug(f"Flutter: {flutter_freq} Hz, Depth: {flutter_depth * 100:.2f}%")
-    logger.debug(f"Total pitch variation: {(wow_depth + flutter_depth) * 100:.2f}%")
+    logger.debug("Wow: %s Hz, Depth: %.2f%%", wow_freq, wow_depth * 100)
+    logger.debug("Flutter: %s Hz, Depth: %.2f%%", flutter_freq, flutter_depth * 100)
+    logger.debug("Total pitch variation: %.2f%%", (wow_depth + flutter_depth) * 100)
     logger.debug("")
 
     # Test with different materials
@@ -1721,7 +1721,7 @@ if __name__ == "__main__":
 
     for material, material_name in materials:
         logger.debug("─" * 80)
-        logger.debug(f"Material: {material_name}")
+        logger.debug("Material: %s", material_name)
         logger.debug("─" * 80)
         logger.debug("")
 
@@ -1731,20 +1731,20 @@ if __name__ == "__main__":
         if result.metrics["wow_flutter_detected"]:
             logger.debug("✅ Professional Wow & Flutter Correction:")
             logger.debug("   Detected: YES")
-            logger.debug(f"   Max Deviation: {result.metrics['max_deviation_percent']:.3f}%")
-            logger.debug(f"   Wow Magnitude: {result.metrics['wow_magnitude_percent']:.3f}%")
-            logger.debug(f"   Flutter Magnitude: {result.metrics['flutter_magnitude_percent']:.3f}%")
-            logger.debug(f"   Residual Deviation: {result.metrics['residual_deviation_percent']:.3f}% (target <0.3%)")
-            logger.debug(f"   Correction Strength: {result.metrics['correction_strength']}")
-            logger.debug(f"   Mean Confidence: {result.metrics['mean_confidence']:.2f}")
+            logger.debug("   Max Deviation: %.3f%%", result.metrics['max_deviation_percent'])
+            logger.debug("   Wow Magnitude: %.3f%%", result.metrics['wow_magnitude_percent'])
+            logger.debug("   Flutter Magnitude: %.3f%%", result.metrics['flutter_magnitude_percent'])
+            logger.debug("   Residual Deviation: %.3f%% (target <0.3%%)", result.metrics['residual_deviation_percent'])
+            logger.debug("   Correction Strength: %s", result.metrics['correction_strength'])
+            logger.debug("   Mean Confidence: %.2f", result.metrics['mean_confidence'])
             logger.debug(
                 f"   Processing time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
             )
             logger.debug("")
         else:
             logger.debug("⚠️  No significant wow/flutter detected")
-            logger.debug(f"   Max Deviation: {result.metrics['max_deviation_percent']:.3f}%")
-            logger.debug(f"   Threshold: {phase.DETECTION_THRESHOLD[material]}%")
+            logger.debug("   Max Deviation: %.3f%%", result.metrics['max_deviation_percent'])
+            logger.debug("   Threshold: %s%%", phase.DETECTION_THRESHOLD[material])
             logger.debug("")
 
     logger.debug("=" * 80)

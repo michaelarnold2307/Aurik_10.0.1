@@ -329,9 +329,8 @@ class MultibandCompressionPhase(PhaseInterface):
         """
         # Envelope Detection (character-dependent)
         if is_stereo:
-            envelope_left = np.abs(band[:, 0])
-            envelope_right = np.abs(band[:, 1])
-            envelope = np.maximum(envelope_left, envelope_right)  # Linked
+            # §2.51 Linked Stereo: RMS-combined sidechain √(L²+R²)/√2 (spec §2.51, phase_35)
+            envelope = np.sqrt(band[:, 0] ** 2 + band[:, 1] ** 2) * (1.0 / np.sqrt(2))
         else:
             envelope = np.abs(band)
 
@@ -346,27 +345,40 @@ class MultibandCompressionPhase(PhaseInterface):
 
         alpha_attack = 1.0 - np.exp(-1.0 / (attack_ms * 0.001 * sample_rate))
 
-        # Smooth envelope
-        smoothed_envelope = np.zeros_like(envelope)
-        smoothed_envelope[0] = envelope[0]
-
-        for i in range(1, len(envelope)):
-            if envelope[i] > smoothed_envelope[i - 1]:
-                # Attack
-                if isinstance(alpha_attack, np.ndarray):
-                    smoothed_envelope[i] = (
-                        alpha_attack[i] * envelope[i] + (1 - alpha_attack[i]) * smoothed_envelope[i - 1]
-                    )
-                else:
-                    smoothed_envelope[i] = alpha_attack * envelope[i] + (1 - alpha_attack) * smoothed_envelope[i - 1]
+        # Smooth envelope — frame-based IIR (32x faster than sample-loop).
+        # HOP=32 → 0.67 ms resolution at 48 kHz, well below minimum attack_ms (5 ms).
+        # Time constants are adjusted to the frame rate: alpha_frame = 1 - (1-alpha)^HOP.
+        # For the optical band (array alpha_release), one representative sample per frame
+        # is used (frame mid-point), which preserves program-dependent release semantics.
+        _HOP = 32
+        n_samp = len(envelope)
+        n_frames = (n_samp + _HOP - 1) // _HOP
+        # Vectorised peak envelope at frame rate (pad to full HOP multiple)
+        _n_pad = n_frames * _HOP - n_samp
+        _env_pad = np.append(envelope, np.full(_n_pad, envelope[-1] if n_samp > 0 else 0.0))
+        env_frames = _env_pad.reshape(n_frames, _HOP).max(axis=1)
+        # Frame-rate alpha values
+        _a_att = float(1.0 - (1.0 - float(alpha_attack)) ** _HOP)
+        if isinstance(alpha_release, np.ndarray):
+            # Mid-point sample per frame, clipped to valid range
+            _mid_idx = np.minimum(np.arange(n_frames) * _HOP + _HOP // 2, n_samp - 1)
+            _a_rel_arr = 1.0 - (1.0 - alpha_release[_mid_idx]) ** _HOP
+            _a_rel_scalar: float | None = None
+        else:
+            _a_rel_arr = None
+            _a_rel_scalar = float(1.0 - (1.0 - float(alpha_release)) ** _HOP)
+        # Loop at frame rate (n_frames ≈ n_samp/32, typical 3s@48kHz → ~4500 iters)
+        smoothed_frames = np.zeros(n_frames, dtype=np.float64)
+        smoothed_frames[0] = env_frames[0]
+        for _fi in range(1, n_frames):
+            _ar = float(_a_rel_arr[_fi]) if _a_rel_arr is not None else _a_rel_scalar
+            if env_frames[_fi] > smoothed_frames[_fi - 1]:
+                smoothed_frames[_fi] = _a_att * env_frames[_fi] + (1.0 - _a_att) * smoothed_frames[_fi - 1]
             else:
-                # Release
-                if isinstance(alpha_release, np.ndarray):
-                    smoothed_envelope[i] = (
-                        alpha_release[i] * envelope[i] + (1 - alpha_release[i]) * smoothed_envelope[i - 1]
-                    )
-                else:
-                    smoothed_envelope[i] = alpha_release * envelope[i] + (1 - alpha_release) * smoothed_envelope[i - 1]
+                smoothed_frames[_fi] = _ar * env_frames[_fi] + (1.0 - _ar) * smoothed_frames[_fi - 1]
+        # Upsample back to sample rate via linear interpolation between frame centres
+        _frame_centres = np.arange(n_frames) * _HOP + _HOP // 2
+        smoothed_envelope = np.interp(np.arange(n_samp), _frame_centres, smoothed_frames).astype(np.float64)
 
         # Convert to dB
         envelope_db = 20 * np.log10(smoothed_envelope + 1e-10)
@@ -599,11 +611,11 @@ if __name__ == "__main__":
     rms_before = np.sqrt(np.mean(test_audio_stereo**2))
     peak_before = np.abs(test_audio_stereo).max()
 
-    logger.debug(f"\nGeneriert {duration}s Test-Audio @ {sample_rate} Hz")
+    logger.debug("\nGeneriert %ss Test-Audio @ %s Hz", duration, sample_rate)
     logger.debug("Multi-Frequenz: 100 Hz (Bass, stark), 500 Hz (Low-Mid), 2000 Hz (Mid-High), 8000 Hz (High, leise)")
     logger.debug("Stereo mit leichter Phasenverschiebung")
-    logger.debug(f"RMS vor Compression: {20 * np.log10(rms_before):.1f} dBFS")
-    logger.debug(f"Peak vor Compression: {20 * np.log10(peak_before):.1f} dBFS")
+    logger.debug("RMS vor Compression: %.1f dBFS", 20 * np.log10(rms_before))
+    logger.debug("Peak vor Compression: %.1f dBFS", 20 * np.log10(peak_before))
 
     phase = MultibandCompressionPhase()
 
@@ -611,15 +623,15 @@ if __name__ == "__main__":
     test_materials = [MaterialType.SHELLAC, MaterialType.VINYL, MaterialType.STREAMING]
 
     for material in test_materials:
-        logger.debug(f"\n{'─' * 80}")
-        logger.debug(f"Material: {material.name}")
-        logger.debug(f"{'─' * 80}")
+        logger.debug("\n%s", '─' * 80)
+        logger.debug("Material: %s", material.name)
+        logger.debug("%s", '─' * 80)
 
         result = phase.process(test_audio_stereo, sample_rate, material)
 
         if result.success:
             logger.debug("\n✅ Professional Multiband Compression:")
-            logger.debug(f"   RMS Change: {result.metrics['rms_change_db']:+.2f} dB")
+            logger.debug("   RMS Change: %.2f dB", result.metrics['rms_change_db'])
             logger.debug(
                 f"   Peak: {result.metrics['peak_before_db']:.1f} → {result.metrics['peak_after_db']:.1f} dBFS"
             )
@@ -648,6 +660,6 @@ if __name__ == "__main__":
                 f"({result.execution_time_seconds / duration:.2f}× realtime)"
             )
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("Test abgeschlossen")
-    logger.debug(f"{'=' * 80}")
+    logger.debug("%s", '=' * 80)

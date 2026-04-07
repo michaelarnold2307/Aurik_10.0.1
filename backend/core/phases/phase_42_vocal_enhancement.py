@@ -748,6 +748,44 @@ class VocalEnhancement(PhaseInterface):
         except Exception as exc:
             logger.debug("Phase42 mdx23c fehlgeschlagen: %s", exc)
 
+        # ── 3: NMF-β Fallback (§2.47 ML-Failure-Degradationskaskade: NMF-β→HPSS) ──
+        try:
+            from plugins.mdx23c_plugin import MDX23CModel as _MDX23CModel
+            _audio_2d = audio_mono[np.newaxis, :] if audio_mono.ndim == 1 else audio_mono
+            voc_nmf_2d = _MDX23CModel._nmf_beta_fallback(_audio_2d, is_vocals=True)
+            inst_nmf_2d = _MDX23CModel._nmf_beta_fallback(_audio_2d, is_vocals=False)
+            voc_nmf = voc_nmf_2d[0] if voc_nmf_2d.ndim == 2 else voc_nmf_2d
+            inst_nmf = inst_nmf_2d[0] if inst_nmf_2d.ndim == 2 else inst_nmf_2d
+            n = min(len(audio_mono), len(voc_nmf))
+            if audio.ndim == 2:
+                vocals_out, instr_out = self._wiener_stereo_from_mono(audio[:n], voc_nmf[:n], sr)
+            else:
+                vocals_out = voc_nmf[:n]
+                instr_out = inst_nmf[:n]
+            logger.debug("Phase42 NMF-β Fallback erfolgreich (§2.47)")
+            return vocals_out, instr_out, 0.45, "nmf_beta_dsp"
+        except Exception as exc:
+            logger.debug("Phase42 NMF-β fehlgeschlagen: %s — HPSS tertiärer Fallback", exc)
+
+        # ── 4: HPSS tertiärer Fallback ────────────────────────────────────────
+        try:
+            import librosa
+            if audio.ndim == 2:
+                mono_in = audio_mono
+            else:
+                mono_in = audio
+            harmonic_mono, _ = librosa.effects.hpss(mono_in)
+            n = min(len(audio_mono), len(harmonic_mono))
+            if audio.ndim == 2:
+                vocals_out, instr_out = self._wiener_stereo_from_mono(audio[:n], harmonic_mono[:n], sr)
+            else:
+                vocals_out = harmonic_mono[:n]
+                instr_out = np.clip(audio_mono[:n] - harmonic_mono[:n], -1.0, 1.0)
+            logger.debug("Phase42 HPSS tertiärer Fallback erfolgreich (§2.47)")
+            return vocals_out, instr_out, 0.30, "hpss_tertiary"
+        except Exception as exc:
+            logger.debug("Phase42 HPSS Fallback fehlgeschlagen: %s", exc)
+
         return None
 
     def _detect_vocals(self, audio: np.ndarray, sample_rate: int) -> bool:

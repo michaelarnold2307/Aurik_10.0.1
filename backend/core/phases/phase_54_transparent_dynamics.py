@@ -269,8 +269,8 @@ class TransparentDynamicsV1(PhaseInterface):
         # Stage 4: Dry/Wet Mix (parallel compression for transparency)
         audio_mono = mix * audio_compressed + (1.0 - mix) * audio_mono
 
-        # Prevent clipping
-        peak = np.max(np.abs(audio_mono))
+        # Prevent clipping — §2.49 Peak-Guard: percentile(99.9)
+        peak = float(np.percentile(np.abs(audio_mono), 99.9))
         if peak > 0.95:
             audio_mono = audio_mono * (0.95 / peak)
 
@@ -515,9 +515,9 @@ if __name__ == "__main__":
     audio = audio / np.max(np.abs(audio)) * 0.7
 
     logger.debug("\n🎵 Test Audio Generated:")
-    logger.debug(f"   Duration: {duration}s")
+    logger.debug("   Duration: %ss", duration)
     logger.debug("   Dynamics: Quiet (0-0.5s), Loud (0.5-1.0s), Quiet (1.0-2.0s)")
-    logger.debug(f"   Transients: {len(transient_times)} drum hits")
+    logger.debug("   Transients: %s drum hits", len(transient_times))
 
     # Test first genre/material combination
     phase = TransparentDynamicsV1(sample_rate=sr, genre=genres[0])
@@ -526,13 +526,13 @@ if __name__ == "__main__":
     metadata = phase.get_metadata()
 
     logger.debug("\n📋 Phase Metadata:")
-    logger.debug(f"   ID: {metadata.phase_id}")
-    logger.debug(f"   Name: {metadata.name}")
-    logger.debug(f"   Priority: {metadata.priority}")
-    logger.debug(f"   Estimated time: {metadata.estimated_time_factor}× RT")
-    logger.debug(f"   Quality impact: {metadata.quality_impact * 100:.0f}%")
+    logger.debug("   ID: %s", metadata.phase_id)
+    logger.debug("   Name: %s", metadata.name)
+    logger.debug("   Priority: %s", metadata.priority)
+    logger.debug("   Estimated time: %s× RT", metadata.estimated_time_factor)
+    logger.debug("   Quality impact: %.0f%%", metadata.quality_impact * 100)
 
-    logger.debug(f"\n🎛️ Testing {len(genres)} genres × {len(materials)} materials:")
+    logger.debug("\n🎛️ Testing %s genres × %s materials:", len(genres), len(materials))
 
     for genre in genres:
         for material in materials:

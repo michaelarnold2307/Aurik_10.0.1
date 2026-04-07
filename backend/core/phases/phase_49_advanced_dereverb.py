@@ -149,10 +149,21 @@ class AdvancedDereverbPhase(PhaseInterface):
 
         is_stereo = audio.ndim == 2
         if is_stereo:
-            left = self._dereverb_channel(audio[:, 0], sample_rate, strength, protect_transients)
-            right = self._dereverb_channel(audio[:, 1], sample_rate, strength, protect_transients)
-            n = min(len(left), len(right))
-            processed = np.column_stack([left[:n], right[:n]])
+            # §2.51 M/S: derive room envelope from Mid-channel only so both
+            # channels are attenuated by the SAME gain curve — independent L/R
+            # processing assigns different room estimates and causes stereo-field
+            # asymmetry that triggers §2.49 phase-cancellation rollbacks.
+            _sqrt2 = np.sqrt(2.0)
+            _mid = (audio[:, 0] + audio[:, 1]) / _sqrt2
+            _side = (audio[:, 0] - audio[:, 1]) / _sqrt2
+            _mid_dry = self._dereverb_channel(_mid, sample_rate, strength, protect_transients)
+            # Side: apply weaker dereverb (side information is already less reverberant)
+            _side_strength = strength * 0.5
+            _side_dry = self._dereverb_channel(_side, sample_rate, _side_strength, protect_transients)
+            _n = min(len(_mid_dry), len(_side_dry))
+            _l = (_mid_dry[:_n] + _side_dry[:_n]) / _sqrt2
+            _r = (_mid_dry[:_n] - _side_dry[:_n]) / _sqrt2
+            processed = np.column_stack([_l, _r])
         else:
             processed = self._dereverb_channel(audio, sample_rate, strength, protect_transients)
 
@@ -175,13 +186,19 @@ class AdvancedDereverbPhase(PhaseInterface):
 
         # --- §4.5c Early-Reflection-Guard: C80/D50 clarity-based wet-mix limiting ---
         # Measure C80 (Kuttruff 2009) on original and processed signal.
-        # Spec limits: ΔC80 ≤ 6 dB.  Values exceeding bounds → reduce wet_mix
+        # Spec limits: ΔC80 ≤ 6 dB, ΔD50 ≤ 0.12.  Values exceeding bounds → reduce wet_mix
         # or blend early reflections back (alpha=0.35 for first 50 ms).
         c80_pre = self._measure_c80_proxy(audio, sample_rate)
         c80_post = self._measure_c80_proxy(processed, sample_rate)
         delta_c80 = c80_post - c80_pre
         c80_guard_triggered = False
         early_blend_triggered = False
+
+        # §4.5c D50 Guard — ΔD50 ≤ 0.12 (Deutlichkeitsmaß)
+        d50_pre = self._measure_d50_proxy(audio, sample_rate)
+        d50_post = self._measure_d50_proxy(processed, sample_rate)
+        delta_d50 = d50_post - d50_pre
+        d50_guard_triggered = False
 
         if delta_c80 < -2.0:
             # C80 degraded — full rollback to original dry signal
@@ -216,6 +233,16 @@ class AdvancedDereverbPhase(PhaseInterface):
                 _proc64[:_e] = (1.0 - _alpha) * _proc64[:_e] + _alpha * _orig64[:_e]
             processed = _proc64.astype(np.float32)
             logger.info("Phase 49 C80-guard: ΔC80=%.2f dB — early-reflection blend 35 %% applied (50 ms)", delta_c80)
+
+        # §4.5c D50 secondary guard: ΔD50 > 0.12 → further reduce wet
+        if abs(delta_d50) > 0.12 and not c80_guard_triggered:
+            _d50_scale = float(np.clip(0.12 / (abs(delta_d50) + 1e-9), 0.30, 1.0))
+            wet_mix *= _d50_scale
+            d50_guard_triggered = True
+            logger.info(
+                "Phase 49 D50-guard: ΔD50=%.3f > 0.12 → wet_mix scaled to %.3f",
+                delta_d50, wet_mix,
+            )
 
         if wet_mix < 1.0:
             processed = audio + wet_mix * (processed - audio)

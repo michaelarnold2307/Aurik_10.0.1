@@ -198,7 +198,7 @@ class NoiseGate(PhaseInterface):
             vad_probabilities = np.nan_to_num(vad_probabilities, nan=1.0, posinf=1.0, neginf=0.0)
             return np.clip(vad_probabilities, 0.0, 1.0)
         except Exception as e:
-            logger.error(f"Voice activity detection failed: {e}")
+            logger.error("Voice activity detection failed: %s", e)
             # Fallback: Gate komplett offen (kein Signalverlust)
             return np.ones(len(audio), dtype=np.float32)
 
@@ -250,9 +250,16 @@ class NoiseGate(PhaseInterface):
 
         # Process each channel
         if is_stereo:
-            gated_left = self._gate_channel(audio[:, 0], sample_rate, config)
-            gated_right = self._gate_channel(audio[:, 1], sample_rate, config)
-            gated_audio = np.column_stack((gated_left, gated_right))
+            # §2.51 Linked-Stereo: gate decision based on max(L_rms, R_rms).
+            # Both channels open/close together to preserve stereo coherence.
+            # RMS-linked sidechain √(L²+R²)/√2 represents the combined signal level.
+            _linked_sc = np.sqrt(audio[:, 0] ** 2 + audio[:, 1] ** 2) * (1.0 / np.sqrt(2))
+            _gated_sc = self._gate_channel(_linked_sc, sample_rate, config)
+            # Derive per-sample linked gain (ratio of gated to original sidechain level).
+            _sc_mag = np.abs(_linked_sc)
+            _linked_gain = np.where(_sc_mag > 1e-9, np.abs(_gated_sc) / np.maximum(_sc_mag, 1e-9), 1.0)
+            _linked_gain = np.clip(_linked_gain, 0.0, 1.0)
+            gated_audio = np.column_stack((_linked_gain * audio[:, 0], _linked_gain * audio[:, 1]))
         else:
             gated_audio = self._gate_channel(audio, sample_rate, config)
 
@@ -319,7 +326,7 @@ class NoiseGate(PhaseInterface):
                     # Get voice activity probabilities (0-1 for each frame)
                     vad_probabilities = self._detect_voice_activity(audio, sample_rate, silero)
                 except Exception as e:
-                    logger.warning(f"Silero VAD failed: {e}, using DSP only")
+                    logger.warning("Silero VAD failed: %s, using DSP only", e)
             else:
                 log_mode_decision("phase_18", False, "Silero VAD unavailable")
         else:
@@ -402,10 +409,17 @@ class NoiseGate(PhaseInterface):
         """
         audio = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         audio = np.clip(audio, -1.0, 1.0)
-        # Compute RMS envelope
+        # Compute RMS envelope — causal IIR to prevent predictive gate opening.
+        # mode="same" in convolve is non-causal (uses window_samples//2 ≈ 480 future
+        # samples), causing the gate to start opening before actual note onsets.
+        # This introduces audible pre-echo (energy in the 5–10 ms pre-window before
+        # attacks), triggering §2.49 rollbacks on every transient-rich segment.
+        # lfilter is causal by definition: y[n] depends only on x[n..n-M+1]. §2.49
         window_samples = int(0.020 * sample_rate)  # 20ms RMS window
-        rms_power = signal.convolve(audio**2, np.ones(window_samples) / window_samples, mode="same")
-        rms = np.sqrt(np.maximum(rms_power, 0.0))
+        _rms_b = np.ones(window_samples, dtype=np.float64) / window_samples
+        rms_power = signal.lfilter(_rms_b, [1.0], audio.astype(np.float64) ** 2).astype(np.float32)
+        rms_power = np.maximum(rms_power, 0.0)
+        rms = np.sqrt(rms_power)
         rms_db = 20 * np.log10(rms + 1e-10)
 
         # Adjust threshold based on VAD (if available)

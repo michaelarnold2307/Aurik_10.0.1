@@ -199,7 +199,7 @@ class SpatialEnhancementPhase(PhaseInterface):
         x = audio.astype(np.float64)
         L = x[:, 0]
         R = x[:, 1]
-        peak_in = float(np.max(np.abs(audio)))
+        peak_in = float(np.percentile(np.abs(audio), 99.9))  # §2.49 Peak-Guard
 
         # 1. Early reflections (psychoacoustic lateral energy)
         L_ref, R_ref = _early_reflection_mix(L, R, sample_rate, dry_wet)
@@ -238,8 +238,8 @@ class SpatialEnhancementPhase(PhaseInterface):
         if 0.0 < effective_strength < 1.0:
             processed = x + effective_strength * (processed - x)
 
-        # 6. Level preservation
-        peak_out = float(np.max(np.abs(processed)))
+        # 6. Level preservation — §2.49 Peak-Guard: percentile(99.9)
+        peak_out = float(np.percentile(np.abs(processed), 99.9))
         if peak_out > 1e-8 and peak_in > 1e-8:
             processed = processed * (peak_in / peak_out)
 

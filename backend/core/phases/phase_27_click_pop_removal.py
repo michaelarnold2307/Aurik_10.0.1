@@ -70,37 +70,40 @@ class ClickPopRemoval(PhaseInterface):
     """
 
     # Material-adaptive detection parameters
+    # ar_orders: Multi-Scale AR-Residual-Detektion @ 48 kHz.
+    # Spec §VERBOTEN: LPC < 16; Richtig: 30–40 @ 48 kHz.
+    # Drei Skalen für robuste Detektion: kurz (16), mittel (24), lang (32).
     DETECTION_CONFIG = {
         MaterialType.SHELLAC: {
-            "ar_orders": [6, 12, 20],  # Multi-Scale AR-Residual-Detektion
+            "ar_orders": [16, 24, 32],  # Multi-Scale AR-Residual-Detektion (§VERBOTEN: < 16)
             "z_score_threshold": 3.0,  # Sehr sensitiv (dichte Defekte)
             "energy_threshold_db": -35,
             "max_click_duration_samples": 25,
             "repair_strength": 1.0,
         },
         MaterialType.VINYL: {
-            "ar_orders": [6, 12, 20],
+            "ar_orders": [16, 24, 32],
             "z_score_threshold": 3.5,
             "energy_threshold_db": -40,
             "max_click_duration_samples": 20,
             "repair_strength": 0.95,
         },
         MaterialType.TAPE: {
-            "ar_orders": [6, 12],
+            "ar_orders": [16, 24],
             "z_score_threshold": 4.0,  # Konservativ (hauptsächlich Dropouts)
             "energy_threshold_db": -45,
             "max_click_duration_samples": 15,
             "repair_strength": 0.90,
         },
         MaterialType.CD_DIGITAL: {
-            "ar_orders": [6, 12],
+            "ar_orders": [16, 24],
             "z_score_threshold": 5.0,  # Sehr konservativ
             "energy_threshold_db": -50,
             "max_click_duration_samples": 10,
             "repair_strength": 0.85,
         },
         MaterialType.STREAMING: {
-            "ar_orders": [6, 12],
+            "ar_orders": [16, 24],
             "z_score_threshold": 5.0,
             "energy_threshold_db": -55,
             "max_click_duration_samples": 10,
@@ -398,9 +401,9 @@ class ClickPopRemoval(PhaseInterface):
         return repaired
 
     def _ar_prediction(self, audio: np.ndarray, start: int, end: int) -> np.ndarray:
-        """AR(8) prediction for medium pops."""
-        order = 8
-        context = 50
+        """AR prediction for medium pops (order ≥ 16 @ 48 kHz, §VERBOTEN: LPC < 16)."""
+        context = 128
+        order = min(32, context // 4)  # 32 @ context=128; nie < 16
 
         # Use samples before click for AR coefficients
         if start < context + order:

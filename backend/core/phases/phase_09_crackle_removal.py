@@ -130,7 +130,7 @@ def _get_banquet_onnx_session():
                         return None
 
                     _model_path = (
-                        Path(__file__).parent.parent.parent / "models" / "banquet" / "banquet_vinyl_final.onnx"
+                        Path(__file__).parent.parent.parent.parent / "models" / "banquet" / "banquet_vinyl_final.onnx"
                     )
                     if _model_path.exists():
                         try:
@@ -437,7 +437,10 @@ class CrackleRemovalPhase(PhaseInterface):
                 banquet_plugin.process(tmp_in_path, tmp_out_path)
 
                 # Read result
-                restored, _ = sf.read(tmp_out_path)
+                from backend.file_import import load_audio_file
+
+                _res = load_audio_file(tmp_out_path, do_carrier_analysis=False)
+                restored = np.asarray(_res["audio"], dtype=np.float32)
 
                 # Blend with original based on texture_preserve parameter
                 texture_preserve = params.get("texture_preserve", 0.85)
@@ -456,7 +459,7 @@ class CrackleRemovalPhase(PhaseInterface):
                     os.unlink(tmp_out_path)
 
         except Exception as e:
-            logger.error(f"BANQUET ML processing failed: {e}")
+            logger.error("BANQUET ML processing failed: %s", e)
             raise  # Re-raise to trigger DSP fallback in process()
 
     def process(self, audio: np.ndarray, material_type: str = "unknown", **kwargs) -> PhaseResult:
@@ -502,8 +505,8 @@ class CrackleRemovalPhase(PhaseInterface):
             _ds_cr = _defect_scores_p09.get(_DT9.CRACKLE)
             if _ds_cr is not None:
                 _crackle_sev_p09 = float(getattr(_ds_cr, "severity", 0.0))
-        except Exception:
-            pass
+        except Exception as _sev_exc:
+            logger.debug("Crackle severity lookup failed, using default 0.0: %s", _sev_exc)
         if _crackle_sev_p09 >= 0.60:   # heavy crackle → +35 % more ML output, min preserve 0.30
             params["texture_preserve"] = float(np.clip(params["texture_preserve"] - 0.35, 0.30, 1.0))
         elif _crackle_sev_p09 >= 0.35:  # moderate crackle → +15 % more ML output, min preserve 0.40
@@ -715,7 +718,7 @@ class CrackleRemovalPhase(PhaseInterface):
 
         Algorithmus:
             1. Hochpass-Filter (physikalisches HP ohne digitalen Klang-Verlust)
-            2. AR(4)-Vorhersage: x_hat[n] = sum(a_k * x[n-k])
+            2. AR(16)-Vorhersage: x_hat[n] = sum(a_k * x[n-k])
             3. Residuum r[n] = x[n] - x_hat[n]
             4. Adaptive lokale Varianz via gleitendem 20ms-Fenster
             5. Sparse-Outlier-Schwelle: |r[n]| > threshold * sqrt(local_var)
@@ -735,8 +738,9 @@ class CrackleRemovalPhase(PhaseInterface):
         sos_hp = butter(4, highpass_freq, btype="high", fs=self.sample_rate, output="sos")
         filtered = sosfilt(sos_hp, audio)
 
-        # AR(4)-Prädiktion (Autokorrelations-Methode, Burg-ähnlich)
-        AR_ORDER = 4
+        # AR(16)-Prädiktion (Autokorrelations-Methode, Burg-ähnlich)
+        # Spec §VERBOTEN: LPC < 16; Richtig: 30–40 @ 48 kHz (war: 4)
+        AR_ORDER = 16
         n_audio = len(filtered)
         residual = np.zeros(n_audio)
 
@@ -747,8 +751,8 @@ class CrackleRemovalPhase(PhaseInterface):
             try:
                 # Yule-Walker hier bewusst NUR für Prädiktorkoeffizienten
                 # (nicht als primärer Reparatur-Algorithmus)
-                autocorr_full = np.correlate(filtered, filtered, mode="full")
-                R = autocorr_full[n_audio - 1 : n_audio - 1 + AR_ORDER + 1]
+                # Nur Lags 0..AR_ORDER berechnen — O(n) statt O(n²)
+                R = np.array([np.dot(filtered[:n_audio - k], filtered[k:]) for k in range(AR_ORDER + 1)])
                 R_mat = np.array([[R[abs(i - j)] for j in range(AR_ORDER)] for i in range(AR_ORDER)])
                 r_vec = R[1 : AR_ORDER + 1]
                 try:
@@ -1185,7 +1189,7 @@ if __name__ == "__main__":
     # Make stereo
     audio = np.column_stack([audio, audio * 0.95])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Content: 440 Hz tone + harmonics + vinyl surface noise")
     logger.debug("Crackle: 50 clicks/sec in 1-2s region")
 
@@ -1193,9 +1197,9 @@ if __name__ == "__main__":
     materials = ["shellac", "vinyl", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = CrackleRemovalPhase(sample_rate=sr)
         result = phase.process(audio.copy(), material_type=material)
@@ -1205,20 +1209,20 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Transients Short: {result.modifications['transients_short']}")
-            logger.debug(f"   Transients Medium: {result.modifications['transients_medium']}")
-            logger.debug(f"   Crackle Regions: {result.modifications['crackle_regions_found']}")
-            logger.debug(f"   Crackle Reduction: {result.modifications['crackle_reduction_db']:.1f} dB")
-            logger.debug(f"   Texture Preserved: {result.modifications['texture_preserved']:.2f}")
-            logger.debug(f"   Interpolation: {result.metadata['interpolation_method']}")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   Transients Short: %s", result.modifications['transients_short'])
+            logger.debug("   Transients Medium: %s", result.modifications['transients_medium'])
+            logger.debug("   Crackle Regions: %s", result.modifications['crackle_regions_found'])
+            logger.debug("   Crackle Reduction: %.1f dB", result.modifications['crackle_reduction_db'])
+            logger.debug("   Texture Preserved: %.2f", result.modifications['texture_preserved'])
+            logger.debug("   Interpolation: %s", result.metadata['interpolation_method'])
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("❌ Processing Failed!")
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Crackle Removal v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata['algorithm']}")
-    logger.debug(f"Scientific Reference: {result.metadata['scientific_ref']}")
-    logger.debug(f"Benchmark: {result.metadata['benchmark']}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata['algorithm'])
+    logger.debug("Scientific Reference: %s", result.metadata['scientific_ref'])
+    logger.debug("Benchmark: %s", result.metadata['benchmark'])
     logger.debug("Quality Impact: 0.91 (Professional-Grade)")

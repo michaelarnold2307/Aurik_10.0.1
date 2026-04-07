@@ -9,20 +9,24 @@
 
 | Modus | Ziel | Charakteristik |
 | --- | --- | --- |
-| **`restoration`** | Originalgetreue Restauration | Erhalt des historischen Klangs, minimaler Eingriff, LUFS-Diff ≤ 1 LU, kein Harmonic-Exciter, GP `mode="restoration"` konservativ |
-| **`studio2026`** | Highend-Studio-Klang | Modern, kräftig — PQS MOS ≥ 4.5, Brillanz ≥ 0.90, Bass-Kraft ≥ 0.88, GP `mode="studio2026"` aggressiv |
+| **`restoration`** | Originalgetreue Restauration — Tonträgerkette invertieren (§2.46) | Erhalt des historischen Klangs, minimaler Eingriff, LUFS-Diff ≤ 1 LU, kein Harmonic-Exciter, GP `mode="restoration"` konservativ |
+| **`studio2026`** | Highend-Studio-Klang — Carrier-Chain-Inversion + Enhancement | Modern, kräftig — PQS MOS ≥ 4.5, Brillanz ≥ 0.90, Bass-Kraft ≥ 0.88, GP `mode="studio2026"` aggressiv |
 
 **Restoration-Modus Pflicht-Invarianten:**
 
 - Chroma-Korrelation Original↔Restauriert ≥ 0.95
 - LUFS-Differenz ≤ 1 LU
 - Kein hinzugefügtes Harmonic-Exciter-Material
+- Rauschboden: material-adaptiv (Shellac ≤ −45, Vinyl ≤ −55, Tape ≤ −60, Digital ≤ −72 dBFS) — Studio-Ambience bewahren (§0a)
+- HPI-Gate: `timbral_fidelity` dominant (§2.44) — akustisch nicht unterscheidbar vom Original
 
 **Studio-2026-Modus Pflicht-Invarianten:**
 
 - PQS MOS ≥ 4.5 (Weltklasse)
 - Brillanz-Score ≥ 0.90 (verschärft)
 - Bass-Kraft ≥ 0.88 (verschärft)
+- Rauschboden ≤ −72 dBFS (§0a)
+- HPI-Gate: PQS-Improvement dominant (§2.44)
 
 ---
 
@@ -265,6 +269,8 @@ Audio-Eingang (mono/stereo, beliebige SR)
 [EmotionalArcPreservationMetric]  (bei Dateien ≥ 30 s)
     ↓
 [MicroDynamicsEnvelopeMorphing]  ← LETZTER Schritt vor Export
+    ↓
+[HolisticPerceptualGate]  → HPI-Score (inkl. artifact_freedom §2.49)
     ↓
 [GPParameterOptimizer.update()]  ← persistiert Lernerfolg
     ↓
@@ -527,6 +533,24 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     "phase_26": {"micro_dynamics", "artikulation"}, "phase_36": {"micro_dynamics", "artikulation"},
     # Passthrough / analysis-only phases: no musical scoring required.
     "phase_28": set(), "phase_05": set(), "phase_30": set(),
+    # Click removal (phase_01, phase_27): impulse transients + spectral interpolation.
+    #   - artikulation: clicks appear as transients → removal reduces onset-count correlation.
+    #   - natuerlichkeit: spectral interpolation at click locations creates MFCC-smoothness
+    #     discontinuities (transition from reconstructed frames to undamaged context). CREPE-
+    #     based NatuerlichkeitMetric flags these as unnatural → false P1 regression (0.267
+    #     confirmed in real-run, PMGG dithered to strength=0.17). Same mechanism as phase_02.
+    "phase_01": {"artikulation", "natuerlichkeit"},  # click impulses + interpolation → false P2/P1
+    "phase_27": {"artikulation", "natuerlichkeit"},  # click/pop removal — identical to phase_01
+    # BANQUET blind denoising (phase_09): full-band neural spectral modification.
+    #   - natuerlichkeit: MFCC-smoothness proxy disturbed by full-band NR (same as phase_03/29).
+    #   - groove: crackle events appear as periodic impulsive onsets. GrooveMetric onset-based
+    #     DTW proxy registers the change in LF onset density as rhythmic disruption. Real-run
+    #     confirmed: regression=0.291 (P1), stagnation across all retries, strength=0.15.
+    #     Same mechanism as phase_02 groove exclusion.
+    #   - authentizitaet: crackle fills log-spectrum valleys (roughness low before BANQUET);
+    #     after processing valleys reappear → roughness rises → false P1. Identical to phase_03.
+    #   - timbre_authentizitaet: MFCC-Pearson/centroid-CV disturbed (same as phase_29).
+    "phase_09": {"natuerlichkeit", "groove", "authentizitaet", "timbre_authentizitaet"},
     # LyricsGuidedEnhancement (phase_58): Fricative-Ramp-Gain (4–8 kHz) verändert Spektralenveloppe
     # wie shaped NR → K-S-Key-Label-Flip möglich (tonal_center).
     # Vowel-LPC-Shelving und Plosive-Burst ändern MFCC-Pearson/Centroid-CV (timbre_authentizitaet).
@@ -949,3 +973,450 @@ Zusammenfassung aller Stabilitäts-Invarianten. Jede Verletzung einer dieser Reg
 - Wiederaufnahme nutzt das **Original-Audio** (nicht das Checkpoint-Audio) für volle Qualität
 - Checkpoint-Audio dient als Fallback wenn Original fehlt
 - **VERBOTEN**: Checkpoint-Audio als Primärquelle für Re-Restaurierung (Doppelverarbeitung degradiert Qualität)
+
+---
+
+## §2.44 [RELEASE_MUST] Holistic Perceptual Gate (v9.10.123)
+
+Letztes Gate vor Export. Misst **Gesamt-Hörverbesserung** statt nur Einzel-Goals.
+
+### Referenz-Paradoxon (Restoration)
+
+Das Ziel ist Nähe zum **unbekannten Studio-Original**, aber wir besitzen nur den **degradierten Input**. Je erfolgreicher die Restaurierung, desto unähnlicher wird der Output dem degradierten Input. Deshalb misst `timbral_fidelity` nicht bloße Ähnlichkeit zum Input, sondern **strukturelle akustische Kohärenz**:
+
+- **Spectral-Envelope-Kontinuität**: Keine unnatürlichen Lücken oder Spitzen im Frequenzspektrum
+- **Crest-Factor-Konsistenz**: Dynamik-Verhältnis bleibt physikalisch plausibel
+- **MFCC-Stabilität**: Klangfarben-Koeffizienten zeigen keine abrupten Sprünge
+
+**Referenz-Anker-Strategie** (Restorability-abhängig):
+
+- **Restorability > 70** (leichte Degradation): Input ist gute Annäherung ans Original → `timbral_fidelity` gegen Input
+- **Restorability 50–70** (mittlere Degradation): Gewichtete Mischung aus Input-Referenz (60 %) und MERT-Referenz-Vektor aus GP-Memory (40 %)
+- **Restorability ≤ 50** (schwere Degradation): Input zu weit vom Original entfernt → MERT-Referenz-Vektor aus GP-Memory (genre × material × ära) als primärer Anker (70 %), Input nur noch für musikalische Identität (30 %)
+
+### MERT-Referenz-Embedding-Aufbau (v9.10.123)
+
+Die GP-Memory-Referenz-Vektoren werden **automatisch** aus dem Verarbeitungsverlauf aufgebaut — kein manuelles Kuratieren nötig:
+
+**Bootstrap (Cold-Start)**:
+
+- Beim ersten Start: 12 Genre-Prototypen aus vortrainierten MERT-Embeddings (im Modell-Bundle enthalten, ~2 MB)
+- Abdeckung: je 1 Prototyp pro Genre-Cluster (Schlager, Oper, Klassik, Jazz, Rock, Pop, Blues, Soul, Electronic, Latin, Folk, Metal)
+- Ära-Differenzierung: 3 Ära-Bins (pre-1960, 1960–1990, post-1990) × 12 Genres = 36 Basis-Vektoren
+
+**Inkrementeller Aufbau**:
+
+- Nach jeder **erfolgreichen** Restaurierung (HPI > 0.5 UND artifact_freedom ≥ 0.95 UND alle P1/P2-Goals bestanden):
+  - MERT-Embedding des Outputs wird in GP-Memory unter `genre × material × ära_bin` gespeichert
+  - Exponential Moving Average (α = 0.15) mit bestehendem Referenz-Vektor → konvergiert ohne Ausreißer
+- **Qualitäts-Gate für Referenz-Updates**: Nur Outputs mit HPI > 0.5 fließen ein — verhindert, dass mittelmäßige Restaurierungen die Referenz verschlechtern
+- **Mindest-Observationen**: Referenz-Vektor wird erst ab 3 Beobachtungen als "kalibriert" markiert; davor: Bootstrap-Prototyp mit erhöhter Unsicherheit (GP-Lengthscale × 1.5)
+
+**Fallback-Kaskade** (wenn kein passender Referenz-Vektor existiert):
+
+1. Gleiche Genre-Familie + nächstliegende Ära → GP-Memory
+2. Gleiche Ära + nächstliegendes Genre → GP-Memory
+3. Bootstrap-Prototyp für Genre-Cluster
+4. Genre-agnostischer Ära-Median (alle Genres der Ära gemittelt)
+5. Kein Referenz-Vektor → `timbral_fidelity` rein gegen Input (Restorability-unabhängig)
+
+### HPI-Formeln
+
+**Restoration**: `HPI = MERT_similarity(input, output) × timbral_fidelity(input, output) × artifact_freedom × emotional_arc_preservation`
+
+- `timbral_fidelity` dominant: strukturelle Klangkohärenz (nicht bloße Input-Ähnlichkeit)
+- `artifact_freedom` (§2.49): Artefakt-Freiheit — Musical Noise, Pre-Echo, Spectral Holes = 0
+- MERT_similarity: musikalische Identität bewahren (Melodie, Harmonie, Rhythmus)
+- `emotional_arc_preservation`: Arousal/Valence-Bogen + **Makrodynamik** (Vers-/Refrain-/Bridge-Pegelrelationen bleiben erhalten) + Lyrics-Salienz (§2.36: Phonem-Boost-Verhältnisse im Output konsistent mit Enhanced-Zielwerten)
+- RestorabilityEstimator > 0.85 → strengeres Gate
+
+**Studio 2026**: `HPI = studio_quality_gain × PQS_improvement × artifact_freedom × emotional_arc_preservation`
+
+- PQS-Improvement dominant (Qualität steigern > Original-Treue)
+- `studio_quality_gain`: Abstand zu Referenz-Studioniveau (−14 LUFS, Noise ≤ −72 dBFS)
+- `artifact_freedom` (§2.49): auch Enhancement darf keine Artefakte erzeugen
+- MERT-Ähnlichkeit fließt mit reduziertem Gewicht ein (musikalische Identität bewahren, nicht Klangfarbe)
+
+**Beide Modi**: `HPI > 0` → Export | `HPI ≤ 0` → Rollback auf weniger aggressive Variante
+
+### HPI-Gewichtungs-Semantik
+
+Die HPI-Multiplikation ist **nicht** gleichgewichtet — die Faktoren operieren auf unterschiedlichen Wertebereichen:
+
+| Faktor | Wertebereich | Rolle |
+| --- | --- | --- |
+| `timbral_fidelity` | [0.8, 1.0] | Geringe Varianz — dominiert durch **Sensitivität**: kleine Abweichung → großer HPI-Einbruch |
+| `artifact_freedom` | [0.0, 1.0] | **Veto-Faktor**: < 0.95 → Gate-Fail (Primum non nocere) |
+| `MERT_similarity` | [0.5, 1.0] | Musikalische Identität — verhindert, dass Restaurierung das Stück verändert |
+| `emotional_arc` | [0.7, 1.0] | Dynamik-Bogen + Makrodynamik — Narrative Struktur erhalten |
+
+Ein Artefakt (`artifact_freedom` = 0.5) killt den HPI härter als eine leichte Timbre-Abweichung (`timbral_fidelity` = 0.95) — das ist beabsichtigt.
+
+## §2.45 [RELEASE_MUST] Minimal-Intervention-Prinzip (v9.10.122)
+
+**Restoration**: Phasen ohne hörbare Verbesserung werden NICHT angewendet:
+
+- `perceptual_delta > 0` nachweisen (MERT-Embedding-Distanz oder timbral_fidelity-Delta)
+- `perceptual_delta ≤ 0` → Skip
+
+**Studio 2026**: Volle Enhancement-Kette aktiv, aber jede Phase muss Klanggewinn nachweisen:
+
+- `perceptual_delta > 0` Pflicht — auch Enhancement-Phasen müssen messbaren Nutzen zeigen
+- Phasen ohne messbaren Klanggewinn → Skip
+
+## §2.46 [RELEASE_MUST] Carrier-Chain-Inversion (v9.10.122)
+
+**Restoration-Modus**: Ziel = **gesamte Tonträgerkette invertieren**, nicht Einzel-Defekte reparieren.
+
+**Signalkette** (vorwärts): `Studio-Monitor → Mic/Line → Preamp → Mixer → Carrier-Encoding (Tape/Vinyl/Shellac/Digital) → Alterung → Playback → ADC → Digital-File`
+
+**Restaurierung** (invers, Reihenfolge beachten):
+
+1. ADC-Artefakte entfernen (DC-Offset, Quantisierungsrauschen)
+2. Playback-Verzerrungen invertieren (RIAA-Inverse, Azimuth-Korrektur, Wow/Flutter)
+3. Alterungsschäden reparieren (Knistern, Dropout, Oxidation)
+4. Carrier-Encoding invertieren (Bandrauschen, Vinyl-Groove-Distortion, Shellac-Rauschen)
+5. Mixer/Preamp-Charakter: **bewahren** (Recording-Chain-Signatur = Teil des Originals)
+6. Studio-Raumklang: **bewahren** (nicht über-entrauschen — Rauschboden material-adaptiv §0a)
+
+**Studio 2026**: Carrier-Chain-Inversion + Enhancement-Kette (§1.5). Mixer/Preamp-Charakter darf modernisiert werden.
+
+> Kreuzreferenz: Slim Core §2.46, Spec 01 §8.2 Rauschboden modus-differenziert
+
+## §2.47 [RELEASE_MUST] Adaptive-Intelligence-Prinzip (v9.10.123)
+
+Aurik verarbeitet **kein generisches Audio** — jede Eingabe ist ein einzigartiges Musikstück. Das System muss sich **vor Beginn der Verarbeitung** vollständig an das konkrete Material anpassen.
+
+### Adaptions-Kaskade (kanonische Reihenfolge)
+
+```text
+1. MediumDetector.detect()      → transfer_chain, primary_material, composite flag
+2. EraClassifier.classify()     → decade, era_profile, vintage_aesthetics
+3. GenreClassifier              → genre_label, RESTORATION_PROFILE (5 definierte + DEFAULT)
+4. RestorabilityEstimator       → 0–100, tier (GOOD/FAIR/POOR/EXTREME), scale_factor
+5. DefectScanner.scan_all()     → 32 defect_types × severity × locations
+6. CausalDefectReasoner         → 35 Ursachen → Phase-Selektion (CAUSE_TO_PHASES)
+7. SongCalibrationProfile       → 8 family_scalars + global_scalar [0.30–1.80]
+8. GPOptimizer.propose()        → Pareto-optimale Hyperparameter (14-D MOO)
+```
+
+**Resultat**: Dieselbe Pipeline verarbeitet Schellack 1928 (SNR 15 dB, BW 7 kHz, Mono) fundamental anders als CD 2005 (SNR 60 dB, BW 20 kHz, Stereo) — ohne manuellen Eingriff.
+
+### GP-Wissenstransfer (v9.10.123)
+
+- GPOptimizer persistiert Beobachtungen pro `gp_memory_key` (Genre × Material)
+- **Cross-Material-Generalisierung**: Bei < 10 Beobachtungen für ein neues Material werden Hyperparameter-Priors (Kernel-Lengthscale, Signal-Varianz) aus dem nächstverwandten Material initialisiert gemäß Material-Ähnlichkeitsmatrix (siehe unten)
+- **Anti-Overfitting**: `global_scalar ∈ [0.30, 1.80]` begrenzt GP-Vorschläge; Extreme führen zu Conservative-Fallback
+- **Batch-Konvergenz**: Bei sequenzieller Verarbeitung mehrerer Dateien gleichen Materials konvergieren GP-Priors → spätere Dateien profitieren von früheren Ergebnissen
+
+### Material-Ähnlichkeitsmatrix (v9.10.123)
+
+Definiert die Transferierbarkeit von GP-Priors zwischen Materialien. Wert = Ähnlichkeit [0, 1]. Bei < 10 GP-Beobachtungen wird der Prior vom Material mit höchstem Ähnlichkeitswert übernommen.
+
+```text
+                  shellac  wax_cyl  vinyl_78  vinyl_std  tape_std  tape_stu  cassette  digital  mp3_lossy
+shellac             1.00    0.85     0.75      0.40       0.15      0.10     0.10      0.05     0.05
+wax_cylinder        0.85    1.00     0.70      0.35       0.10      0.10     0.08      0.05     0.05
+vinyl_78rpm         0.75    0.70     1.00      0.65       0.20      0.15     0.15      0.08     0.08
+vinyl_standard      0.40    0.35     0.65      1.00       0.45      0.40     0.35      0.15     0.12
+tape_standard       0.15    0.10     0.20      0.45       1.00      0.85     0.70      0.25     0.20
+tape_studio         0.10    0.10     0.15      0.40       0.85      1.00     0.60      0.35     0.25
+cassette            0.10    0.08     0.15      0.35       0.70      0.60     1.00      0.20     0.18
+digital_pcm         0.05    0.05     0.08      0.15       0.25      0.35     0.20      1.00     0.55
+mp3_lossy           0.05    0.05     0.08      0.12       0.20      0.25     0.18      0.55     1.00
+```
+
+**Nutzung bei Cross-Material-Init**:
+
+1. Sortiere Materialien nach Ähnlichkeit absteigend
+2. Wähle das ähnlichste Material mit ≥ 10 GP-Beobachtungen
+3. Übernimm dessen Kernel-Lengthscale × `(1 / similarity)` (= höhere Unsicherheit bei geringerer Ähnlichkeit)
+4. Übernimm Signal-Varianz × `similarity` (= gedämpfter Prior bei geringerer Ähnlichkeit)
+5. Bei `similarity < 0.3` → kein Transfer, nur GP-Default-Priors (uninformativ)
+
+### ML-Failure-Degradations-Kaskade (v9.10.123)
+
+Wenn ein ML-Plugin nicht geladen werden kann (OOM, korruptes Modell, ONNX-Fehler), **muss** die Pipeline graceful degradieren statt abzubrechen:
+
+| Failure | Primär-Fallback | Sekundär-Fallback |
+| --- | --- | --- |
+| DeepFilterNet OOM | OMLSA/IMCRA (§4.5 Spec 04) | Spectral-Gating (Dry-Signal wenn SNR > 35 dB) |
+| MDX23C Stem-Sep OOM | NMF-β-Separation (sklearn, β=Itakura-Saito; sdB ≥ 5 Proxy-SDR-Check) | HPSS (librosa.effects.hpss, tertiärer Fallback) |
+| AudioSR OOM | Harmonische Oberton-Synthese + PGHI-Phasenrekonstruktion | Spectral-Band-Replication (SBR) |
+| MP-SENet OOM (phase_43, ML-De-Esser-Kontext) | OMLSA/IMCRA DSP (Cohen & Berdugo 2002; §4.4) | Bypass (phase_43 Phase-Skip) |
+| CREPE Pitch-Track | pYIN (Mauch & Dixon 2014) | YIN (de Cheveigné & Kawahara 2002) |
+| MertPlugin OOM | DSP-Analyse: F0+Harmonizität+SpektralFlux-Kohärenz (besser als MFCC) | Bypass (HPI ohne MERT-Anteil) |
+
+**Invariante**: Kein ML-Failure darf die Pipeline vollständig abbrechen. Jede Phase **muss** einen DSP-Fallback haben (§4.4 Spec 04). Der Fallback wird in `RestorationResult.metadata["ml_fallbacks_used"]` protokolliert.
+
+## §2.48 [RELEASE_MUST] Kumulative-Phasen-Interaktions-Guard (v9.10.123)
+
+Einzelne Phasen können isoliert korrekt arbeiten, aber in Kombination destruktive Effekte erzeugen (z.B. De-Noise + De-Reverb entfernen gemeinsam mehr Raumklang als beabsichtigt).
+
+### Kumulative P1/P2-Drift-Messung
+
+Nach jeder Phase wird die **kumulative** Gesamt-Regression der P1/P2-Goals (Natürlichkeit, Authentizität, TonalCenter, Timbre, Artikulation) gemessen — nicht nur die Delta-Regression der Einzelphase.
+
+```python
+# In _execute_pipeline(), nach jeder Phase:
+goals_now = musical_goals_checker.evaluate(current_audio, sr)
+cumulative_drift = {g: goals_now[g] - goals_pre_pipeline[g] for g in P1_P2_GOALS}
+if any(drift < -0.05 for drift in cumulative_drift.values()):
+    current_audio = best_checkpoint_audio  # Rollback
+    logger.warning("phase=%s cumulative_drift=%s → rollback", phase_id, cumulative_drift)
+```
+
+### Kritische Interaktions-Paare (bekannte destruktive Kombinationen)
+
+| Paar | Risiko | Guard |
+| --- | --- | --- |
+| `phase_03 (De-Hiss) + phase_20/49 (De-Reverb)` | Kumulative Raumklang-Entfernung | Nach De-Reverb: Natürlichkeit ≥ pre_pipeline − 0.03 |
+| `phase_29 (NR) + phase_03 (De-Hiss)` | Over-Denoising | Nach zweiter NR-Phase: Rauschboden ≥ Material-Ziel (§0a) |
+| `phase_35 (Multiband-Compression) + phase_40 (LUFS-Norm.)` | Dynamik-Verlust | Nach LUFS: MikroDynamik ≥ pre_pipeline − 0.04 |
+| `phase_07 (Harmonic-Restoration) + phase_42 (Vocal-AI)` | Frequenz-Doppelung | Nach Vocal-AI: Spectral-Flatness-Check |
+| `phase_23/24 (Super-Resolution) + phase_03 (De-Hiss)` | Künstliche Obertöne entrauscht | Super-Res immer VOR De-Hiss (Reihenfolge-Invariante) |
+
+### Kumulative STFT-Phasenkohärenz
+
+Mehrfache STFT→Modifikation→ISTFT erzeugt akkumulierte Phasenfehler (Gruppenlaufzeit-Deviation, Phase-Smearing bei Transienten). Dies ist kein Goal-messbarer Effekt, sondern ein rein technischer Fehler.
+
+**Prüfung**: Nach ≥ 3 STFT-basierten Phasen in Folge:
+
+- `group_delay_deviation = max(|τ_current(f) - τ_original(f)|)` über alle Frequenz-Bins
+- Schwellwert: ≤ 5 ms (entspricht ~240 Samples bei 48 kHz)
+  - Begründung v9.10.127: 2 ms war unrealistisch. Standard-2048-Punkt-STFT bei 48 kHz hat bereits 42,6 ms Fensterlänge (10,7 ms Hop). Spektralsubtraktions-Filter verschieben pro-Bin-Phase lokal 3–8 ms ohne hörbare Artefakte. Ab 5 ms liegt ein echtes Phase-Distorsions-Problem vor (typisch: unabhängige L/R-IIR-Filter oder falsch kaskadierte STFT-Ketten).
+- Überschreitung → letzte STFT-Phase rollback, Alternative ohne STFT versuchen (z.B. PGHI statt GriffinLim, Zero-Phase-Filterung statt STFT-Modifikation)
+
+**Betroffene Phasen** (STFT-basiert): phase_03 (De-Hiss), phase_07 (Harmonic), phase_20/49 (De-Reverb), phase_23/24 (Super-Resolution), phase_29 (NR), phase_35 (Multiband-Comp)
+
+### Checkpoint-Verwaltung
+
+- `best_checkpoint`: Audio-Snapshot + Goal-Scores nach der bisherigen besten Phase
+- Bei Rollback: Phase-Skip protokollieren in `RestorationResult.metadata["interaction_rollbacks"]`
+- Nach Rollback: nächste Phase erhält `best_checkpoint`-Audio, nicht das degradierte
+- Max 2 aufeinanderfolgende Rollbacks → Pipeline-Stop, Export auf `best_checkpoint`
+
+### Phasen-Reihenfolge-Optimierung
+
+CAUSE_TO_PHASES wählt **welche** Phasen aktiv sind. Die **Reihenfolge** der aktiven Phasen folgt der **Carrier-Chain-Inversions-Logik** (§2.46):
+
+1. **ADC-Stufe**: DC-Offset, Quantisierungs-Artefakte (phase_01, phase_31)
+2. **Playback-Stufe**: RIAA-Inverse, Azimuth, Wow/Flutter, Speed-Korrektur (phase_06, phase_09, phase_10)
+3. **Alterungs-Stufe**: Click/Pop, Dropout, Knistern (phase_02, phase_04, phase_05, phase_11)
+4. **Carrier-Encoding-Stufe (subtraktiv)**: NR, De-Hiss, De-Reverb (phase_03, phase_29, phase_20/49)
+5. **Carrier-Encoding-Stufe (additiv)**: Super-Resolution, Harmonic-Restoration, Bandwidth-Extension (phase_23, phase_24, phase_07)
+6. **Enhancement-Stufe**: Vocal-AI, Stem-Sep, Dynamics, EQ, LUFS (phase_42, phase_35, phase_40)
+
+**Invariante**: Subtraktive Phasen VOR additiven — sonst werden rekonstruierte Obertöne sofort wieder entrauscht.
+
+> Kreuzreferenz: §2.29d (P1/P2 = hart), §2.45 (perceptual_delta), §2.44 (HPI)
+
+## §2.49 [RELEASE_MUST] Artefakt-Freiheits-Gate (v9.10.123)
+
+Dediziertes Gate für **Artefakt-Erkennung** — unabhängig von den 14 Musical Goals. Eine Phase kann alle Goals bestehen und trotzdem hörbare Artefakte erzeugen.
+
+### Geprüfte Artefakte
+
+| Artefakt | Erkennungsmethode | Schwellwert |
+| --- | --- | --- | 
+| Musical Noise | Spectral-Variance in Stille-Segmenten: isolierte tonale Peaks (> 12 dB über Nachbarn) in Stille/Pausen | 0 Events |
+| Pre-Echo | Transient-Onset-Analyse: Energie in 5-ms-Fenster vor Attack ≤ −40 dB relativ zum Attack-Peak | 0 Events |
+| Spectral Holes | Bandbreiten-Kontinuitäts-Check: keine Energielücken > 200 Hz im erwarteten Passband (SourceFidelity BW) | 0 Holes |
+| Phase-Cancellation | M/S-Korrelation nach Stereo-Processing: `correlation(M, S) ≥ 0.3` (Mono-Kompatibilität) | ≥ 0.3 |
+| Metallic Ringing | CQT-Peak-Detection: isolierte resonante Peaks > 6 dB über Nachbar-Bins, Dauer > 50 ms | 0 Events |
+
+### Material-adaptive Schwellwert-Skalierung (v9.10.123)
+
+Feste Schwellwerte führen zu Fehlalarmen bei historischem Material (z.B. Schellack-Oberflächen-Rauschen als "Musical Noise" fehlklassifiziert) oder zu Durchlassfehlern bei Digital-Material. Deshalb werden die Artefakt-Schwellwerte **material-adaptiv** skaliert:
+
+| Artefakt | Digital/CD | Tape | Vinyl | Shellac/Wax |
+| --- | --- | --- | --- | --- |
+| Musical Noise (Peak-dB) | > 12 dB | > 15 dB | > 18 dB | > 22 dB |
+| Pre-Echo (Rel. Attack) | ≤ −40 dB | ≤ −35 dB | ≤ −30 dB | ≤ −25 dB |
+| Spectral Holes (Lücke) | > 200 Hz | > 300 Hz | > 400 Hz | > 600 Hz |
+| Phase-Cancellation (mono_compat) | ≥ 0.30 | ≥ 0.20 | ≥ 0.20 | ≥ 0.15 |
+| Metallic Ringing (Peak-dB) | > 6 dB | > 8 dB | > 10 dB | > 14 dB |
+
+**Logik**: Historische Träger haben inhärent höhere Artefakt-Pegel im Eingangssignal. Was bei einer CD ein klarer Verarbeitungsfehler ist (Musical-Noise-Peak +12 dB), ist bei Shellac Teil des Trägerprofils. Die Erkennung muss nur **neue, durch Verarbeitung eingeführte** Artefakte finden — nicht die vorhandenen des Trägers.
+
+**Direktionalitätspflicht für Musical-Noise-Detektor** (v9.10.125): Subtractive Phasen (Surface-Noise-Profiling, Denoise, Click-Removal) erzeugen ein Residual `restored − orig` dessen Spektrum die **entfernten** Artefakte spiegelt — nicht neu hinzugefügte. Die Spektralpeaks im Residual sind korrekte Entfernungen, keine Artefakte. Implementierungspflicht:
+
+```python
+# Nur flaggen wenn restored_spectrum[j] > orig_spectrum[j] × 1.05
+# (Energie wurde ADDIERT, nicht subtrahiert)
+if rest_spectrum[j] <= orig_spectrum[j] * 1.05:
+    continue  # subtractive action — correct removal, not an artefact
+```
+
+Ohne diese Prüfung: Surface-Noise-Profiling erzeugt 50 False-Positive-Artefakte → `artifact_freedom=0.000` → Rollback-Loop → Pipeline-Blockade.
+
+**Phase-Cancellation Detektor — Präzisierungen (v9.10.127)**:
+
+Der Phase-Cancellation-Detektor vergleicht im per-phase-Modus die Stereo-Metrik **vor und nach** der Phase (Delta-Check). Folgende Regeln sind **normativ verbindlich**:
+
+1. **Anti-Korrelation-Schwelle**: `lr_corr < −0.20` (nicht `< 0.0`). Werte zwischen 0 und −0.20 entstehen durch STFT-Window-Misalignment, Gate-Transient-Asymmetrie und normale Verarbeitungsunterschiede — sie sind **nicht hörbar** und dürfen nicht als Phase-Cancellation gezählt werden.
+
+2. **Delta-Guard**: Eine Phase wird nur geflaggt, wenn `orig_compat − restored_compat > 0.10`. Kleinere Asymmetrien (< 0.10) durch DSP-Implementierungsdetails (Filter-Rounding, Overlap-Grenzen) sind technische Artefakte, keine perceptuell relevanten Stereo-Probleme.
+
+3. **Near-Mono-Guard**: Wenn das Quellmaterial quasi-mono ist (`orig_compat > 0.65`) UND die verarbeitete Version noch moderat mono-kompatibel ist (`restored_compat > 0.40`), ist die Abweichung durch unabhängige Kanalverarbeitung (Noise-Gate Transient, Dropout-Füllung) **nicht hörbar** — skip. Ausnahme: Echter Stereo-Kollaps (`restored_compat ≤ 0.40`) wird trotzdem geflaggt.
+
+4. **Stereo-Collapse-Guard**: Wenn ein Kanal einen RMS-Abfall > 40 dB gegenüber dem Original-Input verzeichnet (z. B. R-Kanal von −18 dBFS auf −∞), wird **ein Artefakt** erzeugt und der Frame-Loop wird übersprungen (globaler Kollaps überwiegt Frame-Level-Analyse). Voraussetzung: Originales Signal hatte RMS > 1e-4 (kein stiller Quellkanal).
+
+**Implementierung**: `artifact_freedom_gate.py → _detect_phase_cancellation()`
+
+**Implementierung**: `artifact_thresholds = BASE_THRESHOLDS × material_tolerance_factor[material]`. Der `material_tolerance_factor` kommt aus dem MediumDetector-Ergebnis (§2.47 Adaptions-Kaskade Schritt 1).
+
+**Selbstkalibrierung**: Bei den ersten 3 Verarbeitungen eines neuen Material-Typs werden Artefakt-Schwellwerte konservativ (= strenger) angesetzt. Nach 3 erfolgreichen Verarbeitungen (artifact_freedom ≥ 0.98): Schwellwerte auf material-adaptive Normalwerte entspannen.
+
+### Rauschtextur-Kohärenz (Restoration-Modus)
+
+Unabhängig von den 5 Artefakttypen: Die **spektrale Form** des Restrauschens (Noise-Floor-Shape) muss dem originalen Trägerprofil entsprechen. Aggressive Denoising hinterlässt oft ein Restrauschen mit falscher spektraler Färbung.
+
+**Messung**: In Stille-Segmenten (≥ 200 ms, RMS < −50 dBFS):
+
+1. Input-Noise-Profile: Spectral-Tilt (lineare Regression über Log-Magnitude-Spektrum)
+2. Output-Noise-Profile: gleiche Berechnung
+3. `tilt_deviation = |tilt_output - tilt_input|` in dB/Oktave
+
+**Schwellwerte**:
+
+| Abweichung | Aktion |
+| --- | --- |
+| ≤ 3 dB/Oktave | OK — Restrauschen hat natürliche Textur |
+| 3–6 dB/Oktave | Warnung — `artifact_freedom` −0.05 Penalty |
+| > 6 dB/Oktave | Rollback auf letzte NR-Phase — unnatürliche Rauschtextur |
+
+**Typische Fehlerbilder**:
+
+- Vinyl-Denoising → weißes Rauschen (statt rosa-Tilt ≈ −3 dB/Oktave): Over-Denoising der tiefen Frequenzen
+- Tape-NR → tonales Rauschen (isolierte NR-Residuen): Musical-Noise-Variante
+- Shellac → zu "sauberes" Restrauschen: Ambient-Charakter verloren
+
+### Score-Berechnung
+
+```python
+artifact_freedom = 1.0 - (weighted_artifact_count / max_tolerance)
+artifact_freedom = np.clip(artifact_freedom, 0.0, 1.0)
+```
+
+Gewichtung: Musical Noise = 1.0, Pre-Echo = 0.8, Spectral Holes = 0.6, Phase-Cancellation = 1.0, Metallic Ringing = 0.9
+
+**Perzeptuelle Salienz-Gewichtung**: Die obigen Gewichte werden zusätzlich nach perzeptueller Salienz skaliert:
+
+- **Frequenz**: Artefakte im Bereich 200–5000 Hz (höchste Hörempfindlichkeit, ISO 226) erhalten Faktor 1.0; unter 200 Hz oder über 5000 Hz → Faktor 0.5; über 12 kHz → Faktor 0.2
+- **Kontext**: Artefakte in Stille/Pausen-Segmenten (RMS < −40 dBFS) erhalten Faktor 1.5 (stärker hörbar); in Tutti-Passagen (RMS > −20 dBFS) → Faktor 0.5 (maskiert)
+- **Dauer**: Artefakte > 100 ms erhalten Faktor 1.5; < 20 ms → Faktor 0.5
+- Effektiver Score: `salience_weighted_artifact_count = Σ(type_weight × freq_factor × context_factor × duration_factor)`
+
+### Integration
+
+- **Im HPI**: `artifact_freedom` fließt als Multiplikator in beide HPI-Formeln ein (§2.44)
+- **Phase-Level**: Nach jeder Phase prüfen — bei `artifact_freedom < 0.95` → Rollback auf `best_artifact_free_checkpoint`
+- **Export-Gate**: `artifact_freedom < 0.95` → kein Export, auch wenn alle 14 Goals bestanden
+- **Protokollierung**: `RestorationResult.metadata["artifact_freedom"]` = Score + Detail-Report (detected_artifacts: list)
+
+### §2.49 Finaler Score — Berechnungsregel (v9.10.126)
+
+**`_artifact_freedom_score` = Minimum aller per-Phase-Scores aller akzeptierten Phasen.**
+
+FALSCH (und verboten): `artifact_gate.evaluate(pre_pipeline_audio, pipeline_output)` — jede echte Restaurierung erzeugt dadurch zwangsläufig `artifact_freedom=0.000`, weil intentionale Signalveränderungen (Rauschen entfernen, Bandbreite erweitern) im Vollvergleich als Artefakte erscheinen.
+
+RICHTIG: Per-Phase-Minimum über alle Phasen, bei denen der Gate-Check durchgeführt wurde (`_min_per_phase_afg_score`). Phasen, die ge-rollt-back wurden, fließen nicht ein.
+
+### §2.49b [RELEASE_MUST] Post-Pipeline Kumulativer Stereo-Collapse-Guard (v9.10.126)
+
+Per-Phase-δ-Guards fangen nur Single-Phase-Kollapsen (> 40 dB in einer Phase). Kumulativer Stereo-Drift — bei dem 4 Stereo-Phasen jeweils 6–8 dB beitragen — bleibt unsichtbar. Lösung: Post-Pipeline-Vergleich gegen Pre-Pipeline-Baseline.
+
+**Invariante** (direkt nach Phase-Loop, vor `_pmgg_log_entries`-Zuweisung):
+
+```python
+if current_audio.ndim == 2 and current_audio.shape[0] == 2:
+    cu_imb = abs(L/R_dB(current_audio))      # Imbalance Pipeline-Ausgang
+    pp_imb = abs(L/R_dB(afg_pre_pipeline))   # Imbalance Pipeline-Eingang
+    if cu_imb > 20.0 and pp_imb < 6.0:       # kumulativer Kollaps
+        # Rollback-Kaskade:
+        # 1. best_clean_checkpoint — sofern selbst nicht kollabiert (> 20 dB prüfen)
+        # 2. afg_pre_pipeline_audio (Primum non nocere)
+        current_audio = recovery
+```
+
+Schwellwerte: Ausgang-Imbalance > 20 dB; Eingang-Imbalance < 6 dB (Kollaps neu durch Pipeline eingeführt).
+
+### §2.44/§2.49 HPI-Rollback-Checkpoint Stereo-Health-Validation (v9.10.126)
+
+Bevor `_hpi_best_rollback_audio` als Rollback-Ziel verwendet wird: L/R-Imbalance prüfen.
+
+- Checkpoint-Imbalance > 20 dB UND Input war ausgeglichen (< 6 dB) → Checkpoint verwerfen
+- Fallback: `original_audio_for_goals` (Primum non nocere)
+
+Ohne diese Prüfung restauriert der HPI-Rollback ein stereo-zerstörtes Signal.
+
+> Kreuzreferenz: §2.44 HPI (artifact_freedom als Multiplikator), §2.48 (Interaktions-Guard), §2.45 (perceptual_delta)
+
+---
+
+## §2.51 [RELEASE_MUST] Stereo-Kohärenz-Invariante für Phasen (v9.10.127)
+
+### Motivation
+
+Phasen, die L- und R-Kanal **unabhängig** verarbeiten (je Kanal eigener Denoiser, Gate, Kompressor, spektrale Reparatur), können in 2–3 Frames pro Phase `mono_compat < 0.20` erzeugen. Ursache: Minimale Unterschiede in Filterauflösung, Gate-Timing oder Spektralschätzung zwischen den Kanälen. Das §2.49-Gate flaggt diese Frames zu Recht — die Phasen verstoßen gegen §0 (Primum non nocere), weil sie Stereo-Kompatibilität verschlechtern.
+
+Die Lösung ist **nicht** weitere Gate-Relaxation, sondern korrekte Implementierung der betroffenen Phasen.
+
+### Normative Anforderung
+
+Jede Phase, die auf Stereo-Audio operiert und den Signalpegel modifiziert, **MUSS** eine der folgenden zwei Verarbeitungsstrategien verwenden:
+
+**Option A — M/S-Domain (bevorzugt für spektrale Operationen)**:
+
+```
+Mid = (L + R) / 2          # Summen-Kanal: Mono-kompatibler Inhalt
+Side = (L - R) / 2         # Differenz-Kanal: Stereo-Breite
+
+→  Verarbeite Mid mit voller Algorithmus-Stärke
+→  Verarbeite Side mit reduzierter oder keiner Stärke (bewahre Stereo-Breite)
+→  Rekonstruiere: L = Mid + Side,  R = Mid - Side
+→  Clip: L = np.clip(L, -1.0, 1.0),  R = np.clip(R, -1.0, 1.0)
+```
+
+**Wann A**: Harmonische Restaurierung, spektrale Reparatur, Sprach-Enhancement, Dehum, EQ, Sättigungseffekte — immer wenn die Phasen-Verarbeitung tonal auf dem Informations-Inhalt arbeitet.
+
+**Option B — Linked Stereo (für dynamische Verarbeitung)**:
+
+```
+signal_level = max(RMS(L), RMS(R))   # oder: np.sqrt(RMS(L)² + RMS(R)²)
+gain = compute_gain(signal_level)     # Gain-Kurve einmalig berechnen
+L_out = apply_gain(L, gain)           # Gleiches Gain für beide Kanäle
+R_out = apply_gain(R, gain)
+```
+
+**Wann B**: Noise-Gate (Gate öffnet wenn L ODER R über Threshold), Dropout-Repair (synchrone Erkennung + kohärente Füllung), Multiband-Kompression, Transient-Shaper — immer wenn die Entscheidung (öffnen/schließen, verstärken/dämpfen) von der gemeinsamen Energie-Hüllkurve abhängt.
+
+### Betroffene Phasen (Pflicht-Umsetzung)
+
+| Phase | Problem | Strategie |
+| --- | --- | --- |
+| `phase_07_harmonic_restoration` | Harmonics separat auf L/R → Anti-Phase-Transients in 2–3 Frames | **Option A** (M/S) — Harmonics auf Mid, Side unverändert |
+| `phase_18_noise_gate` | Gate öffnet/schließt für L und R unabhängig → Anti-Phase-Gate-Transients | **Option B** (Linked) — `max(L_rms, R_rms) > threshold → both open` |
+| `phase_23_spectral_repair` | Spektrale Lücken auf L/R separat erzeugt minimale Anti-Phasigkeit | **Option A** (M/S) — Reparatur auf Mid, Side minimal bearbeiten |
+| `phase_24_dropout_repair` | L/R-Dropouts erkannt und gefüllt unabhängig | **Option B** (Linked) — Dropout-Grenze ist der Eintritt BEIDER Kanäle unter Schwelle; Füllung kohärent |
+| `phase_35_multiband_compression` | Kompressor berechnet Gain für L und R separat → L/R-Gain-Differenz in Transienten | **Option B** (Linked) — Gain-Berechnung auf Summen-RMS (`√(L²+R²)/√2`), gleicher Gain auf beide |
+
+### Downstream-Auswirkungen auf Metriken
+
+| Metrik | Auswirkung | Korrekturbedarf |
+| --- | --- | --- |
+| **Brillanz** | M/S in `phase_07`: Harmonics nur auf Mid → weniger HF-Energie im Side-Kanal. Brillanz-Schwellwert ≥ 0.78 unverändert, aber `BrillanzMetric` muss Stereo-Mid nicht Side-Anteil messen | Kein Schwellwert-Änderungsbedarf; Metrik misst bereits Gesamtspektrum |
+| **Raumtiefe** | Linked Stereo in `phase_35`: Einheitlicher Gain erhält Side-kanal besser → Raumtiefe kann leicht steigen | Kein Korrekturbedarf (positive Auswirkung) |
+| **SepFidelity** | Kohärente L/R-Füllung in `phase_24`: Dropout-Füllung ist konsistenter mit Stereo-Bild → SepFidelity tendenziell verbessert | Kein Korrekturbedarf |
+| **Groove** | Linked Gate in `phase_18`: Transiente Energie wird kohärent erhalten (kein halbes Gate-Öffnen) → Groove-Presenz besser | Kein Korrekturbedarf (positive Auswirkung) |
+| **§2.49 Phase-Cancellation** | Nach Implementierung: 5 Phasen passieren Gate ohne Rollback → `_min_per_phase_afg_score` bleibt 1.0 | Kein Korrekturbedarf; Gate-Schwellwerte unverändert |
+| **PMGG Wärme §9.7.14** | Wärme nutzt harmonische Oberton-Ratio. M/S ändert Side-Obertöne nicht → Wärme-Proxy stabil | Kein Korrekturbedarf |
+
+### Invariante
+
+Kein Accept-Checkpoint darf `mono_compat < 0.20` in mehr als 5 % der Frames haben (außer das Quellmaterial hatte bereits diese Mono-Inkompatibilität — §2.50 SourceMaterialBaseline).
+
+**Implementierungsprüfung**: `_detect_phase_cancellation()` im §2.49-Gate ist der objective Prüfer. Nach Umsetzung der obigen Phasen dürfen phase_07, phase_18, phase_23, phase_24, phase_35 keine §2.49-Rollbacks mehr auslösen.
+
+> Kreuzreferenz: §2.49 (ArtifactFreedomGate), §2.50 (SourceMaterialBaseline), §7.4 Spec06 (PhaseInterface)

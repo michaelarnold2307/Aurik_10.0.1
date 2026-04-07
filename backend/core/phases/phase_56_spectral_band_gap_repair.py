@@ -760,8 +760,8 @@ class SpectralBandGapRepairPhase(PhaseInterface):
                                 if gap_low <= _b < gap_high and 0 <= _b < stft_mag.shape[0]:
                                     _gauss = math.exp(-0.5 * (_db / 1.5) ** 2)
                                     stft_mag[_b] = stft_mag[_b] * (1.0 + 0.15 * _gauss)
-                except Exception:
-                    pass
+                except Exception as _formant_exc:
+                    logger.debug("Formant-guided band gap repair failed, using standard fill: %s", _formant_exc)
 
             # Spectral Flatness prüfen
             gap_region = stft_mag[gap_low:gap_high, :]

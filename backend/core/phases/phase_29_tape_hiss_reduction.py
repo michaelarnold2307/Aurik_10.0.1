@@ -311,6 +311,45 @@ class TapeHissReductionPhase(PhaseInterface):
         # Guard: log10(0) when both bands are silent -> RuntimeWarning; clamp >= 1e-30
         hf_reduction_db = 20 * np.log10(np.maximum(np.std(hf_band_orig) / (np.std(hf_band_proc) + 1e-10), 1e-30))
 
+        # HF over-suppression guard (Restoration): avoid excessive brilliance loss.
+        # If tape hiss attenuation exceeds a material-adaptive ceiling, blend back
+        # only the HF residual from original audio.
+        hf_detail_blend = 0.0
+        _mat_name = getattr(material, "name", str(material)).upper()
+        _hf_ceiling_db = {
+            "TAPE": 10.0,
+            "REEL_TAPE": 10.5,
+            "VINYL": 9.5,
+            "SHELLAC": 8.5,
+        }.get(_mat_name, 10.0)
+        if hf_reduction_db > _hf_ceiling_db and _effective_strength > 0.0:
+            _excess_db = float(hf_reduction_db - _hf_ceiling_db)
+            # Max 28% HF back-blend, scaled by excess reduction and locality strength.
+            hf_detail_blend = float(np.clip((_excess_db / 12.0) * 0.28 * _effective_strength, 0.0, 0.28))
+            if hf_detail_blend > 0.0:
+                if is_stereo:
+                    for ch in range(channels):
+                        _orig_hf = self._extract_band(audio[:, ch], sample_rate, hf_low, hf_high)
+                        _proc_hf = self._extract_band(audio_processed[:, ch], sample_rate, hf_low, hf_high)
+                        audio_processed[:, ch] = np.clip(
+                            audio_processed[:, ch] + hf_detail_blend * (_orig_hf - _proc_hf),
+                            -1.0,
+                            1.0,
+                        )
+                else:
+                    _orig_hf = self._extract_band(audio, sample_rate, hf_low, hf_high)
+                    _proc_hf = self._extract_band(audio_processed, sample_rate, hf_low, hf_high)
+                    audio_processed = np.clip(
+                        audio_processed + hf_detail_blend * (_orig_hf - _proc_hf),
+                        -1.0,
+                        1.0,
+                    )
+
+                # Recompute HF reduction after guard blend.
+                proc_ch0 = audio_processed[:, 0] if is_stereo else audio_processed
+                hf_band_proc = self._extract_band(proc_ch0, sample_rate, hf_low, hf_high)
+                hf_reduction_db = 20 * np.log10(np.maximum(np.std(hf_band_orig) / (np.std(hf_band_proc) + 1e-10), 1e-30))
+
         # ML Refinement for HF (>2kHz) - if enabled and significant hiss present
         ml_refined = False
         if use_ml and _effective_strength > 0.0 and hf_reduction_db > 3:  # Only refine if significant hiss was removed
@@ -338,6 +377,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 "reduction_depth_db": float(reduction_depth_db),
                 "hf_focus_range_hz": [int(hf_low), int(hf_high)],
                 "hf_reduction_db": round(float(hf_reduction_db), 2),
+                "hf_detail_blend": round(float(hf_detail_blend), 4),
                 "ml_refined": ml_refined,
                 "algorithm_version": "3.0_omlsa_ml_hybrid" if ml_refined else "3.0_omlsa",
                 "algorithm": "IMCRA+OMLSA (Cohen 2002/2003)",
@@ -595,6 +635,36 @@ class TapeHissReductionPhase(PhaseInterface):
         G_combined[valid, :] = (G_acc[valid, :] / w_acc[valid, np.newaxis]).astype(np.float32)
         G_combined = np.clip(np.nan_to_num(G_combined, nan=1.0), 0.0, 1.0)
 
+        # HF detail protection: preserve salient tape harmonics/transients in 6-18 kHz
+        # while still reducing stationary hiss in low-salience bins.
+        _mat = getattr(material, "name", str(material)).upper()
+        _base_floor_by_mat = {
+            "TAPE": 0.11,
+            "REEL_TAPE": 0.10,
+            "VINYL": 0.09,
+            "SHELLAC": 0.09,
+            "DAT": 0.08,
+        }
+        _hf_guard_low = max(float(hf_low), 6000.0)
+        _hf_guard_high = min(float(hf_high), 18000.0)
+        _hf_guard_mask = (f_ref >= _hf_guard_low) & (f_ref <= _hf_guard_high)
+        if np.any(_hf_guard_mask):
+            _mag_hf = np.abs(Zxx_ref[_hf_guard_mask, :]).astype(np.float64)
+            _bin_sal = np.median(_mag_hf, axis=1)
+            _bin_den = float(np.percentile(_bin_sal, 95) + eps)
+            _bin_sal_n = np.clip(_bin_sal / _bin_den, 0.0, 1.0)
+
+            _frame_den = np.percentile(_mag_hf, 90, axis=1, keepdims=True) + eps
+            _frame_sal_n = np.clip(_mag_hf / _frame_den, 0.0, 1.0)
+
+            _base_floor = float(_base_floor_by_mat.get(_mat, 0.09))
+            # With higher intensity we still preserve enough HF detail to avoid dullness.
+            _floor_min = float(np.clip(_base_floor - 0.03 * intensity_scale, 0.07, 0.16))
+            _bin_floor = np.clip(_floor_min + 0.12 * _bin_sal_n, _floor_min, 0.30)
+            _dyn_floor = _bin_floor[:, None] + 0.08 * _frame_sal_n
+            _dyn_floor = np.clip(_dyn_floor, _bin_floor[:, None], 0.36).astype(np.float32)
+            G_combined[_hf_guard_mask, :] = np.maximum(G_combined[_hf_guard_mask, :], _dyn_floor)
+
         # Apply gain + PGHI reconstruction
         Zxx_proc = G_combined * np.abs(Zxx_ref) * np.exp(1j * np.angle(Zxx_ref))
         if _PGHI_AVAILABLE_P29:
@@ -700,7 +770,10 @@ class TapeHissReductionPhase(PhaseInterface):
 
             if returncode == 0 and os.path.exists(output_path):
                 # Read refined audio
-                refined, _sr_read = sf.read(output_path)
+                from backend.file_import import load_audio_file
+
+                _res = load_audio_file(output_path, do_carrier_analysis=False)
+                refined = np.asarray(_res["audio"], dtype=np.float32)
 
                 # Blend strategy: Keep <2kHz from original, use ML for >2kHz
                 if refined.shape == audio.shape:
@@ -725,14 +798,14 @@ class TapeHissReductionPhase(PhaseInterface):
                     logger.info("✅ ML HF refinement successful (>2kHz band)")
                     return True
                 else:
-                    logger.warning(f"Shape mismatch: {refined.shape} vs {audio.shape}")
+                    logger.warning("Shape mismatch: %s vs %s", refined.shape, audio.shape)
                     return False
             else:
-                logger.warning(f"DeepFilterNet failed (returncode={returncode})")
+                logger.warning("DeepFilterNet failed (returncode=%s)", returncode)
                 return False
 
         except Exception as e:
-            logger.error(f"ML HF refinement error: {e}")
+            logger.error("ML HF refinement error: %s", e)
             return False
 
         finally:
@@ -834,7 +907,7 @@ if __name__ == "__main__":
     ]
 
     for material in test_materials:
-        logger.debug(f"Testing {material.value.upper()}:")
+        logger.debug("Testing %s:", material.value.upper())
 
         # Create test signal: music + tape hiss
         sr = 44100
@@ -872,11 +945,11 @@ if __name__ == "__main__":
         hf_reduction = 20 * np.log10(np.std(hf_orig) / (np.std(hf_proc) + 1e-10))
 
         # Display results
-        logger.debug(f"  Gate threshold: {meta.get('gate_threshold_db', 0):.1f} dB")
-        logger.debug(f"  Reduction depth: {meta.get('reduction_depth_db', 0):.1f} dB")
-        logger.debug(f"  HF focus range: {meta.get('hf_focus_range_hz', [])} Hz")
-        logger.debug(f"  Num bands: {meta.get('num_bands', 0)}")
-        logger.debug(f"  HF reduction: {meta.get('hf_reduction_db', 0):.2f} dB")
-        logger.debug(f"  Per-band reduction: {meta.get('reduction_per_band_db', [])[:3]}... (first 3)")
-        logger.debug(f"  Processing time: {elapsed:.3f}s")
+        logger.debug("  Gate threshold: %.1f dB", meta.get('gate_threshold_db', 0))
+        logger.debug("  Reduction depth: %.1f dB", meta.get('reduction_depth_db', 0))
+        logger.debug("  HF focus range: %s Hz", meta.get('hf_focus_range_hz', []))
+        logger.debug("  Num bands: %s", meta.get('num_bands', 0))
+        logger.debug("  HF reduction: %.2f dB", meta.get('hf_reduction_db', 0))
+        logger.debug("  Per-band reduction: %s... (first 3)", meta.get('reduction_per_band_db', [])[:3])
+        logger.debug("  Processing time: %.3fs", elapsed)
         logger.debug("  ✅\n")

@@ -286,7 +286,7 @@ class SpectralRepair(PhaseInterface):
                 self._audiosr_plugin = AudioSRPlugin()
                 logger.info("AudioSR plugin loaded successfully")
             except Exception as e:
-                logger.warning(f"Failed to load AudioSR plugin: {e}")
+                logger.warning("Failed to load AudioSR plugin: %s", e)
                 self._audiosr_plugin = False  # Mark as unavailable
 
         return self._audiosr_plugin if self._audiosr_plugin is not False else None
@@ -404,17 +404,35 @@ class SpectralRepair(PhaseInterface):
             _clip_level = float(np.clip(_clip_level, 0.85, 1.0))
             logger.info("ADMM declipping activated: clip_level=%.4f", _clip_level)
             if is_stereo:
-                repaired_left = self._admm_declip(audio[:, 0], _clip_level, sample_rate)
-                repaired_right = self._admm_declip(audio[:, 1], _clip_level, sample_rate)
-                repaired_audio = np.column_stack((repaired_left, repaired_right))
+                # §2.51 M/S: Reparatur auf Mid-Kanal; Side minimal (Stereo-Kohärenz-Invariante).
+                _sqrt2 = np.sqrt(2.0)
+                _mid = (audio[:, 0] + audio[:, 1]) / _sqrt2
+                _side = (audio[:, 0] - audio[:, 1]) / _sqrt2
+                _repaired_mid = self._admm_declip(_mid, _clip_level, sample_rate)
+                # Side: declip mildly (half strength) to avoid breaking stereo field
+                _side_clip = float(np.clip(_clip_level * 1.05, 0.85, 1.0))
+                _repaired_side = self._admm_declip(_side, _side_clip, sample_rate)
+                repaired_audio = np.column_stack((
+                    (_repaired_mid + _repaired_side) / _sqrt2,
+                    (_repaired_mid - _repaired_side) / _sqrt2,
+                ))
             else:
                 repaired_audio = self._admm_declip(audio, _clip_level, sample_rate)
         else:
-            # Process each channel via standard spectral inpainting
+            # Process via standard spectral inpainting — §2.51 M/S for stereo.
             if is_stereo:
-                repaired_left = self._repair_channel(audio[:, 0], sample_rate, stft_cfg, thresholds, repair_strength)
-                repaired_right = self._repair_channel(audio[:, 1], sample_rate, stft_cfg, thresholds, repair_strength)
-                repaired_audio = np.column_stack((repaired_left, repaired_right))
+                # §2.51 M/S: Reparatur auf Mid-Kanal; Side minimal (Stereo-Kohärenz-Invariante).
+                _sqrt2 = np.sqrt(2.0)
+                _mid = (audio[:, 0] + audio[:, 1]) / _sqrt2
+                _side = (audio[:, 0] - audio[:, 1]) / _sqrt2
+                _repaired_mid = self._repair_channel(_mid, sample_rate, stft_cfg, thresholds, repair_strength)
+                # Side: minimal repair at half strength to preserve stereo field
+                _side_strength = repair_strength * 0.5
+                _repaired_side = self._repair_channel(_side, sample_rate, stft_cfg, thresholds, _side_strength)
+                repaired_audio = np.column_stack((
+                    (_repaired_mid + _repaired_side) / _sqrt2,
+                    (_repaired_mid - _repaired_side) / _sqrt2,
+                ))
             else:
                 repaired_audio = self._repair_channel(audio, sample_rate, stft_cfg, thresholds, repair_strength)
 
@@ -751,7 +769,7 @@ class SpectralRepair(PhaseInterface):
             return audio_final[: len(audio)]
 
         except Exception as e:
-            logger.error(f"AudioSR processing failed: {e}, falling back to DSP")
+            logger.error("AudioSR processing failed: %s, falling back to DSP", e)
             # Fallback to DSP (will be handled by caller)
             return audio
 

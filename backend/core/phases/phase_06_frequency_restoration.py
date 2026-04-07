@@ -201,7 +201,7 @@ class FrequencyRestorationPhase(PhaseInterface):
             "restoration_strength": 0.40,  # Light — AAC preserves HF well
             "sbr_ratio": 0.80,  # HE-AAC uses SBR natively — natural fit
             "transient_synthesis": 0.35,
-            "lpc_order": 14,
+            "lpc_order": 16,
             "max_boost_db": 4.0,
         },
         "minidisc": {
@@ -242,6 +242,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         ("air", 128, 32, 16000, 24000),
     )
     _MRSA_CROSSFADE_BW_HZ: float = 100.0
+    _AUDIOSR_MIN_DURATION_S: float = 10.0
 
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
@@ -356,7 +357,12 @@ class FrequencyRestorationPhase(PhaseInterface):
         if use_ml_hybrid:
             # ML-Hybrid path: DSP (SBR + LPC) + AudioSR (Neural Vocoder Super Resolution)
             restored, ml_metadata = self._restore_frequency_ml_hybrid(
-                audio, params, material_type, quality_mode, enable_sbr
+                audio,
+                params,
+                material_type,
+                quality_mode,
+                enable_sbr,
+                audiosr_min_duration_s=float(kwargs.get("audiosr_min_duration_s", self._AUDIOSR_MIN_DURATION_S)),
             )
         else:
             # DSP-only path: Traditional SBR + LPC
@@ -452,6 +458,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         material_type: str,
         quality_mode: str,
         enable_sbr: bool,
+        audiosr_min_duration_s: float,
     ) -> tuple[np.ndarray, dict[str, Any]]:
         """Run DSP restoration first, then blend in AudioSR HF delta when available.
 
@@ -494,6 +501,24 @@ class FrequencyRestorationPhase(PhaseInterface):
         alpha = (_alpha_base + _deficit_boost) * float(params.get("restoration_strength", 0.7))
         alpha = float(np.clip(alpha, 0.0, 0.80))  # cap at 0.80 — preserve DSP harmonic character
 
+        audio_dur_s = audio.shape[-1] / float(self.sample_rate)
+        if audio_dur_s < max(0.0, audiosr_min_duration_s):
+            logger.info(
+                "Phase 06: AudioSR skipped for short clip (%.2fs < %.2fs) — DSP-only aktiv",
+                audio_dur_s,
+                audiosr_min_duration_s,
+            )
+            return dsp_restored, {
+                "ml_hybrid_available": True,
+                "quality_mode": quality_mode,
+                "strategy_used": "dsp_only",
+                "ml_reason": (
+                    f"short_clip_guard: duration={audio_dur_s:.2f}s "
+                    f"< min_duration={audiosr_min_duration_s:.2f}s"
+                ),
+                "ml_watchdog": "short_clip_guard",
+            }
+
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager, touch_plugin
 
@@ -525,13 +550,13 @@ class FrequencyRestorationPhase(PhaseInterface):
             if _avail_gb < _needed_total:
                 _sr_headroom_ok = False
                 _sr_guard_msg = f"RAM {_avail_gb:.1f}GB < {_needed_total:.1f}GB needed — defer to KMV"
-                logger.info(f"§Phase-06: AudioSR Guard triggered ({_sr_guard_msg})")
+                logger.info("§Phase-06: AudioSR Guard triggered (%s)", _sr_guard_msg)
         except Exception as _p06_guard_exc:
-            logger.debug(f"Phase-06 Headroom Guard fehlgeschlagen (psutil?): {_p06_guard_exc}")
+            logger.debug("Phase-06 Headroom Guard fehlgeschlagen (psutil?): %s", _p06_guard_exc)
 
         # Wenn Headroom nicht OK: DSP-Fallback statt OOM
         if not _sr_headroom_ok:
-            logger.warning(f"§Phase-06: AudioSR übersprungen — {_sr_guard_msg}")
+            logger.warning("§Phase-06: AudioSR übersprungen — %s", _sr_guard_msg)
             return dsp_restored, {
                 "ml_hybrid_available": False,
                 "quality_mode": quality_mode,
@@ -578,7 +603,6 @@ class FrequencyRestorationPhase(PhaseInterface):
         # 3:45 Audio â 225 s × 32 = 7200 s — impractical; use a sane cap instead.
         # AudioSR typical inference: 2× RT on CPU. Add generous headroom for slow machines.
         # Absolute cap: 180 s (3 min). Falls back to DSP-only version instead of freezing.
-        audio_dur_s = audio.shape[-1] / float(self.sample_rate)
         timeout_s = min(180, max(30, int(audio_dur_s * 2.5)))
         ml_thread.join(timeout=timeout_s)
 
@@ -587,7 +611,7 @@ class FrequencyRestorationPhase(PhaseInterface):
             ml_restored = ml_out.T if (audio.ndim == 2 and ml_out.ndim == 2) else ml_out
             ml_restored = np.asarray(ml_restored, dtype=np.float32)
             if ml_restored.shape != audio.shape:
-                logger.warning(f"AudioSR shape mismatch: expected {audio.shape}, got {ml_restored.shape}")
+                logger.warning("AudioSR shape mismatch: expected %s, got %s", audio.shape, ml_restored.shape)
                 return dsp_restored, {
                     "ml_hybrid_available": True,
                     "quality_mode": quality_mode,
@@ -618,7 +642,7 @@ class FrequencyRestorationPhase(PhaseInterface):
             }
         elif not ml_error_queue.empty():
             exc = ml_error_queue.get()
-            logger.warning(f"Phase 06 ML-Hybrid fehlgeschlagen ({exc}) — DSP-only aktiv")
+            logger.warning("Phase 06 ML-Hybrid fehlgeschlagen (%s) — DSP-only aktiv", exc)
             return dsp_restored, {
                 "ml_hybrid_available": True,
                 "quality_mode": quality_mode,
@@ -627,7 +651,7 @@ class FrequencyRestorationPhase(PhaseInterface):
                 "ml_watchdog": f"error_{timeout_s}s",
             }
         else:
-            logger.warning(f"Phase 06 ML-Hybrid TIMEOUT nach {timeout_s}s — DSP-only aktiv")
+            logger.warning("Phase 06 ML-Hybrid TIMEOUT nach %ss — DSP-only aktiv", timeout_s)
             return dsp_restored, {
                 "ml_hybrid_available": True,
                 "quality_mode": quality_mode,
@@ -1248,7 +1272,7 @@ if __name__ == "__main__":
     # Make stereo
     audio_rolled_off = np.column_stack([audio_rolled_off, audio_rolled_off * 0.98])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Music: Harmonics 200, 400, 800, 1600, 3200, 6400, 12800 Hz + white noise")
     logger.debug("Rolloff: 5 kHz lowpass (8th order, STEEP) simulating shellac")
 
@@ -1256,9 +1280,9 @@ if __name__ == "__main__":
     materials = ["shellac", "vinyl", "tape", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = FrequencyRestorationPhase(sample_rate=sr)
         result = phase.process(audio_rolled_off.copy(), material_type=material)
@@ -1268,28 +1292,28 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Rolloff: {result.modifications['rolloff_hz']} Hz")
-            logger.debug(f"   Extension Range: {result.modifications['extension_range_hz']} Hz")
-            logger.debug(f"   HF Boost: {result.modifications['hf_boost_db']:.1f} dB")
-            logger.debug(f"   Restoration Strength: {result.modifications['restoration_strength']:.2f}")
-            logger.debug(f"   SBR Enabled: {result.modifications['sbr_enabled']}")
+            logger.debug("   Rolloff: %s Hz", result.modifications['rolloff_hz'])
+            logger.debug("   Extension Range: %s Hz", result.modifications['extension_range_hz'])
+            logger.debug("   HF Boost: %.1f dB", result.modifications['hf_boost_db'])
+            logger.debug("   Restoration Strength: %.2f", result.modifications['restoration_strength'])
+            logger.debug("   SBR Enabled: %s", result.modifications['sbr_enabled'])
             logger.debug(
                 f"   Measured Rolloff: {result.metadata['measured_rolloff_db']:.1f} dB at {result.metadata['measured_rolloff_freq']:.0f} Hz"
             )
-            logger.debug(f"   LPC Order: {result.metadata['lpc_order']}")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   LPC Order: %s", result.metadata['lpc_order'])
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("⏭️  Frequency Restoration Skipped")
-            logger.debug(f"   Reason: {result.modifications.get('reason', 'unknown')}")
+            logger.debug("   Reason: %s", result.modifications.get('reason', 'unknown'))
             if "measured_rolloff_db" in result.metadata:
                 logger.debug(
                     f"   Measured Rolloff: {result.metadata['measured_rolloff_db']:.1f} dB at {result.metadata.get('measured_rolloff_freq', 0):.0f} Hz"
                 )
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Frequency Restoration v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata.get('algorithm', 'N/A')}")
-    logger.debug(f"Scientific Reference: {result.metadata.get('scientific_ref', 'N/A')}")
-    logger.debug(f"Benchmark: {result.metadata.get('benchmark', 'N/A')}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata.get('algorithm', 'N/A'))
+    logger.debug("Scientific Reference: %s", result.metadata.get('scientific_ref', 'N/A'))
+    logger.debug("Benchmark: %s", result.metadata.get('benchmark', 'N/A'))
     logger.debug("Quality Impact: 0.91 (Professional-Grade)")

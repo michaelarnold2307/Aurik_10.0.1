@@ -168,7 +168,7 @@ class HumRemovalPhase(PhaseInterface):
             logger.info("✅ DeepFilterNet v3 II Plugin loaded for Hum Removal")
             return self._deepfilternet_plugin
         except Exception as e:
-            logger.warning(f"⚠️  DeepFilterNet Plugin not available: {e}")
+            logger.warning("⚠️  DeepFilterNet Plugin not available: %s", e)
             logger.info("    Falling back to DSP-only hum removal")
             return None
 
@@ -469,7 +469,10 @@ class HumRemovalPhase(PhaseInterface):
 
             if returncode == 0 and os.path.exists(output_path):
                 # Read refined audio
-                refined, _sr_read = sf.read(output_path)
+                from backend.file_import import load_audio_file
+
+                _res = load_audio_file(output_path, do_carrier_analysis=False)
+                refined = np.asarray(_res["audio"], dtype=np.float32)
 
                 # Update audio in-place
                 if refined.shape == audio.shape:
@@ -477,14 +480,14 @@ class HumRemovalPhase(PhaseInterface):
                     logger.info("✅ ML hum refinement successful")
                     return True
                 else:
-                    logger.warning(f"Shape mismatch: {refined.shape} vs {audio.shape}")
+                    logger.warning("Shape mismatch: %s vs %s", refined.shape, audio.shape)
                     return False
             else:
-                logger.warning(f"DeepFilterNet failed (returncode={returncode})")
+                logger.warning("DeepFilterNet failed (returncode=%s)", returncode)
                 return False
 
         except Exception as e:
-            logger.error(f"ML hum refinement error: {e}")
+            logger.error("ML hum refinement error: %s", e)
             return False
 
         finally:
@@ -709,7 +712,7 @@ if __name__ == "__main__":
     # Make stereo
     audio_with_hum = np.column_stack([audio_with_hum, audio_with_hum * 0.95])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Content: 440 Hz tone + harmonics")
     logger.debug("Hum: 50 Hz (strong, 4 harmonics) + 60 Hz (weak, 2 harmonics)")
 
@@ -717,9 +720,9 @@ if __name__ == "__main__":
     materials = ["tape", "vinyl", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = HumRemovalPhase()
         result = phase.process(audio_with_hum.copy(), material_type=material)
@@ -729,23 +732,23 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Hum Detected: {result.modifications['hum_detected']}")
+            logger.debug("   Hum Detected: %s", result.modifications['hum_detected'])
 
             if result.modifications["hum_detected"]:
-                logger.debug(f"   Fundamentals: {result.modifications['fundamentals']} Hz")
-                logger.debug(f"   Total Harmonics Removed: {result.modifications['total_harmonics_removed']}")
-                logger.debug(f"   Hum Reduction: {result.modifications['hum_reduction_db']:.1f} dB")
-                logger.debug(f"   Side-Chain Active: {result.metadata['side_chain_active']}")
-                logger.debug(f"   Q-Factor: {result.metadata['q_factor']}")
+                logger.debug("   Fundamentals: %s Hz", result.modifications['fundamentals'])
+                logger.debug("   Total Harmonics Removed: %s", result.modifications['total_harmonics_removed'])
+                logger.debug("   Hum Reduction: %.1f dB", result.modifications['hum_reduction_db'])
+                logger.debug("   Side-Chain Active: %s", result.metadata['side_chain_active'])
+                logger.debug("   Q-Factor: %s", result.metadata['q_factor'])
 
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("❌ Processing Failed!")
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Hum Removal v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata['algorithm']}")
-    logger.debug(f"Scientific Reference: {result.metadata['scientific_ref']}")
-    logger.debug(f"Benchmark: {result.metadata['benchmark']}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata['algorithm'])
+    logger.debug("Scientific Reference: %s", result.metadata['scientific_ref'])
+    logger.debug("Benchmark: %s", result.metadata['benchmark'])
     logger.debug("Quality Impact: 0.92 (Professional-Grade)")

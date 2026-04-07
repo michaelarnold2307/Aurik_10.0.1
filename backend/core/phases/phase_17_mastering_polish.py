@@ -614,11 +614,11 @@ if __name__ == "__main__":
     rms_before = np.sqrt(np.mean(test_audio_stereo**2))
     peak_before = np.abs(test_audio_stereo).max()
 
-    logger.debug(f"\nGeneriert {duration}s Pre-Mastered Test-Audio @ {sample_rate} Hz")
+    logger.debug("\nGeneriert %ss Pre-Mastered Test-Audio @ %s Hz", duration, sample_rate)
     logger.debug("Multi-Frequenz: 100 Hz (Bass), 1000 Hz (Mid), 5000 Hz (High)")
     logger.debug("Stereo mit leichter Phasenverschiebung")
-    logger.debug(f"RMS vor Mastering: {20 * np.log10(rms_before):.1f} dBFS")
-    logger.debug(f"Peak vor Mastering: {20 * np.log10(peak_before):.1f} dBFS")
+    logger.debug("RMS vor Mastering: %.1f dBFS", 20 * np.log10(rms_before))
+    logger.debug("Peak vor Mastering: %.1f dBFS", 20 * np.log10(peak_before))
 
     phase = MasteringPolishPhase()
 
@@ -626,15 +626,15 @@ if __name__ == "__main__":
     test_materials = [MaterialType.SHELLAC, MaterialType.VINYL, MaterialType.CD_DIGITAL]
 
     for material in test_materials:
-        logger.debug(f"\n{'─' * 80}")
-        logger.debug(f"Material: {material.name}")
-        logger.debug(f"{'─' * 80}")
+        logger.debug("\n%s", '─' * 80)
+        logger.debug("Material: %s", material.name)
+        logger.debug("%s", '─' * 80)
 
         result = phase.process(test_audio_stereo, sample_rate, material)
 
         if result.success:
             logger.debug("\n✅ Professional Mastering Chain Complete:")
-            logger.debug(f"   RMS Change: {result.metrics['rms_change_db']:+.2f} dB")
+            logger.debug("   RMS Change: %.2f dB", result.metrics['rms_change_db'])
             logger.debug(
                 f"   Peak: {result.metrics['peak_before_db']:.1f} → {result.metrics['peak_after_db']:.1f} dBFS"
             )
@@ -649,31 +649,31 @@ if __name__ == "__main__":
                 eq_gains = pm["eq"]["band_gains_db"]
                 logger.debug("   1. Mastering EQ:")
                 for band, gain in eq_gains.items():
-                    logger.debug(f"      {band:10s}: {gain:+.1f} dB")
+                    logger.debug("      %s: %+.1f dB", band, gain)
 
             # 2. Transient
             if "transient" in pm:
                 attack = pm["transient"]["attack_multipliers"]
                 sustain = pm["transient"]["sustain_multipliers"]
                 logger.debug("   2. Transient Enhancement:")
-                logger.debug(f"      Attack:  {attack}")
-                logger.debug(f"      Sustain: {sustain}")
+                logger.debug("      Attack:  %s", attack)
+                logger.debug("      Sustain: %s", sustain)
 
             # 3. Harmonic
             if "harmonic" in pm:
                 sat_strength = pm["harmonic"]["saturation_strength"]
                 sat_drive = pm["harmonic"]["saturation_drive"]
                 logger.debug("   3. Harmonic Enhancement:")
-                logger.debug(f"      Saturation Strength: {sat_strength:.2f}")
-                logger.debug(f"      Saturation Drive: {sat_drive:.2f}×")
+                logger.debug("      Saturation Strength: %.2f", sat_strength)
+                logger.debug("      Saturation Drive: %.2f×", sat_drive)
 
             # 4. Stereo
             if "stereo" in pm:
                 width = pm["stereo"]["stereo_width"]
                 mono_compat = pm["stereo"]["mono_compatibility"]
                 logger.debug("   4. Stereo Enhancement:")
-                logger.debug(f"      Width: {width:.2f}×")
-                logger.debug(f"      Mono Compatibility: {mono_compat:.2f} ({'✅' if mono_compat > 0.7 else '⚠️'})")
+                logger.debug("      Width: %.2f×", width)
+                logger.debug("      Mono Compatibility: %.2f (%s)", mono_compat, '✅' if mono_compat > 0.7 else '⚠️')
 
             # 5. Polish
             if "polish" in pm:
@@ -681,14 +681,14 @@ if __name__ == "__main__":
                 final_peak = pm["polish"]["final_peak_db"]
                 target = pm["polish"]["target_db"]
                 logger.debug("   5. Final Polish:")
-                logger.debug(f"      Normalization Gain: {norm_gain:+.1f} dB")
-                logger.debug(f"      Final Peak: {final_peak:.2f} dBFS (Target: {target:.1f} dBFS)")
+                logger.debug("      Normalization Gain: %+.1f dB", norm_gain)
+                logger.debug("      Final Peak: %.2f dBFS (Target: %.1f dBFS)", final_peak, target)
 
             logger.debug(
                 f"\n   Verarbeitungszeit: {result.execution_time_seconds:.3f}s "
                 f"({result.execution_time_seconds / duration:.2f}× realtime)"
             )
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("Test abgeschlossen")
-    logger.debug(f"{'=' * 80}")
+    logger.debug("%s", '=' * 80)

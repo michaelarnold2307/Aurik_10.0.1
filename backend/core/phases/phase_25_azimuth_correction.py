@@ -640,10 +640,8 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                 boost_linear = 10 ** (boost_db / 20)
                 restored[:, ch] = restored[:, ch] + hf_signal * (boost_linear - 1.0)
 
-            # Peak limiting
-            max_val = np.abs(restored).max()
-            if max_val > 0.99:
-                restored = restored * (0.99 / max_val)
+            # Safety clip (no peak normalization)
+            restored = np.clip(restored, -1.0, 1.0)
 
             return restored
         except Exception:
@@ -705,7 +703,7 @@ if __name__ == "__main__":
 
     audio = np.column_stack([left, right])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sample_rate} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sample_rate)
     logger.debug("Multi-frequency content with simulated azimuth error:")
     logger.debug("  Left: 100Hz + 1kHz + 8kHz + 12kHz + noise")
     logger.debug("  Right: Copy of left with time delay")
@@ -718,9 +716,9 @@ if __name__ == "__main__":
     # Test with TAPE (primary target)
     phase = AzimuthCorrectionPhaseV2()
 
-    logger.debug(f"\n{'─' * 80}")
+    logger.debug("\n%s", '─' * 80)
     logger.debug("Testing with material: TAPE")
-    logger.debug(f"{'─' * 80}")
+    logger.debug("%s", '─' * 80)
 
     result = phase.process(audio, sample_rate, MaterialType.TAPE)
 
@@ -729,13 +727,13 @@ if __name__ == "__main__":
         logger.debug(
             f"   Execution Time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
         )
-        logger.debug(f"   Correction Applied: {result.metadata['azimuth_correction_applied']}")
+        logger.debug("   Correction Applied: %s", result.metadata['azimuth_correction_applied'])
         if result.metadata.get("azimuth_correction_applied"):
-            logger.debug(f"   Phase Shift Before: {result.metrics['phase_shift_before_samples']:.1f} samples")
-            logger.debug(f"   Phase Shift After: {result.metrics['phase_shift_after_samples']:.1f} samples")
-            logger.debug(f"   Phase Shift Reduction: {result.metrics['phase_shift_reduction_samples']:.1f} samples")
-            logger.debug(f"   HF Loss Before: {result.metrics['hf_loss_before_db']:.2f} dB")
-            logger.debug(f"   HF Loss After: {result.metrics['hf_loss_after_db']:.2f} dB")
+            logger.debug("   Phase Shift Before: %.1f samples", result.metrics['phase_shift_before_samples'])
+            logger.debug("   Phase Shift After: %.1f samples", result.metrics['phase_shift_after_samples'])
+            logger.debug("   Phase Shift Reduction: %.1f samples", result.metrics['phase_shift_reduction_samples'])
+            logger.debug("   HF Loss Before: %.2f dB", result.metrics['hf_loss_before_db'])
+            logger.debug("   HF Loss After: %.2f dB", result.metrics['hf_loss_after_db'])
             logger.debug("\n   Per-Band Phase Shifts (Before → After):")
             logger.debug(
                 f"     Band 0 (Bass):  {result.metrics['band_0_phase_shift_before_samples']:.1f} → {result.metrics['band_0_phase_shift_after_samples']:.1f} samples"
@@ -746,30 +744,30 @@ if __name__ == "__main__":
             logger.debug(
                 f"     Band 2 (High):  {result.metrics['band_2_phase_shift_before_samples']:.1f} → {result.metrics['band_2_phase_shift_after_samples']:.1f} samples"
             )
-            logger.debug(f"   HF Restoration Applied: {result.modifications['hf_restoration_applied']}")
+            logger.debug("   HF Restoration Applied: %s", result.modifications['hf_restoration_applied'])
         else:
-            logger.debug(f"   Reason: {result.metadata.get('reason', 'unknown')}")
+            logger.debug("   Reason: %s", result.metadata.get('reason', 'unknown'))
             if "max_phase_shift_samples" in result.metadata:
                 logger.debug(
                     f"   Max Phase Shift: {result.metadata['max_phase_shift_samples']:.1f} samples (below threshold)"
                 )
             if "hf_loss_db" in result.metadata:
-                logger.debug(f"   HF Loss: {result.metadata['hf_loss_db']:.2f} dB")
+                logger.debug("   HF Loss: %.2f dB", result.metadata['hf_loss_db'])
 
     # Test with VINYL (should skip)
-    logger.debug(f"\n{'─' * 80}")
+    logger.debug("\n%s", '─' * 80)
     logger.debug("Testing with material: VINYL (should skip)")
-    logger.debug(f"{'─' * 80}")
+    logger.debug("%s", '─' * 80)
 
     result_vinyl = phase.process(audio, sample_rate, MaterialType.VINYL)
 
     if result_vinyl.success:
         logger.debug("✅ As expected: Azimuth Correction skipped for VINYL")
-        logger.debug(f"   Correction Applied: {result_vinyl.metadata['azimuth_correction_applied']}")
-        logger.debug(f"   Reason: {result_vinyl.metadata.get('reason', 'unknown')}")
-        logger.debug(f"   Execution Time: {result_vinyl.execution_time_seconds:.3f}s")
+        logger.debug("   Correction Applied: %s", result_vinyl.metadata['azimuth_correction_applied'])
+        logger.debug("   Reason: %s", result_vinyl.metadata.get('reason', 'unknown'))
+        logger.debug("   Execution Time: %.3fs", result_vinyl.execution_time_seconds)
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Azimuth Correction v2.0 Test Complete!")
     logger.debug("=" * 80)
     logger.debug("Algorithm: multiband_phase_alignment_v2")

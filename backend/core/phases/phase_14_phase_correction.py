@@ -477,8 +477,8 @@ if __name__ == "__main__":
 
     test_audio = np.column_stack([left, right])
 
-    logger.debug(f"Generated {duration}s test audio @ {sample_rate} Hz")
-    logger.debug(f"Phase error: Right delayed by {delay_bass} samples (~{delay_bass * 1000 / sample_rate:.2f}ms)")
+    logger.debug("Generated %ss test audio @ %s Hz", duration, sample_rate)
+    logger.debug("Phase error: Right delayed by %s samples (~%.2fms)", delay_bass, delay_bass * 1000 / sample_rate)
     logger.debug("")
 
     # Test with different materials
@@ -490,7 +490,7 @@ if __name__ == "__main__":
 
     for material, material_name in materials:
         logger.debug("─" * 80)
-        logger.debug(f"Material: {material_name}")
+        logger.debug("Material: %s", material_name)
         logger.debug("─" * 80)
         logger.debug("")
 
@@ -498,9 +498,9 @@ if __name__ == "__main__":
         result = phase.process(test_audio, sample_rate, material)
 
         logger.debug("✅ Professional Phase Correction:")
-        logger.debug(f"   Correlation Before: {result.metrics['correlation_before']:.4f}")
-        logger.debug(f"   Correlation After: {result.metrics['correlation_after']:.4f}")
-        logger.debug(f"   Improvement: {result.metrics['correlation_improvement']:.4f}")
+        logger.debug("   Correlation Before: %.4f", result.metrics['correlation_before'])
+        logger.debug("   Correlation After: %.4f", result.metrics['correlation_after'])
+        logger.debug("   Improvement: %.4f", result.metrics['correlation_improvement'])
         logger.debug("")
         logger.debug(
             f"   Per-Band Correlation Before: {[f'{c:.3f}' for c in result.metrics['per_band_correlation_before']]}"
@@ -508,12 +508,12 @@ if __name__ == "__main__":
         logger.debug(
             f"   Per-Band Correlation After:  {[f'{c:.3f}' for c in result.metrics['per_band_correlation_after']]}"
         )
-        logger.debug(f"   Delays Corrected (samples):  {result.metrics['delays_corrected_samples']}")
+        logger.debug("   Delays Corrected (samples):  %s", result.metrics['delays_corrected_samples'])
         logger.debug("")
         logger.debug(
             f"   Processing time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
         )
-        logger.debug(f"   Correction strength: {result.metrics['correction_strength']}")
+        logger.debug("   Correction strength: %s", result.metrics['correction_strength'])
         logger.debug("")
 
     logger.debug("=" * 80)

@@ -226,9 +226,9 @@ class GuitarEnhancementPhase(PhaseInterface):
         else:  # Pop
             x = _peaking_eq(x, sample_rate, freq=3000.0, gain_db=1.5, q=2.0)
 
-        # 5. Normalisierung + Clip
-        peak_in = float(np.max(np.abs(audio)))
-        peak_out = float(np.max(np.abs(x)))
+        # 5. Normalisierung + Clip — §2.49 Peak-Guard: percentile(99.9) for peak-preservation
+        peak_in = float(np.percentile(np.abs(audio), 99.9))
+        peak_out = float(np.percentile(np.abs(x), 99.9))
         if peak_out > 1e-8 and peak_in > 1e-8:
             x = x * (peak_in / peak_out)
         processed = np.clip(x, -1.0, 1.0).astype(audio.dtype)

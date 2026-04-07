@@ -229,14 +229,12 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         # Step 4: Final correlation check and limiting
         final_correlation = self._measure_correlation(enhanced_audio)
         if final_correlation < 0.5:  # Emergency mono compatibility check
-            logger.warning(f"Low correlation detected ({final_correlation:.2f}), reducing width")
+            logger.warning("Low correlation detected (%.2f), reducing width", final_correlation)
             enhanced_audio = self._reduce_width_for_compatibility(enhanced_audio, audio)
             final_correlation = self._measure_correlation(enhanced_audio)
 
-        # Step 5: Peak normalization
-        max_val = np.abs(enhanced_audio).max()
-        if max_val > 0.99:
-            enhanced_audio = enhanced_audio * (0.99 / max_val)
+        # Step 5: Safety clip (no peak normalization)
+        enhanced_audio = np.clip(enhanced_audio, -1.0, 1.0)
 
         # Measure final stereo width
         final_width = self._measure_stereo_width(enhanced_audio)
@@ -567,7 +565,7 @@ if __name__ == "__main__":
 
     test_audio = np.column_stack((left, right))
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sample_rate} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sample_rate)
     logger.debug("Multi-frequency stereo with phase/amplitude differences")
     logger.debug("440 Hz (A4), 880 Hz (A5), 1760 Hz (A6), 3520 Hz (A7)")
     logger.debug("Moderate initial stereo image")
@@ -578,9 +576,9 @@ if __name__ == "__main__":
     phase = StereoEnhancementPhaseV2()
 
     for material in materials:
-        logger.debug(f"\n{'─' * 80}")
-        logger.debug(f"Testing with material: {material.name}")
-        logger.debug(f"{'─' * 80}")
+        logger.debug("\n%s", '─' * 80)
+        logger.debug("Testing with material: %s", material.name)
+        logger.debug("%s", '─' * 80)
 
         result = phase.process(test_audio, sample_rate, material)
 
@@ -589,19 +587,19 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Stereo Width Before: {result.metrics['stereo_width_before']:.3f}")
-            logger.debug(f"   Stereo Width After: {result.metrics['stereo_width_after']:.3f}")
-            logger.debug(f"   Width Increase: {result.metrics['width_increase_percent']:.1f}%")
-            logger.debug(f"   Correlation Before: {result.metrics['correlation_before']:.3f}")
-            logger.debug(f"   Correlation After: {result.metrics['correlation_after']:.3f}")
-            logger.debug(f"   Band 0 (Bass) Width Increase: {result.metrics['band_0_width_increase']:.1f}%")
-            logger.debug(f"   Band 1 (Low-Mid) Width Increase: {result.metrics['band_1_width_increase']:.1f}%")
-            logger.debug(f"   Band 2 (Mid) Width Increase: {result.metrics['band_2_width_increase']:.1f}%")
-            logger.debug(f"   Band 3 (High) Width Increase: {result.metrics['band_3_width_increase']:.1f}%")
+            logger.debug("   Stereo Width Before: %.3f", result.metrics['stereo_width_before'])
+            logger.debug("   Stereo Width After: %.3f", result.metrics['stereo_width_after'])
+            logger.debug("   Width Increase: %.1f%%", result.metrics['width_increase_percent'])
+            logger.debug("   Correlation Before: %.3f", result.metrics['correlation_before'])
+            logger.debug("   Correlation After: %.3f", result.metrics['correlation_after'])
+            logger.debug("   Band 0 (Bass) Width Increase: %.1f%%", result.metrics['band_0_width_increase'])
+            logger.debug("   Band 1 (Low-Mid) Width Increase: %.1f%%", result.metrics['band_1_width_increase'])
+            logger.debug("   Band 2 (Mid) Width Increase: %.1f%%", result.metrics['band_2_width_increase'])
+            logger.debug("   Band 3 (High) Width Increase: %.1f%%", result.metrics['band_3_width_increase'])
         else:
             logger.debug("❌ Processing failed!")
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Stereo Enhancement v2.0 Test Complete!")
     logger.debug("=" * 80)
     logger.debug("Algorithm: multiband_ms_processing_v2")

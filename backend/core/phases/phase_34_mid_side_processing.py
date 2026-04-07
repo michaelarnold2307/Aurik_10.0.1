@@ -305,8 +305,8 @@ class MidSideProcessing(PhaseInterface):
         if 0.0 < _effective_strength < 1.0:
             audio_processed = audio + _effective_strength * (audio_processed - audio)
 
-        # Normalize to prevent clipping
-        peak = np.max(np.abs(audio_processed))
+        # Normalize to prevent clipping — §2.49 Peak-Guard: percentile(99.9)
+        peak = float(np.percentile(np.abs(audio_processed), 99.9))
         if peak > 0.95:
             audio_processed = audio_processed * (0.95 / peak)
 
@@ -505,7 +505,7 @@ if __name__ == "__main__":
     materials = [MaterialType.SHELLAC, MaterialType.VINYL, MaterialType.TAPE]
 
     for material in materials:
-        logger.debug(f"Testing {material.value.upper()}:")
+        logger.debug("Testing %s:", material.value.upper())
         logger.debug("-" * 70)
 
         sr = 44100
@@ -554,9 +554,9 @@ if __name__ == "__main__":
         elapsed = time.time() - start
 
         logger.debug("  Multi-band M/S dynamics:")
-        logger.debug(f"    Overall Mid change: {meta['mid_change_db']:+.2f} dB")
-        logger.debug(f"    Overall Side change: {meta['side_change_db']:+.2f} dB")
-        logger.debug(f"    Mono compatibility: {meta['mono_compatibility']:.3f}")
+        logger.debug("    Overall Mid change: %.2f dB", meta['mid_change_db'])
+        logger.debug("    Overall Side change: %.2f dB", meta['side_change_db'])
+        logger.debug("    Mono compatibility: %.3f", meta['mono_compatibility'])
         logger.debug("")
         logger.debug("  Per-Band Dynamics:")
         for band_name, metrics in meta["band_metrics"].items():
@@ -566,7 +566,7 @@ if __name__ == "__main__":
                 f"Side {metrics['side_reduction_db']:+5.1f} dB"
             )
         logger.debug("")
-        logger.debug(f"  Processing time: {meta['processing_time_s']:.3f}s ({meta['realtime_factor']:.2f}× realtime)")
-        logger.debug(f"  Quality impact: {meta['quality_impact']:.2f}")
+        logger.debug("  Processing time: %.3fs (%.2f× realtime)", meta['processing_time_s'], meta['realtime_factor'])
+        logger.debug("  Quality impact: %.2f", meta['quality_impact'])
         logger.debug("  ✅")
         logger.debug("")

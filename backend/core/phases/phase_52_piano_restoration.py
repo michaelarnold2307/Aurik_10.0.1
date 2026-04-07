@@ -334,7 +334,7 @@ class PianoRestorationV1(PhaseInterface):
             original_side = None
             audio_mono = original_mid.copy()
 
-        logger.info(f"Piano Restoration: {material_type.value}, config={config}")
+        logger.info("Piano Restoration: %s, config=%s", material_type.value, config)
 
         # Stage 1: Hammer Transient Enhancement
         if config["hammer_enhancement"] > 0:
@@ -364,8 +364,8 @@ class PianoRestorationV1(PhaseInterface):
         mix = float(np.clip(config["mix"], 0.0, 1.0)) * effective_strength
         audio_mono = mix * audio_mono + (1.0 - mix) * original_mono
 
-        # Prevent clipping (soft limiter at 0.95)
-        peak = np.max(np.abs(audio_mono))
+        # Prevent clipping (soft limiter at 0.95) — §2.49 Peak-Guard: percentile(99.9)
+        peak = float(np.percentile(np.abs(audio_mono), 99.9))
         if peak > 0.95:
             audio_mono = audio_mono * (0.95 / peak)
 
@@ -685,10 +685,10 @@ class PianoRestorationV1(PhaseInterface):
         # Apply gain
         audio_expanded = audio * gain
 
-        # Normalize to prevent clipping
-        max_val = np.max(np.abs(audio))
-        if np.max(np.abs(audio_expanded)) > max_val:
-            audio_expanded = audio_expanded / np.max(np.abs(audio_expanded)) * max_val
+        # Normalize to prevent clipping — §2.49 Peak-Guard: percentile(99.9)
+        max_val = float(np.percentile(np.abs(audio), 99.9))
+        if float(np.percentile(np.abs(audio_expanded), 99.9)) > max_val:
+            audio_expanded = audio_expanded / (float(np.percentile(np.abs(audio_expanded), 99.9)) + 1e-10) * max_val
 
         return audio_expanded
 
@@ -737,12 +737,12 @@ if __name__ == "__main__":
     metadata = phase.get_metadata()
 
     logger.debug("\n📋 Phase Metadata:")
-    logger.debug(f"   ID: {metadata.phase_id}")
-    logger.debug(f"   Name: {metadata.name}")
-    logger.debug(f"   Category: {metadata.category.value}")
-    logger.debug(f"   Priority: {metadata.priority}")
-    logger.debug(f"   Estimated time: {metadata.estimated_time_factor}× RT")
-    logger.debug(f"   Quality impact: {metadata.quality_impact * 100:.0f}%")
+    logger.debug("   ID: %s", metadata.phase_id)
+    logger.debug("   Name: %s", metadata.name)
+    logger.debug("   Category: %s", metadata.category.value)
+    logger.debug("   Priority: %s", metadata.priority)
+    logger.debug("   Estimated time: %s× RT", metadata.estimated_time_factor)
+    logger.debug("   Quality impact: %.0f%%", metadata.quality_impact * 100)
 
     # Generate test audio (simulated piano with noise)
     sr = 48000
@@ -776,17 +776,17 @@ if __name__ == "__main__":
     # Test on different materials
     materials = [MaterialType.SHELLAC, MaterialType.VINYL, MaterialType.CD_DIGITAL]
 
-    logger.debug(f"\n🎹 Testing Piano Restoration on {len(materials)} material types:")
-    logger.debug(f"   Audio: {duration}s, {sr} Hz")
+    logger.debug("\n🎹 Testing Piano Restoration on %s material types:", len(materials))
+    logger.debug("   Audio: %ss, %s Hz", duration, sr)
 
     for material in materials:
         result = phase.process(piano_signal, material_type=material)
 
-        logger.debug(f"\n   {material.value}:")
-        logger.debug(f"      Time: {result.execution_time_seconds:.3f}s")
-        logger.debug(f"      RT Factor: {result.execution_time_seconds / duration:.3f}×")
-        logger.debug(f"      Shape: {result.audio.shape}")
-        logger.debug(f"      Max: {np.max(np.abs(result.audio)):.3f}")
+        logger.debug("\n   %s:", material.value)
+        logger.debug("      Time: %.3fs", result.execution_time_seconds)
+        logger.debug("      RT Factor: %.3f×", result.execution_time_seconds / duration)
+        logger.debug("      Shape: %s", result.audio.shape)
+        logger.debug("      Max: %.3f", np.max(np.abs(result.audio)))
         logger.debug(
             f"      Config: hammer={result.metadata['hammer_enhancement']:.2f}, "
             f"resonance={result.metadata['string_resonance']:.2f}, "

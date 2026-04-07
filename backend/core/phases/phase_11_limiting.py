@@ -581,10 +581,10 @@ if __name__ == "__main__":
 
     true_peak_before = 20 * np.log10(np.abs(test_audio_stereo).max())
 
-    logger.debug(f"\nGeneriert {duration}s Test-Audio @ {sample_rate} Hz")
+    logger.debug("\nGeneriert %ss Test-Audio @ %s Hz", duration, sample_rate)
     logger.debug("3 Segmente: Quiet (-15 dB) / Medium (-5 dB) / Loud (+3 dB OVER ceiling)")
     logger.debug("Multi-Frequenz: 100 Hz (Bass), 500 Hz (Low-Mid), 2000 Hz (Mid-High)")
-    logger.debug(f"True Peak vor Limiting: {true_peak_before:.2f} dBFS (CLIPPING!)")
+    logger.debug("True Peak vor Limiting: %.2f dBFS (CLIPPING!)", true_peak_before)
 
     phase = LimitingPhase()
 
@@ -592,21 +592,21 @@ if __name__ == "__main__":
     test_materials = [MaterialType.SHELLAC, MaterialType.VINYL, MaterialType.CD_DIGITAL]
 
     for material in test_materials:
-        logger.debug(f"\n{'─' * 80}")
-        logger.debug(f"Material: {material.name}")
-        logger.debug(f"{'─' * 80}")
+        logger.debug("\n%s", '─' * 80)
+        logger.debug("Material: %s", material.name)
+        logger.debug("%s", '─' * 80)
 
         result = phase.process(test_audio_stereo, sample_rate, material)
 
         if result.success and result.metadata.get("limiting_applied"):
             logger.debug("\n✅ Multi-Band True Peak Limiting:")
-            logger.debug(f"   Ceiling: {result.metadata['ceiling_db']:.1f} dBFS")
-            logger.debug(f"   Oversampling: {result.metadata['oversample_factor']}×")
-            logger.debug(f"   Soft-Clip Knee: {result.metadata['soft_clip_knee_db']:.1f} dB")
-            logger.debug(f"   True Peak vorher: {result.metrics['true_peak_before_db']:.2f} dBFS")
-            logger.debug(f"   True Peak nachher: {result.metrics['true_peak_after_db']:.2f} dBFS")
-            logger.debug(f"   Peak Reduction: {result.metrics['peak_reduction_db']:.2f} dB")
-            logger.debug(f"   RMS Change: {result.metrics['rms_change_db']:.2f} dB")
+            logger.debug("   Ceiling: %.1f dBFS", result.metadata['ceiling_db'])
+            logger.debug("   Oversampling: %s×", result.metadata['oversample_factor'])
+            logger.debug("   Soft-Clip Knee: %.1f dB", result.metadata['soft_clip_knee_db'])
+            logger.debug("   True Peak vorher: %.2f dBFS", result.metrics['true_peak_before_db'])
+            logger.debug("   True Peak nachher: %.2f dBFS", result.metrics['true_peak_after_db'])
+            logger.debug("   Peak Reduction: %.2f dB", result.metrics['peak_reduction_db'])
+            logger.debug("   RMS Change: %.2f dB", result.metrics['rms_change_db'])
 
             logger.debug("\n   Per-Band Limiting:")
             for band_name, metrics in result.metadata["band_metrics"].items():
@@ -622,6 +622,6 @@ if __name__ == "__main__":
         else:
             logger.debug("\n⚠️ Limiting übersprungen (unter Ceiling)")
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("Test abgeschlossen")
-    logger.debug(f"{'=' * 80}")
+    logger.debug("%s", '=' * 80)

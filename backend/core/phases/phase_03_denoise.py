@@ -423,7 +423,7 @@ class DenoisePhase(PhaseInterface):
 
         if use_ml_hybrid:
             try:
-                logger.info(f"Phase 03 ML-Hybrid: mode={quality_mode}, material={material_type}")
+                logger.info("Phase 03 ML-Hybrid: mode=%s, material=%s", quality_mode, material_type)
 
                 # Configure ML denoiser strategy
                 if quality_mode in ["quality", "maximum"]:
@@ -498,11 +498,11 @@ class DenoisePhase(PhaseInterface):
                 )
 
             except Exception as e:
-                logger.warning(f"ML-Hybrid denoising failed: {e}, falling back to DSP. Error type: {type(e).__name__}")
+                logger.warning("ML-Hybrid denoising failed: %s, falling back to DSP. Error type: %s", e, type(e).__name__)
                 # Fall through to DSP path below
 
         # DSP-Only Path (Fast mode or ML fallback)
-        logger.info(f"Phase 03 DSP-Only: material={material_type}, strength={effective_strength}")
+        logger.info("Phase 03 DSP-Only: material=%s, strength=%s", material_type, effective_strength)
 
         # Override material-default strength with PMGG-controlled effective_strength
         dsp_params = dict(params)
@@ -1443,7 +1443,7 @@ if __name__ == "__main__":
     # Make stereo
     audio_with_noise = np.column_stack([audio_with_noise, audio_with_noise * 0.95])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Content: 440 Hz tone + harmonics + drum transient")
     logger.debug("Noise: Broadband high-frequency hiss (tape characteristic)")
 
@@ -1451,9 +1451,9 @@ if __name__ == "__main__":
     materials = ["tape", "vinyl", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = DenoisePhase(sample_rate=sr)
         result = phase.process(audio_with_noise.copy(), material_type=material)
@@ -1463,19 +1463,19 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Noise Reduction: {result.modifications['noise_reduction_db']:.1f} dB")
-            logger.debug(f"   Musical Noise Suppression: {result.modifications['musical_noise_suppression']:.2f}")
-            logger.debug(f"   Strength: {result.modifications['strength']}")
-            logger.debug(f"   Multi-Band: {result.metadata['multi_band']}")
-            logger.debug(f"   Adaptive Tracking: {result.metadata['adaptive_noise_tracking']}")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   Noise Reduction: %.1f dB", result.modifications['noise_reduction_db'])
+            logger.debug("   Musical Noise Suppression: %.2f", result.modifications['musical_noise_suppression'])
+            logger.debug("   Strength: %s", result.modifications['strength'])
+            logger.debug("   Multi-Band: %s", result.metadata['multi_band'])
+            logger.debug("   Adaptive Tracking: %s", result.metadata['adaptive_noise_tracking'])
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("❌ Processing Failed!")
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Denoise v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata['algorithm']}")
-    logger.debug(f"Scientific Reference: {result.metadata['scientific_ref']}")
-    logger.debug(f"Benchmark: {result.metadata['benchmark']}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata['algorithm'])
+    logger.debug("Scientific Reference: %s", result.metadata['scientific_ref'])
+    logger.debug("Benchmark: %s", result.metadata['benchmark'])
     logger.debug("Quality Impact: 0.93 (Professional-Grade)")

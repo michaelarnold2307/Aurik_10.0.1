@@ -370,6 +370,22 @@ class EQCorrectionPhase(PhaseInterface):
     HISTORICAL_CURVES: dict = {}
     # (populated in __init_subclass__ after class body — see _init_historical_curves)
 
+    # ---------------------------------------------------------------------------
+    # Head-Bump Profiles per tape speed (IPS)
+    # The tape transport head creates a low-frequency resonance whose centre
+    # frequency is inversely proportional to recording speed (physical: gap loss
+    # at head resonance wavelength).  Compensation = parametric dip at bump freq.
+    # Sources: Zar (1989) "Magnetic Recording Handbook"; Jorgensen (1996).
+    # Format: { speed_ips: (f_hz, gain_db_cut, Q) }  — gain_db_cut > 0 = cut
+    # ---------------------------------------------------------------------------
+    HEAD_BUMP_PROFILES: dict[float, tuple[float, float, float]] = {
+        1.875: (70,  2.5, 1.2),   # Cassette / 4.75 cm/s
+        3.75:  (90,  2.5, 1.2),   # Slow reel / cassette hi-speed
+        7.5:   (130, 2.0, 1.3),   # Consumer reel standard
+        15.0:  (180, 1.5, 1.4),   # Semi-professional reel
+        30.0:  (250, 1.0, 1.5),   # Professional master reel
+    }
+
     # Material-adaptive Parameters (Professional-tuned)
     MATERIAL_PARAMS = {
         "tape": {
@@ -549,6 +565,27 @@ class EQCorrectionPhase(PhaseInterface):
         # Step 3: Parallel Blend (preserve character)
         result_audio = self._parallel_blend(audio, eq_audio, params["blend"])
 
+        # ── Head-Bump compensation (tape/reel_tape) ──────────────────────────
+        tape_speed_ips: float | None = kwargs.get("tape_speed_ips")
+        head_bump_applied = False
+        if tape_speed_ips is not None and material_type in ("tape", "reel_tape", "cassette", "wire_recording"):
+            result_audio = self._apply_head_bump_compensation(result_audio, tape_speed_ips)
+            head_bump_applied = True
+            logger.info("phase_04: head-bump compensation applied at %.3f ips", tape_speed_ips)
+
+        # ── Dolby / DBX NR approximate inverse ──────────────────────────────
+        dolby_nr_type: str = kwargs.get("dolby_nr_type", "none")
+        dolby_nr_conf: float = float(kwargs.get("dolby_nr_confidence", 1.0))
+        dolby_nr_applied = False
+        if dolby_nr_type and dolby_nr_type != "none":
+            try:
+                from backend.core.dolby_nr_detector import apply_inverse_filter as _dolby_inv
+                result_audio = _dolby_inv(result_audio, dolby_nr_type, sr=sample_rate, confidence=dolby_nr_conf)  # type: ignore[arg-type]
+                dolby_nr_applied = True
+                logger.info("phase_04: Dolby/DBX NR inverse applied type=%s conf=%.2f", dolby_nr_type, dolby_nr_conf)
+            except Exception as exc:
+                logger.warning("phase_04: Dolby NR inverse failed (%s) — bypassed", exc)
+
         execution_time = time.time() - start_time
 
         # Calculate metrics
@@ -572,6 +609,10 @@ class EQCorrectionPhase(PhaseInterface):
                 "phase_mode": params["phase_mode"],
                 "material_type": material_type,
                 "riaa_variant": detected_variant,
+                "head_bump_applied": head_bump_applied,
+                "head_bump_speed_ips": tape_speed_ips if head_bump_applied else None,
+                "dolby_nr_applied": dolby_nr_applied,
+                "dolby_nr_type": dolby_nr_type if dolby_nr_applied else "none",
             },
             warnings=[f"High EQ correction: {total_correction:.1f} dB total"] if total_correction > 30 else [],
             metadata={
@@ -580,9 +621,12 @@ class EQCorrectionPhase(PhaseInterface):
                 "riaa_standard": material_type == "vinyl",
                 "nab_standard": material_type == "tape",
                 "historical_variant": detected_variant,
+                "head_bump_applied": head_bump_applied,
+                "dolby_nr_applied": dolby_nr_applied,
+                "dolby_nr_type": dolby_nr_type,
                 "scientific_ref": "Horbach & Karamustafaoglu (1999), Fielder (1983), RIAA (1954), NAB (1965)",
                 "benchmark": "FabFilter Pro-Q 3, iZotope Ozone EQ, Waves Renaissance EQ",
-                "algorithm_version": "2.0_professional",
+                "algorithm_version": "2.1_carrier_chain_aware",
                 "execution_time_seconds": execution_time,
             },
         )
@@ -792,6 +836,29 @@ class EQCorrectionPhase(PhaseInterface):
 
         return adjusted
 
+    def _apply_head_bump_compensation(self, audio: np.ndarray, speed_ips: float) -> np.ndarray:
+        """Apply parametric dip to compensate the tape head-bump resonance.
+
+        The head-bump is a LF resonance caused by the acoustic resonance of the
+        tape-head gap becoming λ/2 at a specific frequency inversely proportional
+        to recording speed.  A parametric dip at the bump frequency removes the
+        characteristic muddy bass colouration.
+
+        Uses the nearest-speed profile from HEAD_BUMP_PROFILES; no action if speed
+        is outside the known range (> factor-of-2 mismatch).
+        """
+        if not self.HEAD_BUMP_PROFILES:
+            return audio
+
+        known_speeds = sorted(self.HEAD_BUMP_PROFILES.keys())
+        nearest = min(known_speeds, key=lambda s: abs(s - speed_ips))
+        # Skip if the nearest known speed is more than 1.5× away (unknown speed)
+        if abs(nearest - speed_ips) / (nearest + 1e-9) > 1.5:
+            return audio
+
+        f_hz, cut_db, q = self.HEAD_BUMP_PROFILES[nearest]
+        return self._apply_peaking_filter(audio, freq=f_hz, Q=q, gain_db=-cut_db, phase_mode="minimum")
+
     def _apply_parametric_eq_professional(
         self, audio: np.ndarray, eq_curve: dict[float, float], params: dict[str, Any]
     ) -> np.ndarray:
@@ -899,16 +966,16 @@ if __name__ == "__main__":
     # Make stereo
     audio = np.column_stack([pink, pink * 0.95])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Content: Pink noise (flat power spectrum)")
 
     # Test with different materials
     materials = ["shellac", "vinyl", "tape", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = EQCorrectionPhase(sample_rate=sr)
         result = phase.process(audio.copy(), material_type=material)
@@ -918,23 +985,23 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Bands: {result.modifications['num_bands']}")
-            logger.debug(f"   Total Correction: {result.modifications['total_correction_db']:.1f} dB")
-            logger.debug(f"   Max Boost: {result.modifications['max_boost_db']:.1f} dB")
-            logger.debug(f"   Max Cut: {result.modifications['max_cut_db']:.1f} dB")
-            logger.debug(f"   Blend: {result.modifications['blend_ratio']:.2f}")
-            logger.debug(f"   Phase Mode: {result.modifications['phase_mode']}")
-            logger.debug(f"   RIAA Standard: {result.metadata.get('riaa_standard', False)}")
-            logger.debug(f"   NAB Standard: {result.metadata.get('nab_standard', False)}")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   Bands: %s", result.modifications['num_bands'])
+            logger.debug("   Total Correction: %.1f dB", result.modifications['total_correction_db'])
+            logger.debug("   Max Boost: %.1f dB", result.modifications['max_boost_db'])
+            logger.debug("   Max Cut: %.1f dB", result.modifications['max_cut_db'])
+            logger.debug("   Blend: %.2f", result.modifications['blend_ratio'])
+            logger.debug("   Phase Mode: %s", result.modifications['phase_mode'])
+            logger.debug("   RIAA Standard: %s", result.metadata.get('riaa_standard', False))
+            logger.debug("   NAB Standard: %s", result.metadata.get('nab_standard', False))
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("⏭️  EQ Skipped")
-            logger.debug(f"   Reason: {result.modifications.get('reason', 'unknown')}")
+            logger.debug("   Reason: %s", result.modifications.get('reason', 'unknown'))
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional EQ Correction v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata.get('algorithm', 'N/A')}")
-    logger.debug(f"Scientific Reference: {result.metadata.get('scientific_ref', 'N/A')}")
-    logger.debug(f"Benchmark: {result.metadata.get('benchmark', 'N/A')}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata.get('algorithm', 'N/A'))
+    logger.debug("Scientific Reference: %s", result.metadata.get('scientific_ref', 'N/A'))
+    logger.debug("Benchmark: %s", result.metadata.get('benchmark', 'N/A'))
     logger.debug("Quality Impact: 0.96 (Professional-Grade)")

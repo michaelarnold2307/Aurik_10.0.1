@@ -193,7 +193,7 @@ class FinalEQ(PhaseInterface):
         # Check if EQ is needed
         total_gain = sum(abs(band["gain_db"]) for band in config.values())
         if total_gain < 0.5:
-            logger.info(f"Total EQ gain < 0.5 dB - skipping for {material.name}")
+            logger.info("Total EQ gain < 0.5 dB - skipping for %s", material.name)
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
             return PhaseResult(
@@ -217,8 +217,8 @@ class FinalEQ(PhaseInterface):
         else:
             eq_audio = self._eq_channel(audio, sample_rate, config)
 
-        # Normalize if needed (prevent clipping)
-        peak = np.max(np.abs(eq_audio))
+        # Normalize if needed (prevent clipping) — §2.49 Peak-Guard: percentile(99.9)
+        peak = float(np.percentile(np.abs(eq_audio), 99.9))
         if peak > 0.99:
             eq_audio = eq_audio * (0.99 / peak)
             clipping_prevented = True

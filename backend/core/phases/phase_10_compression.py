@@ -232,8 +232,8 @@ class CompressionPhase(PhaseInterface):
         # Combine bands
         audio_processed = self._combine_bands(processed_bands)
 
-        # Normalize to prevent clipping
-        peak = np.max(np.abs(audio_processed))
+        # Normalize to prevent clipping — §2.49 Peak-Guard: percentile(99.9)
+        peak = float(np.percentile(np.abs(audio_processed), 99.9))
         if peak > 0.95:
             audio_processed = audio_processed * (0.95 / peak)
 
@@ -427,7 +427,7 @@ if __name__ == "__main__":
     materials = [MaterialType.SHELLAC, MaterialType.VINYL, MaterialType.CD_DIGITAL]
 
     for material in materials:
-        logger.debug(f"Testing {material.value.upper()}:")
+        logger.debug("Testing %s:", material.value.upper())
         logger.debug("-" * 70)
 
         sr = 44100
@@ -479,12 +479,12 @@ if __name__ == "__main__":
         dr_out = 20 * np.log10(peak_out / (rms_out + 1e-10))
 
         logger.debug("  Multi-band parallel compression:")
-        logger.debug(f"    RMS change: {meta['rms_change_db']:+.2f} dB")
+        logger.debug("    RMS change: %.2f dB", meta['rms_change_db'])
         logger.debug(
             f"    Dynamic range: {dr_in:.1f} dB → {dr_out:.1f} dB (reduced {meta['dynamic_range_reduction_db']:.1f} dB)"
         )
-        logger.debug(f"    Parallel blend: {meta['parallel_blend'] * 100:.0f}% wet")
-        logger.debug(f"    Detection mode: {meta['detection_mode']}")
+        logger.debug("    Parallel blend: %.0f%% wet", meta['parallel_blend'] * 100)
+        logger.debug("    Detection mode: %s", meta['detection_mode'])
         logger.debug("")
         logger.debug("  Per-Band Compression:")
         for band_name, metrics in meta["band_metrics"].items():
@@ -495,7 +495,7 @@ if __name__ == "__main__":
                 f"RMS {metrics['rms_change_db']:+5.2f} dB"
             )
         logger.debug("")
-        logger.debug(f"  Processing time: {meta['processing_time_s']:.3f}s ({meta['realtime_factor']:.2f}× realtime)")
-        logger.debug(f"  Quality impact: {meta['quality_impact']:.2f}")
+        logger.debug("  Processing time: %.3fs (%.2f× realtime)", meta['processing_time_s'], meta['realtime_factor'])
+        logger.debug("  Quality impact: %.2f", meta['quality_impact'])
         logger.debug("  ✅")
         logger.debug("")

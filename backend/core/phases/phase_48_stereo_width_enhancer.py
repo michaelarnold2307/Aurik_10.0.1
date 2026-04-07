@@ -232,7 +232,7 @@ class StereoWidthEnhancerPhase(PhaseInterface):
         x = audio.astype(np.float64)
         L = x[:, 0]
         R = x[:, 1]
-        peak_in = float(np.max(np.abs(audio)))
+        peak_in = float(np.percentile(np.abs(audio), 99.9))  # §2.49 Peak-Guard
 
         # Frequenzabhängige M/S-Breite (STFT basiert)
         L_out, R_out = _freq_dependent_ms_width(L, R, sample_rate, width, diffuse)
@@ -260,8 +260,8 @@ class StereoWidthEnhancerPhase(PhaseInterface):
         if 0.0 < effective_strength < 1.0:
             processed = x + effective_strength * (processed - x)
 
-        # Pegel-Erhalt
-        peak_out = float(np.max(np.abs(processed)))
+        # Pegel-Erhalt — §2.49 Peak-Guard: percentile(99.9)
+        peak_out = float(np.percentile(np.abs(processed), 99.9))
         if peak_out > 1e-8 and peak_in > 1e-8:
             processed = processed * (peak_in / peak_out)
 

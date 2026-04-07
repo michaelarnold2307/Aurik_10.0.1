@@ -204,10 +204,8 @@ class StereoBalancePhaseV2(PhaseInterface):
         # Step 4: Final global balance check
         final_imbalance = self._measure_global_imbalance(corrected_audio)
 
-        # Step 5: Peak normalization (if needed)
-        max_val = np.abs(corrected_audio).max()
-        if max_val > 0.99:
-            corrected_audio = corrected_audio * (0.99 / max_val)
+        # Step 5: Safety clip (no peak normalization)
+        corrected_audio = np.clip(corrected_audio, -1.0, 1.0)
 
         # Calculate overall metrics
         initial_imbalance = self._measure_global_imbalance(audio)
@@ -462,12 +460,12 @@ if __name__ == "__main__":
     right_rms = np.sqrt(np.mean(right**2))
     expected_imbalance = 20 * np.log10(left_rms / right_rms)
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sample_rate} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sample_rate)
     logger.debug("Multi-frequency content with frequency-dependent imbalance:")
     logger.debug("  Bass (100 Hz): Left ~0.4, Right ~0.28 (-3 dB imbalance)")
     logger.debug("  Mid (440/1760 Hz): Left ~0.3/0.2, Right ~0.15/0.1 (-6 dB imbalance)")
     logger.debug("  High (8 kHz): Left ~0.15, Right ~0.13 (-1.5 dB imbalance)")
-    logger.debug(f"Overall expected imbalance: {expected_imbalance:.2f} dB (left louder)")
+    logger.debug("Overall expected imbalance: %.2f dB (left louder)", expected_imbalance)
 
     # Test with different materials
     materials = [MaterialType.SHELLAC, MaterialType.VINYL, MaterialType.TAPE, MaterialType.CD_DIGITAL]
@@ -475,9 +473,9 @@ if __name__ == "__main__":
     phase = StereoBalancePhaseV2()
 
     for material in materials:
-        logger.debug(f"\n{'─' * 80}")
-        logger.debug(f"Testing with material: {material.name}")
-        logger.debug(f"{'─' * 80}")
+        logger.debug("\n%s", '─' * 80)
+        logger.debug("Testing with material: %s", material.name)
+        logger.debug("%s", '─' * 80)
 
         result = phase.process(audio, sample_rate, material)
 
@@ -486,21 +484,21 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Correction Applied: {result.metadata['correction_applied']}")
+            logger.debug("   Correction Applied: %s", result.metadata['correction_applied'])
             if result.metadata["correction_applied"]:
-                logger.debug(f"   Global Imbalance Before: {result.metrics['imbalance_db_before']:.2f} dB")
-                logger.debug(f"   Global Imbalance After: {result.metrics['imbalance_db_after']:.2f} dB")
-                logger.debug(f"   Imbalance Reduction: {result.metrics['imbalance_reduction_db']:.2f} dB")
-                logger.debug(f"   Band 0 (Bass) Before: {result.metrics['band_0_imbalance_before']:.2f} dB")
-                logger.debug(f"   Band 0 (Bass) After: {result.metrics['band_0_imbalance_after']:.2f} dB")
-                logger.debug(f"   Band 1 (Mid) Before: {result.metrics['band_1_imbalance_before']:.2f} dB")
-                logger.debug(f"   Band 1 (Mid) After: {result.metrics['band_1_imbalance_after']:.2f} dB")
-                logger.debug(f"   Band 2 (High) Before: {result.metrics['band_2_imbalance_before']:.2f} dB")
-                logger.debug(f"   Band 2 (High) After: {result.metrics['band_2_imbalance_after']:.2f} dB")
+                logger.debug("   Global Imbalance Before: %.2f dB", result.metrics['imbalance_db_before'])
+                logger.debug("   Global Imbalance After: %.2f dB", result.metrics['imbalance_db_after'])
+                logger.debug("   Imbalance Reduction: %.2f dB", result.metrics['imbalance_reduction_db'])
+                logger.debug("   Band 0 (Bass) Before: %.2f dB", result.metrics['band_0_imbalance_before'])
+                logger.debug("   Band 0 (Bass) After: %.2f dB", result.metrics['band_0_imbalance_after'])
+                logger.debug("   Band 1 (Mid) Before: %.2f dB", result.metrics['band_1_imbalance_before'])
+                logger.debug("   Band 1 (Mid) After: %.2f dB", result.metrics['band_1_imbalance_after'])
+                logger.debug("   Band 2 (High) Before: %.2f dB", result.metrics['band_2_imbalance_before'])
+                logger.debug("   Band 2 (High) After: %.2f dB", result.metrics['band_2_imbalance_after'])
         else:
             logger.debug("❌ Processing failed!")
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Stereo Balance v2.0 Test Complete!")
     logger.debug("=" * 80)
     logger.debug("Algorithm: multiband_spectral_balance_v2")

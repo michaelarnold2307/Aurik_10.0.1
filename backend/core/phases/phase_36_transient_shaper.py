@@ -206,8 +206,8 @@ class TransientShaper(PhaseInterface):
         transient_energy_after = self._measure_transient_energy(shaped_audio, sample_rate)
         transient_boost_db = 20 * np.log10((transient_energy_after + 1e-10) / (transient_energy_before + 1e-10))
 
-        # Safety limiting
-        peak = np.max(np.abs(shaped_audio))
+        # Safety limiting — §2.49 Peak-Guard: percentile(99.9) so single impulse artefacts don't block normalisation
+        peak = float(np.percentile(np.abs(shaped_audio), 99.9))
         if peak > 0.99:
             shaped_audio = shaped_audio * (0.99 / peak)
 

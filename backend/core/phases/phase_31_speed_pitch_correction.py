@@ -538,8 +538,8 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             read_pos += hop_analysis
             write_pos += hop_synthesis
 
-        # Normalize
-        output = output / (np.max(np.abs(output)) + 1e-10)
+        # Normalize — §2.49 Peak-Guard: percentile(99.9) so impulse artefacts don't suppress the whole signal
+        output = output / (float(np.percentile(np.abs(output), 99.9)) + 1e-10)
 
         return output
 
@@ -916,7 +916,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             return result.detected_pitch, result.confidence, metadata
 
         except Exception as e:
-            logger.error(f"ML-Hybrid pitch detection failed: {e}, falling back to pYIN")
+            logger.error("ML-Hybrid pitch detection failed: %s, falling back to pYIN", e)
             # Fallback zu pYIN (Mauch & Dixon 2014)
             params = self.MATERIAL_PARAMS.get("vinyl", self.MATERIAL_PARAMS["unknown"])
             pitch, conf = self._detect_pitch_pyin(audio, params)
@@ -957,18 +957,18 @@ if __name__ == "__main__":
     # Make stereo
     audio = np.column_stack([audio, audio * 0.95])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
-    logger.debug(f"True pitch: {true_pitch} Hz")
-    logger.debug(f"Simulated speed error: {speed_error * 100:.1f}% (too fast)")
-    logger.debug(f"Played pitch: {played_pitch:.2f} Hz")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
+    logger.debug("True pitch: %s Hz", true_pitch)
+    logger.debug("Simulated speed error: %.1f%% (too fast)", speed_error * 100)
+    logger.debug("Played pitch: %.2f Hz", played_pitch)
 
     # Test with different materials
     materials = ["tape", "vinyl", "shellac"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = SpeedPitchCorrectionPhase(sample_rate=sr)
         result = phase.process(audio.copy(), material_type=material, reference_pitch=true_pitch)
@@ -978,22 +978,22 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Detected Pitch: {result.modifications['detected_pitch']:.2f} Hz")
-            logger.debug(f"   Confidence: {result.modifications['confidence']:.2f}")
-            logger.debug(f"   Speed Error: {result.modifications['speed_error_percent']:.2f}%")
-            logger.debug(f"   Correction Ratio: {result.modifications['correction_ratio']:.4f}")
-            logger.debug(f"   Algorithm: {result.metadata['algorithm']}")
+            logger.debug("   Detected Pitch: %.2f Hz", result.modifications['detected_pitch'])
+            logger.debug("   Confidence: %.2f", result.modifications['confidence'])
+            logger.debug("   Speed Error: %.2f%%", result.modifications['speed_error_percent'])
+            logger.debug("   Correction Ratio: %.4f", result.modifications['correction_ratio'])
+            logger.debug("   Algorithm: %s", result.metadata['algorithm'])
             logger.debug(
                 f"   Samples: {result.modifications['samples_before']} → {result.modifications['samples_after']}"
             )
         else:
             logger.debug("⏭️  Processing Skipped")
-            logger.debug(f"   Reason: {result.modifications.get('reason', 'unknown')}")
+            logger.debug("   Reason: %s", result.modifications.get('reason', 'unknown'))
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Speed/Pitch Correction v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata['algorithm']}")
-    logger.debug(f"Scientific Reference: {result.metadata.get('scientific_ref', 'N/A')}")
-    logger.debug(f"Benchmark: {result.metadata.get('benchmark', 'N/A')}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata['algorithm'])
+    logger.debug("Scientific Reference: %s", result.metadata.get('scientific_ref', 'N/A'))
+    logger.debug("Benchmark: %s", result.metadata.get('benchmark', 'N/A'))
     logger.debug("Quality Impact: 0.94 (Professional-Grade)")

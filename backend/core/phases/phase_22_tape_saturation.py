@@ -396,8 +396,9 @@ class TapeSaturation(PhaseInterface):
                 sos_tape_hf = signal.butter(2, hf_rolloff / nyquist, btype="lowpass", output="sos")
                 saturated = signal.sosfilt(sos_tape_hf, saturated)
 
-        # Soft limiter (prevent clipping)
-        peak = np.max(np.abs(saturated))
+        # Soft limiter (prevent clipping) — §2.49 Peak-Guard: percentile(99.9) so single
+        # crackle/click impulses do not block normalization of the musical signal.
+        peak = float(np.percentile(np.abs(saturated), 99.9))
         if peak > 0.95:
             saturated = saturated * (0.95 / peak)
 
@@ -467,8 +468,8 @@ class TapeSaturation(PhaseInterface):
         # Mix harmonics
         saturated_with_harmonics = saturated + h2 + h3 + h4
 
-        # Normalize to prevent clipping
-        peak = np.max(np.abs(saturated_with_harmonics))
+        # Normalize to prevent clipping — §2.49 Peak-Guard: percentile(99.9)
+        peak = float(np.percentile(np.abs(saturated_with_harmonics), 99.9))
         if peak > 1.0:
             saturated_with_harmonics /= peak
 
@@ -535,7 +536,7 @@ if __name__ == "__main__":
     # Pure 440 Hz sine (A4) at moderate level
     test_signal = 0.5 * np.sin(2 * np.pi * 440 * t)
 
-    logger.debug(f"Generated {duration}s test audio @ {sample_rate} Hz")
+    logger.debug("Generated %ss test audio @ %s Hz", duration, sample_rate)
     logger.debug("Signal: Pure 440 Hz sine (A4)")
     logger.debug("Purpose: Measure THD and harmonic addition")
     logger.debug("")
@@ -549,7 +550,7 @@ if __name__ == "__main__":
 
     for material, material_name in materials:
         logger.debug("─" * 80)
-        logger.debug(f"Material: {material_name}")
+        logger.debug("Material: %s", material_name)
         logger.debug("─" * 80)
         logger.debug("")
 
@@ -557,12 +558,12 @@ if __name__ == "__main__":
         result = phase.process(test_signal, sample_rate, material)
 
         logger.debug("✅ Professional Tape Saturation:")
-        logger.debug(f"   THD: {result.metrics['thd_percent']:.2f}%")
-        logger.debug(f"   Harmonic Increase: {result.metrics['harmonic_increase_db']:.2f} dB")
-        logger.debug(f"   Drive: {result.metrics['drive']:.2f}")
-        logger.debug(f"   Mix Amount: {result.metrics['mix_amount']:.0%}")
-        logger.debug(f"   Tape Speed: {result.metrics['tape_speed']}")
-        logger.debug(f"   Hysteresis: {result.metrics['hysteresis']:.2f}")
+        logger.debug("   THD: %.2f%%", result.metrics['thd_percent'])
+        logger.debug("   Harmonic Increase: %.2f dB", result.metrics['harmonic_increase_db'])
+        logger.debug("   Drive: %.2f", result.metrics['drive'])
+        logger.debug("   Mix Amount: %s", format(result.metrics['mix_amount'], '.0%'))
+        logger.debug("   Tape Speed: %s", result.metrics['tape_speed'])
+        logger.debug("   Hysteresis: %.2f", result.metrics['hysteresis'])
         logger.debug(
             f"   Processing time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
         )

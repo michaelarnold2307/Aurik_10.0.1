@@ -304,7 +304,7 @@ if __name__ == "__main__":
     ]
 
     for material in test_materials:
-        logger.debug(f"Testing {material.value.upper()}:")
+        logger.debug("Testing %s:", material.value.upper())
 
         # Create test signal: music + DC offset + rumble
         sr = 44100
@@ -331,11 +331,11 @@ if __name__ == "__main__":
 
         # Display results
         meta = result.metadata
-        logger.debug(f"  HP cutoff: {meta['hp_cutoff_hz']:.1f} Hz ({meta['filter_type'].upper()})")
-        logger.debug(f"  DC before: {meta['dc_offset_before']}")
-        logger.debug(f"  DC after: {meta['dc_offset_after']}")
-        logger.debug(f"  DC reduction: {meta['dc_reduction']}")
-        logger.debug(f"  Subsonic reduction: {meta['subsonic_reduction_db']:.2f} dB")
-        logger.debug(f"  Processing time: {elapsed:.4f}s")
-        logger.debug(f"  RT factor: {meta['rt_factor']:.4f}×")
+        logger.debug("  HP cutoff: %.1f Hz (%s)", meta['hp_cutoff_hz'], meta['filter_type'].upper())
+        logger.debug("  DC before: %s", meta['dc_offset_before'])
+        logger.debug("  DC after: %s", meta['dc_offset_after'])
+        logger.debug("  DC reduction: %s", meta['dc_reduction'])
+        logger.debug("  Subsonic reduction: %.2f dB", meta['subsonic_reduction_db'])
+        logger.debug("  Processing time: %.4fs", elapsed)
+        logger.debug("  RT factor: %.4f×", meta['rt_factor'])
         logger.debug("  ✅\n")

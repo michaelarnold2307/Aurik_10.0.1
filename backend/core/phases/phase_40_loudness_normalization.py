@@ -205,7 +205,8 @@ class LoudnessNormalizationPhase(PhaseInterface):
         gain_db = (target_lufs - integrated_lufs) * _effective_strength
 
         # §v9.10.113: §8.2 Restoration/balanced — LUFS-Δ ≤ 1 LU (archive material retains original loudness)
-        if quality_mode in ("restoration", "balanced"):
+        # QualityMode.QUALITY.value == "quality" is the Restoration mode in UV3 (§performance_guard.py)
+        if quality_mode in ("restoration", "balanced", "quality"):
             gain_db = float(np.clip(gain_db, -1.0, 1.0))
 
         # Dynamic Range Preservation: Limit gain to preserve DR
@@ -219,7 +220,10 @@ class LoudnessNormalizationPhase(PhaseInterface):
         # distorts the spectrum (changes MFCC / spectral centroid), causing
         # PMGG to roll back the normalization entirely.
         # Solution: cap gain so the True Peak Limiter needs ≤2 dB of attenuation.
-        current_peak = float(np.max(np.abs(audio)) + 1e-12)
+        # §v9.10.125: Use 99.9th-percentile peak instead of np.max() so that a single
+        # impulsive artefact (crackle/click at near-full scale) cannot suppress LUFS
+        # gain for the much quieter actual music content.
+        current_peak = float(np.percentile(np.abs(audio), 99.9) + 1e-12)
         # max gain that keeps peak within 2 dB headroom of the True Peak limit
         max_safe_gain_db = max_true_peak_db - 20.0 * np.log10(current_peak) + 2.0
         if gain_db > max_safe_gain_db:
@@ -635,11 +639,11 @@ if __name__ == "__main__":
     rms_before = np.sqrt(np.mean(test_audio_stereo**2))
     peak_before = np.abs(test_audio_stereo).max()
 
-    logger.debug(f"\nGeneriert {duration}s Test-Audio @ {sample_rate} Hz")
+    logger.debug("\nGeneriert %ss Test-Audio @ %s Hz", duration, sample_rate)
     logger.debug("Multi-Frequenz: 100 Hz, 1000 Hz, 5000 Hz")
     logger.debug("Stereo (zu leise für Production)")
-    logger.debug(f"RMS: {20 * np.log10(rms_before):.1f} dBFS")
-    logger.debug(f"Peak: {20 * np.log10(peak_before):.1f} dBFS")
+    logger.debug("RMS: %.1f dBFS", 20 * np.log10(rms_before))
+    logger.debug("Peak: %.1f dBFS", 20 * np.log10(peak_before))
 
     phase = LoudnessNormalizationPhase()
 
@@ -652,9 +656,9 @@ if __name__ == "__main__":
     ]
 
     for material, platform, description in test_configs:
-        logger.debug(f"\n{'─' * 80}")
-        logger.debug(f"{description}")
-        logger.debug(f"{'─' * 80}")
+        logger.debug("\n%s", '─' * 80)
+        logger.debug("%s", description)
+        logger.debug("%s", '─' * 80)
 
         result = phase.process(test_audio_stereo, sample_rate, material, platform=platform)
 
@@ -663,32 +667,32 @@ if __name__ == "__main__":
             meta = result.metadata
 
             logger.debug("\n✅ Professional Loudness Normalization:")
-            logger.debug(f"   Target: {meta['target_lufs']:.1f} LUFS")
+            logger.debug("   Target: %.1f LUFS", meta['target_lufs'])
             if meta["platform_preset"]:
-                logger.debug(f"   Platform: {meta['platform_preset']}")
+                logger.debug("   Platform: %s", meta['platform_preset'])
 
             logger.debug("\n   Loudness:")
-            logger.debug(f"     Integrated: {m['integrated_lufs_before']:.2f} → {m['integrated_lufs_after']:.2f} LUFS")
-            logger.debug(f"     Tolerance: {m['lufs_tolerance']:.2f} LU ({'✅' if m['lufs_tolerance'] < 0.5 else '⚠️'})")
-            logger.debug(f"     Momentary Max: {m['momentary_max_lufs']:.2f} LUFS")
-            logger.debug(f"     Short-term Max: {m['short_term_max_lufs']:.2f} LUFS")
+            logger.debug("     Integrated: %.2f → %.2f LUFS", m['integrated_lufs_before'], m['integrated_lufs_after'])
+            logger.debug("     Tolerance: %.2f LU (%s)", m['lufs_tolerance'], '✅' if m['lufs_tolerance'] < 0.5 else '⚠️')
+            logger.debug("     Momentary Max: %.2f LUFS", m['momentary_max_lufs'])
+            logger.debug("     Short-term Max: %.2f LUFS", m['short_term_max_lufs'])
 
             logger.debug("\n   Loudness Range (LRA):")
-            logger.debug(f"     Before: {m['lra_before']:.2f} LU")
-            logger.debug(f"     After: {m['lra_after']:.2f} LU")
+            logger.debug("     Before: %.2f LU", m['lra_before'])
+            logger.debug("     After: %.2f LU", m['lra_after'])
 
             logger.debug("\n   True Peak:")
-            logger.debug(f"     Before: {m['true_peak_before_db']:.2f} dBTP")
-            logger.debug(f"     After: {m['true_peak_after_db']:.2f} dBTP")
-            logger.debug(f"     Max Allowed: {meta['max_true_peak_db']:.1f} dBTP")
-            logger.debug(f"     Compliance: {'✅' if m['peak_compliance'] else '❌'}")
+            logger.debug("     Before: %.2f dBTP", m['true_peak_before_db'])
+            logger.debug("     After: %.2f dBTP", m['true_peak_after_db'])
+            logger.debug("     Max Allowed: %.1f dBTP", meta['max_true_peak_db'])
+            logger.debug("     Compliance: %s", '✅' if m['peak_compliance'] else '❌')
 
             logger.debug("\n   Processing:")
-            logger.debug(f"     Gain Applied: {m['gain_applied_db']:+.2f} dB")
+            logger.debug("     Gain Applied: %.2f dB", m['gain_applied_db'])
             logger.debug(
                 f"     Time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
             )
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("Test abgeschlossen")
-    logger.debug(f"{'=' * 80}")
+    logger.debug("%s", '=' * 80)

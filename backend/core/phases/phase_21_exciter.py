@@ -288,8 +288,8 @@ class Exciter(PhaseInterface):
         mix_amount = config["mix"]
         excited_audio = audio * (1 - mix_amount) + excited_sum * mix_amount
 
-        # Normalize if needed
-        peak = np.max(np.abs(excited_audio))
+        # Normalize if needed — §2.49 Peak-Guard: percentile(99.9) so single impulse artefacts don't block normalisation
+        peak = float(np.percentile(np.abs(excited_audio), 99.9))
         if peak > 0.99:
             excited_audio = excited_audio * (0.99 / peak)
 

@@ -237,28 +237,43 @@ class HarmonicRestorationPhase(PhaseInterface):
             {f"{f0:.0f}Hz": orders for f0, _sal, orders in f0_info} if f0_info else {}
         )
 
-        # Step 2: Apply multi-mode saturation
-        saturated = self._apply_saturation_professional(audio, params)
-
-        # Step 3: Extract and enhance harmonics
-        harmonics = self._extract_harmonics(saturated, audio, params)
-
-        # Step 3b: Additive synthesis of missing overtones (I – Multi-Pitch)
-        additive = self._synthesize_missing_overtones(_mono, f0_info, params)
-
-        # Step 4: Blend with original (parallel processing)
-        restored = audio + harmonics * params["blend"]
-        # Fill-in missing overtones at 40 % of saturation blend (conservative)
-        fill_gain = params["blend"] * 0.40
+        # Step 2: Apply multi-mode saturation — §2.51 M/S: harmonics only on Mid channel.
         if audio.ndim == 2:
-            restored += fill_gain * additive[:, None]
+            # M/S encode: Mid = (L+R)/√2, Side = (L-R)/√2
+            _sqrt2 = np.sqrt(2.0)
+            _mid = (audio[:, 0] + audio[:, 1]) / _sqrt2
+            _side = (audio[:, 0] - audio[:, 1]) / _sqrt2
+            # Saturation + harmonic extraction on Mid only
+            _saturated_mid = self._apply_saturation_professional(_mid, params)
+            _harmonics_mid = self._extract_harmonics(_saturated_mid, _mid, params)
+            # Additive synthesis on Mid only
+            additive = self._synthesize_missing_overtones(_mono, f0_info, params)
+            fill_gain = params["blend"] * 0.40
+            # Blend harmonics into Mid, keep Side intact
+            _out_mid = _mid + _harmonics_mid * params["blend"] + fill_gain * additive
+            # M/S decode back to L/R
+            restored = np.column_stack((
+                (_out_mid + _side) / _sqrt2,
+                (_out_mid - _side) / _sqrt2,
+            ))
+            # Unused variables for unified code path below
+            saturated = audio  # not used further
+            harmonics = np.zeros_like(audio)  # already applied above
         else:
+            # Step 2 mono: apply saturation directly
+            saturated = self._apply_saturation_professional(audio, params)
+            # Step 3: Extract and enhance harmonics
+            harmonics = self._extract_harmonics(saturated, audio, params)
+            # Step 3b: Additive synthesis of missing overtones (I – Multi-Pitch)
+            additive = self._synthesize_missing_overtones(_mono, f0_info, params)
+            # Step 4: Blend with original (parallel processing)
+            restored = audio + harmonics * params["blend"]
+            # Fill-in missing overtones at 40 % of saturation blend (conservative)
+            fill_gain = params["blend"] * 0.40
             restored += fill_gain * additive
 
-        # Step 5: Prevent clipping
-        max_val = np.max(np.abs(restored))
-        if max_val > 0.99:
-            restored = restored * (0.99 / max_val)
+        # Step 5: Safety clip (no peak normalization)
+        restored = np.clip(restored, -1.0, 1.0)
 
         execution_time = time.time() - start_time
 
@@ -770,16 +785,16 @@ if __name__ == "__main__":
     # Make stereo
     audio = np.column_stack([fundamental, fundamental * 0.98])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Pure 440 Hz sine wave (no harmonics)")
 
     # Test with different materials
     materials = ["shellac", "vinyl", "tape", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = HarmonicRestorationPhase(sample_rate=sr)
         result = phase.process(audio.copy(), material_type=material)
@@ -789,25 +804,25 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Saturation Mode: {result.modifications['saturation_mode']}")
-            logger.debug(f"   Drive: {result.modifications['drive']:.1f}×")
-            logger.debug(f"   Blend: {result.modifications['blend']:.2f}")
+            logger.debug("   Saturation Mode: %s", result.modifications['saturation_mode'])
+            logger.debug("   Drive: %.1f×", result.modifications['drive'])
+            logger.debug("   Blend: %.2f", result.modifications['blend'])
             logger.debug(
                 f"   Even/Odd Ratio: {result.modifications['even_harmonic_ratio']:.1f}/{result.modifications['odd_harmonic_ratio']:.1f}"
             )
-            logger.debug(f"   HF Enhancement: {result.modifications['hf_enhancement_db']:.1f} dB")
-            logger.debug(f"   THD: {result.modifications['thd_percent']:.2f}%")
-            logger.debug(f"   Missing Harmonics: {result.metadata['missing_harmonics']}")
-            logger.debug(f"   Target Range: {result.metadata['target_range_hz']} Hz")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   HF Enhancement: %.1f dB", result.modifications['hf_enhancement_db'])
+            logger.debug("   THD: %.2f%%", result.modifications['thd_percent'])
+            logger.debug("   Missing Harmonics: %s", result.metadata['missing_harmonics'])
+            logger.debug("   Target Range: %s Hz", result.metadata['target_range_hz'])
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("⏭️  Harmonic Restoration Skipped")
-            logger.debug(f"   Reason: {result.modifications.get('reason', 'unknown')}")
+            logger.debug("   Reason: %s", result.modifications.get('reason', 'unknown'))
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Harmonic Restoration v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata.get('algorithm', 'N/A')}")
-    logger.debug(f"Scientific Reference: {result.metadata.get('scientific_ref', 'N/A')}")
-    logger.debug(f"Benchmark: {result.metadata.get('benchmark', 'N/A')}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata.get('algorithm', 'N/A'))
+    logger.debug("Scientific Reference: %s", result.metadata.get('scientific_ref', 'N/A'))
+    logger.debug("Benchmark: %s", result.metadata.get('benchmark', 'N/A'))
     logger.debug("Quality Impact: 0.94 (Professional-Grade)")

@@ -273,7 +273,7 @@ class ReverbReduction(PhaseInterface):
 
         if use_ml_hybrid:
             try:
-                logger.info(f"Phase 20 ML-Hybrid: mode={quality_mode}, material={material.value}")
+                logger.info("Phase 20 ML-Hybrid: mode=%s, material=%s", quality_mode, material.value)
 
                 # Configure ML dereverb strategy
                 # 'quality' und 'maximum' → HYBRID (SGMSE+ ML-Primär + WPE-DSP-Fallback, §4.4)
@@ -377,7 +377,7 @@ class ReverbReduction(PhaseInterface):
                 # Fall through to DSP path below
 
         # DSP-Only Path (Fast mode or ML fallback)
-        logger.info(f"Phase 20 DSP-Only: material={material.value}, strength={strength}")
+        logger.info("Phase 20 DSP-Only: material=%s, strength=%s", material.value, strength)
 
         # ── Tier-1 DSP: WPE (Nakatani 2010) — DSP-Fallback für Dereverb (§4.4; ML-Primär: SGMSE+) ──
         # WPE entfernt Spätreflexionen via iterative gewichtete lineare Prädiktion.
@@ -439,24 +439,26 @@ class ReverbReduction(PhaseInterface):
             # Detect channel-major (2, N) vs time-major (N, 2).
             # Aurik uses channel-major (2, N) throughout the pipeline.
             _is_ch_maj = audio.shape[0] <= 2 and audio.shape[1] > audio.shape[0]
-            _left = audio[0] if _is_ch_maj else audio[:, 0]
-            _right = audio[1] if _is_ch_maj else audio[:, 1]
-            # Process each channel in parallel (multicore via ThreadPoolExecutor)
-            # Note: _reduce_reverb uses numpy FFT which releases GIL, enabling true parallelism
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                future_left = executor.submit(self._reduce_reverb, _left, sample_rate, strength, damping)
-                future_right = executor.submit(self._reduce_reverb, _right, sample_rate, strength, damping)
-                left_reduced = future_left.result()
-                right_reduced = future_right.result()
-
-            # Ensure same length and recombine in original format
-            min_len = min(len(left_reduced), len(right_reduced))
+            _l = audio[0] if _is_ch_maj else audio[:, 0]
+            _r = audio[1] if _is_ch_maj else audio[:, 1]
+            # §2.51 M/S: apply reverb suppression on Mid-channel only so both
+            # channels receive the SAME gain curve — independent L/R processing
+            # estimates different room impulses per channel, creating stereo-field
+            # asymmetry that triggers §2.49 phase-cancellation rollbacks.
+            _sqrt2 = np.sqrt(2.0)
+            _mid = (_l + _r) / _sqrt2
+            _side = (_l - _r) / _sqrt2
+            mid_reduced = self._reduce_reverb(_mid, sample_rate, strength, damping)
+            # Side: apply weaker dereverb (side already less reverberant)
+            _side_str = strength * 0.5
+            side_reduced = self._reduce_reverb(_side, sample_rate, _side_str, damping)
+            min_len = min(len(mid_reduced), len(side_reduced))
+            _l_out = (mid_reduced[:min_len] + side_reduced[:min_len]) / _sqrt2
+            _r_out = (mid_reduced[:min_len] - side_reduced[:min_len]) / _sqrt2
             if _is_ch_maj:
-                reduced = np.stack([left_reduced[:min_len], right_reduced[:min_len]], axis=0)  # (2, N)
+                reduced = np.stack([_l_out, _r_out], axis=0)  # (2, N)
             else:
-                reduced = np.column_stack([left_reduced[:min_len], right_reduced[:min_len]])  # (N, 2)
+                reduced = np.column_stack([_l_out, _r_out])  # (N, 2)
         else:
             reduced = self._reduce_reverb(audio, sample_rate, strength, damping)
 
@@ -476,13 +478,17 @@ class ReverbReduction(PhaseInterface):
 
         # §4.5c Early-Reflection-Guard (Spec §4.5c, v9.10.100)
         # C80 = 10·log10(E_early80ms / E_late) — Kuttruff 2009; ΔC80 ≤ 6 dB
+        # D50 = E_early50ms / E_total — ΔD50 ≤ 0.12 (sekundär)
         _c80_guard_triggered = False
         _early_blend_triggered = False
         _delta_c80 = 0.0
+        _d50_guard_triggered = False
+        _delta_d50 = 0.0
         try:
             _mono_in = audio[0] if audio.ndim == 2 else audio
             _mono_out = reduced[0] if reduced.ndim == 2 else reduced
             _e80 = int(sample_rate * 0.080)
+            _e50 = int(sample_rate * 0.050)
             if len(_mono_in) > _e80:
                 _c80_pre = 10.0 * float(np.log10(
                     max(np.sum(_mono_in[:_e80] ** 2), 1e-12) / max(np.sum(_mono_in[_e80:] ** 2), 1e-12)
@@ -491,6 +497,14 @@ class ReverbReduction(PhaseInterface):
                     max(np.sum(_mono_out[:_e80] ** 2), 1e-12) / max(np.sum(_mono_out[_e80:] ** 2), 1e-12)
                 ))
                 _delta_c80 = _c80_post - _c80_pre
+
+                # D50 measurement
+                _e_total_in = max(float(np.sum(_mono_in ** 2)), 1e-12)
+                _e_total_out = max(float(np.sum(_mono_out ** 2)), 1e-12)
+                _d50_pre = float(np.clip(float(np.sum(_mono_in[:_e50] ** 2)) / _e_total_in, 0.0, 1.0))
+                _d50_post = float(np.clip(float(np.sum(_mono_out[:_e50] ** 2)) / _e_total_out, 0.0, 1.0))
+                _delta_d50 = _d50_post - _d50_pre
+
                 if _delta_c80 < -2.0:
                     # C80 degraded → rollback to dry
                     logger.warning(
@@ -527,8 +541,19 @@ class ReverbReduction(PhaseInterface):
                         "Phase 20 §4.5c C80-guard: ΔC80=%.2f dB — early-reflection blend 35 %% applied",
                         _delta_c80,
                     )
+
+                # §4.5c D50 secondary guard: ΔD50 > 0.12 → reduce wet further
+                if abs(_delta_d50) > 0.12 and not _c80_guard_triggered:
+                    _d50_scale = float(np.clip(0.12 / (abs(_delta_d50) + 1e-9), 0.30, 1.0))
+                    reduced = audio + _d50_scale * (reduced - audio)
+                    reduced = np.clip(reduced, -1.0, 1.0)
+                    _d50_guard_triggered = True
+                    logger.info(
+                        "Phase 20 §4.5c D50-guard: ΔD50=%.3f > 0.12 → wet scaled to %.2f",
+                        _delta_d50, _d50_scale,
+                    )
         except Exception as _c80_exc:
-            logger.debug("Phase 20 C80-guard skipped (non-critical): %s", _c80_exc)
+            logger.debug("Phase 20 C80/D50-guard skipped (non-critical): %s", _c80_exc)
 
         return PhaseResult(
             success=True,
@@ -915,7 +940,7 @@ if __name__ == "__main__":
     reverb_tail = signal.lfilter([1], [1, -0.7], dry_signal)  # Simple comb filter
     reverbed_signal = dry_signal + 0.4 * reverb_tail
 
-    logger.debug(f"Generated {duration}s test audio @ {sample_rate} Hz")
+    logger.debug("Generated %ss test audio @ %s Hz", duration, sample_rate)
     logger.debug("Dry signal + synthetic reverb tail")
     logger.debug("")
 
@@ -928,7 +953,7 @@ if __name__ == "__main__":
 
     for material, material_name in materials:
         logger.debug("─" * 80)
-        logger.debug(f"Material: {material_name}")
+        logger.debug("Material: %s", material_name)
         logger.debug("─" * 80)
         logger.debug("")
 
@@ -936,9 +961,9 @@ if __name__ == "__main__":
         result = phase.process(reverbed_signal, sample_rate, material)
 
         logger.debug("✅ Professional Reverb Reduction:")
-        logger.debug(f"   RMS Change: {result.metrics['rms_change_db']:.2f} dB")
-        logger.debug(f"   Reduction Strength: {result.metrics['reduction_strength']:.2f}")
-        logger.debug(f"   Tail Damping: {result.metrics['tail_damping']:.2f}")
+        logger.debug("   RMS Change: %.2f dB", result.metrics['rms_change_db'])
+        logger.debug("   Reduction Strength: %.2f", result.metrics['reduction_strength'])
+        logger.debug("   Tail Damping: %.2f", result.metrics['tail_damping'])
         logger.debug(
             f"   Processing time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
         )

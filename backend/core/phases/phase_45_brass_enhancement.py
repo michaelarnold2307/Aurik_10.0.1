@@ -216,9 +216,9 @@ class BrassEnhancementPhase(PhaseInterface):
         # 3. Air High-Shelf (8 kHz, +air_db dB)
         x = _high_shelf(x, sample_rate, freq=8000.0, gain_db=air_db)
 
-        # 4. Normalisierung (Pegel-Erhalt)
-        peak_in = float(np.max(np.abs(audio)))
-        peak_out = float(np.max(np.abs(x)))
+        # 4. Normalisierung (Pegel-Erhalt) — §2.49 Peak-Guard: percentile(99.9)
+        peak_in = float(np.percentile(np.abs(audio), 99.9))
+        peak_out = float(np.percentile(np.abs(x), 99.9))
         if peak_out > 1e-8 and peak_in > 1e-8:
             x = x * (peak_in / peak_out)
 

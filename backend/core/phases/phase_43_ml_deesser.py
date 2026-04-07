@@ -437,11 +437,17 @@ class AdaptiveDeEsserPhase(PhaseInterface):
         # Optional ML refinement with strict safety guard:
         # accept only if sibilance reduces and vocal core band is preserved.
         ml_refine_applied = False
+        ml_refine_bypassed = False
         ml_refine_model = "disabled"
         ml_blend = 0.0
+        ml_refine_bypass_reason = "disabled"
         if bool(kwargs.get("enable_ml_refine", True)):
             ml_candidate, ml_refine_model = _try_mp_senet_refine(processed, sample_rate)
-            if ml_candidate is not None and ml_candidate.shape == processed.shape:
+            ml_refine_bypass_reason = "unavailable" if ml_candidate is None else "shape_mismatch"
+            if ml_refine_model != "mp_senet_onnx":
+                ml_refine_bypassed = True
+                ml_refine_bypass_reason = ml_refine_model
+            elif ml_candidate is not None and ml_candidate.shape == processed.shape:
                 sibilance_before = _band_rms(processed, sample_rate, freq_low, freq_high)
                 sibilance_after = _band_rms(ml_candidate, sample_rate, freq_low, freq_high)
                 vocal_core_before = _band_rms(processed, sample_rate, 300.0, 3000.0)
@@ -465,7 +471,10 @@ class AdaptiveDeEsserPhase(PhaseInterface):
                     processed = processed + ml_blend * (ml_candidate - processed)
                     processed = np.clip(np.nan_to_num(processed, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
                     ml_refine_applied = True
+                    ml_refine_bypass_reason = "applied"
                 else:
+                    ml_refine_bypassed = True
+                    ml_refine_bypass_reason = "safety_gate"
                     logger.debug(
                         "Phase 43 ML refinement rejected: sib_impr=%.3f core_ratio=%.3f rms_delta_db=%.2f",
                         sibilance_improvement,
@@ -502,6 +511,8 @@ class AdaptiveDeEsserPhase(PhaseInterface):
                 "strength_cap": strength_cap,
                 "ml_refine_enabled": bool(kwargs.get("enable_ml_refine", True)),
                 "ml_refine_applied": ml_refine_applied,
+                "ml_refine_bypassed": ml_refine_bypassed,
+                "ml_refine_bypass_reason": ml_refine_bypass_reason,
                 "ml_refine_model": ml_refine_model,
                 "ml_refine_blend": ml_blend,
                 "phase_locality_factor": phase_locality_factor,

@@ -407,7 +407,7 @@ class DrumsEnhancementV1(PhaseInterface):
             )
 
         except Exception as e:
-            logger.error(f"Drums enhancement failed: {e}", exc_info=True)
+            logger.error("Drums enhancement failed: %s", e, exc_info=True)
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
             return PhaseResult(

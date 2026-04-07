@@ -248,10 +248,8 @@ class TransientPreservationPhase(PhaseInterface):
         # Step 4: Recombine bands
         enhanced = self._recombine_multiband(shaped_bands, self.BAND_SPLITS)
 
-        # Step 5: Prevent clipping
-        max_val = np.max(np.abs(enhanced))
-        if max_val > 0.99:
-            enhanced = enhanced * (0.99 / max_val)
+        # Step 5: Safety clip (no peak normalization)
+        enhanced = np.clip(enhanced, -1.0, 1.0)
 
         execution_time = time.time() - start_time
 
@@ -530,17 +528,17 @@ if __name__ == "__main__":
     # Make stereo
     audio = np.column_stack([audio, audio * 0.98])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Background: 440 Hz sustained tone")
-    logger.debug(f"Transients: 5 drum hits @ {hit_times} seconds (dampened)")
+    logger.debug("Transients: 5 drum hits @ %s seconds (dampened)", hit_times)
 
     # Test with different materials
     materials = ["shellac", "vinyl", "tape", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = TransientPreservationPhase(sample_rate=sr)
         result = phase.process(audio.copy(), material_type=material)
@@ -550,21 +548,21 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Transients Detected: {result.modifications['num_transients']}")
-            logger.debug(f"   Transient Density: {result.modifications['transient_density_per_sec']:.1f}/sec")
-            logger.debug(f"   Peak Enhancement: {result.modifications['peak_enhancement_db']:.1f} dB")
-            logger.debug(f"   Num Bands: {result.modifications['num_bands']}")
-            logger.debug(f"   Band Splits: {result.modifications['band_splits_hz']} Hz")
-            logger.debug(f"   Attack Gain (per band): {result.metadata['attack_gain_db_per_band']} dB")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   Transients Detected: %s", result.modifications['num_transients'])
+            logger.debug("   Transient Density: %.1f/sec", result.modifications['transient_density_per_sec'])
+            logger.debug("   Peak Enhancement: %.1f dB", result.modifications['peak_enhancement_db'])
+            logger.debug("   Num Bands: %s", result.modifications['num_bands'])
+            logger.debug("   Band Splits: %s Hz", result.modifications['band_splits_hz'])
+            logger.debug("   Attack Gain (per band): %s dB", result.metadata['attack_gain_db_per_band'])
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("⏭️  Transient Preservation Skipped")
-            logger.debug(f"   Reason: {result.modifications.get('reason', 'unknown')}")
+            logger.debug("   Reason: %s", result.modifications.get('reason', 'unknown'))
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Transient Preservation v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata.get('algorithm', 'N/A')}")
-    logger.debug(f"Scientific Reference: {result.metadata.get('scientific_ref', 'N/A')}")
-    logger.debug(f"Benchmark: {result.metadata.get('benchmark', 'N/A')}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata.get('algorithm', 'N/A'))
+    logger.debug("Scientific Reference: %s", result.metadata.get('scientific_ref', 'N/A'))
+    logger.debug("Benchmark: %s", result.metadata.get('benchmark', 'N/A'))
     logger.debug("Quality Impact: 0.92 (Professional-Grade)")

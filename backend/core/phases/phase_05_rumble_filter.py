@@ -530,7 +530,7 @@ if __name__ == "__main__":
     audio = kick + melody + rumble
     audio = np.column_stack([audio, audio * 0.95])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Music: 80 Hz kick (pulsing) + 500 Hz melody")
     logger.debug("Rumble: 33 Hz motor + 66 Hz harmonic (strong!)")
 
@@ -538,9 +538,9 @@ if __name__ == "__main__":
     materials = ["shellac", "vinyl", "tape", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = RumbleFilterPhase(sample_rate=sr)
         result = phase.process(audio.copy(), material_type=material)
@@ -550,24 +550,24 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Cutoff: {result.modifications['cutoff_hz']:.1f} Hz")
-            logger.debug(f"   Filter Order: {result.modifications['filter_order']}")
-            logger.debug(f"   Phase Mode: {result.modifications['phase_mode']}")
-            logger.debug(f"   Transient Preserved: {result.modifications['transient_preserved']}")
-            logger.debug(f"   Rumble Reduction: {result.modifications['rumble_reduction_db']:.1f} dB")
-            logger.debug(f"   Rumble Energy Before: {result.metadata['rumble_energy_before']:.3f}")
-            logger.debug(f"   Rumble Energy After: {result.metadata['rumble_energy_after']:.3f}")
-            logger.debug(f"   Rumble Frequencies: {result.metadata['rumble_frequencies_hz']} Hz")
-            logger.debug(f"   Transient Locations: {result.metadata['transient_locations']}")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   Cutoff: %.1f Hz", result.modifications['cutoff_hz'])
+            logger.debug("   Filter Order: %s", result.modifications['filter_order'])
+            logger.debug("   Phase Mode: %s", result.modifications['phase_mode'])
+            logger.debug("   Transient Preserved: %s", result.modifications['transient_preserved'])
+            logger.debug("   Rumble Reduction: %.1f dB", result.modifications['rumble_reduction_db'])
+            logger.debug("   Rumble Energy Before: %.3f", result.metadata['rumble_energy_before'])
+            logger.debug("   Rumble Energy After: %.3f", result.metadata['rumble_energy_after'])
+            logger.debug("   Rumble Frequencies: %s Hz", result.metadata['rumble_frequencies_hz'])
+            logger.debug("   Transient Locations: %s", result.metadata['transient_locations'])
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("⏭️  Rumble Filter Skipped")
-            logger.debug(f"   Reason: {result.modifications.get('reason', 'unknown')}")
+            logger.debug("   Reason: %s", result.modifications.get('reason', 'unknown'))
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Rumble Filter v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata.get('algorithm', 'N/A')}")
-    logger.debug(f"Scientific Reference: {result.metadata.get('scientific_ref', 'N/A')}")
-    logger.debug(f"Benchmark: {result.metadata.get('benchmark', 'N/A')}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata.get('algorithm', 'N/A'))
+    logger.debug("Scientific Reference: %s", result.metadata.get('scientific_ref', 'N/A'))
+    logger.debug("Benchmark: %s", result.metadata.get('benchmark', 'N/A'))
     logger.debug("Quality Impact: 0.93 (Professional-Grade)")

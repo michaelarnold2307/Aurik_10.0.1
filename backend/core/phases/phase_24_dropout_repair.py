@@ -321,7 +321,7 @@ class DropoutRepairPhase(PhaseInterface):
             logger.info("✅ AudioSR Plugin loaded for Dropout Repair")
             return self._audiosr_plugin
         except Exception as e:
-            logger.warning(f"⚠️  AudioSR Plugin not available: {e}")
+            logger.warning("⚠️  AudioSR Plugin not available: %s", e)
             logger.info("    Falling back to DSP-only dropout repair")
             return None
 
@@ -756,21 +756,38 @@ class DropoutRepairPhase(PhaseInterface):
         # Stereo/Mono handling
         _pre_repaired_skipped = 0
         if audio.ndim == 2:
-            dropouts_left = self._detect_dropouts_multimodal(audio[:, 0], params)
-            dropouts_right = self._detect_dropouts_multimodal(audio[:, 1], params)
-            dropouts_left, _sk_l = _filter_pre_repaired(dropouts_left)
-            dropouts_right, _sk_r = _filter_pre_repaired(dropouts_right)
-            _pre_repaired_skipped = _sk_l + _sk_r
+            # §2.51 Linked-Stereo: kohärente L/R-Grenze + Füllung.
+            # Detect dropouts on the Mid signal (L+R power), merge with dropout
+            # positions from L and R to ensure no dropout in either channel is missed.
+            # Both channels are then repaired at the UNION of detected boundaries.
+            _mid_sc = (audio[:, 0] + audio[:, 1]) / np.sqrt(2)
+            dropouts_mid = self._detect_dropouts_multimodal(_mid_sc, params)
+            dropouts_left_raw = self._detect_dropouts_multimodal(audio[:, 0], params)
+            dropouts_right_raw = self._detect_dropouts_multimodal(audio[:, 1], params)
+            # Union: merge overlapping intervals from all three detection passes
+            _all_raw = sorted(set(dropouts_mid + dropouts_left_raw + dropouts_right_raw))
+            # Merge overlapping/adjacent intervals (< 1 ms gap)
+            _gap_samples = max(1, int(0.001 * self.sample_rate))
+            _merged: list[tuple[int, int]] = []
+            for _ds, _de in _all_raw:
+                if _merged and _ds <= _merged[-1][1] + _gap_samples:
+                    _merged[-1] = (_merged[-1][0], max(_merged[-1][1], _de))
+                else:
+                    _merged.append((_ds, _de))
+            linked_dropouts = _merged
+            linked_dropouts, _sk_linked = _filter_pre_repaired(linked_dropouts)
+            _pre_repaired_skipped = _sk_linked
 
+            # Repair both channels at the same (linked) boundaries
             repaired_left, ml_count_left = self._repair_dropouts_professional(
-                audio[:, 0], dropouts_left, params, use_ml
+                audio[:, 0], linked_dropouts, params, use_ml
             )
             repaired_right, ml_count_right = self._repair_dropouts_professional(
-                audio[:, 1], dropouts_right, params, use_ml
+                audio[:, 1], linked_dropouts, params, use_ml
             )
 
             repaired_audio = np.column_stack([repaired_left, repaired_right])
-            all_dropouts = dropouts_left + dropouts_right
+            all_dropouts = linked_dropouts
             ml_repaired_count = ml_count_left + ml_count_right
         else:
             all_dropouts = self._detect_dropouts_multimodal(audio, params)
@@ -1085,8 +1102,8 @@ class DropoutRepairPhase(PhaseInterface):
                             content_type = "atonal"  # HF-noise/burst: sinusoidal would smear
                         elif _pclass in ("vowel_stressed", "vowel_unstressed"):
                             content_type = "tonal"  # harmonic, sinusoidal repair preferred
-                except Exception:
-                    pass
+                except Exception as _ptl_exc:
+                    logger.debug("Phoneme-guided content typing failed for dropout segment: %s", _ptl_exc)
 
             # Repair based on content type
             if content_type == "tonal":
@@ -1644,7 +1661,7 @@ if __name__ == "__main__":
     # Make stereo
     audio = np.column_stack([audio, audio * 0.95])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz (stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
     logger.debug("Content: 440 Hz tone + harmonics")
     logger.debug("Dropouts: 3 injected (5ms, 20ms, 60ms)")
 
@@ -1652,9 +1669,9 @@ if __name__ == "__main__":
     materials = ["shellac", "vinyl", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = DropoutRepairPhase()
         result = phase.process(audio.copy(), sample_rate=sr, material_type=material)
@@ -1664,19 +1681,19 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Dropouts Repaired: {result.modifications['dropouts_repaired']}")
-            logger.debug(f"   Avg Duration: {result.modifications['avg_dropout_duration_ms']:.1f}ms")
-            logger.debug(f"   Max Duration: {result.modifications['max_dropout_duration_ms']:.1f}ms")
-            logger.debug(f"   Repair Strength: {result.modifications['repair_strength']:.2f}")
-            logger.debug(f"   Phase Continuity: {result.metadata['phase_continuity']:.2f}")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   Dropouts Repaired: %s", result.modifications['dropouts_repaired'])
+            logger.debug("   Avg Duration: %.1fms", result.modifications['avg_dropout_duration_ms'])
+            logger.debug("   Max Duration: %.1fms", result.modifications['max_dropout_duration_ms'])
+            logger.debug("   Repair Strength: %.2f", result.modifications['repair_strength'])
+            logger.debug("   Phase Continuity: %.2f", result.metadata['phase_continuity'])
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("❌ Processing Failed!")
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Dropout Repair v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata['algorithm']}")
-    logger.debug(f"Scientific Reference: {result.metadata['scientific_ref']}")
-    logger.debug(f"Benchmark: {result.metadata['benchmark']}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata['algorithm'])
+    logger.debug("Scientific Reference: %s", result.metadata['scientific_ref'])
+    logger.debug("Benchmark: %s", result.metadata['benchmark'])
     logger.debug("Quality Imp: 0.94 (Professional-Grade)")

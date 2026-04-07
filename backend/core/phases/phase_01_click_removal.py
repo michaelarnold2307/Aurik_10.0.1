@@ -154,7 +154,7 @@ class ClickRemovalPhase(PhaseInterface):
             logger.info("✅ DeepFilterNet v3 II Plugin loaded for Click Removal")
             return self._deepfilternet_plugin
         except Exception as e:
-            logger.warning(f"⚠️  DeepFilterNet Plugin not available: {e}")
+            logger.warning("⚠️  DeepFilterNet Plugin not available: %s", e)
             logger.info("    Falling back to DSP-only click removal")
             return None
 
@@ -458,22 +458,25 @@ class ClickRemovalPhase(PhaseInterface):
 
             if returncode == 0 and os.path.exists(output_path):
                 # Read repaired audio
-                repaired, _sr_read = sf.read(output_path)
+                from backend.file_import import load_audio_file
+
+                _res = load_audio_file(output_path, do_carrier_analysis=False)
+                repaired = np.asarray(_res["audio"], dtype=np.float32)
 
                 # Update audio in-place
                 if len(repaired) == len(audio):
                     audio[:] = repaired
-                    logger.info(f"✅ ML click repair successful ({len(clicks)} severe clicks)")
+                    logger.info("✅ ML click repair successful (%s severe clicks)", len(clicks))
                     return True
                 else:
-                    logger.warning(f"Length mismatch: {len(repaired)} vs {len(audio)}")
+                    logger.warning("Length mismatch: %s vs %s", len(repaired), len(audio))
                     return False
             else:
-                logger.warning(f"DeepFilterNet failed (returncode={returncode})")
+                logger.warning("DeepFilterNet failed (returncode=%s)", returncode)
                 return False
 
         except Exception as e:
-            logger.error(f"ML click repair error: {e}")
+            logger.error("ML click repair error: %s", e)
             return False
 
         finally:
@@ -877,16 +880,16 @@ if __name__ == "__main__":
     transient_pos = int(len(audio) * 0.5)
     audio[transient_pos : transient_pos + 5] *= 2.0  # Legitimate attack
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sr} Hz")
+    logger.debug("\nTest Audio: %ss @ %s Hz", duration, sr)
     logger.debug("Injected: 10 short + 5 medium + 2 long clicks + 1 transient")
 
     # Test with different materials
     materials = ["shellac", "vinyl", "tape", "cd_digital"]
 
     for material in materials:
-        logger.debug(f"\n{'-' * 80}")
-        logger.debug(f"Testing with material: {material.upper()}")
-        logger.debug(f"{'-' * 80}")
+        logger.debug("\n%s", '-' * 80)
+        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("%s", '-' * 80)
 
         phase = ClickRemovalPhase()
         result = phase.process(audio.copy(), material_type=material, preserve_transients=True)
@@ -896,20 +899,20 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Total Clicks Removed: {result.modifications['total_clicks_removed']}")
-            logger.debug(f"   - Short: {result.modifications['short_clicks']}")
-            logger.debug(f"   - Medium: {result.modifications['medium_clicks']}")
-            logger.debug(f"   - Long: {result.modifications['long_clicks']}")
-            logger.debug(f"   Transients Preserved: {result.modifications['transients_preserved']}")
-            logger.debug(f"   Preservation Ratio: {result.modifications['preservation_ratio']:.2%}")
-            logger.debug(f"   Warnings: {result.warnings if result.warnings else 'None'}")
+            logger.debug("   Total Clicks Removed: %s", result.modifications['total_clicks_removed'])
+            logger.debug("   - Short: %s", result.modifications['short_clicks'])
+            logger.debug("   - Medium: %s", result.modifications['medium_clicks'])
+            logger.debug("   - Long: %s", result.modifications['long_clicks'])
+            logger.debug("   Transients Preserved: %s", result.modifications['transients_preserved'])
+            logger.debug("   Preservation Ratio: %s", format(result.modifications['preservation_ratio'], '.2%'))
+            logger.debug("   Warnings: %s", result.warnings if result.warnings else 'None')
         else:
             logger.debug("❌ Processing Failed!")
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Click Removal v2.0 Test Complete!")
-    logger.debug(f"{'=' * 80}")
-    logger.debug(f"Algorithm: {result.metadata['algorithm']}")
-    logger.debug(f"Scientific Reference: {result.metadata['scientific_ref']}")
-    logger.debug(f"Benchmark: {result.metadata['benchmark']}")
+    logger.debug("%s", '=' * 80)
+    logger.debug("Algorithm: %s", result.metadata['algorithm'])
+    logger.debug("Scientific Reference: %s", result.metadata['scientific_ref'])
+    logger.debug("Benchmark: %s", result.metadata['benchmark'])
     logger.debug("Quality Impact: 0.95 (Professional-Grade)")

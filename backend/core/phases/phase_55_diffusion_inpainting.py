@@ -79,6 +79,36 @@ _CONTEXT_FRAMES = 20  # Kontext-Frames links/rechts
 _MASK_DILATION_FRAMES = 3  # Dilations-Padding um Maske
 _SIGMA_MAX = 0.3  # Maximale Rausch-Standardabweichung
 
+# §0 Primum-non-nocere: Material-Bandbreiten-Cap verhindert HF-Halluzination
+# beim Inpainting historischer Träger (wax_cylinder BW ≤ 5 kHz, wire_rec. ≤ 6 kHz).
+# Ohne Cap generiert AR/Diffusion synthetische Obertöne, die nie vorhanden waren.
+_MATERIAL_BW_CAP_HZ: dict[str, float] = {
+    "wax_cylinder": 5000.0,   # Mechanische Aufzeichnung 1900–1930
+    "wire_recording": 6000.0, # Stahlbandfone 1940–1955
+    "lacquer_disc": 8000.0,   # Acetat-Lackfolien 1930–1950 (konservativ)
+}
+
+
+def _apply_bw_cap(segment: np.ndarray, sample_rate: int, cap_hz: float) -> np.ndarray:
+    """Low-pass filter reconstructed segment to material bandwidth cap.
+
+    Prevents AR/diffusion hallucinating HF content never present in the
+    source material (§0 Primum-non-nocere, §2.55 BW-Cap Invariante).
+    Uses Butterworth 8th-order to avoid ringing in short segments.
+    """
+    if cap_hz >= sample_rate / 2 - 100:
+        return segment
+    nyq = sample_rate / 2.0
+    norm_cut = min(cap_hz / nyq, 0.99)
+    from scipy import signal as _sps
+    sos = _sps.butter(4, norm_cut, btype="low", output="sos")
+    # filtfilt for zero-phase; fall back to sosfilt for very short segments
+    if len(segment) > 20:
+        filtered = _sps.sosfiltfilt(sos, segment)
+    else:
+        filtered = _sps.sosfilt(sos, segment)
+    return np.clip(filtered.astype(segment.dtype), -1.0, 1.0)
+
 
 def _cosine_schedule(t: int, T: int) -> float:
     """Cosine Noise-Schedule: σ_t = σ_max * (t/T)²"""
@@ -336,6 +366,7 @@ def _process_channel(
     sample_rate: int,
     min_gap_ms: float,
     repaired_gap_samples: list[tuple[int, int]] | None = None,
+    bw_cap_hz: float | None = None,
 ) -> tuple[np.ndarray, dict]:
     """Inpainting für einen Mono-Kanal. Returns (repaired, stats)."""
     result = channel.copy()
@@ -381,6 +412,11 @@ def _process_channel(
             else:
                 # Priorität 3: DSP-Diffusion (NMF-β / AR-Inpainting — Letzfall)
                 result[start:end] = _inpaint_gap_dsp(channel, start, end, sample_rate, n_steps)
+
+        # §0 BW-Cap: historische Träger dürfen keine HF-Details halluzinieren
+        if bw_cap_hz is not None:
+            gap_segment = result[start:end]
+            result[start:end] = _apply_bw_cap(gap_segment, sample_rate, bw_cap_hz)
 
         stats["total_gap_ms"] += gap_ms
         stats["max_gap_ms"] = max(stats["max_gap_ms"], gap_ms)
@@ -460,6 +496,17 @@ class DiffusionInpaintingPhase(PhaseInterface):
         effective_strength = float(kwargs.get("strength", 1.0)) * phase_locality_factor
         effective_strength = float(np.clip(effective_strength, 0.0, 1.0))
 
+        # §0 BW-Cap: prevent hallucination of HF content on bandwidth-limited carriers
+        _material = kwargs.get("material_type", None)
+        _mat_key = str(_material).lower() if _material is not None else ""
+        # Accept both enum value strings like "MaterialType.WAX_CYLINDER" and plain keys
+        for _mk, _cap in _MATERIAL_BW_CAP_HZ.items():
+            if _mk in _mat_key:
+                _bw_cap_hz: float | None = _cap
+                break
+        else:
+            _bw_cap_hz = None
+
         if effective_strength <= 1e-6:
             dry = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             dry = np.clip(dry, -1.0, 1.0)
@@ -483,7 +530,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
 
         if audio.ndim == 1:
             # Mono
-            repaired, stats = _process_channel(audio, sample_rate, min_gap_ms_eff, _repaired_gaps)
+            repaired, stats = _process_channel(audio, sample_rate, min_gap_ms_eff, _repaired_gaps, _bw_cap_hz)
             gaps = _detect_gaps(audio, sample_rate, min_gap_ms_eff)
             quality = _reconstruction_quality_score(audio, repaired, gaps)
             n_gaps = stats["n_gaps"]
@@ -501,7 +548,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
             quality_scores = []
 
             for ch in range(audio.shape[1]):
-                ch_rep, stats = _process_channel(audio[:, ch], sample_rate, min_gap_ms_eff, _repaired_gaps)
+                ch_rep, stats = _process_channel(audio[:, ch], sample_rate, min_gap_ms_eff, _repaired_gaps, _bw_cap_hz)
                 channels_repaired.append(ch_rep)
                 n_gaps = max(n_gaps, stats["n_gaps"])
                 total_gap_ms += stats["total_gap_ms"]
@@ -540,5 +587,6 @@ class DiffusionInpaintingPhase(PhaseInterface):
                 "pre_repaired_gaps_skipped": _n_repaired_skipped,
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": effective_strength,
+                "bw_cap_hz": _bw_cap_hz,
             },
         )

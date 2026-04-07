@@ -242,7 +242,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
             )
 
         # Input is mono → apply pseudo-stereo
-        logger.info(f"Mono input detected (L/R correlation = {correlation:.3f}), applying pseudo-stereo")
+        logger.info("Mono input detected (L/R correlation = %.3f), applying pseudo-stereo", correlation)
 
         # Step 1: Extract mono signal (average L+R)
         mono = np.mean(audio, axis=1)
@@ -518,10 +518,8 @@ class MonoToStereoPhaseV2(PhaseInterface):
                 hf_signal = signal.sosfilt(sos_hf, enhanced[:, ch])
                 enhanced[:, ch] = enhanced[:, ch] + hf_signal * (boost_linear - 1.0)
 
-            # Peak limiting
-            max_val = np.abs(enhanced).max()
-            if max_val > 0.99:
-                enhanced = enhanced * (0.99 / max_val)
+            # Safety clip (no peak normalization)
+            enhanced = np.clip(enhanced, -1.0, 1.0)
 
             return enhanced
         except Exception:
@@ -590,7 +588,7 @@ if __name__ == "__main__":
     # Create mono stereo (L = R)
     audio = np.column_stack([mono, mono])
 
-    logger.debug(f"\nTest Audio: {duration}s @ {sample_rate} Hz (mono stereo)")
+    logger.debug("\nTest Audio: %ss @ %s Hz (mono stereo)", duration, sample_rate)
     logger.debug("Multi-frequency content: 100Hz + 440Hz + 1760Hz + 8kHz + noise")
     logger.debug("L = R (perfect correlation, simulates mono recording)")
 
@@ -604,9 +602,9 @@ if __name__ == "__main__":
     phase = MonoToStereoPhaseV2()
 
     for material in test_materials:
-        logger.debug(f"\n{'─' * 80}")
-        logger.debug(f"Testing with material: {material.name}")
-        logger.debug(f"{'─' * 80}")
+        logger.debug("\n%s", '─' * 80)
+        logger.debug("Testing with material: %s", material.name)
+        logger.debug("%s", '─' * 80)
 
         result = phase.process(audio, sample_rate, material)
 
@@ -615,22 +613,22 @@ if __name__ == "__main__":
             logger.debug(
                 f"   Execution Time: {result.execution_time_seconds:.3f}s ({result.execution_time_seconds / duration:.2f}× realtime)"
             )
-            logger.debug(f"   Pseudo-Stereo Applied: {result.metadata['mono_to_stereo_applied']}")
+            logger.debug("   Pseudo-Stereo Applied: %s", result.metadata['mono_to_stereo_applied'])
             if result.metadata.get("mono_to_stereo_applied"):
-                logger.debug(f"   L/R Correlation Before: {result.metrics['lr_correlation_before']:.3f}")
-                logger.debug(f"   L/R Correlation After: {result.metrics['lr_correlation_after']:.3f}")
-                logger.debug(f"   Stereo Width Achieved: {result.metrics['stereo_width_achieved']:.2f}")
-                logger.debug(f"   Mono Compatible: {result.metrics['mono_compatible']}")
-                logger.debug(f"   HF Enhancement: {result.metrics['hf_enhancement_db']:.1f} dB")
-                logger.debug(f"\n   Width Factors (Bass→Ultra-High): {result.modifications['width_factors']}")
-                logger.debug(f"   Haas Delays (ms): {result.modifications['haas_delays_ms']}")
+                logger.debug("   L/R Correlation Before: %.3f", result.metrics['lr_correlation_before'])
+                logger.debug("   L/R Correlation After: %.3f", result.metrics['lr_correlation_after'])
+                logger.debug("   Stereo Width Achieved: %.2f", result.metrics['stereo_width_achieved'])
+                logger.debug("   Mono Compatible: %s", result.metrics['mono_compatible'])
+                logger.debug("   HF Enhancement: %.1f dB", result.metrics['hf_enhancement_db'])
+                logger.debug("\n   Width Factors (Bass→Ultra-High): %s", result.modifications['width_factors'])
+                logger.debug("   Haas Delays (ms): %s", result.modifications['haas_delays_ms'])
             else:
-                logger.debug(f"   Reason: {result.metadata.get('reason', 'unknown')}")
+                logger.debug("   Reason: %s", result.metadata.get('reason', 'unknown'))
 
     # Test with already-stereo input (should skip)
-    logger.debug(f"\n{'─' * 80}")
+    logger.debug("\n%s", '─' * 80)
     logger.debug("Testing with already-stereo input (should skip)")
-    logger.debug(f"{'─' * 80}")
+    logger.debug("%s", '─' * 80)
 
     # Create true stereo (L ≠ R, low correlation)
     left_stereo = 0.5 * np.sin(2 * np.pi * 440 * t)
@@ -641,13 +639,13 @@ if __name__ == "__main__":
 
     if result_stereo.success:
         logger.debug("✅ As expected: Pseudo-Stereo skipped for already-stereo input")
-        logger.debug(f"   Applied: {result_stereo.metadata['mono_to_stereo_applied']}")
-        logger.debug(f"   Reason: {result_stereo.metadata.get('reason', 'unknown')}")
+        logger.debug("   Applied: %s", result_stereo.metadata['mono_to_stereo_applied'])
+        logger.debug("   Reason: %s", result_stereo.metadata.get('reason', 'unknown'))
         if "lr_correlation" in result_stereo.metadata:
-            logger.debug(f"   L/R Correlation: {result_stereo.metadata['lr_correlation']:.3f} (below threshold)")
-        logger.debug(f"   Execution Time: {result_stereo.execution_time_seconds:.3f}s")
+            logger.debug("   L/R Correlation: %.3f (below threshold)", result_stereo.metadata['lr_correlation'])
+        logger.debug("   Execution Time: %.3fs", result_stereo.execution_time_seconds)
 
-    logger.debug(f"\n{'=' * 80}")
+    logger.debug("\n%s", '=' * 80)
     logger.debug("✅ Professional Mono-to-Stereo Enhancement v2.0 Test Complete!")
     logger.debug("=" * 80)
     logger.debug("Algorithm: lauridsen_pseudo_stereo_v2")
