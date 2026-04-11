@@ -143,6 +143,8 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print()
 | Spectral-Tilt-Drift in ADDITIVE-Phasen | HF-Extension ohne Tilt-Check (phase_06, phase_39) — Ära-Charakter wird zerstört ohne Goal-Verstoß | `era_result.spectral_tilt` in `kwargs` prüfen; Post-Tilt via `_estimate_spectral_tilt_quick()`; Cap wenn Deviation > material_tolerance (±1.5–±3.0 dB/oct je Material) (§2.46b) |
 | Roughness/Sharpness Anstieg ungeprüft | DYNAMICS/ADDITIVE-Phasen (phase_35, phase_39) erhöhen psychoakustische Lästigkeit ohne Gate | `ArtifactFreedomGate._compute_roughness_zwicker()` + `_compute_sharpness_bismarck()` für `DYNAMICS/ADDITIVE/ENHANCEMENT`-Phasen; Penalty -0.05 bzw. -0.10 (§2.49c) |
 | MERT als primäre Qualitätsmetrik | `MertPlugin.score()` direkt als HPI-Haupt-Koeffizient wenn VERSA verfügbar | VERSA primär; MERT als Proxy-Fallback wenn VERSA fehlschlägt; `metadata["mert_proxy_used"]` setzen (§2.44) |
+| VERSA auf RESEARCH-Modus beschränkt | `use_versa_in_loop=deployment_mode == RESEARCH` im FeedbackChain-Aufruf | `use_versa_in_loop=True` — VERSA ist produktionsstabil und muss immer aktiv sein (§2.44 VERBOTEN: MERT darf nicht primary sein wenn VERSA verfügbar) |
+| Pitch-Kaskade ohne RMVPE | FCPE → CREPE → PESTO → pYIN (RMVPE übersprungen) | FCPE → RMVPE → PESTO → pYIN: `get_rmvpe_plugin()` als Tier-2 in HPG `_estimate_f0_track`, `hybrid_wow_flutter._init_crepe`, `hybrid_speed_pitch_ml._init_crepe` (§4.4 — 30 % geringere Pitch-Fehlerrate bei Gesang, Wei et al. ICASSP 2023) |
 | Lautheitsmessung ohne ISO 532-1 | `np.mean(audio**2)` oder LUFS-only nach Rumble/Multiband-Phasen | `compute_specific_loudness_zwicker(audio, sr)` → ΔN > 2.0 sone = FAIL, Dry/Wet-Rescue (§4.1b) |
 | JND-blinde PMGG-Phase-Akzeptanz | Phase mit allen Deltas > 0 und < JND wird identisch zu signifikant positiver Phase behandelt | `JND_MIN_DELTA` Dict in `_run_with_retry()`: wenn alle Deltas ≥ 0 UND alle < JND → `sub_threshold`, kein Retry, `metadata["sub_threshold_phases"]` (§2.47b) |
 | Uniforme Goal-Gewichtung | Alle 14 Goals gleich gewichtet via Minimax (`_max_regression` ohne Weights) | `estimate_goal_importance()` → Per-Song-Profil → `goal_weights` in PMGG/CIG/GPP/FC (§2.56) |
@@ -333,7 +335,7 @@ Jede Eingabe ist ein einzigartiges Musikstück. Das System passt sich **vor** de
 | MDX23C Stem-Sep OOM | NMF-β-Separation (sdB ≥ 5) | HPSS (Medianfilter-Trennung) |
 | AudioSR OOM | Harmonische Oberton-Synthese + PGHI | Spectral-Band-Replication |
 | MP-SENet OOM | OMLSA/IMCRA DSP (§4.4) | Bypass (phase_43 Phase-Skip) |
-| CREPE Pitch-Track | pYIN (Mauch & Dixon 2014) | YIN (de Cheveigné & Kawahara 2002) |
+| CREPE Pitch-Track | RMVPE → pYIN (Mauch & Dixon 2014) | YIN (de Cheveigné & Kawahara 2002) — direkter pYIN-Fallback ohne RMVPE-Stufe |
 | MertPlugin OOM | DSP-Analyse (F0+Harmonizität+FluxKohärenz) | Bypass (HPI ohne MERT-Anteil) |
 
 **Invariante**: Kein ML-Failure darf Pipeline abbrechen. Fallback in `metadata["ml_fallbacks_used"]` protokollieren.

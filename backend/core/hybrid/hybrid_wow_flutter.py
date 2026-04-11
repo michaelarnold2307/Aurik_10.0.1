@@ -346,7 +346,7 @@ class HybridWowFlutter:
             self._init_crepe()
 
     def _init_crepe(self) -> None:
-        """Initialize FCPE/CREPE pitch plugin (lazy-loading, FCPE preferred)."""
+        """Initialize FCPE/CREPE/RMVPE pitch plugin (lazy-loading, FCPE preferred)."""
         try:
             from plugins.fcpe_plugin import get_fcpe_plugin
 
@@ -360,6 +360,14 @@ class HybridWowFlutter:
 
             self.crepe = get_crepe_plugin()
             logger.info("CREPE plugin geladen für wow/flutter-Detektion")
+            return
+        except Exception as e:
+            logger.debug("CREPE nicht verfügbar (%s) — RMVPE-Fallback (§4.4 Tier-3)", e)
+        try:
+            from plugins.rmvpe_plugin import get_rmvpe_plugin
+
+            self.crepe = get_rmvpe_plugin()  # type: ignore[assignment]
+            logger.info("RMVPE plugin geladen für wow/flutter-Detektion (§4.4 Fallback2)")
         except Exception as e:
             logger.warning("Kein Pitch-ML-Plugin verfügbar (%s) — pYIN-Fallback", e)
             self.crepe = None

@@ -133,7 +133,7 @@ class HybridSpeedPitch:
             self._init_crepe()
 
     def _init_crepe(self) -> None:
-        """Initialize FCPE/CREPE plugin (FCPE bevorzugt, CREPE als Fallback)."""
+        """Initialize FCPE/CREPE/RMVPE plugin (FCPE bevorzugt, CREPE dann RMVPE als Fallback)."""
         try:
             from plugins.fcpe_plugin import get_fcpe_plugin
 
@@ -147,6 +147,14 @@ class HybridSpeedPitch:
 
             self.crepe = CREPEPlugin()
             logger.info("CREPE plugin loaded for Phase 31 speed/pitch detection")
+            return
+        except Exception as e:
+            logger.debug("CREPE nicht verfügbar (%s) — RMVPE-Fallback (§4.4 Tier-3)", e)
+        try:
+            from plugins.rmvpe_plugin import get_rmvpe_plugin
+
+            self.crepe = get_rmvpe_plugin()  # type: ignore[assignment]
+            logger.info("RMVPE plugin loaded for Phase 31 speed/pitch detection (§4.4 Fallback2)")
         except Exception as e:
             logger.warning("Kein Pitch-ML-Plugin verfügbar: %s", e)
             self.crepe = None

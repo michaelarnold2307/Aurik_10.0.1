@@ -282,7 +282,16 @@ class FeedbackChain:
         _audio_dur_s = float(max(current.shape) if current.ndim == 2 else len(current)) / float(_sr)
         _time_budget_s = max(120.0, 2.0 * _audio_dur_s)  # 120s per minute, min 120s
         best = current.copy()
+        _t_before_init_score = time.perf_counter()
         best_mos = self._compute_iteration_score(best, _sr)
+        _init_score_elapsed = time.perf_counter() - _t_before_init_score
+        if _init_score_elapsed > 30.0:
+            logger.warning(
+                "FeedbackChain: initial score call took %.1fs (audio=%.0fs) — "
+                "likely ML scorer without length cap; iterations will be skipped if budget exhausted",
+                _init_score_elapsed,
+                _audio_dur_s,
+            )
         history = [best_mos]
         _score_sources = [self._last_score_source]
         _ceiling_reached = False

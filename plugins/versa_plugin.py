@@ -46,6 +46,11 @@ _logging.getLogger("s3prl.upstream.espnet_hubert.expert").setLevel(_logging.ERRO
 _logging.getLogger("s3prl.upstream.fairseq.expert").setLevel(_logging.ERROR)
 del _logging
 _MODEL_SR: int = 16_000
+# SingMOS Pro / wav2vec2-large is designed for short utterances (≤30 s).
+# Processing full-length tracks (3+ min) causes O(n) inference on CPU and
+# leads to 20–40 min blocking calls per FC iteration. Cap at 30 s representative
+# centre-slice — perceptually sufficient for MOS scoring (§Performance-Budget).
+_SINGMOS_MAX_SAMPLES_16K: int = 30 * _MODEL_SR  # 30 s @ 16 kHz = 480 000 samples
 
 _lock = threading.Lock()
 _instance: VersaPlugin | None = None
@@ -311,6 +316,16 @@ class VersaPlugin:
             mono_16k = resample_poly(mono_48k, _MODEL_SR // g, sr // g).astype(np.float32)
             mono_16k = np.nan_to_num(mono_16k, nan=0.0, posinf=0.0, neginf=0.0)
             mono_16k = np.clip(mono_16k, -1.0, 1.0)
+            # Cap to 30 s centre-slice — wav2vec2-large inference is O(n); feeding
+            # full-length tracks (> 30 s) causes multi-minute blocking calls on CPU.
+            if mono_16k.size > _SINGMOS_MAX_SAMPLES_16K:
+                _start = (mono_16k.size - _SINGMOS_MAX_SAMPLES_16K) // 2
+                mono_16k = mono_16k[_start : _start + _SINGMOS_MAX_SAMPLES_16K]
+                logger.debug(
+                    "SingMOS: audio trimmed to %.0fs centre-slice for MOS scoring (full=%.0fs)",
+                    _SINGMOS_MAX_SAMPLES_16K / _MODEL_SR,
+                    mono_48k.size / sr,
+                )
             if mono_16k.size < 320:
                 logger.debug("SingMOS input too short (%d samples @16k) — using PQS fallback", mono_16k.size)
                 return self._score_pqs_dsp(mono_48k, sr)

@@ -4811,7 +4811,7 @@ class UnifiedRestorerV3:
                     excellence_mode=_fc_excellence,
                     material=material_type.value,
                     use_pqs_in_loop=True,
-                    use_versa_in_loop=self.config.deployment_mode == DeploymentMode.RESEARCH,
+                    use_versa_in_loop=True,  # §2.44: VERSA primär in Produktion (MERT nur Proxy-Fallback)
                     restorability_score=float(_pmgg_restorability_score),
                     defect_severity_mean=float(self._fc_defect_severity_mean(defect_result)),
                 )

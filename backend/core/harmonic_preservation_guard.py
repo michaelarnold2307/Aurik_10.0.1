@@ -73,7 +73,15 @@ try:
     _CREPE_OK = True
 except Exception:
     _CREPE_OK = False
-    logger.debug("FCPE/CREPE nicht verfügbar — PESTO/pYIN-Fallback für HPG aktiv")
+    logger.debug("FCPE/CREPE nicht verfügbar — RMVPE/PESTO/pYIN-Fallback für HPG aktiv")
+
+try:
+    from plugins.rmvpe_plugin import get_rmvpe_plugin as _get_rmvpe
+
+    _RMVPE_OK = True
+except Exception:
+    _RMVPE_OK = False
+    logger.debug("RMVPE nicht verfügbar — PESTO/pYIN-Fallback für HPG aktiv")
 
 try:
     import librosa
@@ -457,7 +465,7 @@ class HarmonicPreservationGuard:
         """
         f₀ pro STFT-Frame schätzen.
 
-        Tier-1: FCPE → Tier-2: CREPE → Tier-3: PESTO (DSP) → Tier-4: pYIN → Tier-5: Autokorrelation
+        Tier-1: FCPE → Tier-2: RMVPE → Tier-3: PESTO (DSP) → Tier-4: pYIN → Tier-5: Autokorrelation
 
         Returns:
             float32-Array [n_frames] mit f₀ in Hz (0 = unvoiced)
@@ -483,9 +491,31 @@ class HarmonicPreservationGuard:
                 f0_track[conf_track < VOICING_CONFIDENCE_MIN] = 0.0
                 return f0_track.astype(np.float32)
             except Exception as exc:
-                logger.debug("CREPE f₀-Track fehlgeschlagen: %s", exc)
+                logger.debug("FCPE f₀-Track fehlgeschlagen: %s", exc)
 
-        # Tier-2: PESTO DSP (Riou et al. ISMIR 2023) — §4.4: PESTO → pYIN.
+        # Tier-2: RMVPE ONNX (Wei et al. ICASSP 2023) — §4.4 Fallback2.
+        # ~30 % geringere Pitch-Fehlerrate vs. CREPE bei Vibrato + stimmhaft/stimmlos-Übergängen.
+        if _RMVPE_OK:
+            try:
+                _rmvpe_r = _get_rmvpe().analyze(mono, sr)
+                _rmvpe_freqs = np.where(_rmvpe_r.voiced_flag, _rmvpe_r.f0, 0.0).astype(np.float32)
+                if np.sum(_rmvpe_r.voiced_flag) >= 3:
+                    f0_track = np.interp(
+                        np.linspace(0, len(_rmvpe_freqs) - 1, n_frames),
+                        np.arange(len(_rmvpe_freqs)),
+                        _rmvpe_freqs,
+                    ).astype(np.float32)
+                    logger.debug(
+                        "HPG Tier-2 RMVPE: f0_mean=%.1f Hz voiced=%d/%d",
+                        float(_rmvpe_r.f0_mean),
+                        int(np.sum(_rmvpe_r.voiced_flag)),
+                        len(_rmvpe_r.voiced_flag),
+                    )
+                    return f0_track
+            except Exception as exc:
+                logger.debug("RMVPE f₀-Track fehlgeschlagen: %s", exc)
+
+        # Tier-3: PESTO DSP (Riou et al. ISMIR 2023) — §4.4: PESTO → pYIN.
         # CQT-based, ~8-20× schneller als pYIN; gut für tonales/melodisches Material.
         if _PESTO_OK:
             try:
