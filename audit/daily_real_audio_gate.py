@@ -188,12 +188,14 @@ def _markdown_from_status(status: dict[str, Any]) -> str:
             ]
         )
 
-    lines.extend([
-        "## Trend",
-        "",
-        "| Date | Source | Recommendation | Gates | R5-R12 |",
-        "|---|---|---|---:|---:|",
-    ])
+    lines.extend(
+        [
+            "## Trend",
+            "",
+            "| Date | Source | Recommendation | Gates | R5-R12 |",
+            "|---|---|---|---:|---:|",
+        ]
+    )
 
     trend = status.get("trend") if isinstance(status.get("trend"), list) else []
     for entry in trend:

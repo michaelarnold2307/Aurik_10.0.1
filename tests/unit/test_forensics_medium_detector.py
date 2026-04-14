@@ -594,12 +594,9 @@ class TestMediumDetector:
         result = detector.detect(audio, sr=48000, file_ext=".mp3")
 
         # Chain must include vinyl as analog origin, not just mp3_low
-        assert result.is_multi_generation is True, (
-            f"Expected multi-gen chain, got single: {result.transfer_chain}"
-        )
-        assert "vinyl" in result.transfer_chain, (
-            f"Vinyl must appear in chain, got: {result.transfer_chain}"
-        )
-        assert result.transfer_chain[-1] in {"mp3_low", "mp3_high"}, (
-            f"Chain must end with MP3 codec, got: {result.transfer_chain}"
-        )
+        assert result.is_multi_generation is True, f"Expected multi-gen chain, got single: {result.transfer_chain}"
+        assert "vinyl" in result.transfer_chain, f"Vinyl must appear in chain, got: {result.transfer_chain}"
+        assert result.transfer_chain[-1] in {
+            "mp3_low",
+            "mp3_high",
+        }, f"Chain must end with MP3 codec, got: {result.transfer_chain}"

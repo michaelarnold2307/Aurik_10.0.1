@@ -386,7 +386,7 @@ class HybridDereverb:
 
     def _apply_dccrn(self, audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, dict[str, Any]]:
         """ML-Dereverb via SGMSE+ (primär §4.4) oder ResembleEnhance (Fallback 1).
-        
+
         Verarbeitet Stereo-Kanäle unabhängig für bessere Qualität.
         """
         metadata: dict[str, Any] = {}
@@ -399,7 +399,7 @@ class HybridDereverb:
             audio_in = audio.astype(np.float32)
             # Detect channel-major (2, N) vs time-major (N, 2) format.
             _dccrn_ch_maj = audio_in.ndim == 2 and audio_in.shape[0] <= 2 and audio_in.shape[1] > audio_in.shape[0]
-            
+
             # Extract channels independently (process L/R separately)
             if audio_in.ndim == 2:
                 channels = [audio_in[0] if _dccrn_ch_maj else audio_in[:, 0]]
@@ -407,7 +407,7 @@ class HybridDereverb:
                     channels.append(audio_in[1] if _dccrn_ch_maj else audio_in[:, 1])
             else:
                 channels = [audio_in]
-            
+
             enhanced_channels = []
             for ch_idx, mono_in in enumerate(channels):
                 # §2.54 U-Net/STFT shape guard: pad input to next multiple of 512
@@ -416,7 +416,7 @@ class HybridDereverb:
                 _padded_len = ((_orig_ch_len + _pad_mult - 1) // _pad_mult) * _pad_mult
                 if _padded_len != _orig_ch_len:
                     mono_in = np.pad(mono_in, (0, _padded_len - _orig_ch_len))
-                
+
                 if self._sgmse_active:
                     # §4.4 Primär: SGMSE+ — enhance(audio, sr) → SGMSEResult
                     result = dccrn_plugin.enhance(mono_in, sample_rate)
@@ -433,11 +433,11 @@ class HybridDereverb:
                     enhanced = np.asarray(enhanced, dtype=np.float32)
                     if ch_idx == 0:
                         metadata["model"] = "resemble_enhance"
-                
+
                 # Trim back to original channel length
                 enhanced = enhanced[:_orig_ch_len]
                 enhanced_channels.append(enhanced)
-            
+
             # Recombine channels in original format
             if audio.ndim == 2:
                 if len(enhanced_channels) == 1:

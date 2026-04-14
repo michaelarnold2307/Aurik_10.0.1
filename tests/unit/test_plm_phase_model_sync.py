@@ -7,6 +7,7 @@ Ensures that:
    that phase somewhere in the code.
 3. Phase_23 maps Apollo (not just AudioSR) — regression test for the v9.11.14 crash.
 """
+
 from __future__ import annotations
 
 import ast
@@ -50,9 +51,7 @@ class TestPLMPhaseModelSync:
 
     def test_phase_required_models_not_empty(self):
         """_PHASE_REQUIRED_MODELS must have entries."""
-        assert len(_PHASE_REQUIRED_MODELS) >= 10, (
-            f"Expected ≥10 phase entries, got {len(_PHASE_REQUIRED_MODELS)}"
-        )
+        assert len(_PHASE_REQUIRED_MODELS) >= 10, f"Expected ≥10 phase entries, got {len(_PHASE_REQUIRED_MODELS)}"
 
     @pytest.mark.parametrize(
         "phase_id,phase_file,code_models",
@@ -66,8 +65,7 @@ class TestPLMPhaseModelSync:
             pytest.skip(f"{phase_id} has no _PHASE_REQUIRED_MODELS entry (may be DSP-only phase using budget directly)")
         missing = code_models - mapping
         assert not missing, (
-            f"{phase_id}: try_allocate() calls models {missing} "
-            f"but _PHASE_REQUIRED_MODELS only has {mapping}"
+            f"{phase_id}: try_allocate() calls models {missing} " f"but _PHASE_REQUIRED_MODELS only has {mapping}"
         )
 
     def test_phase_23_includes_apollo(self):
@@ -81,20 +79,14 @@ class TestPLMPhaseModelSync:
     def test_phase_03_includes_sgmse(self):
         """phase_03 SGMSE+ Tier-0 must be in mapping."""
         models = _PHASE_REQUIRED_MODELS.get("phase_03_denoise", frozenset())
-        assert "SGMSE+" in models, (
-            f"phase_03 _PHASE_REQUIRED_MODELS={models} — SGMSE+ missing!"
-        )
+        assert "SGMSE+" in models, f"phase_03 _PHASE_REQUIRED_MODELS={models} — SGMSE+ missing!"
 
     def test_phase_49_exists(self):
         """phase_49 advanced_dereverb uses SGMSE+ — must have mapping."""
         models = _PHASE_REQUIRED_MODELS.get("phase_49_advanced_dereverb", frozenset())
-        assert "SGMSE+" in models, (
-            f"phase_49 _PHASE_REQUIRED_MODELS={models} — SGMSE+ missing!"
-        )
+        assert "SGMSE+" in models, f"phase_49 _PHASE_REQUIRED_MODELS={models} — SGMSE+ missing!"
 
     def test_phase_12_includes_rmvpe(self):
         """§4.4: FCPE → RMVPE → PESTO → pYIN — RMVPE must be in mapping."""
         models = _PHASE_REQUIRED_MODELS.get("phase_12_wow_flutter_fix", frozenset())
-        assert "RMVPE" in models, (
-            f"phase_12 _PHASE_REQUIRED_MODELS={models} — RMVPE missing!"
-        )
+        assert "RMVPE" in models, f"phase_12 _PHASE_REQUIRED_MODELS={models} — RMVPE missing!"

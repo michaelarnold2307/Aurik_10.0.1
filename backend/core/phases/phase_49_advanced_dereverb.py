@@ -180,6 +180,7 @@ class AdvancedDereverbPhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict49
+
             _get_plm_evict49().evict_for_phase("phase_49_advanced_dereverb")
         except Exception:
             pass

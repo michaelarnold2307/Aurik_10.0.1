@@ -404,6 +404,7 @@ class SpectralRepair(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict
+
             _get_plm_evict().evict_for_phase("phase_23_spectral_repair")
         except Exception:
             pass
@@ -513,6 +514,7 @@ class SpectralRepair(PhaseInterface):
             _apollo_swap_blocked = False
             try:
                 from backend.core.ml_memory_budget import is_system_thrashing as _is_thrashing_p23
+
                 if _is_thrashing_p23():
                     logger.warning(
                         "phase_23: Apollo TorchScript übersprungen — Swap-Thrashing erkannt "
@@ -550,6 +552,7 @@ class SpectralRepair(PhaseInterface):
                             del _ap_l
                             # GC between channels — free torch tensors before second channel
                             import gc
+
                             gc.collect(0)
                             if _plm23 is not None:
                                 try:
@@ -947,9 +950,7 @@ class SpectralRepair(PhaseInterface):
         # Decide: ML or DSP?
         use_ml = is_phase_ml_enabled(23) and QualityModeConfig.should_use_ml("phase_23", defect_severity)
         if use_ml and system_thrashing and not allow_ml_under_pressure:
-            logger.warning(
-                "phase_23: ML repair skipped — system thrashing detected, forcing DSP fallback"
-            )
+            logger.warning("phase_23: ML repair skipped — system thrashing detected, forcing DSP fallback")
             use_ml = False
         elif use_ml and allow_ml_under_pressure:
             self._pressure_relax_ml_attempts += 1
@@ -994,9 +995,7 @@ class SpectralRepair(PhaseInterface):
                     self._THRASH_RELAX_MRSA_MAX_ATTEMPTS,
                 )
             if system_thrashing and not _allow_mrsa_under_pressure:
-                logger.warning(
-                    "phase_23: MRSA skipped — system thrashing detected, using Single-STFT fallback"
-                )
+                logger.warning("phase_23: MRSA skipped — system thrashing detected, using Single-STFT fallback")
                 _mrsa_ok = False
             elif _allow_mrsa_under_pressure:
                 self._pressure_relax_mrsa_attempts += 1

@@ -27,10 +27,7 @@ def _write_uat(
             "gates_total": gates_total,
             "recommendation": recommendation,
         },
-        "restoration_criteria": [
-            {"criterion_id": cid, "status": status}
-            for cid, status in r_statuses.items()
-        ],
+        "restoration_criteria": [{"criterion_id": cid, "status": status} for cid, status in r_statuses.items()],
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -42,7 +39,16 @@ def test_load_uat_runs_sorted_by_timestamp(tmp_path: Path) -> None:
         gates_passed=7,
         gates_total=7,
         recommendation="GO",
-        r_statuses={"R5": "PASSED", "R6": "PASSED", "R7": "PASSED", "R8": "PASSED", "R9": "PASSED", "R10": "PASSED", "R11": "PASSED", "R12": "PASSED"},
+        r_statuses={
+            "R5": "PASSED",
+            "R6": "PASSED",
+            "R7": "PASSED",
+            "R8": "PASSED",
+            "R9": "PASSED",
+            "R10": "PASSED",
+            "R11": "PASSED",
+            "R12": "PASSED",
+        },
     )
     _write_uat(
         tmp_path / "uat_results_2026-04-11.json",
@@ -50,7 +56,16 @@ def test_load_uat_runs_sorted_by_timestamp(tmp_path: Path) -> None:
         gates_passed=6,
         gates_total=7,
         recommendation="CONDITIONAL",
-        r_statuses={"R5": "PASSED", "R6": "FAILED", "R7": "PASSED", "R8": "PASSED", "R9": "PASSED", "R10": "PASSED", "R11": "PASSED", "R12": "PASSED"},
+        r_statuses={
+            "R5": "PASSED",
+            "R6": "FAILED",
+            "R7": "PASSED",
+            "R8": "PASSED",
+            "R9": "PASSED",
+            "R10": "PASSED",
+            "R11": "PASSED",
+            "R12": "PASSED",
+        },
     )
 
     runs = load_uat_runs(tmp_path)
@@ -66,7 +81,16 @@ def test_build_status_marks_ready_when_latest_is_fully_passing(tmp_path: Path) -
         gates_passed=6,
         gates_total=7,
         recommendation="CONDITIONAL",
-        r_statuses={"R5": "PASSED", "R6": "FAILED", "R7": "PASSED", "R8": "PASSED", "R9": "PASSED", "R10": "PASSED", "R11": "PASSED", "R12": "PASSED"},
+        r_statuses={
+            "R5": "PASSED",
+            "R6": "FAILED",
+            "R7": "PASSED",
+            "R8": "PASSED",
+            "R9": "PASSED",
+            "R10": "PASSED",
+            "R11": "PASSED",
+            "R12": "PASSED",
+        },
     )
     _write_uat(
         tmp_path / "uat_results_2026-04-12.json",
@@ -74,7 +98,16 @@ def test_build_status_marks_ready_when_latest_is_fully_passing(tmp_path: Path) -
         gates_passed=7,
         gates_total=7,
         recommendation="GO",
-        r_statuses={"R5": "PASSED", "R6": "PASSED", "R7": "PASSED", "R8": "PASSED", "R9": "PASSED", "R10": "PASSED", "R11": "PASSED", "R12": "PASSED"},
+        r_statuses={
+            "R5": "PASSED",
+            "R6": "PASSED",
+            "R7": "PASSED",
+            "R8": "PASSED",
+            "R9": "PASSED",
+            "R10": "PASSED",
+            "R11": "PASSED",
+            "R12": "PASSED",
+        },
     )
 
     points = build_daily_points(load_uat_runs(tmp_path))
@@ -92,7 +125,16 @@ def test_generate_daily_real_audio_gate_report_writes_outputs(tmp_path: Path) ->
         gates_passed=7,
         gates_total=7,
         recommendation="GO",
-        r_statuses={"R5": "PASSED", "R6": "PASSED", "R7": "PASSED", "R8": "PASSED", "R9": "PASSED", "R10": "PASSED", "R11": "PASSED", "R12": "PASSED"},
+        r_statuses={
+            "R5": "PASSED",
+            "R6": "PASSED",
+            "R7": "PASSED",
+            "R8": "PASSED",
+            "R9": "PASSED",
+            "R10": "PASSED",
+            "R11": "PASSED",
+            "R12": "PASSED",
+        },
     )
 
     out_json = tmp_path / "daily_status.json"

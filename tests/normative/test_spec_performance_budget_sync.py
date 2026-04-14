@@ -57,10 +57,7 @@ def test_common_performance_budgets_are_in_sync() -> None:
         if core[op] != spec[op]:
             mismatches.append(f"{op}: core={core[op]}s, spec={spec[op]}s")
 
-    assert not mismatches, (
-        "Performance-Budget-Sync verletzt zwischen Slim-Core und Spec 07:\n"
-        + "\n".join(mismatches)
-    )
+    assert not mismatches, "Performance-Budget-Sync verletzt zwischen Slim-Core und Spec 07:\n" + "\n".join(mismatches)
 
 
 @pytest.mark.normative
@@ -69,9 +66,5 @@ def test_defect_scanner_budget_is_four_seconds_per_minute() -> None:
     core = _extract_budget_table(_CORE.read_text(encoding="utf-8"))
     spec = _extract_budget_table(_SPEC07.read_text(encoding="utf-8"))
 
-    assert core.get("DefectScanner") == 4.0, (
-        "DefectScanner-Budget in copilot-instructions muss 4 s/min sein (Spec 07)."
-    )
-    assert spec.get("DefectScanner") == 4.0, (
-        "DefectScanner-Budget in Spec 07 muss 4 s/min sein."
-    )
+    assert core.get("DefectScanner") == 4.0, "DefectScanner-Budget in copilot-instructions muss 4 s/min sein (Spec 07)."
+    assert spec.get("DefectScanner") == 4.0, "DefectScanner-Budget in Spec 07 muss 4 s/min sein."

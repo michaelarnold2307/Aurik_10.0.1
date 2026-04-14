@@ -91,6 +91,7 @@ def _pump(player, frames=1024):
 # Shape / normalisation
 # ---------------------------------------------------------------------------
 
+
 class TestPrepareAudio:
     """Tests for _prepare() shape normalisation and resampling."""
 
@@ -157,6 +158,7 @@ class TestPrepareAudio:
 # ---------------------------------------------------------------------------
 # Playback lifecycle
 # ---------------------------------------------------------------------------
+
 
 class TestPlayback:
     """Tests for play/stop/seek lifecycle."""
@@ -238,6 +240,7 @@ class TestPlayback:
 # Gapless source switching (crossfade)
 # ---------------------------------------------------------------------------
 
+
 class TestGaplessSwitch:
     """Tests for gapless A/B source switching."""
 
@@ -304,6 +307,7 @@ class TestGaplessSwitch:
 # Thread safety
 # ---------------------------------------------------------------------------
 
+
 class TestThreadSafety:
     """Basic thread-safety smoke tests."""
 
@@ -361,6 +365,7 @@ class TestThreadSafety:
 # Shutdown
 # ---------------------------------------------------------------------------
 
+
 class TestShutdown:
     def test_shutdown_cleans_up(self):
         p = _make_player()
@@ -382,6 +387,7 @@ class TestShutdown:
 # Singleton
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_get_streaming_player_returns_same(self):
         from Aurik910.ui.audio_player import get_streaming_player
@@ -400,6 +406,7 @@ class TestSingleton:
 # ---------------------------------------------------------------------------
 # On-finished callback
 # ---------------------------------------------------------------------------
+
 
 class TestFinishedCallback:
     def test_on_finished_called_at_natural_end(self):

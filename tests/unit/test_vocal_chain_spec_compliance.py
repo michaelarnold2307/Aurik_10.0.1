@@ -67,9 +67,9 @@ class TestVocalChainSpec10Steps:
         gd = GenderDetector()
         result = gd.detect(synthetic_vocal_2s)
 
-        assert hasattr(result, "gender") or hasattr(result, "voice_type"), (
-            f"GenderDetector-Rückgabe hat kein gender/voice_type-Attribut: Erhalten: {type(result).__name__}"
-        )
+        assert hasattr(result, "gender") or hasattr(
+            result, "voice_type"
+        ), f"GenderDetector-Rückgabe hat kein gender/voice_type-Attribut: Erhalten: {type(result).__name__}"
 
     # ======================================================================
     # Step 2: SGMSE+ (Dereverb/Denoising)
@@ -374,9 +374,9 @@ class TestVocalChainSpec10Steps:
         except ImportError as exc:
             pytest.xfail(f"EmotionalArcPreservationMetric nicht verfügbar: {exc}")
 
-        assert hasattr(EmotionalArcPreservationMetric, "measure"), (
-            "EmotionalArcPreservationMetric hat keine measure()-Methode"
-        )
+        assert hasattr(
+            EmotionalArcPreservationMetric, "measure"
+        ), "EmotionalArcPreservationMetric hat keine measure()-Methode"
 
     def test_step_10_emotion_score_above_threshold(self, synthetic_vocal_2s: np.ndarray) -> None:
         """Step 10: Emotionalität nach Pipeline ≥ 0.87."""

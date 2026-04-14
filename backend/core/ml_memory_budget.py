@@ -230,8 +230,7 @@ def _allow_lightweight_under_pressure(model_name: str, size_gb: float) -> bool:
             )
         if (_tiny_allocated + float(size_gb)) > _PRESSURE_LIGHT_MODEL_TOTAL_GB_CAP:
             logger.warning(
-                "ML-Budget: '%s' (%.2f GB) pressure soft-allow abgelehnt — "
-                "tiny-budget cap erreicht (%.2f/%.2f GB)",
+                "ML-Budget: '%s' (%.2f GB) pressure soft-allow abgelehnt — " "tiny-budget cap erreicht (%.2f/%.2f GB)",
                 model_name,
                 size_gb,
                 _tiny_allocated,
@@ -285,8 +284,7 @@ def _should_block_heavy_ml_load(size_gb: float) -> bool:
         early_swap = swap_pct >= _HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT
         active_paging = swap_io_rate_mb_s >= _HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S
         low_headroom = (
-            avail_ratio <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX
-            or avail_gb <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_GB_MAX
+            avail_ratio <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX or avail_gb <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_GB_MAX
         )
         should_block = (elevated_swap and (active_paging or low_headroom)) or (early_swap and low_headroom)
         if should_block:
@@ -410,8 +408,7 @@ def _attempt_quality_preserving_pressure_recovery(model_name: str, size_gb: floa
             return True
 
         logger.warning(
-            "ML-Budget: pressure recovery %d/%d for '%s' insufficient "
-            "(evicted=%d, thrashing=%s, heavy_block=%s)",
+            "ML-Budget: pressure recovery %d/%d for '%s' insufficient " "(evicted=%d, thrashing=%s, heavy_block=%s)",
             attempt,
             attempts,
             model_name,

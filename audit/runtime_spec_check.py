@@ -18,7 +18,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-
 _ALLOWED_MODE_PATTERNS = (
     re.compile(r"\bmode\s*=\s*\"?restoration\"?\b", re.IGNORECASE),
     re.compile(r"\bmode\s*=\s*\"?studio2026\"?\b", re.IGNORECASE),

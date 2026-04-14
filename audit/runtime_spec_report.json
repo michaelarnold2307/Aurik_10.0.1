@@ -1,84 +1,84 @@
 {
-  "timestamp": "2026-04-14T19:05:28.503549",
   "backend_log": "logs/aurik_backend.log",
-  "frontend_log": "logs/aurik_frontend.out",
-  "latest_run_window": {
-    "start_line": 2898,
-    "end_line": 4163
-  },
-  "compliance_ok": true,
-  "required_passed": 9,
-  "required_total": 9,
   "checks": [
     {
+      "evidence": "AurikDenker.denke() gestartet gefunden",
       "id": "entry_denker",
-      "title": "AurikDenker Einstieg genutzt",
       "passed": true,
       "required": true,
-      "evidence": "AurikDenker.denke() gestartet gefunden"
+      "title": "AurikDenker Einstieg genutzt"
     },
     {
+      "evidence": "mode=restoration/studio_2026 vorhanden",
       "id": "mode_contract",
-      "title": "Nur erlaubter Betriebsmodus",
       "passed": true,
       "required": true,
-      "evidence": "mode=restoration/studio_2026 vorhanden"
+      "title": "Nur erlaubter Betriebsmodus"
     },
     {
+      "evidence": "Cached Defect/PreAnalysis im Lauf genutzt",
       "id": "preanalysis_handover",
-      "title": "§2.47a PreAnalysis-Handover sichtbar",
       "passed": true,
       "required": true,
-      "evidence": "Cached Defect/PreAnalysis im Lauf genutzt"
+      "title": "\u00a72.47a PreAnalysis-Handover sichtbar"
     },
     {
+      "evidence": "\ud83d\udd0d MediumDetector fresh_count=0 (cached ignoriert)",
       "id": "medium_detect_single",
-      "title": "MediumDetector im Lauf nicht mehrfach aktiv",
       "passed": true,
       "required": true,
-      "evidence": "🔍 MediumDetector fresh_count=0 (cached ignoriert)"
+      "title": "MediumDetector im Lauf nicht mehrfach aktiv"
     },
     {
+      "evidence": "artifact_freedom=0.950",
       "id": "artifact_gate",
-      "title": "§2.49 Artifact-Freedom Gate erfüllt",
       "passed": true,
       "required": true,
-      "evidence": "artifact_freedom=0.950"
+      "title": "\u00a72.49 Artifact-Freedom Gate erf\u00fcllt"
     },
     {
+      "evidence": "HPI-Eintrag vorhanden",
       "id": "hpi_gate",
-      "title": "§2.44 HPI-Gate protokolliert",
       "passed": true,
       "required": true,
-      "evidence": "HPI-Eintrag vorhanden"
+      "title": "\u00a72.44 HPI-Gate protokolliert"
     },
     {
+      "evidence": "Joy-Index-Signal gefunden",
       "id": "exp_joy_runtime",
-      "title": "§2.53 joy_runtime_index propagiert",
       "passed": true,
       "required": true,
-      "evidence": "Joy-Index-Signal gefunden"
+      "title": "\u00a72.53 joy_runtime_index propagiert"
     },
     {
+      "evidence": "Auto-Improve-Signal gefunden",
       "id": "exp_auto_improve",
-      "title": "§2.53 auto_improvement_recommendations propagiert",
       "passed": true,
       "required": true,
-      "evidence": "Auto-Improve-Signal gefunden"
+      "title": "\u00a72.53 auto_improvement_recommendations propagiert"
     },
     {
+      "evidence": "cluster_policy gefunden",
       "id": "exp_cluster_policy",
-      "title": "§2.53 cluster_policy propagiert",
       "passed": true,
       "required": true,
-      "evidence": "cluster_policy gefunden"
+      "title": "\u00a72.53 cluster_policy propagiert"
     },
     {
+      "evidence": "Exzellenz-API-Hinweis gefunden",
       "id": "exzellenz_api_contract",
-      "title": "§2.53a Exzellenz-API-Pfad erkennbar",
       "passed": true,
       "required": false,
-      "evidence": "Exzellenz-API-Hinweis gefunden"
+      "title": "\u00a72.53a Exzellenz-API-Pfad erkennbar"
     }
-  ]
+  ],
+  "compliance_ok": true,
+  "frontend_log": "logs/aurik_frontend.out",
+  "latest_run_window": {
+    "end_line": 4163,
+    "start_line": 2898
+  },
+  "required_passed": 9,
+  "required_total": 9,
+  "timestamp": "2026-04-14T19:05:28.503549"
 }

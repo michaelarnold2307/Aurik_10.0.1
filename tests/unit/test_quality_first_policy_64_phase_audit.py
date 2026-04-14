@@ -46,6 +46,4 @@ def test_time_gates_are_quality_gated_for_high_end_modes() -> None:
             if not any(marker in text for marker in quality_markers):
                 offenders.append(str(pf))
 
-    assert not offenders, (
-        "Time-gated phase paths without quality-first gating found:\n" + "\n".join(offenders)
-    )
+    assert not offenders, "Time-gated phase paths without quality-first gating found:\n" + "\n".join(offenders)

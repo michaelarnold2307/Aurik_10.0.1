@@ -352,7 +352,10 @@ class ReverbReduction(PhaseInterface):
         use_lightweight = False
         if RESOURCE_MANAGER_AVAILABLE:
             use_lightweight = adaptive_resource_manager.should_use_lightweight_mode()
-            if use_lightweight:
+            # Quality-first contract: do not downgrade to lightweight in quality tiers.
+            if quality_mode in ["quality", "maximum"]:
+                use_lightweight = False
+            elif use_lightweight:
                 logger.info(
                     f"Phase 20: Resource constraint detected, forcing DSP-only mode "
                     f"(CPU: {adaptive_resource_manager.get_cpu_usage():.1f}%, "

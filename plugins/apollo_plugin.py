@@ -431,7 +431,7 @@ class ApolloPlugin:
             chunk = audio_f32[chunk_pos:chunk_end]
             if len(chunk) < n_fft:
                 # Final short chunk: pad & process
-                chunk = np.pad(chunk, (0, n_fft - len(chunk)), mode='constant')
+                chunk = np.pad(chunk, (0, n_fft - len(chunk)), mode="constant")
 
             chunk_f64 = chunk.astype(np.float64)
             chunk_len = len(chunk_f64)
@@ -452,7 +452,7 @@ class ApolloPlugin:
                 # Step 1: Consistent Wiener (single-frame version)
                 k = 3
                 kernel = np.ones(k, dtype=np.float64) / k
-                mag_smooth = np.convolve(mag, kernel, mode='same')
+                mag_smooth = np.convolve(mag, kernel, mode="same")
                 mag_smooth = np.maximum(mag_smooth, 0.0)
 
                 # Use percentile over frame context (not global)
@@ -467,7 +467,7 @@ class ApolloPlugin:
                 if hf4k_bin < n_bins:
                     hf_mag = mag_out[hf4k_bin:]
                     local_kernel = np.ones(11, dtype=np.float64) / 11
-                    local_mean = np.convolve(hf_mag, local_kernel, mode='same')
+                    local_mean = np.convolve(hf_mag, local_kernel, mode="same")
                     local_mean = np.maximum(local_mean, 1e-15)
                     crest_boost = 1.0 + 0.20 * np.clip(hf_mag / local_mean - 1.2, 0.0, 1.0)
                     mag_out[hf4k_bin:] = hf_mag * crest_boost
@@ -483,8 +483,8 @@ class ApolloPlugin:
                 # OLA: add frame to result (with overlap handling)
                 result_start = chunk_pos + start
                 result_end = min(result_start + n_fft, n)
-                result[result_start:result_end] += frame_out[:result_end - result_start]
-                norm_w[result_start:result_end] += window[:result_end - result_start]
+                result[result_start:result_end] += frame_out[: result_end - result_start]
+                norm_w[result_start:result_end] += window[: result_end - result_start]
 
             chunk_pos = chunk_end - overlap_samples  # Overlap for smooth transitions
 

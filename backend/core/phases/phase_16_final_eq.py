@@ -241,9 +241,13 @@ class FinalEQ(PhaseInterface):
         # §4.5 Psychoacoustic Masking Clamp — EQ corrections only where audible
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             eq_audio = apply_psychoacoustic_masking_clamp(
-                audio, eq_audio, sample_rate,
-                strength=_effective_strength, mode="additive",
+                audio,
+                eq_audio,
+                sample_rate,
+                strength=_effective_strength,
+                mode="additive",
             )
         except Exception as _pm_exc:
             logger.debug("Phase16 masking clamp non-blocking: %s", _pm_exc)

@@ -887,29 +887,39 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
             "conservative_audio_scalar": _safe01(_rc.get("conservative_audio_scalar", 1.0)),
             "confidence_band": str(_rc.get("confidence_band", "") or ""),
             "restorability_score": _safe_float(_rc.get("restorability_score", 0.0), 0.0),
-            "transfer_generation_count": int(_rc.get("transfer_generation_count", 0))
-            if isinstance(_rc.get("transfer_generation_count", 0), (int, float))
-            else 0,
-            "hf_loss_db": _safe_float(_rc.get("hf_loss_db", 0.0), 0.0)
-            if isinstance(_rc.get("hf_loss_db", None), (int, float))
-            else None,
+            "transfer_generation_count": (
+                int(_rc.get("transfer_generation_count", 0))
+                if isinstance(_rc.get("transfer_generation_count", 0), (int, float))
+                else 0
+            ),
+            "hf_loss_db": (
+                _safe_float(_rc.get("hf_loss_db", 0.0), 0.0)
+                if isinstance(_rc.get("hf_loss_db", None), (int, float))
+                else None
+            ),
         },
         # §0/§2.46 HF-Hallucination-Guard: Treffer-Aggregation für UI-Klangtreue-Hinweis
-        "hf_hallucination_guard": (lambda _hfg=_meta.get("hf_hallucination_guard", {}): {
-            "guard_fired_count": int(_hfg.get("guard_fired_count", 0) or 0),
-            "phases_guarded": list(_hfg.get("phases_guarded", []) or []),
-            "max_delta_ratio": _safe_float(_hfg.get("max_delta_ratio", 0.0), 0.0),
-            "min_cap_hz": _safe_float(_hfg.get("min_cap_hz", 0.0), 0.0)
-            if isinstance(_hfg.get("min_cap_hz", None), (int, float))
-            else None,
-        })(),
+        "hf_hallucination_guard": (
+            lambda _hfg=_meta.get("hf_hallucination_guard", {}): {
+                "guard_fired_count": int(_hfg.get("guard_fired_count", 0) or 0),
+                "phases_guarded": list(_hfg.get("phases_guarded", []) or []),
+                "max_delta_ratio": _safe_float(_hfg.get("max_delta_ratio", 0.0), 0.0),
+                "min_cap_hz": (
+                    _safe_float(_hfg.get("min_cap_hz", 0.0), 0.0)
+                    if isinstance(_hfg.get("min_cap_hz", None), (int, float))
+                    else None
+                ),
+            }
+        )(),
         # §2.46b Spectral Tilt Drift Guard: Treffer-Aggregation für UI-Klangtreue-Hinweis
-        "spectral_tilt_guard": (lambda _stg=_meta.get("spectral_tilt_guard", {}): {
-            "guard_fired_count": int(_stg.get("guard_fired_count", 0) or 0),
-            "phases_guarded": list(_stg.get("phases_guarded", []) or []),
-            "max_deviation_db_per_oct": _safe_float(_stg.get("max_deviation_db_per_oct", 0.0), 0.0),
-            "max_wet_cap_applied": _safe_float(_stg.get("max_wet_cap_applied", 0.0), 0.0),
-        })(),
+        "spectral_tilt_guard": (
+            lambda _stg=_meta.get("spectral_tilt_guard", {}): {
+                "guard_fired_count": int(_stg.get("guard_fired_count", 0) or 0),
+                "phases_guarded": list(_stg.get("phases_guarded", []) or []),
+                "max_deviation_db_per_oct": _safe_float(_stg.get("max_deviation_db_per_oct", 0.0), 0.0),
+                "max_wet_cap_applied": _safe_float(_stg.get("max_wet_cap_applied", 0.0), 0.0),
+            }
+        )(),
         # §2.47b JND Sub-Threshold Phase Telemetrie — für Diagnose und UI
         "sub_threshold_phases": list(_meta.get("sub_threshold_phases", []) or []),
         # §2.47 ML-Fallback-Transparenz — Invariante: Kein ML-Failure darf Pipeline abbrechen
@@ -920,17 +930,11 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
                 "fallback": str(fb.get("fallback", "") or ""),
                 "reason": str(fb.get("reason", "") or ""),
             }
-            for fb in (
-                _meta.get("ml_fallbacks_used")
-                if isinstance(_meta.get("ml_fallbacks_used"), list)
-                else []
-            )
+            for fb in (_meta.get("ml_fallbacks_used") if isinstance(_meta.get("ml_fallbacks_used"), list) else [])
             if isinstance(fb, dict)
         ],
         # §0d Carrier-Chain-Recovery-Ratio — Pflichtfeld
-        "carrier_chain_recovery_ratio": _safe_float(
-            _meta.get("carrier_chain_recovery_ratio", 0.0), 0.0
-        ),
+        "carrier_chain_recovery_ratio": _safe_float(_meta.get("carrier_chain_recovery_ratio", 0.0), 0.0),
         "carrier_reference_shifted": bool(_meta.get("reference_shifted", False)),
     }
 
@@ -1177,7 +1181,9 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
     if fqf_triggered and fqf_status in {"recovered", "degraded", "failed", "fail"}:
         passed = False
         if not primary_fail_reason:
-            primary_fail_reason = str(fqf.get("reason", "fallback_quality_floor_triggered") or "fallback_quality_floor_triggered")
+            primary_fail_reason = str(
+                fqf.get("reason", "fallback_quality_floor_triggered") or "fallback_quality_floor_triggered"
+            )
         if not degradation_status:
             degradation_status = "recovered" if fqf_status == "recovered" else "degraded"
 
@@ -1236,6 +1242,7 @@ def build_export_metadata(result: object, **tag_kwargs):
             if isinstance(v, (int, float, str, bool)):
                 try:
                     import math
+
                     out[k] = 0.0 if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v
                 except Exception:
                     pass

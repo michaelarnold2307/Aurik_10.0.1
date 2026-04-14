@@ -1476,7 +1476,9 @@ class TestPhase42VocalEnhancement:
         def _boom():
             raise AssertionError("bs_roformer should be skipped by preflight")
 
-        monkeypatch.setattr(mod42.psutil if hasattr(mod42, "psutil") else __import__("psutil"), "virtual_memory", lambda: _VM())
+        monkeypatch.setattr(
+            mod42.psutil if hasattr(mod42, "psutil") else __import__("psutil"), "virtual_memory", lambda: _VM()
+        )
         monkeypatch.setattr("plugins.mdx23c_plugin.get_mdx23c_plugin", lambda: _FakeMDX())
         monkeypatch.setattr("plugins.bs_roformer_plugin.get_bs_roformer", _boom)
 
@@ -1508,7 +1510,9 @@ class TestPhase42VocalEnhancement:
 
         import backend.core.phases.phase_42_vocal_enhancement as mod42
 
-        monkeypatch.setattr(mod42.psutil if hasattr(mod42, "psutil") else __import__("psutil"), "virtual_memory", lambda: _VM())
+        monkeypatch.setattr(
+            mod42.psutil if hasattr(mod42, "psutil") else __import__("psutil"), "virtual_memory", lambda: _VM()
+        )
         monkeypatch.setattr("plugins.bs_roformer_plugin.get_bs_roformer", lambda: _FakeRoformer())
 
         short_stereo = np.tile(np.array([[0.1, 0.05]], dtype=np.float32), (SR * 2, 1))

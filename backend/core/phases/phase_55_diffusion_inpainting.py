@@ -529,6 +529,7 @@ def _try_diffwave_plugin(audio: np.ndarray, start: int, end: int, sample_rate: i
             return None
 
         from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55c
+
         _plm55c = _get_plm55c()
         _plm55c.set_active("DiffWave", True)
         try:
@@ -1038,6 +1039,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict55
+
             _get_plm_evict55().evict_for_phase("phase_55_diffusion_inpainting")
         except Exception:
             pass

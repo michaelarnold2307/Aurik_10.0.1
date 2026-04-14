@@ -877,9 +877,13 @@ class DeEsserPhase(PhaseInterface):
         # §4.5 Psychoacoustic Masking Clamp — only reduce sibilance above masking threshold
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             deessed_audio = apply_psychoacoustic_masking_clamp(
-                audio, deessed_audio, sample_rate,
-                strength=_effective_strength, mode="subtractive",
+                audio,
+                deessed_audio,
+                sample_rate,
+                strength=_effective_strength,
+                mode="subtractive",
             )
         except Exception as _pm_exc:
             logger.debug("Phase19 masking clamp non-blocking: %s", _pm_exc)

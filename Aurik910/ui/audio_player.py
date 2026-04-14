@@ -201,9 +201,7 @@ class StreamingAudioPlayer:
                 factor = np.linspace(0.0, -1.0, remain, dtype=np.float32)
                 if seg.ndim == 2:
                     factor = factor[:, np.newaxis]
-                self._cf_overlay = np.ascontiguousarray(
-                    seg * factor, dtype=np.float32
-                )
+                self._cf_overlay = np.ascontiguousarray(seg * factor, dtype=np.float32)
                 self._cf_pos = 0
                 self._stop_after_fade = True
             else:
@@ -227,9 +225,7 @@ class StreamingAudioPlayer:
                     fade = np.linspace(1.0, 0.0, cf_len, dtype=np.float32)
                     if old_seg.ndim == 2:
                         fade = fade[:, np.newaxis]
-                    self._cf_overlay = np.ascontiguousarray(
-                        (old_seg - new_seg) * fade, dtype=np.float32
-                    )
+                    self._cf_overlay = np.ascontiguousarray((old_seg - new_seg) * fade, dtype=np.float32)
                     self._cf_pos = 0
 
             self._pos = new_pos
@@ -374,9 +370,7 @@ class StreamingAudioPlayer:
                 fade = np.linspace(1.0, 0.0, cf_len, dtype=np.float32)
                 if old_seg.ndim == 2:
                     fade = fade[:, np.newaxis]
-                cf_overlay = np.ascontiguousarray(
-                    (old_seg - new_seg) * fade, dtype=np.float32
-                )
+                cf_overlay = np.ascontiguousarray((old_seg - new_seg) * fade, dtype=np.float32)
 
         # --- Assign _buf LAST (lock-free callback safety) ---
         self._pos = start_idx
@@ -407,11 +401,7 @@ class StreamingAudioPlayer:
         # Detect device SR
         try:
             dev = sd.query_devices(kind="output")
-            dev_sr = (
-                int(round(float(dev.get("default_samplerate", 48000.0))))
-                if isinstance(dev, dict)
-                else 48000
-            )
+            dev_sr = int(round(float(dev.get("default_samplerate", 48000.0)))) if isinstance(dev, dict) else 48000
         except Exception:
             dev_sr = 48000
         if dev_sr <= 0:
@@ -430,18 +420,14 @@ class StreamingAudioPlayer:
                 blocksize=2048,  # ~43 ms @ 48 kHz — GIL-tolerant under ML load
             )
             self._stream.start()
-            logger.debug(
-                "StreamingAudioPlayer: stream opened @ %d Hz, latency=high", dev_sr
-            )
+            logger.debug("StreamingAudioPlayer: stream opened @ %d Hz, latency=high", dev_sr)
             return True
         except Exception as exc:
             logger.warning("StreamingAudioPlayer: stream creation failed: %s", exc)
             self._stream = None
             return False
 
-    def _prepare(
-        self, audio: np.ndarray, sr: int, output_sr: int
-    ) -> np.ndarray | None:
+    def _prepare(self, audio: np.ndarray, sr: int, output_sr: int) -> np.ndarray | None:
         """Normalise + resample audio to output SR.  NOT locked (slow!)."""
         # Cache lookup (by object identity)
         audio_id = id(audio)
@@ -475,9 +461,7 @@ class StreamingAudioPlayer:
                 from scipy.signal import resample_poly
 
                 g = math.gcd(sr, output_sr)
-                data = resample_poly(data, output_sr // g, sr // g, axis=0).astype(
-                    np.float32
-                )
+                data = resample_poly(data, output_sr // g, sr // g, axis=0).astype(np.float32)
             except Exception as exc:
                 logger.debug("Resample to device SR failed: %s", exc)
                 # Fallback: play at wrong SR (slight pitch shift, better than silence)

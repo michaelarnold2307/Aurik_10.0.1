@@ -109,7 +109,7 @@ class UATReportGenerator:
                     "-p",
                     "no:xdist",
                     "--run-heavy-tests",
-                    '--override-ini=addopts=--strict-markers --import-mode=importlib',
+                    "--override-ini=addopts=--strict-markers --import-mode=importlib",
                     "--timeout=180",
                     "-v",
                     "--tb=short",
@@ -327,9 +327,7 @@ class UATReportGenerator:
             result_sym = (
                 "✅ PASS"
                 if r.status == ResultStatus.PASSED
-                else "❌ FAIL"
-                if r.status == ResultStatus.FAILED
-                else "⊘ SKIP"
+                else "❌ FAIL" if r.status == ResultStatus.FAILED else "⊘ SKIP"
             )
             lines.append(
                 f"| {r.criterion_id} | {r.name} | {r.category} | {r.severity} | {result_sym} | {r.evidence[:50]}{'...' if len(r.evidence) > 50 else ''} |"
@@ -349,9 +347,7 @@ class UATReportGenerator:
             result_sym = (
                 "✅ PASS"
                 if r.status == ResultStatus.PASSED
-                else "❌ FAIL"
-                if r.status == ResultStatus.FAILED
-                else "⊘ SKIP"
+                else "❌ FAIL" if r.status == ResultStatus.FAILED else "⊘ SKIP"
             )
             lines.append(
                 f"| {r.criterion_id} | {r.name} | {r.category} | {r.severity} | {result_sym} | {r.evidence[:50]}{'...' if len(r.evidence) > 50 else ''} |"
@@ -371,9 +367,7 @@ class UATReportGenerator:
             result_sym = (
                 "✅ PASS"
                 if g.status == ResultStatus.PASSED
-                else "❌ FAIL"
-                if g.status == ResultStatus.FAILED
-                else "⊘ SKIP"
+                else "❌ FAIL" if g.status == ResultStatus.FAILED else "⊘ SKIP"
             )
             ko_mark = "🔴" if g.ko else "⚪"
             lines.append(f"| {g.gate_id} | {g.name} | {ko_mark} | {result_sym} |")
@@ -409,9 +403,7 @@ class UATReportGenerator:
         rec_emoji = (
             "✅"
             if self.summary.recommendation == "GO"
-            else "⚠️"
-            if self.summary.recommendation == "CONDITIONAL"
-            else "❌"
+            else "⚠️" if self.summary.recommendation == "CONDITIONAL" else "❌"
         )
 
         lines = [

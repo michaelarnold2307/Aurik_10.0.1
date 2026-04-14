@@ -269,6 +269,7 @@ class VocalEnhancement(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict42
+
             _get_plm_evict42().evict_for_phase("phase_42_vocal_enhancement")
         except Exception:
             pass
@@ -392,13 +393,15 @@ class VocalEnhancement(PhaseInterface):
                 if _sal_values:
                     _avg_sal = float(np.clip(np.mean(_sal_values), 0.0, 1.0))
                     # High average saliency → less aggressive, preserve articulation
-                    _lyrics_presence_scale = 1.0 - 0.3 * _avg_sal   # 0.7–1.0
+                    _lyrics_presence_scale = 1.0 - 0.3 * _avg_sal  # 0.7–1.0
                     _lyrics_formant_q_scale = 1.0 + 0.5 * _avg_sal  # 1.0–1.5 (narrower Q)
                     config["presence_gain_db"] = float(config["presence_gain_db"] * _lyrics_presence_scale)
                     _lyrics_adaptation_active = True
                     logger.info(
                         "Phase42 lyrics-saliency adaptation: avg_sal=%.2f presence_scale=%.2f q_scale=%.2f",
-                        _avg_sal, _lyrics_presence_scale, _lyrics_formant_q_scale,
+                        _avg_sal,
+                        _lyrics_presence_scale,
+                        _lyrics_formant_q_scale,
                     )
             except Exception as _lsa_exc:
                 logger.debug("Phase42 lyrics-saliency non-blocking: %s", _lsa_exc)
@@ -815,6 +818,7 @@ class VocalEnhancement(PhaseInterface):
 
                 try:
                     from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm42r
+
                     _plm42_rof = _get_plm42r()
                     _plm42_rof.set_active("MelBandRoformer", True)
                 except Exception:
@@ -861,6 +865,7 @@ class VocalEnhancement(PhaseInterface):
 
             try:
                 from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm42m
+
                 _plm42_mdx = _get_plm42m()
                 _plm42_mdx.set_active("MDX23C", True)
             except Exception:

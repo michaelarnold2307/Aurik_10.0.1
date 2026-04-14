@@ -234,6 +234,7 @@ def _try_mp_senet_refine(audio: np.ndarray, sr: int) -> tuple[np.ndarray | None,
     _dfn_release = None
     try:
         from backend.core.ml_memory_budget import try_allocate as _try_alloc_43, release as _rel_43
+
         if not _try_alloc_43("MpSeNet_phase43", 0.25):
             logger.debug("MP-SENet phase_43: ml_memory_budget insufficient — DSP-Fallback")
             return None, "unavailable"
@@ -307,6 +308,7 @@ class AdaptiveDeEsserPhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict43
+
             _get_plm_evict43().evict_for_phase("phase_43_ml_deesser")
         except Exception:
             pass

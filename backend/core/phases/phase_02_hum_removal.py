@@ -219,6 +219,7 @@ class HumRemovalPhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict02
+
             _get_plm_evict02().evict_for_phase("phase_02_hum_removal")
         except Exception:
             pass

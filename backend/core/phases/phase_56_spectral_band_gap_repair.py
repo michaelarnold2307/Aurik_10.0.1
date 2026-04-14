@@ -560,6 +560,7 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict56
+
             _get_plm_evict56().evict_for_phase("phase_56_spectral_band_gap_repair")
         except Exception:
             pass

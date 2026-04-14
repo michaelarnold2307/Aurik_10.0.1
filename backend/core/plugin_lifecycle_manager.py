@@ -234,11 +234,15 @@ class PluginLifecycleManager:
             or (required_mb > 0 and free_mb < required_mb)
             or swap_pct > _SWAP_EVICT_THRESHOLD_PCT  # Swap-Druck allein reicht für Eviction
         )
-        if swap_pct > _SWAP_EVICT_THRESHOLD_PCT and not (ram_pct > _RAM_EVICT_THRESHOLD_PCT or free_mb < _MIN_FREE_MB_HARD):
+        if swap_pct > _SWAP_EVICT_THRESHOLD_PCT and not (
+            ram_pct > _RAM_EVICT_THRESHOLD_PCT or free_mb < _MIN_FREE_MB_HARD
+        ):
             logger.warning(
                 "PLM: Swap-Druck kritisch (%.0f %%) — erzwinge Eviction inaktiver Plugins "
                 "(RAM=%.0f %%, frei=%.0f MB)",
-                swap_pct, ram_pct, free_mb,
+                swap_pct,
+                ram_pct,
+                free_mb,
             )
         if not needs_evict:
             return 0

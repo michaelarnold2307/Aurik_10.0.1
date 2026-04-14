@@ -241,6 +241,7 @@ class TapeHissReductionPhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict29
+
             _get_plm_evict29().evict_for_phase("phase_29_tape_hiss_reduction")
         except Exception:
             pass

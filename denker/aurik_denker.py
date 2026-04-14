@@ -1484,15 +1484,14 @@ class AurikDenker:
                     logger.debug("ExzellenzDenker VERSA nicht verfügbar: %s", _ve_exz)
 
                 _goals_total = len(goals) if goals else 0
-                stage_notes["exzellenz"] = (
-                    f"Messung{' + Repair' if _used_repair_path else ''}: Score {excellence_score:.3f}, "
-                    f"{goals_passed}/{_goals_total} Ziele erfüllt"
-                    + (f", VERSA MOS={_exz_versa_mos:.2f}" if _exz_versa_mos > 0.0 else "")
-                    + (
-                        " (Zeit-Domain-Repair für P3-P5 — kein STFT-Re-Pass)"
-                        if _used_repair_path
-                        else " (Legacy-Goal-Messpfad)"
-                    )
+                stage_notes[
+                    "exzellenz"
+                ] = f"Messung{' + Repair' if _used_repair_path else ''}: Score {excellence_score:.3f}, " f"{goals_passed}/{_goals_total} Ziele erfüllt" + (
+                    f", VERSA MOS={_exz_versa_mos:.2f}" if _exz_versa_mos > 0.0 else ""
+                ) + (
+                    " (Zeit-Domain-Repair für P3-P5 — kein STFT-Re-Pass)"
+                    if _used_repair_path
+                    else " (Legacy-Goal-Messpfad)"
                 )
                 phases_executed.append("exzellenz_messung_repair" if _used_repair_path else "exzellenz_messung")
                 logger.info(

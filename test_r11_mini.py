@@ -3,19 +3,21 @@
 Mini-Test für R11 P1/P2-Regression.
 Nutzt nur 10s real audio ür schnelle Diagnose
 """
+
 import sys
-sys.path.insert(0, '.')
+
+sys.path.insert(0, ".")
 
 import numpy as np
 from pathlib import Path
 
 # Find a test audio file
-test_audio_dir = Path('test_audio')
+test_audio_dir = Path("test_audio")
 if not test_audio_dir.exists():
     print(f"test_audio dir not found")
     sys.exit(1)
 
-audio_files = list(test_audio_dir.glob('*.wav')) + list(test_audio_dir.glob('*.mp3'))
+audio_files = list(test_audio_dir.glob("*.wav")) + list(test_audio_dir.glob("*.mp3"))
 if not audio_files:
     print(f"No audio files found in {test_audio_dir}")
     sys.exit(1)
@@ -25,9 +27,10 @@ print(f"Using test audio: {test_file}")
 
 # Load audio (only first 10 seconds for speed)
 import librosa
+
 audio, sr = librosa.load(test_file, sr=48000, mono=False, duration=10)
 if audio.ndim == 1:
-    audio = audio.reshape(-1,  1)
+    audio = audio.reshape(-1, 1)
 elif audio.ndim == 2 and audio.shape[0] < audio.shape[1]:
     audio = audio.T
 
