@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def get_accent_colors(mode: str):
     """Liefert Akzentfarben für Import (Restoration) oder Export (Studio 2026)."""
-    if mode == "export" or mode == "Studio 2026":
+    if mode in ("STUDIO_2026", "export", "Studio 2026"):
         return {
             "accent": "#00B0FF",
             "accent_hover": "#0091EA",
@@ -415,6 +415,14 @@ try:
 except Exception:
     _sd = None
     _SD_AVAILABLE = False
+
+# Unterbrechungsfreier Streaming-Player (callback-basiert, gapless A/B switch)
+try:
+    from Aurik910.ui.audio_player import StreamingAudioPlayer, get_streaming_player
+
+    _STREAMING_PLAYER_AVAILABLE = True
+except Exception:
+    _STREAMING_PLAYER_AVAILABLE = False
 
 # Musical Goals Radar Chart (pure PyQt5, kein Matplotlib)
 try:
@@ -2028,7 +2036,7 @@ class BatchProcessingThread(QThread):
                     "inner_groove_distortion": ["inner_groove_distortion"],
                 }
 
-                def _uv3_to_ui_pct(uv3_pct: int) -> float:
+                def _uv3_to_ui_pct(uv3_pct: float) -> float:
                     """Maps UV3 internal progress (1-98) to UI progress (9-98%), song-adaptive.
 
                     The mapping adapts to the actual phase count once _uv3_total_known[0]
@@ -2050,7 +2058,7 @@ class BatchProcessingThread(QThread):
                     else:
                         return 83.0 + (uv3_pct - 86) / 12.0 * 15.0  # 83 → 98
 
-                def _on_batch_progress(pct: int, msg: str, elapsed_s: float = 0.0, _item=item) -> None:
+                def _on_batch_progress(pct: float, msg: str, elapsed_s: float = 0.0, _item=item) -> None:
                     # §11.4 Stufen-Vorab-Meldung: UV3 meldet Gesamtzahl der Phasen
                     # BEVOR die Pipeline startet → Total von Anfang an korrekt.
                     if msg.startswith("__total_uv3_phases__:"):
@@ -2059,6 +2067,18 @@ class BatchProcessingThread(QThread):
                         except (ValueError, IndexError):
                             pass
                         return  # Keine UI-Aktualisierung für Metadaten-Nachricht
+                    if msg.startswith("__carrier_chain__:"):
+                        _payload = msg.split(":", 1)[1]
+                        _chain_keys = [str(_part).strip().lower() for _part in _payload.split("|") if str(_part).strip()]
+                        if len(_chain_keys) >= 2:
+                            def _apply_chain(_keys=list(_chain_keys)):
+                                try:
+                                    self._apply_authoritative_chain_display(_keys)
+                                except Exception as _chain_exc:
+                                    logger.debug("Live-Kettenanzeige fehlgeschlagen: %s", _chain_exc)
+
+                            self._dispatch_to_gui(_apply_chain)
+                        return
                     # Track when UV3 pipeline starts (pct ≥ 20) for sub-segment ETA
                     if elapsed_s > 0 and pct >= 20 and getattr(self, "_ml_start_elapsed", -1.0) < 0:
                         self._ml_start_elapsed = elapsed_s
@@ -2092,7 +2112,7 @@ class BatchProcessingThread(QThread):
                             _sp2_phase_reset[0] = True
                         # Track upward jump size for creep velocity calibration
                         _delta = _new_tgt - _sp["target"]
-                        if _delta > 0.5:
+                        if _delta > 0.3:  # erhöht von 0.15 wegen 30Hz Heartbeat-Granularität
                             _sp["last_jump"] = _delta
                         _sp["last_target_time"] = _now
                         # Monotonic: nur aufwärts setzen
@@ -9843,6 +9863,13 @@ class ModernMainWindow(QMainWindow):
         # Invalidated whenever a new file loads or the restored audio changes.
         self._playback_device_cache: tuple | None = None
         self._playback_warmup_token: int = 0  # invalidates stale warmup threads
+        # ── Streaming Audio Player (gapless, callback-based) ─────────
+        self._streaming_player: StreamingAudioPlayer | None = None
+        if _STREAMING_PLAYER_AVAILABLE:
+            try:
+                self._streaming_player = get_streaming_player()
+            except Exception:
+                self._streaming_player = None
         # Live-Visualisierung: serieller Stereo-Update-Puffer für mono Phasen-Outputs
         self._live_stereo_view_audio: np.ndarray | None = None
         self._live_serial_next_channel: int = 0
@@ -10467,17 +10494,17 @@ class ModernMainWindow(QMainWindow):
             _is_studio = _mode_norm in ("maximum", "studio2026", "studio")
 
             # Batch starten mit Recovery-Flag
-            if hasattr(self, "_start_batch_processing"):
+            if hasattr(self, "_process_with_mode"):
                 # Setze Recovery-Kontext der vom BatchProcessingThread abgefragt wird
                 self._pending_recovery_checkpoint = checkpoint
                 if _is_studio:
-                    self._on_studio26_clicked()
+                    self._process_with_mode("STUDIO_2026")
                 else:
-                    self._on_restore_clicked()
+                    self._process_with_mode("RESTORATION")
             else:
                 import logging
 
-                logging.getLogger(__name__).warning("OOM-Recovery: _start_batch_processing nicht verfügbar.")
+                logging.getLogger(__name__).warning("OOM-Recovery: _process_with_mode nicht verfügbar.")
         except Exception as _exc:
             import logging
 
@@ -12952,6 +12979,11 @@ class ModernMainWindow(QMainWindow):
         load_token: int | None = None,
     ) -> None:
         """Aktualisiert den Carrier-Label im GUI-Thread (nach async Analyse)."""
+        # CRITICAL: State synchronization — _carrier_bg_label MUSS immer mit detected_medium_label synchron sein
+        # um nachfolgende Era-Badge-Updates nicht zu zerstören (§2.26, 2026-04-13/2026-04-14 Fix)
+        self._carrier_bg_label = carrier_label
+        self._carrier_bg_score = carrier_score
+
         # Feed Prognose-Widget (material key + confidence 0–1)
         if getattr(self, "prognose_widget", None) is not None:
             _raw = getattr(self, "_raw_medium_type", "unknown")
@@ -12980,6 +13012,74 @@ class ModernMainWindow(QMainWindow):
         if hasattr(self, "current_carrier_confidence"):
             self.current_carrier_confidence = carrier_score
         self._apply_mode_recommendation_visuals()
+
+    def _apply_authoritative_chain_display(self, chain_keys: list[str]) -> bool:
+        """Render an authoritative multi-link carrier chain into the main label."""
+        if not hasattr(self, "detected_medium_label"):
+            return False
+        if not isinstance(chain_keys, list) or len(chain_keys) < 2:
+            return False
+
+        try:
+            _ci_icons_dir = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "resources",
+                "carrier_icons",
+            )
+        except (TypeError, AttributeError):
+            _ci_icons_dir = ""
+
+        _CI_MEDIUM_DATA: dict[str, tuple[str, str]] = {
+            "wax_cylinder": ("wax_cylinder", "Wachswalze"),
+            "lacquer_disc": ("lacquer_disc", "Lackfolie"),
+            "shellac": ("shellac", "Schellack"),
+            "vinyl": ("vinyl", "Vinyl-Schallplatte"),
+            "wire_recording": ("wire_recording", "Drahtband"),
+            "reel_tape": ("reel_tape", "Spulenband"),
+            "tape": ("tape", "Kassette (Band)"),
+            "cassette": ("tape", "Kassette (Band)"),
+            "dat": ("dat", "DAT"),
+            "cd_digital": ("cd_digital", "CD"),
+            "cd": ("cd", "CD"),
+            "digital": ("cd_digital", "Digital"),
+            "minidisc": ("minidisc", "MiniDisc"),
+            "mp3_low": ("mp3_low", "MP3 (schwach)"),
+            "mp3_high": ("mp3_high", "MP3"),
+            "damaged_mp3": ("damaged_mp3", "MP3 (defekt)"),
+            "aac": ("aac", "AAC"),
+            "streaming": ("streaming", "Streaming"),
+            "unknown": ("unknown", "Unbekannt"),
+        }
+
+        def _ci_html(icon_key: str, label: str) -> str:
+            if not _ci_icons_dir:
+                return label
+            try:
+                _svg = os.path.join(_ci_icons_dir, f"{icon_key}.svg")
+                _png = os.path.join(_ci_icons_dir, f"{icon_key}.png")
+                _p = _svg if os.path.isfile(_svg) else _png
+                return (
+                    f'<img src="file:///{_p}" width="22" height="22" '
+                    f'style="vertical-align:middle;">&nbsp;{label}'
+                )
+            except (OSError, TypeError):
+                return label
+
+        _parts: list[str] = []
+        for _k in chain_keys:
+            _k_str = str(_k).strip().lower() if _k else "unknown"
+            _icon_key, _label = _CI_MEDIUM_DATA.get(_k_str, ("unknown", "Unbekannt"))
+            _parts.append(_ci_html(_icon_key, _label))
+
+        if not _parts:
+            return False
+
+        _chain_html = "&nbsp;&nbsp;→&nbsp;&nbsp;".join(_parts)
+        self._carrier_bg_label = _chain_html
+        _ampel = self._render_ampel_html(int(getattr(self, "_carrier_bg_score", 0) or 0))
+        _badge = getattr(self, "_era_genre_badge", "") or ""
+        self.detected_medium_label.setText(f"{_chain_html}   {_ampel}{_badge}")
+        return True
 
     @staticmethod
     def _render_star_html(score: int, size: int = 18) -> str:
@@ -13096,6 +13196,13 @@ class ModernMainWindow(QMainWindow):
             # first play-click is stutter-free.  Invalidate any previous cache.
             self._playback_device_cache = None
             self._playback_warmup_token += 1
+            # Invalidate streaming player resample cache for the new file
+            _sp = getattr(self, "_streaming_player", None)
+            if _sp is not None:
+                try:
+                    _sp.invalidate_cache()
+                except Exception:
+                    pass
             _warmup_token = self._playback_warmup_token
             _warmup_audio = _audio
             _warmup_sr = _sr
@@ -13889,12 +13996,24 @@ class ModernMainWindow(QMainWindow):
     def _on_waveform_seek_request(self, frac: float) -> None:
         """Seek playback to clicked waveform position (0.0–1.0 of current source)."""
         frac = max(0.0, min(1.0, float(frac)))
-        _is_playing = bool(self._play_thread is not None and self._play_thread.is_alive())
 
         if hasattr(self, "waveform_widget"):
             self.waveform_widget._playhead_pos = frac
             self.waveform_widget.update()
 
+        # ── Streaming-Player: gapless seek (kein stop/restart) ───────────────
+        _sp = self._streaming_player
+        if _sp is not None and _sp.available and _sp.is_playing:
+            _sp.seek(frac)
+            _dur = _sp.duration_seconds
+            if _dur > 0 and hasattr(self, "_playback_time_label"):
+                _t = int(frac * _dur)
+                _m, _s = divmod(_t, 60)
+                _dm, _ds = divmod(int(_dur), 60)
+                self._playback_time_label.setText(f"{_m}:{_s:02d} / {_dm}:{_ds:02d}")
+            return
+
+        # ── Legacy: position update + restart ────────────────────────────────
         _dur = float(getattr(self, "_playback_audio_duration", 0.0) or 0.0)
         if _dur > 0 and hasattr(self, "_playback_time_label"):
             _t = int(frac * _dur)
@@ -13902,6 +14021,7 @@ class ModernMainWindow(QMainWindow):
             _dm, _ds = divmod(int(_dur), 60)
             self._playback_time_label.setText(f"{_m}:{_s:02d} / {_dm}:{_ds:02d}")
 
+        _is_playing = bool(self._play_thread is not None and self._play_thread.is_alive())
         if not _is_playing:
             return
 
@@ -13930,7 +14050,63 @@ class ModernMainWindow(QMainWindow):
             pass
 
     def _play_audio(self, audio: np.ndarray, sr: int, start_pos_frac: float = 0.0):
-        """Audiodaten asynchron über sounddevice abspielen (optional ab Startposition)."""
+        """Audiodaten unterbrechungsfrei abspielen (gapless source-switch via StreamingAudioPlayer)."""
+        # ── Streaming-Player-Pfad (bevorzugt — gapless, kein stop/restart) ───
+        _sp = self._streaming_player
+        if _sp is not None and _sp.available:
+            # Pass raw audio reference — StreamingAudioPlayer._prepare()
+            # handles normalisation/resampling internally with id()-based
+            # cache.  Creating a copy here would kill the cache (new id()
+            # on every call → full re-normalise + resample → GUI freeze +
+            # GIL contention → audible stuttering under ML load).
+            if audio is None or (hasattr(audio, 'size') and audio.size == 0):
+                if hasattr(self, "status_text"):
+                    self._apply_status_text_style("error")
+                    self.status_text.setText(
+                        "⚠ Wiedergabe nicht möglich: Die Audiodatei enthält keine abspielbaren Samples."
+                    )
+                if hasattr(self, "title_bar"):
+                    self.title_bar.set_status("Wiedergabe-Fehler", "#B87A7A")
+                return
+
+            # Persist source for click-to-seek (raw ref — stable id())
+            self._playback_source_audio = audio
+            self._playback_source_sr = int(sr)
+
+            ok = _sp.play(
+                audio,
+                int(sr),
+                start_frac=float(start_pos_frac),
+                label="",
+                on_finished=self._on_streaming_playback_finished,
+            )
+            if not ok:
+                logger.warning("StreamingAudioPlayer.play() returned False — device unavailable?")
+                if hasattr(self, "status_text"):
+                    self._apply_status_text_style("error")
+                    self.status_text.setText(
+                        "⚠ Wiedergabe nicht möglich: Audio-Ausgabegerät prüfen."
+                    )
+                return
+
+            # Mark as "playing" for UI state checks
+            # Use a lightweight sentinel so existing is_playing checks work.
+            self._play_thread = threading.Thread(target=lambda: None, daemon=True)
+            self._play_thread.start()  # finishes immediately — just sets is_alive() briefly
+
+            if hasattr(self, "btn_stop_playback"):
+                self.btn_stop_playback.setEnabled(True)
+
+            # ── Playhead-Timer ────────────────────────────────────────────────
+            self._playback_audio_duration = _sp.duration_seconds
+            self._last_playhead_pos = -1.0
+            if not hasattr(self, "_playhead_timer"):
+                self._playhead_timer = QTimer(self)
+                self._playhead_timer.timeout.connect(self._update_playhead)
+            self._playhead_timer.start(120)
+            return
+
+        # ── Legacy-Fallback: sd.play() (nicht gapless) ───────────────────────
         if not _SD_AVAILABLE:
             QMessageBox.information(self, t("dialog.player_title"), t("dialog.player_body"))
             return
@@ -13967,10 +14143,6 @@ class ModernMainWindow(QMainWindow):
                     data = data / (np.abs(data).max() + 1e-9)
                 play_sr = int(sr)
 
-                # ── Device-SR adaption: hit pre-warmed cache first ────────────────
-                # The warmup thread resampled to device SR in the background after
-                # file-load.  Cache hit eliminates a blocking resample that caused
-                # stutter on the very first play-click (PulseAudio/ALSA bridges).
                 _cache = getattr(self, "_playback_device_cache", None)
                 if (
                     isinstance(_cache, tuple)
@@ -13979,12 +14151,9 @@ class ModernMainWindow(QMainWindow):
                     and _cache[1] == sr
                 ):
                     _cache_tuple = _cache
-                    data = _cache_tuple[3]  # already float32, shape (N, C)
+                    data = _cache_tuple[3]
                     play_sr = _cache_tuple[2]
-                    logger.debug("Playback: using pre-warmed device-SR cache (sr=%d)", play_sr)
                 else:
-                    # Cache miss (first play before warmup finished, or restored audio):
-                    # resample inline.  Result is saved so subsequent seeks are instant.
                     try:
                         if _sd is not None:
                             _dev = _sd.query_devices(kind="output")
@@ -14002,7 +14171,6 @@ class ModernMainWindow(QMainWindow):
                                 )
                                 data = np.ascontiguousarray(_rs, dtype=np.float32)
                                 play_sr = _dev_sr
-                            # Opportunistically fill cache for next seek
                             if getattr(self, "_playback_warmup_token", -1) >= 0:
                                 self._playback_device_cache = (
                                     id(prepared_audio), sr, play_sr, data
@@ -14010,10 +14178,6 @@ class ModernMainWindow(QMainWindow):
                     except Exception as exc:
                         logger.debug("A/B playback device-rate adaption skipped: %s", exc)
 
-                # Use sd.play() (callback mode) — avoids ALSA mmap_begin crashes
-                # that occur with OutputStream.write() on PulseAudio/ALSA bridges.
-                # latency='high' uses a ~200 ms ring buffer instead of the default
-                # ~10 ms ('low'), eliminating periodic underruns on PulseAudio bridges.
                 if data.ndim == 1:
                     data2 = data.reshape(-1, 1)
                 else:
@@ -14026,14 +14190,13 @@ class ModernMainWindow(QMainWindow):
 
                 finished_evt = threading.Event()
                 self._playback_stop_evt = finished_evt
-                self._sd_stream = None  # no OutputStream reference in callback mode
+                self._sd_stream = None
 
                 with self._sd_lock:
                     if _sd is None:
                         return
                     _sd.play(data_to_play, samplerate=play_sr, blocking=False, latency="high")
 
-                # Poll until natural end or external stop request
                 while not finished_evt.is_set():
                     try:
                         _active = _sd is not None and _sd.get_stream().active
@@ -14081,7 +14244,7 @@ class ModernMainWindow(QMainWindow):
         if hasattr(self, "btn_stop_playback"):
             self.btn_stop_playback.setEnabled(True)
 
-        # ── Playhead-Timer (50 ms-Takt, läuft im Hauptthread) ────────────────
+        # ── Playhead-Timer (läuft im Hauptthread) ────────────────────────────
         self._playback_start_time = time.monotonic() - max(0.0, min(1.0, float(start_pos_frac))) * (
             len(prepared_audio) / max(1, sr)
         )
@@ -14090,27 +14253,48 @@ class ModernMainWindow(QMainWindow):
         if not hasattr(self, "_playhead_timer"):
             self._playhead_timer = QTimer(self)
             self._playhead_timer.timeout.connect(self._update_playhead)
-        # 120 ms is visually smooth enough but much lighter on CPU/GPU than 50 ms.
         self._playhead_timer.start(120)
 
+    def _on_streaming_playback_finished(self) -> None:
+        """Callback from StreamingAudioPlayer when source ends naturally.
+
+        Runs in the PortAudio thread — dispatch UI updates to GUI thread.
+        """
+        self._dispatch_to_gui(self._on_playback_ended_gui)
+
+    def _on_playback_ended_gui(self) -> None:
+        """Reset UI after playback ends (runs in GUI thread)."""
+        if hasattr(self, "_playhead_timer"):
+            self._playhead_timer.stop()
+        if hasattr(self, "waveform_widget"):
+            self.waveform_widget._playhead_pos = -1.0
+            self.waveform_widget.update()
+        if hasattr(self, "_playback_time_label"):
+            self._playback_time_label.setText("– : – –")
+        if hasattr(self, "btn_stop_playback"):
+            self.btn_stop_playback.setEnabled(False)
+
     def _update_playhead(self) -> None:
-        """50-ms-Timer-Slot: aktualisiert Playhead-Position und Zeitanzeige im Hauptthread."""
-        _thread_alive = hasattr(self, "_play_thread") and self._play_thread is not None and self._play_thread.is_alive()
-        if not _thread_alive:
-            # Wiedergabe beendet — alles zurücksetzen
-            if hasattr(self, "_playhead_timer"):
-                self._playhead_timer.stop()
-            if hasattr(self, "waveform_widget"):
-                self.waveform_widget._playhead_pos = -1.0
-                self.waveform_widget.update()
-            if hasattr(self, "_playback_time_label"):
-                self._playback_time_label.setText("– : – –")
-            if hasattr(self, "btn_stop_playback"):
-                self.btn_stop_playback.setEnabled(False)
-            return
-        _elapsed = time.monotonic() - self._playback_start_time
-        _dur = self._playback_audio_duration
-        _pos = min(_elapsed / max(_dur, 1e-9), 1.0)
+        """120-ms-Timer-Slot: aktualisiert Playhead-Position und Zeitanzeige im Hauptthread."""
+        # ── Streaming-Player: sample-genaue Position ─────────────────────────
+        _sp = self._streaming_player
+        if _sp is not None and _sp.available:
+            _pos = _sp.position_frac
+            if _pos < 0.0:
+                # Playback ended
+                self._on_playback_ended_gui()
+                return
+            _elapsed = _sp.elapsed_seconds
+            _dur = _sp.duration_seconds
+        else:
+            # ── Legacy-Fallback: time.monotonic()-basiert ─────────────────────
+            _thread_alive = hasattr(self, "_play_thread") and self._play_thread is not None and self._play_thread.is_alive()
+            if not _thread_alive:
+                self._on_playback_ended_gui()
+                return
+            _elapsed = time.monotonic() - self._playback_start_time
+            _dur = self._playback_audio_duration
+            _pos = min(_elapsed / max(_dur, 1e-9), 1.0)
         # Avoid expensive full-waveform repaints for tiny cursor movements.
         _last_pos = float(getattr(self, "_last_playhead_pos", -1.0))
         if _last_pos >= 0.0 and abs(_pos - _last_pos) < 0.004:
@@ -14172,7 +14356,11 @@ class ModernMainWindow(QMainWindow):
                     self._ab_source_label.setVisible(False)
         # Stop-Button nur aktivierbar wenn Wiedergabe läuft — Grundzustand: deaktiviert
         if hasattr(self, "btn_stop_playback"):
-            _playing = hasattr(self, "_play_thread") and self._play_thread is not None and self._play_thread.is_alive()
+            _sp = self._streaming_player
+            if _sp is not None and _sp.available:
+                _playing = _sp.is_playing
+            else:
+                _playing = hasattr(self, "_play_thread") and self._play_thread is not None and self._play_thread.is_alive()
             self.btn_stop_playback.setEnabled(_playing)
 
     def _ab_sync_toggle(self) -> None:
@@ -14191,7 +14379,12 @@ class ModernMainWindow(QMainWindow):
             return
 
         # Loop aktiviert — Startposition bestimmen (aktueller Playhead oder 0)
-        _pos = float(getattr(self, "_last_playhead_pos", -1.0))
+        # Streaming-Player liefert sample-genaue Position (kein 120ms-Timer-Drift)
+        _sp = self._streaming_player
+        if _sp is not None and _sp.available and _sp.is_playing:
+            _pos = _sp.position_frac
+        else:
+            _pos = float(getattr(self, "_last_playhead_pos", -1.0))
         if _pos < 0.0 or _pos >= 1.0:
             _pos = 0.0
         self._ab_loop_start_frac = _pos
@@ -14232,7 +14425,12 @@ class ModernMainWindow(QMainWindow):
         if not _loop_active:
             return
         # Aktuelle Playhead-Position als neuen Loop-Startpunkt übernehmen
-        _current_pos = float(getattr(self, "_last_playhead_pos", -1.0))
+        # Streaming-Player liefert sample-genaue Position (kein 120ms-Timer-Drift)
+        _sp = self._streaming_player
+        if _sp is not None and _sp.available and _sp.is_playing:
+            _current_pos = _sp.position_frac
+        else:
+            _current_pos = float(getattr(self, "_last_playhead_pos", -1.0))
         if 0.0 <= _current_pos < 1.0:
             self._ab_loop_start_frac = _current_pos
         self._ab_loop_source = source
@@ -14873,7 +15071,7 @@ class ModernMainWindow(QMainWindow):
             self._heartbeat_timer = QTimer(self)
             self._heartbeat_timer.timeout.connect(self._tick_heartbeat)
         if not self._heartbeat_timer.isActive():
-            self._heartbeat_timer.start(200)
+            self._heartbeat_timer.start(33)  # 30 Hz sync mit Smooth-Emitter für feingranulares Feedback
 
         # GIL-Switch-Intervall senken: Standard 5 ms → 1 ms während Batch.
         # Schwere ML-Ops (torch.load, gc.collect) halten die GIL für Sekunden.
@@ -15363,37 +15561,124 @@ class ModernMainWindow(QMainWindow):
         # ── Tonträgerkette aus TontraegerketteDenker im Label anzeigen ────────
         # Die _carrier_bg-Voranalyse zeigt nur MediumClassifier (Primärträger +
         # Dateiendung). Der TontraegerketteDenker (läuft im Batch) kennt die
-        # vollständige Kette — z.B. "Vinyl → Magnetband → MP3".
-        # Falls der Ursprungsträger im aktuellen Label fehlt, Kette ergänzen.
+        # vollständige Kette — z.B. "Vinyl → Kassette → MP3".
+        # Die autoritative Kette ERSETZT die Voranalyse-Anzeige (nicht anhängen),
+        # damit keine widersprüchlichen Ketten untereinander stehen.
         try:
             _chain_info = getattr(restoration_result, "chain_info", None)
+            # Fallback: if chain_info missing, read transfer_chain from backend
+            if _chain_info is None:
+                _transfer_chain = getattr(restoration_result, "transfer_chain", None)
+                _transfer_chain_str = getattr(restoration_result, "transfer_chain_str", "")
+                if _transfer_chain is not None and isinstance(_transfer_chain, (list, tuple)):
+                    # Build chain_info dict from transfer_chain
+                    _chain_info = {
+                        "chain": list(_transfer_chain),
+                        "chain_string": str(_transfer_chain_str) or "",
+                    }
+                    logger.debug(
+                        "Tonträgerkette aus Backend transfer_chain konstruiert: chain=%s string=%r",
+                        _transfer_chain,
+                        _transfer_chain_str,
+                    )
+                else:
+                    logger.debug(
+                        "Tonträgerkette nicht verfügbar: chain_info=None, transfer_chain=%s",
+                        _transfer_chain,
+                    )
             if isinstance(_chain_info, dict) and hasattr(self, "detected_medium_label"):
-                _chain_string = str(_chain_info.get("chain_string", ""))
-                _orig_medium = str(_chain_info.get("original_medium", "")).lower()
-                _gen_count = int(_chain_info.get("generation_count", 1))
-                # Analoge Quellträger die selten korrekt via _carrier_bg erkannt werden
-                _ANALOG_SOURCES = {"vinyl", "shellac", "lacquer_disc", "wax_cylinder", "wire_recording"}
-                _is_multi_analog = _gen_count >= 2 and _orig_medium in _ANALOG_SOURCES
-                if _chain_string and _is_multi_analog:
-                    _cur_text = self.detected_medium_label.text()
-                    # Nur aktualisieren wenn die Kettendarstellung neue Info enthält
-                    _chain_already_shown = _chain_string.split(" →")[0].lower() in _cur_text.lower()
-                    if not _chain_already_shown:
-                        _new_text = _cur_text + f"<br><small style='color:#8ab4d4;'>🔗&nbsp;{_chain_string}</small>"
-                        self.detected_medium_label.setText(_new_text)
-                        logger.debug("detected_medium_label: Kettenanalyse ergänzt — %s", _chain_string)
-                # Vollständige Kette immer als Tooltip-Info
-                if _chain_string:
-                    _glieder = _chain_info.get("glieder", [])
-                    _tip_lines = [f"<b>Tonträgerkette:</b> {_chain_string}"]
-                    for _gl in _glieder:
-                        if isinstance(_gl, dict):
-                            _tip_lines.append(
-                                f"&nbsp;• {_gl.get('label', _gl.get('medium', '?'))}: {_gl.get('degradation_type', '')}"
+                _chain_string = str(_chain_info.get("chain_string", "")) or ""
+                # BUGFIX: Backend speichert "transfer_chain", nicht "chain"
+                _chain_keys = _chain_info.get("transfer_chain") or _chain_info.get("chain") or []
+                # Vollständige Kette mit Icons anzeigen wenn ≥ 2 Glieder
+                if isinstance(_chain_keys, (list, tuple)) and len(_chain_keys) >= 2:
+                    # Icon-HTML-Helfer (konsistent mit _pre_analysis_bg)
+                    _ci_icons_dir = None
+                    try:
+                        _ci_icons_dir = os.path.join(
+                            os.path.dirname(os.path.dirname(__file__)),
+                            "resources",
+                            "carrier_icons",
+                        )
+                    except (TypeError, AttributeError):
+                        pass
+
+                    _CI_MEDIUM_DATA: dict[str, tuple[str, str]] = {
+                        "wax_cylinder": ("wax_cylinder", "Wachswalze"),
+                        "lacquer_disc": ("lacquer_disc", "Lackfolie"),
+                        "shellac": ("shellac", "Schellack"),
+                        "vinyl": ("vinyl", "Vinyl-Schallplatte"),
+                        "wire_recording": ("wire_recording", "Drahtband"),
+                        "reel_tape": ("reel_tape", "Spulenband"),
+                        "tape": ("tape", "Kassette (Band)"),
+                        "cassette": ("tape", "Kassette (Band)"),
+                        "dat": ("dat", "DAT"),
+                        "cd_digital": ("cd_digital", "CD"),
+                        "cd": ("cd", "CD"),
+                        "digital": ("cd_digital", "Digital"),
+                        "minidisc": ("minidisc", "MiniDisc"),
+                        "mp3_low": ("mp3_low", "MP3 (schwach)"),
+                        "mp3_high": ("mp3_high", "MP3"),
+                        "damaged_mp3": ("damaged_mp3", "MP3 (defekt)"),
+                        "aac": ("aac", "AAC"),
+                        "streaming": ("streaming", "Streaming"),
+                        "unknown": ("unknown", "Unbekannt"),
+                    }
+
+                    def _ci_html(icon_key: str, label: str) -> str:
+                        if not _ci_icons_dir:
+                            return label  # Plain text fallback
+                        try:
+                            _svg = os.path.join(_ci_icons_dir, f"{icon_key}.svg")
+                            _png = os.path.join(_ci_icons_dir, f"{icon_key}.png")
+                            _p = _svg if os.path.isfile(_svg) else _png
+                            return (
+                                f'<img src="file:///{_p}" width="22" height="22" '
+                                f'style="vertical-align:middle;">&nbsp;{label}'
                             )
-                    self.detected_medium_label.setToolTip("<br>".join(_tip_lines))
+                        except (OSError, TypeError):
+                            return label  # Fallback if icon lookup fails
+
+                    try:
+                        _chain_parts = []
+                        for _k in _chain_keys:
+                            _k_str = str(_k).strip().lower() if _k else "unknown"
+                            _tuple = _CI_MEDIUM_DATA.get(_k_str, ("unknown", "Unbekannt"))
+                            _icon_key, _label = _tuple[0], _tuple[1]
+                            _chain_parts.append(_ci_html(_icon_key, _label))
+
+                        _chain_html = "&nbsp;&nbsp;→&nbsp;&nbsp;".join(_chain_parts)
+                        # Autoritative Kette ERSETZT die Voranalyse-Anzeige.
+                        # INVARIANTE (§2.26 State-Synchronisation, 2026-04-14 Fix):
+                        # _carrier_bg_label MUSS immer = aktuelle detected_medium_label.text()
+                        # sein, weil Era-Badge-Block (nachfolgend) aus _carrier_bg_label rekonstruiert.
+                        # FEHLER: Wenn _carrier_bg_label ≠ detected_medium_label, dann:
+                        #   Era-Badge liest alte _carrier_bg_label → schreibt detected_medium_label
+                        #   mit älterem Content → Kettenanalyse wird überschrieben (SILENT DATA LOSS)
+                        if _chain_html:
+                            self.detected_medium_label.setText(_chain_html)
+                            self._carrier_bg_label = _chain_html  # ← CRITICAL State sync
+                            logger.debug("detected_medium_label: Kettenanalyse ersetzt — %s", _chain_string)
+                    except Exception as _html_exc:
+                        logger.debug("Kettenanalyse HTML-Bildung fehlgeschlagen: %s", _html_exc)
+
+                # Vollständige Kette immer als Tooltip-Info (unabhängig vom HTML)
+                if _chain_string:
+                    try:
+                        _glieder = _chain_info.get("glieder") or []
+                        _tip_lines = [f"<b>Tontraegerkette:</b> {_chain_string}"]
+                        if isinstance(_glieder, list):
+                            for _gl in _glieder:
+                                if isinstance(_gl, dict):
+                                    _lbl = str(_gl.get("label") or _gl.get("medium") or "?")
+                                    _deg = str(_gl.get("degradation_type") or "")
+                                    if _lbl and _lbl != "?":
+                                        _tip_lines.append(f"&nbsp;• {_lbl}: {_deg}")
+                        self.detected_medium_label.setToolTip("<br>".join(_tip_lines))
+                    except Exception as _tooltip_exc:
+                        logger.debug("Kettenanalyse Tooltip fehlgeschlagen: %s", _tooltip_exc)
         except Exception as _chain_upd_exc:
-            logger.debug("Kettenanzeige-Update fehlgeschlagen: %s", _chain_upd_exc)
+            logger.debug("Kettenanzeige-Update kritisch fehlgeschlagen: %s", _chain_upd_exc)
         # ── Ära-Badge aus UV3-Ergebnis aktualisieren (autoritativ) ────────────
         # Die Voranalyse (_detect_era_genre_bg) kann abweichende Dekaden liefern,
         # da sie nur DSP-Heuristiken nutzt. UV3 hat GlobalPlan-Prior + vollständige
@@ -15440,6 +15725,11 @@ class ModernMainWindow(QMainWindow):
                     _cur_lbl = getattr(self, "_carrier_bg_label", "")
                     _cur_sc = getattr(self, "_carrier_bg_score", 0)
                     _cur_stars = self._render_ampel_html(_cur_sc)
+                    # BUGFIX (2026-04-14): _cur_lbl enthält nur die Kette ohne Ampel (seit Zeile 15559).
+                    # Ampel wurde dort nicht eingefügt, um Doppel-Rendering zu vermeiden.
+                    # Die Ampel ist KEINE-old-score hier, daher Stille-Update.
+                    # NUR in Voranalyse-Phase wird Ampel + Badge zusammen mit Kette eingefügt (Zeile 12985).
+                    # Hier nachfolgende Era-Update + korrekte Ampel-Einstellung.
                     self.detected_medium_label.setText(f"{_cur_lbl}   {_cur_stars}{_new_badge}")
                     # chip_era wird NICHT gesetzt — Ära steht bereits im detected_medium_label
                     if (
@@ -15945,8 +16235,13 @@ class ModernMainWindow(QMainWindow):
         self._stop_playback()
 
     def _stop_playback(self):
-        """Laufende Wiedergabe anhalten."""
-        if _SD_AVAILABLE:
+        """Laufende Wiedergabe anhalten (mit Fade-Out bei StreamingPlayer)."""
+        # ── Streaming-Player (bevorzugt) ─────────────────────────────────────
+        _sp = self._streaming_player
+        if _sp is not None and _sp.available:
+            _sp.stop()
+        # ── Legacy sd.play() Fallback ────────────────────────────────────────
+        elif _SD_AVAILABLE:
             try:
                 if not hasattr(self, "_sd_lock"):
                     self._sd_lock = threading.Lock()
@@ -15965,507 +16260,859 @@ class ModernMainWindow(QMainWindow):
         if hasattr(self, "_playback_time_label"):
             self._playback_time_label.setText("– : – –")
 
-    def _compute_and_show_quality(self, output_path: str, restoration_result=None):
-        """Qualitätsscore im Hintergrund berechnen und Radar-Chart aktualisieren."""
+    def _load_restored_audio_for_quality(
+        self,
+        output_path: str,
+        restoration_result=None,
+    ) -> tuple[np.ndarray, int]:
+        """Load restored audio for quality analysis with in-memory fallback.
 
-        def _run():
-            try:
-                try:
-                    from backend.file_import import load_audio_file as _laf_q
+        Primary path: load from output file.
+        Fallback path: use audio from restoration_result.
+        """
+        try:
+            from backend.file_import import load_audio_file as _laf_q
 
-                    _q_result = _laf_q(output_path)
-                    if _q_result is not None and not _q_result.get("error"):
-                        rest_audio = np.asarray(_q_result["audio"], dtype=np.float32)
-                        rest_sr = int(_q_result["sr"])
-                    else:
-                        raise RuntimeError(
-                            _q_result.get("error", "load_audio_file failed")
-                            if _q_result
-                            else "load_audio_file returned None"
-                        )
-                except Exception:
-                    # Fallback: Audio direkt aus RestorationResult (bereits im Speicher)
-                    if restoration_result is not None and hasattr(restoration_result, "audio"):
-                        rest_audio = np.asarray(restoration_result.audio, dtype=np.float32)
-                        rest_sr = 48000
-                    else:
-                        raise
-                rest_audio = _normalize_audio(rest_audio)
-                self._rest_audio = rest_audio
-                self._rest_sr = int(rest_sr)
-                # Invalidate playback cache for restored audio
-                self._playback_device_cache = None
-                self._playback_warmup_token += 1
-                corr = 1.0
-                if self._orig_audio is not None:
-                    o_mono = np.mean(self._orig_audio, axis=1) if self._orig_audio.ndim > 1 else self._orig_audio
-                    r_mono = np.mean(rest_audio, axis=1) if rest_audio.ndim > 1 else rest_audio
-                    min_len = min(len(o_mono), len(r_mono))
-                    o_s = o_mono[:min_len].astype(np.float64)
-                    r_s = r_mono[:min_len].astype(np.float64)
-                    if o_s.std() > 1e-9 and r_s.std() > 1e-9:
-                        corr = float(np.corrcoef(o_s, r_s)[0, 1])
-                        corr = max(0.0, min(1.0, corr))
+            _q_result = _laf_q(output_path)
+            if _q_result is not None and not _q_result.get("error"):
+                rest_audio = np.asarray(_q_result["audio"], dtype=np.float32)
+                rest_sr = int(_q_result["sr"])
+                return _normalize_audio(rest_audio), rest_sr
+            raise RuntimeError(
+                _q_result.get("error", "load_audio_file failed")
+                if _q_result
+                else "load_audio_file returned None"
+            )
+        except Exception:
+            if restoration_result is not None and hasattr(restoration_result, "audio"):
+                rest_audio = np.asarray(restoration_result.audio, dtype=np.float32)
+                return _normalize_audio(rest_audio), 48000
+            raise
 
-                mos_est = 1.0 + 4.0 * corr
+    def _compute_quality_correlation(self, rest_audio: np.ndarray) -> float:
+        """Compute bounded mono correlation against current original audio."""
+        if self._orig_audio is None:
+            return 1.0
 
-                # ── Schritt 2: Musical Goals aus RestorationResult (wenn vorhanden) ──
-                musical_goals: dict = {}
-                adaptive_thresholds: dict = {}
-                applicable_goals = None
-                inapplicable_reasons: dict = {}
-                synthesized_goals: set = set()
-                adaptation_reasons: dict = {}
-                phase_gate_notes: list = []
-                ceiling_reached: bool = False
-                era_label: str = ""
-                genre_label: str = ""
+        o_mono = np.mean(self._orig_audio, axis=1) if self._orig_audio.ndim > 1 else self._orig_audio
+        r_mono = np.mean(rest_audio, axis=1) if rest_audio.ndim > 1 else rest_audio
+        min_len = min(len(o_mono), len(r_mono))
+        if min_len <= 0:
+            return 1.0
 
-                # ── Transparenz-Variablen (erweiterter Backend-Report) ──
-                rt_factor: float = 0.0
-                total_time_s: float = 0.0
-                phases_exec_count: int = 0
-                phases_skip_count: int = 0
-                pipeline_confidence: float = 0.0
-                restorability_grade: str = ""
-                restorability_mos_min: float = 0.0
-                restorability_mos_max: float = 0.0
-                temporal_coh_score: float = 0.0
-                emotional_arc_score: float = 0.0
-                top_causal_cause: str = ""
-                causal_conf: float = 0.0
-                era_label_full: str = ""
-                era_conf: float = 0.0
-                genre_bpm: float = 0.0
-                genre_key: str = ""
-                genre_accordion: float = 0.0
-                genre_is_schlager: bool = False
-                pipeline_tier: str = ""
-                pipeline_hint: str = ""
-                mushra_score: float = 0.0
-                mushra_grade: str = ""
-                mushra_itu: str = ""
-                joy_index: float = 0.0
-                fatigue_index: float = 0.0
-                frisson_index: float = 0.0
-                cluster_key: str = ""
-                cluster_policy: dict = {}
-                auto_recommendations: list[dict] = []
-                # §0/§2.46 Klangtreue-Garantie: HF-Halluzinations-Guard + Recovery-Certainty
-                _xp_recovery_certainty: dict = {}
-                _xp_hf_guard: dict = {}
-                _xp_tilt_guard: dict = {}
-                quality_before_score: float = 0.0
-                quality_after_score: float = 0.0
-                quality_delta: float = 0.0
-                delta_snr: float = 0.0
-                feedback_retries: int = 0
-                feedback_chain_score: float = 0.0
-                excellence_steps: list = []
-                musical_violations: list = []
-                fail_reason: str = ""
-                degradation_status: str = "ok"
-                primary_error_code: str = ""
-                runtime_fallback_original: bool = False
+        o_s = o_mono[:min_len].astype(np.float64)
+        r_s = r_mono[:min_len].astype(np.float64)
+        if o_s.std() <= 1e-9 or r_s.std() <= 1e-9:
+            return 1.0
 
-                if restoration_result is not None:
-                    r = restoration_result
-                    # Musical Goals
-                    if hasattr(r, "musical_goals") and isinstance(r.musical_goals, dict):
-                        musical_goals = r.musical_goals
-                    # Realer PQS-MOS
-                    if hasattr(r, "pqs_result") and r.pqs_result is not None:
-                        if hasattr(r.pqs_result, "mos"):
-                            mos_est = float(r.pqs_result.mos)
-                    # Adaptive Thresholds — RestorationResult.adaptive_thresholds is a plain
-                    # dict[str, float] (the resolved goal thresholds used during processing).
-                    _at = getattr(r, "adaptive_thresholds", None)
-                    if isinstance(_at, dict) and _at:
-                        adaptive_thresholds = _at
-                    elif hasattr(_at, "thresholds"):
-                        adaptive_thresholds = _at.thresholds or {}  # type: ignore[union-attr]
-                    # Goal Applicability — RestorationResult.goal_applicability is a plain
-                    # dict[str, bool] mapping goal_key → is_applicable.
-                    _ga = getattr(r, "goal_applicability", None)
-                    if isinstance(_ga, dict) and _ga:
-                        applicable_goals = {k for k, v in _ga.items() if v}
-                    elif hasattr(_ga, "applicable"):
-                        applicable_goals = set(_ga.applicable)  # type: ignore[union-attr]
-                        if hasattr(_ga, "reasons"):
-                            inapplicable_reasons = _ga.reasons or {}  # type: ignore[union-attr]
-                    # Synthesierte Ziele (EraAuthentic ✦)
-                    if hasattr(r, "genealogy") and r.genealogy is not None:
-                        gen = r.genealogy
-                        if hasattr(gen, "operations"):
-                            for op in gen.operations:
-                                if hasattr(op, "operation_type") and "synthesize" in str(op.operation_type):
-                                    synthesized_goals.add("brillanz")
-                    # PMGG Phase-Gate-Log
-                    if hasattr(r, "phase_gate_log") and r.phase_gate_log:
-                        phase_gate_notes = list(r.phase_gate_log)
-                    # Physical Ceiling
-                    if hasattr(r, "physical_ceiling") and r.physical_ceiling is not None:
-                        pc = r.physical_ceiling
-                        if hasattr(pc, "further_optimization_worthwhile"):
-                            ceiling_reached = not pc.further_optimization_worthwhile
-                    # Ära & Genre (Grunddaten) — era_decade ist int|None, prüfe auf not None
-                    if hasattr(r, "era_decade") and r.era_decade is not None:
-                        era_label = str(r.era_decade)
-                    if hasattr(r, "genre_label") and r.genre_label:
-                        genre_label = str(r.genre_label)
+        corr = float(np.corrcoef(o_s, r_s)[0, 1])
+        return max(0.0, min(1.0, corr))
 
-                    # ── Transparenz-Extraktion ──
-                    rt_factor = float(getattr(r, "rt_factor", 0.0))
-                    total_time_s = float(getattr(r, "total_time_seconds", 0.0))
-                    phases_exec = getattr(r, "phases_executed", []) or []
-                    phases_skip = getattr(r, "phases_skipped", []) or []
-                    phases_exec_count = len(phases_exec)
-                    phases_skip_count = len(phases_skip)
-                    pipeline_confidence = float(getattr(r, "confidence", 0.0))
+    @staticmethod
+    def _extract_first_error_code(entries) -> str:
+        """Return first non-empty error code from a fail-reasons list."""
+        if not isinstance(entries, list):
+            return ""
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            code = str(entry.get("error_code") or "").strip()
+            if code and code not in {"None", "none"}:
+                return code
+        return ""
 
-                    # Restorability Grade
-                    _rest = getattr(r, "restorability", None)
-                    if _rest is not None:
-                        restorability_grade = str(getattr(_rest, "grade", ""))
-                        _mos_range = getattr(_rest, "predicted_mos_range", None)
-                        if _mos_range and len(_mos_range) >= 2:
-                            restorability_mos_min = float(_mos_range[0])
-                            restorability_mos_max = float(_mos_range[1])
+    @staticmethod
+    def _detect_runtime_original_fallback_reason(restoration_result) -> str:
+        """Detect textual signals that processing fell back to original audio."""
+        if restoration_result is None:
+            return ""
 
-                    # Temporal Coherence & Emotional Arc
-                    _tc = getattr(r, "temporal_coherence", None)
-                    if _tc is not None:
-                        temporal_coh_score = float(getattr(_tc, "score", 0.0))
-                    _ea = getattr(r, "emotional_arc", None)
-                    if _ea is not None:
-                        emotional_arc_score = float(getattr(_ea, "score", 0.0))
+        warnings = [str(w) for w in (getattr(restoration_result, "warnings", []) or [])]
+        processing_note = str(getattr(restoration_result, "processing_note", "") or "")
+        fail_tokens = (
+            "original unverändert",
+            "restaurierung fehlgeschlagen",
+            "fallback auf original",
+        )
 
-                    # Metadata-Extraktion (robuste dict-Zugriffe)
-                    _meta = getattr(r, "metadata", {}) or {}
-                    _stage_notes = getattr(r, "stage_notes", {}) or {}
+        warn_hit = next((w for w in warnings if any(token in w.lower() for token in fail_tokens)), "")
+        if warn_hit:
+            return warn_hit
+        if any(token in processing_note.lower() for token in fail_tokens):
+            return processing_note
+        return ""
 
-                    def _first_error_code(entries) -> str:
-                        if not isinstance(entries, list):
-                            return ""
-                        for entry in entries:
-                            if not isinstance(entry, dict):
-                                continue
-                            code = str(entry.get("error_code") or "").strip()
-                            if code and code not in {"None", "none"}:
-                                return code
-                        return ""
+    def _extract_quality_runtime_context(self, restoration_result, mos_est: float) -> tuple[float, dict[str, Any]]:
+        """Extract runtime/metadata context for quality UI rendering."""
+        ctx: dict[str, Any] = {
+            "musical_goals": {},
+            "adaptive_thresholds": {},
+            "applicable_goals": None,
+            "inapplicable_reasons": {},
+            "synthesized_goals": set(),
+            "adaptation_reasons": {},
+            "phase_gate_notes": [],
+            "ceiling_reached": False,
+            "era_label": "",
+            "genre_label": "",
+            "rt_factor": 0.0,
+            "total_time_s": 0.0,
+            "phases_exec_count": 0,
+            "phases_skip_count": 0,
+            "pipeline_confidence": 0.0,
+            "restorability_grade": "",
+            "restorability_mos_min": 0.0,
+            "restorability_mos_max": 0.0,
+            "temporal_coh_score": 0.0,
+            "emotional_arc_score": 0.0,
+            "top_causal_cause": "",
+            "causal_conf": 0.0,
+            "era_label_full": "",
+            "era_conf": 0.0,
+            "genre_bpm": 0.0,
+            "genre_key": "",
+            "genre_accordion": 0.0,
+            "genre_is_schlager": False,
+            "pipeline_tier": "",
+            "pipeline_hint": "",
+            "mushra_score": 0.0,
+            "mushra_grade": "",
+            "mushra_itu": "",
+            "joy_index": 0.0,
+            "fatigue_index": 0.0,
+            "frisson_index": 0.0,
+            "cluster_key": "",
+            "cluster_policy": {},
+            "auto_recommendations": [],
+            "_xp_recovery_certainty": {},
+            "_xp_hf_guard": {},
+            "_xp_tilt_guard": {},
+            "_xp_fqf": {},
+            "_xp_ml_fallbacks": [],
+            "_xp_team_coord": {},
+            "_xp_carrier_ratio": 0.0,
+            "_xp_carrier_ref_shifted": False,
+            "quality_before_score": 0.0,
+            "quality_after_score": 0.0,
+            "quality_delta": 0.0,
+            "delta_snr": 0.0,
+            "feedback_retries": 0,
+            "feedback_chain_score": 0.0,
+            "excellence_steps": [],
+            "musical_violations": [],
+            "fail_reason": "",
+            "degradation_status": "ok",
+            "primary_error_code": "",
+            "runtime_fallback_original": False,
+        }
 
-                    primary_error_code = _first_error_code(_meta.get("fail_reasons"))
-                    if not primary_error_code:
-                        primary_error_code = _first_error_code(_stage_notes.get("fail_reasons"))
+        if restoration_result is None:
+            return mos_est, ctx
 
-                    # Kausal-Analyse
-                    _cp = (_meta.get("defect_analysis") or {}).get("causal_plan") or {}
-                    top_causal_cause = str(_cp.get("primary_cause") or "")
-                    causal_conf = float(_cp.get("confidence") or 0.0)
+        r = restoration_result
+        if hasattr(r, "musical_goals") and isinstance(r.musical_goals, dict):
+            ctx["musical_goals"] = r.musical_goals
+        if hasattr(r, "pqs_result") and r.pqs_result is not None and hasattr(r.pqs_result, "mos"):
+            mos_est = float(r.pqs_result.mos)
 
-                    # Ära-Details
-                    _era = _meta.get("era") or {}
-                    era_label_full = str(_era.get("era_label") or "")
-                    era_conf = float(_era.get("confidence") or 0.0)
-                    if era_label_full and not era_label:
-                        era_label = era_label_full
+        _at = getattr(r, "adaptive_thresholds", None)
+        if isinstance(_at, dict) and _at:
+            ctx["adaptive_thresholds"] = _at
+        elif hasattr(_at, "thresholds"):
+            ctx["adaptive_thresholds"] = _at.thresholds or {}  # type: ignore[union-attr]
 
-                    # Genre/Schlager-Details
-                    _genre = _meta.get("genre") or {}
-                    if _genre:
-                        genre_is_schlager = bool(_genre.get("is_schlager", False))
-                        genre_bpm = float(_genre.get("bpm") or 0.0)
-                        genre_key = str(_genre.get("key") or "")
-                        genre_accordion = float(_genre.get("accordion_score") or 0.0)
-                        if not genre_label:
-                            genre_label = str(_genre.get("genre_label") or "")
+        _ga = getattr(r, "goal_applicability", None)
+        if isinstance(_ga, dict) and _ga:
+            ctx["applicable_goals"] = {k for k, v in _ga.items() if v}
+        elif hasattr(_ga, "applicable"):
+            ctx["applicable_goals"] = set(_ga.applicable)  # type: ignore[union-attr]
+            if hasattr(_ga, "reasons"):
+                ctx["inapplicable_reasons"] = _ga.reasons or {}  # type: ignore[union-attr]
 
-                    # Pipeline-Konfidenz
-                    _pc = _meta.get("pipeline_confidence") or {}
-                    pipeline_tier = str(_pc.get("tier") or "")
-                    pipeline_hint = str(_pc.get("user_hint") or "")
+        if hasattr(r, "genealogy") and r.genealogy is not None:
+            gen = r.genealogy
+            if hasattr(gen, "operations"):
+                for op in gen.operations:
+                    if hasattr(op, "operation_type") and "synthesize" in str(op.operation_type):
+                        ctx["synthesized_goals"].add("brillanz")
 
-                    # MUSHRA
-                    _mushra = _meta.get("mushra") or {}
-                    if _mushra:
-                        mushra_score = float(_mushra.get("mushra_score") or 0.0)
-                        mushra_grade = str(_mushra.get("grade") or "")
-                        mushra_itu = str(_mushra.get("itu_grade") or "")
+        if hasattr(r, "phase_gate_log") and r.phase_gate_log:
+            ctx["phase_gate_notes"] = list(r.phase_gate_log)
 
-                    # Experience-Insights (closed-loop runtime telemetry)
-                    try:
-                        _xp = _bridge_get_experience_insights(r)
-                        joy_index = float((_xp or {}).get("joy_index", 0.0) or 0.0)
-                        fatigue_index = float((_xp or {}).get("fatigue_index", 0.0) or 0.0)
-                        frisson_index = float((_xp or {}).get("frisson_index", 0.0) or 0.0)
-                        cluster_key = str((_xp or {}).get("cluster_key", "") or "")
-                        cluster_policy = (
-                            dict((_xp or {}).get("cluster_policy", {}))
-                            if isinstance((_xp or {}).get("cluster_policy", {}), dict)
-                            else {}
-                        )
-                        _rec_list = (_xp or {}).get("recommendations", [])
-                        auto_recommendations = list(_rec_list) if isinstance(_rec_list, list) else []
-                        # §0/§2.46 Klangtreue-Garantie: Recovery-Certainty + HF-Guard
-                        _rc_raw = (_xp or {}).get("recovery_certainty", {})
-                        _xp_recovery_certainty = dict(_rc_raw) if isinstance(_rc_raw, dict) else {}
-                        _hf_raw = (_xp or {}).get("hf_hallucination_guard", {})
-                        _xp_hf_guard = dict(_hf_raw) if isinstance(_hf_raw, dict) else {}
-                        _tg_raw = (_xp or {}).get("spectral_tilt_guard", {})
-                        _xp_tilt_guard = dict(_tg_raw) if isinstance(_tg_raw, dict) else {}
-                    except Exception as _xp_exc:
-                        logger.debug("Experience-Insights-Lesen fehlgeschlagen: %s", _xp_exc)
+        if hasattr(r, "physical_ceiling") and r.physical_ceiling is not None:
+            pc = r.physical_ceiling
+            if hasattr(pc, "further_optimization_worthwhile"):
+                ctx["ceiling_reached"] = not pc.further_optimization_worthwhile
 
-                    # Qualitätsverbesserung
-                    _qi = _meta.get("quality_improvement") or {}
-                    _qbef = _qi.get("before") or {}
-                    _qaft = _qi.get("after") or {}
-                    if _qbef and _qaft:
-                        quality_before_score = float(_qbef.get("overall_score") or 0.0)
-                        quality_after_score = float(_qaft.get("overall_score") or 0.0)
-                        quality_delta = float(_qi.get("delta_score") or 0.0)
-                        delta_snr = float(_qi.get("delta_snr_db") or 0.0)
+        if hasattr(r, "era_decade") and r.era_decade is not None:
+            ctx["era_label"] = str(r.era_decade)
+        if hasattr(r, "genre_label") and r.genre_label:
+            ctx["genre_label"] = str(r.genre_label)
 
-                    # Feedback-Chain
-                    _fc = _meta.get("feedback_chain") or {}
-                    if _fc:
-                        feedback_retries = int(_fc.get("total_retries") or 0)
-                        feedback_chain_score = float(_fc.get("overall_score") or 0.0)
+        ctx["rt_factor"] = float(getattr(r, "rt_factor", 0.0))
+        ctx["total_time_s"] = float(getattr(r, "total_time_seconds", 0.0))
+        phases_exec = getattr(r, "phases_executed", []) or []
+        phases_skip = getattr(r, "phases_skipped", []) or []
+        ctx["phases_exec_count"] = len(phases_exec)
+        ctx["phases_skip_count"] = len(phases_skip)
+        ctx["pipeline_confidence"] = float(getattr(r, "confidence", 0.0))
 
-                    # Excellence-Optimizer
-                    _exc = _meta.get("excellence_optimizer") or {}
-                    if _exc:
-                        excellence_steps = list(_exc.get("applied_steps") or [])
+        _rest = getattr(r, "restorability", None)
+        if _rest is not None:
+            ctx["restorability_grade"] = str(getattr(_rest, "grade", ""))
+            _mos_range = getattr(_rest, "predicted_mos_range", None)
+            if _mos_range and len(_mos_range) >= 2:
+                ctx["restorability_mos_min"] = float(_mos_range[0])
+                ctx["restorability_mos_max"] = float(_mos_range[1])
 
-                    # Musical-Goals-Verletzungen
-                    _mg_meta = _meta.get("musical_goals") or {}
-                    musical_violations = list(_mg_meta.get("violations") or [])
-                    # Fail/degradation mapping prefers typed result fields.
-                    fail_reason = _bridge_resolve_pipeline_fail_reason(
-                        typed_fail_reason=getattr(r, "fail_reason", None),
-                        metadata=_meta,
-                        stage_notes=_stage_notes,
-                        fail_reasons=_meta.get("fail_reasons") or _stage_notes.get("fail_reasons"),
+        _tc = getattr(r, "temporal_coherence", None)
+        if _tc is not None:
+            ctx["temporal_coh_score"] = float(getattr(_tc, "score", 0.0))
+        _ea = getattr(r, "emotional_arc", None)
+        if _ea is not None:
+            ctx["emotional_arc_score"] = float(getattr(_ea, "score", 0.0))
+
+        _meta = getattr(r, "metadata", {}) or {}
+        _stage_notes = getattr(r, "stage_notes", {}) or {}
+
+        ctx["primary_error_code"] = self._extract_first_error_code(_meta.get("fail_reasons"))
+        if not ctx["primary_error_code"]:
+            ctx["primary_error_code"] = self._extract_first_error_code(_stage_notes.get("fail_reasons"))
+
+        _cp = (_meta.get("defect_analysis") or {}).get("causal_plan") or {}
+        ctx["top_causal_cause"] = str(_cp.get("primary_cause") or "")
+        ctx["causal_conf"] = float(_cp.get("confidence") or 0.0)
+
+        _era = _meta.get("era") or {}
+        ctx["era_label_full"] = str(_era.get("era_label") or "")
+        ctx["era_conf"] = float(_era.get("confidence") or 0.0)
+        if ctx["era_label_full"] and not ctx["era_label"]:
+            ctx["era_label"] = ctx["era_label_full"]
+
+        _genre = _meta.get("genre") or {}
+        if _genre:
+            ctx["genre_is_schlager"] = bool(_genre.get("is_schlager", False))
+            ctx["genre_bpm"] = float(_genre.get("bpm") or 0.0)
+            ctx["genre_key"] = str(_genre.get("key") or "")
+            ctx["genre_accordion"] = float(_genre.get("accordion_score") or 0.0)
+            if not ctx["genre_label"]:
+                ctx["genre_label"] = str(_genre.get("genre_label") or "")
+
+        _pc = _meta.get("pipeline_confidence") or {}
+        ctx["pipeline_tier"] = str(_pc.get("tier") or "")
+        ctx["pipeline_hint"] = str(_pc.get("user_hint") or "")
+
+        _mushra = _meta.get("mushra") or {}
+        if _mushra:
+            ctx["mushra_score"] = float(_mushra.get("mushra_score") or 0.0)
+            ctx["mushra_grade"] = str(_mushra.get("grade") or "")
+            ctx["mushra_itu"] = str(_mushra.get("itu_grade") or "")
+
+        try:
+            _xp = _bridge_get_experience_insights(r)
+            ctx["joy_index"] = float((_xp or {}).get("joy_index", 0.0) or 0.0)
+            ctx["fatigue_index"] = float((_xp or {}).get("fatigue_index", 0.0) or 0.0)
+            ctx["frisson_index"] = float((_xp or {}).get("frisson_index", 0.0) or 0.0)
+            ctx["cluster_key"] = str((_xp or {}).get("cluster_key", "") or "")
+            ctx["cluster_policy"] = (
+                dict((_xp or {}).get("cluster_policy", {}))
+                if isinstance((_xp or {}).get("cluster_policy", {}), dict)
+                else {}
+            )
+            _rec_list = (_xp or {}).get("recommendations", [])
+            ctx["auto_recommendations"] = list(_rec_list) if isinstance(_rec_list, list) else []
+            _rc_raw = (_xp or {}).get("recovery_certainty", {})
+            ctx["_xp_recovery_certainty"] = dict(_rc_raw) if isinstance(_rc_raw, dict) else {}
+            _hf_raw = (_xp or {}).get("hf_hallucination_guard", {})
+            ctx["_xp_hf_guard"] = dict(_hf_raw) if isinstance(_hf_raw, dict) else {}
+            _tg_raw = (_xp or {}).get("spectral_tilt_guard", {})
+            ctx["_xp_tilt_guard"] = dict(_tg_raw) if isinstance(_tg_raw, dict) else {}
+            _fqf_raw = (_xp or {}).get("fallback_quality_floor", {})
+            ctx["_xp_fqf"] = dict(_fqf_raw) if isinstance(_fqf_raw, dict) else {}
+            _mlf_raw = (_xp or {}).get("ml_fallbacks_used", [])
+            ctx["_xp_ml_fallbacks"] = list(_mlf_raw) if isinstance(_mlf_raw, list) else []
+            _tc_raw = (_xp or {}).get("team_coordination", {})
+            ctx["_xp_team_coord"] = dict(_tc_raw) if isinstance(_tc_raw, dict) else {}
+            ctx["_xp_carrier_ratio"] = float((_xp or {}).get("carrier_chain_recovery_ratio", 0.0) or 0.0)
+            ctx["_xp_carrier_ref_shifted"] = bool((_xp or {}).get("carrier_reference_shifted", False))
+            _qg_raw = (_xp or {}).get("quality_gate", {})
+            ctx["_xp_quality_gate"] = dict(_qg_raw) if isinstance(_qg_raw, dict) else {}
+        except Exception as _xp_exc:
+            logger.debug("Experience-Insights-Lesen fehlgeschlagen: %s", _xp_exc)
+
+        _qi = _meta.get("quality_improvement") or {}
+        _qbef = _qi.get("before") or {}
+        _qaft = _qi.get("after") or {}
+        if _qbef and _qaft:
+            ctx["quality_before_score"] = float(_qbef.get("overall_score") or 0.0)
+            ctx["quality_after_score"] = float(_qaft.get("overall_score") or 0.0)
+            ctx["quality_delta"] = float(_qi.get("delta_score") or 0.0)
+            ctx["delta_snr"] = float(_qi.get("delta_snr_db") or 0.0)
+
+        _fc = _meta.get("feedback_chain") or {}
+        if _fc:
+            ctx["feedback_retries"] = int(_fc.get("total_retries") or 0)
+            ctx["feedback_chain_score"] = float(_fc.get("overall_score") or 0.0)
+
+        _exc = _meta.get("excellence_optimizer") or {}
+        if _exc:
+            ctx["excellence_steps"] = list(_exc.get("applied_steps") or [])
+
+        _mg_meta = _meta.get("musical_goals") or {}
+        ctx["musical_violations"] = list(_mg_meta.get("violations") or [])
+        ctx["fail_reason"] = _bridge_resolve_pipeline_fail_reason(
+            typed_fail_reason=getattr(r, "fail_reason", None),
+            metadata=_meta,
+            stage_notes=_stage_notes,
+            fail_reasons=_meta.get("fail_reasons") or _stage_notes.get("fail_reasons"),
+        )
+        ctx["degradation_status"] = _bridge_normalize_pipeline_health_state(
+            getattr(r, "degradation_status", None)
+            or _meta.get("degradation_status", "")
+            or _stage_notes.get("degradation_status", "")
+        ).value
+
+        _xp_qg = ctx.get("_xp_quality_gate", {}) if isinstance(ctx.get("_xp_quality_gate", {}), dict) else {}
+        _xp_qg_status = str(_xp_qg.get("degradation_status", "") or "").strip().lower()
+        if _xp_qg_status:
+            ctx["degradation_status"] = _bridge_normalize_pipeline_health_state(_xp_qg_status).value
+        if not ctx.get("fail_reason"):
+            ctx["fail_reason"] = str(_xp_qg.get("primary_fail_reason", "") or "")
+        if not ctx.get("primary_error_code"):
+            ctx["primary_error_code"] = str(_xp_qg.get("primary_error_code", "") or "")
+
+        _fallback_reason = self._detect_runtime_original_fallback_reason(r)
+        if _fallback_reason:
+            ctx["runtime_fallback_original"] = True
+            if not ctx["fail_reason"]:
+                ctx["fail_reason"] = _fallback_reason
+            if ctx["degradation_status"] not in {"blocked", "critical_degraded", "degraded"}:
+                ctx["degradation_status"] = "degraded"
+
+        return mos_est, ctx
+
+    def _synthesize_goals_from_mos(self, corr: float, mos_est: float) -> tuple[dict[str, float], set[str]]:
+        """Estimate musical goals from MOS/correlation if no measured goals are available."""
+        corr_synth = corr if self._orig_audio is not None else max(0.0, min(1.0, (mos_est - 1.0) / 4.0))
+        goals = {
+            "brillanz": min(1.0, corr_synth * 0.95 + 0.05),
+            "waerme": min(1.0, corr_synth * 0.92 + 0.06),
+            "natuerlichkeit": min(1.0, corr_synth * 0.97 + 0.02),
+            "authentizitaet": min(1.0, corr_synth * 0.94 + 0.04),
+            "emotionalitaet": min(1.0, corr_synth * 0.90 + 0.05),
+            "transparenz": min(1.0, corr_synth * 0.93 + 0.04),
+            "bass_kraft": min(1.0, corr_synth * 0.91 + 0.05),
+            "groove": min(1.0, corr_synth * 0.96 + 0.02),
+            "spatial_depth": min(1.0, corr_synth * 0.88 + 0.07),
+            "timbre_authentizitaet": min(1.0, corr_synth * 0.93 + 0.04),
+            "tonal_center": min(1.0, corr_synth * 0.98 + 0.01),
+            "micro_dynamics": min(1.0, corr_synth * 0.94 + 0.04),
+            "separation_fidelity": min(1.0, corr_synth * 0.89 + 0.06),
+            "artikulation": min(1.0, corr_synth * 0.93 + 0.04),
+        }
+        return goals, set(goals.keys())
+
+    def _build_quality_score_text(
+        self,
+        *,
+        mos_est: float,
+        restorability_grade: str,
+        restorability_mos_min: float,
+        restorability_mos_max: float,
+        mushra_score: float,
+        mushra_grade: str,
+        mushra_itu: str,
+        era_label_full: str,
+        era_label: str,
+        era_conf: float,
+        genre_label: str,
+        genre_bpm: float,
+        genre_key: str,
+        pipeline_confidence: float,
+        output_path: str,
+    ) -> str:
+        """Build the multiline quality score text for UI."""
+        stars = "⭐" * max(1, min(5, round(mos_est)))
+        score_lines = [f"{stars}  Qualitätsscore: {mos_est:.1f} / 5.0"]
+
+        if restorability_grade:
+            mos_range_str = (
+                f" ({restorability_mos_min:.1f}–{restorability_mos_max:.1f})" if restorability_mos_max > 0 else ""
+            )
+            score_lines.append(f"Restaurierbarkeit: Klasse {restorability_grade}{mos_range_str}")
+
+        if mushra_score > 0:
+            mushra_str = f"MUSHRA: {mushra_score:.0f}"
+            if mushra_grade:
+                mushra_str += f"  ({mushra_grade}"
+                if mushra_itu:
+                    mushra_str += f" · {mushra_itu}"
+                mushra_str += ")"
+            score_lines.append(mushra_str)
+
+        era_str = era_label_full or (f"{era_label}er" if era_label else "")
+        if era_str:
+            conf_str = f"  ({era_conf * 100:.0f}%)" if era_conf > 0 else ""
+            score_lines.append(f"Ära: {era_str}{conf_str}")
+
+        if genre_label and genre_label.lower() not in ("unknown", ""):
+            genre_str = f"Genre: {genre_label}"
+            if genre_bpm > 0:
+                genre_str += f" · {genre_bpm:.0f} BPM"
+            if genre_key:
+                genre_str += f" · {genre_key}"
+            score_lines.append(genre_str)
+
+        if pipeline_confidence > 0:
+            score_lines.append(f"Sicherheit: {pipeline_confidence * 100:.0f}%  ·  Datei: {Path(output_path).name}")
+        else:
+            score_lines.append(f"Datei: {Path(output_path).name}")
+
+        return "\n".join(score_lines)
+
+    def _build_quality_banner_sections(
+        self,
+        *,
+        fail_reason: str,
+        degradation_status: str,
+        runtime_fallback_original: bool,
+        primary_error_code: str,
+        phases_exec_count: int,
+        phases_skip_count: int,
+        total_time_s: float,
+        rt_factor: float,
+        top_causal_cause: str,
+        causal_conf: float,
+        quality_before_score: float,
+        quality_after_score: float,
+        quality_delta: float,
+        delta_snr: float,
+        temporal_coh_score: float,
+        emotional_arc_score: float,
+        feedback_retries: int,
+        feedback_chain_score: float,
+        excellence_steps: list,
+        genre_is_schlager: bool,
+        genre_accordion: float,
+        genre_bpm: float,
+        genre_key: str,
+        pipeline_hint: str,
+        pipeline_tier: str,
+        joy_index: float,
+        fatigue_index: float,
+        frisson_index: float,
+        cluster_key: str,
+        cluster_policy: dict,
+        auto_recommendations: list[dict],
+        musical_violations: list,
+        phase_gate_notes: list,
+        ceiling_reached: bool,
+        xp_recovery_certainty: dict,
+        xp_hf_guard: dict,
+        xp_tilt_guard: dict,
+        xp_carrier_ratio: float,
+        xp_carrier_ref_shifted: bool,
+        xp_fqf: dict,
+        xp_ml_fallbacks: list[dict],
+        xp_team_coord: dict,
+    ) -> list[str]:
+        """Build info banner sections for post-processing quality UI."""
+        banner_sections: list[str] = []
+
+        if fail_reason and fail_reason not in ("None", "none", ""):
+            banner_sections.append(f"🚫  Export blockiert: {fail_reason}")
+        elif degradation_status in {"blocked", "critical_degraded", "degraded"}:
+            banner_sections.append(f"⚠️  Degradation-Status: {degradation_status}")
+        if runtime_fallback_original:
+            banner_sections.append(
+                "⚠️  Laufzeit-Fallback: Restaurierung wurde nicht vollständig angewendet (Originalsignal übernommen)."
+            )
+        if degradation_status in {"blocked", "critical_degraded", "degraded"} and primary_error_code:
+            if primary_error_code not in fail_reason:
+                banner_sections.append(f"🧩  Fehlercode: {primary_error_code}")
+
+        if phases_exec_count > 0 or total_time_s > 0:
+            stat_parts = []
+            if phases_exec_count > 0:
+                stat_parts.append(f"{phases_exec_count} Phasen ausgeführt")
+            if phases_skip_count > 0:
+                stat_parts.append(f"{phases_skip_count} übersprungen")
+            if total_time_s > 0:
+                stat_parts.append(f"{total_time_s:.1f} s")
+            if rt_factor > 0:
+                stat_parts.append(f"{rt_factor:.1f}× Echtzeit")
+            banner_sections.append("⚙️  Pipeline: " + "  ·  ".join(stat_parts))
+
+        if top_causal_cause and top_causal_cause not in ("None", "none", ""):
+            cause_map = {
+                "vinyl_scratches": "Vinyl-Kratzer",
+                "surface_noise": "Oberflächenrauschen",
+                "mechanical_hum": "Mechanisches Brummen",
+                "tape_hiss": "Bandrauschen",
+                "electrical_noise": "Elektrisches Rauschen",
+                "clipping_distortion": "Übersteuerungsverzerrung",
+                "wow": "Wow",
+                "flutter": "Flutter",
+                "dropout": "Signalausfall",
+                "codec_artifacts": "Codec-Artefakte",
+                "room_resonance": "Raumresonanz",
+                "microphone_noise": "Mikrofon-Rauschen",
+                "dc_offset": "DC-Gleichspannungsversatz",
+            }
+            cause_de = cause_map.get(top_causal_cause, top_causal_cause)
+            cause_str = f"🔍  Hauptursache: {cause_de}"
+            if causal_conf > 0:
+                cause_str += f"  ({causal_conf * 100:.0f}% Sicherheit)"
+            banner_sections.append(cause_str)
+
+        if quality_before_score > 0 and quality_after_score > 0:
+            delta_str = f"+{quality_delta:.0f}" if quality_delta >= 0 else f"{quality_delta:.0f}"
+            qi_str = f"📈  Qualität: {quality_before_score:.0f} → {quality_after_score:.0f} Pkte ({delta_str})"
+            if delta_snr != 0:
+                snr_sign = "+" if delta_snr >= 0 else ""
+                qi_str += f"  ·  SNR: {snr_sign}{delta_snr:.1f} dB"
+            banner_sections.append(qi_str)
+
+        perc_parts = []
+        if temporal_coh_score > 0:
+            perc_parts.append(f"Temporale Kohärenz: {temporal_coh_score:.2f}")
+        if emotional_arc_score > 0:
+            perc_parts.append(f"Emotionaler Bogen: {emotional_arc_score:.2f}")
+        if perc_parts:
+            banner_sections.append("🎭  " + "  ·  ".join(perc_parts))
+
+        opt_parts = []
+        if feedback_retries > 0:
+            opt_parts.append(f"Optimierung: {feedback_retries}× Anpassung")
+            if feedback_chain_score > 0:
+                opt_parts.append(f"Score: {feedback_chain_score:.2f}")
+        if excellence_steps:
+            opt_parts.append(f"Excellence: {len(excellence_steps)} Schritte")
+        if opt_parts:
+            banner_sections.append("♻️  " + "  ·  ".join(opt_parts))
+
+        if genre_is_schlager and (genre_accordion > 0 or genre_bpm > 0):
+            g_parts = ["🪗  Schlager-Profil aktiv"]
+            if genre_bpm > 0:
+                g_parts.append(f"{genre_bpm:.0f} BPM")
+            if genre_key:
+                g_parts.append(genre_key)
+            if genre_accordion > 0:
+                g_parts.append(f"Akkordeon: {genre_accordion * 100:.0f}%")
+            banner_sections.append("  ·  ".join(g_parts))
+
+        if pipeline_hint and pipeline_hint not in ("None", ""):
+            hint_str = f"💡  {pipeline_hint}"
+            if pipeline_tier and pipeline_tier not in ("None", ""):
+                hint_str += f"  [{pipeline_tier}]"
+            banner_sections.append(hint_str)
+        elif pipeline_tier and pipeline_tier not in ("None", ""):
+            banner_sections.append(f"💡  Pipeline-Tier: {pipeline_tier}")
+
+        if joy_index > 0.0 or fatigue_index > 0.0 or frisson_index > 0.0:
+            banner_sections.append(
+                "🎧  Erlebnis-Index: "
+                f"Freude {joy_index * 100:.0f}%  ·  Ermuedung {fatigue_index * 100:.0f}%  ·  "
+                f"Gaensehaut {frisson_index * 100:.0f}%"
+            )
+        if cluster_key:
+            cluster_note = f"🧬  Cluster-Policy: {cluster_key}"
+            if cluster_policy:
+                cluster_note += (
+                    f"  ·  Artefakt-Sens {float(cluster_policy.get('artifact_sensitivity', 1.0)):.2f}"
+                    f"  ·  Recovery {float(cluster_policy.get('recovery_bias', 1.0)):.2f}"
+                )
+            banner_sections.append(cluster_note)
+        if auto_recommendations:
+            rec_lines = []
+            for rec in auto_recommendations[:3]:
+                if isinstance(rec, dict):
+                    focus = str(rec.get("focus", "Optimierung"))
+                    action = str(rec.get("action", "")).strip()
+                    rec_lines.append(f"• {focus}: {action}" if action else f"• {focus}")
+            if rec_lines:
+                banner_sections.append("🚀  Auto-Improve:\n" + "\n".join(rec_lines))
+
+        if musical_violations:
+            viol_map = {
+                "brillanz": "Brillanz",
+                "waerme": "Wärme",
+                "natuerlichkeit": "Natürlichkeit",
+                "authentizitaet": "Authentizität",
+                "emotionalitaet": "Emotionalität",
+                "transparenz": "Transparenz",
+                "bass_kraft": "Bass-Kraft",
+                "groove": "Groove",
+                "spatial_depth": "Raumtiefe",
+                "timbre_authentizitaet": "Timbre",
+                "tonal_center": "Tonales Zentrum",
+                "micro_dynamics": "Mikro-Dynamik",
+                "separation_fidelity": "Separation",
+                "artikulation": "Artikulation",
+            }
+            viol_de = [str(viol_map.get(v, v)) for v in musical_violations]
+            banner_sections.append(f"⚠️  Ziele unter Schwellwert: {', '.join(viol_de)}")
+
+        if phase_gate_notes:
+            banner_sections.append("⚠️  Einige Verarbeitungsschritte wurden angepasst, um den Klang zu schützen.")
+        if ceiling_reached:
+            banner_sections.append("🏆  Das Beste aus dieser Aufnahme wurde herausgeholt — physikalische Grenzen erreicht.")
+
+        fidelity_parts: list[str] = []
+        rc_ceiling = float(xp_recovery_certainty.get("recoverability_ceiling", 0.0) or 0.0)
+        rc_band = str(xp_recovery_certainty.get("confidence_band", "") or "")
+        if rc_ceiling > 0.0:
+            band_de = {
+                "high": "hoch",
+                "medium": "mittel",
+                "low": "niedrig",
+                "very_low": "sehr niedrig",
+            }.get(rc_band, rc_band)
+            ceil_pct = int(round(rc_ceiling * 100))
+            fidelity_parts.append(
+                f"~{ceil_pct}% Klangpotential rekonstruierbar" + (f" · Konfidenz: {band_de}" if band_de else "")
+            )
+        hf_fires = int(xp_hf_guard.get("guard_fired_count", 0) or 0)
+        hf_min_cap = xp_hf_guard.get("min_cap_hz", None)
+        if hf_fires > 0 and isinstance(hf_min_cap, (int, float)) and hf_min_cap > 0:
+            hf_khz = f"{hf_min_cap / 1000:.0f}"
+            fidelity_parts.append(f"HF-Limite ≤{hf_khz} kHz eingehalten ({hf_fires}×)")
+        tg_fires = int(xp_tilt_guard.get("guard_fired_count", 0) or 0)
+        tg_max_dev = float(xp_tilt_guard.get("max_deviation_db_per_oct", 0.0) or 0.0)
+        if tg_fires > 0:
+            fidelity_parts.append(f"Era-Tilt geschützt ({tg_fires}×, max Δ={tg_max_dev:.2f} dB/oct)")
+        if fidelity_parts:
+            banner_sections.append("🔒  Klangtreue: " + "  ·  ".join(fidelity_parts))
+
+        if xp_carrier_ratio > 0.15:
+            cr_pct = int(round(xp_carrier_ratio * 100))
+            cr_txt = f"🔄  Tonträgerketten-Inversion: {cr_pct}% Signaländerung"
+            if xp_carrier_ref_shifted:
+                cr_txt += " · Referenzpunkt verschoben (§0d)"
+            banner_sections.append(cr_txt)
+
+        fqf_triggered = xp_fqf.get("triggered", False)
+        if fqf_triggered:
+            fqf_status = str(xp_fqf.get("status", "unbekannt"))
+            fqf_reason = str(xp_fqf.get("reason", "") or "").strip()
+            fqf_recovered = xp_fqf.get("recovered", False)
+            fqf_hpi = float(xp_fqf.get("hpi", 0.0) or 0.0)
+            fqf_hpi_passed = xp_fqf.get("hpi_passed", False)
+            fqf_attempts = int(xp_fqf.get("attempts", 0) or 0)
+            status_de = {
+                "passed": "bestanden",
+                "recovered": "wiederhergestellt",
+                "degraded": "eingeschränkt",
+                "blocked": "blockiert",
+                "failed": "fehlgeschlagen",
+            }.get(fqf_status, fqf_status)
+            fqf_parts = [f"Status: {status_de}"]
+            if fqf_hpi != 0.0:
+                fqf_parts.append(f"HPI={fqf_hpi:.2f}" + (" ✓" if fqf_hpi_passed else " ✗"))
+            if fqf_attempts > 0:
+                fqf_parts.append(f"{fqf_attempts} Versuch(e)")
+            if fqf_recovered:
+                fqf_parts.append("Recovery erfolgreich")
+            fqf_line = "🛡️  Qualitäts-Gate: " + "  ·  ".join(fqf_parts)
+            if fqf_reason:
+                fqf_line += f"\n   Grund: {fqf_reason}"
+            banner_sections.append(fqf_line)
+
+        if xp_ml_fallbacks:
+            fb_parts = []
+            for fb in xp_ml_fallbacks[:5]:
+                fb_model = str(fb.get("model", "?"))
+                fb_fallback = str(fb.get("fallback", "DSP"))
+                fb_reason = str(fb.get("reason", ""))
+                fb_txt = f"{fb_model}→{fb_fallback}"
+                if fb_reason:
+                    fb_txt += f" ({fb_reason})"
+                fb_parts.append(fb_txt)
+            banner_sections.append("⚠️  ML-Fallbacks: " + ", ".join(fb_parts))
+
+        tc_count = int(xp_team_coord.get("event_count", 0) or 0)
+        if tc_count > 0:
+            tc_summary = xp_team_coord.get("phase_type_summary", {})
+            tc_parts = [f"{tc_count} Koordinations-Ereignis(se)"]
+            if isinstance(tc_summary, dict) and tc_summary:
+                for tck, tcv in list(tc_summary.items())[:3]:
+                    tc_parts.append(f"{tck}: {tcv}")
+            banner_sections.append("🤝  Phasen-Koordination: " + "  ·  ".join(tc_parts))
+
+        return banner_sections
+
+    def _apply_quality_header_and_banner(
+        self,
+        *,
+        musical_goals: dict,
+        adaptive_thresholds: dict,
+        applicable_goals,
+        inapplicable_reasons: dict,
+        synthesized_goals: set,
+        adaptation_reasons: dict,
+        mos_text: str,
+        banner_sections: list[str],
+    ) -> None:
+        """Apply top quality widgets (radar, score, gauge, banner) in GUI thread."""
+        if self.radar_widget is not None and musical_goals:
+            self.radar_widget.update_scores(
+                scores=musical_goals,
+                adaptive_thresholds=adaptive_thresholds if adaptive_thresholds else None,
+                applicable_goals=applicable_goals,
+                inapplicable_reasons=inapplicable_reasons if inapplicable_reasons else None,
+                synthesized_goals=synthesized_goals if synthesized_goals else None,
+                adaptation_reasons=adaptation_reasons if adaptation_reasons else None,
+            )
+
+        qs_style_final = (
+            "color: #82B89A; font-size: 9pt; font-weight: bold;"
+            " padding: 10px; background: rgba(85, 155, 115, 0.08);"
+            " border-radius: 8px; border: 1px solid rgba(100, 168, 130, 0.26);"
+            " line-height: 150%;"
+        )
+        self.quality_score_label.setStyleSheet(
+            "color: #A8CCBA; font-size: 9pt; font-weight: bold;"
+            " padding: 10px; background: rgba(85, 155, 115, 0.14);"
+            " border-radius: 8px; border: 1px solid rgba(100, 168, 130, 0.42);"
+            " line-height: 150%;"
+        )
+        self.quality_score_label.setText(mos_text)
+        QTimer.singleShot(
+            380,
+            lambda s=qs_style_final: self.quality_score_label.setStyleSheet(s),
+        )
+
+        try:
+            import re as _re
+
+            m = _re.search(r"MOS[:\s]+(\d+(?:[.,]\d+)?)", mos_text)
+            if m:
+                self._animate_mos_gauge(float(m.group(1).replace(",", ".")))
+        except Exception:
+            pass
+
+        if banner_sections:
+            self.info_banner.setText("\n".join(banner_sections))
+            self.info_banner.setStyleSheet("""
+                color: #B0BEC5; font-size: 8pt; padding: 10px;
+                background: rgba(30, 40, 55, 0.80);
+                border-radius: 8px; border: 1px solid rgba(96, 125, 139, 0.35);
+                line-height: 155%;
+            """)
+            self.info_banner.setVisible(True)
+        else:
+            self.info_banner.setVisible(False)
+
+    def _apply_quality_defect_summary_and_footer(
+        self,
+        *,
+        restoration_result,
+        degradation_status: str,
+        fail_reason: str,
+        mos_est: float,
+        quality_after_score: float,
+        top_causal_cause: str,
+        causal_conf: float,
+        quality_before_score: float,
+        quality_delta: float,
+        delta_snr: float,
+        phases_exec_count: int,
+        phases_skip_count: int,
+        musical_violations: list,
+        ceiling_reached: bool,
+        feedback_retries: int,
+        primary_error_code: str,
+    ) -> None:
+        """Apply left defect summary panel and bottom status/footer updates."""
+        if hasattr(self, "defect_summary_label") and restoration_result is not None:
+            summary_lines: list[str] = []
+            has_problem = degradation_status in {"blocked", "critical_degraded", "degraded"}
+            winning_var = getattr(restoration_result, "winning_variant", None)
+            is_passthrough = winning_var == "clean_digital_pass_through"
+
+            if is_passthrough:
+                summary_lines.append("✅  Saubere Quelle — kein Eingriff nötig")
+                summary_lines.append("🎵  Die Aufnahme war bereits in hervorragendem Zustand.")
+                summary_lines.append("   Aurik hat darauf verzichtet, unnötige Veränderungen")
+                summary_lines.append("   vorzunehmen (Overprocessing-Schutz).")
+                if mos_est > 0:
+                    summary_lines.append(f"📊  Qualitätsmessung (VERSA): {mos_est:.1f} / 5.0 MOS")
+                elif quality_after_score > 0:
+                    summary_lines.append(f"📊  Qualitätsscore: {quality_after_score:.0f} / 100")
+
+                color_pt = "#82B89A"
+                bg_pt = "rgba(85,155,115,0.09)"
+                brd_pt = "rgba(100,168,130,0.24)"
+                self.defect_summary_label.setText("\n".join(summary_lines))
+                self.defect_summary_label.setStyleSheet(f"""
+                    color: {color_pt}; font-size: 9pt; padding: 12px;
+                    background: {bg_pt};
+                    border-radius: 10px; border: 1px solid {brd_pt};
+                    line-height: 160%;
+                """)
+                if hasattr(self, "defect_count_live_label"):
+                    self.defect_count_live_label.setText("✅ Fertig")
+                    self.defect_count_live_label.setStyleSheet(
+                        "color: #82B89A; font-size: 8pt; background: transparent; font-weight: bold; padding: 0 2px;"
                     )
-                    degradation_status = _bridge_normalize_pipeline_health_state(
-                        getattr(r, "degradation_status", None)
-                        or _meta.get("degradation_status", "")
-                        or _stage_notes.get("degradation_status", "")
-                    ).value
-                    # Runtime-fallback transparency: some runs return a high-level
-                    # result object but internally fall back to unchanged original.
-                    # Surface this as a degraded state to avoid false "success" UX.
-                    _warns = [str(w) for w in (getattr(r, "warnings", []) or [])]
-                    _proc_note = str(getattr(r, "processing_note", "") or "")
-                    _fail_tokens = (
-                        "original unverändert",
-                        "restaurierung fehlgeschlagen",
-                        "fallback auf original",
-                    )
-                    _warn_hit = next((w for w in _warns if any(tk in w.lower() for tk in _fail_tokens)), "")
-                    _note_hit = _proc_note if any(tk in _proc_note.lower() for tk in _fail_tokens) else ""
-                    if _warn_hit or _note_hit:
-                        runtime_fallback_original = True
-                        if not fail_reason:
-                            fail_reason = _warn_hit or _note_hit
-                        if degradation_status not in {"blocked", "critical_degraded", "degraded"}:
-                            degradation_status = "degraded"
-
-                # ── Schritt 3: Synthetische Goal-Schätzung wenn keine echten Daten ──
-                if not musical_goals:
-                    # Bestmögliche Korrelation: falls kein Original geladen (z.B. Batch-Only),
-                    # MOS-basierten Schätzwert verwenden (MOS 5 → corr 1.0, MOS 1 → corr 0.0).
-                    _corr_synth = corr if self._orig_audio is not None else max(0.0, min(1.0, (mos_est - 1.0) / 4.0))
-                    musical_goals = {
-                        "brillanz": min(1.0, _corr_synth * 0.95 + 0.05),
-                        "waerme": min(1.0, _corr_synth * 0.92 + 0.06),
-                        "natuerlichkeit": min(1.0, _corr_synth * 0.97 + 0.02),
-                        "authentizitaet": min(1.0, _corr_synth * 0.94 + 0.04),
-                        "emotionalitaet": min(1.0, _corr_synth * 0.90 + 0.05),
-                        "transparenz": min(1.0, _corr_synth * 0.93 + 0.04),
-                        "bass_kraft": min(1.0, _corr_synth * 0.91 + 0.05),
-                        "groove": min(1.0, _corr_synth * 0.96 + 0.02),
-                        "spatial_depth": min(1.0, _corr_synth * 0.88 + 0.07),
-                        "timbre_authentizitaet": min(1.0, _corr_synth * 0.93 + 0.04),
-                        "tonal_center": min(1.0, _corr_synth * 0.98 + 0.01),
-                        "micro_dynamics": min(1.0, _corr_synth * 0.94 + 0.04),
-                        "separation_fidelity": min(1.0, _corr_synth * 0.89 + 0.06),
-                        "artikulation": min(1.0, _corr_synth * 0.93 + 0.04),
-                    }
-                    synthesized_goals = set(musical_goals.keys())  # alle als geschätzt markieren
-
-                # ── Schritt 4: GUI-Texte zusammenstellen ──
-                stars = "⭐" * max(1, min(5, round(mos_est)))
-
-                # --- Qualitätsscore-Label ---
-                _score_lines = [f"{stars}  Qualitätsscore: {mos_est:.1f} / 5.0"]
-                if restorability_grade:
-                    _mos_range_str = (
-                        f" ({restorability_mos_min:.1f}–{restorability_mos_max:.1f})"
-                        if restorability_mos_max > 0
-                        else ""
-                    )
-                    _score_lines.append(f"Restaurierbarkeit: Klasse {restorability_grade}{_mos_range_str}")
-                if mushra_score > 0:
-                    _mushra_str = f"MUSHRA: {mushra_score:.0f}"
-                    if mushra_grade:
-                        _mushra_str += f"  ({mushra_grade}"
-                        if mushra_itu:
-                            _mushra_str += f" · {mushra_itu}"
-                        _mushra_str += ")"
-                    _score_lines.append(_mushra_str)
-                _era_str = era_label_full or (f"{era_label}er" if era_label else "")
-                if _era_str:
-                    _conf_str = f"  ({era_conf * 100:.0f}%)" if era_conf > 0 else ""
-                    _score_lines.append(f"Ära: {_era_str}{_conf_str}")
-                if genre_label and genre_label.lower() not in ("unknown", ""):
-                    _genre_str = f"Genre: {genre_label}"
-                    if genre_bpm > 0:
-                        _genre_str += f" · {genre_bpm:.0f} BPM"
-                    if genre_key:
-                        _genre_str += f" · {genre_key}"
-                    _score_lines.append(_genre_str)
-
-                if pipeline_confidence > 0:
-                    _score_lines.append(
-                        f"Sicherheit: {pipeline_confidence * 100:.0f}%  ·  Datei: {Path(output_path).name}"
-                    )
+                    self.defect_count_live_label.setVisible(True)
+            else:
+                if has_problem:
+                    summary_lines.append(f"⚠️  Restaurierung mit Einschränkungen\n   {fail_reason or degradation_status}")
                 else:
-                    _score_lines.append(f"Datei: {Path(output_path).name}")
-                mos_text = "\n".join(_score_lines)
+                    summary_lines.append("✅  Restaurierung erfolgreich abgeschlossen")
+                    summary_lines.append("🛡️  Klangcharakter und Originalbalance wurden dabei bewusst geschützt")
 
-                # --- Info-Banner (immer befüllt nach Verarbeitung) ---
-                banner_sections: list[str] = []
-
-                # Fail-Reason prominently first (No-Guess Export Gate — Spec §11.4)
-                if fail_reason and fail_reason not in ("None", "none", ""):
-                    banner_sections.append(f"🚫  Export blockiert: {fail_reason}")
-                elif degradation_status in {"blocked", "critical_degraded", "degraded"}:
-                    banner_sections.append(f"⚠️  Degradation-Status: {degradation_status}")
-                if runtime_fallback_original:
-                    banner_sections.append(
-                        "⚠️  Laufzeit-Fallback: Restaurierung wurde nicht vollständig angewendet (Originalsignal übernommen)."
-                    )
-                if degradation_status in {"blocked", "critical_degraded", "degraded"} and primary_error_code:
-                    if primary_error_code not in fail_reason:
-                        banner_sections.append(f"🧩  Fehlercode: {primary_error_code}")
-
-                # Pipeline-Stats
-                if phases_exec_count > 0 or total_time_s > 0:
-                    _stat_parts = []
-                    if phases_exec_count > 0:
-                        _stat_parts.append(f"{phases_exec_count} Phasen ausgeführt")
-                    if phases_skip_count > 0:
-                        _stat_parts.append(f"{phases_skip_count} übersprungen")
-                    if total_time_s > 0:
-                        _stat_parts.append(f"{total_time_s:.1f} s")
-                    if rt_factor > 0:
-                        _stat_parts.append(f"{rt_factor:.1f}× Echtzeit")
-                    banner_sections.append("⚙️  Pipeline: " + "  ·  ".join(_stat_parts))
-
-                # Kausal-Ursache
+                cause_map_de = {
+                    "tape_hiss": "Bandrauschen",
+                    "tape_dropout": "Bandsignalausfall",
+                    "vinyl_crackle": "Vinyl-Knistern",
+                    "vinyl_warp": "Vinyl-Verwölbung",
+                    "electrical_hum": "Elektrisches Brummen",
+                    "head_misalignment": "Bandkopf-Fehljustage",
+                    "dc_offset": "DC-Gleichspannungsversatz",
+                    "digital_clip": "Digitale Übersteuerung",
+                    "soft_saturation": "Röhren-/Bandsättigung bewahrt",
+                    "head_wear": "Bandkopf-Verschleiß",
+                    "print_through": "Bandübersprechen",
+                    "riaa_curve_error": "RIAA-Kurven-Fehler",
+                    "aliasing": "Aliasing-Artefakte",
+                    "bias_error": "Vormagnetisierungs-Fehler",
+                    "vinyl_scratches": "Vinyl-Kratzer",
+                    "surface_noise": "Oberflächenrauschen",
+                    "mechanical_hum": "Mechanisches Brummen",
+                    "clipping_distortion": "Übersteuerungsverzerrung",
+                    "wow": "Wow-Schwankungen",
+                    "flutter": "Flutter-Schwankungen",
+                    "dropout": "Tonaussetzer",
+                    "codec_artifacts": "Codec-Artefakte",
+                    "room_resonance": "Raumresonanz",
+                }
                 if top_causal_cause and top_causal_cause not in ("None", "none", ""):
-                    _cause_map = {
-                        "vinyl_scratches": "Vinyl-Kratzer",
-                        "surface_noise": "Oberflächenrauschen",
-                        "mechanical_hum": "Mechanisches Brummen",
-                        "tape_hiss": "Bandrauschen",
-                        "electrical_noise": "Elektrisches Rauschen",
-                        "clipping_distortion": "Übersteuerungsverzerrung",
-                        "wow": "Wow",
-                        "flutter": "Flutter",
-                        "dropout": "Signalausfall",
-                        "codec_artifacts": "Codec-Artefakte",
-                        "room_resonance": "Raumresonanz",
-                        "microphone_noise": "Mikrofon-Rauschen",
-                        "dc_offset": "DC-Gleichspannungsversatz",
-                    }
-                    _cause_de = _cause_map.get(top_causal_cause, top_causal_cause)
-                    _cause_str = f"🔍  Hauptursache: {_cause_de}"
-                    if causal_conf > 0:
-                        _cause_str += f"  ({causal_conf * 100:.0f}% Sicherheit)"
-                    banner_sections.append(_cause_str)
+                    cause_de = cause_map_de.get(top_causal_cause, top_causal_cause)
+                    conf_s = f" ({causal_conf * 100:.0f}%)" if causal_conf > 0 else ""
+                    summary_lines.append(f"🔍  Hauptproblem behandelt: {cause_de}{conf_s}")
 
-                # Qualitätsverbesserung
                 if quality_before_score > 0 and quality_after_score > 0:
-                    _delta_str = f"+{quality_delta:.0f}" if quality_delta >= 0 else f"{quality_delta:.0f}"
-                    _qi_str = (
-                        f"📈  Qualität: {quality_before_score:.0f} → {quality_after_score:.0f} Pkte ({_delta_str})"
+                    sign = "+" if quality_delta >= 0 else ""
+                    summary_lines.append(
+                        f"📈  Qualität: {quality_before_score:.0f} → {quality_after_score:.0f}"
+                        f"  ({sign}{quality_delta:.0f} Punkte)"
                     )
                     if delta_snr != 0:
-                        _snr_sign = "+" if delta_snr >= 0 else ""
-                        _qi_str += f"  ·  SNR: {_snr_sign}{delta_snr:.1f} dB"
-                    banner_sections.append(_qi_str)
+                        snr_s = f"+{delta_snr:.1f}" if delta_snr >= 0 else f"{delta_snr:.1f}"
+                        summary_lines.append(f"   Rauschverbesserung: {snr_s} dB")
+                elif mos_est > 0:
+                    summary_lines.append(f"🎵  Klangqualität: {mos_est:.1f} / 5.0 MOS")
 
-                # Temporale Kohärenz & Emotionaler Bogen
-                _perc_parts = []
-                if temporal_coh_score > 0:
-                    _perc_parts.append(f"Temporale Kohärenz: {temporal_coh_score:.2f}")
-                if emotional_arc_score > 0:
-                    _perc_parts.append(f"Emotionaler Bogen: {emotional_arc_score:.2f}")
-                if _perc_parts:
-                    banner_sections.append("🎭  " + "  ·  ".join(_perc_parts))
+                if phases_exec_count > 0:
+                    ph_s = f"⚙️  {phases_exec_count} Verarbeitungsschritte ausgeführt"
+                    if phases_skip_count > 0:
+                        ph_s += f"  ({phases_skip_count} nicht benötigt)"
+                    summary_lines.append(ph_s)
 
-                # Feedback-Chain & Excellence
-                _opt_parts = []
-                if feedback_retries > 0:
-                    _opt_parts.append(f"Optimierung: {feedback_retries}× Anpassung")
-                    if feedback_chain_score > 0:
-                        _opt_parts.append(f"Score: {feedback_chain_score:.2f}")
-                if excellence_steps:
-                    _opt_parts.append(f"Excellence: {len(excellence_steps)} Schritte")
-                if _opt_parts:
-                    banner_sections.append("♻️  " + "  ·  ".join(_opt_parts))
-
-                # Genre-Details (Schlager)
-                if genre_is_schlager and (genre_accordion > 0 or genre_bpm > 0):
-                    _g_parts = ["🪗  Schlager-Profil aktiv"]
-                    if genre_bpm > 0:
-                        _g_parts.append(f"{genre_bpm:.0f} BPM")
-                    if genre_key:
-                        _g_parts.append(genre_key)
-                    if genre_accordion > 0:
-                        _g_parts.append(f"Akkordeon: {genre_accordion * 100:.0f}%")
-                    banner_sections.append("  ·  ".join(_g_parts))
-
-                # Pipeline-Hinweis (wenn vorhanden)
-                if pipeline_hint and pipeline_hint not in ("None", ""):
-                    _hint_str = f"💡  {pipeline_hint}"
-                    if pipeline_tier and pipeline_tier not in ("None", ""):
-                        _hint_str += f"  [{pipeline_tier}]"
-                    banner_sections.append(_hint_str)
-                elif pipeline_tier and pipeline_tier not in ("None", ""):
-                    banner_sections.append(f"💡  Pipeline-Tier: {pipeline_tier}")
-
-                # Runtime-Erlebnisindikatoren (geschlossenes Produktions-Feedback)
-                if joy_index > 0.0 or fatigue_index > 0.0 or frisson_index > 0.0:
-                    banner_sections.append(
-                        "🎧  Erlebnis-Index: "
-                        f"Freude {joy_index * 100:.0f}%  ·  Ermuedung {fatigue_index * 100:.0f}%  ·  "
-                        f"Gaensehaut {frisson_index * 100:.0f}%"
-                    )
-                if cluster_key:
-                    _cluster_note = f"🧬  Cluster-Policy: {cluster_key}"
-                    if cluster_policy:
-                        _cluster_note += (
-                            f"  ·  Artefakt-Sens {float(cluster_policy.get('artifact_sensitivity', 1.0)):.2f}"
-                            f"  ·  Recovery {float(cluster_policy.get('recovery_bias', 1.0)):.2f}"
-                        )
-                    banner_sections.append(_cluster_note)
-                if auto_recommendations:
-                    _rec_lines = []
-                    for _rec in auto_recommendations[:3]:
-                        if isinstance(_rec, dict):
-                            _focus = str(_rec.get("focus", "Optimierung"))
-                            _action = str(_rec.get("action", "")).strip()
-                            _rec_lines.append(f"• {_focus}: {_action}" if _action else f"• {_focus}")
-                    if _rec_lines:
-                        banner_sections.append("🚀  Auto-Improve:\n" + "\n".join(_rec_lines))
-
-                # Musical-Goals-Verletzungen
                 if musical_violations:
-                    _viol_map = {
+                    vmap = {
                         "brillanz": "Brillanz",
                         "waerme": "Wärme",
                         "natuerlichkeit": "Natürlichkeit",
@@ -16481,258 +17128,226 @@ class ModernMainWindow(QMainWindow):
                         "separation_fidelity": "Separation",
                         "artikulation": "Artikulation",
                     }
-                    _viol_de = [str(_viol_map.get(v, v)) for v in musical_violations]
-                    banner_sections.append(f"⚠️  Ziele unter Schwellwert: {', '.join(_viol_de)}")
+                    vnames: list[str] = [str(vmap.get(v, v)) for v in musical_violations]
+                    summary_lines.append(f"⚠️  Ziele unter Schwellwert: {', '.join(vnames)}")
 
-                # PMGG-Warnungen & Ceiling
-                if phase_gate_notes:
-                    banner_sections.append(
-                        "⚠️  Einige Verarbeitungsschritte wurden angepasst, um den Klang zu schützen."
-                    )
                 if ceiling_reached:
-                    banner_sections.append(
-                        "🏆  Das Beste aus dieser Aufnahme wurde herausgeholt — physikalische Grenzen erreicht."
-                    )
+                    summary_lines.append("🏆  Physikalisches Optimum dieser Aufnahme erreicht")
+                elif feedback_retries > 0:
+                    summary_lines.append(f"♻️  {feedback_retries}× nachoptimiert für bestes Ergebnis")
 
-                # §0/§2.46 Klangtreue-Garantie: Recovery-Ceiling + HF-Schutznachweis
-                _fidelity_parts: list[str] = []
-                _rc_ceiling = float(_xp_recovery_certainty.get("recoverability_ceiling", 0.0) or 0.0)
-                _rc_band = str(_xp_recovery_certainty.get("confidence_band", "") or "")
-                if _rc_ceiling > 0.0:
-                    _band_de = {
-                        "high": "hoch",
-                        "medium": "mittel",
-                        "low": "niedrig",
-                        "very_low": "sehr niedrig",
-                    }.get(_rc_band, _rc_band)
-                    _ceil_pct = int(round(_rc_ceiling * 100))
-                    _fidelity_parts.append(
-                        f"~{_ceil_pct}% Klangpotential rekonstruierbar"
-                        + (f" · Konfidenz: {_band_de}" if _band_de else "")
-                    )
-                _hf_fires = int(_xp_hf_guard.get("guard_fired_count", 0) or 0)
-                _hf_min_cap = _xp_hf_guard.get("min_cap_hz", None)
-                if _hf_fires > 0 and isinstance(_hf_min_cap, (int, float)) and _hf_min_cap > 0:
-                    _hf_khz = f"{_hf_min_cap / 1000:.0f}"
-                    _fidelity_parts.append(f"HF-Limite ≤{_hf_khz} kHz eingehalten ({_hf_fires}×)")
-                _tg_fires = int(_xp_tilt_guard.get("guard_fired_count", 0) or 0)
-                _tg_max_dev = float(_xp_tilt_guard.get("max_deviation_db_per_oct", 0.0) or 0.0)
-                if _tg_fires > 0:
-                    _fidelity_parts.append(f"Era-Tilt geschützt ({_tg_fires}×, max Δ={_tg_max_dev:.2f} dB/oct)")
-                if _fidelity_parts:
-                    banner_sections.append("🔒  Klangtreue: " + "  ·  ".join(_fidelity_parts))
+                color = "#B8A068" if has_problem else "#82B89A"
+                bg = "rgba(150,130,68,0.09)" if has_problem else "rgba(85,155,115,0.09)"
+                brd = "rgba(150,130,68,0.24)" if has_problem else "rgba(100,168,130,0.24)"
+                self.defect_summary_label.setText("\n".join(summary_lines))
+                self.defect_summary_label.setStyleSheet(f"""
+                    color: {color}; font-size: 9pt; padding: 12px;
+                    background: {bg};
+                    border-radius: 10px; border: 1px solid {brd};
+                    line-height: 160%;
+                """)
+                if hasattr(self, "defect_count_live_label"):
+                    if has_problem:
+                        self.defect_count_live_label.setText("⚠ Eingeschränkt")
+                        self.defect_count_live_label.setStyleSheet(
+                            "color: #B8A068; font-size: 8pt; background: transparent; font-weight: bold; padding: 0 2px;"
+                        )
+                    else:
+                        self.defect_count_live_label.setText("✅ Fertig")
+                        self.defect_count_live_label.setStyleSheet(
+                            "color: #82B89A; font-size: 8pt; background: transparent; font-weight: bold; padding: 0 2px;"
+                        )
+                    self.defect_count_live_label.setVisible(True)
+
+        if hasattr(self, "status_text") and degradation_status in {"blocked", "critical_degraded", "degraded"}:
+            status_reason = fail_reason if fail_reason not in ("None", "none", "") else degradation_status
+            status_code = f" · Code: {primary_error_code}" if primary_error_code else ""
+            status_reason_with_code = f"{status_reason}{status_code}"
+            status_text_msg = t("status.processing_limited", reason=status_reason_with_code)
+            if "Verarbeitung mit Einschränkungen" not in str(status_text_msg):
+                status_text_msg = f"⚠ Verarbeitung mit Einschränkungen: {status_reason_with_code}"
+            self._apply_status_text_style("warning")
+            self.status_text.setText(status_text_msg)
+
+        self._update_ab_player_state()
+        self._update_waveform(self._rest_audio, self._rest_sr)
+
+    def _compute_and_show_quality(self, output_path: str, restoration_result=None):
+        """Qualitätsscore im Hintergrund berechnen und Radar-Chart aktualisieren."""
+
+        def _run() -> None:
+            try:
+                rest_audio, rest_sr = self._load_restored_audio_for_quality(
+                    output_path,
+                    restoration_result,
+                )
+                self._rest_audio = rest_audio
+                self._rest_sr = int(rest_sr)
+                # Invalidate playback cache for restored audio
+                self._playback_device_cache = None
+                self._playback_warmup_token += 1
+                corr = self._compute_quality_correlation(rest_audio)
+
+                mos_est = 1.0 + 4.0 * corr
+
+                # ── Schritt 2: Musical Goals + Runtime-Kontext aus Ergebnis extrahieren ──
+                mos_est, _ctx = self._extract_quality_runtime_context(restoration_result, mos_est)
+                musical_goals: dict = _ctx["musical_goals"]
+                adaptive_thresholds: dict = _ctx["adaptive_thresholds"]
+                applicable_goals = _ctx["applicable_goals"]
+                inapplicable_reasons: dict = _ctx["inapplicable_reasons"]
+                synthesized_goals: set = _ctx["synthesized_goals"]
+                adaptation_reasons: dict = _ctx["adaptation_reasons"]
+                phase_gate_notes: list = _ctx["phase_gate_notes"]
+                ceiling_reached: bool = bool(_ctx["ceiling_reached"])
+                era_label: str = _ctx["era_label"]
+                genre_label: str = _ctx["genre_label"]
+
+                rt_factor: float = float(_ctx["rt_factor"])
+                total_time_s: float = float(_ctx["total_time_s"])
+                phases_exec_count: int = int(_ctx["phases_exec_count"])
+                phases_skip_count: int = int(_ctx["phases_skip_count"])
+                pipeline_confidence: float = float(_ctx["pipeline_confidence"])
+                restorability_grade: str = _ctx["restorability_grade"]
+                restorability_mos_min: float = float(_ctx["restorability_mos_min"])
+                restorability_mos_max: float = float(_ctx["restorability_mos_max"])
+                temporal_coh_score: float = float(_ctx["temporal_coh_score"])
+                emotional_arc_score: float = float(_ctx["emotional_arc_score"])
+                top_causal_cause: str = _ctx["top_causal_cause"]
+                causal_conf: float = float(_ctx["causal_conf"])
+                era_label_full: str = _ctx["era_label_full"]
+                era_conf: float = float(_ctx["era_conf"])
+                genre_bpm: float = float(_ctx["genre_bpm"])
+                genre_key: str = _ctx["genre_key"]
+                genre_accordion: float = float(_ctx["genre_accordion"])
+                genre_is_schlager: bool = bool(_ctx["genre_is_schlager"])
+                pipeline_tier: str = _ctx["pipeline_tier"]
+                pipeline_hint: str = _ctx["pipeline_hint"]
+                mushra_score: float = float(_ctx["mushra_score"])
+                mushra_grade: str = _ctx["mushra_grade"]
+                mushra_itu: str = _ctx["mushra_itu"]
+                joy_index: float = float(_ctx["joy_index"])
+                fatigue_index: float = float(_ctx["fatigue_index"])
+                frisson_index: float = float(_ctx["frisson_index"])
+                cluster_key: str = _ctx["cluster_key"]
+                cluster_policy: dict = _ctx["cluster_policy"]
+                auto_recommendations: list[dict] = _ctx["auto_recommendations"]
+                _xp_recovery_certainty: dict = _ctx["_xp_recovery_certainty"]
+                _xp_hf_guard: dict = _ctx["_xp_hf_guard"]
+                _xp_tilt_guard: dict = _ctx["_xp_tilt_guard"]
+                _xp_fqf: dict = _ctx["_xp_fqf"]
+                _xp_ml_fallbacks: list[dict] = _ctx["_xp_ml_fallbacks"]
+                _xp_team_coord: dict = _ctx["_xp_team_coord"]
+                _xp_carrier_ratio: float = float(_ctx["_xp_carrier_ratio"])
+                _xp_carrier_ref_shifted: bool = bool(_ctx["_xp_carrier_ref_shifted"])
+                quality_before_score: float = float(_ctx["quality_before_score"])
+                quality_after_score: float = float(_ctx["quality_after_score"])
+                quality_delta: float = float(_ctx["quality_delta"])
+                delta_snr: float = float(_ctx["delta_snr"])
+                feedback_retries: int = int(_ctx["feedback_retries"])
+                feedback_chain_score: float = float(_ctx["feedback_chain_score"])
+                excellence_steps: list = _ctx["excellence_steps"]
+                musical_violations: list = _ctx["musical_violations"]
+                fail_reason: str = _ctx["fail_reason"]
+                degradation_status: str = _ctx["degradation_status"]
+                primary_error_code: str = _ctx["primary_error_code"]
+                runtime_fallback_original: bool = bool(_ctx["runtime_fallback_original"])
+
+                if not musical_goals:
+                    musical_goals, synthesized_goals = self._synthesize_goals_from_mos(corr, mos_est)
+
+                mos_text = self._build_quality_score_text(
+                    mos_est=mos_est,
+                    restorability_grade=restorability_grade,
+                    restorability_mos_min=restorability_mos_min,
+                    restorability_mos_max=restorability_mos_max,
+                    mushra_score=mushra_score,
+                    mushra_grade=mushra_grade,
+                    mushra_itu=mushra_itu,
+                    era_label_full=era_label_full,
+                    era_label=era_label,
+                    era_conf=era_conf,
+                    genre_label=genre_label,
+                    genre_bpm=genre_bpm,
+                    genre_key=genre_key,
+                    pipeline_confidence=pipeline_confidence,
+                    output_path=output_path,
+                )
+
+                banner_sections = self._build_quality_banner_sections(
+                    fail_reason=fail_reason,
+                    degradation_status=degradation_status,
+                    runtime_fallback_original=runtime_fallback_original,
+                    primary_error_code=primary_error_code,
+                    phases_exec_count=phases_exec_count,
+                    phases_skip_count=phases_skip_count,
+                    total_time_s=total_time_s,
+                    rt_factor=rt_factor,
+                    top_causal_cause=top_causal_cause,
+                    causal_conf=causal_conf,
+                    quality_before_score=quality_before_score,
+                    quality_after_score=quality_after_score,
+                    quality_delta=quality_delta,
+                    delta_snr=delta_snr,
+                    temporal_coh_score=temporal_coh_score,
+                    emotional_arc_score=emotional_arc_score,
+                    feedback_retries=feedback_retries,
+                    feedback_chain_score=feedback_chain_score,
+                    excellence_steps=excellence_steps,
+                    genre_is_schlager=genre_is_schlager,
+                    genre_accordion=genre_accordion,
+                    genre_bpm=genre_bpm,
+                    genre_key=genre_key,
+                    pipeline_hint=pipeline_hint,
+                    pipeline_tier=pipeline_tier,
+                    joy_index=joy_index,
+                    fatigue_index=fatigue_index,
+                    frisson_index=frisson_index,
+                    cluster_key=cluster_key,
+                    cluster_policy=cluster_policy,
+                    auto_recommendations=auto_recommendations,
+                    musical_violations=musical_violations,
+                    phase_gate_notes=phase_gate_notes,
+                    ceiling_reached=ceiling_reached,
+                    xp_recovery_certainty=_xp_recovery_certainty,
+                    xp_hf_guard=_xp_hf_guard,
+                    xp_tilt_guard=_xp_tilt_guard,
+                    xp_carrier_ratio=_xp_carrier_ratio,
+                    xp_carrier_ref_shifted=_xp_carrier_ref_shifted,
+                    xp_fqf=_xp_fqf,
+                    xp_ml_fallbacks=_xp_ml_fallbacks,
+                    xp_team_coord=_xp_team_coord,
+                )
 
                 def _update_gui():
-                    # Radar-Chart aktualisieren
-                    if self.radar_widget is not None and musical_goals:
-                        self.radar_widget.update_scores(
-                            scores=musical_goals,
-                            adaptive_thresholds=adaptive_thresholds if adaptive_thresholds else None,
-                            applicable_goals=applicable_goals,
-                            inapplicable_reasons=inapplicable_reasons if inapplicable_reasons else None,
-                            synthesized_goals=synthesized_goals if synthesized_goals else None,
-                            adaptation_reasons=adaptation_reasons if adaptation_reasons else None,
-                        )
-                    # Score-Label: bright flash on appearance, decay to normal
-                    _qs_style_final = (
-                        "color: #82B89A; font-size: 9pt; font-weight: bold;"
-                        " padding: 10px; background: rgba(85, 155, 115, 0.08);"
-                        " border-radius: 8px; border: 1px solid rgba(100, 168, 130, 0.26);"
-                        " line-height: 150%;"
+                    self._apply_quality_header_and_banner(
+                        musical_goals=musical_goals,
+                        adaptive_thresholds=adaptive_thresholds,
+                        applicable_goals=applicable_goals,
+                        inapplicable_reasons=inapplicable_reasons,
+                        synthesized_goals=synthesized_goals,
+                        adaptation_reasons=adaptation_reasons,
+                        mos_text=mos_text,
+                        banner_sections=banner_sections,
                     )
-                    self.quality_score_label.setStyleSheet(
-                        "color: #A8CCBA; font-size: 9pt; font-weight: bold;"
-                        " padding: 10px; background: rgba(85, 155, 115, 0.14);"
-                        " border-radius: 8px; border: 1px solid rgba(100, 168, 130, 0.42);"
-                        " line-height: 150%;"
+                    self._apply_quality_defect_summary_and_footer(
+                        restoration_result=restoration_result,
+                        degradation_status=degradation_status,
+                        fail_reason=fail_reason,
+                        mos_est=mos_est,
+                        quality_after_score=quality_after_score,
+                        top_causal_cause=top_causal_cause,
+                        causal_conf=causal_conf,
+                        quality_before_score=quality_before_score,
+                        quality_delta=quality_delta,
+                        delta_snr=delta_snr,
+                        phases_exec_count=phases_exec_count,
+                        phases_skip_count=phases_skip_count,
+                        musical_violations=musical_violations,
+                        ceiling_reached=ceiling_reached,
+                        feedback_retries=feedback_retries,
+                        primary_error_code=primary_error_code,
                     )
-                    self.quality_score_label.setText(mos_text)
-                    QTimer.singleShot(
-                        380,
-                        lambda _s=_qs_style_final: self.quality_score_label.setStyleSheet(_s),
-                    )
-                    # Quality Meter gauge — animated count-up
-                    try:
-                        import re as _re
-
-                        _m = _re.search(r"MOS[:\s]+(\d+(?:[.,]\d+)?)", mos_text)
-                        if _m:
-                            self._animate_mos_gauge(float(_m.group(1).replace(",", ".")))
-                    except Exception:
-                        pass
-                    # Info-Banner — immer befüllt wenn Daten vorhanden
-                    if banner_sections:
-                        self.info_banner.setText("\n".join(banner_sections))
-                        self.info_banner.setStyleSheet("""
-                            color: #B0BEC5; font-size: 8pt; padding: 10px;
-                            background: rgba(30, 40, 55, 0.80);
-                            border-radius: 8px; border: 1px solid rgba(96, 125, 139, 0.35);
-                            line-height: 155%;
-                        """)
-                        self.info_banner.setVisible(True)
-                    else:
-                        self.info_banner.setVisible(False)
-
-                    # ── Abschluss-Zusammenfassung im Defekt-Panel (links) ──
-                    if hasattr(self, "defect_summary_label") and restoration_result is not None:
-                        _sum: list[str] = []
-                        _has_problem = degradation_status in {"blocked", "critical_degraded", "degraded"}
-                        _winning_var = getattr(restoration_result, "winning_variant", None)
-                        _is_passthrough = _winning_var == "clean_digital_pass_through"
-
-                        if _is_passthrough:
-                            # Clean digital source — pipeline skipped intentionally
-                            _sum.append("✅  Saubere Quelle — kein Eingriff nötig")
-                            _sum.append("🎵  Die Aufnahme war bereits in hervorragendem Zustand.")
-                            _sum.append("   Aurik hat darauf verzichtet, unnötige Veränderungen")
-                            _sum.append("   vorzunehmen (Overprocessing-Schutz).")
-                            if mos_est > 0:
-                                _sum.append(f"📊  Qualitätsmessung (VERSA): {mos_est:.1f} / 5.0 MOS")
-                            elif quality_after_score > 0:
-                                _sum.append(f"📊  Qualitätsscore: {quality_after_score:.0f} / 100")
-                            _color_pt = "#82B89A"
-                            _bg_pt = "rgba(85,155,115,0.09)"
-                            _brd_pt = "rgba(100,168,130,0.24)"
-                            self.defect_summary_label.setText("\n".join(_sum))
-                            self.defect_summary_label.setStyleSheet(f"""
-                                color: {_color_pt}; font-size: 9pt; padding: 12px;
-                                background: {_bg_pt};
-                                border-radius: 10px; border: 1px solid {_brd_pt};
-                                line-height: 160%;
-                            """)
-                            if hasattr(self, "defect_count_live_label"):
-                                self.defect_count_live_label.setText("✅ Fertig")
-                                self.defect_count_live_label.setStyleSheet(
-                                    "color: #82B89A; font-size: 8pt; background: transparent; font-weight: bold; padding: 0 2px;"
-                                )
-                                self.defect_count_live_label.setVisible(True)
-                        else:
-                            # Normal restoration path
-                            if _has_problem:
-                                _sum.append(
-                                    f"⚠️  Restaurierung mit Einschränkungen\n   {fail_reason or degradation_status}"
-                                )
-                            else:
-                                _sum.append("✅  Restaurierung erfolgreich abgeschlossen")
-                                _sum.append("🛡️  Klangcharakter und Originalbalance wurden dabei bewusst geschützt")
-
-                            # Was wurde behandelt — Hauptursache
-                            _cause_map_de = {
-                                "tape_hiss": "Bandrauschen",
-                                "tape_dropout": "Bandsignalausfall",
-                                "vinyl_crackle": "Vinyl-Knistern",
-                                "vinyl_warp": "Vinyl-Verwölbung",
-                                "electrical_hum": "Elektrisches Brummen",
-                                "head_misalignment": "Bandkopf-Fehljustage",
-                                "dc_offset": "DC-Gleichspannungsversatz",
-                                "digital_clip": "Digitale Übersteuerung",
-                                "soft_saturation": "Röhren-/Bandsättigung bewahrt",
-                                "head_wear": "Bandkopf-Verschleiß",
-                                "print_through": "Bandübersprechen",
-                                "riaa_curve_error": "RIAA-Kurven-Fehler",
-                                "aliasing": "Aliasing-Artefakte",
-                                "bias_error": "Vormagnetisierungs-Fehler",
-                                "vinyl_scratches": "Vinyl-Kratzer",
-                                "surface_noise": "Oberflächenrauschen",
-                                "mechanical_hum": "Mechanisches Brummen",
-                                "clipping_distortion": "Übersteuerungsverzerrung",
-                                "wow": "Wow-Schwankungen",
-                                "flutter": "Flutter-Schwankungen",
-                                "dropout": "Tonaussetzer",
-                                "codec_artifacts": "Codec-Artefakte",
-                                "room_resonance": "Raumresonanz",
-                            }
-                            if top_causal_cause and top_causal_cause not in ("None", "none", ""):
-                                _cause_de = _cause_map_de.get(top_causal_cause, top_causal_cause)
-                                _conf_s = f" ({causal_conf * 100:.0f}%)" if causal_conf > 0 else ""
-                                _sum.append(f"🔍  Hauptproblem behandelt: {_cause_de}{_conf_s}")
-
-                            # Qualitätsverbesserung
-                            if quality_before_score > 0 and quality_after_score > 0:
-                                _sign = "+" if quality_delta >= 0 else ""
-                                _sum.append(
-                                    f"📈  Qualität: {quality_before_score:.0f} → {quality_after_score:.0f}"
-                                    f"  ({_sign}{quality_delta:.0f} Punkte)"
-                                )
-                                if delta_snr != 0:
-                                    _snr_s = f"+{delta_snr:.1f}" if delta_snr >= 0 else f"{delta_snr:.1f}"
-                                    _sum.append(f"   Rauschverbesserung: {_snr_s} dB")
-                            elif mos_est > 0:
-                                _sum.append(f"🎵  Klangqualität: {mos_est:.1f} / 5.0 MOS")
-
-                            # Phasen
-                            if phases_exec_count > 0:
-                                _ph_s = f"⚙️  {phases_exec_count} Verarbeitungsschritte ausgeführt"
-                                if phases_skip_count > 0:
-                                    _ph_s += f"  ({phases_skip_count} nicht benötigt)"
-                                _sum.append(_ph_s)
-
-                            # Musical-Goals-Verletzungen
-                            if musical_violations:
-                                _vmap = {
-                                    "brillanz": "Brillanz",
-                                    "waerme": "Wärme",
-                                    "natuerlichkeit": "Natürlichkeit",
-                                    "authentizitaet": "Authentizität",
-                                    "emotionalitaet": "Emotionalität",
-                                    "transparenz": "Transparenz",
-                                    "bass_kraft": "Bass-Kraft",
-                                    "groove": "Groove",
-                                    "spatial_depth": "Raumtiefe",
-                                    "timbre_authentizitaet": "Timbre",
-                                    "tonal_center": "Tonales Zentrum",
-                                    "micro_dynamics": "Mikro-Dynamik",
-                                    "separation_fidelity": "Separation",
-                                    "artikulation": "Artikulation",
-                                }
-                                _vnames: list[str] = [str(_vmap.get(v, v)) for v in musical_violations]
-                                _sum.append(f"⚠️  Ziele unter Schwellwert: {', '.join(_vnames)}")
-
-                            # Ceiling / Optimum
-                            if ceiling_reached:
-                                _sum.append("🏆  Physikalisches Optimum dieser Aufnahme erreicht")
-                            elif feedback_retries > 0:
-                                _sum.append(f"♻️  {feedback_retries}× nachoptimiert für bestes Ergebnis")
-
-                            _color = "#B8A068" if _has_problem else "#82B89A"
-                            _bg = "rgba(150,130,68,0.09)" if _has_problem else "rgba(85,155,115,0.09)"
-                            _brd = "rgba(150,130,68,0.24)" if _has_problem else "rgba(100,168,130,0.24)"
-                            self.defect_summary_label.setText("\n".join(_sum))
-                            self.defect_summary_label.setStyleSheet(f"""
-                                color: {_color}; font-size: 9pt; padding: 12px;
-                                background: {_bg};
-                                border-radius: 10px; border: 1px solid {_brd};
-                                line-height: 160%;
-                            """)
-                            # Live-Zähler auch aktualisieren
-                            if hasattr(self, "defect_count_live_label"):
-                                if _has_problem:
-                                    self.defect_count_live_label.setText("⚠ Eingeschränkt")
-                                    self.defect_count_live_label.setStyleSheet(
-                                        "color: #B8A068; font-size: 8pt; background: transparent; font-weight: bold; padding: 0 2px;"
-                                    )
-                                else:
-                                    self.defect_count_live_label.setText("✅ Fertig")
-                                    self.defect_count_live_label.setStyleSheet(
-                                        "color: #82B89A; font-size: 8pt; background: transparent; font-weight: bold; padding: 0 2px;"
-                                    )
-                                self.defect_count_live_label.setVisible(True)
-
-                    if hasattr(self, "status_text") and degradation_status in {
-                        "blocked",
-                        "critical_degraded",
-                        "degraded",
-                    }:
-                        _status_reason = fail_reason if fail_reason not in ("None", "none", "") else degradation_status
-                        _status_code = f" · Code: {primary_error_code}" if primary_error_code else ""
-                        _status_reason_with_code = f"{_status_reason}{_status_code}"
-                        _status_text_msg = t("status.processing_limited", reason=_status_reason_with_code)
-                        if "Verarbeitung mit Einschränkungen" not in str(_status_text_msg):
-                            _status_text_msg = f"⚠ Verarbeitung mit Einschränkungen: {_status_reason_with_code}"
-                        self._apply_status_text_style("warning")
-                        self.status_text.setText(_status_text_msg)
-                    self._update_ab_player_state()
-                    self._update_waveform(self._rest_audio, self._rest_sr)
 
                 QTimer.singleShot(0, _update_gui)
 
@@ -17694,6 +18309,13 @@ class ModernMainWindow(QMainWindow):
                 except Exception:
                     pass
             # Second pass after async stop finished.
+            # ── Streaming player shutdown ────────────────
+            _sp = getattr(self, "_streaming_player", None)
+            if _sp is not None:
+                try:
+                    _sp.shutdown()
+                except Exception:
+                    pass
             if _SD_AVAILABLE:
                 try:
                     if not hasattr(self, "_sd_lock"):

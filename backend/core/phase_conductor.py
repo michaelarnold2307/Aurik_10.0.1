@@ -207,6 +207,7 @@ class PhaseConductor:
         current_state: PhaseState,
         material_type: str = "unknown",
         current_strength: float = 1.0,
+        goal_weights: dict[str, float] | None = None,
     ) -> ConductorRecommendation:
         """Empfehle Stärke / Skip-Entscheidung für die nächste Phase.
 
@@ -220,6 +221,9 @@ class PhaseConductor:
             Materialklasse (z.B. "vinyl", "tape", …)
         current_strength : float
             Aktuell geplante Stärke der nächsten Phase
+        goal_weights : dict[str, float] | None
+            §2.52a Per-Song Goal-Gewichte (aus SongGoalImportance §2.56).
+            Moduliert Strength ±10 % basierend auf gewichteter Relevanz.
 
         Returns
         -------
@@ -256,6 +260,19 @@ class PhaseConductor:
         recommended_strength = float(
             np.clip(ideal_strength * confidence + current_strength * (1.0 - confidence), 0.0, 1.0)
         )
+
+        # §2.52a Goal-Weight-Modulation: ±10 % bounded adjustment.
+        # High-priority goals (weight > 1.0) push strength up; low-priority push down.
+        if goal_weights:
+            try:
+                _gw_vals = [v for v in goal_weights.values() if isinstance(v, (int, float)) and np.isfinite(v)]
+                if _gw_vals:
+                    _gw_mean = float(np.mean(_gw_vals))
+                    # map mean weight to [-0.10, +0.10] range (1.0 = neutral)
+                    _gw_mod = float(np.clip((_gw_mean - 1.0) * 0.10, -0.10, 0.10))
+                    recommended_strength = float(np.clip(recommended_strength + _gw_mod, 0.0, 1.0))
+            except Exception:
+                pass  # Non-blocking: goal_weights integration failure → neutral
 
         # Mindest-Stärke aus Invariante
         min_str = _MIN_STRENGTH.get(next_phase_id, _DEFAULT_MIN_STRENGTH)

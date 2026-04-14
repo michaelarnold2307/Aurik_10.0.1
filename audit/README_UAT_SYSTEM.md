@@ -1,8 +1,8 @@
 # Aurik 9.10.77 — User Acceptance Test (UAT) System
 
-**Version:** 1.0  
-**Date:** 2026-03-28  
-**Status:** Production-ready
+**Version:** 1.1  
+**Date:** 2026-04-14  
+**Status:** Operational (Daily Gate active)
 
 ---
 
@@ -15,6 +15,13 @@ This UAT system provides formal acceptance testing and release gate validation f
 - **Release Gates** — 7 critical K.O. criteria (G1–G7)
 
 Total: **30 acceptance criteria + 7 release gates**
+
+Current runtime snapshot (latest available run):
+
+- Recommendation: GO
+- Gates: 7/7 passed
+- Real-Audio subset R5-R12: 8/8 passed
+- Daily trend status: ready
 
 ---
 
@@ -137,52 +144,80 @@ Machine-readable test results in JSON format:
 - Release decision scripts
 - Audit trail logging
 
+### 4. Daily Real-Audio Gate Reporter: `audit/daily_real_audio_gate.py`
+
+Builds a deterministic daily status from existing UAT result files in `audit/`.
+
+**Usage:**
+
+```bash
+# Generate/refresh daily status artifacts
+python audit/daily_real_audio_gate.py
+
+# Custom paths
+python audit/daily_real_audio_gate.py \
+  --audit-dir audit \
+  --json-output audit/daily_real_audio_gate_status.json \
+  --md-output audit/daily_real_audio_gate_status.md
+```
+
+**Outputs:**
+
+- `audit/daily_real_audio_gate_status.json`
+- `audit/daily_real_audio_gate_status.md`
+
+Both include trend points over all available `uat_results_*.json` runs.
+
 ---
 
 ## Criteria Reference
 
+Note: The status markers below are the original baseline snapshot from 2026-03-28.
+For current decisioning use `audit/uat_results_2026-04-12.json` and
+`audit/daily_real_audio_gate_status.json`.
+
 ### Restoration Criteria (R1–R15)
 
-| ID | Criterion | Severity | Category | Status |
-|----|-----------|----------|----------|--------|
-| R1 | Einstiegs-Nachricht klar | MUST | UI/UX | ✅ |
-| R2 | Defekt-Scanning transparent | MUST | UI/UX | ⊘ |
-| R3 | Zweistufige Progress Bars | MUST | UI/UX | ✅ |
-| R4 | Waveform-Scan-Cursor | SHOULD | UI/UX | ✅ |
-| R5 | Vocals in Stereo | MUST | Audio | ⊘ |
-| R6 | Tonart nicht verschoben | MUST | Audio | ⊘ |
-| R7 | Mikro-Dynamik erhalten | MUST | Audio | ⊘ |
-| R8 | Keine stillen Defekte | MUST | Audio | ⊘ |
-| R9 | Reversing (Ctrl+Z) | SHOULD | UI/UX | ✅ |
-| R10 | Export LUFS | MUST | Audio | ⊘ |
-| R11 | Musical Goals | MUST | Audio | ⊘ |
-| R12 | Keine NaN/Inf | MUST | Code | ⊘ |
-| R13 | Mono/Stereo korrekt | MUST | Audio | ✅ |
-| R14 | Material-Klassifikation | MUST | Audio | ⊘ |
-| R15 | Pass-Through SNR | SHOULD | Audio | ⊘ |
+| ID  | Criterion                   | Severity  | Category | Status |
+|-----|-----------------------------|-----------|----------|--------|
+| R1  | Einstiegs-Nachricht klar    | MUST      | UI/UX    | ✅     |
+| R2  | Defekt-Scanning transparent | MUST      | UI/UX    | ⊘      |
+| R3  | Zweistufige Progress Bars   | MUST      | UI/UX    | ✅     |
+| R4  | Waveform-Scan-Cursor        | SHOULD    | UI/UX    | ✅     |
+| R5  | Vocals in Stereo            | MUST      | Audio    | ⊘      |
+| R6  | Tonart nicht verschoben     | MUST      | Audio    | ⊘      |
+| R7  | Mikro-Dynamik erhalten      | MUST      | Audio    | ⊘      |
+| R8  | Keine stillen Defekte       | MUST      | Audio    | ⊘      |
+| R9  | Reversing (Ctrl+Z)          | SHOULD    | UI/UX    | ✅     |
+| R10 | Export LUFS                 | MUST      | Audio    | ⊘      |
+| R11 | Musical Goals               | MUST      | Audio    | ⊘      |
+| R12 | Keine NaN/Inf               | MUST      | Code     | ⊘      |
+| R13 | Mono/Stereo korrekt         | MUST      | Audio    | ✅     |
+| R14 | Material-Klassifikation     | MUST      | Audio    | ⊘      |
+| R15 | Pass-Through SNR            | SHOULD    | Audio    | ⊘      |
 
 ✅ = Passed (code inspection)  
 ⊘ = Skipped (functional test deferred)
 
 ### Studio 2026 Criteria (S1–S15)
 
-| ID | Criterion | Severity | Category | Status |
-|----|-----------|----------|----------|--------|
-| S1 | Studio 2026 Modusmeldung | MUST | UI/UX | ✅ |
-| S2–S14 | (Stem-Sep, Mastering, Audio metrics) | MUST/SHOULD | Audio | ⊘ |
-| S15 | Export-Gate | MUST | Code | ✅ |
+| ID     | Criterion                            | Severity    | Category   | Status |
+|--------|--------------------------------------|-------------|------------|--------|
+| S1     | Studio 2026 Modusmeldung             | MUST        | UI/UX      | ✅     |
+| S2–S14 | (Stem-Sep, Mastering, Audio metrics) | MUST/SHOULD | Audio      | ⊘      |
+| S15    | Export-Gate                          | MUST        | Code       | ✅     |
 
 ### Release Gates (G1–G7)
 
-| ID | Gate | K.O. | Status |
-|----|------|------|--------|
-| G1 | No Docker in Production | 🔴 | ⊘ |
-| G2 | KMV batch audio source | 🔴 | ✅ |
-| G3 | No silent refinement cancel | 🔴 | ✅ |
-| G4 | Progress counter | ⚪ | ✅ |
-| G5 | PMGG no rollback | 🔴 | ✅ |
-| G6 | OQS ≥ 80 (AMRB) | ⚪ | ⊘ |
-| G7 | Hybrid release mode | 🔴 | ✅ |
+| ID | Gate                        | K.O. | Status |
+|----|-----------------------------|------|--------|
+| G1 | No Docker in Production     | 🔴   | ⊘      |
+| G2 | KMV batch audio source      | 🔴   | ✅     |
+| G3 | No silent refinement cancel | 🔴   | ✅     |
+| G4 | Progress counter            | ⚪   | ✅     |
+| G5 | PMGG no rollback            | 🔴   | ✅     |
+| G6 | OQS ≥ 80 (AMRB)             | ⚪   | ⊘      |
+| G7 | Hybrid release mode         | 🔴   | ✅     |
 
 🔴 = K.O. (critical) | ⚪ = Non-critical | ⊘ = Skipped
 
@@ -192,12 +227,12 @@ Machine-readable test results in JSON format:
 
 ### Go/No-Go Logic
 
-| Condition | Threshold | Current | Status |
-|-----------|-----------|---------|--------|
-| Acceptance passed | ≥ 24/30 | 6/30 (code baseline) | ⚠️ |
-| K.O. violations | = 0 | 0 | ✅ |
-| Gates passed | ≥ 5/7 | 5/7 | ✅ |
-| Regressions | = 0 | 0 | ✅ |
+| Condition         | Threshold | Current            | Status |
+|-------------------|-----------|--------------------|--------|
+| Acceptance passed | ≥ 24/30   | 30/30 (latest UAT) | ✅     |
+| K.O. violations   | = 0       | 0                  | ✅     |
+| Gates passed      | ≥ 5/7     | 7/7                | ✅     |
+| Regressions       | = 0       | 0                  | ✅     |
 
 ### Recommendation Algorithm
 
@@ -212,7 +247,7 @@ else:
     recommendation = "NO-GO"
 ```
 
-**Current:** CONDITIONAL GO (code inspection phase complete)
+**Current:** GO
 
 ---
 
@@ -225,25 +260,25 @@ else:
 - Verifies KMV audio sourcing
 - Confirms signal definitions
 - Validates release mode states
-- **Result:** 6/30 criteria verified, 0 K.O. violations
+- **Result:** completed (historical baseline established)
 
-### Phase 2: Functional Testing (NEXT)
+### Phase 2: Functional Testing ✅ COMPLETE
 
 ```bash
 # Run all functional tests (audio processing, metrics)
 pytest tests/ -m "not e2e and not ml" --timeout=60 -v
 
-# Expected: R2, R5–R8, R10–R12, R14–R15, S2–S14 all PASS
+# Completed in latest run
 ```
 
-### Phase 3: Integration Testing
+### Phase 3: Integration Testing ✅ COMPLETE (release-gate relevant scope)
 
 ```bash
 # Full end-to-end scenarios
 pytest tests -m "e2e" --timeout=120 -v
 ```
 
-### Phase 4: Release Certification
+### Phase 4: Release Certification ✅ ACTIVE
 
 - ✅ All 30 criteria passed
 - ✅ 7/7 gates passed
@@ -256,7 +291,7 @@ pytest tests -m "e2e" --timeout=120 -v
 ## Regression Assessment
 
 **Prior Baseline:** 51/51 unit tests passed (2026-03-27)  
-**Current:** 51/51 unit tests still pass (2026-03-28)  
+**Current:** UAT latest run GO with 30/30 + 7/7 (2026-04-12)  
 **Regression Risk:** ✅ Zero
 
 All UAT additions are non-breaking. Existing test suite remains green.
@@ -278,12 +313,11 @@ All UAT additions are non-breaking. Existing test suite remains green.
    - G5: PMGG no rollback ✅
    - G7: release mode states ✅
 
-### ⊘ Deferred to Next Phase
+### ✅ Operational Daily Monitoring
 
-- R2, R5–R8, R10–R12, R14–R15 (Restoration audio tests)
-- S2–S14 (Studio 2026 audio tests)
-- G1: Docker normative test
-- G6: AMRB OQS benchmark
+- Daily status artifacts are generated via `audit/daily_real_audio_gate.py`.
+- Trend tracks recommendation, gate pass count, and R5-R12 pass-rate over time.
+- Current trend: 2026-03-28 (CONDITIONAL) -> 2026-04-12 (GO).
 
 ---
 
@@ -296,12 +330,11 @@ All UAT additions are non-breaking. Existing test suite remains green.
 python audit/uat_report_generator.py --output-dir ./release_docs
 
 # 2. Check recommendation in JSON
-jq '.summary.recommendation' audit/uat_results_2026-03-28.json
-# Output: "CONDITIONAL GO"
+jq '.summary.recommendation' audit/uat_results_2026-04-12.json
+# Output: "GO"
 
-# 3. If GO: Proceed to press release
-# If CONDITIONAL: Fix deferred items, rerun
-# If NO-GO: Block release, investigate
+# 3. Optional: refresh daily trend artifacts
+python audit/daily_real_audio_gate.py
 ```
 
 ### Scenario 2: CI/CD Integration
@@ -341,7 +374,11 @@ tar -czf aurik_uat_2026-03-28.tar.gz \
 │   └── test_uat_acceptance_criteria.py     ← UAT test suite
 ├── audit/
 │   ├── uat_report_generator.py             ← Report orchestrator
-│   ├── uat_results_2026-03-28.json         ← Machine-readable results
+│   ├── daily_real_audio_gate.py            ← Daily trend reporter (R5-R12 + gates)
+│   ├── uat_results_2026-03-28.json         ← Historical baseline results
+│   ├── uat_results_2026-04-12.json         ← Latest full UAT results
+│   ├── daily_real_audio_gate_status.json   ← Latest daily trend status (JSON)
+│   ├── daily_real_audio_gate_status.md     ← Latest daily trend status (Markdown)
 │   └── README_UAT_SYSTEM.md                ← This file
 └── docs/
     ├── UAT_SCORECARD_2026-03-28.md         ← Formal scorecard
@@ -379,6 +416,7 @@ python -m json.tool audit/uat_results_2026-03-28.json > /dev/null
 ```bash
 rm docs/UAT_*.md audit/uat_results_*.json
 python audit/uat_report_generator.py
+python audit/daily_real_audio_gate.py
 ```
 
 ---
@@ -426,5 +464,5 @@ Update `UAT_VERSION` in `test_uat_acceptance_criteria.py` when criteria change.
 
 ---
 
-**Last Updated:** 2026-03-28  
-**Status:** Production Ready ✅
+**Last Updated:** 2026-04-14  
+**Status:** Operational (GO + Daily Gate) ✅

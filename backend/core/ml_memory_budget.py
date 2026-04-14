@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 try:
     import psutil as _psutil
@@ -58,6 +59,26 @@ ML_MAX_GB: float = _auto_detect_budget()
 _SYSTEM_MEMORY_MARGIN_BASE: float = 1.35  # Basis-Margin für kleine Modelle (< 1 GB)
 _SYSTEM_MEMORY_MARGIN_MIN: float = 1.10  # Minimale Margin für sehr große Modelle (>= 5 GB)
 _MIN_FREE_MB_HARD: float = 3072.0  # 3 GB — angehoben von 1.5 GB (systemd-oomd-Schutz)
+_PRESSURE_LIGHT_MODEL_MAX_GB: float = 0.12
+_PRESSURE_LIGHT_MODEL_MIN_AVAIL_RATIO: float = 0.35
+_PRESSURE_LIGHT_MODEL_MAX_SWAP_PCT: float = 95.0
+_PRESSURE_LIGHT_MODEL_TOTAL_GB_CAP: float = 0.35
+_PRESSURE_LIGHT_MODEL_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "SileroVAD",
+        "SileroVAD_phase18",
+        "FCPE",
+        "BasicPitch",
+    }
+)
+_HEAVY_MODEL_PREEMPTIVE_MIN_GB: float = 1.0
+_HEAVY_MODEL_PREEMPTIVE_SWAP_PCT: float = 70.0
+_HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT: float = 45.0
+_HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S: float = 2.0
+_HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX: float = 0.30
+_HEAVY_MODEL_PREEMPTIVE_AVAIL_GB_MAX: float = 16.0
+_PRESSURE_RECOVERY_ATTEMPTS: int = 2
+_PRESSURE_RECOVERY_SLEEP_S: float = 0.35
 
 
 def _scaled_margin(size_gb: float) -> float:
@@ -85,6 +106,42 @@ def _scaled_margin(size_gb: float) -> float:
 _lock = threading.Lock()
 _allocated: dict[str, float] = {}  # model_name → GB currently allocated
 _total_gb: float = 0.0  # sum of _allocated.values()
+_last_swap_poll_ts: float = 0.0
+_last_swap_sin: int = 0
+_last_swap_sout: int = 0
+
+
+def _swap_io_rate_mb_per_s(swap_obj: object) -> float:
+    """Estimate recent swap I/O activity in MB/s.
+
+    High swap usage alone does not always mean active thrashing. This helper uses
+    swap sin/sout counters to distinguish stale high swap occupancy from ongoing
+    paging pressure that can trigger freezes and OOM-kills.
+    """
+    global _last_swap_poll_ts, _last_swap_sin, _last_swap_sout
+    if _psutil is None:
+        return 0.0
+    try:
+        now = time.monotonic()
+        sin = int(getattr(swap_obj, "sin", 0) or 0)
+        sout = int(getattr(swap_obj, "sout", 0) or 0)
+
+        if _last_swap_poll_ts <= 0.0:
+            _last_swap_poll_ts = float(now)
+            _last_swap_sin = sin
+            _last_swap_sout = sout
+            return 0.0
+
+        dt = max(1e-3, float(now - _last_swap_poll_ts))
+        delta_bytes = max(0, (sin - _last_swap_sin)) + max(0, (sout - _last_swap_sout))
+        rate_mb_s = (delta_bytes / (1024.0 * 1024.0)) / dt
+
+        _last_swap_poll_ts = float(now)
+        _last_swap_sin = sin
+        _last_swap_sout = sout
+        return float(rate_mb_s)
+    except Exception:
+        return 0.0
 
 
 def _available_memory_mb() -> float:
@@ -95,9 +152,14 @@ def _available_memory_mb() -> float:
 
 
 def is_system_thrashing() -> bool:
-    """Detect swap-thrashing: high swap usage combined with low free RAM.
+    """Detect swap-thrashing: high swap usage or combined swap+RAM pressure.
 
-    Heuristic: swap > 30 % used AND available RAM < 15 % of total.
+        Conditions (any triggers):
+            1. swap > 80 % AND active swap I/O > 8 MB/s (real thrashing)
+            2. swap > 95 % AND available RAM < 25 % (critical emergency)
+            3. swap > 30 % AND available RAM < 15 % (systemd-oomd warning zone)
+            4. available RAM < 8 % (hard emergency regardless of swap)
+
     On Linux, systemd-oomd kills at ~50 % memory-pressure for > 20 s.
     We detect BEFORE that point to allow graceful degradation.
     """
@@ -108,17 +170,137 @@ def is_system_thrashing() -> bool:
         vm = _psutil.virtual_memory()
         swap_used_pct = swap.percent  # 0–100
         avail_ratio = vm.available / max(vm.total, 1)
-        thrashing = swap_used_pct > 30.0 and avail_ratio < 0.15
+        swap_io_rate_mb_s = _swap_io_rate_mb_per_s(swap)
+        # Condition 1: critically high swap plus ongoing swap I/O.
+        swap_critical_active = swap_used_pct > 80.0 and swap_io_rate_mb_s > 8.0
+        # Condition 2: emergency when swap is nearly full and RAM headroom is shrinking.
+        swap_critical_emergency = swap_used_pct > 95.0 and avail_ratio < 0.25
+        # Condition 3: combined pressure (legacy heuristic, retained).
+        combined_pressure = swap_used_pct > 30.0 and avail_ratio < 0.15
+        # Condition 4: hard emergency regardless of swap stats.
+        ram_emergency = avail_ratio < 0.08
+
+        thrashing = swap_critical_active or swap_critical_emergency or combined_pressure or ram_emergency
         if thrashing:
             logger.warning(
                 "ml_memory_budget: swap thrashing detected — swap %.0f %% used (%.1f GB), "
-                "RAM available %.1f %% (%.1f GB) — ML loads will be blocked",
+                "swap I/O %.1f MB/s, RAM available %.1f %% (%.1f GB) — ML loads will be blocked",
                 swap_used_pct,
                 swap.used / (1024**3),
+                swap_io_rate_mb_s,
                 avail_ratio * 100,
                 vm.available / (1024**3),
             )
+        elif swap_used_pct > 80.0 and swap_io_rate_mb_s <= 8.0:
+            logger.debug(
+                "ml_memory_budget: high swap occupancy without active paging (swap %.0f %%, I/O %.1f MB/s) "
+                "— no thrashing block",
+                swap_used_pct,
+                swap_io_rate_mb_s,
+            )
         return thrashing
+    except Exception:
+        return False
+
+
+def _allow_lightweight_under_pressure(model_name: str, size_gb: float) -> bool:
+    """Allow tiny models during pressure when memory headroom is still healthy.
+
+    This prevents broad cascade fallbacks (e.g. VAD/pitch helper models) while
+    keeping large model loads blocked under thrashing.
+    """
+    if _psutil is None:
+        return False
+    if size_gb > _PRESSURE_LIGHT_MODEL_MAX_GB:
+        return False
+    if model_name not in _PRESSURE_LIGHT_MODEL_ALLOWLIST:
+        return False
+    try:
+        vm = _psutil.virtual_memory()
+        swap = _psutil.swap_memory()
+        avail_ratio = vm.available / max(vm.total, 1)
+        swap_pct = float(getattr(swap, "percent", 100.0))
+        with _lock:
+            _tiny_allocated = float(
+                sum(
+                    float(_sz)
+                    for _name, _sz in _allocated.items()
+                    if _name in _PRESSURE_LIGHT_MODEL_ALLOWLIST and float(_sz) <= _PRESSURE_LIGHT_MODEL_MAX_GB
+                )
+            )
+        if (_tiny_allocated + float(size_gb)) > _PRESSURE_LIGHT_MODEL_TOTAL_GB_CAP:
+            logger.warning(
+                "ML-Budget: '%s' (%.2f GB) pressure soft-allow abgelehnt — "
+                "tiny-budget cap erreicht (%.2f/%.2f GB)",
+                model_name,
+                size_gb,
+                _tiny_allocated,
+                _PRESSURE_LIGHT_MODEL_TOTAL_GB_CAP,
+            )
+            return False
+        if avail_ratio >= _PRESSURE_LIGHT_MODEL_MIN_AVAIL_RATIO and swap_pct < _PRESSURE_LIGHT_MODEL_MAX_SWAP_PCT:
+            logger.warning(
+                "ML-Budget: '%s' (%.2f GB) soft-allowed under pressure window "
+                "(RAM %.1f %%, swap %.1f %%, tiny-cap %.2f/%.2f GB)",
+                model_name,
+                size_gb,
+                avail_ratio * 100.0,
+                swap_pct,
+                _tiny_allocated + float(size_gb),
+                _PRESSURE_LIGHT_MODEL_TOTAL_GB_CAP,
+            )
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _should_block_heavy_ml_load(size_gb: float) -> bool:
+    """Return True when heavy model loads should be blocked preemptively.
+
+    Rationale:
+    - Crash pattern: swap climbs from ~70 % to >85 % during a single heavy load wave
+      even while RAM still looks healthy in absolute GB.
+    - Thrashing detection alone can be too late if swap occupancy is already high and
+      paging starts shortly after model deserialization begins.
+
+    Policy:
+    - Applies only to heavy models (>= 1.0 GB).
+    - Blocks when swap is already elevated AND either active paging is visible
+      or available RAM ratio is no longer high.
+    """
+    if _psutil is None:
+        return False
+    if size_gb < _HEAVY_MODEL_PREEMPTIVE_MIN_GB:
+        return False
+    try:
+        vm = _psutil.virtual_memory()
+        swap = _psutil.swap_memory()
+        swap_pct = float(getattr(swap, "percent", 0.0) or 0.0)
+        avail_bytes = float(vm.available)
+        avail_ratio = avail_bytes / max(float(vm.total), 1.0)
+        avail_gb = avail_bytes / float(1024**3)
+        swap_io_rate_mb_s = _swap_io_rate_mb_per_s(swap)
+        elevated_swap = swap_pct >= _HEAVY_MODEL_PREEMPTIVE_SWAP_PCT
+        early_swap = swap_pct >= _HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT
+        active_paging = swap_io_rate_mb_s >= _HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S
+        low_headroom = (
+            avail_ratio <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX
+            or avail_gb <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_GB_MAX
+        )
+        should_block = (elevated_swap and (active_paging or low_headroom)) or (early_swap and low_headroom)
+        if should_block:
+            logger.warning(
+                "ML-Budget: preemptive heavy-load block (%.1f GB) — "
+                "swap %.0f %%, swap-I/O %.1f MB/s, RAM available %.1f %% (%.1f GB) "
+                "→ DSP fallback before thrashing escalation",
+                size_gb,
+                swap_pct,
+                swap_io_rate_mb_s,
+                avail_ratio * 100.0,
+                avail_gb,
+            )
+        return should_block
     except Exception:
         return False
 
@@ -187,6 +369,60 @@ def _preflight_system_memory(required_mb: float) -> bool:
     return False
 
 
+def _attempt_quality_preserving_pressure_recovery(model_name: str, size_gb: float) -> bool:
+    """Try short pressure recovery before forcing DSP fallback.
+
+    Strategy: evict stale plugins and wait briefly so the allocator can reclaim
+    memory pages. This keeps ML-first behavior under transient pressure and only
+    blocks when pressure remains critical after retries.
+    """
+    if _psutil is None:
+        return False
+
+    required_mb = max(float(size_gb), 0.0) * 1024.0
+    attempts = max(0, int(_PRESSURE_RECOVERY_ATTEMPTS))
+    if attempts <= 0:
+        return False
+
+    for attempt in range(1, attempts + 1):
+        try:
+            from backend.core.plugin_lifecycle_manager import evict_stale_plugins
+
+            evicted = int(evict_stale_plugins(required_mb=required_mb))
+        except Exception as _exc:
+            logger.debug("ML-Budget: pressure recovery eviction failed (non-fatal): %s", _exc)
+            evicted = 0
+
+        if _PRESSURE_RECOVERY_SLEEP_S > 0.0:
+            time.sleep(_PRESSURE_RECOVERY_SLEEP_S)
+
+        still_thrashing = is_system_thrashing()
+        still_heavy_block = _should_block_heavy_ml_load(float(max(size_gb, 0.0)))
+        if not still_thrashing and not still_heavy_block:
+            logger.warning(
+                "ML-Budget: pressure recovery succeeded for '%s' after %d/%d attempt(s) "
+                "(evicted=%d) — ML load retry statt DSP-fallback.",
+                model_name,
+                attempt,
+                attempts,
+                evicted,
+            )
+            return True
+
+        logger.warning(
+            "ML-Budget: pressure recovery %d/%d for '%s' insufficient "
+            "(evicted=%d, thrashing=%s, heavy_block=%s)",
+            attempt,
+            attempts,
+            model_name,
+            evicted,
+            still_thrashing,
+            still_heavy_block,
+        )
+
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -208,12 +444,28 @@ def try_allocate(model_name: str, size_gb: float) -> bool:
     # Swap-Thrashing-Guard: Wenn system bereits thrashing, alle neuen
     # ML-Loads blockieren — DSP-Fallback statt Freeze/OOM.
     if is_system_thrashing():
-        logger.warning(
-            "ML-Budget: '%s' (%.1f GB) blockiert — System-Thrashing erkannt, DSP-Fallback aktiv.",
-            model_name,
-            size_gb,
-        )
-        return False
+        if _allow_lightweight_under_pressure(model_name, float(max(size_gb, 0.0))):
+            pass
+        elif _attempt_quality_preserving_pressure_recovery(model_name, size_gb):
+            pass
+        else:
+            logger.warning(
+                "ML-Budget: '%s' (%.1f GB) blockiert — System-Thrashing erkannt, DSP-Fallback aktiv.",
+                model_name,
+                size_gb,
+            )
+            return False
+
+    # Präventiver Heavy-Load-Guard: große Modell-Ladungen schon vor dem
+    # harten Thrashing-Zustand abbrechen, wenn Swap-Druck bereits ansteigt.
+    if _should_block_heavy_ml_load(float(max(size_gb, 0.0))):
+        if not _attempt_quality_preserving_pressure_recovery(model_name, size_gb):
+            logger.warning(
+                "ML-Budget: '%s' (%.1f GB) präventiv blockiert — erhöhter Swap-Druck, DSP-Fallback aktiv.",
+                model_name,
+                size_gb,
+            )
+            return False
 
     if not _preflight_system_memory(required_mb=max(size_gb, 0.0) * 1024.0):
         return False

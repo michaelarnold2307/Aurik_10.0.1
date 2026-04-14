@@ -999,11 +999,23 @@ class DropoutRepairPhase(PhaseInterface):
 
     def _detect_amplitude_dropouts(self, audio: np.ndarray, params: dict[str, Any]) -> list[tuple[int, int]]:
         """Detect dropouts via amplitude/energy drop."""
+        # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+        MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+        if len(audio) < MIN_AUDIO_SAMPLES:
+            logger.debug(f"phase_24: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}), no dropouts detected")
+            return []  # No dropouts in ultra-short audio
+
         # RMS envelope
         window_ms = 2
         window_samples = max(3, int(self.sample_rate * window_ms / 1000))
         if window_samples % 2 == 0:
             window_samples += 1
+
+        # Ensure window is shorter than audio
+        if window_samples > len(audio):
+            window_samples = max(3, len(audio) // 4)
+            if window_samples % 2 == 0:
+                window_samples -= 1
 
         squared = audio**2
         envelope = signal.savgol_filter(squared, window_samples, 2)
@@ -1013,6 +1025,13 @@ class DropoutRepairPhase(PhaseInterface):
         ref_window = int(self.sample_rate * 0.1)
         if ref_window % 2 == 0:
             ref_window += 1
+
+        # Ensure ref_window is also shorter than audio
+        if ref_window > len(audio):
+            ref_window = max(3, len(audio) // 2)
+            if ref_window % 2 == 0:
+                ref_window -= 1
+
         local_ref = signal.savgol_filter(envelope, ref_window, 3)
 
         # Dropout mask
@@ -1049,8 +1068,14 @@ class DropoutRepairPhase(PhaseInterface):
 
         Uses STFT to find regions with sudden spectral energy loss.
         """
+        # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+        MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+        if len(audio) < MIN_AUDIO_SAMPLES:
+            logger.debug(f"phase_24: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}) for spectral gap detection")
+            return []  # No spectral gaps in ultra-short audio
+
         # STFT
-        nperseg = 2048
+        nperseg = min(2048, len(audio))  # Cap nperseg to audio length
         noverlap = nperseg // 2
         _f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
 

@@ -356,6 +356,13 @@ class DenoisePhase(PhaseInterface):
         start_time = time.time()
         _progress_cb = kwargs.get("progress_sub_callback")
 
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict
+            _get_plm_evict().evict_for_phase("phase_03_denoise")
+        except Exception:
+            pass
+
         def _report_progress(pct: float, label: str) -> None:
             if callable(_progress_cb):
                 try:
@@ -621,21 +628,7 @@ class DenoisePhase(PhaseInterface):
                 logger.debug("Phase 03 TDP recombine skipped (non-blocking): %s", _tdp_rec_exc)
             return processed_audio, False
 
-        # §Hebel-2 SGMSE+ Tier-0: Score-Based Generative Speech Enhancement
-        # Applied BEFORE ML-Hybrid for vocal-dominant material (singing, speech, opera).
-        # SGMSE+ (Richter et al. 2022) uses diffusion posterior sampling P(x|y) in the
-        # complex STFT domain — superior to deterministic filters for structured vocal noise.
-        # Only active when:
-        #   a) quality_mode in ["quality", "maximum"] (not balanced — too slow)
-        #   b) vocal content detected: PANNs singing ≥ 0.25 (primary gate), OR genre in
-        #      vocal set AND PANNs singing ≥ 0.10 (genre boosts confidence threshold)
-        #      Rationale: genre label "Klassik" alone (instrumental orchestra) must NOT
-        #      activate SGMSE+; a pure symphonic recording has panns_singing ≈ 0.0.
-        #   c) material is NOT clean_digital (SGMSE trains on degraded recordings)
-        #   d) available RAM > 0.5 GB (SGMSE+ TorchScript is ~251 MB loaded)
-        _sgmse_applied = False
-        # Vocal genres where SGMSE+ helps when vocals are present (based on GenreClassifier
-        # output labels). "Singer-Songwriter" and "Chanson" removed — never returned by classifier.
+        # Build a robust vocal-evidence signal once and use it across all denoise tiers.
         _report_progress(5.0, "Entrauschung: Rauschanalyse")
         _vocal_genres = {"Klassik", "Oper", "Jazz", "Folk", "Blues", "Pop", "Soul/R&B", "Gospel"}
         _genre_is_vocal = genre_label in _vocal_genres
@@ -655,15 +648,89 @@ class DenoisePhase(PhaseInterface):
                 float(_pt.get("Female singing", 0.0)),
             )
         # §0 Primum non nocere: genre alone is insufficient — require PANNs evidence.
-        # Pure orchestral "Klassik" (panns_singing ≈ 0.0) must NOT trigger SGMSE+.
+        # Pure orchestral "Klassik" (panns_singing ≈ 0.0) must NOT trigger vocal ML.
         _is_vocal_material = _panns_singing >= 0.25 or (_genre_is_vocal and _panns_singing >= 0.10)
         _is_non_digital = material_type not in ("cd_digital", "streaming", "mp3_high")
+
+        # §4.5 / §2.47 DeepFilterNet Tier-0 PRIMARY: Vocal broadband noise
+        # DeepFilterNet v3.II is the primary model for broadband noise with vocal content
+        # (Schröter et al. 2022). energy_bias = -6 dB preserves harmonics (§4.4 Spec).
+        _dfn_applied = False
+        _dfn_eligible = (
+            _is_vocal_material and _panns_singing >= 0.25 and quality_mode in ("quality", "maximum") and not use_lightweight
+        )
+        if _dfn_eligible:
+            _plm03_dfn = None
+            try:
+                from plugins.deepfilternet_v3_ii_plugin import get_deepfilternet_plugin
+
+                try:
+                    from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm03d
+
+                    _plm03_dfn = _get_plm03d()
+                    _plm03_dfn.set_active("DeepFilterNetV3", True)
+                except Exception:
+                    _plm03_dfn = None
+
+                _dfn_plugin = get_deepfilternet_plugin()
+                _dfn_result = _dfn_plugin.enhance(audio, sr=sample_rate, energy_bias_db=-6.0)
+                if _dfn_result is not None and np.isfinite(_dfn_result).all():
+                    # §8.2 Energy-preservation guard for DeepFilterNet
+                    _dfn_e_in = float(np.sum(audio.astype(np.float64) ** 2))
+                    _dfn_e_out = float(np.sum(_dfn_result.astype(np.float64) ** 2))
+                    if _dfn_e_in > 1e-6 and _dfn_e_out / _dfn_e_in >= 0.20:
+                        audio = np.nan_to_num(_dfn_result, nan=0.0, posinf=0.0, neginf=0.0)
+                        audio = np.clip(audio, -1.0, 1.0)
+                        _dfn_applied = True
+                        logger.info(
+                            "§4.5 DeepFilterNet Tier-0 PRIMARY: vocal broadband denoise applied "
+                            "(panns_singing=%.2f, material=%s, energy_ratio=%.3f)",
+                            _panns_singing,
+                            material_type,
+                            _dfn_e_out / _dfn_e_in,
+                        )
+                    else:
+                        logger.info(
+                            "§4.5 DeepFilterNet Tier-0 PRIMARY: energy guard triggered "
+                            "(e_ratio=%.4f < 0.20) → fallback to SGMSE+/ML-Hybrid/OMLSA",
+                            _dfn_e_out / max(_dfn_e_in, 1e-10),
+                        )
+            except Exception as _dfn_exc:
+                logger.debug(
+                    "DeepFilterNet Tier-0 PRIMARY nicht verfügbar, weiter mit SGMSE+/ML-Hybrid/OMLSA: %s",
+                    _dfn_exc,
+                )
+                _dfn_applied = False
+            finally:
+                if _plm03_dfn is not None:
+                    try:
+                        _plm03_dfn.set_active("DeepFilterNetV3", False)
+                    except Exception:
+                        pass
+
+        _report_progress(38.0 if _dfn_applied else 10.0, "Entrauschung: Vokal-Stufe (DeepFilterNet) abgeschlossen")
+
+        # §Hebel-2 SGMSE+ Tier-1 FALLBACK: score-based generative enhancement.
+        # Run only if DeepFilterNet was not applied successfully.
+        _sgmse_applied = False
         _sgmse_eligible = (
-            quality_mode in ("quality", "maximum") and _is_vocal_material and _is_non_digital and not use_lightweight
+            quality_mode in ("quality", "maximum")
+            and _is_vocal_material
+            and _is_non_digital
+            and not use_lightweight
+            and not _dfn_applied
         )
         if _sgmse_eligible:
+            _plm03_sgmse = None
             try:
                 from plugins.sgmse_plugin import get_sgmse_plus_plugin
+
+                try:
+                    from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm03
+                    _plm03_sgmse = _get_plm03()
+                    _plm03_sgmse.set_active("SGMSE+", True)  # §4.6b: protect from eviction
+                except Exception:
+                    _plm03_sgmse = None
 
                 _sgmse_plugin = get_sgmse_plus_plugin()
                 # SNR-adaptive sigma calibration — Richter et al. (2022) IEEE TASLP 31:2351-2364
@@ -685,13 +752,18 @@ class DenoisePhase(PhaseInterface):
                 _sigma_from_snr = float(np.clip(0.55 + (12.0 - _snr_for_sigma) * 0.018, 0.25, 0.75))
                 _material_sigma_bonus = 0.05 if material_type == "shellac" else 0.0
                 _sgmse_sigma = float(np.clip(_sigma_from_snr + _material_sigma_bonus, 0.25, 0.75))
+                if _plm03_sgmse is not None:
+                    try:
+                        _plm03_sgmse.touch_plugin("SGMSE+")
+                    except Exception:
+                        pass
                 _sgmse_result = _sgmse_plugin.enhance(audio, sr=sample_rate, sigma=_sgmse_sigma)
                 if _sgmse_result is not None and np.isfinite(_sgmse_result.audio).all():
                     audio = np.nan_to_num(_sgmse_result.audio, nan=0.0, posinf=0.0, neginf=0.0)
                     audio = np.clip(audio, -1.0, 1.0)
                     _sgmse_applied = True
                     logger.info(
-                        "§Hebel-2 SGMSE+: vocal enhancement applied "
+                        "§Hebel-2 SGMSE+ Tier-1 FALLBACK: vocal enhancement applied "
                         "(sigma=%.2f snr=%.1f dB material=%s model=%s — Richter et al. 2022)",
                         _sgmse_sigma,
                         _snr_for_sigma,
@@ -699,58 +771,20 @@ class DenoisePhase(PhaseInterface):
                         _sgmse_result.model_used,
                     )
             except Exception as _sgmse_exc:
-                logger.debug("SGMSE+ Tier-0 nicht verfügbar, weiter mit OMLSA: %s", _sgmse_exc)
-
-        # §4.5 / §2.47 DeepFilterNet Tier-1: Vocal broadband noise with singing ≥ 0.4
-        # DeepFilterNet v3.II is the primary model for broadband noise with vocal content
-        # (Schröter et al. 2022). energy_bias = -6 dB preserves harmonics (§4.4 Spec).
-        _report_progress(38.0 if _sgmse_applied else 10.0, "Entrauschung: Vokal-Stufe (SGMSE+) abgeschlossen")
-        # Activated between SGMSE+ (Tier-0) and ML-Hybrid (Tier-2) if SGMSE+ was not applied.
-        _dfn_applied = False
-        _dfn_eligible = (
-            not _sgmse_applied
-            and _is_vocal_material
-            and _panns_singing >= 0.4
-            and quality_mode in ("quality", "maximum")
-            and not use_lightweight
-        )
-        if _dfn_eligible:
-            try:
-                from plugins.deepfilternet_v3_ii_plugin import get_deepfilternet_plugin
-
-                _dfn_plugin = get_deepfilternet_plugin()
-                _dfn_result = _dfn_plugin.enhance(audio, sr=sample_rate, energy_bias_db=-6.0)
-                if _dfn_result is not None and np.isfinite(_dfn_result).all():
-                    # §8.2 Energy-preservation guard for DeepFilterNet
-                    _dfn_e_in = float(np.sum(audio.astype(np.float64) ** 2))
-                    _dfn_e_out = float(np.sum(_dfn_result.astype(np.float64) ** 2))
-                    if _dfn_e_in > 1e-6 and _dfn_e_out / _dfn_e_in >= 0.20:
-                        audio = np.nan_to_num(_dfn_result, nan=0.0, posinf=0.0, neginf=0.0)
-                        audio = np.clip(audio, -1.0, 1.0)
-                        _dfn_applied = True
-                        logger.info(
-                            "§4.5 DeepFilterNet Tier-1: vocal broadband denoise applied "
-                            "(panns_singing=%.2f, material=%s, energy_ratio=%.3f)",
-                            _panns_singing,
-                            material_type,
-                            _dfn_e_out / _dfn_e_in,
-                        )
-                    else:
-                        logger.info(
-                            "§4.5 DeepFilterNet Tier-1: energy guard triggered "
-                            "(e_ratio=%.4f < 0.20) → fallback to ML-Hybrid/OMLSA",
-                            _dfn_e_out / max(_dfn_e_in, 1e-10),
-                        )
-            except Exception as _dfn_exc:
-                logger.debug(
-                    "DeepFilterNet Tier-1 nicht verfügbar, weiter mit ML-Hybrid/OMLSA: %s",
-                    _dfn_exc,
-                )
-                _dfn_applied = False
+                logger.debug("SGMSE+ Tier-1 FALLBACK nicht verfügbar, weiter mit OMLSA: %s", _sgmse_exc)
+            finally:
+                if _plm03_sgmse is not None:
+                    try:
+                        _plm03_sgmse.set_active("SGMSE+", False)
+                    except Exception:
+                        pass
 
         # ML-Hybrid only if resources available and quality mode permits
-        # Skip if DeepFilterNet Tier-1 already applied successfully.
-        _report_progress(48.0 if _dfn_applied else 18.0, "Entrauschung: Breitband-Stufe (DFN) abgeschlossen")
+        # Skip if DeepFilterNet (primary) or SGMSE+ (fallback) already applied successfully.
+        _report_progress(
+            48.0 if (_dfn_applied or _sgmse_applied) else 18.0,
+            "Entrauschung: Breitband-Stufe (DFN/SGMSE+) abgeschlossen",
+        )
         # "quality" (10×RT) and "maximum" (15×RT) both use full ML-Hybrid; "balanced" (8×RT) uses adaptive
         use_ml_hybrid = (
             ML_HYBRID_AVAILABLE

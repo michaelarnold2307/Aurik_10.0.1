@@ -9,6 +9,7 @@
 .venv_singmos/
 .venv/
 venv/
+.venv_rocm/
 
 # ── Python-Caches ────────────────────────────────────────────────────────────
 __pycache__/

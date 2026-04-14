@@ -585,7 +585,13 @@ class MediumDetector:
             elif fp.codec_artifact_score < 0.25 and fp.rotation_strength >= 0.20:
                 # Tier 2: lossless, HPF-digitised — moderate inference (55 %)
                 vinyl_conf = max(vinyl_conf, float(fp.rotation_strength) * 0.55)
-            # Tier 3: codec present, no infrasonic → skip (song rhythm false positive)
+            elif fp.codec_artifact_score >= 0.25 and fp.rotation_strength >= 0.25:
+                # Tier 2.5 (§2.46a): Multi-gen transfer through codec attenuates
+                # infrasonic rumble via lossy encoding HPF, but rotation periodicity
+                # persists. Reduced weight (45 %) to limit false positives from
+                # song-rhythm aliasing while preserving genuine vinyl evidence.
+                vinyl_conf = max(vinyl_conf, float(fp.rotation_strength) * 0.45)
+            # Tier 3: codec present, no infrasonic, weak rotation → skip
         if vinyl_conf >= 0.20:
             sources.append(("vinyl", float(np.clip(vinyl_conf, 0.20, 0.85))))
 
@@ -606,14 +612,19 @@ class MediumDetector:
         # starts at ~0.18 even for high-quality decks (Nakamichi flutter spec 0.04 % WRMS,
         # vinyl pitch-drift adds 0.10–0.15). Use a lower threshold in that case.
         has_disc = any(m in ("vinyl", "shellac", "lacquer_disc") for m, _ in sources)
-        _cass_flutter_thresh = 0.18 if has_disc else 0.30
+        # §2.46a: Codec-adaptive cassette flutter threshold.
+        # MP3/AAC encoding attenuates measured wow/flutter index by 40-60 %.
+        _cass_flutter_base = 0.18 if has_disc else 0.30
+        _cass_flutter_thresh = max(0.03, _cass_flutter_base * (1.0 - 0.60 * _codec_contamination))
         cassette_conf = 0.0
         if fp.wow_flutter_index > _cass_flutter_thresh:
             cassette_conf = float(min((fp.wow_flutter_index - _cass_flutter_thresh) / 1.20, 1.0))
         # Bandwidth evidence: cassette tape limits HF to ~14.5–15.5 kHz due to azimuth
-        # misalignment and tape-formula roll-off.  Only use when codec artifacts are low
-        # (MP3 also limits HF; we must not conflate codec roll-off with cassette roll-off).
-        if has_disc and 5_000 < fp.effective_bandwidth_hz < 15_500 and fp.codec_artifact_score < 0.30:
+        # misalignment and tape-formula roll-off.  When a disc source is already confirmed,
+        # relax the codec guard — narrow BW in a codec file with confirmed analog origin
+        # suggests cassette as intermediary, not just codec BW limitation (§2.46a).
+        _bw_codec_limit = 0.65 if has_disc else 0.30
+        if has_disc and 5_000 < fp.effective_bandwidth_hz < 15_500 and fp.codec_artifact_score < _bw_codec_limit:
             _bw_conf = float(np.clip((15_500 - fp.effective_bandwidth_hz) / 6_000, 0.15, 0.55))
             cassette_conf = max(cassette_conf, _bw_conf)
         _cassette_min = 0.15 if has_disc else 0.25
@@ -1224,6 +1235,11 @@ class MediumDetector:
         # analog physical media.  A .mp3 file was encoded digitally at capture time —
         # any analog artefacts are from the recording chain, not mechanical transport.
         # Zero out all analog material posteriors and renormalise before chain inference.
+        # NOTE: lossless/uncompressed containers (.wav, .flac, .aiff, .aif, .wv) are NOT
+        # treated as "digital-encoded" formats — they are neutral storage containers commonly
+        # used for digitised analog recordings (vinyl rips, tape transfers).  Only lossy-
+        # encoded formats confirm that the source was processed digitally at capture time
+        # (spec §5: ".mp3, .aac, .ogg, .wma, .opus u. a.").
         _DIGITAL_FILE_EXTS: frozenset[str] = frozenset(
             {
                 ".mp3",
@@ -1232,11 +1248,6 @@ class MediumDetector:
                 ".m4a",
                 ".ogg",
                 ".opus",
-                ".flac",
-                ".wav",
-                ".aiff",
-                ".aif",
-                ".wv",
                 ".mpc",
                 ".wma",
             }
@@ -1294,10 +1305,21 @@ class MediumDetector:
                 # For digital container formats, analog-primary override is only valid
                 # when physical evidence is strong. Weak analog hints are common in
                 # lossy codec material and must not dominate primary-material routing.
-                _strong_physical_analog = _cand_conf >= 0.55 and (
-                    fp.rotation_strength >= 0.65
-                    or fp.wow_flutter_index >= 0.06
-                    or (fp.infrasonic_rms >= 0.025 and fp.crackle_density >= 0.02)
+                #
+                # §2.46a: Codec-adaptive thresholds — multi-generation transfers
+                # (vinyl→cassette→MP3) attenuate analog fingerprints through each
+                # transfer stage. Fixed thresholds miss genuine analog origins when
+                # codec degradation is high. Scale by codec contamination level.
+                _pa_codec_att = min(1.0, fp.codec_artifact_score / 0.60)
+                _pa_conf_thresh = max(0.20, 0.55 * (1.0 - 0.55 * _pa_codec_att))
+                _pa_rot_thresh = max(0.15, 0.65 * (1.0 - 0.45 * _pa_codec_att))
+                _pa_wow_thresh = max(0.02, 0.06 * (1.0 - 0.45 * _pa_codec_att))
+                _pa_infra_thresh = max(0.015, 0.025 * (1.0 - 0.40 * _pa_codec_att))
+                _pa_crackle_thresh = max(0.010, 0.020 * (1.0 - 0.40 * _pa_codec_att))
+                _strong_physical_analog = _cand_conf >= _pa_conf_thresh and (
+                    fp.rotation_strength >= _pa_rot_thresh
+                    or fp.wow_flutter_index >= _pa_wow_thresh
+                    or (fp.infrasonic_rms >= _pa_infra_thresh and fp.crackle_density >= _pa_crackle_thresh)
                 )
                 if _strong_physical_analog:
                     best_analog, best_analog_score = _cand_analog, _cand_conf

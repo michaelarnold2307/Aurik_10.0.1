@@ -266,6 +266,13 @@ class VocalEnhancement(PhaseInterface):
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict42
+            _get_plm_evict42().evict_for_phase("phase_42_vocal_enhancement")
+        except Exception:
+            pass
+
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
@@ -424,7 +431,16 @@ class VocalEnhancement(PhaseInterface):
             )
 
         # ── Stem-based vocal enhancement (§1.4 StemRemixBalancer, §2.8) ──────
-        stem_result = self._try_stem_separation(audio, sample_rate)
+        _quality_mode_hint = str(kwargs.get("quality_mode", "quality")).strip().lower()
+        _quality_first_unleashed = bool(
+            kwargs.get("quality_first_unleashed", _quality_mode_hint in ("quality", "maximum"))
+        )
+        stem_result = self._try_stem_separation(
+            audio,
+            sample_rate,
+            quality_mode=_quality_mode_hint,
+            quality_first_unleashed=_quality_first_unleashed,
+        )
         stem_model_used = "none"
 
         if stem_result is not None:
@@ -750,7 +766,13 @@ class VocalEnhancement(PhaseInterface):
 
         return vocals_out.astype(np.float32), instr_out.astype(np.float32)
 
-    def _try_stem_separation(self, audio: np.ndarray, sr: int) -> "tuple[np.ndarray, np.ndarray, float, str] | None":
+    def _try_stem_separation(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        quality_mode: str = "quality",
+        quality_first_unleashed: bool = False,
+    ) -> "tuple[np.ndarray, np.ndarray, float, str] | None":
         """Vocal/Instrument stem separation cascade: bs_roformer → demucs_v4 → None.
 
         Returns (vocals, instruments, vocal_weight, model_name) or None on total failure.
@@ -763,7 +785,6 @@ class VocalEnhancement(PhaseInterface):
         # Convert for mono-based models; keep original shape for result
         audio_mono = audio.mean(axis=1).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
 
-        _duration_s = float(len(audio_mono) / max(1, sr))
         _skip_roformer_reason: str | None = None
         try:
             import psutil as _psutil
@@ -773,8 +794,13 @@ class VocalEnhancement(PhaseInterface):
                 _skip_roformer_reason = f"low_ram_{_avail_gb:.1f}GB"
         except Exception:
             _avail_gb = None  # type: ignore[assignment]
-        if _skip_roformer_reason is None and _duration_s > 120.0:
-            _skip_roformer_reason = f"long_audio_{_duration_s:.1f}s"
+
+        # Quality-first policy: do not skip RoFormer only because the material is long.
+        # Time factor must not degrade quality in quality/maximum paths.
+        if _skip_roformer_reason is None and not quality_first_unleashed and quality_mode not in ("quality", "maximum"):
+            _duration_s = float(len(audio_mono) / max(1, sr))
+            if _duration_s > 120.0:
+                _skip_roformer_reason = f"long_audio_{_duration_s:.1f}s"
 
         # ── 1: BSRoFormer (MelBandRoformer, falls Modell verfügbar) ──────────
         if _skip_roformer_reason is not None:
@@ -783,10 +809,23 @@ class VocalEnhancement(PhaseInterface):
                 _skip_roformer_reason,
             )
         else:
+            _plm42_rof = None
             try:
                 from plugins.bs_roformer_plugin import get_bs_roformer
 
+                try:
+                    from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm42r
+                    _plm42_rof = _get_plm42r()
+                    _plm42_rof.set_active("MelBandRoformer", True)
+                except Exception:
+                    _plm42_rof = None
+
                 roformer = get_bs_roformer()
+                if _plm42_rof is not None:
+                    try:
+                        _plm42_rof.touch_plugin("MelBandRoformer")
+                    except Exception:
+                        pass
                 sep = roformer.separate(audio_mono, sr, stems=["vocals"])
                 if sep is not None and "vocals" in sep.stems:
                     voc_mono = np.asarray(sep.stems["vocals"], dtype=np.float32)
@@ -808,13 +847,37 @@ class VocalEnhancement(PhaseInterface):
                     return vocals_out, instr_out, confidence, sep.model_used
             except Exception as exc:
                 logger.debug("Phase42 bs_roformer fehlgeschlagen: %s", exc)
+            finally:
+                if _plm42_rof is not None:
+                    try:
+                        _plm42_rof.set_active("MelBandRoformer", False)
+                    except Exception:
+                        pass
 
         # ── 2: MDX23C fallback (Kim_Vocal_2) ─────────────────────────────────
+        _plm42_mdx = None
         try:
             from plugins.mdx23c_plugin import get_mdx23c_plugin
 
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm42m
+                _plm42_mdx = _get_plm42m()
+                _plm42_mdx.set_active("MDX23C", True)
+            except Exception:
+                _plm42_mdx = None
+
             mdx = get_mdx23c_plugin()
+            if _plm42_mdx is not None:
+                try:
+                    _plm42_mdx.touch_plugin("MDX23C")
+                except Exception:
+                    pass
             voc_mono = mdx.process(audio_mono, sr, stem="vocals")
+            if _plm42_mdx is not None:
+                try:
+                    _plm42_mdx.touch_plugin("MDX23C")
+                except Exception:
+                    pass
             inst_mono = mdx.process(audio_mono, sr, stem="inst")
             n = min(len(audio_mono), len(voc_mono), len(inst_mono))
             if audio.ndim == 2:
@@ -826,6 +889,12 @@ class VocalEnhancement(PhaseInterface):
             return vocals_out, instr_out, 0.65, "mdx23c_kim_vocal_2"
         except Exception as exc:
             logger.debug("Phase42 mdx23c fehlgeschlagen: %s", exc)
+        finally:
+            if _plm42_mdx is not None:
+                try:
+                    _plm42_mdx.set_active("MDX23C", False)
+                except Exception:
+                    pass
 
         # ── 3: NMF-β Fallback (§2.47 ML-Failure-Degradationskascade: NMF-β→HPSS) ──
         try:

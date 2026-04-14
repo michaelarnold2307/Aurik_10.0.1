@@ -238,6 +238,13 @@ class TapeHissReductionPhase(PhaseInterface):
         self.sample_rate = sample_rate
         self.validate_input(audio)
 
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict29
+            _get_plm_evict29().evict_for_phase("phase_29_tape_hiss_reduction")
+        except Exception:
+            pass
+
         # Determine if ML should be used
         use_ml = False
         if QUALITY_MODE_AVAILABLE and quality_mode:
@@ -696,6 +703,12 @@ class TapeHissReductionPhase(PhaseInterface):
         Returns:
             Processed mono audio, same length as input.
         """
+        # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+        MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+        if len(channel) < MIN_AUDIO_SAMPLES:
+            logger.debug(f"phase_29: audio too short ({len(channel)} < {MIN_AUDIO_SAMPLES}), passthrough")
+            return np.asarray(channel, dtype=np.float32).copy()
+
         n = len(channel)
         nyquist = float(sample_rate // 2)
         eps = 1e-10
@@ -711,7 +724,7 @@ class TapeHissReductionPhase(PhaseInterface):
         alpha_g = 0.85
 
         # Reference STFT (win=2048, 75 % overlap) — on channel (for magnitude application)
-        REF_WIN = 2048
+        REF_WIN = min(2048, len(channel) // 2) if len(channel) >= 128 else 64
         REF_HOP = 512
         REF_NOVERLAP = REF_WIN - REF_HOP
         f_ref, _, Zxx_ref = signal.stft(channel, fs=sample_rate, nperseg=REF_WIN, noverlap=REF_NOVERLAP, window="hann")

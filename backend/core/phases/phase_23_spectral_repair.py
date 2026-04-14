@@ -177,12 +177,25 @@ class SpectralRepair(PhaseInterface):
         MaterialType.STREAMING: 0.90,  # Very aggressive (codec artifacts)
     }
 
+    # Soft-relax window for thrashing guards (§2.54): allow robust processing when
+    # headroom is still objectively high, keep hard stop for real emergency states.
+    _THRASH_RELAX_ML_MIN_AVAIL_GB = 14.0
+    _THRASH_RELAX_ML_MIN_AVAIL_RATIO = 0.40
+    _THRASH_RELAX_ML_MAX_SWAP_PCT = 95.0
+    _THRASH_RELAX_ML_MAX_ATTEMPTS = 1
+    _THRASH_RELAX_MRSA_MIN_AVAIL_GB = 8.0
+    _THRASH_RELAX_MRSA_MIN_AVAIL_RATIO = 0.28
+    _THRASH_RELAX_MRSA_MAX_SWAP_PCT = 98.0
+    _THRASH_RELAX_MRSA_MAX_ATTEMPTS = 1
+
     def __init__(self):
         super().__init__()
         self.name = "Spectral Repair v3 IMCRA"
         self._audiosr_plugin = None  # Lazy loading
         self._ml_guard_events: list[dict[str, Any]] = []
         self._current_material: MaterialType = MaterialType.CD_DIGITAL  # updated per process() call
+        self._pressure_relax_ml_attempts: int = 0
+        self._pressure_relax_mrsa_attempts: int = 0
 
     def _has_sufficient_ml_headroom(self, audio: np.ndarray, sample_rate: int) -> bool:
         """Return True when enough physical RAM is available for AudioSR stage.
@@ -300,6 +313,36 @@ class SpectralRepair(PhaseInterface):
             return False
         return True
 
+    def _can_relax_thrashing_guard(self, *, for_mrsa: bool) -> bool:
+        """Return True when pressure is elevated but still far from emergency.
+
+        This enables a controlled attempt for robust paths in phase 23 instead of
+        forcing immediate Single-STFT fallback on every transient pressure spike.
+        """
+        try:
+            import psutil
+
+            vm = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+            avail_gb = float(vm.available / (1024**3))
+            avail_ratio = float(vm.available / max(vm.total, 1))
+            swap_pct = float(getattr(swap, "percent", 100.0))
+
+            if for_mrsa:
+                return (
+                    avail_gb >= self._THRASH_RELAX_MRSA_MIN_AVAIL_GB
+                    and avail_ratio >= self._THRASH_RELAX_MRSA_MIN_AVAIL_RATIO
+                    and swap_pct < self._THRASH_RELAX_MRSA_MAX_SWAP_PCT
+                )
+
+            return (
+                avail_gb >= self._THRASH_RELAX_ML_MIN_AVAIL_GB
+                and avail_ratio >= self._THRASH_RELAX_ML_MIN_AVAIL_RATIO
+                and swap_pct < self._THRASH_RELAX_ML_MAX_SWAP_PCT
+            )
+        except Exception:
+            return False
+
     def get_metadata(self) -> PhaseMetadata:
         """Return phase metadata."""
         return PhaseMetadata(
@@ -331,6 +374,16 @@ class SpectralRepair(PhaseInterface):
 
         return self._audiosr_plugin if self._audiosr_plugin is not False else None
 
+    @staticmethod
+    def _is_system_thrashing() -> bool:
+        """Return True when swap/RAM pressure makes heavy phase-23 paths unsafe."""
+        try:
+            from backend.core.ml_memory_budget import is_system_thrashing
+
+            return bool(is_system_thrashing())
+        except Exception:
+            return False
+
     def process(
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
@@ -347,6 +400,14 @@ class SpectralRepair(PhaseInterface):
         """
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
+
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict
+            _get_plm_evict().evict_for_phase("phase_23_spectral_repair")
+        except Exception:
+            pass
+
         start_time = time.time()
         _progress_cb = kwargs.get("progress_sub_callback")
 
@@ -444,49 +505,81 @@ class SpectralRepair(PhaseInterface):
         _apollo_preproc_applied = False
         _apollo_hf_gain_db: float | None = None
         if self._current_material in _APOLLO_CODEC_MATERIALS:
+            # §OOM-Guard: Swap-Thrashing-Check vor Apollo-TorchScript-Inferenz.
+            # Apollo lädt bis zu 21 GB anon-RSS bei langen Audios (Mamba-State-Space).
+            # Wenn Swap bereits > 80 % voll, bricht die Allokation den Prozess via
+            # Kernel-OOM-Killer (kein Python-Traceback, kein faulthandler-Dump).
+            # In diesem Fall DSP-Fallback erzwingen — Apollo wird übersprungen.
+            _apollo_swap_blocked = False
             try:
-                from plugins.apollo_plugin import get_apollo as _get_apollo
-
-                _plm23 = None
-                try:
-                    from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm23
-
-                    _plm23 = _get_plm23()
-                    _plm23.set_active("Apollo", True)
-                except Exception:
-                    _plm23 = None
-
-                _apollo_inst = _get_apollo()
-                if _apollo_inst._model_loaded and _apollo_inst._torch_model is not None:
-                    if is_stereo:
-                        # Audio is normalized to (N, 2) at method start — safe to use [:, 0]
-                        _ap_l = _apollo_inst.repair(audio[:, 0], sample_rate, material=self._current_material)
-                        _ap_r = _apollo_inst.repair(audio[:, 1], sample_rate, material=self._current_material)
-                        audio = np.column_stack((_ap_l.audio, _ap_r.audio))  # (N, 2)
-                        _apollo_hf_gain_db = float((_ap_l.hf_gain_db + _ap_r.hf_gain_db) / 2.0)
-                    else:
-                        _ap_res = _apollo_inst.repair(audio, sample_rate, material=self._current_material)
-                        audio = _ap_res.audio
-                        _apollo_hf_gain_db = float(_ap_res.hf_gain_db)
-                    _apollo_preproc_applied = True
-                    logger.info(
-                        "phase_23: Apollo pre-processing applied (material=%s, hf_gain=+%.1f dB)",
-                        self._current_material,
-                        _apollo_hf_gain_db,
+                from backend.core.ml_memory_budget import is_system_thrashing as _is_thrashing_p23
+                if _is_thrashing_p23():
+                    logger.warning(
+                        "phase_23: Apollo TorchScript übersprungen — Swap-Thrashing erkannt "
+                        "(OOM-Killer-Prävention). DSP-Inpainting wird verwendet."
                     )
-                    _report_progress(20.0, "Spektralreparatur: Apollo-Vorverarbeitung")
-                if _plm23 is not None:
-                    try:
-                        _plm23.set_active("Apollo", False)
-                    except Exception:
-                        pass
-            except Exception as _apollo_exc:
+                    _apollo_swap_blocked = True
+            except Exception as _swap_chk_exc:
+                logger.debug("phase_23: Swap-Thrashing-Check fehlgeschlagen (non-critical): %s", _swap_chk_exc)
+
+            _plm23 = None
+            if not _apollo_swap_blocked:
                 try:
+                    from plugins.apollo_plugin import get_apollo as _get_apollo
+
+                    try:
+                        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm23
+
+                        _plm23 = _get_plm23()
+                        _plm23.set_active("Apollo", True)  # §4.6b: protect from eviction during inference
+                    except Exception:
+                        _plm23 = None
+
+                    _apollo_inst = _get_apollo()
+                    if _apollo_inst._model_loaded and _apollo_inst._torch_model is not None:
+                        if is_stereo:
+                            # Audio is normalized to (N, 2) at method start — safe to use [:, 0]
+                            if _plm23 is not None:
+                                try:
+                                    _plm23.touch_plugin("Apollo")
+                                except Exception:
+                                    pass
+                            _ap_l = _apollo_inst.repair(audio[:, 0], sample_rate, material=self._current_material)
+                            _ap_l_audio = _ap_l.audio
+                            _ap_l_hf = float(_ap_l.hf_gain_db)
+                            del _ap_l
+                            # GC between channels — free torch tensors before second channel
+                            import gc
+                            gc.collect(0)
+                            if _plm23 is not None:
+                                try:
+                                    _plm23.touch_plugin("Apollo")
+                                except Exception:
+                                    pass
+                            _ap_r = _apollo_inst.repair(audio[:, 1], sample_rate, material=self._current_material)
+                            audio = np.column_stack((_ap_l_audio, _ap_r.audio))  # (N, 2)
+                            _apollo_hf_gain_db = (_ap_l_hf + float(_ap_r.hf_gain_db)) / 2.0
+                            del _ap_r, _ap_l_audio
+                        else:
+                            _ap_res = _apollo_inst.repair(audio, sample_rate, material=self._current_material)
+                            audio = _ap_res.audio
+                            _apollo_hf_gain_db = float(_ap_res.hf_gain_db)
+                            del _ap_res
+                        _apollo_preproc_applied = True
+                        logger.info(
+                            "phase_23: Apollo pre-processing applied (material=%s, hf_gain=+%.1f dB)",
+                            self._current_material,
+                            _apollo_hf_gain_db,
+                        )
+                        _report_progress(20.0, "Spektralreparatur: Apollo-Vorverarbeitung")
+                except Exception as _apollo_exc:
+                    logger.debug("Apollo pre-processing skipped (non-critical): %s", _apollo_exc)
+                finally:
                     if _plm23 is not None:
-                        _plm23.set_active("Apollo", False)
-                except Exception:
-                    pass
-                logger.debug("Apollo pre-processing skipped (non-critical): %s", _apollo_exc)
+                        try:
+                            _plm23.set_active("Apollo", False)
+                        except Exception:
+                            pass
 
         # --- ADMM Declipping path (spec §4.5a) ---
         # Detect hard clipping and route to sparse-recovery solver instead of
@@ -842,9 +935,29 @@ class SpectralRepair(PhaseInterface):
 
         # Calculate defect severity for adaptive ML decision
         defect_severity = float(np.sum(defect_mask) / defect_mask.size)
+        system_thrashing = self._is_system_thrashing()
+        allow_ml_under_pressure = system_thrashing and self._can_relax_thrashing_guard(for_mrsa=False)
+        if allow_ml_under_pressure and self._pressure_relax_ml_attempts >= self._THRASH_RELAX_ML_MAX_ATTEMPTS:
+            allow_ml_under_pressure = False
+            logger.warning(
+                "phase_23: pressure-relax ML attempt cap reached (%d) — forcing DSP fallback",
+                self._THRASH_RELAX_ML_MAX_ATTEMPTS,
+            )
 
         # Decide: ML or DSP?
         use_ml = is_phase_ml_enabled(23) and QualityModeConfig.should_use_ml("phase_23", defect_severity)
+        if use_ml and system_thrashing and not allow_ml_under_pressure:
+            logger.warning(
+                "phase_23: ML repair skipped — system thrashing detected, forcing DSP fallback"
+            )
+            use_ml = False
+        elif use_ml and allow_ml_under_pressure:
+            self._pressure_relax_ml_attempts += 1
+            logger.warning(
+                "phase_23: controlled ML retry under pressure enabled — high RAM headroom detected (attempt %d/%d)",
+                self._pressure_relax_ml_attempts,
+                self._THRASH_RELAX_ML_MAX_ATTEMPTS,
+            )
 
         if use_ml:
             if not self._has_sufficient_ml_headroom(audio, sample_rate):
@@ -870,16 +983,39 @@ class SpectralRepair(PhaseInterface):
             # OOM-Preflight: MRSA (5 Zonen × STFT) benötigt ~2 GB für Stereo-Audio.
             # Unter 4 GB verfügbar → Single-STFT-Fallback um systemd-oomd zu vermeiden.
             _mrsa_ok = True
+            _allow_mrsa_under_pressure = system_thrashing and self._can_relax_thrashing_guard(for_mrsa=True)
+            if (
+                _allow_mrsa_under_pressure
+                and self._pressure_relax_mrsa_attempts >= self._THRASH_RELAX_MRSA_MAX_ATTEMPTS
+            ):
+                _allow_mrsa_under_pressure = False
+                logger.warning(
+                    "phase_23: pressure-relax MRSA attempt cap reached (%d) — using Single-STFT fallback",
+                    self._THRASH_RELAX_MRSA_MAX_ATTEMPTS,
+                )
+            if system_thrashing and not _allow_mrsa_under_pressure:
+                logger.warning(
+                    "phase_23: MRSA skipped — system thrashing detected, using Single-STFT fallback"
+                )
+                _mrsa_ok = False
+            elif _allow_mrsa_under_pressure:
+                self._pressure_relax_mrsa_attempts += 1
+                logger.warning(
+                    "phase_23: MRSA allowed under controlled pressure window (attempt %d/%d)",
+                    self._pressure_relax_mrsa_attempts,
+                    self._THRASH_RELAX_MRSA_MAX_ATTEMPTS,
+                )
             try:
-                import psutil as _psu
+                if _mrsa_ok:
+                    import psutil as _psu
 
-                _avail_gb = _psu.virtual_memory().available / (1024**3)
-                if _avail_gb < 4.0:
-                    logger.warning(
-                        "phase_23: MRSA-OOM-Preflight fehlgeschlagen (%.1f GB < 4.0 GB) — Single-STFT-Fallback",
-                        _avail_gb,
-                    )
-                    _mrsa_ok = False
+                    _avail_gb = _psu.virtual_memory().available / (1024**3)
+                    if _avail_gb < 4.0:
+                        logger.warning(
+                            "phase_23: MRSA-OOM-Preflight fehlgeschlagen (%.1f GB < 4.0 GB) — Single-STFT-Fallback",
+                            _avail_gb,
+                        )
+                        _mrsa_ok = False
             except Exception:
                 pass  # psutil nicht verfügbar — MRSA versuchen
             if _mrsa_ok:

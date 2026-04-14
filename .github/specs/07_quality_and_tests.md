@@ -67,6 +67,22 @@ Für `mode="studio2026"` gilt ein dediziertes End-Gate:
 **Rationale:** Studio-2026 ist ein Qualitätsversprechen („modern, frisch, kräftig").
 Ein optionales Roadmap-Ziel ist dafür normativ zu weich.
 
+### §8.1.1b [RELEASE_MUST] Restoration OQS-Gate (v9.11.14)
+
+Für `mode="restoration"` gilt ein materialadaptives End-Gate:
+
+| Material-Klasse | OQS-Minimum | Begründung |
+| --- | --- | --- |
+| Digital (cd_digital, dat, streaming, aac) | ≥ **80** | Geringe Degradierung → hohe Erwartung |
+| Analog modern (vinyl, tape, reel_tape, cassette, minidisc) | ≥ **72** | Moderate Degradierung |
+| Analog historisch (shellac, wax_cylinder, wire_recording) | ≥ **60** | Historisches Material hat physikalische Grenzen |
+| Lossy Codec (mp3_low, mp3_high) | ≥ **75** | Codec-Artefakte reparierbar |
+| Unknown | ≥ **70** | Konservativer Fallback |
+
+**Recovery-Verhalten**: Bei OQS < Minimum → §8.2b Recovery-Kaskade (kein Hardstop). Export mit Status `degraded` + `fail_reason`.
+
+**Invariante**: Restoration-Modus darf Audio nie verschlechtern — wenn OQS(output) < OQS(input), MUSS Rollback auf Input erfolgen.
+
 ---
 
 ## §8.1.2 AMRB v1.0 — Aurik Musical Restoration Benchmark
@@ -129,6 +145,7 @@ item_seed = _sid_offset(scenario_id)  # RICHTIG
 | Chroma-Korrelation (Tonart) | Pearson ≥ 0.95 |
 | **Pass-Through (sauberes Material)** | PQS-MOS-Verlust ≤ 0.05, Goals stabil ± 0.02 |
 | **Rauschboden (Studio-2026)** | ≤ −72 dBFS, A-gew. ≤ −75 dB(A), 0 Musical-Noise-Events |
+| **Rauschboden (Restoration)** | Material-adaptiv (§0a): wax_cylinder ≤ −35, shellac ≤ −45, vinyl ≤ −55, tape/reel_tape ≤ −58, cassette ≤ −52, minidisc ≤ −65, cd_digital ≤ −72 dBFS. Niveau UND Textur des Quellmediums bewahren, nicht aggressiver. |
 | **Rauschtextur-Kohärenz (Restoration)** | `noise_texture_coherence ≥ 0.80` (§4.7) — Restrauschen muss Carrier-Profil entsprechen |
 | **Temporale Kohärenz** | MOS-Spanne über 10-s-Segmente ≤ 0.30, σ ≤ 0.15 |
 | **Stereo-Authentizität** | Mono-Ären M/S-Korrelation nach Restaur. ≥ 0.97 |

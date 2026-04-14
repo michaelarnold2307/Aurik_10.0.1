@@ -385,7 +385,10 @@ class HybridDereverb:
         return result, metadata
 
     def _apply_dccrn(self, audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, dict[str, Any]]:
-        """ML-Dereverb via SGMSE+ (primär §4.4) oder ResembleEnhance (Fallback 1)."""
+        """ML-Dereverb via SGMSE+ (primär §4.4) oder ResembleEnhance (Fallback 1).
+        
+        Verarbeitet Stereo-Kanäle unabhängig für bessere Qualität.
+        """
         metadata: dict[str, Any] = {}
         dccrn_plugin = self.dccrn
         if dccrn_plugin is None:
@@ -395,49 +398,65 @@ class HybridDereverb:
         try:
             audio_in = audio.astype(np.float32)
             # Detect channel-major (2, N) vs time-major (N, 2) format.
-            # For channel-major: mean along axis=0 collapses channels → (N,).
-            # For time-major:  mean along axis=1 (=axis=-1) collapses channels → (N,).
             _dccrn_ch_maj = audio_in.ndim == 2 and audio_in.shape[0] <= 2 and audio_in.shape[1] > audio_in.shape[0]
+            
+            # Extract channels independently (process L/R separately)
             if audio_in.ndim == 2:
-                mono_in = audio_in.mean(axis=0) if _dccrn_ch_maj else audio_in.mean(axis=1)
+                channels = [audio_in[0] if _dccrn_ch_maj else audio_in[:, 0]]
+                if audio_in.shape[1 if _dccrn_ch_maj else 0] > 1:
+                    channels.append(audio_in[1] if _dccrn_ch_maj else audio_in[:, 1])
             else:
-                mono_in = audio_in
-
-            # §2.54 U-Net/STFT shape guard: pad input to next multiple of 512 to prevent
-            # internal tensor dimension mismatches in SGMSE+/ResembleEnhance architectures
-            # (e.g. "size of tensor a (3841) must match tensor b (3843)").
-            _orig_mono_len = len(mono_in)
-            _pad_mult = 512
-            _padded_len = ((_orig_mono_len + _pad_mult - 1) // _pad_mult) * _pad_mult
-            if _padded_len != _orig_mono_len:
-                mono_in = np.pad(mono_in, (0, _padded_len - _orig_mono_len))
-
-            if self._sgmse_active:
-                # §4.4 Primär: SGMSE+ — enhance(audio, sr) → SGMSEResult
-                result = dccrn_plugin.enhance(mono_in, sample_rate)
-                enhanced = np.asarray(
-                    result.audio if hasattr(result, "audio") else result,
-                    dtype=np.float32,
-                )
-                metadata["model"] = "sgmse_plus"
-                metadata["model_used"] = getattr(result, "model_used", "sgmse_plus_torchscript")
-            else:
-                # §4.4 Fallback 1: ResembleEnhance
-                enhanced = dccrn_plugin.enhance(mono_in, sample_rate)
-                enhanced = np.asarray(enhanced, dtype=np.float32)
-                metadata["model"] = "resemble_enhance"
-
-            # Trim back to original length (undo padding)
-            enhanced = enhanced[:_orig_mono_len]
-
-            # Stereo wiederherstellen — in der gleichen Format-Konvention wie der Eingang.
-            if audio.ndim == 2:
-                if _dccrn_ch_maj:
-                    enhanced = np.stack([enhanced[: audio.shape[1]], enhanced[: audio.shape[1]]], axis=0)  # (2, N)
+                channels = [audio_in]
+            
+            enhanced_channels = []
+            for ch_idx, mono_in in enumerate(channels):
+                # §2.54 U-Net/STFT shape guard: pad input to next multiple of 512
+                _orig_ch_len = len(mono_in)
+                _pad_mult = 512
+                _padded_len = ((_orig_ch_len + _pad_mult - 1) // _pad_mult) * _pad_mult
+                if _padded_len != _orig_ch_len:
+                    mono_in = np.pad(mono_in, (0, _padded_len - _orig_ch_len))
+                
+                if self._sgmse_active:
+                    # §4.4 Primär: SGMSE+ — enhance(audio, sr) → SGMSEResult
+                    result = dccrn_plugin.enhance(mono_in, sample_rate)
+                    enhanced = np.asarray(
+                        result.audio if hasattr(result, "audio") else result,
+                        dtype=np.float32,
+                    )
+                    if ch_idx == 0:
+                        metadata["model"] = "sgmse_plus"
+                        metadata["model_used"] = getattr(result, "model_used", "sgmse_plus_torchscript")
                 else:
-                    enhanced = np.stack([enhanced, enhanced], axis=-1)  # (N, 2)
-            elif audio.ndim == 1 and enhanced.ndim > 1:
-                enhanced = np.mean(enhanced, axis=-1)
+                    # §4.4 Fallback 1: ResembleEnhance
+                    enhanced = dccrn_plugin.enhance(mono_in, sample_rate)
+                    enhanced = np.asarray(enhanced, dtype=np.float32)
+                    if ch_idx == 0:
+                        metadata["model"] = "resemble_enhance"
+                
+                # Trim back to original channel length
+                enhanced = enhanced[:_orig_ch_len]
+                enhanced_channels.append(enhanced)
+            
+            # Recombine channels in original format
+            if audio.ndim == 2:
+                if len(enhanced_channels) == 1:
+                    enhanced = enhanced_channels[0]
+                    # Mono-Ergebnis: auf beide Kanäle expandieren
+                    if _dccrn_ch_maj:
+                        enhanced = np.stack([enhanced, enhanced], axis=0)  # (2, N)
+                    else:
+                        enhanced = np.stack([enhanced, enhanced], axis=-1)  # (N, 2)
+                else:
+                    # Stereo verarbeitet: recombine
+                    if _dccrn_ch_maj:
+                        enhanced = np.stack(enhanced_channels, axis=0)  # (2, N)
+                    else:
+                        enhanced = np.stack(enhanced_channels, axis=-1)  # (N, 2)
+            elif audio.ndim == 1 and len(enhanced_channels) > 0:
+                enhanced = enhanced_channels[0]
+            else:
+                enhanced = enhanced_channels[0] if enhanced_channels else audio
 
             metadata["success"] = True
             return np.clip(np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0), metadata

@@ -172,6 +172,16 @@ _MATERIAL_BW_CEILING_HZ = {
 
 **Invariante**: `_MATERIAL_BW_CEILING_HZ` ist identisch mit der `bw_ceiling_hz`-Spalte in `CARRIER_TRANSFER_CHARACTERISTICS` (§4.8). Änderungen müssen synchron erfolgen.
 
+### §6.2d [RELEASE_MUST] BW/DR-Ceiling Bidirektionale Sync-Invariante (v9.11.14)
+
+Drei Dicts führen physikalische Materialgrenzen: `_MATERIAL_BW_CEILING_HZ` (§6.2c), `_MATERIAL_DR_CEILING_DB` (§6.2b) und `CARRIER_TRANSFER_CHARACTERISTICS` (§4.8). Diese MÜSSEN bidirektional synchron sein:
+
+1. `_MATERIAL_BW_CEILING_HZ[m]` == `CARRIER_TRANSFER_CHARACTERISTICS[m].bw_ceiling_hz` für alle 15 Materialtypen.
+2. `_MATERIAL_DR_CEILING_DB[m]` == `CARRIER_TRANSFER_CHARACTERISTICS[m].dr_ceiling_db` für alle 15 Materialtypen.
+3. Änderungen an einem Dict erfordern identische Änderung im anderen.
+
+**Testpflicht**: CI-Regressionstest `tests/unit/test_material_ceiling_sync.py` prüft die Gleichheit automatisch. Ohne diesen Test ist keine Ceiling-Änderung mergebar.
+
 ---
 
 ## §6.3 DefectType-Vollkatalog (46 Defekte)

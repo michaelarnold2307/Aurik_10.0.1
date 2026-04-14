@@ -694,6 +694,133 @@ class TestPhase23SpectralRepair:
         assert repaired.shape == weird.shape
         assert np.allclose(repaired, weird, atol=1e-8)
 
+    def test_thrashing_skips_ml_audiosr_path(self, mono, monkeypatch):
+        monkeypatch.setattr(self.phase, "_is_system_thrashing", lambda: True)
+        monkeypatch.setattr(self.phase, "_can_relax_thrashing_guard", lambda **_kwargs: False)
+        monkeypatch.setattr(
+            "backend.core.phases.phase_23_spectral_repair.is_phase_ml_enabled",
+            lambda _phase_id: True,
+        )
+        monkeypatch.setattr(
+            "backend.core.phases.phase_23_spectral_repair.QualityModeConfig.should_use_ml",
+            lambda _phase_id, _severity: True,
+        )
+        monkeypatch.setattr(
+            self.phase,
+            "_get_audiosr_plugin",
+            lambda: (_ for _ in ()).throw(AssertionError("AudioSR darf bei Thrashing nicht geladen werden")),
+        )
+
+        result = self.phase.process(mono, SR, MaterialType.STREAMING)
+
+        _assert_phase_result(result, mono, check_clipping=False)
+
+    def test_thrashing_skips_mrsa_path(self, mono, monkeypatch):
+        monkeypatch.setattr(self.phase, "_is_system_thrashing", lambda: True)
+        monkeypatch.setattr(self.phase, "_can_relax_thrashing_guard", lambda **_kwargs: False)
+        monkeypatch.setattr(
+            self.phase,
+            "_repair_channel_mrsa",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("MRSA darf bei Thrashing nicht laufen")),
+        )
+
+        result = self.phase.process(mono, SR, MaterialType.STREAMING)
+
+        _assert_phase_result(result, mono, check_clipping=False)
+
+    def test_thrashing_relax_allows_mrsa_when_headroom_is_high(self, monkeypatch):
+        long_mono = np.random.default_rng(7).uniform(-0.1, 0.1, SR * 2).astype(np.float32)
+        monkeypatch.setattr(self.phase, "_is_system_thrashing", lambda: True)
+        monkeypatch.setattr(
+            self.phase,
+            "_can_relax_thrashing_guard",
+            lambda **kwargs: bool(kwargs.get("for_mrsa", False)),
+        )
+
+        called = {"mrsa": 0}
+
+        def _mrsa(audio, *_args, **_kwargs):
+            called["mrsa"] += 1
+            return audio
+
+        monkeypatch.setattr(self.phase, "_repair_channel_mrsa", _mrsa)
+
+        result = self.phase.process(long_mono, SR, MaterialType.STREAMING)
+
+        _assert_phase_result(result, long_mono, check_clipping=False)
+        assert called["mrsa"] >= 1
+
+    def test_thrashing_relax_ml_attempt_cap_limits_retries(self, mono, monkeypatch):
+        monkeypatch.setattr(self.phase, "_is_system_thrashing", lambda: True)
+        monkeypatch.setattr(
+            self.phase,
+            "_can_relax_thrashing_guard",
+            lambda **kwargs: not bool(kwargs.get("for_mrsa", False)),
+        )
+        monkeypatch.setattr(
+            self.phase,
+            "_detect_defects",
+            lambda magnitude, *_args, **_kwargs: np.ones_like(magnitude, dtype=bool),
+        )
+        monkeypatch.setattr(
+            "backend.core.phases.phase_23_spectral_repair.is_phase_ml_enabled",
+            lambda _phase_id: True,
+        )
+        monkeypatch.setattr(
+            "backend.core.phases.phase_23_spectral_repair.QualityModeConfig.should_use_ml",
+            lambda _phase_id, _severity: True,
+        )
+        monkeypatch.setattr(self.phase, "_has_sufficient_ml_headroom", lambda *_args, **_kwargs: True)
+
+        class _FakeAudioSR:
+            def process(self, audio, sr, target_sr):
+                return np.asarray(audio, dtype=np.float32)
+
+        monkeypatch.setattr(self.phase, "_get_audiosr_plugin", lambda: _FakeAudioSR())
+
+        called = {"ml": 0}
+
+        def _repair_with_audiosr(audio, *_args, **_kwargs):
+            called["ml"] += 1
+            return np.asarray(audio, dtype=np.float32)
+
+        monkeypatch.setattr(self.phase, "_repair_with_audiosr", _repair_with_audiosr)
+
+        result1 = self.phase.process(mono, SR, MaterialType.TAPE)
+        result2 = self.phase.process(mono, SR, MaterialType.TAPE)
+
+        _assert_phase_result(result1, mono, check_clipping=False)
+        _assert_phase_result(result2, mono, check_clipping=False)
+        assert called["ml"] == 1
+
+    def test_thrashing_relax_mrsa_attempt_cap_limits_retries(self, monkeypatch):
+        long_mono = np.random.default_rng(11).uniform(-0.1, 0.1, SR * 2).astype(np.float32)
+        monkeypatch.setattr(self.phase, "_is_system_thrashing", lambda: True)
+        monkeypatch.setattr(
+            self.phase,
+            "_can_relax_thrashing_guard",
+            lambda **kwargs: bool(kwargs.get("for_mrsa", False)),
+        )
+        monkeypatch.setattr(
+            "backend.core.phases.phase_23_spectral_repair.is_phase_ml_enabled",
+            lambda _phase_id: False,
+        )
+
+        called = {"mrsa": 0}
+
+        def _mrsa(audio, *_args, **_kwargs):
+            called["mrsa"] += 1
+            return np.asarray(audio, dtype=np.float32)
+
+        monkeypatch.setattr(self.phase, "_repair_channel_mrsa", _mrsa)
+
+        result1 = self.phase.process(long_mono, SR, MaterialType.STREAMING)
+        result2 = self.phase.process(long_mono, SR, MaterialType.STREAMING)
+
+        _assert_phase_result(result1, long_mono, check_clipping=False)
+        _assert_phase_result(result2, long_mono, check_clipping=False)
+        assert called["mrsa"] == 1
+
 
 # ===========================================================================
 # Phase 24 – Dropout Repair

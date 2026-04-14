@@ -293,6 +293,13 @@ class FrequencyRestorationPhase(PhaseInterface):
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
 
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict06
+            _get_plm_evict06().evict_for_phase("phase_06_frequency_restoration")
+        except Exception:
+            pass
+
         # §2.47 PMGG-Retry: locality_factor skaliert finale Intensität bei Retries
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
@@ -595,7 +602,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         alpha = float(np.clip(alpha, 0.0, 0.80))  # cap at 0.80 — preserve DSP harmonic character
 
         audio_dur_s = audio.shape[-1] / float(self.sample_rate)
-        if audio_dur_s < max(0.0, audiosr_min_duration_s):
+        if quality_mode not in ("quality", "maximum") and audio_dur_s < max(0.0, audiosr_min_duration_s):
             logger.info(
                 "Phase 06: AudioSR skipped for short clip (%.2fs < %.2fs) — DSP-only aktiv",
                 audio_dur_s,
@@ -651,7 +658,8 @@ class FrequencyRestorationPhase(PhaseInterface):
             }
 
         # Fast sentinel: skip ML thread entirely if a previous load attempt failed.
-        # Without this check the join() timeout (up to 600 s) causes an apparent
+        # Without this check the join() timeout (quality-first path can be long)
+        # causes an apparent
         # freeze whenever AudioSR is unavailable (missing torchaudio / model).
         try:
             from plugins.audiosr_plugin import has_audiosr_ml_failed as _has_audiosr_failed
@@ -710,11 +718,14 @@ class FrequencyRestorationPhase(PhaseInterface):
             ml_thread = threading.Thread(target=ml_infer, daemon=True)
             ml_thread.start()
 
-            # Timeout: 32× RT-Budget (§PerformanceGuard LIMIT_MAXIMUM = 32×).
-            # 3:45 Audio â 225 s × 32 = 7200 s — impractical; use a sane cap instead.
-            # AudioSR typical inference: 2× RT on CPU. Add generous headroom for slow machines.
-            # Absolute cap: 180 s (3 min). Falls back to DSP-only version instead of freezing.
-            timeout_s = min(180, max(30, int(audio_dur_s * 2.5)))
+            # Quality-first watchdog policy:
+            # - quality/maximum: do not let time factor prematurely cap AudioSR quality.
+            #   Use a wide upper bound so long songs can complete high-end reconstruction.
+            # - balanced/fast: keep a tighter timeout to preserve responsiveness.
+            if quality_mode in ("quality", "maximum"):
+                timeout_s = min(900, max(120, int(audio_dur_s * 12.0)))
+            else:
+                timeout_s = min(180, max(30, int(audio_dur_s * 2.5)))
             ml_thread.join(timeout=timeout_s)
 
             if not ml_result_queue.empty():

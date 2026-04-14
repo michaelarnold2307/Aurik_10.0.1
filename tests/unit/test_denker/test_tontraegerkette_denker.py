@@ -258,8 +258,38 @@ class TestTontraegerketteDenkerAnalysiere:
         if result is not None:
             assert isinstance(result.chain_string, str)
             assert isinstance(result.combined_phases, list)
-            assert math.isfinite(float(result.chain_complexity))
-        assert True  # Absturz wäre eine Fehlermeldung
+
+    def test_23_weak_cached_single_link_triggers_detect_recovery(self):
+        """Schwaches Cache-Ergebnis (1 Glied, low conf) triggert detect()-Recovery."""
+        from denker.tontraegerkette_denker import TontraegerketteDenker
+
+        denker = TontraegerketteDenker()
+        audio = _sine(1.0)
+        cached = MagicMock()
+        cached.primary_material = "mp3_low"
+        cached.confidence = 0.40
+        cached.transfer_chain = ["mp3_low"]
+        cached.medium_confidences = [0.40]
+
+        detected_raw = {
+            "detected_media": [("vinyl", 0.85), ("tape", 0.43), ("mp3_low", 0.40)],
+            "is_multi_generation": True,
+            "confidence": 0.80,
+        }
+
+        with patch.object(TontraegerketteDenker, "_erkennen", return_value=detected_raw) as p_detect:
+            result = denker.analysiere(
+                audio,
+                SR,
+                file_path="/tmp/demo.mp3",
+                cached_medium_result=cached,
+            )
+
+        assert p_detect.called, "detect()-Recovery muss bei schwachem Single-Link-Cache laufen"
+        assert isinstance(result.chain, list)
+        assert len(result.chain) == 3
+        assert result.chain == ["vinyl", "tape", "mp3_low"]
+        assert math.isfinite(float(result.chain_complexity))
 
     def test_21_cached_medium_result_skips_detector_call(self):
         """Mit cached_medium_result wird _erkennen() nicht aufgerufen (§2.47a)."""

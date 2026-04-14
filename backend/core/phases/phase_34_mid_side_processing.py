@@ -81,6 +81,12 @@ class MidSideProcessing(PhaseInterface):
             "mid_high": [-20, 3.0, 5, 60, 4.0],  # Stronger compression, presence
             "high": [-25, 2.0, 3, 50, 3.0],  # Gentle, preserve air
         },
+        MaterialType.WAX_CYLINDER: {
+            "bass": [-24, 2.1, 10, 110, 3.5],
+            "low_mid": [-22, 2.6, 8, 90, 3.8],
+            "mid_high": [-20, 3.0, 5, 70, 4.0],
+            "high": [-25, 2.0, 3, 60, 3.2],
+        },
         MaterialType.VINYL: {
             "bass": [-28, 1.8, 10, 100, 2.5],
             "low_mid": [-25, 2.2, 8, 80, 3.0],
@@ -114,6 +120,12 @@ class MidSideProcessing(PhaseInterface):
             "low_mid": [-30, 1.3, 12, 120, 1.0],
             "mid_high": [-28, 1.5, 8, 100, 1.5],
             "high": [-32, 1.3, 5, 80, 1.0],
+        },
+        MaterialType.WAX_CYLINDER: {
+            "bass": [-33, 1.15, 15, 160, 0.4],
+            "low_mid": [-31, 1.25, 12, 130, 0.8],
+            "mid_high": [-29, 1.45, 8, 110, 1.2],
+            "high": [-33, 1.25, 5, 90, 0.8],
         },
         MaterialType.VINYL: {
             "bass": [-30, 1.5, 15, 150, 1.5],
@@ -149,6 +161,12 @@ class MidSideProcessing(PhaseInterface):
             "low_mid": [0.08, 0.12],
             "mid_high": [0.10, 0.10],
             "high": [0.08, 0.12],
+        },
+        MaterialType.WAX_CYLINDER: {
+            "bass": [0.04, 0.16],
+            "low_mid": [0.07, 0.13],
+            "mid_high": [0.09, 0.11],
+            "high": [0.07, 0.13],
         },
         MaterialType.VINYL: {
             "bass": [0.08, 0.12],
@@ -247,9 +265,12 @@ class MidSideProcessing(PhaseInterface):
         bands = self._split_bands(audio, sample_rate)
 
         # Get material-specific parameters
-        mid_params = {k: list(v) for k, v in self.MID_DYNAMICS[material].items()}
-        side_params = {k: list(v) for k, v in self.SIDE_DYNAMICS[material].items()}
-        crossfeed_params = {k: list(v) for k, v in self.CROSSFEED[material].items()}
+        _mid_source = self.MID_DYNAMICS.get(material, self.MID_DYNAMICS[MaterialType.SHELLAC])
+        _side_source = self.SIDE_DYNAMICS.get(material, self.SIDE_DYNAMICS[MaterialType.SHELLAC])
+        _cross_source = self.CROSSFEED.get(material, self.CROSSFEED[MaterialType.SHELLAC])
+        mid_params = {k: list(v) for k, v in _mid_source.items()}
+        side_params = {k: list(v) for k, v in _side_source.items()}
+        crossfeed_params = {k: list(v) for k, v in _cross_source.items()}
 
         for band_name in self.band_names:
             mid_params[band_name][1] = float(1.0 + (mid_params[band_name][1] - 1.0) * _effective_strength)

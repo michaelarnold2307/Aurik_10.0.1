@@ -340,7 +340,7 @@ class RmvpePlugin:
 
         PESTO (dsp/pesto_pitch.py) ist ~8-20× schneller als pYIN bei vergleichbarer
         Genauigkeit für tonales Material. Fällt auf pYIN zurück bei PESTO-Fehler.
-        §4.4: FCPE → CREPE → RMVPE → PESTO → pYIN (letzte DSP-Stufe)
+        §4.4: FCPE → RMVPE → PESTO → pYIN (letzte DSP-Stufe)
         """
         # Tier-DSP-1: PESTO (chromagram CQT, Riou et al. ISMIR 2023)
         try:

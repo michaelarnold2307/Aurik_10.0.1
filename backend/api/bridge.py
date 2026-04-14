@@ -733,6 +733,9 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
     _cluster = _song_cal.get("cluster_policy") if isinstance(_song_cal.get("cluster_policy"), dict) else {}
     _fqf = _meta.get("fallback_quality_floor") if isinstance(_meta.get("fallback_quality_floor"), dict) else {}
     _rc = _meta.get("recovery_certainty") if isinstance(_meta.get("recovery_certainty"), dict) else {}
+    _stage_notes = getattr(result, "stage_notes", None)
+    if not isinstance(_stage_notes, dict):
+        _stage_notes = {}
 
     _recommendations = _auto.get("recommendations") if isinstance(_auto.get("recommendations"), list) else []
 
@@ -807,6 +810,38 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
             }
         )
 
+    _fail_reasons = _meta.get("fail_reasons") if isinstance(_meta.get("fail_reasons"), list) else []
+    if not _fail_reasons and isinstance(_stage_notes.get("fail_reasons"), list):
+        _fail_reasons = list(_stage_notes.get("fail_reasons") or [])
+
+    _primary_fail_reason = resolve_pipeline_fail_reason(
+        typed_fail_reason=getattr(result, "fail_reason", None),
+        metadata=_meta,
+        stage_notes=_stage_notes,
+        fail_reasons=_fail_reasons,
+    )
+    _raw_degradation = (
+        getattr(result, "degradation_status", None)
+        or _meta.get("degradation_status", "")
+        or _stage_notes.get("degradation_status", "")
+    )
+    _degradation_status = normalize_pipeline_health_state(_raw_degradation).value
+
+    _fqf_triggered = bool(_fqf.get("triggered", False))
+    _fqf_status = str(_fqf.get("status", "") or "").strip().lower()
+    _fqf_attempts = int(_fqf.get("attempts", 0)) if isinstance(_fqf.get("attempts", 0), (int, float)) else 0
+
+    # Keep bridge and export-workflow semantics aligned for recovered/degraded fallback-floor runs.
+    if _fqf_triggered and _fqf_status in {"recovered", "degraded", "failed", "fail"}:
+        if _degradation_status == "ok":
+            _degradation_status = "recovered" if _fqf_status == "recovered" else "degraded"
+        if not _primary_fail_reason:
+            _primary_fail_reason = str(_fqf.get("reason", "fallback_quality_floor_triggered") or "")
+
+    _primary_error_code = ""
+    if _fail_reasons and isinstance(_fail_reasons[0], dict):
+        _primary_error_code = str(_fail_reasons[0].get("error_code", "") or "")
+
     return {
         "joy_index": _safe01(_joy.get("joy_index", 0.0)),
         "fatigue_index": _safe01(_joy.get("fatigue_index", 0.0)),
@@ -835,6 +870,16 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
             "hpi": _safe_float(_fqf.get("hpi", 0.0), 0.0),
             "best_candidate": str(_fqf.get("best_candidate", "") or ""),
             "recovery_trace": _fqf_trace,
+        },
+        "quality_gate": {
+            "passed": bool(_degradation_status == "ok"),
+            "degradation_status": str(_degradation_status),
+            "primary_fail_reason": str(_primary_fail_reason or ""),
+            "primary_error_code": str(_primary_error_code),
+            "required_gates": ["musical_goals", "pqs", "oqs", "fallback_quality_floor"],
+            "recovery_attempted": bool(_fqf_attempts > 0),
+            "best_possible_reached": bool(_fqf_status == "recovered"),
+            "fallback_quality_floor_status": str(_fqf.get("status", "passed") or "passed"),
         },
         "recovery_certainty": {
             "recoverability_ceiling": _safe01(_rc.get("recoverability_ceiling", 0.0)),
@@ -867,6 +912,26 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
         })(),
         # §2.47b JND Sub-Threshold Phase Telemetrie — für Diagnose und UI
         "sub_threshold_phases": list(_meta.get("sub_threshold_phases", []) or []),
+        # §2.47 ML-Fallback-Transparenz — Invariante: Kein ML-Failure darf Pipeline abbrechen
+        "ml_fallbacks_used": [
+            {
+                "phase": str(fb.get("phase", "") or ""),
+                "model": str(fb.get("model", "") or ""),
+                "fallback": str(fb.get("fallback", "") or ""),
+                "reason": str(fb.get("reason", "") or ""),
+            }
+            for fb in (
+                _meta.get("ml_fallbacks_used")
+                if isinstance(_meta.get("ml_fallbacks_used"), list)
+                else []
+            )
+            if isinstance(fb, dict)
+        ],
+        # §0d Carrier-Chain-Recovery-Ratio — Pflichtfeld
+        "carrier_chain_recovery_ratio": _safe_float(
+            _meta.get("carrier_chain_recovery_ratio", 0.0), 0.0
+        ),
+        "carrier_reference_shifted": bool(_meta.get("reference_shifted", False)),
     }
 
 

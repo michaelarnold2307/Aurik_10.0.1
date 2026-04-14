@@ -4,7 +4,7 @@ Testet alle 10 geforderten Schritte der Vocal-Pipeline:
 
 1. GenderDetector.detect() → VoiceCharacteristics
 2. SGMSE+ (Dereverb/Denoising) VOR VocalAIEnhancement
-3. FCPE → CREPE → RMVPE → pYIN (Pitch-Tracking-Kaskade)
+3. FCPE → RMVPE → PESTO → pYIN (Pitch-Tracking-Kaskade §4.4)
 4. FormantTracker (LPC 30–40 @ 48kHz, F1–F5)
 5. BreathDetector → breathiness ratio
 6. De-Esser (phase_19) + ML-De-Esser (phase_43) stimmtyp-adaptiv
@@ -96,7 +96,7 @@ class TestVocalChainSpec10Steps:
         assert hasattr(ProcessingMode, "BALANCED") or len(ProcessingMode) > 0, "ProcessingMode leer"
 
     # ======================================================================
-    # Step 3: Pitch-Tracking-Kaskade (FCPE → CREPE → RMVPE → pYIN)
+    # Step 3: Pitch-Tracking-Kaskade (FCPE → RMVPE → PESTO → pYIN, §4.4)
     # ======================================================================
     def test_step_03_fcpe_plugin_available(self) -> None:
         """Step 3: FCPE (Primär-Tracker) vorhanden."""

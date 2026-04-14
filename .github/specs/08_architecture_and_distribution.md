@@ -948,7 +948,7 @@ self._dispatch_to_gui(lambda: widget.setText("..."))
 ### Shortcuts
 
 | Key | Aktion |
-|---|---|
+| --- | --- |
 | Space | Play/Pause |
 | A / B | Original / Restauriert |
 | Ctrl+O / Ctrl+S | Öffnen / Export |
@@ -967,7 +967,7 @@ self._dispatch_to_gui(lambda: widget.setText("..."))
 ### Echtzeit-UX-Features
 
 | Feature | Implementierung |
-|---|---|
+| --- | --- |
 | Phase-Fortschritt | `phase_progress_bar` (5 px, lila Gradient) unter Hauptleiste |
 | Defekte-Animation | Count-up (22 Frames × 85 ms); `_PHASE_REDUCES` senkt Scores ×0.3 |
 | Varianten-Wettkampf | `★name_1 (4.12) › name_2 (3.87)` Rangliste |
@@ -979,7 +979,7 @@ self._dispatch_to_gui(lambda: widget.setText("..."))
 ### §11.4b Schadensmarker-Lebenszyklus
 
 | Phase | Waveform | Defekt-Chip |
-|---|---|---|
+| --- | --- | --- |
 | `detected` | Farbiger Marker per Count-up-Animation | Roter/amber Severity-Chip mit Fortschrittsbalken |
 | `correcting` | Marker bleibt sichtbar; verschwindet bei Score ≤ 0.01 (`_tick_defect_removal`, 75 ms) | Amber → orange bei aktivem Repair |
 | **Abgeschlossen** (score ≤ 0.01) | **Marker verschwindet** — kein grünes Overlay | **Grüner Haken-Chip** `&#10003;` in `#4DC878`, Rand `rgba(77,200,120,0.45)` |
@@ -1021,7 +1021,7 @@ Bei fehlendem Backend: `_BRIDGE_AVAILABLE = False` mit 17 Stub-Funktionen.
 ### Farbschema (verbindlich für alle Diagramme)
 
 | Typ | `classDef` | Fill | Beschreibung |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | ML-Modell / Plugin | `ml` | `#7B2FBE` (Lila) | Torch, ONNX, MDX23C |
 | DSP-Algorithmus | `dsp` | `#1a6fcf` (Blau) | NumPy, SciPy, OMLSA |
 | Qualitätsmetrik | `metric` | `#0f7a3e` (Grün) | MusicalGoals, PQS |
@@ -1072,7 +1072,7 @@ self._dispatch_to_gui(lambda: widget.setText("..."))
 ### Shortcuts
 
 | Key | Aktion |
-|---|---|
+| --- | --- |
 | Space | Play/Pause |
 | A / B | Original / Restauriert |
 | Ctrl+O / Ctrl+S | Öffnen / Export |
@@ -1091,7 +1091,7 @@ self._dispatch_to_gui(lambda: widget.setText("..."))
 ### Echtzeit-UX-Features
 
 | Feature | Implementierung |
-|---|---|
+| --- | --- |
 | Phase-Fortschritt | `phase_progress_bar` (5 px, lila Gradient) unter Hauptleiste |
 | Defekte-Animation | Count-up (22 Frames × 85 ms); `_PHASE_REDUCES` senkt Scores ×0.3 |
 | Varianten-Wettkampf | `★name_1 (4.12) › name_2 (3.87)` Rangliste |
@@ -1103,7 +1103,7 @@ self._dispatch_to_gui(lambda: widget.setText("..."))
 ### §11.4b Schadensmarker-Lebenszyklus
 
 | Phase | Waveform | Defekt-Chip |
-|---|---|---|
+| --- | --- | --- |
 | `detected` | Farbiger Marker per Count-up-Animation | Roter/amber Severity-Chip mit Fortschrittsbalken |
 | `correcting` | Marker bleibt sichtbar; verschwindet bei Score ≤ 0.01 (`_tick_defect_removal`, 75 ms) | Amber → orange bei aktivem Repair |
 | **Abgeschlossen** (score ≤ 0.01) | **Marker verschwindet** — kein grünes Overlay | **Grüner Haken-Chip** `&#10003;` in `#4DC878`, Rand `rgba(77,200,120,0.45)` |
@@ -1145,7 +1145,7 @@ Bei fehlendem Backend: `_BRIDGE_AVAILABLE = False` mit 17 Stub-Funktionen.
 ### Farbschema (verbindlich für alle Diagramme)
 
 | Typ | `classDef` | Fill | Beschreibung |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | ML-Modell / Plugin | `ml` | `#7B2FBE` (Lila) | Torch, ONNX, MDX23C |
 | DSP-Algorithmus | `dsp` | `#1a6fcf` (Blau) | NumPy, SciPy, OMLSA |
 | Qualitätsmetrik | `metric` | `#0f7a3e` (Grün) | MusicalGoals, PQS |

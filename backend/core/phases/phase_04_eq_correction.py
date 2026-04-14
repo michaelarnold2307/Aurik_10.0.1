@@ -1059,6 +1059,14 @@ class EQCorrectionPhase(PhaseInterface):
         """
         Apply professional parametric EQ with proper peaking filters.
         """
+        # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+        # sosfiltfilt requires len(audio) > padlen (typically 9–100 samples depending on sos)
+        # For very short audio, return passthrough
+        MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+        if len(audio) < MIN_AUDIO_SAMPLES:
+            logger.debug(f"phase_04: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}), skipping EQ")
+            return np.asarray(audio, dtype=np.float32).copy()
+
         result = audio.copy()
 
         # Apply each band

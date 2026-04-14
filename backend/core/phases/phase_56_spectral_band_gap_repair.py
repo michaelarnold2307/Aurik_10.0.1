@@ -556,6 +556,14 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         """
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
+
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict56
+            _get_plm_evict56().evict_for_phase("phase_56_spectral_band_gap_repair")
+        except Exception:
+            pass
+
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         effective_strength = float(kwargs.get("strength", 1.0)) * phase_locality_factor

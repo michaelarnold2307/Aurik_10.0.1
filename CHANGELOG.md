@@ -2,6 +2,266 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.11.20 — Globaler Quality-First-Schalter + 64-Phasen-Audit (Apr 2026)
+
+### Ziel
+
+- Quality-First nicht nur phasenlokal, sondern orchestratorweit als Standard in High-End-Modi.
+- Regressionssichere Absicherung ueber den gesamten 64-Phasen-Raum.
+
+### Aenderungen
+
+- `UnifiedRestorerV3._profiled_phase_call(...)` injiziert jetzt global:
+  - `quality_first_unleashed=True` in high-end Kontexten (`quality`/`maximum`/studio)
+  - Dadurch koennen Phasen ihre Zeitgates konsistent auf dieselbe Policy stützen.
+
+- Zeitgates auf den globalen Schalter harmonisiert in:
+  - `phase_12_wow_flutter_fix`
+  - `phase_19_de_esser`
+  - `phase_42_vocal_enhancement`
+  - `phase_49_advanced_dereverb` (erweiterter ML-Laufzeit-Budget-Rahmen in quality-first)
+
+- Neuer 64-Phasen-Policy-Test:
+  - `tests/unit/test_quality_first_policy_64_phase_audit.py`
+  - Verifiziert 64 Phase-Dateien und prueft bekannte Zeitgate-Muster auf Quality-Gating.
+
+### Wirkung
+
+- Hohe Modus-Konsistenz fuer Restoration/Studio 2026 auf Quality-First-Ausfuehrung.
+- Weniger implizite Zeit-Downgrades in kritischen High-End-Pfaden.
+- Bessere Zukunftssicherheit durch automatischen 64-Phasen-Audit in Unit-Tests.
+
+## Version 9.11.19 — Quality-First Zeitgates ueber Kernphasen gehaertet (Apr 2026)
+
+### Ziel
+
+- Das hohe Qualitaetsniveau soll nicht nur punktuell gelten, sondern auf den zentralen
+  zeitlimitierenden High-End-Pfaden konsistent abgesichert werden.
+
+### Aenderungen
+
+- Phase 06 (`phase_06_frequency_restoration`):
+  - Short-Clip-Guard fuer AudioSR greift nicht mehr in `quality`/`maximum`.
+
+- Phase 19 (`phase_19_de_esser`):
+  - Stage-2..6 Audio-Cap (30s Zentrum) wird in `quality`/`maximum` deaktiviert.
+  - In niedrigeren Modi bleibt der Cap als Laufzeit-Schutz aktiv.
+
+- Policy-Regressionstest hinzugefuegt:
+  - `tests/unit/test_quality_first_time_gates_all_phases.py`
+  - Prueft, dass bekannte Zeitgates in den betroffenen Phasen quality-gated bleiben.
+
+### Wirkung
+
+- Weniger zeitgetriebene Downgrades in hochwertigen Modi.
+- Qualitaetsorientierung fuer lange Audios in den kritischen ML/DSP-Hybridpfaden staerker abgesichert.
+
+## Version 9.11.18 — Quality-First AudioSR Watchdog in Phase 06 (Apr 2026)
+
+### Ziel
+
+- Zeitfaktor darf im High-End-Modus die HF-Rekonstruktion nicht vorzeitig auf DSP-only zurückwerfen.
+
+### Aenderung
+
+- Phase 06 (`phase_06_frequency_restoration`) Watchdog-Timeout differenziert:
+  - `quality`/`maximum`: deutlich erhoehter AudioSR-Timeout (quality-first)
+  - andere Modi: weiterhin engeres Timeout fuer Reaktionsfaehigkeit
+
+### Wirkung
+
+- Weniger vorzeitige AudioSR-Timeouts in hochwertigen Modi.
+- Bessere Chance auf volle HF-Rekonstruktion bei langen Audios.
+- OOM-/Thrashing-Sicherungen bleiben unveraendert aktiv.
+
+## Version 9.11.17 — Quality-First Entfesselung in High-End-Pfaden (Apr 2026)
+
+### Ziel
+
+- Zeitheuristiken duerfen im Quality/Maximum-Modus keine hochwertigen Algorithmen abwuergen.
+- Klangtreue und Defektbehebung haben Vorrang vor Laufzeitverkuerzung.
+
+### Aenderungen
+
+- Phase 42 (`phase_42_vocal_enhancement`):
+  - BSRoFormer wird im `quality`/`maximum`-Pfad nicht mehr wegen `long_audio` uebersprungen.
+  - Long-Audio-Skip bleibt nur in nicht-hochwertigen Pfaden aktiv.
+  - RAM-Schutz bei realer Knappheit bleibt unveraendert.
+
+- Phase 12 (`phase_12_wow_flutter_fix`):
+  - `librosa.pyin` wird im `quality`/`maximum`-Pfad standardmaessig aktiviert (Env kann weiterhin hart ueberschreiben).
+  - Python-pYIN-Fallback wird in `quality`/`maximum` nicht mehr auf 30s Zentrum begrenzt.
+  - In niedrigeren Modi bleibt der 30s-Cap als Laufzeit-Schutz bestehen.
+
+### Wirkung
+
+- Besserer Zugriff auf hochwertige Stem- und Pitch-Pfade bei langen Dateien.
+- Weniger qualitaetsbedingte Degradierung durch zeitgetriebene Abkuerzungen.
+- Sicherheitsnetz gegen OOM/harte Systemknappheit bleibt aktiv.
+
+## Version 9.11.16 — Kritischer Denoise-Kaskaden-Fix (DeepFilterNet PRIMARY) (Apr 2026)
+
+### Kritische Erkenntnis
+
+- In Phase 03 war die Vokal-Denoise-Kaskade faktisch invertiert:
+  - SGMSE+ lief zuerst
+  - DeepFilterNet wurde nur nachgelagert versucht
+- Das widersprach der normativen Vorgabe aus §4.5, wonach DeepFilterNet v3.II das Primary-Modell fuer Vokal-Breitbandrauschen sein muss.
+
+### Ursache
+
+- Reihenfolge der Ausfuehrungsbloecke in phase_03 war umgekehrt.
+- Zusaetzlich blockierte die Bedingung not _sgmse_applied den DeepFilterNet-Pfad nach erfolgreichem SGMSE+.
+
+### Loesung
+
+- Phase 03 auf PRIMARY/FALLBACK-Kaskade umgestellt:
+  - Tier-0 PRIMARY: DeepFilterNet (ab vokaler Evidenz)
+  - Tier-1 FALLBACK: SGMSE+ nur wenn DeepFilterNet nicht erfolgreich angewendet wurde
+- Logging-Pfade klar getrennt in PRIMARY und FALLBACK.
+- Progress-Text fuer die Vokal-/Breitband-Stufe an die neue Kaskade angepasst.
+
+### Wirkung
+
+- Spezifikationskonforme Priorisierung fuer vokal dominiertes Material.
+- Weniger Over-Processing-Risiko durch generative Vorstufe auf Faellen, in denen DeepFilterNet als Primary ausreicht.
+- Deterministischere ML-Fallback-Entscheidung in Phase 03.
+
+## Version 9.11.15 — Tonträgerkette Live-Propagation + Thrashing-Guard Präzisierung (Apr 2026)
+
+### Zusammenfassung
+
+Zwei produktionsrelevante Stabilitäts- und Transparenz-Fixes aus dem Realbetrieb:
+
+1. **Tonträgerkette wird jetzt bereits während der Restaurierung live angezeigt**
+2. **Hybrid-ML wird bei hohem Swap weniger unnötig blockiert (weniger False-Positive-Fallbacks), bei echten Notlagen bleibt der OOM-Schutz hart**
+
+---
+
+### 1) Tonträgerkette im Frontend (Live statt nur Endzustand)
+
+**Problem (beobachtet):**
+
+- Während laufender Restoration zeigte das UI häufig nur die Voranalyse (z. B. 1 Glied), obwohl der Tonträgerketten-Denker intern bereits 3 Glieder erkannt hatte.
+- Die autoritative Kette wurde erst im Abschluss-Handler gesetzt.
+
+**Ursache:**
+
+- Die Ketteninformation wurde bis zum finalen Result-Callback zurückgehalten.
+- Zusätzlich traten Feld-/Fallback-Mismatches zwischen `chain`, `transfer_chain` und UI-Rekonstruktion auf.
+
+**Lösung:**
+
+- `AurikDenker` emittiert nach erfolgreicher Stufe 2 eine Metadaten-Fortschrittsnachricht `__carrier_chain__:` mit allen Kettengliedern.
+- Der Frontend-Progress-Handler verarbeitet diese Nachricht sofort im GUI-Thread und rendert die Kette autoritativ im Hauptlabel.
+- Zusätzlicher UI-Fallback bleibt erhalten (`chain_info` und `transfer_chain`).
+
+**Wirkung:**
+
+- Nutzer sehen die vollständige Kette (z. B. Vinyl → Tape → MP3) bereits während der laufenden Verarbeitung.
+- Kein stilles Zurückfallen auf veraltete Ein-Glied-Anzeigen im Live-Betrieb.
+
+---
+
+### 2) Hybrid DSP/ML: Thrashing-Guard präzisiert
+
+**Problem (beobachtet):**
+
+- Bei hoher Swap-Belegung wurden ML-Pfade teils zu konservativ blockiert, obwohl keine starke aktive Paging-Last vorlag.
+- Folge: unnötige DSP-Fallbacks, reduzierter Hybrid-Nutzen.
+
+**Ursache:**
+
+- Thrashing-Erkennung basierte primär auf statischen Schwellwerten (Swap-Auslastung + RAM-Verhältnis), ohne aktive Swap-I/O-Rate.
+
+**Lösung:**
+
+- In `ml_memory_budget` wurde eine aktivitätsbasierte Thrashing-Prüfung ergänzt:
+  - Neu: Swap-I/O-Rate (MB/s) aus `sin/sout`-Delta (monotonic clock)
+  - Blockierung bei realem Thrashing: `swap > 80%` **und** aktive Swap-I/O > 8 MB/s
+  - Harte Notfallbedingungen bleiben erhalten (u. a. sehr hoher Swap + niedriger RAM-Headroom, RAM-Notlage)
+  - Bei hoher Swap-Belegung ohne aktive Paging-Last: Debug-Hinweis statt harter ML-Block
+
+**Wirkung:**
+
+- Mehr stabile ML-Nutzung in Hybridphasen unter Last.
+- OOM-/systemd-oomd-Schutz bleibt normativ erhalten.
+
+---
+
+### 3) Stabilitäts-Upgrade II: Kontrollierte Druckfenster statt Kaskaden-Fallback
+
+**Problem (beobachtet):**
+
+- Bei temporärem Systemdruck kam es zu Kaskaden-Fallbacks (Phase 23 Single-STFT, kleine Helper-Modelle deaktiviert), obwohl noch substanzielle RAM-Reserve vorhanden war.
+
+**Lösung:**
+
+- `phase_23_spectral_repair`:
+  - Neue kontrollierte Relax-Window-Logik unter Thrashing-Signal.
+  - AudioSR bleibt nur dann freigegeben, wenn Headroom objektiv hoch ist.
+  - MRSA wird bei ausreichender Reserve explizit erlaubt statt pauschal deaktiviert.
+  - Harte Notlagen bleiben blockierend (kein Risky-Mode).
+- `ml_memory_budget`:
+  - Tiny-Modelle (bis 0.12 GB) können in einem engen Sicherheitsfenster trotz Druck zugelassen werden,
+    um unnötige Qualitätskaskaden zu vermeiden.
+  - Große Modelle bleiben unter Thrashing weiterhin strikt blockiert.
+
+**Wirkung:**
+
+- Robusteres Verhalten bei Druckspitzen.
+- Weniger unnötige degradierte Pfade in Studio-ähnlichen Hybrid-Läufen.
+- Sicherheitsinvarianten (OOM-Preflight, harte Pressure-Guards) bleiben unverändert aktiv.
+
+---
+
+### 4) Stabilitäts-Upgrade III: Soft-Allow gehärtet + Attempt-Caps (Normalfall + Randfälle)
+
+**Problem (beobachtet):**
+
+- Ein generischer Tiny-Model-Soft-Allow kann im Extremfall neue Randfallpfade öffnen (z. B. viele unbekannte kleine Modelle unter Druck).
+- Wiederholte Relax-Versuche in Phase 23 sind bei dauerhaftem Druck unnötig riskant.
+
+**Lösung:**
+
+- `ml_memory_budget`:
+  - Soft-Allow unter Druck nur noch für explizite Helper-Allowlist (`SileroVAD`, `SileroVAD_phase18`, `FCPE`, `BasicPitch`).
+  - Zusätzlich globaler Tiny-Cap im Pressure-Window (`0.35 GB`), damit keine Mini-Modell-Kaskade entsteht.
+- `phase_23_spectral_repair`:
+  - Attempt-Caps für Relax-Fenster eingeführt (ML und MRSA jeweils maximal 1 kontrollierter Versuch pro Instanz).
+  - Danach zwingender konservativer Fallback-Pfad.
+
+**Wirkung:**
+
+- Höhere Vorhersagbarkeit und Robustheit bei Dauerlast.
+- Normalfall bleibt leistungsfähig, Randfälle bleiben strikt begrenzt.
+- Keine Aufweichung der Sicherheitsprinzipien, sondern zusätzliche deterministische Schutzgrenzen.
+
+---
+
+### Validierung
+
+- `tests/unit/test_denker/test_tontraegerkette_denker.py`: **23 passed**
+- `tests/unit/test_ml_headroom.py` + `tests/unit/test_oom_guards.py`: **40 passed**
+- `tests/unit/test_phases_mid_late.py -k TestPhase23SpectralRepair`: **9 passed**
+- Nach Stabilitäts-Upgrade II: `tests/unit/test_phases_mid_late.py` + `tests/unit/test_oom_guards.py` + `tests/unit/test_ml_headroom.py`: **215 passed, 0 failed**
+- Nach Stabilitäts-Upgrade III (inkl. neuer Edge-Tests): **215 passed, 0 failed**
+
+Alle gezielten Regressionstests nach den Änderungen grün.
+
+---
+
+### Dateien geändert
+
+- `Aurik910/ui/modern_window.py`
+- `denker/aurik_denker.py`
+- `denker/tontraegerkette_denker.py`
+- `backend/core/ml_memory_budget.py`
+- `backend/core/phases/phase_23_spectral_repair.py`
+- `tests/unit/test_denker/test_tontraegerkette_denker.py`
+- `tests/unit/test_oom_guards.py`
+- `tests/unit/test_phases_mid_late.py`
+
 ## Version 9.11.14 — Musical Chills (Frisson) Telemetry + Studio-Only Coupling (Apr 2026)
 
 ### Zusammenfassung

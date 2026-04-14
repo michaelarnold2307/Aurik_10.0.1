@@ -265,19 +265,53 @@ def _emergency_checkpoint_if_running() -> None:
         logger.debug("_emergency_checkpoint_if_running skipped: %s", _exc)
 
 
+_sigterm_shutdown_started = False
+
+
 def _sigterm_handler(signum: int, frame: object) -> None:
-    """SIGTERM → emergency checkpoint + graceful Qt shutdown (§3.9.2)."""
-    logger.warning("SIGTERM received (signum=%d) — initiating emergency checkpoint", signum)
-    _emergency_checkpoint_if_running()
+    """SIGTERM → emergency checkpoint + graceful Qt shutdown (§3.9.2).
+
+    CRITICAL: Signal handlers are re-entrant-unsafe. This handler ONLY schedules
+    work via QTimer.singleShot (or calls fallback synchronously). Minimal work
+    in the handler itself. The _sigterm_shutdown_started flag prevents
+    re-entry of the finalization logic.
+    """
+    global _sigterm_shutdown_started
+    if _sigterm_shutdown_started:
+        # SIGTERM came in again while shutdown was in progress.
+        # Just return; don't hold the signal handler or do heavy work.
+        return
+    # Set immediately to prevent re-entry from concurrent SIGTERMs
+    _sigterm_shutdown_started = True
+    logger.warning("SIGTERM received (signum=%d) — initiating emergency shutdown", signum)
+
+    def _finalize_sigterm_shutdown() -> None:
+        """Finalize shutdown: checkpoint → quit."""
+        _emergency_checkpoint_if_running()
+        try:
+            from PyQt5.QtWidgets import QApplication
+
+            _app2 = QApplication.instance()
+            if _app2:
+                _app2.quit()
+        except Exception as _exc:
+            logger.debug("Qt-Quit after SIGTERM failed: %s", _exc)
+        # If Qt.quit fails, process will exit from SIGTERM anyhow
+
     try:
         from PyQt5.QtCore import QTimer
         from PyQt5.QtWidgets import QApplication
 
         _app = QApplication.instance()
         if _app:
-            QTimer.singleShot(0, _app.quit)
+            # Schedule via event loop (non-blocking from signal handler)
+            QTimer.singleShot(0, _finalize_sigterm_shutdown)
+            return
     except Exception as _exc:
-        logger.debug("Qt-Shutdown nach SIGTERM fehlgeschlagen: %s", _exc)
+        logger.debug("SIGTERM QTimer dispatch failed, fallback: %s", _exc)
+
+    # Fallback if QTimer dispatch failed (e.g., no event loop)
+    _finalize_sigterm_shutdown()
 
 
 def _process_events_ms(app: "QApplication", ms: int) -> None:

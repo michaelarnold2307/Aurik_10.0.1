@@ -195,6 +195,8 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print()
 | Rauschtextur-Check fehlt | Denoising erzeugt weiße/flache Rauschtextur statt Carrier-kohärentem Profil | `NoiseTextureCoherenceGuard` (§4.7): spektrale Form des Restrauschens vs. Trägerprofil; Kohärenz ≥ 0.80 in Restoration |
 | Goals gegen degradierten Input am Pipeline-Ende | `MusicalGoalsChecker.measure_all(restored, sr, original=degraded_input)` | Bei `carrier_chain_recovery_ratio > 0.15`: End-Referenz = `best_carrier_checkpoint` (§0d Ebene 2, §1.2a) |
 | carrier_chain_recovery_ratio fehlt | Metadata ohne Carrier-Recovery-Signal | UV3 Pflichtfeld `metadata["carrier_chain_recovery_ratio"]` — berechnet nach letzter Carrier-Phase (§0d) |
+| ML-Inferenz ohne PLM-Active-Guard | `session.run()` / `model(input)` ohne `plm.set_active()` — Emergency-Eviction entlädt Plugin während aktiver Inferenz → Crash → OOM | `plm.set_active("model", True)` VOR Inferenz, `plm.set_active("model", False)` in `finally`-Block (§4.6b) |
+| `_PHASE_REQUIRED_MODELS` unvollständig | Phase listet nur Primärmodell, nicht Fallback-Modelle — PLM evictiert Fallback-Modell bei `evict_for_phase()` | Alle ML-Modelle (primär + Fallback) in `_PHASE_REQUIRED_MODELS` listen; bidirektionale Sync mit `try_allocate()`-Aufrufen (§4.6c) |
 | Pitch-Kaskade ohne RMVPE | FCPE → CREPE → PESTO → pYIN (RMVPE übersprungen) | FCPE → RMVPE → PESTO → pYIN: `get_rmvpe_plugin()` als Tier-2 in HPG `_estimate_f0_track`, `hybrid_wow_flutter._init_crepe`, `hybrid_speed_pitch_ml._init_crepe` (§4.4 — 30 % geringere Pitch-Fehlerrate bei Gesang, Wei et al. ICASSP 2023) |
 | Lautheitsmessung ohne ISO 532-1 | `np.mean(audio**2)` oder LUFS-only nach Rumble/Multiband-Phasen | `compute_specific_loudness_zwicker(audio, sr)` → ΔN > 2.0 sone = FAIL, Dry/Wet-Rescue (§4.1b) |
 | JND-blinde PMGG-Phase-Akzeptanz | Phase mit allen Deltas > 0 und < JND wird identisch zu signifikant positiver Phase behandelt | `JND_MIN_DELTA` Dict in `_run_with_retry()`: wenn alle Deltas ≥ 0 UND alle < JND → `sub_threshold`, kein Retry, `metadata["sub_threshold_phases"]` (§2.47b) |
@@ -251,7 +253,7 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print()
 
 | Operation | Limit / Minute Audio |
 |---|---|
-| DefectScanner | ≤ 20 s |
+| DefectScanner | ≤ 4 s |
 | Phase-Pipeline gesamt | ≤ 240 s |
 | FeedbackChain | ≤ 120 s |
 | RestorabilityEstimator | ≤ 5 s |

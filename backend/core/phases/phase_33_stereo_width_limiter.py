@@ -106,6 +106,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
     # [Bass, Low-Mid, Mid-High, High]
     MAX_WIDTH_PER_BAND = {
         MaterialType.SHELLAC: [0.4, 0.6, 0.8, 0.7],  # Conservative
+        MaterialType.WAX_CYLINDER: [0.35, 0.5, 0.7, 0.6],  # Very conservative (mono-like historical media)
         MaterialType.VINYL: [0.5, 0.7, 0.9, 0.8],  # Moderate
         MaterialType.TAPE: [0.45, 0.65, 0.85, 0.75],  # Slightly conservative
         MaterialType.CD_DIGITAL: [0.6, 0.8, 1.0, 0.9],  # Allow wider

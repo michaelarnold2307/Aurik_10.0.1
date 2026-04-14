@@ -300,6 +300,13 @@ class MasteringPolishPhase(PhaseInterface):
 
     def _split_bands(self, audio: np.ndarray, sample_rate: int) -> list:
         """Teilt Audio in 4 Frequenzbänder (Linkwitz-Riley 4th Order)."""
+        # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+        MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+        if len(audio) < MIN_AUDIO_SAMPLES:
+            logger.debug(f"phase_17: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}), returning passthrough bands")
+            # Return audio as all 4 bands (band 1 = full, bands 2-4 = silence)
+            return [audio.copy(), np.zeros_like(audio), np.zeros_like(audio), np.zeros_like(audio)]
+
         bands = []
 
         # Band 1: Bass (< 150 Hz)

@@ -723,6 +723,50 @@ class TestApolloPlugin:
         _cleanup(["Apollo"], "plugins.apollo_plugin")
         assert _budget_total() == 0.0
 
+    def test_04_marks_apollo_active_during_repair(self, monkeypatch):
+        from plugins.apollo_plugin import ApolloPlugin
+
+        class _FakePLM:
+            def __init__(self):
+                self.active = False
+                self.calls: list[tuple[str, str, bool | None]] = []
+
+            def touch(self, name: str) -> None:
+                self.calls.append(("touch", name, None))
+
+            def set_active(self, name: str, active: bool) -> None:
+                self.active = active
+                self.calls.append(("set_active", name, active))
+
+        fake_plm = _FakePLM()
+        plugin = ApolloPlugin.__new__(ApolloPlugin)
+        plugin._model_loaded = True
+        plugin._torch_model = object()
+        plugin._device = "cpu"
+        plugin._fallback_active = False
+
+        monkeypatch.setattr(
+            "backend.core.plugin_lifecycle_manager.get_plugin_lifecycle_manager",
+            lambda: fake_plm,
+        )
+
+        def _fake_repair_apollo(audio: np.ndarray, sr: int, material: str) -> np.ndarray:
+            assert fake_plm.active is True, "Apollo muss waehrend repair() im PLM aktiv sein"
+            return np.asarray(audio, dtype=np.float32)
+
+        plugin._repair_apollo = _fake_repair_apollo
+        plugin._repair_dsp_fallback = lambda audio, sr, material: np.asarray(audio, dtype=np.float32)
+        plugin._measure_hf_gain = lambda before, after, sr: 0.0
+        plugin._estimate_brillanz = lambda audio, sr: 0.9
+        plugin._estimate_waerme = lambda audio, sr: 0.9
+
+        result = plugin.repair(_signal(0.25), SR, material="mp3_low")
+
+        assert result.model_used == "apollo"
+        assert ("set_active", "Apollo", True) in fake_plm.calls
+        assert fake_plm.calls[-1] == ("set_active", "Apollo", False)
+        assert fake_plm.active is False, "Apollo muss nach repair() wieder freigegeben werden"
+
 
 class TestCqtdiffPlusPlugin:
     """CQTdiff+ (Dropout-Inpainting ≥ 50 ms): Gap-Befüllung, finite Output."""

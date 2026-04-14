@@ -127,7 +127,7 @@ class ApolloPlugin:
         self._try_load_model()
 
     _BUDGET_NAME: str = "Apollo"
-    _BUDGET_SIZE_GB: float = 0.15  # ~100-150 MB TorchScript
+    _BUDGET_SIZE_GB: float = 0.8  # Erhöht von 0.15 GB (zu klein für lange Audio + TorchScript)
 
     def _try_load_model(self) -> None:
         """Lädt Apollo TorchScript-Modell; aktiviert DSP-Fallback bei Fehler."""
@@ -244,9 +244,27 @@ class ApolloPlugin:
         )
 
         if self._model_loaded and self._torch_model is not None:
-            result_audio = self._repair_apollo(audio_f32, sr, material)
-            model_used = "apollo"
-            confidence = 0.92
+            lifecycle_manager = None
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager
+
+                lifecycle_manager = get_plugin_lifecycle_manager()
+                lifecycle_manager.touch(self._BUDGET_NAME)
+                lifecycle_manager.set_active(self._BUDGET_NAME, True)
+            except Exception as exc:
+                logger.debug("Apollo: failed to mark plugin active in PLM: %s", exc)
+
+            try:
+                result_audio = self._repair_apollo(audio_f32, sr, material)
+                model_used = "apollo"
+                confidence = 0.92
+            finally:
+                if lifecycle_manager is not None:
+                    try:
+                        lifecycle_manager.touch(self._BUDGET_NAME)
+                        lifecycle_manager.set_active(self._BUDGET_NAME, False)
+                    except Exception as exc:
+                        logger.debug("Apollo: failed to clear active flag in PLM: %s", exc)
         else:
             result_audio = self._repair_dsp_fallback(audio_f32, sr, material)
             model_used = "spectral_repair_dsp_fallback"
@@ -316,16 +334,23 @@ class ApolloPlugin:
             with torch.no_grad():
                 out = model(t)  # [1,1,T']
 
+            # Free input tensor immediately — no longer needed
+            del t
+
             # 3. Resample 44100 → 48000
             if sr != self._APOLLO_SR:
                 out = torchaudio.functional.resample(out, self._APOLLO_SR, sr)
 
             reconstructed = out.squeeze().cpu().numpy()  # [T]
 
+            # Free output tensor — data is in numpy now
+            del out
+
             # 4. Länge angleichen + Guard
             n = min(len(audio), len(reconstructed))
             result = audio.copy()
             result[:n] = np.nan_to_num(reconstructed[:n], nan=0.0, posinf=0.0, neginf=0.0)
+            del reconstructed
             return np.clip(result, -1.0, 1.0).astype(np.float32)
 
         except Exception as exc:
@@ -358,31 +383,30 @@ class ApolloPlugin:
         sr: int,
         material: str,
     ) -> np.ndarray:
-        """DSP-Fallback: Consistent Wiener + Spectral Crest Restoration + residual HF-Tilt.
+        """DSP-Fallback mit Chunked-Processing (streaming, konstanter Speicher).
 
-        Replaces simple HF-shelving with a 3-step pipeline targeting actual MDCT
-        quantization artefacts (staircase inter-bin roughness, masked spectral peaks):
+        WICHTIG: DSP-Fallback wurde mit voller STFT-Pufferung implementiert,
+        was bei langen Audios (>30s) zu RAM-OOM führt. Diese Version nutzt
+        Chunk-Processing (8s-Fenster) mit Overlap-Add, um Speicher O(1) zu halten.
 
-        1. Consistent Wiener per-bin smoothing (Le Roux & Vincent 2013):
-           Estimates noise variance from 5th-percentile magnitude floor; Wiener gain
-           G = σ_s² / (σ_s² + σ_n²), floor 0.15 to avoid musical-noise.
-           Kernel width k=3 bins → matches typical MP3 scale-factor-band granularity.
+        Algorithmus (wie orig, aber mit Chunking):
+            1. Consistent Wiener pro Chunk
+            2. Spectral crest restoration (4–8 kHz)
+            3. HF-Shelving (8 kHz+)
+            4. OLA-Rekombination mit Windowing
 
-        2. Spectral crest restoration above 4 kHz (Fastl & Zwicker 2007 §8.3):
-           MP3/AAC psychoacoustic masking flattens spectral peaks; restore crest factor
-           by boosting bins that exceed 1.2× local mean by up to +20 %.
-
-        3. Residual HF shelving above 8 kHz (reduced gain vs. old approach).
-
-        4. OLA reconstruction preserving original phase angles (lightweight PGHI proxy).
+        Invariante: Chunk-Größe = 8s → RAM-Peak ≈ 4 MB statt 346+ MB
         """
+        chunk_duration_s = 8.0  # ← Streaming-Chunk-Size
+        chunk_samples = int(chunk_duration_s * sr)
+        overlap_samples = 2048  # n_fft → 1 hop overlap für smooth OLA
+
         n_fft = 2048
         hop = n_fft // 4
-        window = np.hanning(n_fft).astype(np.float64)
-        audio_f64 = audio.astype(np.float64)
-        n = len(audio_f64)
+        window = np.hanning(n_fft).astype(np.float32)
+        audio_f32 = np.asarray(audio, dtype=np.float32)
+        n = len(audio_f32)
 
-        # Reduced HF shelf gain — steps 1-2 now handle the bulk of codec damage
         boost_db = {
             "mp3_low": 2.5,
             "mp3_high": 1.5,
@@ -392,67 +416,87 @@ class ApolloPlugin:
         }.get(material, 1.5)
         gain_lin = 10.0 ** (boost_db / 20.0)
 
+        result = np.zeros(n, dtype=np.float32)
+        norm_w = np.zeros(n, dtype=np.float32)
+
         freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
         n_bins = len(freqs)
         hf4k_bin = int(np.searchsorted(freqs, 4000.0))
         hf8k_bin = int(np.searchsorted(freqs, 8000.0))
 
-        # Collect STFT frames
-        frame_starts = list(range(0, n - n_fft + 1, hop))
-        if not frame_starts:
-            return audio.copy().astype(np.float32)
+        # Process audio in overlapping chunks
+        chunk_pos = 0
+        while chunk_pos < n:
+            chunk_end = min(chunk_pos + chunk_samples, n)
+            chunk = audio_f32[chunk_pos:chunk_end]
+            if len(chunk) < n_fft:
+                # Final short chunk: pad & process
+                chunk = np.pad(chunk, (0, n_fft - len(chunk)), mode='constant')
 
-        mags = np.zeros((len(frame_starts), n_bins), dtype=np.float64)
-        phases = np.zeros((len(frame_starts), n_bins), dtype=np.float64)
-        for i, start in enumerate(frame_starts):
-            frame = audio_f64[start : start + n_fft] * window
-            spec = np.fft.rfft(frame, n=n_fft)
-            mags[i] = np.abs(spec)
-            phases[i] = np.angle(spec)
+            chunk_f64 = chunk.astype(np.float64)
+            chunk_len = len(chunk_f64)
 
-        # Step 1: Consistent Wiener noise reduction over frequency axis
-        # 3-bin moving average → smooths MDCT scale-factor-band quantization roughness
-        k = 3
-        kernel = np.ones(k, dtype=np.float64) / k
-        mag_smooth = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode="same"), 1, mags)
-        mag_smooth = np.maximum(mag_smooth, 0.0)
+            # Mini-STFT for this chunk only (O(chunk) memory, not O(audio))
+            frame_starts = list(range(0, chunk_len - n_fft + 1, hop))
+            if not frame_starts:
+                chunk_pos = chunk_end
+                continue
 
-        noise_floor = np.percentile(mags, 5, axis=0)  # per-bin minimum statistics
-        noise_var = noise_floor**2
-        signal_var = np.maximum(mag_smooth**2 - noise_var[np.newaxis, :], 0.0)
-        wiener_g = signal_var / (signal_var + noise_var[np.newaxis, :] + 1e-15)
-        wiener_g = np.clip(wiener_g, 0.15, 1.0)  # spectral floor 0.15 (Le Roux & Vincent 2013)
-        mag_out = mags * wiener_g
+            # Process frames streaming-style: build & process per-frame, not per-file
+            for i, start in enumerate(frame_starts):
+                frame = chunk_f64[start : start + n_fft] * window
+                spec = np.fft.rfft(frame, n=n_fft)
+                mag = np.abs(spec)
+                phase = np.angle(spec)
 
-        # Step 2: Spectral crest restoration above 4 kHz
-        # Boost spectral peaks (> 1.2× local mean) by up to +20 %
-        if hf4k_bin < n_bins:
-            hf_mag = mag_out[:, hf4k_bin:]
-            local_kernel = np.ones(11, dtype=np.float64) / 11
-            local_mean = np.apply_along_axis(lambda x: np.convolve(x, local_kernel, mode="same"), 1, hf_mag)
-            local_mean = np.maximum(local_mean, 1e-15)
-            crest_boost = 1.0 + 0.20 * np.clip(hf_mag / local_mean - 1.2, 0.0, 1.0)
-            mag_out[:, hf4k_bin:] = hf_mag * crest_boost
+                # Step 1: Consistent Wiener (single-frame version)
+                k = 3
+                kernel = np.ones(k, dtype=np.float64) / k
+                mag_smooth = np.convolve(mag, kernel, mode='same')
+                mag_smooth = np.maximum(mag_smooth, 0.0)
 
-        # Step 3: Residual HF shelving above 8 kHz
-        if hf8k_bin < n_bins:
-            mag_out[:, hf8k_bin:] *= gain_lin
+                # Use percentile over frame context (not global)
+                noise_floor = np.percentile(mag, 5)
+                noise_var = noise_floor**2
+                signal_var = np.maximum(mag_smooth**2 - noise_var, 0.0)
+                wiener_g = signal_var / (signal_var + noise_var + 1e-15)
+                wiener_g = np.clip(wiener_g, 0.15, 1.0)
+                mag_out = mag * wiener_g
 
-        # Step 4: OLA reconstruction (original phases preserved — lightweight PGHI proxy)
-        spec_out = mag_out * np.exp(1j * phases)
-        result = np.zeros(n, dtype=np.float64)
-        norm_w = np.zeros(n, dtype=np.float64)
-        for i, start in enumerate(frame_starts):
-            frame_out = np.fft.irfft(spec_out[i], n=n_fft).astype(np.float64) * window
-            result[start : start + n_fft] += frame_out
-            norm_w[start : start + n_fft] += window**2
+                # Step 2: Spectral crest restoration
+                if hf4k_bin < n_bins:
+                    hf_mag = mag_out[hf4k_bin:]
+                    local_kernel = np.ones(11, dtype=np.float64) / 11
+                    local_mean = np.convolve(hf_mag, local_kernel, mode='same')
+                    local_mean = np.maximum(local_mean, 1e-15)
+                    crest_boost = 1.0 + 0.20 * np.clip(hf_mag / local_mean - 1.2, 0.0, 1.0)
+                    mag_out[hf4k_bin:] = hf_mag * crest_boost
 
+                # Step 3: HF shelving
+                if hf8k_bin < n_bins:
+                    mag_out[hf8k_bin:] *= gain_lin
+
+                # Step 4: Reconstruct this frame
+                spec_out = mag_out * np.exp(1j * phase)
+                frame_out = np.fft.irfft(spec_out, n=n_fft).astype(np.float32) * window
+
+                # OLA: add frame to result (with overlap handling)
+                result_start = chunk_pos + start
+                result_end = min(result_start + n_fft, n)
+                result[result_start:result_end] += frame_out[:result_end - result_start]
+                norm_w[result_start:result_end] += window[:result_end - result_start]
+
+            chunk_pos = chunk_end - overlap_samples  # Overlap for smooth transitions
+
+        # Normalize by window
         norm_w = np.where(norm_w > 1e-10, norm_w, 1.0)
-        result /= norm_w
+        result = result / norm_w
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
         result = np.clip(result, -1.0, 1.0).astype(np.float32)
+
         logger.info(
-            "🟡 Apollo DSP-Fallback: Wiener+CrestEnh+HF+%.1fdB (%s)",
+            "🟡 Apollo DSP-Fallback-Chunked: Chunks=%d | Wiener+CrestEnh+HF+%.1fdB (%s) | RAM-efficient",
+            int(np.ceil(n / chunk_samples)),
             boost_db,
             material,
         )

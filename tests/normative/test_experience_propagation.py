@@ -151,6 +151,59 @@ class TestBridgeExperienceInsights:
         assert fqf["fallback_count"] == 2
         assert isinstance(fqf["recovery_trace"], list)
 
+    def test_get_experience_insights_contains_quality_gate_summary(self):
+        """Bridge must provide standardized quality_gate summary for UI decisions."""
+        from backend.api.bridge import get_experience_insights
+
+        class MockResult:
+            fail_reason = "HPI_FAIL"
+            degradation_status = "degraded"
+            metadata = {
+                "fail_reasons": [
+                    {
+                        "component": "HolisticPerceptualGate",
+                        "error_code": "HPI_FAIL",
+                    }
+                ],
+                "fallback_quality_floor": {
+                    "triggered": True,
+                    "status": "degraded",
+                    "attempts": 1,
+                    "reason": "fallback_quality_floor_failed_no_compatible_checkpoint",
+                },
+            }
+
+        result = get_experience_insights(MockResult())
+        qg = result["quality_gate"]
+        assert qg["passed"] is False
+        assert qg["degradation_status"] == "degraded"
+        assert qg["primary_fail_reason"] == "HPI_FAIL"
+        assert qg["primary_error_code"] == "HPI_FAIL"
+        assert qg["recovery_attempted"] is True
+        assert qg["best_possible_reached"] is False
+
+    def test_get_experience_insights_quality_gate_maps_recovered_floor(self):
+        """Fallback-quality-floor recovered status must be reflected as recovered gate status."""
+        from backend.api.bridge import get_experience_insights
+
+        class MockResult:
+            metadata = {
+                "degradation_status": "ok",
+                "fallback_quality_floor": {
+                    "triggered": True,
+                    "status": "recovered",
+                    "attempts": 1,
+                    "reason": "fallback_quality_floor_recovered_with_checkpoint",
+                },
+            }
+
+        result = get_experience_insights(MockResult())
+        qg = result["quality_gate"]
+        assert qg["passed"] is False
+        assert qg["degradation_status"] == "recovered"
+        assert qg["best_possible_reached"] is True
+        assert qg["fallback_quality_floor_status"] == "recovered"
+
     def test_build_export_quality_gate_payload_includes_fqf_flags(self):
         """Bridge must emit export_workflow-compatible quality_gate payload."""
         from backend.api.bridge import build_export_quality_gate_payload

@@ -177,6 +177,13 @@ class AdvancedDereverbPhase(PhaseInterface):
         self.validate_input(audio)
         t0 = time.time()
 
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict49
+            _get_plm_evict49().evict_for_phase("phase_49_advanced_dereverb")
+        except Exception:
+            pass
+
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         effective_strength = float(kwargs.get("strength", 0.7)) * phase_locality_factor
@@ -198,6 +205,10 @@ class AdvancedDereverbPhase(PhaseInterface):
             )
 
         strength = effective_strength
+        _quality_mode_49 = str(kwargs.get("quality_mode", "quality")).strip().lower()
+        _quality_first_unleashed_49 = bool(
+            kwargs.get("quality_first_unleashed", _quality_mode_49 in ("quality", "maximum"))
+        )
         _vocal_conf_49 = float(kwargs.get("vocal_confidence", kwargs.get("panns_singing_confidence", 0.0)))
         _vocal_detected_49 = bool(kwargs.get("vocal_detected", False)) or (_vocal_conf_49 >= 0.35)
 
@@ -258,7 +269,16 @@ class AdvancedDereverbPhase(PhaseInterface):
                         _plm49 = None
                     # sigma: adaptiv aus strength — stärkerer Nachhall braucht höheres sigma
                     _sigma = float(np.clip(0.25 + strength * 0.65, 0.25, 0.90))
-                    _ml_runtime_budget_s = float(np.clip(kwargs.get("ml_runtime_budget_s", 60.0), 20.0, 120.0))
+                    _ml_runtime_default = 120.0 if _quality_first_unleashed_49 else 60.0
+                    _ml_runtime_max = 300.0 if _quality_first_unleashed_49 else 120.0
+                    _ml_runtime_budget_s = float(
+                        np.clip(kwargs.get("ml_runtime_budget_s", _ml_runtime_default), 20.0, _ml_runtime_max)
+                    )
+                    if _plm49 is not None:
+                        try:
+                            _plm49.touch_plugin("SGMSE+")
+                        except Exception:
+                            pass
                     _sgmse_result = _sgmse_factory_49().enhance(
                         audio,
                         sample_rate,

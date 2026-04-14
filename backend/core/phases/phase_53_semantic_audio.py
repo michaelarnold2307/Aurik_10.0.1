@@ -88,6 +88,11 @@ def _mono(audio: np.ndarray) -> np.ndarray:
 
 def _estimate_bpm(mono: np.ndarray, sr: int) -> float:
     """Auto-Korrelation der Onset-Hüllkurve für BPM-Schätzung."""
+    # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+    MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+    if len(mono) < MIN_AUDIO_SAMPLES:
+        return 120.0  # Default fallback for ultra-short audio
+
     # Hüllkurve über RMS-Fenster (23 ms)
     frame = max(1, int(0.023 * sr))
     hop = max(1, frame // 2)
@@ -111,6 +116,11 @@ def _estimate_bpm(mono: np.ndarray, sr: int) -> float:
 
 def _estimate_key(mono: np.ndarray, sr: int) -> str:
     """Chromagramm + Krumhansl-Profile → Tonart-Schätzung."""
+    # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+    MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+    if len(mono) < MIN_AUDIO_SAMPLES:
+        return "C major"  # Default fallback for ultra-short audio
+
     n_fft = 4096
     hop = 1024
     f, _t, Zxx = sig.stft(mono, fs=sr, nperseg=n_fft, noverlap=n_fft - hop, window="hann")

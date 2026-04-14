@@ -1162,7 +1162,8 @@ class UnifiedRestorerV3:
             return None
 
         if isinstance(chain_src, str):
-            _tokens = [p.strip().lower() for p in chain_src.replace("→", ">").split(">") if p.strip()]
+            _norm = chain_src.replace("->", ">").replace("→", ">")
+            _tokens = [p.strip().lower() for p in _norm.split(">") if p.strip()]
             return _tokens or None
 
         if isinstance(chain_src, (list, tuple)):
@@ -1631,6 +1632,56 @@ class UnifiedRestorerV3:
         return float(_thr), float(_dmp)
 
     @staticmethod
+    def _post_additive_bw_guard(
+        audio: np.ndarray,
+        sample_rate: int,
+        material_type: Any,
+        quality_mode: Any = None,
+    ) -> tuple[np.ndarray, bool]:
+        """§6.2c Post-Additive BW-Hard-Cap — Material-Bandbreiten-Ceiling.
+
+        Butterworth 8th-order LPF nach dem Phase-Loop, um BW-Überschreitungen
+        durch additive Phasen (phase_06, phase_07, phase_23, phase_39) zu verhindern.
+
+        Restoration: Hard-Cap aktiv. Studio 2026: kein Enforcement.
+
+        Returns (audio, guard_applied).
+        """
+        try:
+            from backend.core.carrier_transfer_characteristics import get_bw_ceiling_hz
+
+            _bw_mat_key = material_type.value if hasattr(material_type, "value") else str(material_type)
+            _bw_is_studio = quality_mode is not None and "studio" in str(quality_mode).lower()
+
+            if _bw_is_studio:
+                return audio, False
+
+            _bw_ceil_hz = get_bw_ceiling_hz(_bw_mat_key)
+            _nyquist = sample_rate / 2.0
+            if _bw_ceil_hz >= _nyquist * 0.95:
+                return audio, False
+
+            from scipy.signal import butter, sosfiltfilt
+
+            _bw_norm = min(_bw_ceil_hz / _nyquist, 0.99)
+            _bw_sos = butter(8, _bw_norm, btype="low", output="sos")
+            if audio.ndim == 2:
+                for _ch in range(audio.shape[1]):
+                    audio[:, _ch] = sosfiltfilt(_bw_sos, audio[:, _ch])
+            else:
+                audio = sosfiltfilt(_bw_sos, audio)
+            audio = np.clip(audio, -1.0, 1.0)
+            logger.info(
+                "§2.46c BW-Hard-Cap: LPF @%d Hz (material=%s, Butterworth 8th-order)",
+                _bw_ceil_hz,
+                _bw_mat_key,
+            )
+            return audio, True
+        except Exception as _exc:
+            logger.debug("§2.46c BW-Guard failed (non-blocking): %s", _exc)
+            return audio, False
+
+    @staticmethod
     def _compute_joy_fatigue_runtime_index(
         musical_goal_scores: dict[str, float] | None,
         fatigue_result: dict[str, Any] | None,
@@ -1937,7 +1988,7 @@ class UnifiedRestorerV3:
         try:
             from backend.core.era_classifier import _estimate_spectral_tilt as _est_tilt
 
-            mono = audio[0] if audio.ndim == 2 else audio
+            mono = audio[:, 0] if audio.ndim == 2 else audio
             # Limit to 4 s centre excerpt for speed (≤10 ms on typical 48 kHz audio).
             max_n = int(4.0 * sr)
             if len(mono) > max_n:
@@ -3687,7 +3738,7 @@ class UnifiedRestorerV3:
             if _schlager_result is not None:
                 if _schlager_result.is_schlager:
                     logger.info(
-                        "🎵 Schlager erkannt: confidence=%.2f genre=%s bpm=%.0f — SCHLAGER_PROFILE aktiv",
+                        "🎵 Schlager-Kandidat: confidence=%.2f genre=%s bpm=%.0f (finale Genre-Guards ausstehend)",
                         _schlager_result.confidence,
                         _schlager_result.genre_label,
                         _schlager_result.bpm,
@@ -3794,7 +3845,7 @@ class UnifiedRestorerV3:
                     _schlager_result = classify_genre(analysis_audio, analysis_sample_rate)
                     if _schlager_result.is_schlager:
                         logger.info(
-                            "🎵 Schlager erkannt: confidence=%.2f genre=%s bpm=%.0f — SCHLAGER_PROFILE aktiv",
+                            "🎵 Schlager-Kandidat: confidence=%.2f genre=%s bpm=%.0f (finale Genre-Guards ausstehend)",
                             _schlager_result.confidence,
                             _schlager_result.genre_label,
                             _schlager_result.bpm,
@@ -3828,6 +3879,23 @@ class UnifiedRestorerV3:
                         )
                     except Exception as _gp_genre_else_exc:
                         logger.debug("GlobalPlan Genre-Override (else-Pfad) fehlgeschlagen: %s", _gp_genre_else_exc)
+
+        if _schlager_result is not None and bool(getattr(_schlager_result, "is_schlager", False)):
+            _era_decade_guard = int(getattr(_era_result, "decade", 0) or 0)
+            _genre_conf_guard = float(getattr(_schlager_result, "confidence", 0.0) or 0.0)
+            _is_short_vintage_guard = (_era_decade_guard > 0 and _era_decade_guard <= 1940) and (_audio_duration_s < 10.0)
+            if _is_short_vintage_guard and _genre_conf_guard < 0.60:
+                _schlager_result.is_schlager = False
+                _schlager_result.genre_label = "Unbekannt"
+                _schlager_result.subgenre = "unknown"
+                _schlager_result.open_set_unknown = True
+                _schlager_result.confidence = 0.0
+                logger.info(
+                    "Genre-Guard: Vintage-Kurzsignal neutralisiert (era=%d, duration=%.1fs, conf=%.2f) -> Unbekannt",
+                    _era_decade_guard,
+                    _audio_duration_s,
+                    _genre_conf_guard,
+                )
 
         # §2.19.3 SCHLAGER_RESTORATION_PROFILE anwenden (GP-Material-Key + Phase-Params)
         _genre_profile: dict = {}
@@ -5285,38 +5353,10 @@ class UnifiedRestorerV3:
         _cb(86, "Nachbearbeitung…")
 
         # §2.46c / §6.2c Post-Additive BW-Hard-Cap — Material-Bandbreiten-Ceiling
-        # Butterworth 8th-order LPF nach dem Phase-Loop, um BW-Überschreitungen zu verhindern.
-        _bw_guard_applied = False
-        try:
-            from backend.core.carrier_transfer_characteristics import get_bw_ceiling_hz
-
-            _bw_mat_key = material_type.value if hasattr(material_type, "value") else str(material_type)
-            _bw_qmode = getattr(self, "_quality_mode", None)
-            _bw_is_studio = _bw_qmode is not None and "studio" in str(_bw_qmode).lower()
-
-            if not _bw_is_studio:  # Restoration: Hard-Cap; Studio 2026: kein Enforcement
-                _bw_ceil_hz = get_bw_ceiling_hz(_bw_mat_key)
-                _nyquist = sample_rate / 2.0
-                if _bw_ceil_hz < _nyquist * 0.95:  # Nur wenn Ceiling signifikant unter Nyquist
-                    from scipy.signal import butter, sosfiltfilt
-
-                    _bw_norm = _bw_ceil_hz / _nyquist
-                    _bw_norm = min(_bw_norm, 0.99)  # scipy-Limit
-                    _bw_sos = butter(8, _bw_norm, btype="low", output="sos")
-                    if restored_audio.ndim == 2:
-                        for _ch in range(restored_audio.shape[1]):
-                            restored_audio[:, _ch] = sosfiltfilt(_bw_sos, restored_audio[:, _ch])
-                    else:
-                        restored_audio = sosfiltfilt(_bw_sos, restored_audio)
-                    restored_audio = np.clip(restored_audio, -1.0, 1.0)
-                    _bw_guard_applied = True
-                    logger.info(
-                        "§2.46c BW-Hard-Cap: LPF @%d Hz (material=%s, Butterworth 8th-order)",
-                        _bw_ceil_hz,
-                        _bw_mat_key,
-                    )
-        except Exception as _bw_guard_exc:
-            logger.debug("§2.46c BW-Guard failed (non-blocking): %s", _bw_guard_exc)
+        restored_audio, _bw_guard_applied = self._post_additive_bw_guard(
+            restored_audio, sample_rate, material_type,
+            quality_mode=getattr(self, "_quality_mode", None),
+        )
 
         # §0c Graceful-Stop-Tag: wenn Watchdog die Pipeline beendet hat, Metadaten befüllen.
         # Die FeedbackChain und HPI laufen danach nicht (zu aufwändig), stattdessen direkter
@@ -6176,7 +6216,14 @@ class UnifiedRestorerV3:
                         max(float(np.percentile(np.abs(restored_audio.flatten()), 5)), 1e-12)
                     )
                     _hpg_snr_gain = _hpg_nf_original - _hpg_nf_restored  # positive = noise floor reduced
-                    if _hpg_snr_gain > 12.0:
+                    # Guard against floor-limited measurements: the raw 5th-percentile drops to
+                    # the 1e-12 protection floor (~-240 dBFS) in music after denoising when silence
+                    # gaps / pauses dominate the lowest 5% of samples.  The guard then fires on
+                    # healthy audio whose restored signal is NOT silent — it is simply gap-quiet.
+                    # Fix: only recompute the HPG mask if the 5th-percentile is above the analytical
+                    # floor (-200 dBFS is well above 20*log10(1e-12)+1 ≈ -239 dBFS floor).
+                    _HPG_FLOOR_DB = -200.0
+                    if _hpg_snr_gain > 12.0 and _hpg_nf_restored > _HPG_FLOOR_DB:
                         _hpg_ref_audio = restored_audio
                         _hpg_pre_mask, _hpg_pre_href = None, None  # force fresh extraction from denoised audio
                         logger.info(
@@ -6978,15 +7025,26 @@ class UnifiedRestorerV3:
                         _vr.pqs_mos,
                         _vr.mel_snr_db,
                     )
-                restored_audio = np.clip(
+                # Keep pre-Vocos audio when the vocoder output is effectively silent.
+                _vocos_safe = np.clip(
                     np.nan_to_num(_vocos_out, nan=0.0, posinf=0.0, neginf=0.0),
                     -1.0,
                     1.0,
                 )
+                _vocos_rms = float(np.sqrt(np.mean(_vocos_safe.astype(np.float64) ** 2) + 1e-12))
+                if _vocos_rms <= 1e-4:
+                    logger.warning(
+                        "§1.4 Vocos: Ausgabe stumm (RMS=%.2e, mel_snr=%.1f dB) -> "
+                        "verworfen, behalte Pre-Vocos-Audio (§0 Primum non nocere)",
+                        _vocos_rms,
+                        getattr(_vr, "mel_snr_db", float("nan")),
+                    )
+                else:
+                    restored_audio = _vocos_safe
             elif _is_vocos_studio:
                 logger.debug(
-                    "§1.4 Vocos: Übersprungen — PQS-MOS ≥ 4.3 "
-                    "(pqs_mos_norm=%.3f ≥ 0.825), kein Qualitätsverlust möglich",
+                    "§1.4 Vocos: Übersprungen - PQS-MOS >= 4.3 "
+                    "(pqs_mos_norm=%.3f >= 0.825), kein Qualitätsverlust möglich",
                     _pqs_mos_norm if _pqs_mos_norm is not None else -1.0,
                 )
         except Exception as _vocos_exc:
@@ -13915,6 +13973,10 @@ class UnifiedRestorerV3:
         # wenn quality/maximum Modus und analoges Material — "auto" lässt die Phase
         # selbst entscheiden (qualitätsmodus × material_type). Advisory-only: explicit
         # caller-Werte überschreiben die Injection nicht.
+        _qmode_str = str(kwargs.get("quality_mode", getattr(self.config.mode, "value", "quality"))).strip().lower()
+        _quality_first_unleashed = bool(self.is_studio_mode() or _qmode_str in {"quality", "maximum", "studio", "studio2026"})
+        kwargs.setdefault("quality_first_unleashed", _quality_first_unleashed)
+
         if phase_metadata.phase_id == "phase_03_denoise":
             kwargs.setdefault("tdp_stem_aware_nr", "auto")
 
@@ -14187,7 +14249,7 @@ class UnifiedRestorerV3:
                             if _mapped <= _mono_last[0]:
                                 return  # Heartbeat-Tick liegt hinter echtem Callback
                             _mono_last[0] = _mapped
-                        _root_cb(int(round(_mapped)), lbl, elapsed)
+                        _root_cb(_mapped, lbl, elapsed)
                     except Exception:
                         pass
 
@@ -14733,7 +14795,7 @@ class UnifiedRestorerV3:
             Executes in approx. 1–3 ms on 5 s of audio.
             """
             try:
-                mono = a[0] if a.ndim == 2 else a
+                mono = a[:, 0] if a.ndim == 2 else a
                 max_n = int(5.0 * sr_)  # max 5 s
                 if len(mono) > max_n:
                     start = (len(mono) - max_n) // 2
@@ -17233,7 +17295,10 @@ class UnifiedRestorerV3:
                             _mat_str_cond = (
                                 material_type.value if hasattr(material_type, "value") else str(material_type)
                             )
-                            _cond_rec = _conductor.recommend(_next_pid, _conductor_state, _mat_str_cond)
+                            _cond_rec = _conductor.recommend(
+                                _next_pid, _conductor_state, _mat_str_cond,
+                                goal_weights=getattr(self, "_song_goal_weights", None),
+                            )
                             if not hasattr(self, "_conductor_strength_hints"):
                                 self._conductor_strength_hints: dict[str, float] = {}
                             if _cond_rec.skip_recommended:

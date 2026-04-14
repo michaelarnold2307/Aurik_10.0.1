@@ -320,7 +320,7 @@ class UATReportGenerator:
             "## Restoration Criteria (15 Tests)",
             "",
             "| ID | Criterion | Category | Severity | Result | Evidence |",
-            "|----|-----------| ---------|----------|--------|----------|",
+            "| --- | --- | --- | --- | --- | --- |",
         ]
 
         for r in self.restoration_results:
@@ -341,7 +341,7 @@ class UATReportGenerator:
                 "## Studio 2026 Criteria (15 Tests)",
                 "",
                 "| ID | Criterion | Category | Severity | Result | Evidence |",
-                "|----|-----------| ---------|----------|--------|----------|",
+                "| --- | --- | --- | --- | --- | --- |",
             ]
         )
 
@@ -363,7 +363,7 @@ class UATReportGenerator:
                 "## Release Gates (7 Critical Tests)",
                 "",
                 "| ID | Gate name | K.O. | Result |",
-                "|----|-----------| ----|--------|",
+                "| --- | --- | --- | --- |",
             ]
         )
 
@@ -436,7 +436,7 @@ class UATReportGenerator:
             "### Restoration Mode (R1–R15)",
             "",
             "| ID | Criterion | Result | Notes |",
-            "|----|-----------| --------|-------|",
+            "| --- | --- | --- | --- |",
         ]
 
         for r in self.restoration_results:
@@ -449,7 +449,7 @@ class UATReportGenerator:
                 "### Studio 2026 Mode (S1–S15)",
                 "",
                 "| ID | Criterion | Result | Notes |",
-                "|----|-----------| --------|-------|",
+                "| --- | --- | --- | --- |",
             ]
         )
 
@@ -463,7 +463,7 @@ class UATReportGenerator:
                 "## Release Gate Validation (G1–G7)",
                 "",
                 "| ID | Gate | K.O. | Result | Notes |",
-                "|----|----|------|--------|-------|",
+                "| --- | --- | --- | --- | --- |",
             ]
         )
 
@@ -504,7 +504,7 @@ class UATReportGenerator:
                 "## Decision Matrix",
                 "",
                 "| Criteria | Threshold | Actual | Status |",
-                "|----------|-----------|--------|--------|",
+                "| --- | --- | --- | --- |",
                 f"| Acceptance Criteria Passed | ≥ 24/30 | {self.summary.restoration_passed + self.summary.studio_2026_passed}/30 | {'✅' if (self.summary.restoration_passed + self.summary.studio_2026_passed) >= 24 else '❌'} |",
                 f"| K.O. Violations | = 0 | {self.summary.ko_violations} | {'✅' if self.summary.ko_violations == 0 else '❌'} |",
                 f"| Release Gates Passed | ≥ 5/7 | {self.summary.gates_passed}/7 | {'✅' if self.summary.gates_passed >= 5 else '❌'} |",

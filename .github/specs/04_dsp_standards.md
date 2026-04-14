@@ -79,6 +79,20 @@ def compute_specific_loudness_zwicker(audio: np.ndarray, sr: int) -> float:
 **Rückwärtskompatibilität**: Ergänzt §2.45a (Gated-RMS-Guard) — LUFS-Check bleibt erhalten als Broadcast-Metrik.
 LUFS = Distribution-Standard; Sone = psychoakustische Lästigkeitsmetrik. Beide sind Pflicht.
 
+### §4.1c Loudness-Metrik-Hierarchie (Arbitration bei Konflikt)
+
+Drei Loudness-Metriken sind parallel aktiv. Bei widersprüchlichen Ergebnissen gilt:
+
+| Priorität | Metrik | Anwendung | Triggert |
+| --- | --- | --- | --- |
+| **1 (höchste)** | **Sone (ISO 532-1)** | Psychoakustische Wahrnehmung | Phase-Rollback / Dry-Wet-Rescue bei ΔN > 2.0 |
+| **2** | **LUFS (ITU-R BS.1770-5)** | Broadcast-Normierung, Export-Gate | Makeup-Gain bei Δ > 1.0 LU |
+| **3 (niedrigste)** | **Gated-RMS (dBFS)** | Per-Phase-Guard (§2.45a) | Envelope-Aware Gain bei Drift > 3.0 dB |
+
+**Regel**: Wenn Sone-Guard „OK" (ΔN ≤ 0.5) und LUFS-Guard „FAIL" (Δ > 1.0 LU), greift LUFS-Korrektur.
+Wenn Sone-Guard „FAIL" (ΔN > 2.0), dominiert Sone ungeachtet des LUFS-Status.
+Gated-RMS ist Frühwarnung — triggert nur, wenn BEIDE höheren Metriken schweigen.
+
 ---
 
 ## §4.2 Verbotene Legacy-Algorithmen als Primärverarbeitung
@@ -630,6 +644,49 @@ def compute_cumulative_generation_loss(transfer_chain: list[str]) -> dict:
 
 ---
 
+## §4.9 [RELEASE_MUST] AudioSR Wall-Time-Budget (v9.11.14)
+
+AudioSR-Zonen-Schleifen (BWE in phase_06, phase_23, phase_24) können bei extremen Songstrukturen (>180 s, komplexe Texturen) zeitlich unbegrenzt laufen → Pipeline-Hänger.
+
+**Normative Regel**:
+
+```python
+_AUDIOSR_WALL_BUDGET_S = 900.0  # 15 min maximal für AudioSR-Zonenschleife
+```
+
+- Vor der Zonenschleife: `wall_start = time.monotonic()`
+- Jede Zone prüft: `if time.monotonic() - wall_start > _AUDIOSR_WALL_BUDGET_S: break`
+- Zonen jenseits des Budgets: **Passthrough** (Original-Audio), kein Inpainting
+- `metadata["audiosr_wall_budget_exceeded"]` = True bei Budget-Überschreitung
+- Telemetrie: `metadata["audiosr_zones_completed"]` / `metadata["audiosr_zones_total"]`
+
+**Invariante**: AudioSR-Timeout darf die Pipeline nicht crashen — verbleibende Zonen werden als Original-Audio beibehalten, nicht abgebrochen oder leer gelassen.
+
+---
+
+## §4.10 [RELEASE_MUST] Pitch-Tracking-Kaskade — Tier-Reihenfolge (v9.11.14)
+
+Die SOTA-Matrix (§4.4) definiert die Pitch-Tracking-Kaskade als:
+
+```
+FCPE (Tier-0, primär) → RMVPE (Tier-1, Fallback) → PESTO (Tier-2) → pYIN (Tier-3, DSP-Fallback)
+```
+
+**Semantik der Pfeile**: `→` bedeutet **OOM/Fehler-Fallback**, nicht Prioritätsreihenfolge. FCPE wird immer zuerst versucht. Nur bei Fehler (OOM, ONNX-Crash, Timeout) wird der nächste Tier aktiviert.
+
+| Tier | Modell | Typ | Anmerkung |
+| --- | --- | --- | --- |
+| 0 | FCPE | ML (ONNX) | Primär für alle Pitch-Pfade |
+| 1 | RMVPE | ML (Torch) | −30 % Fehlerrate bei Gesang (Wei et al. ICASSP 2023) |
+| 2 | PESTO | ML (light) | Schnell, weniger genau |
+| 3 | pYIN | DSP | Ultimativer Fallback, kein ML nötig |
+
+**VERBOTEN**: CREPE als Tier in der Produktionskaskade (deprecated seit v9.10). CREPE bleibt nur in `_PHASE_REQUIRED_MODELS` für Legacy-Kompatibilität.
+
+**Betroffene Phasen**: phase_12 (Wow/Flutter), phase_56 (Spectral Band Gap), hybrid_wow_flutter, hybrid_speed_pitch_ml.
+
+---
+
 ## §12 Referenzen (Auswahl — Pflicht-Algorithmen)
 
 - Cohen & Berdugo (2002): IMCRA — _Noise Estimation by Minima Controlled Recursive Averaging_
@@ -813,6 +870,56 @@ except Exception:
 
 **Auto-Budget-Formel**: `max(4.0, min(12.0, RAM_GB / 3))`. Budget-Einheit: **immer GB (float)**, nie MB.
 
+### §4.6b [RELEASE_MUST] PLM-Inferenz-Schutz — Active-Guard-Pflicht (v9.11.14)
+
+**Problem**: Emergency-Eviction (`evict_if_needed` bei RAM > 78 %) entlädt registrierte Plugins nach LRU-Alter. Wenn ein Plugin gerade in einer Phase aktiv ist, aber `entry.active == False`, wird es evictiert → Inferenz-Crash → OOM-Eskalation → Kernel-Kill.
+
+**Pflicht-Workflow für jede ML-Inferenz innerhalb einer Phase:**
+
+```python
+plm = get_plugin_lifecycle_manager()
+plm.set_active("my_model", True)   # VOR Inferenz-Start
+try:
+    result = model.run(input)       # oder session.run()
+finally:
+    plm.set_active("my_model", False)  # IMMER nach Inferenz-Ende
+```
+
+**Invarianten:**
+
+1. **Emergency-Eviction darf NIEMALS ein Plugin entladen, dessen `entry.active == True`** — unabhängig vom RAM-Druck. Bei 100 % aktiver Plugins und RAM-Krise → `gc.collect()` + `malloc_trim(0)`, aber kein Evict.
+2. **`set_active(name, True)` MUSS vor dem ersten `model.run()`/`session.run()` der Phase aufgerufen werden** — nicht erst vor dem Ergebnis-Zugriff.
+3. **`set_active(name, False)` MUSS in `finally`-Block** — auch bei Timeout, OOM oder Inferenz-Fehler.
+4. **`_PHASE_REQUIRED_MODELS` MUSS alle ML-Modelle listen, die eine Phase in irgendeinem Codepfad laden kann** (primär UND Fallback). Unvollständiges Mapping = PLM evictiert benötigte Modelle bei `evict_for_phase()`.
+
+**VERBOTEN**: ML-Inferenz ohne `set_active()`-Guard; Emergency-Eviction von `entry.active`-Plugins; `_PHASE_REQUIRED_MODELS`-Eintrag, der nur den Primärpfad listet.
+
+### §4.6c [RELEASE_MUST] Phase-zu-Modell-Mapping — Bidirektionale Sync-Invariante (v9.11.14)
+
+**`_PHASE_REQUIRED_MODELS`** in `backend/core/plugin_lifecycle_manager.py` ist die **Single Source of Truth** für das Phase→ML-Mapping. Es MUSS **alle** Modelle enthalten, die eine Phase laden kann:
+
+| Phase | Primär | Fallback(s) | _PHASE_REQUIRED_MODELS |
+| --- | --- | --- | --- |
+| `phase_03_denoise` | SGMSE+, ResembleEnhance | DeepFilterNetV3, OMLSA (DSP) | `{"SGMSE+", "ResembleEnhance", "DeepFilterNetV3"}` |
+| `phase_09_crackle_removal` | BANQUET | DSP (Median-Filter) | `{"BANQUET"}` |
+| `phase_12_wow_flutter_fix` | FCPE | RMVPE, CREPE, pYIN (DSP) | `{"FCPE", "RMVPE", "CREPE"}` |
+| `phase_18_noise_gate` | SileroVAD | Energy-Gate (DSP) | `{"SileroVAD"}` |
+| `phase_20_reverb_reduction` | SGMSE+ | WPE (DSP) | `{"SGMSE+"}` |
+| `phase_23_spectral_repair` | Apollo | AudioSR, PGHI (DSP) | `{"Apollo", "AudioSR"}` |
+| `phase_24_dropout_repair` | AudioSR | AR-Interpolation (DSP) | `{"AudioSR"}` |
+| `phase_29_tape_hiss_reduction` | DeepFilterNetV3 | OMLSA (DSP) | `{"DeepFilterNetV3"}` |
+| `phase_42_vocal_enhancement` | BSRoFormer | NMF-β (DSP) | `{"BSRoFormer"}` |
+| `phase_43_ml_deesser` | MP-SENet | OMLSA (DSP) | `{"MP-SENet"}` |
+| `phase_49_advanced_dereverb` | SGMSE+ | WPE (DSP) | `{"SGMSE+"}` |
+| `phase_55_diffusion_inpainting` | CQTdiff | FlowMatching, PGHI (DSP) | `{"CQTdiff", "FlowMatching"}` |
+| `phase_56_spectral_band_gap` | FCPE | CREPE, pYIN (DSP) | `{"FCPE", "CREPE"}` |
+
+**Sync-Invarianten (analog §2.55 PMGG-CIG-Sync):**
+
+1. Jeder `try_allocate("ModelName", ...)` Aufruf innerhalb einer Phase MUSS einen korrespondierenden Eintrag in `_PHASE_REQUIRED_MODELS` haben.
+2. Jeder Eintrag in `_PHASE_REQUIRED_MODELS` MUSS einem tatsächlichen `try_allocate()`-Aufruf in der Phase entsprechen.
+3. **Testpflicht**: CI-Regressionstest `tests/unit/test_plm_phase_model_sync.py` scannt alle `phase_*.py`-Dateien nach `try_allocate()`-Aufrufen und gleicht mit `_PHASE_REQUIRED_MODELS` ab.
+
 ### §2.38a Headroom-Guard (RELEASE_MUST)
 
 Für schwere ML-Pfade (SGMSE+, ResembleEnhance, AudioSR, CQTdiff/FlowMatching):
@@ -870,6 +977,28 @@ opts.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_AL
 `release_mode` ∈ `primary | fallback | blocked`. Kein ML-Failure darf Pipeline vollständig abbrechen.
 Jeder Fallback in `metadata["ml_fallbacks_used"]` protokollieren.
 
+### §4.6d PLM Active-Guard-Audit — Implementierungsstatus pro ML-Phase
+
+| Phase | Modell | `set_active()` Guard | Status |
+| --- | --- | --- | --- |
+| phase_03 | SGMSE+ | ✅ | v9.11.0 |
+| phase_03 | ResembleEnhance | ✅ | v9.10.x |
+| phase_03 | DeepFilterNetV3 | ✅ | v9.10.x |
+| phase_09 | BANQUET | ⬜ TODO | — |
+| phase_12 | FCPE/RMVPE/CREPE | ⬜ TODO | — |
+| phase_18 | SileroVAD | ⬜ leicht (CPU) | nicht nötig (<100 MB) |
+| phase_20 | SGMSE+ | ✅ | v9.11.0 |
+| phase_23 | Apollo | ✅ | v9.11.14 |
+| phase_24 | AudioSR | ⬜ TODO | — |
+| phase_29 | DeepFilterNetV3 | ✅ | v9.10.x |
+| phase_42 | BSRoFormer/MDX23C | ⬜ TODO | — |
+| phase_43 | MP-SENet | ⬜ TODO | — |
+| phase_49 | SGMSE+ | ✅ | v9.11.0 |
+| phase_55 | CQTdiff/FlowMatching | ⬜ TODO | — |
+
+**Invariante**: Jede Phase mit ⬜ MUSS vor Release v9.12.0 den `set_active()`-Guard implementieren.
+Leichte CPU-Modelle (< 200 MB) sind ausgenommen, da Emergency-Eviction sie nicht targetiert.
+
 ### Checkliste neues ML-Plugin
 
 ```
@@ -877,6 +1006,8 @@ Jeder Fallback in `metadata["ml_fallbacks_used"]` protokollieren.
 □ ml_memory_budget.try_allocate(name, size_gb) VOR Load (Einheit: GB float)
 □ ml_memory_budget.release(name) in ALLEN Fehler-Pfaden
 □ plm.register(name, size_gb, unload_fn) nach erfolgreichem Load
+□ plm.set_active(name, True) VOR Inferenz; plm.set_active(name, False) in finally-Block (§4.6b)
+□ _PHASE_REQUIRED_MODELS-Eintrag mit ALLEN Modellen (primär + Fallback) (§4.6c)
 □ DSP-Fallback für ImportError UND Budget-Überschreitung
 □ Heavy: providers=get_ort_providers("Name") / Light: providers=["CPUExecutionProvider"]
 □ Headroom-Guard für schwere Modelle (> 1 GB)

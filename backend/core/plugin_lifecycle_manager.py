@@ -35,6 +35,9 @@ _RAM_EVICT_THRESHOLD_PCT: float = 75.0  # RAM% ab der Eviction beginnt (gesenkt:
 _RAM_TARGET_PCT: float = 65.0  # RAM% auf die wir evicten wollen
 _MIN_FREE_MB_HARD: float = 3000.0  # immer mind. 3 GB frei halten
 _PIPELINE_EMERGENCY_PCT: float = 78.0  # RAM% ab der auch WÄHREND Pipeline evicted wird (gesenkt von 82%)
+_SWAP_EVICT_THRESHOLD_PCT: float = 80.0  # Swap% ab der Eviction erzwungen wird (unabhängig von RAM-%).
+# Rationale: Crash 2026-04-14 — swap=99 %, avail=18.79 GB → OOM-Killer wegen
+# Apollo-TorchScript-Allokation. RAM-only-Guards erkannten die Gefahr nicht.
 _MONITOR_JOIN_TIMEOUT_S: float = 1.0  # Shutdown darf Tests/App-Ende nicht unbounded blockieren
 # Begründung Absenkung: 82% war zu konservativ — AudioSR (7 GB) konnte nicht geladen werden weil
 # Eviction erst bei 82% erlaubt war, RAM aber schon bei 78% knapp wurde. Modelle die gerade
@@ -48,18 +51,19 @@ _MONITOR_JOIN_TIMEOUT_S: float = 1.0  # Shutdown darf Tests/App-Ende nicht unbou
 _PHASE_REQUIRED_MODELS: dict[str, frozenset[str]] = {
     "phase_01_click_removal": frozenset({"DeepFilterNetV3"}),
     "phase_02_hum_removal": frozenset({"DeepFilterNetV3"}),
-    "phase_03_denoise": frozenset({"ResembleEnhance", "DeepFilterNetV3"}),
+    "phase_03_denoise": frozenset({"SGMSE+", "ResembleEnhance", "DeepFilterNetV3"}),
     "phase_06_frequency_restoration": frozenset({"AudioSR"}),
-    "phase_09_crackle_removal": frozenset({"BanquetVinyl"}),
-    "phase_12_wow_flutter_fix": frozenset({"FCPE", "CREPE"}),
+    "phase_09_crackle_removal": frozenset({"BANQUET"}),
+    "phase_12_wow_flutter_fix": frozenset({"FCPE", "RMVPE", "CREPE"}),
     "phase_18_noise_gate": frozenset({"SileroVAD"}),
     "phase_20_reverb_reduction": frozenset({"SGMSE+"}),
-    "phase_23_spectral_repair": frozenset({"AudioSR"}),
+    "phase_23_spectral_repair": frozenset({"Apollo", "AudioSR"}),
     "phase_24_dropout_repair": frozenset({"AudioSR"}),
     "phase_29_tape_hiss_reduction": frozenset({"DeepFilterNetV3"}),
     "phase_31_speed_pitch_correction": frozenset({"BasicPitch"}),
     "phase_42_vocal_enhancement": frozenset({"MelBandRoformer", "MDX23C"}),
     "phase_43_ml_deesser": frozenset({"MP-SENet"}),
+    "phase_49_advanced_dereverb": frozenset({"SGMSE+"}),
     "phase_55_diffusion_inpainting": frozenset({"CQTdiff+", "FlowMatching"}),
     "phase_56_spectral_band_gap_repair": frozenset({"FCPE", "CREPE"}),
 }
@@ -223,11 +227,19 @@ class PluginLifecycleManager:
             )
         # required_mb kommt bereits MIT Margin aus ml_memory_budget._preflight_system_memory.
         # Keine doppelte Margin (war 1.25×) — direkt prüfen ob genug frei ist.
+        swap_pct = self._swap_percent()
         needs_evict = (
             ram_pct > _RAM_EVICT_THRESHOLD_PCT
             or free_mb < _MIN_FREE_MB_HARD
             or (required_mb > 0 and free_mb < required_mb)
+            or swap_pct > _SWAP_EVICT_THRESHOLD_PCT  # Swap-Druck allein reicht für Eviction
         )
+        if swap_pct > _SWAP_EVICT_THRESHOLD_PCT and not (ram_pct > _RAM_EVICT_THRESHOLD_PCT or free_mb < _MIN_FREE_MB_HARD):
+            logger.warning(
+                "PLM: Swap-Druck kritisch (%.0f %%) — erzwinge Eviction inaktiver Plugins "
+                "(RAM=%.0f %%, frei=%.0f MB)",
+                swap_pct, ram_pct, free_mb,
+            )
         if not needs_evict:
             return 0
         return self._do_evict(target_pct=_RAM_TARGET_PCT, required_mb=required_mb)
@@ -404,6 +416,16 @@ class PluginLifecycleManager:
         if _psutil is not None:
             return float(_psutil.virtual_memory().available / (1024 * 1024))
         return float("inf")
+
+    @staticmethod
+    def _swap_percent() -> float:
+        """Return swap usage in percent (0–100). 0 if psutil unavailable or no swap."""
+        if _psutil is not None:
+            try:
+                return float(_psutil.swap_memory().percent)
+            except Exception:
+                return 0.0
+        return 0.0
 
     # ------------------------------------------------------------------
     # Status (Logging/Debug)

@@ -752,6 +752,8 @@ class AurikDenker:
                 kette.chain_string,
                 kette.chain_complexity,
             )
+            if getattr(kette, "chain", None):
+                _emit(4, "__carrier_chain__:" + "|".join(str(_k) for _k in (kette.chain or [])))
         except Exception as exc:
             _record_stage_failure("kette", "TontraegerketteDenker", exc)
             logger.warning("AurikDenker [2/10] TontraegerketteDenker: %s", exc)

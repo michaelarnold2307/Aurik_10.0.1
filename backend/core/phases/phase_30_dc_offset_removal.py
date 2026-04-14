@@ -289,6 +289,14 @@ class DCOffsetRemoval(PhaseInterface):
         filter_order = config["filter_order"]
         filter_type = config["filter_type"]
 
+        # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+        # filtfilt/sosfiltfilt require len(audio) > padlen (typically 9–20 samples)
+        # For audio < minimum window size, passthrough instead of crashing
+        MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz — minimum safe for any filter
+        if len(audio) < MIN_AUDIO_SAMPLES:
+            logger.debug(f"phase_30: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}), passthrough")
+            return np.asarray(audio, dtype=np.float32)
+
         # Stage 1: always remove static DC bias directly.
         dc = float(np.mean(audio))
         if abs(dc) > 1e-9:

@@ -304,6 +304,13 @@ class AdaptiveDeEsserPhase(PhaseInterface):
         self.validate_input(audio)
         t0 = time.time()
 
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict43
+            _get_plm_evict43().evict_for_phase("phase_43_ml_deesser")
+        except Exception:
+            pass
+
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))

@@ -305,6 +305,10 @@ class WowFlutterFix(PhaseInterface):
         _report_progress(5.0, "Wow/Flutter: Tonhöhen-Analyse startet")
         # ML-Hybrid Mode Routing (v3.0)
         quality_mode = kwargs.get("quality_mode", "quality")
+        self._quality_mode_hint = str(quality_mode).strip().lower()
+        self._quality_first_unleashed = bool(
+            kwargs.get("quality_first_unleashed", self._quality_mode_hint in {"quality", "maximum"})
+        )
 
         # Check resource availability for ML-Hybrid (fallback to lightweight if needed)
         use_lightweight = False
@@ -930,12 +934,23 @@ class WowFlutterFix(PhaseInterface):
             (pitch_trajectory, confidence): Pitch Hz and confidence [0,1] per frame
         """
         # -----------------------------------------------------------------
-        # Optional fast path: librosa.pyin (C-accelerated)
-        # Disabled by default because some environments show native segfaults
-        # in librosa.sequence.viterbi/pyin. Opt-in with:
-        #   AURIK_ENABLE_LIBROSA_PYIN=1
+        # High-quality path: librosa.pyin (C-accelerated)
+        # Env override semantics:
+        #   AURIK_ENABLE_LIBROSA_PYIN=1  -> force enable
+        #   AURIK_ENABLE_LIBROSA_PYIN=0  -> force disable
+        #   unset/auto                   -> enable in quality/maximum
         # -----------------------------------------------------------------
-        _enable_librosa_pyin = os.environ.get("AURIK_ENABLE_LIBROSA_PYIN", "0").strip() == "1"
+        _qm_hint = str(getattr(self, "_quality_mode_hint", "quality")).strip().lower()
+        _quality_first_unleashed = bool(
+            getattr(self, "_quality_first_unleashed", _qm_hint in {"quality", "maximum"})
+        )
+        _pyin_env = os.environ.get("AURIK_ENABLE_LIBROSA_PYIN", "auto").strip().lower()
+        if _pyin_env in {"1", "true", "yes", "on"}:
+            _enable_librosa_pyin = True
+        elif _pyin_env in {"0", "false", "no", "off"}:
+            _enable_librosa_pyin = False
+        else:
+            _enable_librosa_pyin = _quality_first_unleashed
         if _enable_librosa_pyin:
             try:
                 import librosa  # always available in .venv_aurik
@@ -965,16 +980,20 @@ class WowFlutterFix(PhaseInterface):
             except Exception as _lib_exc:
                 logger.debug("librosa.pyin unavailable (%s) — falling back to Python pYIN (30 s cap)", _lib_exc)
         else:
-            logger.debug("librosa.pyin disabled (AURIK_ENABLE_LIBROSA_PYIN!=1) — using Python pYIN fallback")
+            logger.debug(
+                "librosa.pyin disabled by policy/env (quality_mode=%s, env=%s) — using Python pYIN fallback",
+                _qm_hint,
+                _pyin_env,
+            )
 
         # -----------------------------------------------------------------
-        # Fallback: pure-Python pYIN with 30 s centre cap
-        # (prevents 80 M Python iterations on long audio)
+        # Fallback: pure-Python pYIN.
+        # In quality/maximum, do not cap to center window; in balanced/fast keep 30 s cap.
         # -----------------------------------------------------------------
-        _PYIN_CAP_S = 30
-        _cap_samples = int(_PYIN_CAP_S * sample_rate)
+        _PYIN_CAP_S = 0 if _quality_first_unleashed else 30
+        _cap_samples = int(_PYIN_CAP_S * sample_rate) if _PYIN_CAP_S > 0 else 0
         _analysis_offset_samples = 0  # sample index where the analysed window starts in full audio
-        if len(audio) > _cap_samples:
+        if _PYIN_CAP_S > 0 and len(audio) > _cap_samples:
             _mid = len(audio) // 2
             _half = _cap_samples // 2
             audio_pyin = audio[_mid - _half : _mid + _half]

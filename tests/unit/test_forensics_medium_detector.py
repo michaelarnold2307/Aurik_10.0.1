@@ -548,3 +548,58 @@ class TestMediumDetector:
         assert all(
             order.get(a, 99) <= order.get(b, 99) for a, b in zip(result.transfer_chain, result.transfer_chain[1:])
         )
+
+    def test_35_detect_mp3_vinyl_cassette_chain_codec_adaptive_gate(self, monkeypatch):
+        """§2.46a regression: vinyl→cassette→mp3 multi-gen chain must not be suppressed.
+
+        Multi-generation transfers attenuate analog fingerprints through each stage.
+        The _strong_physical_analog gate must use codec-adaptive thresholds so that
+        moderate analog evidence (vinyl conf=0.25, rotation=0.371) in strongly-encoded
+        MP3 material still allows chain reconstruction.
+        """
+        detector = MediumDetector()
+        fp = SpectralFingerprint(
+            rolloff_95_hz=6500.0,
+            wow_flutter_index=0.034,
+            hf_energy_above_16k=0.0001,
+            noise_floor_db=-35.0,
+            effective_bandwidth_hz=12500.0,
+            codec_artifact_score=0.65,
+            codec_type_code=2.0,
+            crackle_density=0.015,
+            rotation_strength=0.371,
+            infrasonic_rms=0.010,
+        )
+
+        monkeypatch.setattr(detector, "_compute_fingerprint", lambda _audio, _sr: fp)
+        monkeypatch.setattr(
+            detector,
+            "_bayesian_score",
+            lambda _fp: {
+                "vinyl": 0.38,
+                "cassette": 0.30,
+                "cd_digital": 0.10,
+                "mp3_low": 0.15,
+                "aac": 0.05,
+            },
+        )
+        monkeypatch.setattr(
+            detector,
+            "_infer_analog_source_from_fingerprint",
+            lambda _fp: [("vinyl", 0.25), ("cassette", 0.35)],
+        )
+        monkeypatch.setattr(detector, "_is_benign_codec_source", lambda _audio, _sr, _fp: False)
+
+        audio = np.random.randn(48000).astype(np.float32) * 0.1
+        result = detector.detect(audio, sr=48000, file_ext=".mp3")
+
+        # Chain must include vinyl as analog origin, not just mp3_low
+        assert result.is_multi_generation is True, (
+            f"Expected multi-gen chain, got single: {result.transfer_chain}"
+        )
+        assert "vinyl" in result.transfer_chain, (
+            f"Vinyl must appear in chain, got: {result.transfer_chain}"
+        )
+        assert result.transfer_chain[-1] in {"mp3_low", "mp3_high"}, (
+            f"Chain must end with MP3 codec, got: {result.transfer_chain}"
+        )

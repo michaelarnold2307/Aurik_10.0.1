@@ -175,7 +175,67 @@ def _compute_linked_gain(l_audio, r_audio, gain_fn) -> np.ndarray:
 
 ---
 
+## §7.1c [RELEASE_MUST] Phasen-Familien-Taxonomie — ADDITIVE / SUBTRAKTIVE / DYNAMICS (v9.11.14)
+
+Jede Phase gehört zu **genau einer** Phasen-Familie. Die Zuordnung steuert:
+
+- `_post_additive_bw_guard()` (§6.2c): BW-Ceiling-Guard NUR nach ADDITIVE-Block
+- `NoiseTextureCoherenceGuard` (§4.7): nur nach SUBTRAKTIVE-Phasen
+- `ArtifactFreedomGate` Roughness/Sharpness-Penalty (§2.49c): nur DYNAMICS/ADDITIVE/ENHANCEMENT
+
+| Familie | Phase-IDs | Beschreibung |
+| --- | --- | --- |
+| **SUBTRAKTIVE** | phase_01, phase_02, phase_03, phase_05, phase_09, phase_10, phase_17, phase_18, phase_19, phase_20, phase_22, phase_24, phase_27, phase_28, phase_29, phase_30, phase_31, phase_49, phase_50, phase_60, phase_63 | Entfernt Energie (Rauschen, Knistern, Klicks, Reverb, DC-Offset) |
+| **ADDITIVE** | phase_06, phase_07, phase_21, phase_23, phase_37, phase_38, phase_39, phase_55, phase_56 | Fügt Frequenzinhalt hinzu (BW-Extension, Harmonik, Inpainting) |
+| **DYNAMICS** | phase_11, phase_26, phase_33, phase_34, phase_35, phase_36, phase_40 | Verändert Dynamik/Lautstärke (Kompression, Expansion, Normalisierung) |
+| **CORRECTION** | phase_04, phase_08, phase_12, phase_13, phase_14, phase_15, phase_25, phase_32, phase_41 | Korrigiert technische Parameter (EQ, Speed, Phase, Azimuth, Stereo) |
+| **ENHANCEMENT** | phase_42, phase_43, phase_44, phase_45, phase_46, phase_47, phase_48, phase_51, phase_52, phase_53, phase_54, phase_57, phase_58, phase_59, phase_61, phase_62, phase_64 | Instrument-spezifisch, Stem-Enhancement, Lyrics-guided |
+
+**Invariante (§6.2c)**: UV3 `_post_additive_bw_guard()` MUSS nach der letzten ADDITIVE-Phase im Pipeline-Block laufen. Neue Phasen MÜSSEN hier zugeordnet werden — fehlende Zuordnung ist ein RELEASE-Blocker.
+
+**[RELEASE_MUST] Ceiling-Pflicht für ADDITIVE- und DYNAMICS-Phasen**:
+
+Jede ADDITIVE-Phase MUSS `_MATERIAL_BW_CEILING_HZ` (Spec 05 §6.2c) respektieren:
+
+| ADDITIVE-Phase | Ceiling-Referenz | Guard |
+| --- | --- | --- |
+| `phase_06` (BW-Extension) | `_MATERIAL_BW_CEILING_HZ[material]` | Hard-Cap auf generiertes HF-Band |
+| `phase_07` (Harmonik) | `_MATERIAL_BW_CEILING_HZ[material]` | Obertöne oberhalb Ceiling unterdrücken |
+| `phase_23` (Spectral Repair) | `_MATERIAL_BW_CEILING_HZ[material]` | Apollo/AudioSR-Output BW-begrenzen |
+| `phase_39` (Air-Band) | `_MATERIAL_BW_CEILING_HZ[material]` | Air-Band nur bis Ceiling |
+| `phase_55` (Inpainting) | `_MATERIAL_BW_CEILING_HZ[material]` | Diffusion-Output BW-begrenzen |
+| `phase_56` (Band-Gap) | `_MATERIAL_BW_CEILING_HZ[material]` | Gap-Fill nur bis Ceiling |
+
+Jede DYNAMICS-Phase mit Expansion MUSS `_MATERIAL_DR_CEILING_DB` (Spec 05 §6.2b) respektieren:
+
+| DYNAMICS-Phase | Ceiling-Referenz | Guard |
+| --- | --- | --- |
+| `phase_26` (DR-Expansion) | `_MATERIAL_DR_CEILING_DB[material]` | Expansion bis Ceiling, nicht darüber |
+| `phase_54` (Transparent Dynamics) | `_MATERIAL_DR_CEILING_DB[material]` | DR-Change begrenzt auf Ceiling |
+
+**Invariante**: Fehlender Ceiling-Check in einer ADDITIVE/DYNAMICS-Phase ist ein §0a-Verstoß (Material-Ceiling-Überschreitung = Artefakt).
+
+**Implementierung**: `backend/core/phase_ontology.py` — `PHASE_FAMILY_MAP: dict[str, str]`
+
+---
+
 ## §7.2 CAUSE_TO_PHASES-Mapping (CausalDefectReasoner)
+
+**Merge-Regel mit `_MATERIAL_PRIORITY_PHASES` (§6.2a)**:
+
+Beide Dicts liefern unabhängig voneinander Phase-Listen. Die resultierende Phase-Selektion
+ist die **Vereinigung (Union)** beider Quellen:
+
+```
+selected = set(MATERIAL_PRIORITY_PHASES[material]) | set()
+for cause in detected_causes:
+    selected |= set(CAUSE_TO_PHASES[cause])
+```
+
+- Material-Phasen sind **immer aktiv** (§6.2a Invariante), auch wenn kein Defect sie triggert.
+- Cause-Phasen fügen kontextspezifische Reparatur hinzu (z. B. `vocal_harshness` → `phase_43`).
+- Duplikate werden durch die Vereinigung automatisch entfernt.
+- `GoalApplicabilityFilter` darf einzelne Phasen nachträglich deaktivieren (z. B. phase_48 bei Mono).
 
 ```python
 CAUSE_TO_PHASES = {
@@ -453,13 +513,13 @@ result = process_in_adaptive_chunks(
 
 | Phase | ML-Modell | Begründung |
 | --- | --- | --- |
-| `phase_03_denoise` | OMLSA + ResembleEnhance | ML-Hybrid: Inferenz-Output identisch bei gleichem Input |
+| `phase_03_denoise` | SGMSE+ (Tier-0, Vokal) / ResembleEnhance / DeepFilterNetV3 / OMLSA (DSP) | ML-Hybrid: Inferenz-Output identisch bei gleichem Input |
 | `phase_06_frequency_restoration` | AudioSR | Neurale Bandwidth-Extension deterministisch |
 | `phase_09_crackle_removal` | BANQUET ONNX | Blind-Denoising deterministisch |
 | `phase_12_wow_flutter_fix` | FCPE/CREPE/pYIN | f₀-Schätzung deterministisch (Timing-Phase: kein Wet/Dry) |
 | `phase_18_noise_gate` | Silero VAD | Binary-Mask deterministisch |
 | `phase_20_reverb_reduction` | SGMSE+ (Primärpfad) | Reverb-Speech-Separation deterministisch (WPE-DSP-Fallback: muss re-run) |
-| `phase_23_spectral_repair` | AudioSR Inpainting | Spektral-Lückenfüllung deterministisch |
+| `phase_23_spectral_repair` | Apollo (primär) + AudioSR (Fallback) | Spektral-Lückenfüllung deterministisch |
 | `phase_24_dropout_repair` | AudioSR | Audio-Generierung deterministisch |
 | `phase_29_tape_hiss_reduction` | DeepFilterNet v3 II | HF-Denoising deterministisch (OMLSA-DSP <2 kHz: muss re-run) |
 | `phase_42_vocal_enhancement` | BSRoFormer | Stem-Separation deterministisch |
@@ -546,7 +606,7 @@ Verhindert Phase-Cancellation bei Kopfhörer.
 ### PHASE_GOAL_EXCLUSIONS — kanonische Tabelle (v9.10.96)
 
 | Phase | Ausgeschlossene Goals | Begründung |
-|---|---|---|
+| --- | --- | --- |
 | `phase_02` | bass_kraft, authentizitaet, natuerlichkeit, transparenz, groove, timbre_authentizitaet | Kammfilter Hum-Removal |
 | `phase_03` | natuerlichkeit, artikulation, authentizitaet, tonal_center, timbre_authentizitaet | CREPE-Load-State + shaped NR |
 | `phase_04` | transparenz, brillanz, waerme, authentizitaet, natuerlichkeit, timbre_authentizitaet | EQ |
@@ -574,7 +634,7 @@ Verhindert Phase-Cancellation bei Kopfhörer.
 ### PANNs Instrument-Aktivierungsmatrix
 
 | PANNs-Kategorie | Phase | Schwellwert |
-|---|---|---|
+| --- | --- | --- |
 | Vocals / Singing | phase_19 + phase_42 + phase_43 | ≥ 0.40 / ≥ 0.35 |
 | Guitar | phase_44 | ≥ 0.50 |
 | Brass / Saxophone | phase_45 | ≥ 0.50 |
@@ -588,7 +648,7 @@ Verhindert Phase-Cancellation bei Kopfhörer.
 ### §2.36a Phonem-DSP-Klassen
 
 | Klasse | Algorithmus |
-|---|---|
+| --- | --- |
 | fricative | Ramp-Gain 4–8 kHz, KEIN Wiener |
 | plosive | TransientShapeGuard (onset gain=1.0), Burst ×1.40 |
 | vowel_stressed | LPC Burg → F1–F4 Shelving |

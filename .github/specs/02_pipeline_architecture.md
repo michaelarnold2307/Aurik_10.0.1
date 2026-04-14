@@ -287,6 +287,9 @@ Audio-Eingang (mono/stereo, beliebige SR)
 [Phasen-Ausführung]  ← jede Phase gewrapped durch PerPhaseMusicalGoalsGate
     │ 5-s-Sample → measure_quick(6 Ziele) → Rollback bei Δ > REGRESSION_THRESHOLD
     │ SongCalibrationProfile skaliert phasenfamilien-basiert strength/wet-dry
+    │ §2.45a Mid-Pipeline-Loudness-Drift-Guard: Nach jeder breitbandig-subtraktiven Phase
+    │   Gated-RMS + Sone (§4.1b) + LUFS messen; bei Drift → Envelope-Aware Makeup-Gain
+    │   Dreistufig: Per-Phase → Mid-Pipeline (kumulativ) → End-of-Pipeline (final)
     │ §2.56a Global All-Phase Harmonic Adaptation skaliert zusätzlich
     │ implizite strength/wet-dry mit bounded song-context-Scalar
     │ (psychoakustisch priorisiert: P1/P2-Stabilität, Maskierung, Transienten)
@@ -410,6 +413,9 @@ normativ vorhanden sein (fehlertolerant, aber schema-stabil):
 - `song_calibration.cluster_key: str`
 - `song_calibration.cluster_policy: dict`
 - `joy_runtime_index: {joy_index: float, fatigue_index: float, components: dict}`
+  - `components` MUSS enthalten: `frisson_index` (0..1, Gänsehaut-Propensity, Blood & Zatorre 2001),
+    alle Sub-Werte NaN/Inf-frei, clipped [0, 1]
+  - Mode-Policy: Restoration = advisory-only (kein Audio-Impact); Studio 2026 = konservative bounded Mikro-Kopplung erlaubt
 - `auto_improvement_recommendations: {count: int, recommendations: list[dict]}`
 
 **Invarianten:**
@@ -2388,6 +2394,25 @@ if phase_id in _conductor_strength_hints and "strength" not in explicit_kwargs:
 | Exception-Sicherheit | Jede Exception in `measure_state` oder `recommend` → `logger.debug(exc)`, Pipeline läuft **unverändert** weiter (kein Abbruch, kein Fehler-Propagation) |
 | Kein §0-Verstoß | Wenn `recommended_strength < explicit_strength`: PMGG-Wert gewinnt; wenn `recommended_strength > explicit_strength`: PMGG-Wert gewinnt — ConductorHint beeinflusst nur **nicht explizit gesetzten** Strength |
 | Keine ML-Abhängigkeit | Rein DSP, nur numpy + scipy; kein torch, kein ONNX, kein Remote-Call |
+
+### §2.52a PhaseConductor × SongGoalImportance Integration (v9.11.14)
+
+`PhaseConductor.recommend()` erhält optional `goal_weights: dict[str, float]` (aus §2.56 `estimate_goal_importance()`).
+
+**Workflow**:
+
+1. UV3 berechnet `goal_weights` einmalig in `restore()` (§2.56 Stufe 1–5)
+2. UV3 übergibt `goal_weights` an `_conductor.recommend(next_phase_id, state, material_type, goal_weights=goal_weights)`
+3. PhaseConductor berücksichtigt Gewichte bei der Strength-Empfehlung:
+   - Hohe `transparenz`/`brillanz`-Gewichtung → ADDITIVE-Phasen bekommen leichten Strength-Boost
+   - Hohe `natuerlichkeit`/`authentizitaet`-Gewichtung → konservativere Empfehlung (niedrigerer Strength)
+4. Modifikation ist **bounded** (±10 % des Basiswerts) und **advisory-only**
+
+**Invarianten**:
+
+- `goal_weights=None` → Fallback auf Uniform-Gewichtung (1.0 für alle Goals)
+- Fehler im goal_weights-Pfad → `logger.debug`, neutraler Strength (kein Crash)
+- PMGG-Strength hat weiterhin absoluten Vorrang (§2.52 Kein-§0-Verstoß-Invariante)
 
 ### Zusammenspiel mit §2.47 PhaseSkipper (Hebel 1 + Hebel 3 Synergie)
 

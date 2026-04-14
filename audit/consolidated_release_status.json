@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-04-14T19:19:25.584010",
+  "release_report_path": "audit/release_report.json",
+  "runtime_report_path": "audit/runtime_spec_report.json",
+  "release_timestamp": "2026-04-14T19:05:30.996222",
+  "runtime_timestamp": "2026-04-14T19:05:28.503549",
+  "latest_source": "release",
+  "release_ready": true,
+  "runtime_compliance_ok": true,
+  "required_passed": 9,
+  "required_total": 9,
+  "contradiction": false,
+  "final_ready": true,
+  "reasons": []
+}

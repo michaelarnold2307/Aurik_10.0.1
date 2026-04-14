@@ -456,9 +456,15 @@ def _try_cqtdiff_plus_plugin(audio: np.ndarray, start: int, end: int, sample_rat
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
         from plugins.cqtdiff_plus_plugin import get_cqtdiff_plus
+        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55a
 
         plugin = get_cqtdiff_plus()
-        result = plugin.inpaint(audio=audio, sr=sample_rate, gap_start_sample=start, gap_end_sample=end)
+        _plm55a = _get_plm55a()
+        _plm55a.set_active("CQTdiffPlus", True)
+        try:
+            result = plugin.inpaint(audio=audio, sr=sample_rate, gap_start_sample=start, gap_end_sample=end)
+        finally:
+            _plm55a.set_active("CQTdiffPlus", False)
         # InpaintingResult.audio = volles Audio-Signal mit gefüllter Lücke
         repaired_segment = result.audio[start:end]
         if repaired_segment is not None and np.isfinite(repaired_segment).all():
@@ -486,8 +492,14 @@ def _try_flow_matching_plugin(audio: np.ndarray, start: int, end: int, sample_ra
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
         from flow_matching_plugin import inpaint_flow
+        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55b
 
-        result = inpaint_flow(audio, start, end, sample_rate)
+        _plm55b = _get_plm55b()
+        _plm55b.set_active("FlowMatching", True)
+        try:
+            result = inpaint_flow(audio, start, end, sample_rate)
+        finally:
+            _plm55b.set_active("FlowMatching", False)
         if result is not None and result.success:
             repaired_segment = result.audio[start:end]
             if repaired_segment is not None and np.isfinite(repaired_segment).all():
@@ -516,7 +528,13 @@ def _try_diffwave_plugin(audio: np.ndarray, start: int, end: int, sample_rate: i
         if not hasattr(dw, "inpaint"):
             return None
 
-        return dw.inpaint(audio, start, end, sample_rate)
+        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55c
+        _plm55c = _get_plm55c()
+        _plm55c.set_active("DiffWave", True)
+        try:
+            return dw.inpaint(audio, start, end, sample_rate)
+        finally:
+            _plm55c.set_active("DiffWave", False)
     except Exception as e:
         logger.debug("DiffWave-Plugin nicht verfügbar: %s", e)
         return None
@@ -544,6 +562,7 @@ def _try_consistency_model_inpainting(channel: np.ndarray, start: int, end: int,
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
         from plugins.consistency_inpaint_plugin import get_consistency_inpaint_plugin
+        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55d
 
         cm = get_consistency_inpaint_plugin()
         if cm is None:
@@ -554,7 +573,12 @@ def _try_consistency_model_inpainting(channel: np.ndarray, start: int, end: int,
         ctx_l = channel[max(0, start - ctx_samples) : start]
         ctx_r = channel[end : min(len(channel), end + ctx_samples)]
 
-        result = cm.inpaint(ctx_l, ctx_r, gap_len, sample_rate)
+        _plm55d = _get_plm55d()
+        _plm55d.set_active("ConsistencyInpaint", True)
+        try:
+            result = cm.inpaint(ctx_l, ctx_r, gap_len, sample_rate)
+        finally:
+            _plm55d.set_active("ConsistencyInpaint", False)
         if result is None or len(result) == 0:
             return None
 
@@ -587,6 +611,7 @@ def _try_dac_token_inpainting(channel: np.ndarray, start: int, end: int, sample_
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
         from plugins.dac_plugin import get_dac_plugin
+        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55e
 
         dac = get_dac_plugin()
         if dac is None:
@@ -597,7 +622,12 @@ def _try_dac_token_inpainting(channel: np.ndarray, start: int, end: int, sample_
         ctx_l = channel[max(0, start - ctx_samples) : start]
         ctx_r = channel[end : min(len(channel), end + ctx_samples)]
 
-        result = dac.inpaint(ctx_l, ctx_r, gap_len, sample_rate)
+        _plm55e = _get_plm55e()
+        _plm55e.set_active("DACInpaint", True)
+        try:
+            result = dac.inpaint(ctx_l, ctx_r, gap_len, sample_rate)
+        finally:
+            _plm55e.set_active("DACInpaint", False)
         if result is None or len(result) == 0:
             return None
 
@@ -1004,6 +1034,13 @@ class DiffusionInpaintingPhase(PhaseInterface):
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         t0 = time.perf_counter()
+
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict55
+            _get_plm_evict55().evict_for_phase("phase_55_diffusion_inpainting")
+        except Exception:
+            pass
 
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))

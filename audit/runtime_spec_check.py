@@ -19,6 +19,16 @@ from pathlib import Path
 from typing import Any
 
 
+_ALLOWED_MODE_PATTERNS = (
+    re.compile(r"\bmode\s*=\s*\"?restoration\"?\b", re.IGNORECASE),
+    re.compile(r"\bmode\s*=\s*\"?studio2026\"?\b", re.IGNORECASE),
+    re.compile(r"\bmode\s*=\s*\"?studio_2026\"?\b", re.IGNORECASE),
+    re.compile(r'"mode"\s*:\s*"restoration"', re.IGNORECASE),
+    re.compile(r'"mode"\s*:\s*"studio2026"', re.IGNORECASE),
+    re.compile(r'"mode"\s*:\s*"studio_2026"', re.IGNORECASE),
+)
+
+
 @dataclass
 class CheckResult:
     id: str
@@ -81,6 +91,21 @@ def _count_medium_detector_activations(lines: list[str]) -> int:
     return count
 
 
+def _has_allowed_mode(lines: list[str]) -> bool:
+    """True if run logs contain a canonical allowed mode marker.
+
+    Accepts both internal and UI spellings:
+    - restoration
+    - studio2026
+    - studio_2026
+    """
+
+    for line in lines:
+        if any(rx.search(line) for rx in _ALLOWED_MODE_PATTERNS):
+            return True
+    return False
+
+
 def _extract_float(lines: list[str], pattern: str) -> float | None:
     rx = re.compile(pattern)
     for line in lines:
@@ -113,7 +138,7 @@ def run_check(backend_log: Path, frontend_log: Path, output: Path) -> dict[str, 
     )
 
     if run_lines:
-        mode_ok = any("mode=restoration" in l or "mode=studio_2026" in l for l in run_lines)
+        mode_ok = _has_allowed_mode(run_lines)
         checks.append(
             CheckResult(
                 id="mode_contract",

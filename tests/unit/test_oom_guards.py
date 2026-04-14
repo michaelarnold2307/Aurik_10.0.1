@@ -70,6 +70,201 @@ def test_try_allocate_succeeds_after_preflight_and_budget(monkeypatch):
     assert budget._allocated.get("SmallModel") == 0.5
 
 
+def test_try_allocate_soft_allows_tiny_model_under_pressure(monkeypatch):
+    _reset_budget_state()
+
+    class _PressurePsutil:
+        @staticmethod
+        def virtual_memory():
+            total = 32 * 1024**3
+            available = 14 * 1024**3
+            return SimpleNamespace(total=total, available=available, percent=56.0)
+
+        @staticmethod
+        def swap_memory():
+            return SimpleNamespace(percent=90.0, used=7 * 1024**3, sin=0, sout=0)
+
+    monkeypatch.setattr(budget, "_psutil", _PressurePsutil)
+    monkeypatch.setattr(budget, "ML_MAX_GB", 10.0)
+    monkeypatch.setattr(budget, "is_system_thrashing", lambda: True)
+    monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
+
+    ok = budget.try_allocate("TinyHelperModel", size_gb=0.1)
+    assert ok is False
+    assert "TinyHelperModel" not in budget._allocated
+
+
+def test_try_allocate_soft_allows_allowlisted_tiny_model_under_pressure(monkeypatch):
+    _reset_budget_state()
+
+    class _PressurePsutil:
+        @staticmethod
+        def virtual_memory():
+            total = 32 * 1024**3
+            available = 14 * 1024**3
+            return SimpleNamespace(total=total, available=available, percent=56.0)
+
+        @staticmethod
+        def swap_memory():
+            return SimpleNamespace(percent=90.0, used=7 * 1024**3, sin=0, sout=0)
+
+    monkeypatch.setattr(budget, "_psutil", _PressurePsutil)
+    monkeypatch.setattr(budget, "ML_MAX_GB", 10.0)
+    monkeypatch.setattr(budget, "is_system_thrashing", lambda: True)
+    monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
+
+    ok = budget.try_allocate("SileroVAD", size_gb=0.1)
+    assert ok is True
+    assert budget._allocated.get("SileroVAD") == 0.1
+
+
+def test_try_allocate_soft_allow_respects_tiny_cap_under_pressure(monkeypatch):
+    _reset_budget_state()
+
+    class _PressurePsutil:
+        @staticmethod
+        def virtual_memory():
+            total = 32 * 1024**3
+            available = 14 * 1024**3
+            return SimpleNamespace(total=total, available=available, percent=56.0)
+
+        @staticmethod
+        def swap_memory():
+            return SimpleNamespace(percent=90.0, used=7 * 1024**3, sin=0, sout=0)
+
+    monkeypatch.setattr(budget, "_psutil", _PressurePsutil)
+    monkeypatch.setattr(budget, "ML_MAX_GB", 10.0)
+    monkeypatch.setattr(budget, "is_system_thrashing", lambda: True)
+    monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
+
+    assert budget.try_allocate("SileroVAD", size_gb=0.12) is True
+    assert budget.try_allocate("FCPE", size_gb=0.12) is True
+    assert budget.try_allocate("BasicPitch", size_gb=0.12) is False
+
+
+def test_try_allocate_blocks_heavy_model_on_preemptive_swap_pressure(monkeypatch):
+    _reset_budget_state()
+
+    class _PressurePsutil:
+        @staticmethod
+        def virtual_memory():
+            total = 32 * 1024**3
+            available = int(total * 0.20)
+            return SimpleNamespace(total=total, available=available, percent=80.0)
+
+        @staticmethod
+        def swap_memory():
+            return SimpleNamespace(percent=72.0, used=6 * 1024**3, sin=0, sout=0)
+
+    monkeypatch.setattr(budget, "_psutil", _PressurePsutil)
+    monkeypatch.setattr(budget, "ML_MAX_GB", 10.0)
+    monkeypatch.setattr(budget, "is_system_thrashing", lambda: False)
+    monkeypatch.setattr(budget, "_swap_io_rate_mb_per_s", lambda swap_obj: 3.5)
+    monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
+
+    ok = budget.try_allocate("AudioSR", size_gb=2.0)
+    assert ok is False
+    assert "AudioSR" not in budget._allocated
+
+
+def test_try_allocate_allows_heavy_model_when_swap_pressure_is_low(monkeypatch):
+    _reset_budget_state()
+
+    class _HealthyPsutil:
+        @staticmethod
+        def virtual_memory():
+            total = 32 * 1024**3
+            available = 18 * 1024**3
+            return SimpleNamespace(total=total, available=available, percent=44.0)
+
+        @staticmethod
+        def swap_memory():
+            return SimpleNamespace(percent=35.0, used=2 * 1024**3, sin=0, sout=0)
+
+    monkeypatch.setattr(budget, "_psutil", _HealthyPsutil)
+    monkeypatch.setattr(budget, "ML_MAX_GB", 10.0)
+    monkeypatch.setattr(budget, "is_system_thrashing", lambda: False)
+    monkeypatch.setattr(budget, "_swap_io_rate_mb_per_s", lambda swap_obj: 0.2)
+    monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
+
+    ok = budget.try_allocate("AudioSR", size_gb=2.0)
+    assert ok is True
+    assert budget._allocated.get("AudioSR") == 2.0
+
+
+def test_try_allocate_blocks_heavy_model_on_early_swap_plus_low_headroom(monkeypatch):
+    _reset_budget_state()
+
+    class _PressurePsutil:
+        @staticmethod
+        def virtual_memory():
+            total = 32 * 1024**3
+            available = int(12.7 * 1024**3)
+            return SimpleNamespace(total=total, available=available, percent=62.0)
+
+        @staticmethod
+        def swap_memory():
+            return SimpleNamespace(percent=46.0, used=3.7 * 1024**3, sin=0, sout=0)
+
+    monkeypatch.setattr(budget, "_psutil", _PressurePsutil)
+    monkeypatch.setattr(budget, "ML_MAX_GB", 10.0)
+    monkeypatch.setattr(budget, "is_system_thrashing", lambda: False)
+    monkeypatch.setattr(budget, "_swap_io_rate_mb_per_s", lambda swap_obj: 0.5)
+    monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
+
+    ok = budget.try_allocate("AudioSR", size_gb=2.0)
+    assert ok is False
+    assert "AudioSR" not in budget._allocated
+
+
+def test_try_allocate_retries_after_thrashing_recovery(monkeypatch):
+    _reset_budget_state()
+
+    from backend.core import plugin_lifecycle_manager as plm
+
+    monkeypatch.setattr(budget, "ML_MAX_GB", 10.0)
+    monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
+    monkeypatch.setattr(budget, "_PRESSURE_RECOVERY_ATTEMPTS", 2)
+    monkeypatch.setattr(budget, "_PRESSURE_RECOVERY_SLEEP_S", 0.0)
+    monkeypatch.setattr(plm, "evict_stale_plugins", lambda required_mb=0: 1)
+
+    _thrash_states = iter([True, False])
+
+    def _thrashing_toggle() -> bool:
+        return next(_thrash_states)
+
+    monkeypatch.setattr(budget, "is_system_thrashing", _thrashing_toggle)
+    monkeypatch.setattr(budget, "_should_block_heavy_ml_load", lambda size_gb: False)
+
+    ok = budget.try_allocate("AudioSR", size_gb=2.0)
+    assert ok is True
+    assert budget._allocated.get("AudioSR") == 2.0
+
+
+def test_try_allocate_retries_after_preemptive_block_recovery(monkeypatch):
+    _reset_budget_state()
+
+    from backend.core import plugin_lifecycle_manager as plm
+
+    monkeypatch.setattr(budget, "ML_MAX_GB", 10.0)
+    monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
+    monkeypatch.setattr(budget, "_PRESSURE_RECOVERY_ATTEMPTS", 2)
+    monkeypatch.setattr(budget, "_PRESSURE_RECOVERY_SLEEP_S", 0.0)
+    monkeypatch.setattr(plm, "evict_stale_plugins", lambda required_mb=0: 1)
+    monkeypatch.setattr(budget, "is_system_thrashing", lambda: False)
+
+    _block_states = iter([True, False])
+
+    def _preemptive_toggle(size_gb: float) -> bool:
+        return next(_block_states)
+
+    monkeypatch.setattr(budget, "_should_block_heavy_ml_load", _preemptive_toggle)
+
+    ok = budget.try_allocate("AudioSR", size_gb=2.0)
+    assert ok is True
+    assert budget._allocated.get("AudioSR") == 2.0
+
+
 def test_adaptive_resource_manager_start_monitoring_is_idempotent(monkeypatch):
     manager = AdaptiveResourceManager(check_interval=10.0)
 

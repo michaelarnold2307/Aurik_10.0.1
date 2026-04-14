@@ -254,6 +254,12 @@ class TransientShaper(PhaseInterface):
                 the sidechain rather than from ``audio`` itself.  The sidechain
                 must have the same length as ``audio``.
         """
+        # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+        MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+        if len(audio) < MIN_AUDIO_SAMPLES:
+            logger.debug(f"phase_36: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}), passthrough")
+            return np.asarray(audio, dtype=np.float32).copy()
+
         # Split into bands
         bands = self._split_into_bands(audio, sample_rate)
         sc_bands: list[np.ndarray | None]
@@ -342,7 +348,18 @@ class TransientShaper(PhaseInterface):
         gain_db = np.where(transient_mask, attack_gain_db, sustain_gain_db)
 
         # Smooth gain transitions
-        gain_db_smooth = signal.savgol_filter(gain_db, window_length=min(51, len(gain_db) // 10 * 2 + 1), polyorder=3)
+        # **GUARD**: window_length must be ≤ len(gain_db) and odd
+        min_window = 5  # Minimum for polyorder=3
+        max_window = min(51, len(gain_db) // 10 * 2 + 1)
+        window_length = max(min_window, min(max_window, len(gain_db)))
+        if window_length % 2 == 0:
+            window_length -= 1  # Ensure odd
+        window_length = max(3, min(window_length, len(gain_db)))  # Final safeguard
+
+        if window_length >= 5 and len(gain_db) >= window_length:
+            gain_db_smooth = signal.savgol_filter(gain_db, window_length=window_length, polyorder=3)
+        else:
+            gain_db_smooth = gain_db  # Passthrough if too short
 
         # Apply gain
         gain_linear = 10 ** (gain_db_smooth / 20)
@@ -428,21 +445,33 @@ class TransientShaper(PhaseInterface):
 
         # Threshold based on local statistics
         window_size = attack_samples * 4
-        local_mean = signal.savgol_filter(
-            slope, window_length=min(window_size * 2 + 1, len(slope) // 5 * 2 + 1), polyorder=1
-        )
+        # **GUARD**: window_length must be ≤ len(slope) and odd
+        max_window = min(window_size * 2 + 1, len(slope) // 5 * 2 + 1)
+        window_length = max(3, min(max_window, len(slope)))
+        if window_length % 2 == 0:
+            window_length -= 1
+        window_length = max(3, min(window_length, len(slope)))
+
+        if window_length >= 3 and len(slope) >= window_length:
+            local_mean = signal.savgol_filter(slope, window_length=window_length, polyorder=1)
+        else:
+            local_mean = slope  # Fallback if too short
+
         # Guard: savgol_filter auf quadrierten Werten kann durch Float-Rundung minimal
         # negative Ergebnisse liefern => sqrt(negativ) = NaN => RuntimeWarning; clamp >= 0
-        local_std = np.sqrt(
-            np.maximum(
-                signal.savgol_filter(
-                    (slope - local_mean) ** 2,
-                    window_length=min(window_size * 2 + 1, len(slope) // 5 * 2 + 1),
-                    polyorder=1,
-                ),
-                0.0,
+        if window_length >= 3 and len(slope) >= window_length:
+            local_std = np.sqrt(
+                np.maximum(
+                    signal.savgol_filter(
+                        (slope - local_mean) ** 2,
+                        window_length=window_length,
+                        polyorder=1,
+                    ),
+                    0.0,
+                )
             )
-        )
+        else:
+            local_std = np.sqrt(np.maximum((slope - local_mean) ** 2, 0.0))
 
         # Transient: slope > mean + 2*std
         transient_mask = slope > (local_mean + 2 * local_std)

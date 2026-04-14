@@ -443,17 +443,38 @@ class TontraegerketteDenker:
             neginf=0.0,
         )
 
-        # §2.47a: Use cached result directly to avoid second MediumDetector.detect() call.
+        # §2.47a: Prefer cached result to avoid duplicate MediumDetector.detect() calls.
+        # Guard: if cached chain is clearly under-informative (single-link + low confidence),
+        # run one fresh detect() as recovery path so multi-generation chains are not lost.
         if cached_medium_result is not None:
-            logger.debug(
-                "TontraegerketteDenker.analysiere(): gecachtes MediumResult übernommen "
-                "(primary_material=%s, conf=%.2f) — detect() NICHT aufgerufen",
+            _cached_chain = getattr(cached_medium_result, "transfer_chain", None)
+            _cached_conf = float(getattr(cached_medium_result, "confidence", 0.0) or 0.0)
+            _cached_primary = (
                 getattr(cached_medium_result, "primary_material", None)
-                or getattr(cached_medium_result, "material_type", "?"),
-                getattr(cached_medium_result, "confidence", 0.0),
+                or getattr(cached_medium_result, "material_type", None)
+                or "?"
             )
-            raw = self._aufbereiten_from_cached(cached_medium_result)
-            return raw
+            _chain_len = len(_cached_chain) if isinstance(_cached_chain, (list, tuple)) else 0
+            _weak_cached_chain = (_chain_len <= 1) and (_cached_conf < 0.55)
+
+            if not _weak_cached_chain:
+                logger.debug(
+                    "TontraegerketteDenker.analysiere(): gecachtes MediumResult übernommen "
+                    "(primary_material=%s, conf=%.2f, chain_len=%d) — detect() NICHT aufgerufen",
+                    _cached_primary,
+                    _cached_conf,
+                    _chain_len,
+                )
+                raw = self._aufbereiten_from_cached(cached_medium_result)
+                return raw
+
+            logger.debug(
+                "TontraegerketteDenker.analysiere(): schwaches Cache-Ergebnis erkannt "
+                "(primary_material=%s, conf=%.2f, chain_len=%d) — detect() Recovery wird ausgeführt",
+                _cached_primary,
+                _cached_conf,
+                _chain_len,
+            )
 
         # Detektion durchführen (nur wenn kein cached result)
         import os as _os

@@ -359,6 +359,8 @@ class DeEsserPhase(PhaseInterface):
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
         self.validate_input(audio)
+        quality_mode = str(kwargs.get("quality_mode", "quality")).strip().lower()
+        quality_first_unleashed = bool(kwargs.get("quality_first_unleashed", quality_mode in ("quality", "maximum")))
 
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
@@ -488,10 +490,10 @@ class DeEsserPhase(PhaseInterface):
                 # 22.500 Iterationen → mehrere Stunden Laufzeit.
                 # Fix: Nur max. 30 s Zentrum durch die Stages führen; Ergebnis
                 # wird am Ende in das volle Audio zurückgeschrieben.
-                _STAGE_CAP_S = 30
+                _STAGE_CAP_S = 0 if quality_first_unleashed else 30
                 _stage_full_len = len(enhanced_audio)
-                _cap_samples = int(_STAGE_CAP_S * sample_rate)
-                _stage_cap_active = _stage_full_len > _cap_samples
+                _cap_samples = int(_STAGE_CAP_S * sample_rate) if _STAGE_CAP_S > 0 else 0
+                _stage_cap_active = _STAGE_CAP_S > 0 and _stage_full_len > _cap_samples
                 if _stage_cap_active:
                     _cap_mid = _stage_full_len // 2
                     _cap_start = max(0, _cap_mid - _cap_samples // 2)

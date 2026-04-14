@@ -54,12 +54,12 @@ Functional audio testing remains for **Phase 2 (2 hours, next)**.
 
 ### Timeline
 
-| Phase | Status | Duration | Next |
-|-------|--------|----------|------|
-| **1: Code Inspection** | ✅ COMPLETE | 2 min | NOW |
-| **2: Functional Tests** | 🔄 READY | ~2 hrs | THIS WEEK |
-| **3: Integration Tests** | 🔄 QUEUED | ~1 hr | FOLLOW |
-| **4: Release Certification** | 🔄 PLANNED | TBD | POST-FUNCTIONAL |
+| Phase                        | Status      | Duration | Next            |
+|------------------------------|-------------|----------|-----------------|
+| **1: Code Inspection**       | ✅ COMPLETE | 2 min    | NOW             |
+| **2: Functional Tests**      | 🔄 READY    | ~2 hrs   | THIS WEEK       |
+| **3: Integration Tests**     | 🔄 QUEUED   | ~1 hr    | FOLLOW          |
+| **4: Release Certification** | 🔄 PLANNED  | TBD      | POST-FUNCTIONAL |
 
 ---
 
@@ -76,6 +76,7 @@ Skipped: 11/15 (73%) ⊘ [functional tests deferred]
 ```
 
 **Validated:**
+
 - R1: Mode announcement ✅
 - R3: Dual progress bars ✅
 - R4: Waveform cursor ✅
@@ -83,6 +84,7 @@ Skipped: 11/15 (73%) ⊘ [functional tests deferred]
 - R13: Mono/stereo detection ✅
 
 **Pending (Functional Phase 2):**
+
 - R2: Defect scanning  
 - R5–R8: Audio quality metrics
 - R10–R12: LUFS, Musical Goals, NaN/Inf
@@ -97,24 +99,26 @@ Skipped: 13/15 (87%) ⊘ [functional tests deferred]
 ```
 
 **Validated:**
+
 - S1: Mode announcement ✅
 - S15: Export gate ✅
 
 **Pending (Functional Phase 2):**
+
 - S2–S14: Stem separation, mastering, metrics
 
 ### Release Gates (7 Total)
 
 ```
-Gate ID | Name | K.O. | Status
---------|------|------|--------
-G1      | Docker | 🔴 | ⊘ PENDING
-G2      | KMV audio | 🔴 | ✅ PASS
-G3      | Cancel signal | 🔴 | ✅ PASS
-G4      | Progress counter | ⚪ | ✅ PASS
-G5      | PMGG best-effort | 🔴 | ✅ PASS
-G6      | OQS benchmark | ⚪ | ⊘ PENDING
-G7      | Release mode | 🔴 | ✅ PASS
+Gate ID | Name              | K.O.| Status
+--------|-------------------|-----|--------
+G1      | Docker            | 🔴  | ⊘ PENDING
+G2      | KMV audio         | 🔴  | ✅ PASS
+G3      | Cancel signal     | 🔴  | ✅ PASS
+G4      | Progress counter  | ⚪  | ✅ PASS
+G5      | PMGG best-effort  | 🔴  | ✅ PASS
+G6      | OQS benchmark     | ⚪  | ⊘ PENDING
+G7      | Release mode      | 🔴  | ✅ PASS
 
 Critical (🔴): 5/6 passed, 0 violations ✅
 Non-critical (⚪): 1/1 passed
@@ -127,6 +131,7 @@ Non-critical (⚪): 1/1 passed
 ### Tests
 
 **`tests/test_uat_acceptance_criteria.py`**
+
 - 15 Restoration parametrized tests (R1–R15)
 - 15 Studio 2026 parametrized tests (S1–S15)
 - 7 Release gate tests (G1–G7)
@@ -137,6 +142,7 @@ Non-critical (⚪): 1/1 passed
 ### Generators/Tools
 
 **`audit/uat_report_generator.py`**
+
 - Pytest orchestrator
 - JSON parser
 - Markdown report generator
@@ -146,6 +152,7 @@ Non-critical (⚪): 1/1 passed
 ### Reports (Markdown)
 
 **`docs/UAT_SCORECARD_2026-03-28.md`**
+
 - Formal scorecard with 30 criteria
 - Release gate validation matrix
 - Summary statistics
@@ -153,6 +160,7 @@ Non-critical (⚪): 1/1 passed
 - **Format:** Markdown tables | **Length:** 180 lines
 
 **`docs/UAT_REPORT_2026-03-28.md`**
+
 - Executive certification document
 - Detailed criterion results
 - Risk assessment
@@ -163,6 +171,7 @@ Non-critical (⚪): 1/1 passed
 ### Reference Cards
 
 **`audit/UAT_QUICK_REFERENCE.md`**
+
 - 30-second status snapshot
 - Criteria breakdown
 - Risk matrix
@@ -170,6 +179,7 @@ Non-critical (⚪): 1/1 passed
 - **Format:** Quick reference | **Length:** 200 lines
 
 **`audit/README_UAT_SYSTEM.md`**
+
 - System overview
 - Component documentation
 - Workflow explanation
@@ -179,6 +189,7 @@ Non-critical (⚪): 1/1 passed
 ### Data (JSON)
 
 **`audit/uat_results_2026-03-28.json`**
+
 - Machine-readable test results
 - Summary metrics
 - Per-criterion data
@@ -308,40 +319,42 @@ Phase 3 Complete?
 
 ### Restoration Mode Criteria (R1–R15)
 
-| ID | Type | Gate Link | Phase |
-|----|------|-----------|-------|
-| R1–R4, R9, R13 | UI/Code | N/A | ✅ 1 |
-| R2, R5–R8, R10–R12, R14–R15 | Audio | N/A | 🔄 2 |
+| ID                          | Type    | Gate Link | Phase |
+|-----------------------------|---------|-----------|-------|
+| R1–R4, R9, R13              | UI/Code | N/A       | ✅ 1  |
+| R2, R5–R8, R10–R12, R14–R15 | Audio   | N/A       | 🔄 2  |
 
 ### Studio 2026 Mode Criteria (S1–S15)
 
-| ID | Type | Gate Link | Phase |
-|----|------|-----------|-------|
-| S1, S15 | UI/Code | N/A | ✅ 1 |
-| S2–S14 | Audio | N/A | 🔄 2 |
+| ID      | Type    | Gate Link | Phase |
+|---------|---------|-----------|-------|
+| S1, S15 | UI/Code | N/A       | ✅ 1  |
+| S2–S14  | Audio   | N/A       | 🔄 2  |
 
 ### Release Gates (G1–G7)
 
-| ID | Criterion | K.O. | Phase | Status |
-|----|-----------|------|-------|--------|
-| G1 | Docker normative | 🔴 | 2 | ⊘ |
-| G2 | KMV audio source | 🔴 | 1 | ✅ |
-| G3 | Cancel signal | 🔴 | 1 | ✅ |
-| G4 | Progress counter | ⚪ | 1 | ✅ |
-| G5 | PMGG best-effort | 🔴 | 1 | ✅ |
-| G6 | OQS benchmark | ⚪ | 4 | ⊘ |
-| G7 | Release mode | 🔴 | 1 | ✅ |
+| ID | Criterion         | K.O. | Phase | Status |
+|----|-------------------|------|-------|--------|
+| G1 | Docker normative  | 🔴   | 2     | ⊘      |
+| G2 | KMV audio source  | 🔴   | 1     | ✅     |
+| G3 | Cancel signal     | 🔴   | 1     | ✅     |
+| G4 | Progress counter  | ⚪   | 1     | ✅     |
+| G5 | PMGG best-effort  | 🔴   | 1     | ✅     |
+| G6 | OQS benchmark     | ⚪   | 4     | ⊘      |
+| G7 | Release mode      | 🔴   | 1     | ✅     |
 
 ---
 
 ## 🎓 Reference Documents
 
 **Internal:**
+
 - `.github/copilot-instructions.md` — Normative requirements
 - `.github/specs/01-08_*.md` — Technical specifications
 - `README.md` — Project overview
 
 **This System:**
+
 - `docs/UAT_*.md` — Reports (this folder)
 - `audit/uat_*.py` — Code (audit folder)
 - `audit/README_UAT_SYSTEM.md` — Usage guide
@@ -374,26 +387,26 @@ Phase 3 Complete?
 
 ## 📊 Historical Record
 
-| Date | Action | Result | Status |
-|------|--------|--------|--------|
-| 2026-03-28 | Code Inspection Phase | 6/30 criteria valid | ✅ |
-| 2026-03-28 | K.O. Gate Validation | 5/7 gates pass, 0 violations | ✅ |
-| 2026-03-28 | Generate UAT System | This master index | ✅ |
-| TBD | Phase 2: Functional | Expected ~20/30 pass | 🔄 |
-| TBD | Phase 3: Integration | Expected 28+/30 pass | 🔄 |
-| TBD | Release Certification | Expected FULL GO | 🔄 |
+| Date       | Action                | Result                       | Status |
+|------------|-----------------------|------------------------------|--------|
+| 2026-03-28 | Code Inspection Phase | 6/30 criteria valid          | ✅     | 
+| 2026-03-28 | K.O. Gate Validation  | 5/7 gates pass, 0 violations | ✅     |
+| 2026-03-28 | Generate UAT System   | This master index            | ✅     |
+| TBD        | Phase 2: Functional   | Expected ~20/30 pass         | 🔄     |
+| TBD        | Phase 3: Integration  | Expected 28+/30 pass         | 🔄     |
+| TBD        | Release Certification | Expected FULL GO             | 🔄     |
 
 ---
 
 ## 📞 Questions?
 
-| Question | Answer | Document |
-|----------|--------|----------|
-| What's the status? | CONDITIONAL GO | [Quick Reference](audit/UAT_QUICK_REFERENCE.md) |
-| Can we release now? | Yes, with Phase 2 completion | [Report](docs/UAT_REPORT_2026-03-28.md) |
-| What's pending? | Functional audio tests | [Scorecard](docs/UAT_SCORECARD_2026-03-28.md) |
-| How do I run tests? | See README | [README_UAT_SYSTEM.md](audit/README_UAT_SYSTEM.md) |
-| Is there risk? | Low; mitigation in place | [Report Risk Section](docs/UAT_REPORT_2026-03-28.md) |
+| Question            | Answer                       | Document                                                       |
+|---------------------|------------------------------|----------------------------------------------------------------|
+| What's the status?  | CONDITIONAL GO               | [Quick Reference](audit/UAT_QUICK_REFERENCE.md)                |
+| Can we release now? | Yes, with Phase 2 completion | [Report](docs/UAT_REPORT_2026-03-28.md)                        |
+| What's pending?     | Functional audio tests       | [Scorecard](docs/UAT_SCORECARD_2026-03-28.md)                  |
+| How do I run tests? | See README                   | [README_UAT_SYSTEM.md](audit/README_UAT_SYSTEM.md)             |
+| Is there risk?      | Low; mitigation in place     | [Report Risk Section](docs/UAT_REPORT_2026-03-28.md)           |
 
 ---
 
@@ -403,5 +416,5 @@ Phase 3 Complete?
 
 ---
 
-*Thank you for reviewing Aurik 9.10.77 User Acceptance Testing documentation.*  
-*Next step: Phase 2 Functional Testing (Schedule this week)*
+**Thank you for reviewing Aurik 9.10.77 User Acceptance Testing documentation.**  
+**Next step: Phase 2 Functional Testing (Schedule this week)**

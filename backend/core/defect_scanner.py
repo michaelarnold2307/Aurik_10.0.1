@@ -1167,9 +1167,16 @@ class DefectScanner:
                 logger.debug("DefectScanner chain-threshold-merge fehlgeschlagen: %s", _cta_exc)
 
         # Audio normalisieren für konsistente Detection
+        # Treat column-vectors (N, 1) as mono to avoid false stereo indexing
+        # like audio[:, 1] in downstream stereo detectors.
         if audio.ndim == 2:
-            is_stereo = True
-            audio_mono = np.mean(audio, axis=1)
+            if min(audio.shape) < 2:
+                is_stereo = False
+                audio_mono = np.asarray(audio, dtype=np.float32).reshape(-1)
+            else:
+                is_stereo = True
+                # samples-first expected at this point; keep a safe fallback.
+                audio_mono = np.mean(audio, axis=1 if audio.shape[1] <= audio.shape[0] else 0)
         else:
             is_stereo = False
             audio_mono = audio

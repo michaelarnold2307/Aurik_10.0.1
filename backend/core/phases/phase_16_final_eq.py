@@ -268,6 +268,12 @@ class FinalEQ(PhaseInterface):
 
     def _eq_channel(self, audio: np.ndarray, sample_rate: int, config: dict[str, dict[str, Any]]) -> np.ndarray:
         """Apply EQ to a single channel."""
+        # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
+        MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
+        if len(audio) < MIN_AUDIO_SAMPLES:
+            logger.debug(f"phase_16: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}), skipping EQ")
+            return np.asarray(audio, dtype=np.float32).copy()
+
         eq_audio = audio.copy()
 
         # Apply each band EQ

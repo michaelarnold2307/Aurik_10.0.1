@@ -7,7 +7,7 @@ CQT-based log-frequency representation + harmonic-weighted peak picking, without
 the learned transposition-equivariant head.
 
 Role in Aurik §4.4 pitch-tracking hierarchy (DSP tier, penultimate fallback):
-    FCPE (ML, primary) → CREPE (ML) → RMVPE (ML) → PESTO (DSP) → pYIN (last resort)
+    FCPE (ML, primary) → RMVPE (ML) → PESTO (DSP) → pYIN (last resort)
 
 VERBOTEN as primary tracker — FCPE / RMVPE accuracy is superior for music.
 

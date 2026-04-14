@@ -95,6 +95,16 @@ metadata["best_carrier_checkpoint"] = current_audio.copy()
 
 **Invariante**: Ohne §1.2a-Referenz-Shift würde jede erfolgreiche Carrier-Inversion bei Shellac/Multi-Gen-Material (recovery_ratio > 0.35) einen End-Goals-Fail erzeugen — die Pipeline wäre für genau die Materialien unbrauchbar, für die sie gebaut ist.
 
+**§0d Dreischichtiges Carrier-Recovery-Referenzmodell — Cross-Referenz (normativ)**:
+
+| Ebene | Mechanismus | Spec-Referenz | Beschreibung |
+| --- | --- | --- | --- |
+| **1. Per-Phase PMGG** | Baseline-Capping | Spec 01 §2.29c + Spec 02 §2.29c | `effective_before = min(measured, threshold + 0.05)` für restorative Phasen |
+| **2. End-of-Pipeline Goals** | Carrier-Recovery-Referenz-Shift | **Spec 01 §1.2a** (hier) | Bei `recovery_ratio > 0.15` → End-Referenz = `best_carrier_checkpoint` |
+| **3. HPI Export-Gate** | Referenz-Paradoxon | Spec 02 §2.44 | Restorability-abhängiger Referenz-Anker (GP-Memory MERT bei Restorability ≤ 50) |
+
+Alle drei Ebenen MÜSSEN konsistent implementiert sein. Ein Gate (PMGG, CIG, HPI, AFG) darf den Export nie blockieren, weil sich das Signal vom **degradierten** Input entfernt hat — solange es sich dem **physikalischen Ceiling** des erkannten Materials nähert.
+
 ---
 
 ## §2.34 GoalPriorityProtocol — Hierarchie bei Ressourcen-Konflikten

@@ -496,6 +496,13 @@ class CrackleRemovalPhase(PhaseInterface):
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
 
+        # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict09
+            _get_plm_evict09().evict_for_phase("phase_09_crackle_removal")
+        except Exception:
+            pass
+
         # Get material-specific parameters
         params = dict(self.MATERIAL_PARAMS.get(material_type, self.MATERIAL_PARAMS["unknown"]))
 
