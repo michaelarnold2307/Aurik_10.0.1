@@ -1,19 +1,19 @@
-import json
-import logging
-import os
-from typing import Any
-
-import yaml
-
-from backend.core.data_models import AnalysisProfile
-
 """
 dsp_decision_logic.py - Zentrale Entscheidungslogik für DSP- und KI-Modelle in Aurik 6.0
 
 - Moderne, transparente und musikalisch präsente Ergebnisse
 - Auditierbarkeit und SOTA-Konformität
 """
+
+import json
+import logging
+import os
+from typing import Any
+
 import numpy as np
+import yaml
+
+from backend.core.data_models import AnalysisProfile
 
 from .dsp_module_registry import DSPModuleRegistry
 
@@ -32,7 +32,6 @@ class DSPDecisionLogic:
         musical = profile.musical_context
         vocals = profile.vocal_analysis
         features = profile.raw_features
-        profile.spectral
         dynamics = profile.dynamics
         stereo = profile.stereo
         # Beispiel: adaptive Maßnahmenkette

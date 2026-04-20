@@ -230,7 +230,7 @@ def _allow_lightweight_under_pressure(model_name: str, size_gb: float) -> bool:
             )
         if (_tiny_allocated + float(size_gb)) > _PRESSURE_LIGHT_MODEL_TOTAL_GB_CAP:
             logger.warning(
-                "ML-Budget: '%s' (%.2f GB) pressure soft-allow abgelehnt — " "tiny-budget cap erreicht (%.2f/%.2f GB)",
+                "ML-Budget: '%s' (%.2f GB) pressure soft-allow abgelehnt — tiny-budget cap erreicht (%.2f/%.2f GB)",
                 model_name,
                 size_gb,
                 _tiny_allocated,
@@ -408,7 +408,7 @@ def _attempt_quality_preserving_pressure_recovery(model_name: str, size_gb: floa
             return True
 
         logger.warning(
-            "ML-Budget: pressure recovery %d/%d for '%s' insufficient " "(evicted=%d, thrashing=%s, heavy_block=%s)",
+            "ML-Budget: pressure recovery %d/%d for '%s' insufficient (evicted=%d, thrashing=%s, heavy_block=%s)",
             attempt,
             attempts,
             model_name,
@@ -441,9 +441,9 @@ def try_allocate(model_name: str, size_gb: float) -> bool:
     # Swap-Thrashing-Guard: Wenn system bereits thrashing, alle neuen
     # ML-Loads blockieren — DSP-Fallback statt Freeze/OOM.
     if is_system_thrashing():
-        if _allow_lightweight_under_pressure(model_name, float(max(size_gb, 0.0))):
-            pass
-        elif _attempt_quality_preserving_pressure_recovery(model_name, size_gb):
+        if _allow_lightweight_under_pressure(
+            model_name, float(max(size_gb, 0.0))
+        ) or _attempt_quality_preserving_pressure_recovery(model_name, size_gb):
             pass
         else:
             logger.warning(

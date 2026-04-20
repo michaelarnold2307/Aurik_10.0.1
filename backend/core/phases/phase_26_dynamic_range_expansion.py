@@ -132,6 +132,47 @@ class DynamicRangeExpansion(PhaseInterface):
     def __init__(self):
         super().__init__()
         self.name = "Dynamic Range Expansion v2 Professional"
+        self._max_expansion_db_current = self.MAX_EXPANSION_DB
+
+    @staticmethod
+    def _compute_expansion_profile(
+        material: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive expansion profile (§2.56, §6.2b)."""
+        mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        if restorability_score is None:
+            restorability_score = 50.0
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base = {
+            "wax_cylinder": 3.0,
+            "shellac": 3.6,
+            "vinyl": 5.2,
+            "tape": 6.0,
+            "reel_tape": 6.2,
+            "cassette": 5.5,
+            "cd_digital": 8.6,
+            "dat": 8.3,
+            "streaming": 7.4,
+            "unknown": 6.0,
+        }.get(mat, 6.0)
+
+        mode_adj = {
+            "fast": -1.2,
+            "balanced": 0.0,
+            "restoration": 0.4,
+            "quality": 1.2,
+            "maximum": 2.0,
+            "studio_2026": 2.0,
+        }.get(qm, 0.0)
+
+        # Low restorability => conservative expansion to avoid artifact amplification.
+        rest_adj = ((rest - 50.0) / 50.0) * 1.0
+        max_expansion_db = float(np.clip(base + mode_adj + rest_adj, 2.0, 12.0))
+        return {"max_expansion_db": max_expansion_db}
 
     def get_metadata(self) -> PhaseMetadata:
         """Return phase metadata."""
@@ -174,6 +215,12 @@ class DynamicRangeExpansion(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        quality_mode = kwargs.get("quality_mode")
+        restorability_score = kwargs.get("restorability_score", 50.0)
+        material_key = str(getattr(material, "value", material) or "unknown")
+        expansion_profile = self._compute_expansion_profile(material_key, quality_mode, restorability_score)
+        self._max_expansion_db_current = float(expansion_profile["max_expansion_db"])
+
         is_stereo = audio.ndim == 2
         config = dict(self.EXPANSION_CONFIG.get(material, self.EXPANSION_CONFIG[MaterialType.CD_DIGITAL]))
 
@@ -191,6 +238,7 @@ class DynamicRangeExpansion(PhaseInterface):
                     "dr_increase_db": 0.0,
                     "upward_ratio": 1.0,
                     "downward_ratio": 1.0,
+                    "expansion_runtime_profile": expansion_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "processing": "skipped_zero_strength",
@@ -281,6 +329,7 @@ class DynamicRangeExpansion(PhaseInterface):
                 "dr_increase_db": float(dr_increase_db),
                 "upward_ratio": float(config["upward_ratio"]),
                 "downward_ratio": float(config["downward_ratio"]),
+                "expansion_runtime_profile": expansion_profile,
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "rt_factor": float(rt_factor),
@@ -383,7 +432,8 @@ class DynamicRangeExpansion(PhaseInterface):
         gain_db[mask_dn_knee] = -((deficit_k / knee) ** 2) * (downward_ratio - 1.0) * knee
 
         # Limit expansion
-        gain_db = np.clip(gain_db, -self.MAX_EXPANSION_DB, self.MAX_EXPANSION_DB)
+        max_expansion_db = float(getattr(self, "_max_expansion_db_current", self.MAX_EXPANSION_DB))
+        gain_db = np.clip(gain_db, -max_expansion_db, max_expansion_db)
 
         # Smooth gain (attack/release) — 16× downsampled for performance
         gain_db_smooth = self._smooth_gain(gain_db, sample_rate, config["attack_ms"], config["release_ms"])

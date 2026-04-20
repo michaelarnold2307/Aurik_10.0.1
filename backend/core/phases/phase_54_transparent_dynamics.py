@@ -181,6 +181,30 @@ class TransparentDynamicsV1(PhaseInterface):
         super().__init__(sample_rate, **kwargs)
         self.genre = genre
 
+    @staticmethod
+    def _compute_transparent_dynamics_profile(
+        material_key: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """§2.56 Advisory-only mix adaptation for transparent dynamics."""
+        _aliases = {"restoration": "balanced", "studio_2026": "maximum"}
+        _mode = _aliases.get(
+            str(quality_mode or "balanced").strip().lower(), str(quality_mode or "balanced").strip().lower()
+        )
+        mix_delta = {
+            "fast": -0.05,
+            "balanced": 0.0,
+            "quality": 0.05,
+            "maximum": 0.08,
+        }.get(_mode, 0.0)
+
+        _rest = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0))
+        if _rest < 40.0:
+            mix_delta -= 0.10
+
+        return {"mix_delta": float(np.clip(mix_delta, -0.20, 0.20))}
+
     def process(
         self,
         audio: np.ndarray,
@@ -231,6 +255,12 @@ class TransparentDynamicsV1(PhaseInterface):
 
         # Get material-specific config
         material_config = self.MATERIAL_CEILING.get(material_type, self.DEFAULT_MATERIAL_CONFIG)
+        _material_key_54 = material_type.value if isinstance(material_type, MaterialType) else str(material_type)
+        _td_profile = self._compute_transparent_dynamics_profile(
+            _material_key_54,
+            kwargs.get("quality_mode"),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
 
         # Merge configs (genre provides time constants, material provides ceiling)
         attack_ms = genre_config["attack_ms"]
@@ -238,7 +268,7 @@ class TransparentDynamicsV1(PhaseInterface):
         ratio = material_config["ratio"]
         threshold_db = material_config["threshold_db"]
         knee_db = material_config["knee_db"]
-        mix = float(np.clip(material_config["mix"], 0.0, 1.0)) * effective_strength
+        mix = float(np.clip(material_config["mix"] + _td_profile["mix_delta"], 0.0, 1.0)) * effective_strength
 
         # §2.51 Linked-Stereo: Gain-Envelope aus Mono-Downmix, identisch auf L+R
         is_stereo = audio.ndim == 2
@@ -299,9 +329,13 @@ class TransparentDynamicsV1(PhaseInterface):
         # §4.5 Psychoacoustic Masking Clamp — preserve masked dynamics regions
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             audio_out = apply_psychoacoustic_masking_clamp(
-                audio, audio_out, sample_rate,
-                strength=effective_strength, mode="subtractive",
+                audio,
+                audio_out,
+                sample_rate,
+                strength=effective_strength,
+                mode="subtractive",
             )
         except Exception as _pm_exc:
             logger.debug("Phase54 masking clamp non-blocking: %s", _pm_exc)
@@ -318,6 +352,8 @@ class TransparentDynamicsV1(PhaseInterface):
                 "attack_ms": attack_ms,
                 "release_ms": release_ms,
                 "mix": mix,
+                "transparent_dynamics_profile": dict(_td_profile),
+                "mix_delta": float(_td_profile["mix_delta"]),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": effective_strength,
                 "rms_drop_db": 0.0,

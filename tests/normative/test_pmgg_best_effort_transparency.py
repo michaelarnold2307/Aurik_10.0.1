@@ -6,9 +6,9 @@ every best_effort outcome MUST be marked with recovery_attempted=True and
 best_possible_reached=True so downstream components (UV3, bridge, export_workflow)
 can distinguish a full pass from a tolerated recovery.
 """
+
 from __future__ import annotations
 
-import threading
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -79,9 +79,7 @@ def test_best_effort_action_sets_recovery_attempted_in_log_entry() -> None:
         )
 
     # The action must be a best_effort variant
-    assert log_entry.action.startswith("best_effort"), (
-        f"Expected best_effort* action, got: {log_entry.action!r}"
-    )
+    assert log_entry.action.startswith("best_effort"), f"Expected best_effort* action, got: {log_entry.action!r}"
     # §0c Recovery-Lite transparency invariant:
     assert log_entry.metadata.get("recovery_attempted") is True, (
         "best_effort action MUST set metadata['recovery_attempted'] = True"
@@ -124,12 +122,11 @@ def test_passed_action_does_not_set_recovery_metadata() -> None:
             effective_goals=["natuerlichkeit", "authentizitaet"],
         )
 
-    assert log_entry.action in {"passed", "sub_threshold"}, (
-        f"Clean pass should yield 'passed' or 'sub_threshold', got: {log_entry.action!r}"
-    )
-    assert not log_entry.metadata.get("recovery_attempted", False), (
-        "A clean pass must NOT set recovery_attempted=True"
-    )
+    assert log_entry.action in {
+        "passed",
+        "sub_threshold",
+    }, f"Clean pass should yield 'passed' or 'sub_threshold', got: {log_entry.action!r}"
+    assert not log_entry.metadata.get("recovery_attempted", False), "A clean pass must NOT set recovery_attempted=True"
 
 
 @pytest.mark.normative
@@ -168,8 +165,7 @@ def test_p4_p5_goal_regression_within_tolerance_yields_passed_p4p5_tolerated() -
         )
 
     assert log_entry.action == "passed_p4p5_tolerated", (
-        f"P4 mild regression within tolerance band should yield 'passed_p4p5_tolerated', "
-        f"got: {log_entry.action!r}"
+        f"P4 mild regression within tolerance band should yield 'passed_p4p5_tolerated', got: {log_entry.action!r}"
     )
     assert not log_entry.metadata.get("recovery_attempted", False), (
         "passed_p4p5_tolerated must NOT set recovery_attempted"

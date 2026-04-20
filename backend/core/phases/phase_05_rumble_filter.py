@@ -154,6 +154,91 @@ class RumbleFilterPhase(PhaseInterface):
         },
     }
 
+    @staticmethod
+    def _compute_rumble_filter_profile(
+        material_type: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float | int]:
+        """Compute adaptive rumble-guard profile for diagnostics/planning.
+
+        Returns material/quality dependent limits used by tests and tuning tools.
+        """
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _base_drop_by_mat = {
+            "wax_cylinder": 2.8,
+            "shellac": 2.6,
+            "vinyl": 2.1,
+            "tape": 1.9,
+            "reel_tape": 1.8,
+            "cd_digital": 1.0,
+            "digital": 1.0,
+            "dat": 1.0,
+            "unknown": 1.8,
+        }
+        _base_drop = float(_base_drop_by_mat.get(_mat, _base_drop_by_mat["unknown"]))
+
+        _qm_drop_adj = {
+            "fast": -0.25,
+            "balanced": 0.0,
+            "quality": 0.20,
+            "maximum": 0.35,
+            "restoration": 0.20,
+            "studio_2026": 0.35,
+        }.get(_qm, 0.0)
+        _rest_adj = ((50.0 - _rest) / 50.0) * 0.40
+        max_rms_drop_db = float(np.clip(_base_drop + _qm_drop_adj + _rest_adj, 0.5, 3.5))
+
+        _base_hop_by_mat = {
+            "wax_cylinder": 512,
+            "shellac": 512,
+            "vinyl": 384,
+            "tape": 320,
+            "reel_tape": 320,
+            "cd_digital": 256,
+            "digital": 256,
+            "dat": 256,
+            "unknown": 384,
+        }
+        _hop = int(_base_hop_by_mat.get(_mat, 384))
+        if _qm in {"quality", "maximum", "restoration", "studio_2026"}:
+            _hop = int(max(128, _hop - 64))
+        elif _qm == "fast":
+            _hop = int(min(1024, _hop + 64))
+        onset_hop = int(np.clip(_hop, 128, 1024))
+
+        _base_fft_by_mat = {
+            "wax_cylinder": 1024,
+            "shellac": 1024,
+            "vinyl": 2048,
+            "tape": 2048,
+            "reel_tape": 2048,
+            "cd_digital": 4096,
+            "digital": 4096,
+            "dat": 4096,
+            "unknown": 2048,
+        }
+        _fft = int(_base_fft_by_mat.get(_mat, 2048))
+        if _qm in {"quality", "maximum", "studio_2026"}:
+            _fft = int(min(4096, _fft * 2))
+        elif _qm == "fast":
+            _fft = int(max(512, _fft // 2))
+
+        # Enforce power-of-two in [512, 4096]
+        _fft = int(np.clip(_fft, 512, 4096))
+        if _fft & (_fft - 1):
+            _fft = 1 << int(np.round(np.log2(max(_fft, 1))))
+            _fft = int(np.clip(_fft, 512, 4096))
+
+        return {
+            "max_rms_drop_db": max_rms_drop_db,
+            "onset_hop": onset_hop,
+            "onset_fft": int(_fft),
+        }
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_05_rumble_filter",
@@ -582,7 +667,9 @@ class RumbleFilterPhase(PhaseInterface):
         n_fft = 2048
 
         # Spectrogram
-        _f, _t, Zxx = signal.stft(mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
+        _f, _t, Zxx = signal.stft(
+            mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length, boundary="even"
+        )
         magnitude = np.abs(Zxx)
 
         # Spectral flux (frame-to-frame difference)

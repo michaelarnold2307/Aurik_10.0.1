@@ -730,13 +730,13 @@ class SGMSEPlusPlugin:
                     y_t = xt_t
                     if self._ts_model is not None:
                         out_t = self._run_with_timeout(
-                            lambda: self._ts_model(xt_t, y_t, t_t),
+                            lambda xt_t=xt_t, y_t=y_t, t_t=t_t: self._ts_model(xt_t, y_t, t_t),
                             timeout_s=self.FORWARD_TIMEOUT_S,
                         )
                     else:
                         if self._eager_backbone == "ncsnpp_v2":
                             out_t = self._run_with_timeout(
-                                lambda: self._eager_model(xt_t, y_t, t_t),
+                                lambda xt_t=xt_t, y_t=y_t, t_t=t_t: self._eager_model(xt_t, y_t, t_t),
                                 timeout_s=self.FORWARD_TIMEOUT_S,
                             )
                         else:
@@ -744,7 +744,7 @@ class SGMSEPlusPlugin:
                             y_complex = torch.complex(y_t[:, 0], y_t[:, 1])
                             dnn_input = torch.stack([x_complex, y_complex], dim=1)
                             out_complex = -self._run_with_timeout(
-                                lambda: self._eager_model(dnn_input, t_t),
+                                lambda dnn_input=dnn_input, t_t=t_t: self._eager_model(dnn_input, t_t),
                                 timeout_s=self.FORWARD_TIMEOUT_S,
                             )
                             out_t = torch.stack([out_complex.real, out_complex.imag], dim=1)
@@ -823,12 +823,12 @@ class SGMSEPlusPlugin:
     def _run_with_timeout(self, fn: Any, timeout_s: float) -> Any:
         """Run callable with hard wall-clock timeout in a daemon thread."""
         box: dict[str, Any] = {}
-        err: dict[str, BaseException] = {}
+        err: dict[str, Exception] = {}
 
         def _worker() -> None:
             try:
                 box["value"] = fn()
-            except BaseException as exc:
+            except Exception as exc:
                 err["error"] = exc
 
         thread = threading.Thread(target=_worker, name="sgmse-forward", daemon=True)

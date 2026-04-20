@@ -455,8 +455,8 @@ def _try_cqtdiff_plus_plugin(audio: np.ndarray, start: int, end: int, sample_rat
         if _plugins_dir not in sys.path:
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
-        from plugins.cqtdiff_plus_plugin import get_cqtdiff_plus
         from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55a
+        from plugins.cqtdiff_plus_plugin import get_cqtdiff_plus
 
         plugin = get_cqtdiff_plus()
         _plm55a = _get_plm55a()
@@ -492,6 +492,7 @@ def _try_flow_matching_plugin(audio: np.ndarray, start: int, end: int, sample_ra
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
         from flow_matching_plugin import inpaint_flow
+
         from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55b
 
         _plm55b = _get_plm55b()
@@ -563,6 +564,7 @@ def _try_consistency_model_inpainting(channel: np.ndarray, start: int, end: int,
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
         from plugins.consistency_inpaint_plugin import get_consistency_inpaint_plugin
+
         from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55d
 
         cm = get_consistency_inpaint_plugin()
@@ -611,8 +613,8 @@ def _try_dac_token_inpainting(channel: np.ndarray, start: int, end: int, sample_
         if _os.path.abspath(_plugins_dir) not in sys.path:
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
-        from plugins.dac_plugin import get_dac_plugin
         from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm55e
+        from plugins.dac_plugin import get_dac_plugin
 
         dac = get_dac_plugin()
         if dac is None:
@@ -922,6 +924,52 @@ class DiffusionInpaintingPhase(PhaseInterface):
             strength = min(strength, 0.58)
         return float(np.clip(strength, 0.0, 1.0))
 
+    @staticmethod
+    def _compute_inpainting_profile(
+        material_key: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """§2.54 Runtime profile for diffusion inpainting."""
+        _material = str(material_key or "unknown").strip().lower()
+        _aliases = {"restoration": "balanced", "studio_2026": "maximum"}
+        _mode = _aliases.get(
+            str(quality_mode or "balanced").strip().lower(), str(quality_mode or "balanced").strip().lower()
+        )
+
+        if any(token in _material for token in ("wax_cylinder", "wire_recording", "shellac", "lacquer_disc")):
+            min_gap_ms = 28.0
+            wall_budget_seconds = 120.0
+        elif any(token in _material for token in ("vinyl", "tape", "reel_tape", "cassette")):
+            min_gap_ms = 22.0
+            wall_budget_seconds = 110.0
+        elif any(token in _material for token in ("cd_digital", "dat", "flac", "streaming")):
+            min_gap_ms = 14.0
+            wall_budget_seconds = 90.0
+        else:
+            min_gap_ms = 18.0
+            wall_budget_seconds = 100.0
+
+        _rest = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0))
+        _rest_norm = _rest / 100.0
+        min_gap_ms += (_rest_norm - 0.5) * 12.0
+        wall_budget_seconds += (0.5 - _rest_norm) * 70.0
+
+        _mode_offsets = {
+            "fast": (8.0, -35.0),
+            "balanced": (0.0, 0.0),
+            "quality": (-4.0, 25.0),
+            "maximum": (-7.0, 55.0),
+        }
+        _gap_off, _budget_off = _mode_offsets.get(_mode, (0.0, 0.0))
+        min_gap_ms += _gap_off
+        wall_budget_seconds += _budget_off
+
+        return {
+            "min_gap_ms": float(np.clip(min_gap_ms, 8.0, 80.0)),
+            "wall_budget_seconds": float(np.clip(wall_budget_seconds, 40.0, 240.0)),
+        }
+
     def get_metadata(self) -> PhaseMetadata:
         """Implementiert PhaseInterface.get_metadata()."""
         return PhaseMetadata(
@@ -1052,6 +1100,11 @@ class DiffusionInpaintingPhase(PhaseInterface):
         # §0 BW-Cap: prevent hallucination of HF content on bandwidth-limited carriers
         _material = kwargs.get("material_type")
         _mat_key = str(_material).lower() if _material is not None else ""
+        _inpainting_profile = self._compute_inpainting_profile(
+            _mat_key,
+            str(kwargs.get("quality_mode", "balanced")),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
         _vocals_conf = float(kwargs.get("panns_vocals_confidence", 0.0))
         if _vocals_conf == 0.0:  # Fallback: direct callers may use panns_singing key
             _vocals_conf = float(kwargs.get("panns_singing", 0.0))
@@ -1080,6 +1133,8 @@ class DiffusionInpaintingPhase(PhaseInterface):
                 },
             )
 
+        min_gap_ms = float(_inpainting_profile["min_gap_ms"])
+        wall_budget_s = float(_inpainting_profile["wall_budget_seconds"])
         min_gap_ms_eff = float(min_gap_ms) / max(safe_strength, 0.1)
         source_audio = audio
 
@@ -1097,6 +1152,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
                 min_gap_ms_eff,
                 _repaired_gaps,
                 _bw_cap_hz,
+                wall_budget_s=wall_budget_s,
             )
             gaps = _detect_gaps(audio, sample_rate, min_gap_ms_eff)
             quality = _reconstruction_quality_score(audio, repaired, gaps)
@@ -1128,6 +1184,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
                     _repaired_gaps,
                     _bw_cap_hz,
                     precomputed_gaps=mono_gaps,
+                    wall_budget_s=wall_budget_s,
                 )
                 channels_repaired.append(ch_rep)
                 n_gaps = max(n_gaps, stats["n_gaps"])
@@ -1161,7 +1218,8 @@ class DiffusionInpaintingPhase(PhaseInterface):
                 "plugin_used": plugin_used,
                 "damage_guard_activations": int(_damage_guard_hits),
                 "ml_thrashing_guard": bool(_thrash_guard_active),
-                "wall_budget_seconds": _PHASE55_WALL_BUDGET_S,
+                "wall_budget_seconds": wall_budget_s,
+                "inpainting_profile": dict(_inpainting_profile),
                 "reconstruction_quality": round(quality, 4),
                 "diffusion_steps": f"{_DIFFUSION_STEPS}/{_DIFFUSION_STEPS_MED}/{_DIFFUSION_STEPS_LONG} (adaptive)",
                 "min_gap_ms": min_gap_ms,

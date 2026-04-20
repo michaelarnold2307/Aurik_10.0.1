@@ -783,7 +783,12 @@ class NatuerlichkeitMetric:
         # New ×60: var=0.005 → 0.70, var=0.01 → 0.40, var=0.02 → 0.0 (artifact).
         # Harmonized: ZCR artifacts still detected, but dynamic passages not penalized.
         zcr_variance = np.var(zcr)
-        zcr_score = max(0.0, 1.0 - (zcr_variance * 60))
+        # §9.10.121: Multiplier 60 → 40 — dynamic pop/Schlager (BPM > 90) has natural ZCR
+        # variance 0.015–0.025 (verse/chorus alternation with energy shifts); old ×60 mapped
+        # var=0.020 → 0.0, treating normal dynamic range as artifact. New ×40: var=0.025 → 0.0,
+        # var=0.020 → 0.20, var=0.010 → 0.60. Dynamic content preserved; artifacts still
+        # penalized (var > 0.025 = clear ZCR disruption from processing artifacts).
+        zcr_score = max(0.0, 1.0 - (zcr_variance * 40))
 
         # Spectral Contrast (natural sounds have clear contrast)
         contrast = librosa.feature.spectral_contrast(y=proc_audio, sr=proc_sr, n_fft=_n_fft, hop_length=_hop)

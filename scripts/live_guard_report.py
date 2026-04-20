@@ -10,10 +10,10 @@ Verwendung:
     python scripts/live_guard_report.py --incident-dir /pfad/zu/incidents
     python scripts/live_guard_report.py --since 2026-04-12
 """
+
 from __future__ import annotations
 
 import argparse
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -82,24 +82,28 @@ def aggregate(incident_dir: Path, since: datetime | None = None) -> list[dict]:
         attempts: list[dict] = []
         for attempt_dir in sorted(d.glob("attempt_*")):
             s = _read_env(attempt_dir / "summary.env")
-            attempts.append({
-                "name": attempt_dir.name,
-                "runtime_rc": s.get("runtime_spec_rc", "?"),
-                "compliance_rc": s.get("compliance_rc", "?"),
-                "r10_rc": s.get("uat_r10_rc", "?"),
-                "full_rc": s.get("uat_r5_r12_rc", "?"),
-            })
+            attempts.append(
+                {
+                    "name": attempt_dir.name,
+                    "runtime_rc": s.get("runtime_spec_rc", "?"),
+                    "compliance_rc": s.get("compliance_rc", "?"),
+                    "r10_rc": s.get("uat_r10_rc", "?"),
+                    "full_rc": s.get("uat_r5_r12_rc", "?"),
+                }
+            )
 
         root_cause = _detect_root_cause(d)
 
-        rows.append({
-            "timestamp": ts,
-            "incident_id": d.name,
-            "status": status,
-            "root_cause": root_cause,
-            "attempts": attempts,
-            "meta_reason": meta.get("reason", ""),
-        })
+        rows.append(
+            {
+                "timestamp": ts,
+                "incident_id": d.name,
+                "status": status,
+                "root_cause": root_cause,
+                "attempts": attempts,
+                "meta_reason": meta.get("reason", ""),
+            }
+        )
 
     return rows
 

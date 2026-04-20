@@ -173,6 +173,61 @@ class TapeHissReductionPhase(PhaseInterface):
         super().__init__()
         self.sample_rate = sample_rate
         self._deepfilternet_plugin = None
+        self._omlsa_runtime_profile_current = {
+            "imcra_b_min": 1.66,
+            "imcra_alpha_g": 0.85,
+            "omlsa_q": 0.50,
+            "hf_floor_scale": 0.45,
+        }
+
+    @staticmethod
+    def _compute_omlsa_runtime_profile(
+        material: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive OMLSA/IMCRA runtime profile (§2.54)."""
+        mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        if restorability_score is None:
+            restorability_score = 50.0
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base = {
+            "shellac": {"b_min": 1.72, "alpha_g": 0.87, "q": 0.60, "hf_floor_scale": 0.58},
+            "wax_cylinder": {"b_min": 1.74, "alpha_g": 0.88, "q": 0.61, "hf_floor_scale": 0.60},
+            "vinyl": {"b_min": 1.67, "alpha_g": 0.85, "q": 0.53, "hf_floor_scale": 0.50},
+            "tape": {"b_min": 1.66, "alpha_g": 0.84, "q": 0.50, "hf_floor_scale": 0.45},
+            "reel_tape": {"b_min": 1.65, "alpha_g": 0.84, "q": 0.49, "hf_floor_scale": 0.44},
+            "cassette": {"b_min": 1.68, "alpha_g": 0.85, "q": 0.52, "hf_floor_scale": 0.48},
+            "cd_digital": {"b_min": 1.52, "alpha_g": 0.80, "q": 0.39, "hf_floor_scale": 0.36},
+            "streaming": {"b_min": 1.50, "alpha_g": 0.79, "q": 0.38, "hf_floor_scale": 0.35},
+            "mp3_low": {"b_min": 1.58, "alpha_g": 0.82, "q": 0.45, "hf_floor_scale": 0.40},
+            "unknown": {"b_min": 1.60, "alpha_g": 0.83, "q": 0.46, "hf_floor_scale": 0.42},
+        }.get(mat, {"b_min": 1.60, "alpha_g": 0.83, "q": 0.46, "hf_floor_scale": 0.42})
+
+        mode_adj = {
+            "fast": -1.0,
+            "balanced": 0.0,
+            "restoration": 0.3,
+            "quality": 0.8,
+            "maximum": 1.2,
+            "studio_2026": 1.2,
+        }.get(qm, 0.0)
+
+        rest_smoothing = (50.0 - rest) / 50.0  # low restorability => higher smoothing
+
+        imcra_b_min = float(np.clip(base["b_min"] + 0.05 * mode_adj + 0.07 * rest_smoothing, 1.40, 1.90))
+        imcra_alpha_g = float(np.clip(base["alpha_g"] + 0.03 * mode_adj + 0.04 * rest_smoothing, 0.75, 0.92))
+        omlsa_q = float(np.clip(base["q"], 0.35, 0.65))
+        hf_floor_scale = float(np.clip(base["hf_floor_scale"], 0.30, 0.65))
+
+        return {
+            "imcra_b_min": imcra_b_min,
+            "imcra_alpha_g": imcra_alpha_g,
+            "omlsa_q": omlsa_q,
+            "hf_floor_scale": hf_floor_scale,
+        }
 
     def _get_deepfilternet_plugin(self):
         """
@@ -255,6 +310,15 @@ class TapeHissReductionPhase(PhaseInterface):
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
 
+        restorability_score = kwargs.get("restorability_score", 50.0)
+        material_key = str(getattr(material, "value", material) or "unknown")
+        omlsa_runtime_profile = self._compute_omlsa_runtime_profile(
+            material_key,
+            quality_mode,
+            restorability_score,
+        )
+        self._omlsa_runtime_profile_current = omlsa_runtime_profile
+
         # Skip for digital sources
         if material in [MaterialType.CD_DIGITAL, MaterialType.STREAMING]:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -263,7 +327,11 @@ class TapeHissReductionPhase(PhaseInterface):
                 success=True,
                 audio=audio.copy(),
                 execution_time_seconds=time.time() - start_time,
-                metadata={"material": material.name, "processing": "skipped"},
+                metadata={
+                    "material": material.name,
+                    "processing": "skipped",
+                    "omlsa_runtime_profile": omlsa_runtime_profile,
+                },
                 warnings=["Digital source - no tape hiss expected"],
             )
 
@@ -318,6 +386,7 @@ class TapeHissReductionPhase(PhaseInterface):
                     "material": material.name,
                     "processing": "snr_bypass",
                     "snr_bypass": True,
+                    "omlsa_runtime_profile": omlsa_runtime_profile,
                     "rms_drop_db": 0.0,
                     "loudness_makeup_db": 0.0,
                 },
@@ -360,6 +429,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 metadata={
                     "material": material.name,
                     "processing": "skipped_zero_strength",
+                    "omlsa_runtime_profile": omlsa_runtime_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                 },
@@ -499,6 +569,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 "gate_threshold_db": float(gate_threshold_db),
                 "reduction_depth_db": float(reduction_depth_db),
                 "hf_focus_range_hz": [int(hf_low), int(hf_high)],
+                "omlsa_runtime_profile": omlsa_runtime_profile,
                 "hf_reduction_db": round(float(hf_reduction_db), 2),
                 "hf_detail_blend": round(float(hf_detail_blend), 4),
                 "ml_refined": ml_refined,
@@ -720,15 +791,19 @@ class TapeHissReductionPhase(PhaseInterface):
         G_floor = G_floor_map.get(mat_name, 0.10)
         intensity_scale = float(np.clip(intensity_scale, 0.0, 1.0))
         G_floor = float(np.clip(1.0 - intensity_scale * (1.0 - G_floor), 0.0, 1.0))
-        q = 0.5
-        b_min = 1.66
-        alpha_g = 0.85
+        runtime_profile = getattr(self, "_omlsa_runtime_profile_current", {})
+        q = float(np.clip(runtime_profile.get("omlsa_q", 0.5), 0.35, 0.65))
+        b_min = float(np.clip(runtime_profile.get("imcra_b_min", 1.66), 1.40, 1.90))
+        alpha_g = float(np.clip(runtime_profile.get("imcra_alpha_g", 0.85), 0.75, 0.92))
+        hf_floor_scale = float(np.clip(runtime_profile.get("hf_floor_scale", 0.45), 0.30, 0.65))
 
         # Reference STFT (win=2048, 75 % overlap) — on channel (for magnitude application)
         REF_WIN = min(2048, len(channel) // 2) if len(channel) >= 128 else 64
         REF_HOP = 512
         REF_NOVERLAP = REF_WIN - REF_HOP
-        f_ref, _, Zxx_ref = signal.stft(channel, fs=sample_rate, nperseg=REF_WIN, noverlap=REF_NOVERLAP, window="hann")
+        f_ref, _, Zxx_ref = signal.stft(
+            channel, fs=sample_rate, nperseg=REF_WIN, noverlap=REF_NOVERLAP, window="hann", boundary="even"
+        )
         n_bins, n_t = f_ref.shape[0], Zxx_ref.shape[1]
 
         # §2.51 Linked-Sidechain: compute gain from Mid sidechain for stereo coherence.
@@ -745,13 +820,23 @@ class TapeHissReductionPhase(PhaseInterface):
                 if n >= zone_win * 2:
                     zone_noverlap = zone_win - zone_hop
                     f_z, _, Zxx_z = signal.stft(
-                        _gain_source, fs=sample_rate, nperseg=zone_win, noverlap=zone_noverlap, window="hann"
+                        _gain_source,
+                        fs=sample_rate,
+                        nperseg=zone_win,
+                        noverlap=zone_noverlap,
+                        window="hann",
+                        boundary="even",
                     )
                 else:
                     # Fallback to reference STFT — recompute from gain source if linked
                     if linked_sidechain is not None:
                         f_z, _, Zxx_z = signal.stft(
-                            _gain_source, fs=sample_rate, nperseg=REF_WIN, noverlap=REF_NOVERLAP, window="hann"
+                            _gain_source,
+                            fs=sample_rate,
+                            nperseg=REF_WIN,
+                            noverlap=REF_NOVERLAP,
+                            window="hann",
+                            boundary="even",
                         )
                     else:
                         f_z, Zxx_z = f_ref, Zxx_ref
@@ -782,7 +867,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 # DeepFilterNet removes residual hiss 2–16 kHz; without it, G_floor must be lower.
                 # TAPE: 0.08 → 0.036, VINYL: 0.10 → 0.045, SHELLAC: 0.12 → 0.054 in these zones.
                 if zone_name in ("presence", "air") and intensity_scale > 0.40:
-                    _hf_floor = float(np.clip(G_floor * 0.45, 0.020, G_floor))
+                    _hf_floor = float(np.clip(G_floor * hf_floor_scale, 0.020, G_floor))
                     G_z = np.clip(G_z, _hf_floor, 1.0)
 
                 # Zones below hf_low: pass-through (protect low frequencies)
@@ -902,10 +987,12 @@ class TapeHissReductionPhase(PhaseInterface):
             except Exception as pghi_exc:
                 logger.warning("MRSA Phase 29: PGHI failed, iSTFT fallback: %s", pghi_exc)
                 _, audio_out = signal.istft(
-                    Zxx_proc, fs=sample_rate, nperseg=REF_WIN, noverlap=REF_NOVERLAP, window="hann"
+                    Zxx_proc, fs=sample_rate, nperseg=REF_WIN, noverlap=REF_NOVERLAP, window="hann", boundary=True
                 )
         else:
-            _, audio_out = signal.istft(Zxx_proc, fs=sample_rate, nperseg=REF_WIN, noverlap=REF_NOVERLAP, window="hann")
+            _, audio_out = signal.istft(
+                Zxx_proc, fs=sample_rate, nperseg=REF_WIN, noverlap=REF_NOVERLAP, window="hann", boundary=True
+            )
 
         audio_out = np.real(audio_out)
         audio_out = audio_out[:n]

@@ -34,9 +34,9 @@ def test_layer2_end_of_pipeline_reference_shift_present() -> None:
     text = _UV3.read_text(encoding="utf-8")
 
     assert "_ccr_ratio > 0.15" in text, "§1.2a Schwelle 0.15 fuer Reference-Shift fehlt."
-    assert (
-        "_mg_ref = _ccr_checkpoint" in text
-    ), "End-of-Pipeline Goal-Referenz muss auf best_carrier_checkpoint geschoben werden."
+    assert "_mg_ref = _ccr_checkpoint" in text, (
+        "End-of-Pipeline Goal-Referenz muss auf best_carrier_checkpoint geschoben werden."
+    )
     assert "Goal-Referenz auf best_carrier_checkpoint" in text, "Reference-Shift sollte im Log erkennbar sein."
 
 

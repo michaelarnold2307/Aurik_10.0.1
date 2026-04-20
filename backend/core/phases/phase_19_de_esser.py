@@ -232,6 +232,45 @@ class DeEsserPhase(PhaseInterface):
     ATTACK_MS = 3.0  # Schnell genug für Transients, langsam genug gegen Artefakte
     RELEASE_MS = 80.0  # Schnellere Release als v8.0 (dort 100ms) für mehr Transparenz
 
+    @staticmethod
+    def _compute_de_esser_profile(
+        material_type: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive de-esser lookahead profile."""
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _base = {
+            "wax_cylinder": 7.5,
+            "shellac": 7.0,
+            "vinyl": 5.5,
+            "tape": 5.2,
+            "reel_tape": 5.2,
+            "cd_digital": 4.0,
+            "digital": 4.0,
+            "dat": 4.0,
+            "streaming": 4.5,
+            "unknown": 5.0,
+        }.get(_mat, 5.0)
+
+        _mode_adj = {
+            "fast": -0.8,
+            "balanced": 0.0,
+            "quality": +0.8,
+            "maximum": +1.2,
+            "restoration": +0.5,
+            "studio_2026": +1.2,
+        }.get(_qm, 0.0)
+
+        # Low restorability => slightly longer lookahead for conservative onset handling
+        _rest_adj = ((50.0 - _rest) / 50.0) * 0.8
+
+        lookahead_ms = float(np.clip(_base + _mode_adj + _rest_adj, 2.0, 10.0))
+        return {"lookahead_ms": lookahead_ms}
+
     def __init__(self, gender: str = VocalGender.AUTO):
         super().__init__()
         self.name = "Gender-Aware De-Esser v4.0"

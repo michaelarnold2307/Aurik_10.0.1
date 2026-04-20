@@ -1,5 +1,3 @@
-import logging
-
 """
 MDX-Net Vocal Separator - HIPS Compliant Wrapper
 
@@ -15,6 +13,7 @@ HIPS Compliance:
 - Bedeutungsagnostik: ✅ Pure spectral processing, no aesthetic decisions
 """
 
+import logging
 from pathlib import Path
 
 import librosa
@@ -55,7 +54,8 @@ class MDXNetSeparator:
         logger.info("MDXNetSeparator initialized on %s", self.device)
 
         # Model loading (placeholder - requires actual MDX-Net model)
-        self.model_path = model_path or self._get_default_model_path()
+        _raw_path = model_path or self._get_default_model_path()
+        self.model_path: Path = Path(_raw_path) if not isinstance(_raw_path, Path) else _raw_path
         self.model = self._load_model()
 
         # HIPS tracking
@@ -184,11 +184,10 @@ class MDXNetSeparator:
             D = librosa.stft(channel, n_fft=2048, hop_length=512)
             H, P = librosa.decompose.hpss(D, margin=2.0)
 
-            # Vocals = mostly harmonic
+            # Vocals = mostly harmonic; instrumental = percussive residual
+            # H + P = D (HPSS identity) → vocals + instrumental = original
             vocals_channel = librosa.istft(H, hop_length=512)
-
-            # Instrumental = harmonic + percussive
-            instrumental_channel = librosa.istft(H + P, hop_length=512)
+            instrumental_channel = librosa.istft(P, hop_length=512)
 
             vocals_stereo.append(vocals_channel)
             instrumental_stereo.append(instrumental_channel)

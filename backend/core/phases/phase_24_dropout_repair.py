@@ -117,6 +117,85 @@ class DropoutRepairPhase(PhaseInterface):
     Comparable to: iZotope RX Spectral Repair, CEDAR Restore
     """
 
+    @staticmethod
+    def _compute_inpainting_runtime_profile(
+        material: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive inpainting profile for context-aware dropout repair (§2.54)."""
+        mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        if restorability_score is None:
+            restorability_score = 50.0
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base = {
+            "shellac": {"top_k": 28, "nmf_rank": 12, "nmf_iter": 60, "blend": 0.55},
+            "wax_cylinder": {"top_k": 26, "nmf_rank": 11, "nmf_iter": 55, "blend": 0.53},
+            "vinyl": {"top_k": 24, "nmf_rank": 10, "nmf_iter": 50, "blend": 0.52},
+            "tape": {"top_k": 22, "nmf_rank": 9, "nmf_iter": 48, "blend": 0.51},
+            "reel_tape": {"top_k": 20, "nmf_rank": 8, "nmf_iter": 45, "blend": 0.50},
+            "minidisc": {"top_k": 18, "nmf_rank": 7, "nmf_iter": 42, "blend": 0.49},
+            "cassette": {"top_k": 21, "nmf_rank": 9, "nmf_iter": 48, "blend": 0.51},
+            "cd_digital": {"top_k": 12, "nmf_rank": 6, "nmf_iter": 32, "blend": 0.45},
+            "dat": {"top_k": 10, "nmf_rank": 5, "nmf_iter": 28, "blend": 0.43},
+            "mp3_low": {"top_k": 14, "nmf_rank": 6, "nmf_iter": 35, "blend": 0.46},
+            "mp3_medium": {"top_k": 10, "nmf_rank": 5, "nmf_iter": 30, "blend": 0.44},
+            "streaming": {"top_k": 8, "nmf_rank": 4, "nmf_iter": 25, "blend": 0.42},
+            "unknown": {"top_k": 16, "nmf_rank": 7, "nmf_iter": 40, "blend": 0.48},
+        }.get(mat, {"top_k": 16, "nmf_rank": 7, "nmf_iter": 40, "blend": 0.48})
+
+        mode_adj_k = {
+            "fast": -4.0,
+            "balanced": 0.0,
+            "quality": 6.0,
+            "maximum": 10.0,
+            "restoration": 3.0,
+            "studio_2026": 10.0,
+        }.get(qm, 0.0)
+        mode_adj_rank = {
+            "fast": -1.0,
+            "balanced": 0.0,
+            "quality": 2.0,
+            "maximum": 3.5,
+            "restoration": 1.0,
+            "studio_2026": 3.5,
+        }.get(qm, 0.0)
+        mode_adj_iter = {
+            "fast": -12.0,
+            "balanced": 0.0,
+            "quality": 18.0,
+            "maximum": 28.0,
+            "restoration": 10.0,
+            "studio_2026": 28.0,
+        }.get(qm, 0.0)
+        mode_adj_blend = {
+            "fast": -0.05,
+            "balanced": 0.0,
+            "quality": 0.08,
+            "maximum": 0.12,
+            "restoration": 0.04,
+            "studio_2026": 0.12,
+        }.get(qm, 0.0)
+
+        rest_adj_k = ((50.0 - rest) / 50.0) * 6.0
+        rest_adj_rank = ((50.0 - rest) / 50.0) * 2.0
+        rest_adj_iter = ((50.0 - rest) / 50.0) * 14.0
+        rest_adj_blend = ((50.0 - rest) / 50.0) * 0.04
+
+        tonal_top_k = float(np.clip(base["top_k"] + mode_adj_k + rest_adj_k, 8.0, 56.0))
+        atonal_nmf_rank = float(np.clip(base["nmf_rank"] + mode_adj_rank + rest_adj_rank, 4.0, 20.0))
+        atonal_nmf_iterations = float(np.clip(base["nmf_iter"] + mode_adj_iter + rest_adj_iter, 10.0, 90.0))
+        hybrid_tonal_blend = float(np.clip(base["blend"] + mode_adj_blend + rest_adj_blend, 0.35, 0.70))
+
+        return {
+            "tonal_top_k": tonal_top_k,
+            "atonal_nmf_rank": atonal_nmf_rank,
+            "atonal_nmf_iterations": atonal_nmf_iterations,
+            "hybrid_tonal_blend": hybrid_tonal_blend,
+        }
+
     # ML routing thresholds (milliseconds)
     ML_SHORT_THRESHOLD_MS = 20  # <20ms: DSP linear
     ML_MEDIUM_THRESHOLD_MS = 100  # 20-100ms: DSP spectral
@@ -737,6 +816,15 @@ class DropoutRepairPhase(PhaseInterface):
         # §2.36a: PhonemeTimeline for phoneme-class-aware content-type hint in DSP repair
         self._current_phoneme_timeline = kwargs.get("phoneme_timeline")
 
+        # §2.54 Adaptive inpainting profile
+        quality_mode = str(quality_mode or "balanced")
+        restorability_score = float(kwargs.get("restorability_score", 50.0))
+        inpainting_runtime_profile = self._compute_inpainting_runtime_profile(
+            material_type,
+            quality_mode,
+            restorability_score,
+        )
+
         # Determine if ML should be used
         use_ml = False
         if QUALITY_MODE_AVAILABLE and quality_mode:
@@ -967,6 +1055,7 @@ class DropoutRepairPhase(PhaseInterface):
                 "effective_strength": _effective_strength,
                 "ml_guard_events": list(self._ml_guard_events),
                 "deferred_for_kmv": ["phase_24_dropout_repair"] if self._ml_guard_events else [],
+                "inpainting_runtime_profile": inpainting_runtime_profile,
             },
         )
 

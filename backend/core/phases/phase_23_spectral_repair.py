@@ -110,6 +110,72 @@ class SpectralRepair(PhaseInterface):
     Performance: <0.5× realtime on modern CPU
     """
 
+    @staticmethod
+    def _compute_admm_runtime_profile(
+        material: str | MaterialType,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive runtime profile for ADMM spectral repair (§2.54)."""
+        mat = str(material.value if isinstance(material, MaterialType) else material).lower().replace("-", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        # Material baselines: digital materials have clean spectra, analogues are noisy
+        base = {
+            "shellac": {"clip_pct": 99.2, "clip_floor": 0.82, "side_mult": 1.02},
+            "vinyl": {"clip_pct": 99.3, "clip_floor": 0.84, "side_mult": 1.03},
+            "tape": {"clip_pct": 99.35, "clip_floor": 0.85, "side_mult": 1.04},
+            "reel_tape": {"clip_pct": 99.4, "clip_floor": 0.86, "side_mult": 1.04},
+            "minidisc": {"clip_pct": 99.4, "clip_floor": 0.88, "side_mult": 1.05},
+            "cd_digital": {"clip_pct": 99.5, "clip_floor": 0.90, "side_mult": 1.06},
+            "streaming": {"clip_pct": 99.55, "clip_floor": 0.92, "side_mult": 1.07},
+            "unknown": {"clip_pct": 99.4, "clip_floor": 0.88, "side_mult": 1.04},
+        }.get(mat, {"clip_pct": 99.4, "clip_floor": 0.88, "side_mult": 1.04})
+
+        # Quality mode: fast is conservative (higher clip_pct = fewer bins clipped), quality is aggressive
+        mode_adj_pct = {
+            "fast": 0.22,
+            "balanced": 0.0,
+            "quality": -0.35,
+            "maximum": -0.55,
+            "restoration": -0.15,
+            "studio_2026": -0.55,
+        }.get(qm, 0.0)
+        mode_adj_floor = {
+            "fast": 0.035,
+            "balanced": 0.0,
+            "quality": -0.045,
+            "maximum": -0.070,
+            "restoration": -0.020,
+            "studio_2026": -0.070,
+        }.get(qm, 0.0)
+        mode_adj_mult = {
+            "fast": 0.025,
+            "balanced": 0.0,
+            "quality": -0.020,
+            "maximum": -0.035,
+            "restoration": -0.010,
+            "studio_2026": -0.035,
+        }.get(qm, 0.0)
+
+        # Restorability: low (noisy/degraded) = fewer clipped bins (conservative), high (clean) = more aggressive
+
+        # Restorability: low (noisy/degraded) = more aggressive clipping (lower clip_pct), high (clean) = conservative
+        rest_adj_pct = ((rest - 50.0) / 50.0) * 0.28
+        rest_adj_floor = ((rest - 50.0) / 50.0) * 0.035
+        rest_adj_mult = ((rest - 50.0) / 50.0) * 0.015
+
+        clip_percentile = float(np.clip(base["clip_pct"] + mode_adj_pct + rest_adj_pct, 98.8, 99.9))
+        clip_floor = float(np.clip(base["clip_floor"] + mode_adj_floor + rest_adj_floor, 0.80, 0.93))
+        side_clip_multiplier = float(np.clip(base["side_mult"] + mode_adj_mult + rest_adj_mult, 1.00, 1.10))
+
+        return {
+            "clip_percentile": clip_percentile,
+            "clip_floor": clip_floor,
+            "side_clip_multiplier": side_clip_multiplier,
+        }
+
     # STFT Parameters (material-adaptive)
     STFT_CONFIG = {
         MaterialType.SHELLAC: {
@@ -921,6 +987,7 @@ class SpectralRepair(PhaseInterface):
             nperseg=stft_cfg["nperseg"],
             noverlap=stft_cfg["noverlap"],
             nfft=stft_cfg["nfft"],
+            boundary="even",
         )
 
         # Magnitude and phase
@@ -1071,6 +1138,7 @@ class SpectralRepair(PhaseInterface):
                 nperseg=stft_cfg["nperseg"],
                 noverlap=stft_cfg["noverlap"],
                 nfft=stft_cfg["nfft"],
+                boundary=True,
             )
         _report(98.0, "Rekonstruktion")
 

@@ -252,7 +252,11 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             )
 
         # ML-Hybrid Mode Routing (v3.0)
-        quality_mode = kwargs.get("quality_mode", "quality")
+        quality_mode_input = str(kwargs.get("quality_mode", "quality") or "quality").lower()
+        quality_mode = {
+            "studio_2026": "maximum",
+            "restoration": "balanced",
+        }.get(quality_mode_input, quality_mode_input)
         use_ml_hybrid = ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "quality", "maximum"]
 
         # Step 1: Robuste Pitch-Detektion (ML-Hybrid oder pYIN)
@@ -588,7 +592,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
     def _phase_vocoder_mono(self, audio: np.ndarray, ratio: float, nperseg: int, noverlap: int) -> np.ndarray:
         """Phase Vocoder for mono signal."""
         # STFT
-        f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary="even")
 
         # Frequency shift
         magnitude = np.abs(Zxx)
@@ -612,9 +616,13 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 )
             except Exception as _pghi_exc:
                 logger.debug("phase_31 PGHI failed, fallback to istft: %s", _pghi_exc)
-                _, audio_shifted = signal.istft(Zxx_shifted, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+                _, audio_shifted = signal.istft(
+                    Zxx_shifted, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary=True
+                )
         else:
-            _, audio_shifted = signal.istft(Zxx_shifted, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+            _, audio_shifted = signal.istft(
+                Zxx_shifted, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary=True
+            )
 
         # Match original length
         if len(audio_shifted) > len(audio):

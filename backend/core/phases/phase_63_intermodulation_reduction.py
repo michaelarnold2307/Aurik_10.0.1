@@ -32,6 +32,27 @@ import scipy.signal as sps
 
 logger = logging.getLogger(__name__)
 
+
+def _rms_dbfs_gated(sig: np.ndarray) -> float:
+    """§2.45a-I: Frame-basierter RMS in dBFS, ignoriert Frames < −50 dBFS (Stille).
+
+    Stereo → Mono-Downmix vor Framing. Gibt -96.0 zurück wenn kein aktiver Frame.
+    """
+    if sig.ndim == 2:
+        _mono = sig.mean(axis=0).astype(np.float64) if sig.shape[0] <= 2 else sig.mean(axis=1).astype(np.float64)
+    else:
+        _mono = sig.astype(np.float64)
+    _frame = 480  # 10 ms @ 48 kHz
+    _active = [
+        _mono[i : i + _frame]
+        for i in range(0, len(_mono) - _frame, _frame)
+        if 20.0 * np.log10(np.sqrt(np.mean(_mono[i : i + _frame] ** 2)) + 1e-10) > -50.0
+    ]
+    if not _active:
+        return -96.0
+    return float(20.0 * np.log10(np.sqrt(np.mean(np.concatenate(_active) ** 2)) + 1e-10))
+
+
 _MIN_IMD_SCORE: float = 0.10
 _NOTCH_WIDTH_HZ: float = 50.0
 _BISPECTRUM_NFFT: int = 2048
@@ -42,6 +63,7 @@ def _build_imd_notch_mask(
     x_mono: np.ndarray,
     sample_rate: int,
     strength: float,
+    notch_width_hz: float,
 ) -> np.ndarray:
     """Compute frequency-domain gain mask for IMD notch filtering.
 
@@ -135,7 +157,7 @@ def _build_imd_notch_mask(
     # Build notch mask at PROC_NFFT resolution
     proc_freqs = np.fft.rfftfreq(_PROC_NFFT, 1.0 / sample_rate)
     proc_freq_res = float(proc_freqs[1] - proc_freqs[0]) if len(proc_freqs) > 1 else 1.0
-    notch_width_bins = max(1, int(_NOTCH_WIDTH_HZ / proc_freq_res))
+    notch_width_bins = max(1, int(notch_width_hz / proc_freq_res))
     gain_mask = np.ones(len(proc_freqs), dtype=np.float64)
 
     for analysis_idx in imd_targets:
@@ -187,6 +209,8 @@ def apply(
     sample_rate: int,
     strength: float = 0.55,
     defect_scores: dict | None = None,
+    min_imd_score: float = _MIN_IMD_SCORE,
+    notch_width_hz: float = _NOTCH_WIDTH_HZ,
 ) -> np.ndarray:
     """Main entry point for Phase 63 — §2.51 M/S-compliant."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
@@ -194,8 +218,8 @@ def apply(
 
     if defect_scores is not None:
         imd_score = float(defect_scores.get("intermodulation_distortion", 0.0))
-        if imd_score < _MIN_IMD_SCORE:
-            logger.debug("Phase 63: IMD score %.3f < %.3f — skipped", imd_score, _MIN_IMD_SCORE)
+        if imd_score < min_imd_score:
+            logger.debug("Phase 63: IMD score %.3f < %.3f — skipped", imd_score, min_imd_score)
             return np.clip(audio, -1.0, 1.0)
 
     stereo = audio.ndim == 2
@@ -215,7 +239,7 @@ def apply(
         side = (left - right) * 0.5
 
         # Notch mask derived from Mid signal only
-        gain_mask = _build_imd_notch_mask(mid, sample_rate, strength)
+        gain_mask = _build_imd_notch_mask(mid, sample_rate, strength, notch_width_hz)
 
         mid_clean = _apply_stft_mask(mid, gain_mask, sample_rate)
         # Side: apply same mask at 30 % strength (IMD arises from Mid nonlinearity)
@@ -235,7 +259,7 @@ def apply(
 
     # Mono path
     x = audio.astype(np.float64)
-    gain_mask = _build_imd_notch_mask(x, sample_rate, strength)
+    gain_mask = _build_imd_notch_mask(x, sample_rate, strength, notch_width_hz)
     out = _apply_stft_mask(x, gain_mask, sample_rate)
     result = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
     return np.clip(result, -1.0, 1.0).astype(np.float32)
@@ -268,6 +292,46 @@ class IntermodulationReductionPhase(PhaseInterface):
             ),
         )
 
+    @staticmethod
+    def _compute_imd_profile(material_key: str, quality_mode: str, restorability_score: float) -> dict[str, float]:
+        material = str(material_key or "unknown").strip().lower()
+        mode = str(quality_mode or "balanced").strip().lower()
+        mode = {"restoration": "balanced", "studio_2026": "maximum"}.get(mode, mode)
+
+        if any(token in material for token in ("shellac", "wax_cylinder", "optical_film")):
+            min_imd_score = 0.24
+            notch_width_hz = 70.0
+        elif "vinyl" in material:
+            min_imd_score = 0.18
+            notch_width_hz = 55.0
+        elif any(token in material for token in ("cassette", "tape", "reel_tape")):
+            min_imd_score = 0.12
+            notch_width_hz = 50.0
+        elif any(token in material for token in ("cd_digital", "dat", "mp3", "flac", "streaming")):
+            min_imd_score = 0.08
+            notch_width_hz = 40.0
+        else:
+            min_imd_score = 0.12
+            notch_width_hz = 50.0
+
+        rest_norm = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0)) / 100.0
+        min_imd_score += (rest_norm - 0.5) * 0.14
+        notch_width_hz += (rest_norm - 0.5) * 20.0
+
+        score_off, width_off = {
+            "fast": (0.04, 12.0),
+            "balanced": (0.00, 0.0),
+            "quality": (-0.03, -10.0),
+            "maximum": (-0.05, -15.0),
+        }.get(mode, (0.0, 0.0))
+        min_imd_score += score_off
+        notch_width_hz += width_off
+
+        return {
+            "min_imd_score": float(np.clip(min_imd_score, 0.05, 0.30)),
+            "notch_width_hz": float(np.clip(notch_width_hz, 20.0, 120.0)),
+        }
+
     def process(
         self,
         audio: np.ndarray,
@@ -284,6 +348,11 @@ class IntermodulationReductionPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", strength))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+        _profile_63 = self._compute_imd_profile(
+            str(kwargs.get("material_type") or kwargs.get("material") or "unknown"),
+            str(kwargs.get("quality_mode", "balanced")),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
             passthrough = np.clip(passthrough, -1.0, 1.0)
@@ -304,21 +373,10 @@ class IntermodulationReductionPhase(PhaseInterface):
                 },
                 warnings=["Intermodulation reduction skipped due to zero effective strength"],
             )
-        # §2.54 Material-adaptive IMD threshold: natural harmonic distortion in analog
-        # sources (vinyl, shellac) must not be mistaken for IMD — protect with higher skip threshold.
-        # Digital sources (CD, DAT, MP3) have no natural distortion → low threshold captures real IMD.
+        _imd_score_63 = float((_defect_scores or {}).get("intermodulation_distortion", 0.0))
+        _imd_threshold_63 = float(_profile_63["min_imd_score"])
         _mat_63 = kwargs.get("material_type") or kwargs.get("material")
         _mat_str_63 = str(_mat_63).lower() if _mat_63 is not None else ""
-        _imd_threshold_63 = _MIN_IMD_SCORE  # default 0.10
-        if any(k in _mat_str_63 for k in ("shellac", "wax_cylinder", "optical_film")):
-            _imd_threshold_63 = 0.25  # heavy natural distortion — only very clear IMD
-        elif "vinyl" in _mat_str_63:
-            _imd_threshold_63 = 0.18  # soft saturation is authentic (§0 Vintage Aesthetics)
-        elif "cassette" in _mat_str_63 or "tape" in _mat_str_63:
-            _imd_threshold_63 = 0.12  # tape has some harmonic character
-        elif any(k in _mat_str_63 for k in ("cd_digital", "dat", "mp3")):
-            _imd_threshold_63 = 0.05  # digital: IMD is a real artifact, activate early
-        _imd_score_63 = float((_defect_scores or {}).get("intermodulation_distortion", 0.0))
         if _imd_score_63 < _imd_threshold_63:
             _passthrough_63 = np.clip(np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
             logger.debug(
@@ -341,23 +399,35 @@ class IntermodulationReductionPhase(PhaseInterface):
                 },
                 warnings=["IMD below material-adaptive threshold"],
             )
-        _rms_in = float(np.sqrt(np.mean(np.asarray(audio, dtype=np.float64) ** 2) + 1e-12))
-        result_audio = apply(audio, sample_rate, strength=_effective_strength, defect_scores=_defect_scores)
+        _rms_in_db = _rms_dbfs_gated(audio)
+        result_audio = apply(
+            audio,
+            sample_rate,
+            strength=_effective_strength,
+            defect_scores=_defect_scores,
+            min_imd_score=_profile_63["min_imd_score"],
+            notch_width_hz=_profile_63["notch_width_hz"],
+        )
         elapsed = _time.perf_counter() - t0
 
         # §4.5 Psychoacoustic Masking Clamp — only reduce audible intermodulation
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             result_audio = apply_psychoacoustic_masking_clamp(
-                audio, result_audio, sample_rate,
-                strength=_effective_strength, mode="subtractive",
+                audio,
+                result_audio,
+                sample_rate,
+                strength=_effective_strength,
+                mode="subtractive",
             )
         except Exception as _pm_exc:
             import logging as _log63
+
             _log63.getLogger(__name__).debug("Phase63 masking clamp non-blocking: %s", _pm_exc)
 
-        _rms_out = float(np.sqrt(np.mean(np.asarray(result_audio, dtype=np.float64) ** 2) + 1e-12))
-        _rms_drop = 20.0 * np.log10(max(_rms_out / _rms_in, 1e-30)) if _rms_in > 1e-8 else 0.0
+        _rms_out_db = _rms_dbfs_gated(result_audio)
+        _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0
         return PhaseResult(
             audio=result_audio,
             success=True,
@@ -368,6 +438,9 @@ class IntermodulationReductionPhase(PhaseInterface):
                 "effective_strength": _effective_strength,
             },
             metadata={
+                "imd_profile": dict(_profile_63),
+                "imd_threshold": float(_profile_63["min_imd_score"]),
+                "notch_width_hz": float(_profile_63["notch_width_hz"]),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),

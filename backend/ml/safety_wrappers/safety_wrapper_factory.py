@@ -1,5 +1,3 @@
-import logging
-
 """
 safety_wrapper_factory.py - Automated Safety Wrapper Deployment
 
@@ -19,6 +17,7 @@ Date: 8. Februar 2026
 """
 
 import importlib
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any

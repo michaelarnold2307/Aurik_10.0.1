@@ -18,10 +18,7 @@ Testet drei wissenschaftlich fundierte Änderungen (April 2026):
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
-import pytest
 
 SR = 48000
 
@@ -66,8 +63,8 @@ class TestZwickerMaskingSpread:
 
         up_levels = [0.0] * 24
         dn_levels = [0.0] * 24
-        up_levels[5] = 80.0   # Masker in Mitte, Spread aufwärts zu Band 6
-        dn_levels[5] = 80.0   # Masker in Mitte, Spread abwärts zu Band 4
+        up_levels[5] = 80.0  # Masker in Mitte, Spread aufwärts zu Band 6
+        dn_levels[5] = 80.0  # Masker in Mitte, Spread abwärts zu Band 4
 
         up_result = _apply_excitation_spread(up_levels)
         dn_result = _apply_excitation_spread(dn_levels)
@@ -106,9 +103,7 @@ class TestZwickerMaskingSpread:
         n_noise = compute_specific_loudness_zwicker(noise, SR)
         n_tone = compute_specific_loudness_zwicker(tone, SR)
         # Breitband-Spreading erzeugt mehr Gesamtlautheit als konzentrierter Ton
-        assert n_noise > n_tone, (
-            f"Breitband N={n_noise:.2f} sone sollte > Einzelton N={n_tone:.2f} sone sein"
-        )
+        assert n_noise > n_tone, f"Breitband N={n_noise:.2f} sone sollte > Einzelton N={n_tone:.2f} sone sein"
 
     def test_spreading_increases_total_loudness_vs_independent(self):
         """Stichprobe: Dominanter Bass-Band hebt leise obere Bänder via Spreading
@@ -117,7 +112,7 @@ class TestZwickerMaskingSpread:
         Aufbau: Band 0 bei 95 dB (weit über Threshold 55) → Spreading hebt Band 1 auf
         95-25=70 dB > Threshold 35 → neue Loudness-Contribution, die ohne Spreading fehlt.
         """
-        from dsp.psychoacoustics import _apply_excitation_spread, _THRESHOLD_QUIET_DB
+        from dsp.psychoacoustics import _THRESHOLD_QUIET_DB, _apply_excitation_spread
 
         # Band 0 sehr laut, restliche Bänder bei 0 dB (unter Threshold)
         levels = [95.0] + [0.0] * 23
@@ -132,9 +127,7 @@ class TestZwickerMaskingSpread:
             for lv, thr in zip(effective, _THRESHOLD_QUIET_DB)
             if lv > thr
         )
-        assert with_spread > without, (
-            f"Spreading muss N erhöhen: with={with_spread:.3f}, without={without:.3f}"
-        )
+        assert with_spread > without, f"Spreading muss N erhöhen: with={with_spread:.3f}, without={without:.3f}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -156,11 +149,7 @@ class TestValenceKrumhanslSchmuckler:
         third_interval = 4 if mode == "major" else 3  # Halbtöne
         third_hz = root_hz * 2 ** (third_interval / 12.0)
         fifth_hz = root_hz * 2 ** (7 / 12.0)
-        sig = (
-            np.sin(2 * np.pi * root_hz * t)
-            + np.sin(2 * np.pi * third_hz * t)
-            + np.sin(2 * np.pi * fifth_hz * t)
-        )
+        sig = np.sin(2 * np.pi * root_hz * t) + np.sin(2 * np.pi * third_hz * t) + np.sin(2 * np.pi * fifth_hz * t)
         return (sig / (np.max(np.abs(sig)) + 1e-12) * 0.7).astype(np.float32)
 
     def test_major_chord_higher_valence_than_minor(self):
@@ -196,7 +185,7 @@ class TestValenceKrumhanslSchmuckler:
         t = np.arange(n, dtype=np.float64) / SR
         root_hz = 220.0  # A3
         chord = (np.sin(2 * np.pi * root_hz * t) + np.sin(2 * np.pi * root_hz * 5 / 4 * t)).astype(np.float32) * 0.7
-        noisy = (chord + rng.standard_normal(n).astype(np.float32) * 0.3)
+        noisy = chord + rng.standard_normal(n).astype(np.float32) * 0.3
         noisy = np.clip(noisy, -1.0, 1.0)
 
         _, v_clean, _ = metric._compute_features(chord.astype(np.float32), SR, seg_len, hop_len)
@@ -275,7 +264,7 @@ class TestSgmseSigmaSNRAdaptive:
         sigmas = [self._compute_sigma(float(s)) for s in snrs]
         for i in range(len(sigmas) - 1):
             assert sigmas[i] >= sigmas[i + 1] - 1e-9, (
-                f"Sigma nicht monoton: σ({snrs[i]})={sigmas[i]:.3f} > σ({snrs[i+1]})={sigmas[i+1]:.3f}"
+                f"Sigma nicht monoton: σ({snrs[i]})={sigmas[i]:.3f} > σ({snrs[i + 1]})={sigmas[i + 1]:.3f}"
             )
 
     def test_sigma_clipped_to_bounds(self):
@@ -288,17 +277,13 @@ class TestSgmseSigmaSNRAdaptive:
         """Shellac erhält +0.05 Bonus, da schwere HF-Verluste zusätzliche Diffusionstiefe brauchen."""
         sigma_shellac = self._compute_sigma(15.0, material="shellac")
         sigma_vinyl = self._compute_sigma(15.0, material="vinyl")
-        assert sigma_shellac > sigma_vinyl, (
-            f"Shellac σ={sigma_shellac:.3f} sollte > Vinyl σ={sigma_vinyl:.3f}"
-        )
+        assert sigma_shellac > sigma_vinyl, f"Shellac σ={sigma_shellac:.3f} sollte > Vinyl σ={sigma_vinyl:.3f}"
 
     def test_sigma_higher_for_heavy_degradation_than_clean(self):
         """Stark rauschende Aufnahme bekommt aggressiveres Sigma als saubere."""
         heavy = self._compute_sigma(2.0)
         clean = self._compute_sigma(28.0)
-        assert heavy > clean, (
-            f"Stark degradiert (SNR=2 dB) σ={heavy:.3f} muss > sauber (SNR=28 dB) σ={clean:.3f}"
-        )
+        assert heavy > clean, f"Stark degradiert (SNR=2 dB) σ={heavy:.3f} muss > sauber (SNR=28 dB) σ={clean:.3f}"
 
     def test_fallback_snr_for_material_types(self):
         """Fallback-SNR-Werte: tape/reel_tape/shellac=5 dB, andere=15 dB."""

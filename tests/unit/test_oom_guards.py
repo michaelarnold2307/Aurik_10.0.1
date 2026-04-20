@@ -394,6 +394,7 @@ def test_budget_exhaustion_blocks_allocation(monkeypatch):
     _reset_budget_state()
     monkeypatch.setattr(budget, "ML_MAX_GB", 5.0)
     monkeypatch.setattr(budget, "is_system_thrashing", lambda: False)
+    monkeypatch.setattr(budget, "_should_block_heavy_ml_load", lambda size_gb: False)
     monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
 
     assert budget.try_allocate("ModelA", size_gb=3.0) is True
@@ -406,6 +407,7 @@ def test_release_frees_budget(monkeypatch):
     _reset_budget_state()
     monkeypatch.setattr(budget, "ML_MAX_GB", 5.0)
     monkeypatch.setattr(budget, "is_system_thrashing", lambda: False)
+    monkeypatch.setattr(budget, "_should_block_heavy_ml_load", lambda size_gb: False)
     monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
 
     assert budget.try_allocate("ModelA", size_gb=3.0) is True
@@ -420,6 +422,7 @@ def test_idempotent_allocation(monkeypatch):
     _reset_budget_state()
     monkeypatch.setattr(budget, "ML_MAX_GB", 5.0)
     monkeypatch.setattr(budget, "is_system_thrashing", lambda: False)
+    monkeypatch.setattr(budget, "_should_block_heavy_ml_load", lambda size_gb: False)
     monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
 
     assert budget.try_allocate("SameModel", size_gb=2.0) is True
@@ -432,6 +435,7 @@ def test_get_status(monkeypatch):
     _reset_budget_state()
     monkeypatch.setattr(budget, "ML_MAX_GB", 8.0)
     monkeypatch.setattr(budget, "is_system_thrashing", lambda: False)
+    monkeypatch.setattr(budget, "_should_block_heavy_ml_load", lambda size_gb: False)
     monkeypatch.setattr(budget, "_preflight_system_memory", lambda required_mb=0: True)
 
     budget.try_allocate("TestModel", size_gb=1.5)

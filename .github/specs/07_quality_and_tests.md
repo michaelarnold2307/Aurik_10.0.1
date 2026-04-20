@@ -235,6 +235,33 @@ Zusätzlich zur Song-Selbstkalibrierung sind folgende Tests verpflichtend:
 Telemetrie oder PMGG/CIG-Exclusions betreffen, dürfen ohne diese Testklassen
 nicht als release-fähig gelten.
 
+## §8.5 [RELEASE_MUST] Globales Parameterregister
+
+Das Parameterregister dokumentiert normativ die zentralen Runtime-Parameter,
+die im Produktionscode statisch verankert sein müssen und durch CI (R01–R07)
+automatisch geprüft werden.
+
+### §8.5A OPTIMAL
+
+| Parameter | Zielwert | Ort |
+| --- | --- | --- |
+| Final TruePeak hard-guard ceiling | 0.966 (-0.3 dBFS) | unified_restorer_v3.py |
+| Noise-Texture Threshold shellac | 6.0 dB/oct | _MATERIAL_NOISE_TEXTURE_ROLLBACK_THRESHOLD |
+| Noise-Texture Threshold vinyl | 8.0 dB/oct | _MATERIAL_NOISE_TEXTURE_ROLLBACK_THRESHOLD |
+| Noise-Texture Threshold mp3_low | 15.0 dB/oct | _MATERIAL_NOISE_TEXTURE_ROLLBACK_THRESHOLD |
+| mp3_low priority phases | phase_06, phase_38, phase_39 | _MATERIAL_PRIORITY_PHASES |
+| mp3_high priority phases | phase_06, phase_39 | _MATERIAL_PRIORITY_PHASES |
+| Stereo-correlation guard | input-relativer delta_limit | unified_restorer_v3.py |
+
+### §8.5B NICHT OPTIMAL
+
+| Muster | Risiko | Status |
+| --- | --- | --- |
+| Hardcoded Noise-Texture-Grenze 6.0 für alle Materialien | False-Rollbacks oder Blindheit je Material | NICHT OPTIMAL |
+| TruePeak-Messung via np.max statt percentile(99.9) | Impulsartefakt dominiert Headroom-Guard | NICHT OPTIMAL |
+| Presence/Air-Band nur bei vocals_detected auf Lossy-Material | Codec-Artefakte bleiben unbearbeitet | NICHT OPTIMAL |
+| Stereo-Guard ohne input-relative Schwelle | Falsch-positive Rollbacks bei schmalem Stereo | NICHT OPTIMAL |
+
 ---
 
 ## §9 Performance-Budget (Desktop-Hardware, GPU-Mixed-Mode optional)

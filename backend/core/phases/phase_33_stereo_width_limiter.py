@@ -132,6 +132,59 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
     def __init__(self):
         super().__init__()
         self.name = "Stereo Width Limiter v2.0 (Professional)"
+        self._attack_ms_current = self.ATTACK_MS
+        self._release_ms_current = self.RELEASE_MS
+        self._transient_threshold_percentile_current = self.TRANSIENT_THRESHOLD_PERCENTILE
+        self._transient_width_preservation_current = self.TRANSIENT_WIDTH_PRESERVATION
+
+    @staticmethod
+    def _compute_width_limiter_profile(
+        material: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive width-limiter runtime profile (§2.56)."""
+        mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        if restorability_score is None:
+            restorability_score = 50.0
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base = {
+            "shellac": {"attack": 14.0, "release": 140.0, "threshold": 88.0, "pres": 0.82},
+            "wax_cylinder": {"attack": 15.0, "release": 155.0, "threshold": 87.0, "pres": 0.84},
+            "vinyl": {"attack": 11.0, "release": 110.0, "threshold": 85.0, "pres": 0.74},
+            "tape": {"attack": 12.0, "release": 120.0, "threshold": 84.0, "pres": 0.76},
+            "reel_tape": {"attack": 12.0, "release": 118.0, "threshold": 84.0, "pres": 0.75},
+            "cassette": {"attack": 11.0, "release": 115.0, "threshold": 83.0, "pres": 0.73},
+            "cd_digital": {"attack": 8.0, "release": 80.0, "threshold": 90.0, "pres": 0.62},
+            "streaming": {"attack": 8.0, "release": 85.0, "threshold": 89.0, "pres": 0.64},
+            "unknown": {"attack": 10.0, "release": 100.0, "threshold": 85.0, "pres": 0.70},
+        }.get(mat, {"attack": 10.0, "release": 100.0, "threshold": 85.0, "pres": 0.70})
+
+        mode_adj = {
+            "fast": -1.0,
+            "balanced": 0.0,
+            "restoration": 0.0,
+            "quality": 1.0,
+            "maximum": 2.0,
+            "studio_2026": 2.0,
+        }.get(qm, 0.0)
+
+        # Lower restorability => lower transient threshold (detect more transients).
+        rest_adj = (rest - 50.0) / 50.0
+
+        attack_ms = float(np.clip(base["attack"] + 1.5 * mode_adj, 5.0, 20.0))
+        release_ms = float(np.clip(base["release"] + 18.0 * mode_adj, 50.0, 200.0))
+        transient_threshold_percentile = float(np.clip(base["threshold"] + 2.0 * rest_adj, 70.0, 95.0))
+        transient_width_preservation = float(np.clip(base["pres"], 0.5, 0.9))
+
+        return {
+            "attack_ms": attack_ms,
+            "release_ms": release_ms,
+            "transient_threshold_percentile": transient_threshold_percentile,
+            "transient_width_preservation": transient_width_preservation,
+        }
 
     def process(self, audio: np.ndarray, sample_rate: int, material: MaterialType, **kwargs) -> PhaseResult:
         """
@@ -156,6 +209,15 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        quality_mode = kwargs.get("quality_mode")
+        restorability_score = kwargs.get("restorability_score", 50.0)
+        material_key = str(getattr(material, "value", material) or "unknown")
+        width_limiter_profile = self._compute_width_limiter_profile(material_key, quality_mode, restorability_score)
+        self._attack_ms_current = float(width_limiter_profile["attack_ms"])
+        self._release_ms_current = float(width_limiter_profile["release_ms"])
+        self._transient_threshold_percentile_current = float(width_limiter_profile["transient_threshold_percentile"])
+        self._transient_width_preservation_current = float(width_limiter_profile["transient_width_preservation"])
+
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
@@ -167,6 +229,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
                     "material": material.name,
                     "algorithm": "skipped_zero_strength",
                     "width_limiting_applied": False,
+                    "width_limiter_profile": width_limiter_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -187,6 +250,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
                     "material": material.name,
                     "width_limiting_applied": False,
                     "reason": "mono_audio",
+                    "width_limiter_profile": width_limiter_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -254,6 +318,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
                 "material": material.name,
                 "width_limiting_applied": True,
                 "algorithm": "psychoacoustic_multiband_limiting_v2",
+                "width_limiter_profile": width_limiter_profile,
                 "num_bands": 4,
                 "band_splits_hz": self.BAND_SPLITS,
                 "phase_locality_factor": phase_locality_factor,
@@ -278,9 +343,9 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
             modifications={
                 "max_width_per_band": max_widths,
                 "soft_knee_threshold": self.SOFT_KNEE_THRESHOLD,
-                "transient_preservation": self.TRANSIENT_WIDTH_PRESERVATION,
-                "attack_ms": self.ATTACK_MS,
-                "release_ms": self.RELEASE_MS,
+                "transient_preservation": self._transient_width_preservation_current,
+                "attack_ms": self._attack_ms_current,
+                "release_ms": self._release_ms_current,
             },
         )
 
@@ -371,7 +436,10 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         derivative_smooth = np.convolve(np.abs(derivative), np.ones(window_samples) / window_samples, mode="same")
 
         # Threshold: Top percentile = transients
-        threshold = np.percentile(derivative_smooth, self.TRANSIENT_THRESHOLD_PERCENTILE)
+        threshold_pct = float(
+            getattr(self, "_transient_threshold_percentile_current", self.TRANSIENT_THRESHOLD_PERCENTILE)
+        )
+        threshold = np.percentile(derivative_smooth, threshold_pct)
         transient_mask = derivative_smooth > threshold
 
         return transient_mask
@@ -398,8 +466,10 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         window_samples = int(0.010 * sample_rate)  # 10ms windows
 
         # Compute attack/release coefficients
-        attack_coeff = 1.0 - np.exp(-1.0 / (self.ATTACK_MS * 0.001 * sample_rate))
-        release_coeff = 1.0 - np.exp(-1.0 / (self.RELEASE_MS * 0.001 * sample_rate))
+        attack_ms = float(getattr(self, "_attack_ms_current", self.ATTACK_MS))
+        release_ms = float(getattr(self, "_release_ms_current", self.RELEASE_MS))
+        attack_coeff = 1.0 - np.exp(-1.0 / (attack_ms * 0.001 * sample_rate))
+        release_coeff = 1.0 - np.exp(-1.0 / (release_ms * 0.001 * sample_rate))
 
         # Initialize gain reduction envelope
         gain_reduction = np.ones(len(side_band))
@@ -443,7 +513,14 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
                 # Transient preservation (reduce limiting during transients)
                 is_transient = np.mean(transient_mask[i:end]) > 0.5
                 if is_transient:
-                    target_gain = target_gain + (1.0 - target_gain) * self.TRANSIENT_WIDTH_PRESERVATION
+                    trans_pres = float(
+                        getattr(
+                            self,
+                            "_transient_width_preservation_current",
+                            self.TRANSIENT_WIDTH_PRESERVATION,
+                        )
+                    )
+                    target_gain = target_gain + (1.0 - target_gain) * trans_pres
 
                 # Track reduction
                 reduction_db = 20 * np.log10(target_gain + 1e-10)

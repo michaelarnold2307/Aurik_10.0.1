@@ -128,13 +128,30 @@ class Phase58LyricsGuidedEnhancement(PhaseInterface):
         latency_budget_s: float = (dur_s / 60.0) * _LATENCY_BUDGET_S_PER_MIN
 
         # ── Load singleton LGE (lazy, DSP-fallback on ImportError) ───────────
+        load_attempts = 0
+        retry_attempted = False
+        lge = None
+        load_error: Exception | None = None
         try:
             from backend.core.lyrics_guided_enhancement import (
                 get_lyrics_guided_enhancement,
             )
-
-            lge = get_lyrics_guided_enhancement()
         except Exception as exc:
+            get_lyrics_guided_enhancement = None  # type: ignore[assignment]
+            load_error = exc
+
+        if get_lyrics_guided_enhancement is not None:
+            for attempt in range(2):
+                load_attempts = attempt + 1
+                retry_attempted = retry_attempted or attempt > 0
+                try:
+                    lge = get_lyrics_guided_enhancement()
+                    break
+                except Exception as exc:
+                    load_error = exc
+
+        if lge is None:
+            exc = load_error if load_error is not None else RuntimeError("lge unavailable")
             logger.warning(
                 "phase_58_lyrics_guided_enhancement: LGE unavailable (%s) — DSP passthrough",
                 type(exc).__name__,
@@ -143,13 +160,19 @@ class Phase58LyricsGuidedEnhancement(PhaseInterface):
                 audio=audio,
                 modifications={"lge_fallback": "passthrough", "reason": type(exc).__name__},
                 warnings=[f"LGE unavailable ({type(exc).__name__}) — passthrough"],
-                metadata={"lge_active": False, "lge_error": type(exc).__name__},
+                metadata={
+                    "lge_active": False,
+                    "lge_error": type(exc).__name__,
+                    "retry_attempted": retry_attempted,
+                    "load_attempts": load_attempts,
+                },
                 ml_used=False,
                 quality_estimate=0.95,
             )
 
         # ── Apply LGE (saliency path if pre_transcription available, else full enhance) ─────
         t0 = time.perf_counter()
+        enhance_attempts = 0
         try:
             if pre_transcription is not None and not getattr(pre_transcription, "fallback_used", True):
                 # Fast path: use pre-computed transcription from original audio (§2.36 Phase-Gate).
@@ -174,7 +197,18 @@ class Phase58LyricsGuidedEnhancement(PhaseInterface):
                     len(pre_transcription.words) if pre_transcription is not None else 0,
                 )
             else:
-                audio_out, transcription = lge.enhance(audio, sample_rate)
+                last_enhance_exc: Exception | None = None
+                for attempt in range(2):
+                    enhance_attempts = attempt + 1
+                    retry_attempted = retry_attempted or attempt > 0
+                    try:
+                        audio_out, transcription = lge.enhance(audio, sample_rate)
+                        break
+                    except Exception as exc:
+                        last_enhance_exc = exc
+                else:
+                    assert last_enhance_exc is not None
+                    raise last_enhance_exc
         except Exception as exc:
             logger.warning(
                 "phase_58_lyrics_guided_enhancement: enhance() failed (%s) — passthrough",
@@ -184,7 +218,13 @@ class Phase58LyricsGuidedEnhancement(PhaseInterface):
                 audio=audio,
                 modifications={"lge_fallback": "passthrough_on_error", "reason": type(exc).__name__},
                 warnings=[f"LGE enhance() failed ({type(exc).__name__}) — passthrough"],
-                metadata={"lge_active": False, "lge_error": type(exc).__name__},
+                metadata={
+                    "lge_active": False,
+                    "lge_error": type(exc).__name__,
+                    "retry_attempted": retry_attempted,
+                    "load_attempts": load_attempts,
+                    "enhance_attempts": enhance_attempts,
+                },
                 ml_used=True,
                 quality_estimate=0.95,
             )
@@ -233,6 +273,9 @@ class Phase58LyricsGuidedEnhancement(PhaseInterface):
                 "lge_active": True,
                 "vocal_probability": vocal_prob,
                 "n_phoneme_segments": n_words,
+                "retry_attempted": retry_attempted,
+                "load_attempts": load_attempts,
+                "enhance_attempts": enhance_attempts,
                 # §2.36 Datenschutz: no lyrics text stored here
                 "rms_drop_db": 0.0,
                 "loudness_makeup_db": 0.0,

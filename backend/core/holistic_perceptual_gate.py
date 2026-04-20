@@ -204,16 +204,18 @@ class HolisticPerceptualGate:
         # The additive alternative is computed ONLY for comparative diagnostics —
         # if product HPI fails while PEAQ-additive passes, a single factor collapse may
         # indicate a false rollback worth inspecting in logs.
-        _peaq_additive = float(
-            np.clip(0.40 * mert_sim + 0.35 * timbral + 0.25 * float(emotional_arc_score), 0.0, 1.0)
-        )
+        _peaq_additive = float(np.clip(0.40 * mert_sim + 0.35 * timbral + 0.25 * float(emotional_arc_score), 0.0, 1.0))
         _peaq_hpi_val = float(np.clip(_peaq_additive * artifact_freedom, 0.0, 1.0))
         if not passed and _peaq_hpi_val > 0.30 and artifact_freedom >= 0.95:
             logger.warning(
                 "§2.44 HPI-Diskrepanz (PEAQ-Lit-Vergleich): product=%.4f FAIL aber PEAQ-additiv=%.4f PASS "
                 "(mert=%.3f timbral=%.3f emotional=%.3f) — Single-Factor-Kollaps prüfen "
                 "[ISO 16832 / ITU-R BS.1387]",
-                hpi, _peaq_hpi_val, mert_sim, timbral, float(emotional_arc_score),
+                hpi,
+                _peaq_hpi_val,
+                mert_sim,
+                timbral,
+                float(emotional_arc_score),
             )
 
         return HPIResult(
@@ -715,9 +717,7 @@ class HolisticPerceptualGate:
 
         # DSP proxy: three reference-free quality correlates
         try:
-            mono = np.asarray(
-                audio if audio.ndim == 1 else np.mean(audio, axis=0), dtype=np.float32
-            )
+            mono = np.asarray(audio if audio.ndim == 1 else np.mean(audio, axis=0), dtype=np.float32)
             mono = np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0)
             if len(mono) < 1024:
                 return 1.0

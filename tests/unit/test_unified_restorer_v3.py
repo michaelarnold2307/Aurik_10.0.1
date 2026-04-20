@@ -1530,3 +1530,65 @@ class TestEraSpectralTiltInstance:
         restorer = UnifiedRestorerV3(cfg)
         restorer._era_spectral_tilt = -5.2
         assert restorer._era_spectral_tilt == pytest.approx(-5.2)
+
+
+class TestReferenceAnchorArbitration:
+    def test_tier2_high_conf_era_overrides_globalplan_for_anchor(self, monkeypatch: pytest.MonkeyPatch):
+        restorer = UnifiedRestorerV3()
+        audio = np.zeros(9600, dtype=np.float32)
+
+        captured: dict[str, object] = {}
+
+        def _fake_anchor(era_decade: int, genre_label: str, material: str):
+            captured["era_decade"] = int(era_decade)
+            captured["genre_label"] = str(genre_label)
+            captured["material"] = str(material)
+            return np.zeros(128, dtype=np.float32)
+
+        monkeypatch.setattr(
+            "backend.core.reference_anchor_synthesizer.synthesize_reference_anchor",
+            _fake_anchor,
+        )
+
+        def _stop_after_anchor(*args, **kwargs):
+            raise RuntimeError("stop_after_anchor")
+
+        restorer.defect_scanner.scan = _stop_after_anchor  # type: ignore[method-assign]
+
+        cached_medium = types.SimpleNamespace(
+            material=MaterialType.VINYL,
+            material_type=MaterialType.VINYL,
+            confidence=0.95,
+            classifier_source="unit",
+        )
+        cached_era = types.SimpleNamespace(
+            decade=1980,
+            confidence=0.90,
+            tier_used=2,
+            material_prior="vinyl",
+            noise_profile=np.zeros(24, dtype=np.float32),
+            hf_rolloff_hz=16000.0,
+        )
+        cached_genre = types.SimpleNamespace(
+            is_schlager=False,
+            confidence=0.0,
+            genre_label="unknown",
+            bpm=0.0,
+            subgenre="unknown",
+        )
+        cached_rest = types.SimpleNamespace(restorability_score=70.0, grade="FAIR", predicted_mos=(3.5, 4.1))
+        gp = types.SimpleNamespace(portrait=types.SimpleNamespace(decade=1930, era_confidence=0.92))
+
+        with pytest.raises(RuntimeError, match="stop_after_anchor"):
+            restorer.restore(
+                audio,
+                48000,
+                global_plan=gp,
+                cached_medium_result=cached_medium,
+                cached_era_result=cached_era,
+                cached_genre_result=cached_genre,
+                cached_restorability_result=cached_rest,
+                file_path="/tmp/anchor_arbitration.wav",
+            )
+
+        assert captured.get("era_decade") == 1980

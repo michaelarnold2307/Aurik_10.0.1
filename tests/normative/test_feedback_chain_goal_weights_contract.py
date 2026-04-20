@@ -12,14 +12,12 @@ Also verifies:
 
 These are spec-level contractual tests that must pass in CI.
 """
+
 from __future__ import annotations
 
-import math
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -31,7 +29,7 @@ def _make_feedback_chain(
     material: str = "cd_digital",
     restorability: float = 60.0,
     defect_severity: float = 0.3,
-) -> "Any":
+) -> Any:
     """Create a FeedbackChain with the given goal_weights and contextual attributes."""
     from backend.core.feedback_chain import FeedbackChain
 
@@ -45,13 +43,25 @@ def _make_feedback_chain(
 
 
 def _uniform_weights() -> dict:
-    return {g: 1.0 for g in [
-        "natuerlichkeit", "authentizitaet", "tonal_center",
-        "timbre_authentizitaet", "artikulation",
-        "emotionalitaet", "mikrodynamik", "groove",
-        "transparenz", "waerme", "bassgewalt", "separation_fidelity",
-        "brillanz", "raumtiefe",
-    ]}
+    return dict.fromkeys(
+        [
+            "natuerlichkeit",
+            "authentizitaet",
+            "tonal_center",
+            "timbre_authentizitaet",
+            "artikulation",
+            "emotionalitaet",
+            "mikrodynamik",
+            "groove",
+            "transparenz",
+            "waerme",
+            "bassgewalt",
+            "separation_fidelity",
+            "brillanz",
+            "raumtiefe",
+        ],
+        1.0,
+    )
 
 
 def _p1p2_heavy_weights(multiplier: float = 1.5) -> dict:
@@ -76,12 +86,15 @@ def _p4p5_heavy_weights(multiplier: float = 1.6) -> dict:
 class TestPruneThresholdContract:
     """P1/P2-dominant song must produce *stricter* (more negative) pruning threshold."""
 
-    @pytest.mark.parametrize("material,restorability", [
-        ("vinyl", 40.0),
-        ("cd_digital", 85.0),
-        ("shellac", 20.0),
-        ("reel_tape", 55.0),
-    ])
+    @pytest.mark.parametrize(
+        "material,restorability",
+        [
+            ("vinyl", 40.0),
+            ("cd_digital", 85.0),
+            ("shellac", 20.0),
+            ("reel_tape", 55.0),
+        ],
+    )
     def test_p1p2_tighter_than_uniform(self, material: str, restorability: float) -> None:
         """For any material/restorability, P1/P2-heavy song → threshold ≥ uniform threshold.
 
@@ -99,11 +112,14 @@ class TestPruneThresholdContract:
             f"(less negative = stricter) for material={material}, rest={restorability}"
         )
 
-    @pytest.mark.parametrize("material,restorability", [
-        ("vinyl", 40.0),
-        ("cd_digital", 85.0),
-        ("shellac", 20.0),
-    ])
+    @pytest.mark.parametrize(
+        "material,restorability",
+        [
+            ("vinyl", 40.0),
+            ("cd_digital", 85.0),
+            ("shellac", 20.0),
+        ],
+    )
     def test_p4p5_looser_than_uniform(self, material: str, restorability: float) -> None:
         """P4/P5-heavy song → looser threshold (more negative = more lenient).
 
@@ -155,11 +171,14 @@ class TestPruneThresholdContract:
 class TestMosRegressionToleranceContract:
     """P1/P2-dominant songs must have tighter MOS tolerance (maximum fidelity protection)."""
 
-    @pytest.mark.parametrize("material,restorability", [
-        ("vinyl", 45.0),
-        ("cd_digital", 90.0),
-        ("cassette", 60.0),
-    ])
+    @pytest.mark.parametrize(
+        "material,restorability",
+        [
+            ("vinyl", 45.0),
+            ("cd_digital", 90.0),
+            ("cassette", 60.0),
+        ],
+    )
     def test_p1p2_tighter_tolerance(self, material: str, restorability: float) -> None:
         """P1/P2-heavy song must have tolerance ≤ uniform tolerance."""
         fc_uniform = _make_feedback_chain(_uniform_weights(), material=material, restorability=restorability)
@@ -191,8 +210,7 @@ class TestMosRegressionToleranceContract:
                 fc = _make_feedback_chain(gw, material=mat, restorability=50.0)
                 tol = fc._compute_adaptive_mos_regression_tolerance()
                 assert 0.03 <= tol <= 0.25, (
-                    f"MOS tolerance {tol:.4f} out of sane range [0.03, 0.25] "
-                    f"for {mat} with weights={gw}"
+                    f"MOS tolerance {tol:.4f} out of sane range [0.03, 0.25] for {mat} with weights={gw}"
                 )
 
 

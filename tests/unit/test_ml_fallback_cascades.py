@@ -11,11 +11,12 @@ Tests the 5 untested ML fallback cascade patterns:
 Each cascade must: never abort, log fallback in metadata, produce valid output.
 """
 
-import numpy as np
-import pytest
 import importlib
 import sys
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 SR = 48_000
 
@@ -94,7 +95,7 @@ class TestMDX23CFallback:
         """Stem separator must have NMF and HPSS fallback layers."""
         try:
             mod = _import_with_recovery("dsp.stem_separator")
-            StemSeparator = getattr(mod, "StemSeparator")
+            StemSeparator = mod.StemSeparator
 
             sep = StemSeparator()
             # Must support fallback modes
@@ -140,7 +141,7 @@ class TestMPSENetFallback:
         """MP-SENet plugin must implement process interface."""
         try:
             mod = _import_with_recovery("plugins.mp_senet_plugin")
-            MpSenetPlugin = getattr(mod, "MpSenetPlugin")
+            MpSenetPlugin = mod.MpSenetPlugin
 
             plugin = MpSenetPlugin()
             assert hasattr(plugin, "process") or hasattr(plugin, "enhance")

@@ -438,12 +438,21 @@ class VocalEnhancement(PhaseInterface):
         _quality_first_unleashed = bool(
             kwargs.get("quality_first_unleashed", _quality_mode_hint in ("quality", "maximum"))
         )
-        stem_result = self._try_stem_separation(
-            audio,
-            sample_rate,
-            quality_mode=_quality_mode_hint,
-            quality_first_unleashed=_quality_first_unleashed,
-        )
+        try:
+            stem_result = self._try_stem_separation(
+                audio,
+                sample_rate,
+                quality_mode=_quality_mode_hint,
+                quality_first_unleashed=_quality_first_unleashed,
+            )
+        except TypeError as _stem_sep_sig_exc:
+            if "unexpected keyword argument" not in str(_stem_sep_sig_exc):
+                raise
+            logger.debug(
+                "Phase42 Stem-Sep fallback auf Legacy-Signatur ohne quality kwargs: %s",
+                _stem_sep_sig_exc,
+            )
+            stem_result = self._try_stem_separation(audio, sample_rate)
         stem_model_used = "none"
 
         if stem_result is not None:
@@ -1190,6 +1199,91 @@ class VocalEnhancement(PhaseInterface):
         except Exception as _cfd_exc:
             logger.debug("§Hebel-4 _restore_carrier_formant_decay fehlgeschlagen (ignoriert): %s", _cfd_exc)
             return audio
+
+    @staticmethod
+    def _compute_formant_recovery_guard_profile(
+        material_type: "MaterialType",
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict:
+        """§2.54 Adaptive Formant-Recovery-Guard-Profile.
+
+        Liefert Mindest-Schwellwerte für Formant-Korrekturen in _restore_carrier_formant_decay.
+        Niedrigere Werte = permissiver (mehr Korrekturen erlaubt) = geeignet für stark
+        degradiertes Material oder niedrige Restorability.
+
+        Args:
+            material_type: Trägermedium (shellac, vinyl, tape …).
+            quality_mode: "fast" | "balanced" | "quality" | "maximum".
+            restorability_score: 0–100; niedrig = stark degradiert.
+
+        Returns:
+            dict mit headroom_min_db, correction_min_db, eq_min_gain_db.
+        """
+        # Material-Baseline: härteres analoges Material → permissiver (niedrigere Schwellen)
+        _hard_analog = {
+            "shellac",
+            "wax_cylinder",
+            "wire_recording",
+            "lacquer_disc",
+            "acoustic_78",
+        }
+        _mid_analog = {"vinyl", "reel_tape", "tape"}
+        _soft_analog = {"cassette", "8_track", "minidisc"}
+
+        mat_key = material_type.value if hasattr(material_type, "value") else str(material_type)
+
+        if mat_key in _hard_analog:
+            headroom_base = 0.30
+            correction_base = 0.12
+            eq_base = 0.03
+        elif mat_key in _mid_analog:
+            headroom_base = 0.45
+            correction_base = 0.18
+            eq_base = 0.05
+        elif mat_key in _soft_analog:
+            headroom_base = 0.55
+            correction_base = 0.22
+            eq_base = 0.06
+        else:  # digital / unknown
+            headroom_base = 0.65
+            correction_base = 0.26
+            eq_base = 0.08
+
+        # Restorability: niedrige Restorability → permissiver (niedrigere Schwellen)
+        # Score 10 → -0.15; Score 90 → +0.05 (relativ zur Base)
+        rest_norm = max(0.0, min(100.0, float(restorability_score or 50.0))) / 100.0
+        rest_delta = (rest_norm - 0.5) * 0.20  # [-0.10, +0.10]
+        headroom = headroom_base + rest_delta
+        correction = correction_base + rest_delta * 0.6
+        eq = eq_base + rest_delta * 0.04
+
+        # Quality-mode: fast → konservativer (höhere Schwellen); maximum → aggressiver
+        _mode_offsets = {
+            "fast": +0.12,
+            "balanced": +0.04,
+            "quality": 0.0,
+            "maximum": -0.06,
+        }
+        mode_key = str(quality_mode or "balanced").strip().lower()
+        # Alias-Mapping (§2.31 quality_mode aliases)
+        _aliases = {"restoration": "balanced", "studio_2026": "maximum"}
+        mode_key = _aliases.get(mode_key, mode_key)
+        offset = _mode_offsets.get(mode_key, 0.0)
+        headroom += offset
+        correction += offset * 0.6
+        eq += offset * 0.04
+
+        # Hard bounds
+        headroom = float(np.clip(headroom, 0.25, 0.80))
+        correction = float(np.clip(correction, 0.10, 0.35))
+        eq = float(np.clip(eq, 0.02, 0.10))
+
+        return {
+            "headroom_min_db": headroom,
+            "correction_min_db": correction,
+            "eq_min_gain_db": eq,
+        }
 
     def _reduce_harshness(self, audio: np.ndarray, sample_rate: int, severity: float) -> np.ndarray:
         """Reduce vocal harshness via dynamic presence-band attenuation (2–6 kHz).

@@ -201,6 +201,47 @@ class MidSideProcessing(PhaseInterface):
         super().__init__()
         self.sample_rate = sample_rate
         self.band_names = ["bass", "low_mid", "mid_high", "high"]
+        self._transient_preserve_current = self.TRANSIENT_PRESERVE
+
+    @staticmethod
+    def _compute_mid_side_profile(
+        material: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive M/S runtime profile (§2.56)."""
+        mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        if restorability_score is None:
+            restorability_score = 50.0
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base = {
+            "shellac": 0.82,
+            "wax_cylinder": 0.82,
+            "vinyl": 0.78,
+            "tape": 0.76,
+            "reel_tape": 0.76,
+            "cassette": 0.74,
+            "mp3_low": 0.72,
+            "mp3_medium": 0.70,
+            "cd_digital": 0.66,
+            "streaming": 0.68,
+            "unknown": 0.72,
+        }.get(mat, 0.72)
+
+        mode_adj = {
+            "fast": -0.04,
+            "balanced": 0.0,
+            "restoration": 0.0,
+            "quality": 0.03,
+            "maximum": 0.05,
+            "studio_2026": 0.05,
+        }.get(qm, 0.0)
+
+        rest_adj = ((50.0 - rest) / 50.0) * 0.04
+        transient_preserve = float(np.clip(base + mode_adj + rest_adj, 0.50, 0.95))
+        return {"transient_preserve": transient_preserve}
 
     def get_metadata(self) -> PhaseMetadata:
         """Return phase metadata."""
@@ -232,6 +273,11 @@ class MidSideProcessing(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+        quality_mode = kwargs.get("quality_mode")
+        restorability_score = kwargs.get("restorability_score", 50.0)
+        material_key = str(getattr(material, "value", material) or "unknown")
+        mid_side_profile = self._compute_mid_side_profile(material_key, quality_mode, restorability_score)
+        self._transient_preserve_current = float(mid_side_profile["transient_preserve"])
 
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -244,6 +290,8 @@ class MidSideProcessing(PhaseInterface):
                     "phase": "34_mid_side_processing_v2_professional",
                     "material": material.value,
                     "processing": "skipped_zero_strength",
+                    "mid_side_profile": mid_side_profile,
+                    "transient_preserve": self._transient_preserve_current,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -257,6 +305,8 @@ class MidSideProcessing(PhaseInterface):
             "material": material.value,
             "sample_rate": sample_rate,
             "version": "2.0.0",
+            "mid_side_profile": mid_side_profile,
+            "transient_preserve": self._transient_preserve_current,
             "phase_locality_factor": phase_locality_factor,
             "effective_strength": _effective_strength,
         }
@@ -360,7 +410,7 @@ class MidSideProcessing(PhaseInterface):
                 "mid_change_db": round(float(mid_change_db), 2),
                 "side_change_db": round(float(side_change_db), 2),
                 "mono_compatibility": round(mono_compat, 3),
-                "transient_preservation": self.TRANSIENT_PRESERVE,
+                "transient_preservation": self._transient_preserve_current,
                 "processing_time_s": round(elapsed, 3),
                 "realtime_factor": round(realtime_factor, 2),
                 "quality_impact": 0.92,
@@ -474,7 +524,9 @@ class MidSideProcessing(PhaseInterface):
         gain_reduction_db[mask] = (level_db[mask] - threshold_db) * (1 - 1 / ratio)
 
         # Reduce compression during transients
-        gain_reduction_db[transient_mask] *= 1 - self.TRANSIENT_PRESERVE
+        gain_reduction_db[transient_mask] *= 1 - float(
+            getattr(self, "_transient_preserve_current", self.TRANSIENT_PRESERVE)
+        )
 
         # Apply attack/release smoothing (vectorized - much faster than loop)
         attack_coef = 1 - np.exp(-1 / (sr * attack_ms / 1000))
@@ -567,7 +619,10 @@ if __name__ == "__main__":
         audio = np.column_stack([left, right])
 
         # Normalize input to high level (to trigger compression)
-        audio = audio * 0.9 / np.max(np.abs(audio))
+        # §DSP-Invariante: percentile 99.9 statt np.max() — Impuls-Artefakte blockieren nicht
+        _peak_norm = float(np.percentile(np.abs(audio), 99.9))
+        if _peak_norm > 1e-9:
+            audio = audio * 0.9 / _peak_norm
 
         # Process
         start = time.time()

@@ -698,7 +698,9 @@ def test_restoration_criteria(criterion: dict[str, Any], real_audio_runtime_case
             assert delta <= lufs_limit, (
                 f"LUFS-Drift zu hoch: {delta:.2f} LU (material={material_key}, limit={lufs_limit:.1f})"
             )
-            result["evidence"] = f"Real-Audio LUFS-Delta: {delta:.2f} LU (material={material_key}, limit={lufs_limit:.1f})"
+            result["evidence"] = (
+                f"Real-Audio LUFS-Delta: {delta:.2f} LU (material={material_key}, limit={lufs_limit:.1f})"
+            )
 
         elif criterion["id"] == "R11":
             goals_after = real_audio_runtime_case["goals_after"]

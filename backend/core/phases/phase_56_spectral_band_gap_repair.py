@@ -541,6 +541,55 @@ class SpectralBandGapRepairPhase(PhaseInterface):
             ),
         )
 
+    @staticmethod
+    def _compute_band_gap_profile(
+        material_key: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """§2.54 Adaptive gate profile for spectral band-gap repair."""
+        _material = str(material_key or "unknown").strip().lower()
+        _aliases = {"restoration": "balanced", "studio_2026": "maximum"}
+        _mode = _aliases.get(
+            str(quality_mode or "balanced").strip().lower(), str(quality_mode or "balanced").strip().lower()
+        )
+
+        if any(token in _material for token in ("tape", "reel_tape", "cassette")):
+            min_head_wear_confidence = 0.52
+            mid_gap_fraction_min = 0.78
+            side_gap_fraction_min = 0.92
+        elif any(token in _material for token in ("cd_digital", "dat", "streaming", "flac")):
+            min_head_wear_confidence = 0.70
+            mid_gap_fraction_min = 0.88
+            side_gap_fraction_min = 0.98
+        else:
+            min_head_wear_confidence = 0.60
+            mid_gap_fraction_min = 0.84
+            side_gap_fraction_min = 0.95
+
+        _rest = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0))
+        _rest_norm = _rest / 100.0
+        min_head_wear_confidence += (_rest_norm - 0.5) * 0.18
+        mid_gap_fraction_min += (_rest_norm - 0.5) * 0.12
+        side_gap_fraction_min += (_rest_norm - 0.5) * 0.06
+
+        _mode_offsets = {
+            "fast": (0.08, 0.05, 0.02),
+            "balanced": (0.0, 0.0, 0.0),
+            "quality": (-0.05, -0.04, -0.02),
+            "maximum": (-0.08, -0.06, -0.03),
+        }
+        _conf_off, _mid_off, _side_off = _mode_offsets.get(_mode, (0.0, 0.0, 0.0))
+        min_head_wear_confidence += _conf_off
+        mid_gap_fraction_min += _mid_off
+        side_gap_fraction_min += _side_off
+
+        return {
+            "min_head_wear_confidence": float(np.clip(min_head_wear_confidence, 0.40, 0.85)),
+            "mid_gap_fraction_min": float(np.clip(mid_gap_fraction_min, 0.70, 0.97)),
+            "side_gap_fraction_min": float(np.clip(side_gap_fraction_min, 0.85, 0.995)),
+        }
+
     def process(self, audio: np.ndarray, **kwargs: Any) -> PhaseResult:
         """
         Hauptverarbeitung: Detektion + Reparatur spektraler Bandlücken.
@@ -583,13 +632,27 @@ class SpectralBandGapRepairPhase(PhaseInterface):
                 },
             )
 
+        _material_key_56 = str(kwargs.get("material_type", kwargs.get("material", "unknown"))).lower()
+        _band_gap_profile = self._compute_band_gap_profile(
+            _material_key_56,
+            str(kwargs.get("quality_mode", "balanced")),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
         confidence: float = float(kwargs.get("confidence", 1.0))
-        if confidence < 0.55:
-            logger.debug("SpectralBandGapRepair: confidence=%.2f < 0.55, übersprungen", confidence)
+        if confidence < _band_gap_profile["min_head_wear_confidence"]:
+            logger.debug(
+                "SpectralBandGapRepair: confidence=%.2f < %.2f, übersprungen",
+                confidence,
+                _band_gap_profile["min_head_wear_confidence"],
+            )
             return create_phase_result(
                 audio,
                 modifications={"skipped": True},
                 metadata={
+                    "band_gap_profile": dict(_band_gap_profile),
+                    "min_head_wear_confidence": float(_band_gap_profile["min_head_wear_confidence"]),
+                    "mid_gap_fraction_min": float(_band_gap_profile["mid_gap_fraction_min"]),
+                    "side_gap_fraction_min": float(_band_gap_profile["side_gap_fraction_min"]),
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": effective_strength,
                     "rms_drop_db": 0.0,
@@ -618,7 +681,12 @@ class SpectralBandGapRepairPhase(PhaseInterface):
 
             # Conservative repair on Side channel: gap_fraction_min=0.95 (vs. 0.80 default)
             # → nur Lücken reparieren, die in ≥95 % der Frames leer sind (robusterer Befund nötig)
-            side_repaired = self._process_channel(side, sr, instrument_tag, gap_fraction_min=0.95)
+            side_repaired = self._process_channel(
+                side,
+                sr,
+                instrument_tag,
+                gap_fraction_min=_band_gap_profile["side_gap_fraction_min"],
+            )
             side_repaired = self._mrsa_gain_refinement(
                 side.astype(np.float64), side_repaired.astype(np.float64), sr
             ).astype(np.float32)
@@ -628,7 +696,12 @@ class SpectralBandGapRepairPhase(PhaseInterface):
             right = (mid_repaired - side_repaired) / _sqrt2
             out = np.stack([left.astype(np.float32), right.astype(np.float32)], axis=1)
         else:
-            out = self._process_channel(audio, sr, instrument_tag)
+            out = self._process_channel(
+                audio,
+                sr,
+                instrument_tag,
+                gap_fraction_min=_band_gap_profile["mid_gap_fraction_min"],
+            )
             # MRSA post-processing: zone-specific gain refinement + PGHI
             out = self._mrsa_gain_refinement(audio.astype(np.float64), out.astype(np.float64), sr).astype(np.float32)
 
@@ -650,6 +723,10 @@ class SpectralBandGapRepairPhase(PhaseInterface):
             out,
             modifications={"spectral_band_gaps_repaired": True, "instrument_tag": instrument_tag},
             metadata={
+                "band_gap_profile": dict(_band_gap_profile),
+                "min_head_wear_confidence": float(_band_gap_profile["min_head_wear_confidence"]),
+                "mid_gap_fraction_min": float(_band_gap_profile["mid_gap_fraction_min"]),
+                "side_gap_fraction_min": float(_band_gap_profile["side_gap_fraction_min"]),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": effective_strength,
                 "execution_time_seconds": elapsed,

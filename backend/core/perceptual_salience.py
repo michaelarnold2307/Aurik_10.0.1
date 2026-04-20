@@ -206,7 +206,7 @@ class PerceptualSalienceEstimator:
                         _type_anns_sorted = sorted(_type_anns, key=lambda a: a.salience, reverse=True)
                         _selected.extend(_type_anns_sorted[:_ERB_PER_TYPE])
                     # Tier 2: fill remaining budget from all annotations not yet selected
-                    _selected_set = set(id(a) for a in _selected)
+                    _selected_set = {id(a) for a in _selected}
                     _remaining = sorted(
                         (a for a in all_anns if id(a) not in _selected_set),
                         key=lambda a: a.salience,

@@ -20,13 +20,29 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _reset_budget():
-    """Reset ML memory budget singleton state before each test."""
+def _reset_budget(monkeypatch):
+    """Reset ML memory budget singleton state before each test.
+
+    Also mocks is_system_thrashing → False so host-side swap pressure does not
+    cause non-deterministic failures (§ Richtlinien: Budget-Logik-Tests müssen
+    is_system_thrashing isolieren).
+    """
+    import backend.core.ml_memory_budget as _budget_mod
     from backend.core.ml_memory_budget import (
         get_status,
         release,
         set_budget,
     )
+
+    # Isolate host-side pressure heuristics — swap/RAM state must not affect
+    # logical budget unit tests (spec: monkeypatch is_system_thrashing → False).
+    monkeypatch.setattr(_budget_mod, "is_system_thrashing", lambda: False, raising=False)
+    # New preemptive heavy-load guard must also be neutralized for deterministic
+    # budget logic tests on hosts with elevated swap occupancy.
+    monkeypatch.setattr(_budget_mod, "_should_block_heavy_ml_load", lambda *_a, **_kw: False, raising=False)
+    # Also patch the internal preflight helper if present
+    if hasattr(_budget_mod, "_preflight_system_memory"):
+        monkeypatch.setattr(_budget_mod, "_preflight_system_memory", lambda *a, **kw: True, raising=False)
 
     # Release all currently allocated models
     status = get_status()

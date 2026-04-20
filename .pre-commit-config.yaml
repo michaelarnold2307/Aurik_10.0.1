@@ -57,23 +57,23 @@ repos:
         exclude: ^\.vscode/
 
   # ---------------------------------------------------------------------------
-  # 2. Black — Code-Formatierung
+  # 2. Black — DEAKTIVIERT (Konflikt mit ruff-format; ruff-format ist black-kompatibel)
   # ---------------------------------------------------------------------------
-  - repo: https://github.com/psf/black
-    rev: 26.1.0
-    hooks:
-      - id: black
-        language_version: python3.10
-        args: [--line-length=120]
+  # - repo: https://github.com/psf/black
+  #   rev: 26.1.0
+  #   hooks:
+  #     - id: black
+  #       language_version: python3.10
+  #       args: [--line-length=120]
 
   # ---------------------------------------------------------------------------
-  # 3. isort — Import-Sortierung (Black-kompatibel)
+  # 3. isort — DEAKTIVIERT (Import-Sortierung via ruff)
   # ---------------------------------------------------------------------------
-  - repo: https://github.com/PyCQA/isort
-    rev: 6.0.1
-    hooks:
-      - id: isort
-        args: [--profile=black, --line-length=120]
+  # - repo: https://github.com/PyCQA/isort
+  #   rev: 6.0.1
+  #   hooks:
+  #     - id: isort
+  #       args: [--profile=black, --line-length=120]
 
   # ---------------------------------------------------------------------------
   # 4. Ruff — Schneller Linter (ersetzt Flake8 + Pylint weitgehend)

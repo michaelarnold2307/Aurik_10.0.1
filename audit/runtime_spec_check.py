@@ -99,10 +99,7 @@ def _has_allowed_mode(lines: list[str]) -> bool:
     - studio_2026
     """
 
-    for line in lines:
-        if any(rx.search(line) for rx in _ALLOWED_MODE_PATTERNS):
-            return True
-    return False
+    return any(any(rx.search(line) for rx in _ALLOWED_MODE_PATTERNS) for line in lines)
 
 
 def _extract_float(lines: list[str], pattern: str) -> float | None:

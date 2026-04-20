@@ -73,6 +73,54 @@ logger = logging.getLogger(__name__)
 class TapeSaturation(PhaseInterface):
     """Professional multi-band tape saturation emulation."""
 
+    @staticmethod
+    def _compute_tape_saturation_profile(
+        material_type: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive runtime profile for tape saturation."""
+        mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base = {
+            "shellac": {"drive": 7.2, "h2": 0.078, "h3": 0.042, "h4": 0.018, "side": 0.23},
+            "vinyl": {"drive": 9.4, "h2": 0.112, "h3": 0.057, "h4": 0.024, "side": 0.30},
+            "tape": {"drive": 10.8, "h2": 0.134, "h3": 0.067, "h4": 0.030, "side": 0.36},
+            "reel_tape": {"drive": 11.3, "h2": 0.141, "h3": 0.071, "h4": 0.032, "side": 0.38},
+            "cassette": {"drive": 10.4, "h2": 0.128, "h3": 0.064, "h4": 0.029, "side": 0.35},
+            "cd_digital": {"drive": 7.9, "h2": 0.088, "h3": 0.046, "h4": 0.020, "side": 0.24},
+            "streaming": {"drive": 8.3, "h2": 0.095, "h3": 0.050, "h4": 0.022, "side": 0.26},
+            "mp3_low": {"drive": 8.6, "h2": 0.100, "h3": 0.053, "h4": 0.023, "side": 0.28},
+            "mp3_medium": {"drive": 8.9, "h2": 0.104, "h3": 0.055, "h4": 0.024, "side": 0.29},
+            "unknown": {"drive": 8.8, "h2": 0.102, "h3": 0.054, "h4": 0.024, "side": 0.28},
+        }.get(mat, {"drive": 8.8, "h2": 0.102, "h3": 0.054, "h4": 0.024, "side": 0.28})
+
+        mode_adj = {
+            "fast": -0.55,
+            "balanced": 0.0,
+            "quality": 0.40,
+            "maximum": 0.62,
+            "restoration": 0.25,
+            "studio_2026": 0.62,
+        }.get(qm, 0.0)
+        rest_adj = ((rest - 50.0) / 50.0) * 0.32
+
+        drive_gain_scalar = float(np.clip(base["drive"] + mode_adj + rest_adj, 4.0, 14.0))
+        h2_scale = float(np.clip(base["h2"] + 0.015 * mode_adj + 0.012 * rest_adj, 0.050, 0.200))
+        h3_scale = float(np.clip(base["h3"] + 0.010 * mode_adj + 0.008 * rest_adj, 0.025, 0.100))
+        h4_scale = float(np.clip(base["h4"] + 0.005 * mode_adj + 0.004 * rest_adj, 0.010, 0.050))
+        side_drive_fraction = float(np.clip(base["side"] + 0.030 * mode_adj + 0.020 * rest_adj, 0.15, 0.50))
+
+        return {
+            "drive_gain_scalar": drive_gain_scalar,
+            "h2_scale": h2_scale,
+            "h3_scale": h3_scale,
+            "h4_scale": h4_scale,
+            "side_drive_fraction": side_drive_fraction,
+        }
+
     # Material-adaptive saturation drive
     SATURATION_DRIVE = {
         MaterialType.SHELLAC: 0.0,  # No tape (era mismatch)
@@ -203,7 +251,17 @@ class TapeSaturation(PhaseInterface):
                 },
             )
 
+        quality_mode = str(kwargs.get("quality_mode", "balanced") or "balanced")
+        restorability_score = float(kwargs.get("restorability_score", 75.0))
+        material_key = material.value if isinstance(material, MaterialType) else str(material)
+        tape_saturation_profile = self._compute_tape_saturation_profile(
+            material_key,
+            quality_mode,
+            restorability_score,
+        )
+
         drive = self.SATURATION_DRIVE.get(material, 0.25)
+        drive *= tape_saturation_profile["drive_gain_scalar"] / 10.0
         mix_amount = self.SATURATION_MIX.get(material, 0.30)
         tape_speed = self.TAPE_SPEED.get(material, "7.5_ips")
         hysteresis = self.HYSTERESIS_AMOUNT.get(material, 0.10)
@@ -267,12 +325,30 @@ class TapeSaturation(PhaseInterface):
             _side = (audio[:, 0] - audio[:, 1]) * _sqrt2_inv
 
             # Full saturation on Mid (carries the musical content, tape intermodulation)
-            _mid_sat = self._saturate_multi_band(_mid, sample_rate, drive, tape_speed, hysteresis)
+            _mid_sat = self._saturate_multi_band(
+                _mid,
+                sample_rate,
+                drive,
+                tape_speed,
+                hysteresis,
+                tape_saturation_profile["h2_scale"],
+                tape_saturation_profile["h3_scale"],
+                tape_saturation_profile["h4_scale"],
+            )
 
-            # Side: very light saturation (<=30% drive) to avoid L/R spatial artifacts
-            _side_drive = drive * 0.30
+            # Side: reduced saturation to avoid L/R spatial artifacts
+            _side_drive = drive * tape_saturation_profile["side_drive_fraction"]
             if _side_drive > 0.01:
-                _side_sat = self._saturate_multi_band(_side, sample_rate, _side_drive, tape_speed, hysteresis * 0.5)
+                _side_sat = self._saturate_multi_band(
+                    _side,
+                    sample_rate,
+                    _side_drive,
+                    tape_speed,
+                    hysteresis * 0.5,
+                    tape_saturation_profile["h2_scale"],
+                    tape_saturation_profile["h3_scale"],
+                    tape_saturation_profile["h4_scale"],
+                )
             else:
                 _side_sat = _side
 
@@ -286,7 +362,16 @@ class TapeSaturation(PhaseInterface):
             _right = (_mid_sat - _side_sat) / np.sqrt(2.0)
             saturated = np.column_stack([_left, _right])
         else:
-            saturated = self._saturate_multi_band(audio, sample_rate, drive, tape_speed, hysteresis)
+            saturated = self._saturate_multi_band(
+                audio,
+                sample_rate,
+                drive,
+                tape_speed,
+                hysteresis,
+                tape_saturation_profile["h2_scale"],
+                tape_saturation_profile["h3_scale"],
+                tape_saturation_profile["h4_scale"],
+            )
 
         # Wet/dry mix
         if len(saturated) != len(audio):
@@ -330,7 +415,14 @@ class TapeSaturation(PhaseInterface):
                 "material": material.value,
             },
             execution_time_seconds=processing_time,
-            metadata={"algorithm": "multi_band_tape_saturation", "version": "2.0", "bands": 3},
+            metadata={
+                "algorithm": "multi_band_tape_saturation",
+                "version": "2.0",
+                "bands": 3,
+                "tape_saturation_profile": tape_saturation_profile,
+                "quality_mode": quality_mode,
+                "restorability_score": restorability_score,
+            },
             modifications={
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
@@ -375,7 +467,15 @@ class TapeSaturation(PhaseInterface):
         return env
 
     def _saturate_multi_band(
-        self, audio: np.ndarray, sample_rate: int, drive: float, tape_speed: str, hysteresis: float
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        drive: float,
+        tape_speed: str,
+        hysteresis: float,
+        h2_scale: float,
+        h3_scale: float,
+        h4_scale: float,
     ) -> np.ndarray:
         """Multi-band tape saturation with envelope-following dynamic drive.
 
@@ -410,13 +510,31 @@ class TapeSaturation(PhaseInterface):
 
         # Per-band saturation (pass drive_vec so each band is level-adaptive)
         bass_saturated = self._saturate_band(
-            bass, drive_vec * self.BAND_DRIVE_SCALE["bass"], hysteresis, self.HARMONIC_WEIGHTS["bass"]
+            bass,
+            drive_vec * self.BAND_DRIVE_SCALE["bass"],
+            hysteresis,
+            self.HARMONIC_WEIGHTS["bass"],
+            h2_scale,
+            h3_scale,
+            h4_scale,
         )
         mid_saturated = self._saturate_band(
-            mid, drive_vec * self.BAND_DRIVE_SCALE["mid"], hysteresis, self.HARMONIC_WEIGHTS["mid"]
+            mid,
+            drive_vec * self.BAND_DRIVE_SCALE["mid"],
+            hysteresis,
+            self.HARMONIC_WEIGHTS["mid"],
+            h2_scale,
+            h3_scale,
+            h4_scale,
         )
         high_saturated = self._saturate_band(
-            high, drive_vec * self.BAND_DRIVE_SCALE["high"], hysteresis, self.HARMONIC_WEIGHTS["high"]
+            high,
+            drive_vec * self.BAND_DRIVE_SCALE["high"],
+            hysteresis,
+            self.HARMONIC_WEIGHTS["high"],
+            h2_scale,
+            h3_scale,
+            h4_scale,
         )
 
         # Recombine bands
@@ -460,7 +578,14 @@ class TapeSaturation(PhaseInterface):
         return np.where(close, midpoint, adaa)
 
     def _saturate_band(
-        self, audio: np.ndarray, drive: "float | np.ndarray", hysteresis: float, harmonic_weights: list
+        self,
+        audio: np.ndarray,
+        drive: "float | np.ndarray",
+        hysteresis: float,
+        harmonic_weights: list,
+        h2_scale: float = 0.10,
+        h3_scale: float = 0.05,
+        h4_scale: float = 0.02,
     ) -> np.ndarray:
         """Saturate a single band using ADAA-processed tanh with hysteresis.
 
@@ -490,13 +615,13 @@ class TapeSaturation(PhaseInterface):
 
         # Add harmonics (2nd, 3rd, 4th)
         # 2nd harmonic (even): saturated^2 (scaled)
-        h2 = saturated**2 * np.sign(saturated) * harmonic_weights[0] * 0.1
+        h2 = saturated**2 * np.sign(saturated) * harmonic_weights[0] * h2_scale
 
         # 3rd harmonic (odd): saturated^3
-        h3 = saturated**3 * harmonic_weights[1] * 0.05
+        h3 = saturated**3 * harmonic_weights[1] * h3_scale
 
         # 4th+ harmonics (subtle)
-        h4 = saturated**4 * np.sign(saturated) * harmonic_weights[2] * 0.02
+        h4 = saturated**4 * np.sign(saturated) * harmonic_weights[2] * h4_scale
 
         # Mix harmonics
         saturated_with_harmonics = saturated + h2 + h3 + h4

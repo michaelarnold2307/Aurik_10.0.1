@@ -26,6 +26,27 @@ import scipy.signal as sps
 
 logger = logging.getLogger(__name__)
 
+
+def _rms_dbfs_gated(sig: np.ndarray) -> float:
+    """§2.45a-I: Frame-basierter RMS in dBFS, ignoriert Frames < −50 dBFS (Stille).
+
+    Stereo → Mono-Downmix vor Framing. Gibt -96.0 zurück wenn kein aktiver Frame.
+    """
+    if sig.ndim == 2:
+        _mono = sig.mean(axis=0).astype(np.float64) if sig.shape[0] <= 2 else sig.mean(axis=1).astype(np.float64)
+    else:
+        _mono = sig.astype(np.float64)
+    _frame = 480  # 10 ms @ 48 kHz
+    _active = [
+        _mono[i : i + _frame]
+        for i in range(0, len(_mono) - _frame, _frame)
+        if 20.0 * np.log10(np.sqrt(np.mean(_mono[i : i + _frame] ** 2)) + 1e-10) > -50.0
+    ]
+    if not _active:
+        return -96.0
+    return float(20.0 * np.log10(np.sqrt(np.mean(np.concatenate(_active) ** 2)) + 1e-10))
+
+
 # ─── Konstanten (Spec normativ) ────────────────────────────────────────────────
 _XCORR_MAX_DELAY_MS: float = 600.0  # Maximales Korrelations-Suchfenster in ms
 _ALPHA_PRE_RANGE: tuple[float, float] = (0.03, 0.25)  # Vorwärtswicklung
@@ -41,6 +62,8 @@ def apply(
     sample_rate: int,
     strength: float = 0.8,
     defect_scores: dict | None = None,
+    min_print_through_score: float = _MIN_PRINT_THROUGH_SCORE,
+    coherence_floor: float = _COHERENCE_FLOOR,
 ) -> np.ndarray:
     """Haupteintrittspunkt für Phase 57.
 
@@ -60,11 +83,11 @@ def apply(
     _pt_score = 0.0
     if defect_scores is not None:
         _pt_score = float(defect_scores.get("print_through", 0.0))
-        if _pt_score < _MIN_PRINT_THROUGH_SCORE:
+        if _pt_score < min_print_through_score:
             logger.debug(
                 "Phase 57: Print-Through-Score %.3f < %.3f — übersprungen",
                 _pt_score,
-                _MIN_PRINT_THROUGH_SCORE,
+                min_print_through_score,
             )
             return np.clip(audio, -1.0, 1.0)
 
@@ -122,11 +145,11 @@ def apply(
 
     # Schritt 4: Spectral-Coherence-Check — Rollback wenn Qualität schlechter
     _coh = _spectral_coherence(x, x_clean, sample_rate)
-    if _coh < _COHERENCE_FLOOR:
+    if _coh < coherence_floor:
         logger.warning(
             "Phase 57: Spectral Coherence nach LMS %.3f < %.3f — Rollback auf Original",
             _coh,
-            _COHERENCE_FLOOR,
+            coherence_floor,
         )
         return np.clip(audio, -1.0, 1.0).astype(np.float32)
 
@@ -299,6 +322,48 @@ class PrintThroughReductionPhase(PhaseInterface):
             ),
         )
 
+    @staticmethod
+    def _compute_print_through_profile(
+        material_key: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """§2.54 Adaptive print-through profile."""
+        _material = str(material_key or "unknown").strip().lower()
+        _aliases = {"restoration": "balanced", "studio_2026": "maximum"}
+        _mode = _aliases.get(
+            str(quality_mode or "balanced").strip().lower(), str(quality_mode or "balanced").strip().lower()
+        )
+
+        if any(token in _material for token in ("reel_tape", "tape", "cassette")):
+            min_print_through_score = 0.12
+            coherence_floor = 0.93
+        elif any(token in _material for token in ("cd_digital", "dat", "streaming", "flac")):
+            min_print_through_score = 0.22
+            coherence_floor = 0.95
+        else:
+            min_print_through_score = 0.18
+            coherence_floor = 0.94
+
+        _rest = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0))
+        _rest_norm = _rest / 100.0
+        min_print_through_score += (_rest_norm - 0.5) * 0.14
+
+        _mode_offsets = {
+            "fast": (0.04, -0.01),
+            "balanced": (0.0, 0.0),
+            "quality": (-0.03, 0.02),
+            "maximum": (-0.05, 0.03),
+        }
+        _score_off, _coh_off = _mode_offsets.get(_mode, (0.0, 0.0))
+        min_print_through_score += _score_off
+        coherence_floor += _coh_off
+
+        return {
+            "min_print_through_score": float(np.clip(min_print_through_score, 0.05, 0.30)),
+            "coherence_floor": float(np.clip(coherence_floor, 0.90, 0.99)),
+        }
+
     def process(
         self,
         audio: np.ndarray,
@@ -312,6 +377,11 @@ class PrintThroughReductionPhase(PhaseInterface):
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 
         _defect_scores = defect_scores or kwargs.get("defect_analysis", {})
+        _profile_57 = self._compute_print_through_profile(
+            str(kwargs.get("material_type", kwargs.get("material", "unknown"))).lower(),
+            str(kwargs.get("quality_mode", "balanced")),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", strength))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
@@ -335,23 +405,35 @@ class PrintThroughReductionPhase(PhaseInterface):
                 },
                 warnings=["Print-through reduction skipped due to zero effective strength"],
             )
-        _rms_in = float(np.sqrt(np.mean(np.asarray(audio, dtype=np.float64) ** 2) + 1e-12))
-        result_audio = apply(audio, sample_rate, strength=_effective_strength, defect_scores=_defect_scores)
+        _rms_in_db = _rms_dbfs_gated(audio)
+        result_audio = apply(
+            audio,
+            sample_rate,
+            strength=_effective_strength,
+            defect_scores=_defect_scores,
+            min_print_through_score=_profile_57["min_print_through_score"],
+            coherence_floor=_profile_57["coherence_floor"],
+        )
         elapsed = _time.perf_counter() - t0
 
         # §4.5 Psychoacoustic Masking Clamp — only reduce audible print-through
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             result_audio = apply_psychoacoustic_masking_clamp(
-                audio, result_audio, sample_rate,
-                strength=_effective_strength, mode="subtractive",
+                audio,
+                result_audio,
+                sample_rate,
+                strength=_effective_strength,
+                mode="subtractive",
             )
         except Exception as _pm_exc:
             import logging as _log57
+
             _log57.getLogger(__name__).debug("Phase57 masking clamp non-blocking: %s", _pm_exc)
 
-        _rms_out = float(np.sqrt(np.mean(np.asarray(result_audio, dtype=np.float64) ** 2) + 1e-12))
-        _rms_drop = 20.0 * np.log10(max(_rms_out / _rms_in, 1e-30)) if _rms_in > 1e-8 else 0.0
+        _rms_out_db = _rms_dbfs_gated(result_audio)
+        _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0
         _pt_score = float((_defect_scores or {}).get("print_through", 0.0)) if _defect_scores else 0.0
         return PhaseResult(
             audio=result_audio,
@@ -363,6 +445,9 @@ class PrintThroughReductionPhase(PhaseInterface):
                 "effective_strength": _effective_strength,
             },
             metadata={
+                "print_through_profile": dict(_profile_57),
+                "min_print_through_score": float(_profile_57["min_print_through_score"]),
+                "coherence_floor": float(_profile_57["coherence_floor"]),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),

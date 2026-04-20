@@ -46,6 +46,7 @@ import time
 import numpy as np
 from scipy import ndimage, signal
 
+from backend.core.audio_utils import compute_gated_rms_linear
 from backend.core.defect_scanner import MaterialType
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
@@ -126,6 +127,83 @@ class CompressionPhase(PhaseInterface):
 
     # Look-ahead buffer (ms)
     LOOK_AHEAD_MS = 5.0
+
+    @staticmethod
+    def _compute_compression_profile(
+        material_type: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive analysis windows for compression side-chains."""
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _base_lookahead = {
+            "shellac": 7.0,
+            "wax_cylinder": 7.0,
+            "vinyl": 5.5,
+            "tape": 5.0,
+            "reel_tape": 5.0,
+            "cd_digital": 3.5,
+            "digital": 3.5,
+            "dat": 3.5,
+            "unknown": 5.0,
+        }.get(_mat, 5.0)
+
+        _base_rms = {
+            "shellac": 14.0,
+            "wax_cylinder": 14.0,
+            "vinyl": 12.0,
+            "tape": 11.0,
+            "reel_tape": 11.0,
+            "cd_digital": 8.0,
+            "digital": 8.0,
+            "dat": 8.0,
+            "unknown": 10.0,
+        }.get(_mat, 10.0)
+
+        _base_peak = {
+            "shellac": 6.0,
+            "wax_cylinder": 6.0,
+            "vinyl": 5.0,
+            "tape": 5.0,
+            "reel_tape": 5.0,
+            "cd_digital": 4.0,
+            "digital": 4.0,
+            "dat": 4.0,
+            "unknown": 5.0,
+        }.get(_mat, 5.0)
+
+        _mode_rms_adj = {
+            "fast": -2.0,
+            "balanced": 0.0,
+            "quality": +2.0,
+            "maximum": +3.0,
+            "restoration": +1.0,
+            "studio_2026": +3.0,
+        }.get(_qm, 0.0)
+        _mode_peak_adj = {
+            "fast": -1.0,
+            "balanced": 0.0,
+            "quality": +1.0,
+            "maximum": +2.0,
+            "restoration": +1.0,
+            "studio_2026": +2.0,
+        }.get(_qm, 0.0)
+
+        # Lower restorability => slightly longer lookahead (more conservative envelope following)
+        _rest_lookahead_adj = ((50.0 - _rest) / 50.0) * 1.0
+
+        lookahead_ms = float(np.clip(_base_lookahead + _rest_lookahead_adj, 2.0, 10.0))
+        rms_window_ms = float(np.clip(_base_rms + _mode_rms_adj, 5.0, 20.0))
+        peak_window_ms = float(np.clip(_base_peak + _mode_peak_adj, 2.0, 10.0))
+
+        return {
+            "lookahead_ms": lookahead_ms,
+            "rms_window_ms": rms_window_ms,
+            "peak_window_ms": peak_window_ms,
+        }
 
     def __init__(self):
         super().__init__()
@@ -219,8 +297,8 @@ class CompressionPhase(PhaseInterface):
             processed_bands.append(band_parallel)
 
             # Calculate metrics
-            rms_before = np.sqrt(np.mean(band_audio**2))
-            rms_after = np.sqrt(np.mean(band_parallel**2))
+            rms_before = compute_gated_rms_linear(band_audio)
+            rms_after = compute_gated_rms_linear(band_parallel)
             rms_change_db = 20 * np.log10((rms_after + 1e-10) / (rms_before + 1e-10))
             max_gr_db = np.percentile(gr_db, 95)  # 95th percentile
 
@@ -240,14 +318,14 @@ class CompressionPhase(PhaseInterface):
             audio_processed = audio_processed * (0.95 / peak)
 
         # Calculate overall metrics
-        rms_before = np.sqrt(np.mean(audio**2))
-        rms_after = np.sqrt(np.mean(audio_processed**2))
+        rms_before = compute_gated_rms_linear(audio)
+        rms_after = compute_gated_rms_linear(audio_processed)
         rms_change_db = 20 * np.log10((rms_after + 1e-10) / (rms_before + 1e-10))
 
         # Calculate dynamic range reduction
         # Dynamic range = Peak-to-RMS ratio
-        peak_before = np.max(np.abs(audio))
-        peak_after = np.max(np.abs(audio_processed))
+        peak_before = float(np.percentile(np.abs(audio), 99.9))
+        peak_after = float(np.percentile(np.abs(audio_processed), 99.9))
         dr_before = 20 * np.log10(peak_before / (rms_before + 1e-10))
         dr_after = 20 * np.log10(peak_after / (rms_after + 1e-10))
         dr_reduction_db = dr_before - dr_after  # Positive = reduced dynamic range

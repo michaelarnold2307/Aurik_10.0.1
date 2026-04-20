@@ -258,6 +258,69 @@ class FrequencyRestorationPhase(PhaseInterface):
     _MRSA_CROSSFADE_BW_HZ: float = 100.0
     _AUDIOSR_MIN_DURATION_S: float = 10.0
 
+    @staticmethod
+    def _compute_audiosr_watchdog_profile(
+        quality_mode: str,
+        material_type: str,
+        restorability_score: float,
+        audio_duration_s: float,
+        default_min_duration_s: float,
+    ) -> dict[str, float]:
+        """Compute adaptive AudioSR runtime/eligibility guard profile (§2.54-style).
+
+        Returns bounded timing parameters and a mode/material/restorability-adaptive
+        minimum duration threshold for entering the ML-hybrid path.
+        """
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+        _dur = float(max(0.0, audio_duration_s))
+        _base_min = float(default_min_duration_s)
+
+        if _base_min <= 0.0:
+            _min_dur = 0.0
+        else:
+            _mode_min_adj = {
+                "fast": +4.0,
+                "balanced": 0.0,
+                "quality": -2.0,
+                "maximum": -4.0,
+                "restoration": 0.0,
+                "studio_2026": -4.0,
+            }.get(_qm, 0.0)
+            # low restorability => allow ML on shorter clips (relaxes threshold)
+            _rest_min_adj = ((_rest - 50.0) / 50.0) * 2.0
+            _min_dur = float(np.clip(_base_min + _mode_min_adj + _rest_min_adj, 4.0, 20.0))
+
+        _mode_mult = {
+            "fast": 2.2,
+            "balanced": 3.5,
+            "quality": 8.0,
+            "maximum": 12.0,
+            "restoration": 3.5,
+            "studio_2026": 12.0,
+        }.get(_qm, 3.5)
+        _analog_mats = {"shellac", "wax_cylinder", "vinyl", "tape", "reel_tape", "wire_recording"}
+        _mat_mult_adj = 1.0 if _mat in _analog_mats else 0.0
+        _timeout_mult = float(np.clip(_mode_mult + _mat_mult_adj, 2.0, 14.0))
+
+        if _qm == "fast":
+            _timeout_min, _timeout_max = 20.0, 180.0
+        elif _qm in {"quality", "maximum", "studio_2026"}:
+            _timeout_min, _timeout_max = 120.0, 900.0
+        else:
+            _timeout_min, _timeout_max = 30.0, 240.0
+
+        _timeout_seconds = float(np.clip(_dur * _timeout_mult, _timeout_min, _timeout_max))
+
+        return {
+            "min_duration_s": float(_min_dur),
+            "timeout_seconds": _timeout_seconds,
+            "timeout_mult": _timeout_mult,
+            "timeout_min": float(_timeout_min),
+            "timeout_max": float(_timeout_max),
+        }
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_06_frequency_restoration",
@@ -296,6 +359,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict06
+
             _get_plm_evict06().evict_for_phase("phase_06_frequency_restoration")
         except Exception:
             pass
@@ -395,7 +459,7 @@ class FrequencyRestorationPhase(PhaseInterface):
 
         # Step 2: Multi-band HF restoration with ML-Hybrid support
         # =========================================================
-        quality_mode = kwargs.get("quality_mode", "quality")
+        quality_mode = kwargs.get("quality_mode", "balanced")
         use_ml_hybrid = (
             ML_HYBRID_AVAILABLE
             and quality_mode in ["balanced", "quality", "maximum"]
@@ -602,19 +666,26 @@ class FrequencyRestorationPhase(PhaseInterface):
         alpha = float(np.clip(alpha, 0.0, 0.80))  # cap at 0.80 — preserve DSP harmonic character
 
         audio_dur_s = audio.shape[-1] / float(self.sample_rate)
-        if quality_mode not in ("quality", "maximum") and audio_dur_s < max(0.0, audiosr_min_duration_s):
+        _watchdog_profile = self._compute_audiosr_watchdog_profile(
+            quality_mode=quality_mode,
+            material_type=material_type,
+            restorability_score=float(np.clip(params.get("restoration_strength", 0.7) * 100.0, 0.0, 100.0)),
+            audio_duration_s=audio_dur_s,
+            default_min_duration_s=float(audiosr_min_duration_s),
+        )
+        _min_dur = float(_watchdog_profile["min_duration_s"])
+        _short_clip_guard_active = quality_mode not in ("quality", "maximum")
+        if _short_clip_guard_active and audio_dur_s < _min_dur:
             logger.info(
                 "Phase 06: AudioSR skipped for short clip (%.2fs < %.2fs) — DSP-only aktiv",
                 audio_dur_s,
-                audiosr_min_duration_s,
+                _min_dur,
             )
             return dsp_restored, {
                 "ml_hybrid_available": True,
                 "quality_mode": quality_mode,
                 "strategy_used": "dsp_only",
-                "ml_reason": (
-                    f"short_clip_guard: duration={audio_dur_s:.2f}s < min_duration={audiosr_min_duration_s:.2f}s"
-                ),
+                "ml_reason": (f"short_clip_guard: duration={audio_dur_s:.2f}s < min_duration={_min_dur:.2f}s"),
                 "ml_watchdog": "short_clip_guard",
             }
 
@@ -717,15 +788,16 @@ class FrequencyRestorationPhase(PhaseInterface):
         try:
             ml_thread = threading.Thread(target=ml_infer, daemon=True)
             ml_thread.start()
+            if quality_mode in ("quality", "maximum") or quality_mode == "studio_2026":
+                pass
+            else:
+                pass
 
             # Quality-first watchdog policy:
             # - quality/maximum: do not let time factor prematurely cap AudioSR quality.
             #   Use a wide upper bound so long songs can complete high-end reconstruction.
             # - balanced/fast: keep a tighter timeout to preserve responsiveness.
-            if quality_mode in ("quality", "maximum"):
-                timeout_s = min(900, max(120, int(audio_dur_s * 12.0)))
-            else:
-                timeout_s = min(180, max(30, int(audio_dur_s * 2.5)))
+            timeout_s = int(_watchdog_profile["timeout_seconds"])
             ml_thread.join(timeout=timeout_s)
 
             if not ml_result_queue.empty():
@@ -905,8 +977,8 @@ class FrequencyRestorationPhase(PhaseInterface):
         REF_HOP = 512
         REF_NOVERLAP = REF_WIN - REF_HOP
 
-        f_ref, _, Zxx_in = signal.stft(audio_in, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)
-        _, _, Zxx_out = signal.stft(audio_out, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)
+        f_ref, _, Zxx_in = signal.stft(audio_in, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP, boundary="even")
+        _, _, Zxx_out = signal.stft(audio_out, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP, boundary="even")
         n_bins, n_t = f_ref.shape[0], Zxx_in.shape[1]
         mag_in_ref = np.abs(Zxx_in)
         mag_out_ref = np.abs(Zxx_out)
@@ -921,8 +993,12 @@ class FrequencyRestorationPhase(PhaseInterface):
             try:
                 if n >= zone_win * 2:
                     zone_noverlap = zone_win - zone_hop
-                    f_z, _, Zxx_in_z = signal.stft(audio_in, fs=sr, nperseg=zone_win, noverlap=zone_noverlap)
-                    _, _, Zxx_out_z = signal.stft(audio_out, fs=sr, nperseg=zone_win, noverlap=zone_noverlap)
+                    f_z, _, Zxx_in_z = signal.stft(
+                        audio_in, fs=sr, nperseg=zone_win, noverlap=zone_noverlap, boundary="even"
+                    )
+                    _, _, Zxx_out_z = signal.stft(
+                        audio_out, fs=sr, nperseg=zone_win, noverlap=zone_noverlap, boundary="even"
+                    )
                 else:
                     f_z = f_ref
                     Zxx_in_z, Zxx_out_z = Zxx_in, Zxx_out
@@ -1001,9 +1077,11 @@ class FrequencyRestorationPhase(PhaseInterface):
                     Zxx_refined.astype(np.complex64), sr=sr, win_size=REF_WIN, hop=REF_HOP, n_samples=n
                 )
             except Exception:
-                _, audio_refined = signal.istft(Zxx_refined, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)
+                _, audio_refined = signal.istft(
+                    Zxx_refined, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP, boundary=True
+                )
         else:
-            _, audio_refined = signal.istft(Zxx_refined, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)
+            _, audio_refined = signal.istft(Zxx_refined, fs=sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP, boundary=True)
 
         audio_refined = np.real(audio_refined)[:n]
         if len(audio_refined) < n:
@@ -1018,7 +1096,9 @@ class FrequencyRestorationPhase(PhaseInterface):
         Restore single channel with SBR + harmonic extension.
         """
         # STFT
-        f, _t, Zxx = signal.stft(channel, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
+        f, _t, Zxx = signal.stft(
+            channel, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length, boundary="even"
+        )
         # Store input magnitude for gain-cap in additive processing
         self._restore_channel_input_mag = np.abs(Zxx).copy()
 
@@ -1084,7 +1164,9 @@ class FrequencyRestorationPhase(PhaseInterface):
             restored = pghi_reconstruct_from_stft(Zxx, sr=self.sample_rate, win_size=n_fft, hop=hop_length)
         except Exception:
             # Phase-preserving iSTFT fallback — Zxx enthält bereits Phasen aus signal.stft(channel)
-            _, restored = signal.istft(Zxx, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
+            _, restored = signal.istft(
+                Zxx, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length, boundary=True
+            )
             restored = np.real(restored).astype(np.float32)
 
         # Match length

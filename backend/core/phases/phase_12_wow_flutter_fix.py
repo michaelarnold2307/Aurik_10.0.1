@@ -143,6 +143,86 @@ class WowFlutterFix(PhaseInterface):
         self.name = "Wow & Flutter Correction v2 Professional"
 
     @staticmethod
+    def _compute_adaptive_threshold_profile(
+        material: MaterialType,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive detection/confidence thresholds for phase_12.
+
+        Values are bounded to stable ranges and tuned to keep fast mode more
+        conservative than quality while allowing low-restorability material to
+        pass with a slightly lower correction-confidence floor.
+        """
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _det_base = WowFlutterFix.DETECTION_THRESHOLD.get(material, 0.5)
+        _yin_base = float(WowFlutterFix.YIN_THRESHOLD)
+
+        _ml_conf_base_by_mat = {
+            MaterialType.SHELLAC: 0.62,
+            MaterialType.WAX_CYLINDER: 0.64,
+            MaterialType.VINYL: 0.60,
+            MaterialType.TAPE: 0.56,
+            MaterialType.REEL_TAPE: 0.56,
+            MaterialType.CD_DIGITAL: 0.58,
+            MaterialType.STREAMING: 0.60,
+        }
+        _ml_conf_base = float(_ml_conf_base_by_mat.get(material, 0.60))
+
+        _min_conf_base_by_mat = {
+            MaterialType.SHELLAC: 0.30,
+            MaterialType.WAX_CYLINDER: 0.28,
+            MaterialType.VINYL: 0.26,
+            MaterialType.TAPE: 0.22,
+            MaterialType.REEL_TAPE: 0.22,
+            MaterialType.CD_DIGITAL: 0.30,
+            MaterialType.STREAMING: 0.32,
+        }
+        _min_conf_base = float(_min_conf_base_by_mat.get(material, 0.26))
+
+        _mode_det_adj = {
+            "fast": +0.25,
+            "balanced": 0.0,
+            "quality": -0.10,
+            "maximum": -0.15,
+            "restoration": -0.05,
+            "studio_2026": -0.15,
+        }.get(_qm, 0.0)
+        _mode_yin_adj = {
+            "fast": +0.02,
+            "balanced": 0.0,
+            "quality": -0.01,
+            "maximum": -0.015,
+            "restoration": -0.005,
+            "studio_2026": -0.015,
+        }.get(_qm, 0.0)
+        _mode_ml_adj = {
+            "fast": +0.06,
+            "balanced": 0.0,
+            "quality": -0.03,
+            "maximum": -0.05,
+            "restoration": -0.02,
+            "studio_2026": -0.05,
+        }.get(_qm, 0.0)
+
+        # Lower restorability: allow slightly lower correction-confidence floor.
+        _rest_min_conf_adj = ((_rest - 50.0) / 50.0) * 0.06
+
+        detection_threshold = float(np.clip(_det_base + _mode_det_adj, 0.20, 3.50))
+        yin_threshold = float(np.clip(_yin_base + _mode_yin_adj, 0.08, 0.25))
+        ml_confidence_threshold = float(np.clip(_ml_conf_base + _mode_ml_adj, 0.45, 0.85))
+        min_confidence_for_correction = float(np.clip(_min_conf_base + _rest_min_conf_adj, 0.18, 0.60))
+
+        return {
+            "detection_threshold": detection_threshold,
+            "yin_threshold": yin_threshold,
+            "ml_confidence_threshold": ml_confidence_threshold,
+            "min_confidence_for_correction": min_confidence_for_correction,
+        }
+
+    @staticmethod
     def _derive_safe_timing_profile(
         material: MaterialType,
         mean_confidence: float,
@@ -944,9 +1024,7 @@ class WowFlutterFix(PhaseInterface):
         #   unset/auto                   -> enable in quality/maximum
         # -----------------------------------------------------------------
         _qm_hint = str(getattr(self, "_quality_mode_hint", "quality")).strip().lower()
-        _quality_first_unleashed = bool(
-            getattr(self, "_quality_first_unleashed", _qm_hint in {"quality", "maximum"})
-        )
+        _quality_first_unleashed = bool(getattr(self, "_quality_first_unleashed", _qm_hint in {"quality", "maximum"}))
         _pyin_env = os.environ.get("AURIK_ENABLE_LIBROSA_PYIN", "auto").strip().lower()
         if _pyin_env in {"1", "true", "yes", "on"}:
             _enable_librosa_pyin = True

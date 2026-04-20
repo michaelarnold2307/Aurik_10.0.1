@@ -333,9 +333,9 @@ class TestBsRoformerPlugin:
         # StemSeparationResult hat .stems dict, kein direktes .vocals/.instruments
         vocals = result.stems.get("vocals") if hasattr(result, "stems") else None
         inst = result.stems.get("instruments", result.stems.get("other")) if hasattr(result, "stems") else None
-        assert (
-            vocals is not None
-        ), f"Kein 'vocals' Stem gefunden in {result.stems.keys() if hasattr(result, 'stems') else type(result)}"
+        assert vocals is not None, (
+            f"Kein 'vocals' Stem gefunden in {result.stems.keys() if hasattr(result, 'stems') else type(result)}"
+        )
         # NaN in Randframes des DSP-HPSS-Fallbacks erlaubt — Hauptnutzlast muss finite sein
         _assert_finite(np.nan_to_num(np.asarray(vocals, dtype=np.float32), nan=0.0), "BSRoFormer vocals")
         if inst is not None:
@@ -1077,9 +1077,9 @@ class TestLyricsTranscriberPlugin:
         audio = _signal(5.0)
         result = transcribe_audio(audio, SR)
         assert result is not None
-        assert (
-            hasattr(result, "words") or hasattr(result, "segments") or hasattr(result, "text")
-        ), f"Kein text/words/segments in {type(result)}"
+        assert hasattr(result, "words") or hasattr(result, "segments") or hasattr(result, "text"), (
+            f"Kein text/words/segments in {type(result)}"
+        )
         _cleanup(["WhisperTiny"], "plugins.lyrics_transcriber_plugin")
 
     def test_03_budget_zero_after_cleanup(self):
@@ -1198,6 +1198,6 @@ class TestGlobalBudgetInvariants:
         _reset_budget()
         _plm_evict_all()
         gc.collect()
-        assert (
-            _bud._total_gb == 0.0
-        ), f"Verbleibendes Budget nach globalem Cleanup: {_bud._total_gb:.4f} GB; allocated={dict(_bud._allocated)}"
+        assert _bud._total_gb == 0.0, (
+            f"Verbleibendes Budget nach globalem Cleanup: {_bud._total_gb:.4f} GB; allocated={dict(_bud._allocated)}"
+        )

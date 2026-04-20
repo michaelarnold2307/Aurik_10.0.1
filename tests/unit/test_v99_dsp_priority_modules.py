@@ -326,9 +326,9 @@ class TestAdaptiveMelSpectrogram:
 
         obj = AdaptiveMelSpectrogram(sr=SR)
         # Entweder __call__ oder transform-Methode
-        has_call = callable(obj)
-        has_transform = hasattr(obj, "transform") or hasattr(obj, "compute") or hasattr(obj, "process")
-        assert has_call or has_transform or True  # Instanziierung genügt als Mindesttest
+        callable(obj)
+        hasattr(obj, "transform") or hasattr(obj, "compute") or hasattr(obj, "process")
+        assert True  # Instanziierung genügt als Mindesttest
 
     def test_04_public_methods_exist(self):
         from dsp.multiresolution_stft import AdaptiveMelSpectrogram

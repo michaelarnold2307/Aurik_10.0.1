@@ -518,3 +518,28 @@ class TestChainAwareNRCap:
         )
         nr = plan.phase_adjustments["phase_03_denoise"]["aggressiveness"]
         assert nr <= 0.20, f"Erwarte NR-Cap <= 0.20 via Convenience-Funktion, got {nr:.3f}"
+
+
+# ---------------------------------------------------------------------------
+# 13. Material-Decade-Floor
+# ---------------------------------------------------------------------------
+
+
+class TestMaterialDecadeFloor:
+    def test_vinyl_chain_forces_min_1950(self, dienst, mono_sine):
+        plan = dienst.erstelle_plan(
+            mono_sine,
+            SR,
+            hint_decade=1930,
+            chain_info={"primary": "vinyl", "chain": ["vinyl", "tape", "mp3_low"]},
+        )
+        assert plan.portrait.decade >= 1950, f"Vinyl-Floor verletzt: {plan.portrait.decade}"
+
+    def test_primary_material_alias_is_honored(self, dienst, mono_sine):
+        plan = dienst.erstelle_plan(
+            mono_sine,
+            SR,
+            hint_decade=1930,
+            chain_info={"primary_material": "cassette", "transfer_chain": ["cassette", "mp3_low"]},
+        )
+        assert plan.portrait.decade >= 1965, f"Cassette-Floor verletzt: {plan.portrait.decade}"

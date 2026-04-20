@@ -188,6 +188,61 @@ class HumRemovalPhase(PhaseInterface):
             description="Professional adaptive hum removal with side-chain detection (comparable to iZotope RX De-hum)",
         )
 
+    @staticmethod
+    def _compute_hum_removal_profile(
+        material: str = "unknown",
+        quality_mode: str | None = "balanced",
+        restorability: float = 50.0,
+    ) -> dict:
+        """Compute material-adaptive hum-removal profile (§2.56)."""
+        _material = str(material or "unknown").lower()
+        _base_max_drop: dict[str, float] = {
+            "shellac": 4.2,
+            "wax_cylinder": 4.6,
+            "vinyl": 3.2,
+            "tape": 3.4,
+            "reel_tape": 3.5,
+            "cassette": 3.6,
+            "cd_digital": 2.1,
+            "mp3_low": 2.8,
+        }
+        max_drop = float(_base_max_drop.get(_material, 3.0))
+
+        _qm = (quality_mode or "balanced").lower()
+        if _qm == "restoration":
+            _qm = "balanced"
+        elif _qm == "studio_2026":
+            _qm = "maximum"
+        _qm_delta = {"fast": -0.5, "balanced": 0.0, "quality": +0.4, "maximum": +0.8}.get(_qm, 0.0)
+        max_drop += float(_qm_delta)
+
+        # Low restorability needs more aggressive hum removal -> allow larger drop.
+        _rest = float(np.clip(restorability, 0.0, 100.0))
+        max_drop += float((50.0 - _rest) * 0.02)  # +/-1.0 dB at extremes
+        max_drop = float(np.clip(max_drop, 1.0, 6.0))
+
+        _base_hop: dict[str, int] = {
+            "shellac": 256,
+            "wax_cylinder": 256,
+            "vinyl": 512,
+            "tape": 512,
+            "reel_tape": 512,
+            "cassette": 512,
+            "cd_digital": 768,
+            "mp3_low": 640,
+        }
+        chroma_hop = int(_base_hop.get(_material, 512))
+        if _qm in ("quality", "maximum"):
+            chroma_hop = max(128, chroma_hop // 2)
+        elif _qm == "fast":
+            chroma_hop = min(1024, chroma_hop * 2)
+        chroma_hop = int(np.clip(chroma_hop, 128, 1024))
+
+        return {
+            "max_rms_drop_db": max_drop,
+            "chroma_hop": chroma_hop,
+        }
+
     def process(
         self,
         audio: np.ndarray,
@@ -238,6 +293,8 @@ class HumRemovalPhase(PhaseInterface):
 
         # Get material-specific parameters
         params = dict(self.MATERIAL_PARAMS.get(material_type, self.MATERIAL_PARAMS["unknown"]))
+        _restorability = float(kwargs.get("restorability", kwargs.get("restorability_score", 50.0)))
+        _hum_profile = self._compute_hum_removal_profile(material_type, quality_mode, _restorability)
 
         # Locality-aware intensity control from UV3.
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
@@ -257,6 +314,7 @@ class HumRemovalPhase(PhaseInterface):
                     "algorithm_version": "2.0_professional",
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
+                    "hum_profile": dict(_hum_profile),
                     "execution_time_seconds": time.time() - start_time,
                 },
             )
@@ -279,6 +337,7 @@ class HumRemovalPhase(PhaseInterface):
                     "algorithm_version": "2.0_professional",
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
+                    "hum_profile": dict(_hum_profile),
                     "execution_time_seconds": time.time() - start_time,
                 },
             )
@@ -355,7 +414,7 @@ class HumRemovalPhase(PhaseInterface):
             _orig_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
             _res_mono = np.mean(result_audio, axis=1) if result_audio.ndim == 2 else result_audio
             _n_chroma = min(len(_orig_mono), len(_res_mono))
-            _hop_chroma = 512
+            _hop_chroma = int(_hum_profile.get("chroma_hop", 512))
             _chroma_orig = np.zeros(12, dtype=np.float64)
             _chroma_res = np.zeros(12, dtype=np.float64)
             for _ci in range(min(200, max(1, _n_chroma // _hop_chroma))):
@@ -393,7 +452,7 @@ class HumRemovalPhase(PhaseInterface):
         # §2.45a Mid-Pipeline-Loudness-Drift-Guard
         _rms_out_02 = float(np.sqrt(np.mean(np.asarray(result_audio, dtype=np.float64) ** 2) + 1e-12))
         _rms_drop_02 = 20.0 * np.log10(max(_rms_out_02 / _rms_in_02, 1e-30)) if _rms_in_02 > 1e-8 else 0.0
-        _max_drop_02 = 3.0  # Hum-Notch: max 3 dB Pegelabfall (stärker als Shellac-Spezifikum)
+        _max_drop_02 = float(_hum_profile.get("max_rms_drop_db", 3.0))
         _makeup_02 = 0.0
         if _rms_in_02 > 1e-8 and _rms_drop_02 < -_max_drop_02:
             _required_gain_db = -_max_drop_02 - _rms_drop_02
@@ -445,6 +504,7 @@ class HumRemovalPhase(PhaseInterface):
                 "benchmark": "iZotope RX De-hum (basic)",
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
+                "hum_profile": dict(_hum_profile),
                 "execution_time_seconds": execution_time,
                 "rms_drop_db": round(float(min(0.0, _rms_drop_02)), 3),
                 "loudness_makeup_db": round(float(_makeup_02), 3),

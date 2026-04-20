@@ -1675,7 +1675,9 @@ class GermanSchlagerClassifier:
         return {
             "Rock": float(np.clip(max(_t("Rock music"), 0.65 * _guitar + 0.45 * _drum), 0.0, 1.0)),
             "Jazz": float(np.clip(max(_t("Jazz"), 0.55 * _brass + 0.35 * _keys), 0.0, 1.0)),
-            "Klassik": float(np.clip(max(_t("Classical music"), 0.45 * _keys + 0.35 * _t("Bowed string instrument")), 0.0, 1.0)),
+            "Klassik": float(
+                np.clip(max(_t("Classical music"), 0.45 * _keys + 0.35 * _t("Bowed string instrument")), 0.0, 1.0)
+            ),
             "Electronic": float(np.clip(max(_t("Electronic music"), 0.60 * _keys + 0.25 * _drum), 0.0, 1.0)),
             "Pop": float(np.clip(0.50 * _voc + 0.25 * _t("Music"), 0.0, 1.0)),
         }

@@ -249,6 +249,20 @@ _GENRE_MODIFIERS: dict[str, dict[str, float]] = {
     "unknown": {},  # Keine Modifikation
 }
 
+# Physically plausible lower decade bounds per source medium.
+_MATERIAL_DECADE_FLOOR: dict[str, int] = {
+    "vinyl": 1950,
+    "cassette": 1965,
+    "kassette": 1965,
+    "reel_tape": 1940,
+    "minidisc": 1990,
+    "cd_digital": 1980,
+    "dat": 1980,
+    "mp3_low": 1990,
+    "mp3_high": 1990,
+    "aac": 1990,
+}
+
 
 # ---------------------------------------------------------------------------
 # Ergebnis-Datenklassen
@@ -630,15 +644,25 @@ class MusikalischerGlobalplanDienst:
         reasoning: list[str] = []
 
         chain_materials: set[str] = set()
+        primary_chain_material = ""
         if isinstance(chain_info, dict):
             for _key in ("chain", "transfer_chain"):
                 _chain_raw = chain_info.get(_key)
                 if isinstance(_chain_raw, list):
                     chain_materials.update(str(x).strip().lower() for x in _chain_raw if x is not None)
+            for _key in ("primary", "primary_material"):
+                _value = chain_info.get(_key)
+                if isinstance(_value, str) and _value.strip():
+                    primary_chain_material = _value.strip().lower()
+                    break
             for _key in ("primary", "secondary", "tertiary", "primary_material"):
                 _value = chain_info.get(_key)
                 if isinstance(_value, str) and _value.strip():
                     chain_materials.add(_value.strip().lower())
+
+        if not primary_chain_material and chain_materials:
+            # Keep deterministic fallback when explicit primary is absent.
+            primary_chain_material = sorted(chain_materials)[0]
 
         is_tape_chain = any(m in {"tape", "cassette", "kassette", "reel_tape"} for m in chain_materials)
         is_lossy_chain = any(m in {"mp3_low", "mp3_high", "aac"} for m in chain_materials)
@@ -721,6 +745,17 @@ class MusikalischerGlobalplanDienst:
                 reasoning.append(
                     f"Lossy-Codec-Korrektur: Ära {_decade_before_fix9}er → 1975 "
                     f"(MP3/AAC-Bandbreite ist codec-bedingt, kein Ära-Indikator; §Fix9)"
+                )
+
+        if decade is not None:
+            medium_floor = _MATERIAL_DECADE_FLOOR.get(primary_chain_material, 0)
+            if medium_floor and decade < medium_floor:
+                decade_before_floor = int(decade)
+                decade = medium_floor
+                era_conf = max(era_conf, 0.60)
+                reasoning.append(
+                    f"Material-Floor: {primary_chain_material} erfordert mindestens {medium_floor}er "
+                    f"(war {decade_before_floor}er)"
                 )
 
         # Profil aus dezennium-nächstem Profil

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import warnings
 from pathlib import Path
 from typing import Any
 

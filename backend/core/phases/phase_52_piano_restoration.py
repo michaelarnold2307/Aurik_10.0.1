@@ -572,7 +572,7 @@ class PianoRestorationV1(PhaseInterface):
         noverlap = nperseg // 2
 
         # STFT
-        f, _t, Zxx = signal.stft(audio, fs=self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        f, _t, Zxx = signal.stft(audio, fs=self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary="even")
 
         # Enhance harmonic content (boost overtones)
         # Focus on piano string body (100-2000 Hz)
@@ -612,7 +612,7 @@ class PianoRestorationV1(PhaseInterface):
             logger.debug("Phase 52 inharmonic partial shaping skipped: %s", _inh_exc)
 
         # Inverse STFT
-        _, audio_enhanced = signal.istft(Zxx, fs=self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        _, audio_enhanced = signal.istft(Zxx, fs=self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary=True)
 
         # Trim to original length
         audio_enhanced = audio_enhanced[: len(audio)]

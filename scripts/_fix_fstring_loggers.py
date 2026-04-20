@@ -252,7 +252,7 @@ def convert_line(line: str) -> str | None:
     template, args = result
 
     # Reassemble call
-    all_args = [f'"{template}"'] + args
+    all_args = [f'"{template}"', *args]
     if rest:
         all_args.append(rest)
     args_str = ", ".join(all_args)

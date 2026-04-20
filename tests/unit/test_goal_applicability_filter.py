@@ -302,3 +302,91 @@ class TestStereoInput:
         r_m = evaluate_goal_applicability(mono, SR)
         assert ALWAYS_APPLICABLE.issubset(r_s.applicable)
         assert ALWAYS_APPLICABLE.issubset(r_m.applicable)
+
+
+# ---------------------------------------------------------------------------
+# 10. BassKraft-Regel — §2.32 bassarmes Material in Restoration-Modus
+# ---------------------------------------------------------------------------
+
+
+def _vocal_dominant(dur: float = 5.0, sr: int = SR) -> np.ndarray:
+    """Simulates a bright vocal-dominant recording with minimal bass (<0.015 ratio)."""
+    t = np.linspace(0, dur, int(dur * sr), endpoint=False)
+    # Vocal fundamentals 200-800 Hz dominant; minimal bass at 90 Hz
+    audio = (
+        0.60 * np.sin(2 * np.pi * 400 * t)
+        + 0.30 * np.sin(2 * np.pi * 800 * t)
+        + 0.04 * np.sin(2 * np.pi * 90 * t)  # ~1 % bass contribution
+    ).astype(np.float32)
+    return audio
+
+
+def _bass_heavy(dur: float = 5.0, sr: int = SR) -> np.ndarray:
+    """Simulates a rock/blues recording with strong bass (>>0.015 ratio)."""
+    t = np.linspace(0, dur, int(dur * sr), endpoint=False)
+    audio = (
+        0.50 * np.sin(2 * np.pi * 400 * t)
+        + 0.40 * np.sin(2 * np.pi * 90 * t)  # strong bass
+        + 0.30 * np.sin(2 * np.pi * 55 * t)  # sub-bass
+    ).astype(np.float32)
+    return audio
+
+
+class TestBassKraftApplicability:
+    """§2.32 BassKraft-Regel — physikalisch bassarmes Material."""
+
+    def test_bass_poor_restoration_marks_bass_kraft_inapplicable(self):
+        """Schlager/vocal-dominant in Restoration: bass_kraft must be N/A."""
+        audio = _vocal_dominant()
+        result = evaluate_goal_applicability(audio, SR, mode="restoration")
+        assert "bass_kraft" in result.inapplicable, (
+            "bass_kraft muss N/A sein für vocal-dominante Aufnahmen in Restoration-Modus"
+        )
+
+    def test_bass_poor_studio_2026_bass_kraft_stays_applicable(self):
+        """Studio 2026: Enhancement-Phasen können Bass hinzufügen — bass_kraft bleibt aktiv."""
+        audio = _vocal_dominant()
+        result = evaluate_goal_applicability(audio, SR, mode="studio_2026")
+        assert "bass_kraft" not in result.inapplicable, "bass_kraft darf in Studio-2026-Modus NICHT deaktiviert werden"
+
+    def test_bass_rich_restoration_bass_kraft_applicable(self):
+        """Rock/Blues mit starkem Bass: bass_kraft muss anwendbar bleiben."""
+        audio = _bass_heavy()
+        result = evaluate_goal_applicability(audio, SR, mode="restoration")
+        assert "bass_kraft" in result.applicable, (
+            "bass_kraft muss bei bass-reichen Aufnahmen in Restoration anwendbar sein"
+        )
+
+    def test_bass_poor_default_mode_marks_inapplicable(self):
+        """Kein mode-Argument → default 'restoration' → bass_kraft N/A bei bassarmem Signal."""
+        audio = _vocal_dominant()
+        result = evaluate_goal_applicability(audio, SR)
+        assert "bass_kraft" in result.inapplicable, "Default-Modus ist 'restoration' — Regel muss gelten"
+
+    def test_bass_kraft_inapplicable_reason_contains_ratio(self):
+        """Ablehnungsgrund muss bass-ratio-Wert enthalten für Diagnose."""
+        audio = _vocal_dominant()
+        result = evaluate_goal_applicability(audio, SR, mode="restoration")
+        if "bass_kraft" in result.inapplicable:
+            reason = result.reasons.get("bass_kraft", "")
+            assert "0.0" in reason, f"Ablehnungsgrund muss Ratio-Wert enthalten: {reason!r}"
+
+    def test_bass_kraft_rule_does_not_affect_always_applicable(self):
+        """ALWAYS_APPLICABLE-Goals dürfen nie durch bass_kraft-Regel betroffen werden."""
+        audio = _vocal_dominant()
+        result = evaluate_goal_applicability(audio, SR, mode="restoration")
+        for goal in ALWAYS_APPLICABLE:
+            assert goal in result.applicable, f"{goal} muss immer applicable sein"
+
+    def test_short_audio_no_crash(self):
+        """Zu kurze Datei (<1s) → kein Crash, kein false-positive bass_kraft N/A."""
+        audio = _sine(dur=0.5)  # 0.5 s — unter duration_s >= 1.0 Schutz
+        result = evaluate_goal_applicability(audio, SR, mode="restoration")
+        # Kein Crash; bass_kraft kann applicable oder inapplicable sein (andere Regeln)
+        assert isinstance(result, GoalApplicabilityResult)
+
+    def test_none_audio_no_crash(self):
+        """None audio → bass_kraft Regel nicht ausgelöst (kein crash)."""
+        result = evaluate_goal_applicability(audio=None, sr=SR, mode="restoration")
+        # Kein Crash; bass_kraft default applicable wenn kein Audio-Check möglich
+        assert "bass_kraft" not in result.inapplicable, "Ohne Audio-Input darf bass_kraft nicht pauschal N/A sein"

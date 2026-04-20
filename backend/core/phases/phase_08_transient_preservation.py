@@ -174,6 +174,79 @@ class TransientPreservationPhase(PhaseInterface):
         },
     }
 
+    @staticmethod
+    def _compute_transient_profile(
+        material_type: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, int]:
+        """Compute adaptive onset-analysis profile for transient processing."""
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _base_hop = {
+            "shellac": 512,
+            "wax_cylinder": 512,
+            "vinyl": 384,
+            "tape": 320,
+            "reel_tape": 320,
+            "cd_digital": 256,
+            "digital": 256,
+            "dat": 256,
+            "unknown": 384,
+        }.get(_mat, 384)
+
+        _base_fft = {
+            "shellac": 1024,
+            "wax_cylinder": 1024,
+            "vinyl": 2048,
+            "tape": 2048,
+            "reel_tape": 2048,
+            "cd_digital": 4096,
+            "digital": 4096,
+            "dat": 4096,
+            "unknown": 2048,
+        }.get(_mat, 2048)
+
+        if _qm in {"quality", "maximum", "studio_2026"}:
+            _fft = min(4096, int(_base_fft * 2))
+            _hop_adj = -64
+        elif _qm == "fast":
+            _fft = max(512, int(_base_fft // 2))
+            _hop_adj = +64
+        else:
+            _fft = int(_base_fft)
+            _hop_adj = 0
+
+        # Low restorability: finer temporal tracking (smaller hop)
+        _rest_adj = int(np.round(((_rest - 50.0) / 50.0) * 96.0))
+        _hop = int(np.clip(_base_hop + _hop_adj + _rest_adj, 128, 1024))
+
+        # Ensure power-of-two FFT in [512, 4096]
+        _fft = int(np.clip(_fft, 512, 4096))
+        if _fft & (_fft - 1):
+            _fft = 1 << int(np.round(np.log2(max(_fft, 1))))
+            _fft = int(np.clip(_fft, 512, 4096))
+
+        _superflux_w = {
+            "shellac": 4,
+            "wax_cylinder": 4,
+            "vinyl": 3,
+            "tape": 3,
+            "reel_tape": 3,
+            "cd_digital": 2,
+            "digital": 2,
+            "dat": 2,
+            "unknown": 3,
+        }.get(_mat, 3)
+
+        return {
+            "onset_hop": int(_hop),
+            "onset_fft": int(_fft),
+            "superflux_w": int(np.clip(_superflux_w, 2, 5)),
+        }
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_08_transient_preservation",
@@ -409,7 +482,9 @@ class TransientPreservationPhase(PhaseInterface):
             return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
 
         # Compute STFT
-        _f, _t, Zxx = signal.stft(mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length)
+        _f, _t, Zxx = signal.stft(
+            mono, fs=self.sample_rate, nperseg=n_fft, noverlap=n_fft - hop_length, boundary="even"
+        )
         magnitude = np.abs(Zxx)  # shape: (n_bins, n_frames)
 
         # Superflux: causal W-frame backward maximum reference (Böck & Widmer 2013)
@@ -561,7 +636,11 @@ class TransientPreservationPhase(PhaseInterface):
         Returns dict with 'micro','meso','macro','form' keys, each a float32 array
         of length == len(audio), values normalised to [0, 1].
         """
-        mono = audio if audio.ndim == 1 else np.mean(audio, axis=0 if audio.ndim == 2 and audio.shape[0] > audio.shape[1] else 1)
+        mono = (
+            audio
+            if audio.ndim == 1
+            else np.mean(audio, axis=0 if audio.ndim == 2 and audio.shape[0] > audio.shape[1] else 1)
+        )
         mono = np.asarray(mono, dtype=np.float32)
         sr = self.sample_rate
 

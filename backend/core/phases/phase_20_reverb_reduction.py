@@ -685,8 +685,15 @@ class ReverbReduction(PhaseInterface):
         _delta_d50 = 0.0
         _c80_down_lim, _c80_soft_lim, _c80_hard_lim, _d50_lim = self._adaptive_clarity_limits(kwargs)
         try:
-            _mono_in = audio[0] if audio.ndim == 2 else audio
-            _mono_out = reduced[0] if reduced.ndim == 2 else reduced
+            # §2.51 / axis-orientation: use channel-0 as 1D mono proxy.
+            # audio may be channel-major (2,N) or time-major (N,2).
+            if audio.ndim == 2:
+                _ch_maj = audio.shape[0] <= 2 and audio.shape[1] > audio.shape[0]
+                _mono_in = audio[0] if _ch_maj else audio[:, 0]
+                _mono_out = reduced[0] if _ch_maj else reduced[:, 0]
+            else:
+                _mono_in = audio
+                _mono_out = reduced
             _e80 = int(sample_rate * 0.080)
             _e50 = int(sample_rate * 0.050)
             if len(_mono_in) > _e80:

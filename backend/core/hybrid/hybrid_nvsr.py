@@ -478,13 +478,20 @@ def create_nvsr_config(quality_mode: str = "balanced", material_type: str = "unk
     Create NVSR config based on quality mode and material type.
 
     Args:
-        quality_mode: 'fast', 'balanced', or 'maximum'
+        quality_mode: 'fast', 'balanced', 'quality', 'maximum', 'restoration', or 'studio_2026'
         material_type: 'tape', 'vinyl', 'shellac', etc.
 
     Returns:
         NVSRConfig instance
     """
-    if quality_mode == "fast":
+    # Alias normalisation (§2.46 / §0a mode-differentiation)
+    _qm = (quality_mode or "balanced").lower()
+    if _qm == "restoration":
+        _qm = "balanced"
+    elif _qm == "studio_2026":
+        _qm = "maximum"
+
+    if _qm == "fast":
         return NVSRConfig(
             strategy=NVSRStrategy.DSP_ONLY,
             target_bandwidth_hz=20000,
@@ -493,7 +500,7 @@ def create_nvsr_config(quality_mode: str = "balanced", material_type: str = "unk
             blend_ratio=0.0,  # No AudioSR
             confidence_threshold=1.0,  # Always skip AudioSR
         )
-    elif quality_mode == "maximum":
+    elif _qm == "maximum":
         # Material-adaptive target bandwidth
         target_bw = {
             "shellac": 10000,  # Shellac limited to ~10 kHz restoration
@@ -509,7 +516,7 @@ def create_nvsr_config(quality_mode: str = "balanced", material_type: str = "unk
             blend_ratio=0.7,  # 70% AudioSR
             confidence_threshold=0.0,  # Never skip
         )
-    else:  # balanced
+    else:  # balanced / quality
         return NVSRConfig(
             strategy=NVSRStrategy.ADAPTIVE,
             target_bandwidth_hz=20000,

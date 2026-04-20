@@ -8,13 +8,14 @@ import sys
 
 sys.path.insert(0, ".")
 
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 
 # Find a test audio file
 test_audio_dir = Path("test_audio")
 if not test_audio_dir.exists():
-    print(f"test_audio dir not found")
+    print("test_audio dir not found")
     sys.exit(1)
 
 audio_files = list(test_audio_dir.glob("*.wav")) + list(test_audio_dir.glob("*.mp3"))
@@ -36,10 +37,11 @@ elif audio.ndim == 2 and audio.shape[0] < audio.shape[1]:
 
 print(f"Audio loaded: shape={audio.shape}, sr={sr}")
 
-# Run restoration
-from backend.core.unified_restorer_v3 import UnifiedRestorerV3, RestorationConfig
-from backend.core.performance_guard import QualityMode
 from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
+from backend.core.performance_guard import QualityMode
+
+# Run restoration
+from backend.core.unified_restorer_v3 import RestorationConfig, UnifiedRestorerV3
 
 original = audio.copy()
 original_mono = np.mean(original, axis=1) if original.ndim == 2 else original

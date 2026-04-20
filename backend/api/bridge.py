@@ -899,27 +899,29 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
             ),
         },
         # §0/§2.46 HF-Hallucination-Guard: Treffer-Aggregation für UI-Klangtreue-Hinweis
-        "hf_hallucination_guard": (
-            lambda _hfg=_meta.get("hf_hallucination_guard", {}): {
-                "guard_fired_count": int(_hfg.get("guard_fired_count", 0) or 0),
-                "phases_guarded": list(_hfg.get("phases_guarded", []) or []),
-                "max_delta_ratio": _safe_float(_hfg.get("max_delta_ratio", 0.0), 0.0),
-                "min_cap_hz": (
-                    _safe_float(_hfg.get("min_cap_hz", 0.0), 0.0)
-                    if isinstance(_hfg.get("min_cap_hz", None), (int, float))
-                    else None
-                ),
-            }
-        )(),
+        "hf_hallucination_guard": {
+            "guard_fired_count": int((_meta.get("hf_hallucination_guard") or {}).get("guard_fired_count", 0) or 0),
+            "phases_guarded": list((_meta.get("hf_hallucination_guard") or {}).get("phases_guarded", []) or []),
+            "max_delta_ratio": _safe_float(
+                (_meta.get("hf_hallucination_guard") or {}).get("max_delta_ratio", 0.0), 0.0
+            ),
+            "min_cap_hz": (
+                _safe_float((_meta.get("hf_hallucination_guard") or {}).get("min_cap_hz", 0.0), 0.0)
+                if isinstance((_meta.get("hf_hallucination_guard") or {}).get("min_cap_hz", None), (int, float))
+                else None
+            ),
+        },
         # §2.46b Spectral Tilt Drift Guard: Treffer-Aggregation für UI-Klangtreue-Hinweis
-        "spectral_tilt_guard": (
-            lambda _stg=_meta.get("spectral_tilt_guard", {}): {
-                "guard_fired_count": int(_stg.get("guard_fired_count", 0) or 0),
-                "phases_guarded": list(_stg.get("phases_guarded", []) or []),
-                "max_deviation_db_per_oct": _safe_float(_stg.get("max_deviation_db_per_oct", 0.0), 0.0),
-                "max_wet_cap_applied": _safe_float(_stg.get("max_wet_cap_applied", 0.0), 0.0),
-            }
-        )(),
+        "spectral_tilt_guard": {
+            "guard_fired_count": int((_meta.get("spectral_tilt_guard") or {}).get("guard_fired_count", 0) or 0),
+            "phases_guarded": list((_meta.get("spectral_tilt_guard") or {}).get("phases_guarded", []) or []),
+            "max_deviation_db_per_oct": _safe_float(
+                (_meta.get("spectral_tilt_guard") or {}).get("max_deviation_db_per_oct", 0.0), 0.0
+            ),
+            "max_wet_cap_applied": _safe_float(
+                (_meta.get("spectral_tilt_guard") or {}).get("max_wet_cap_applied", 0.0), 0.0
+            ),
+        },
         # §2.47b JND Sub-Threshold Phase Telemetrie — für Diagnose und UI
         "sub_threshold_phases": list(_meta.get("sub_threshold_phases", []) or []),
         # §2.47 ML-Fallback-Transparenz — Invariante: Kein ML-Failure darf Pipeline abbrechen

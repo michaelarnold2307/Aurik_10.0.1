@@ -238,8 +238,7 @@ class PluginLifecycleManager:
             ram_pct > _RAM_EVICT_THRESHOLD_PCT or free_mb < _MIN_FREE_MB_HARD
         ):
             logger.warning(
-                "PLM: Swap-Druck kritisch (%.0f %%) — erzwinge Eviction inaktiver Plugins "
-                "(RAM=%.0f %%, frei=%.0f MB)",
+                "PLM: Swap-Druck kritisch (%.0f %%) — erzwinge Eviction inaktiver Plugins (RAM=%.0f %%, frei=%.0f MB)",
                 swap_pct,
                 ram_pct,
                 free_mb,

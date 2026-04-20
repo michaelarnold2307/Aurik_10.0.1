@@ -220,7 +220,8 @@ _DEFAULTS_ALIAS: dict[str, str] = {
 }
 
 # Alle zu generierenden Material-Keys (deckt gp_memory_key-Werte aus genre_classifier.py ab)
-MATERIALS = list(_MATERIAL_GOAL_BASE.keys()) + [
+MATERIALS = [
+    *_MATERIAL_GOAL_BASE.keys(),
     "tape_std",
     "tape_stu",
     "vinyl_std",

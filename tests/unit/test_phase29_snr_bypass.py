@@ -4,10 +4,10 @@ Verifies that TapeHissReductionPhase skips OMLSA processing and returns
 the unmodified audio when the estimated SNR exceeds 35 dB.  This is the
 §2.47 RELEASE_MUST 'clean signal → dry bypass' invariant.
 """
+
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 SR = 48_000
 DURATION_S = 3  # seconds of audio in tests
@@ -41,8 +41,8 @@ class TestPhase29SnrBypass:
 
     def test_high_snr_signal_is_bypassed(self) -> None:
         """Clean audio (SNR ≈ 50 dB) must be returned as-is with snr_bypass=True."""
-        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
         from backend.core.defect_scanner import MaterialType
+        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
 
         audio = _clean_mono(snr_db=50.0)
         phase = TapeHissReductionPhase()
@@ -56,8 +56,8 @@ class TestPhase29SnrBypass:
 
     def test_low_snr_signal_is_not_bypassed(self) -> None:
         """Noisy audio (SNR ≈ 10 dB) must NOT receive the SNR bypass."""
-        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
         from backend.core.defect_scanner import MaterialType
+        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
 
         audio = _noisy_mono(snr_db=10.0)
         phase = TapeHissReductionPhase()
@@ -66,14 +66,12 @@ class TestPhase29SnrBypass:
 
         # snr_bypass key must either be absent or False
         meta = result.metadata or {}
-        assert not meta.get("snr_bypass", False), (
-            "Low-SNR audio must not be bypassed — tape hiss reduction should run"
-        )
+        assert not meta.get("snr_bypass", False), "Low-SNR audio must not be bypassed — tape hiss reduction should run"
 
     def test_snr_bypass_for_stereo(self) -> None:
         """The bypass must work identically for stereo (2D) audio."""
-        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
         from backend.core.defect_scanner import MaterialType
+        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
 
         mono = _clean_mono(snr_db=55.0)
         stereo = np.stack([mono, mono], axis=1)  # shape (N, 2)
@@ -88,8 +86,8 @@ class TestPhase29SnrBypass:
 
     def test_snr_bypass_rms_drop_is_zero(self) -> None:
         """Bypassed phase must report rms_drop_db=0.0 (§2.45a telemetry invariant)."""
-        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
         from backend.core.defect_scanner import MaterialType
+        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
 
         audio = _clean_mono(snr_db=45.0)
         phase = TapeHissReductionPhase()
@@ -101,8 +99,8 @@ class TestPhase29SnrBypass:
 
     def test_digital_source_skipped_before_snr_check(self) -> None:
         """CD_DIGITAL material is skipped before reaching the SNR estimation block."""
-        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
         from backend.core.defect_scanner import MaterialType
+        from backend.core.phases.phase_29_tape_hiss_reduction import TapeHissReductionPhase
 
         audio = _noisy_mono(snr_db=5.0)  # very noisy — would NOT trigger SNR bypass
         phase = TapeHissReductionPhase()
@@ -113,7 +111,5 @@ class TestPhase29SnrBypass:
         meta = result.metadata or {}
         # Should be digital-source skip (not snr_bypass)
         processing = meta.get("processing", "")
-        assert processing == "skipped", (
-            f"CD_DIGITAL should use 'skipped' path, got: {processing}"
-        )
+        assert processing == "skipped", f"CD_DIGITAL should use 'skipped' path, got: {processing}"
         assert not meta.get("snr_bypass", False), "CD_DIGITAL skip ≠ SNR bypass path"

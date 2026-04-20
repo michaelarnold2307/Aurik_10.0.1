@@ -775,9 +775,12 @@ def compute_perceptual_score(
         dtype=_np.float64,
     )
     ml = min(len(env_o), len(env_d))
-    if ml > 1:
+    if ml > 1 and _np.std(env_o[:ml]) > 1e-10 and _np.std(env_d[:ml]) > 1e-10:
         cov = _np.corrcoef(env_o[:ml], env_d[:ml])
-        transient_score = float(_np.clip((cov[0, 1] + 1.0) / 2.0, 0.0, 1.0))
+        _raw_corr = float(cov[0, 1])
+        transient_score = float(_np.clip((_raw_corr + 1.0) / 2.0, 0.0, 1.0)) if _np.isfinite(_raw_corr) else 0.5
+    elif ml > 1 and _np.std(env_o[:ml]) < 1e-10 and _np.std(env_d[:ml]) < 1e-10:
+        transient_score = 1.0  # Both silent — trivially matched
     else:
         transient_score = 0.5
 

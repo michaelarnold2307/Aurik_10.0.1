@@ -370,7 +370,7 @@ class SemanticAudioPhase(PhaseInterface):
             if _alloc_53("BEATs_phase53", 0.09):
                 try:
                     _beats_result = _beats_factory().get_tags(audio, sample_rate, top_k=15)
-                    _beats_result.tags
+                    _ = _beats_result.tags
                     _beats_model_used = _beats_result.model_used
                     _beats_top_k = _beats_result.top_k
                     # Speichere die ersten 32 Embedding-Dimensionen (Transport-safe)

@@ -267,6 +267,64 @@ class CrackleRemovalPhase(PhaseInterface):
             description="Professional crackle removal with texture preservation (comparable to iZotope RX De-crackle)",
         )
 
+    @staticmethod
+    def _compute_crackle_removal_profile(
+        material: str = "vinyl",
+        quality_mode: str | None = "balanced",
+        restorability: float = 50.0,
+    ) -> dict:
+        """Compute material- and quality-adaptive profile for crackle removal (§2.56).
+
+        Returns a dict with keys:
+          stft_nperseg_model   — FFT window for ML/spectral model [512, 4096], power of 2
+          stft_nperseg_interp  — FFT window for interpolation [128, 1024]
+          ar_order_texture     — AR model order for texture synthesis [16, 32]
+        """
+        qm = (quality_mode or "balanced").lower()
+
+        # Base STFT nperseg per material (model path)
+        _BASE_MODEL: dict[str, int] = {
+            "shellac": 2048,
+            "wax_cylinder": 2048,
+            "vinyl": 2048,
+            "tape": 1024,
+            "reel_tape": 1024,
+            "cassette": 1024,
+            "cd_digital": 512,
+            "mp3_low": 512,
+        }
+        nperseg_model = _BASE_MODEL.get(material, 2048)
+        if qm in ("quality", "maximum"):
+            nperseg_model = min(4096, nperseg_model * 2)
+        elif qm == "fast":
+            nperseg_model = max(512, nperseg_model // 2)
+
+        # Interpolation STFT window (smaller than model window)
+        nperseg_interp = max(128, nperseg_model // 4)
+        nperseg_interp = min(1024, nperseg_interp)
+
+        # AR order for texture synthesis: shellac/wax need higher order
+        _BASE_AR: dict[str, int] = {
+            "shellac": 28,
+            "wax_cylinder": 30,
+            "vinyl": 24,
+            "tape": 20,
+            "reel_tape": 20,
+            "cassette": 20,
+            "cd_digital": 16,
+        }
+        ar_order = _BASE_AR.get(material, 24)
+        if qm in ("quality", "maximum"):
+            ar_order = min(32, ar_order + 4)
+        elif qm == "fast":
+            ar_order = max(16, ar_order - 4)
+
+        return {
+            "stft_nperseg_model": nperseg_model,
+            "stft_nperseg_interp": nperseg_interp,
+            "ar_order_texture": ar_order,
+        }
+
     def _get_banquet_plugin(self):
         """Lazy load BANQUET Docker-Plugin (Fallback falls ONNX-Direktzugriff scheitert)."""
         if self._banquet_plugin is None:
@@ -353,11 +411,27 @@ class CrackleRemovalPhase(PhaseInterface):
             return audio  # Stille → unverändert zurück
         audio_norm = (audio_48k / max_val).astype(np.float32)
 
-        # --- ONNX-Inferenz ---
+        # --- ONNX-Inferenz mit Fixed-Shape-Chunking (§ml-plugin-SKILL) ---
         input_name = session.get_inputs()[0].name
-        audio_input = audio_norm[np.newaxis, :]  # [1, n_samples]
-        outputs = session.run(None, {input_name: audio_input})
-        restored_48k = (outputs[0].squeeze(0) * max_val).astype(np.float32)
+        _inp_shape = session.get_inputs()[0].shape
+        _fixed_len = (
+            _inp_shape[1] if (len(_inp_shape) > 1 and isinstance(_inp_shape[1], int) and _inp_shape[1] > 0) else None
+        )
+
+        if _fixed_len is not None and len(audio_norm) != _fixed_len:
+            # Chunking-Loop: zero-pad letzten Chunk
+            _chunks_out: list[np.ndarray] = []
+            for _ci in range(0, len(audio_norm), _fixed_len):
+                _chunk = audio_norm[_ci : _ci + _fixed_len]
+                if len(_chunk) < _fixed_len:
+                    _chunk = np.pad(_chunk, (0, _fixed_len - len(_chunk)))
+                _cout = session.run(None, {input_name: _chunk[np.newaxis, :]})[0].squeeze(0)
+                _chunks_out.append(_cout[: min(_fixed_len, len(audio_norm) - _ci)])
+            restored_48k = (np.concatenate(_chunks_out) * max_val).astype(np.float32)
+        else:
+            audio_input = audio_norm[np.newaxis, :]  # [1, n_samples]
+            outputs = session.run(None, {input_name: audio_input})
+            restored_48k = (outputs[0].squeeze(0) * max_val).astype(np.float32)
 
         # --- Zurück auf Original-SR resampeln ---
         if need_resample:
@@ -499,6 +573,7 @@ class CrackleRemovalPhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict09
+
             _get_plm_evict09().evict_for_phase("phase_09_crackle_removal")
         except Exception:
             pass
@@ -800,9 +875,9 @@ class CrackleRemovalPhase(PhaseInterface):
         sos_hp = butter(4, highpass_freq, btype="high", fs=self.sample_rate, output="sos")
         filtered = sosfilt(sos_hp, audio)
 
-        # AR(16)-Prädiktion (Autokorrelations-Methode, Burg-ähnlich)
-        # Spec §VERBOTEN: LPC < 16; Richtig: 30–40 @ 48 kHz (war: 4)
-        AR_ORDER = 16
+        # AR(30)-Prädiktion (Autokorrelations-Methode, Burg-ähnlich)
+        # Spec §VERBOTEN: LPC < 16; Richtig: 30–40 @ 48 kHz (war: 4, dann 16)
+        AR_ORDER = 30
         n_audio = len(filtered)
         residual = np.zeros(n_audio)
 
@@ -1005,7 +1080,7 @@ class CrackleRemovalPhase(PhaseInterface):
 
             # Average spectrum (background texture)
             nperseg = 2048
-            _f, _t, Zxx = signal.stft(clean_audio, self.sample_rate, nperseg=nperseg)
+            _f, _t, Zxx = signal.stft(clean_audio, self.sample_rate, nperseg=nperseg, boundary="even")
             avg_spectrum = np.mean(np.abs(Zxx), axis=1)
 
             return avg_spectrum
@@ -1104,8 +1179,12 @@ class CrackleRemovalPhase(PhaseInterface):
             before_seg = mono[before_start:gap_start]
             after_seg = mono[gap_end:after_end]
 
-            _, _, Z_before = signal.stft(before_seg, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
-            _, _, Z_after = signal.stft(after_seg, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+            _, _, Z_before = signal.stft(
+                before_seg, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary="even"
+            )
+            _, _, Z_after = signal.stft(
+                after_seg, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary="even"
+            )
 
             # Letzter/erster Kontext-Frame
             spec_end = np.abs(Z_before[:, -1])  # (F,)
@@ -1129,7 +1208,7 @@ class CrackleRemovalPhase(PhaseInterface):
                 Zxx_fill[:, fi] = mag * np.exp(1j * ph)
 
             # Konsistente Wiener-Glättung (simple: Magnitude aus Interpolation, Phase aus ISTFT)
-            _, audio_fill = signal.istft(Zxx_fill, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+            _, audio_fill = signal.istft(Zxx_fill, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary=True)
 
             # Länge auf gap_len trimmen/auffüllen
             if len(audio_fill) >= gap_len:

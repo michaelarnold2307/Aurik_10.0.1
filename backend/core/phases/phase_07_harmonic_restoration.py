@@ -320,6 +320,53 @@ class HarmonicRestorationPhase(PhaseInterface):
         },
     }
 
+    def _compute_harmonic_blend_profile(
+        self,
+        material_type: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive blend limits for DDSP harmonic fill (§2.54).
+
+        Output ranges are intentionally bounded to avoid over-processing and to
+        stay stable across materials and runtime modes.
+        """
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _base = {
+            "shellac": {"blend": 0.38, "wet": 0.28, "fill": 0.30},
+            "wax_cylinder": {"blend": 0.36, "wet": 0.26, "fill": 0.28},
+            "vinyl": {"blend": 0.46, "wet": 0.38, "fill": 0.42},
+            "tape": {"blend": 0.45, "wet": 0.36, "fill": 0.40},
+            "reel_tape": {"blend": 0.47, "wet": 0.39, "fill": 0.43},
+            "mp3_low": {"blend": 0.50, "wet": 0.42, "fill": 0.46},
+            "cd_digital": {"blend": 0.42, "wet": 0.30, "fill": 0.34},
+            "digital": {"blend": 0.42, "wet": 0.30, "fill": 0.34},
+            "unknown": {"blend": 0.44, "wet": 0.34, "fill": 0.38},
+        }.get(_mat, {"blend": 0.44, "wet": 0.34, "fill": 0.38})
+
+        _mode_adj = {
+            "fast": -0.06,
+            "balanced": 0.0,
+            "quality": +0.05,
+            "maximum": +0.08,
+            "restoration": +0.03,
+            "studio_2026": +0.08,
+        }.get(_qm, 0.0)
+        _rest_adj = ((_rest - 50.0) / 50.0) * 0.04
+
+        ddsp_blend_factor = float(np.clip(_base["blend"] + _mode_adj + _rest_adj, 0.30, 0.65))
+        ddsp_wet_cap = float(np.clip(_base["wet"] + 0.75 * _mode_adj + 0.75 * _rest_adj, 0.20, 0.55))
+        fill_gain_factor = float(np.clip(_base["fill"] + _mode_adj + _rest_adj, 0.25, 0.58))
+
+        return {
+            "ddsp_blend_factor": ddsp_blend_factor,
+            "ddsp_wet_cap": ddsp_wet_cap,
+            "fill_gain_factor": fill_gain_factor,
+        }
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_07_harmonic_restoration",

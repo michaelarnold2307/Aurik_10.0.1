@@ -162,7 +162,7 @@ def _repair_channel(
         # This propagates spectral structure from known frames into gaps, exploiting
         # the redundancy of the STFT frame (each sample contributes to multiple frames).
         _N_CONSISTENCY_ITER = 5
-        _known_mask = ~damaged_frames           # (n_time,) — True = undamaged
+        _known_mask = ~damaged_frames  # (n_time,) — True = undamaged
         _mag_anchor = mag[:, _known_mask].copy()  # original magnitudes for known frames
         _ph_anchor = phase[:, _known_mask].copy()  # original phases for known frames
 
@@ -251,6 +251,49 @@ class SpectralRepairPhase(PhaseInterface):
             description=self.description,
         )
 
+    @staticmethod
+    def _compute_threshold_runtime_profile(
+        material_key: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """§2.54 Adaptive threshold profile for spectral repair."""
+        _material = str(material_key or "unknown").strip().lower()
+        _aliases = {"restoration": "balanced", "studio_2026": "maximum"}
+        _mode = _aliases.get(
+            str(quality_mode or "balanced").strip().lower(), str(quality_mode or "balanced").strip().lower()
+        )
+
+        if any(token in _material for token in ("shellac", "wax_cylinder", "wire_recording", "lacquer_disc")):
+            strength_floor = 0.08
+            side_multiplier = 1.72
+        elif any(token in _material for token in ("vinyl", "tape", "reel_tape", "cassette")):
+            strength_floor = 0.10
+            side_multiplier = 1.90
+        else:
+            strength_floor = 0.14
+            side_multiplier = 2.18
+
+        _rest = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0))
+        _rest_norm = _rest / 100.0
+        strength_floor += (_rest_norm - 0.5) * 0.08
+        side_multiplier += (_rest_norm - 0.5) * 0.40
+
+        _mode_offsets = {
+            "fast": (0.03, 0.18),
+            "balanced": (0.00, 0.00),
+            "quality": (0.00, 0.00),
+            "maximum": (-0.02, -0.12),
+        }
+        _strength_off, _side_off = _mode_offsets.get(_mode, (0.0, 0.0))
+        strength_floor += _strength_off
+        side_multiplier += _side_off
+
+        return {
+            "strength_floor": float(np.clip(strength_floor, 0.06, 0.18)),
+            "side_multiplier": float(np.clip(side_multiplier, 1.60, 2.40)),
+        }
+
     def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> PhaseResult:
         """
         Repariert spektrale Artefakte via STFT Inpainting.
@@ -287,11 +330,16 @@ class SpectralRepairPhase(PhaseInterface):
                 metrics={"effective_strength": 0.0},
             )
 
-        threshold_factor = float(kwargs.get("threshold_factor", _THRESHOLD_FACTOR))
-        # §2.54 Material-adaptive threshold: degraded analog needs more aggressive repair
-        # (lower threshold_factor = more bins detected as holes = more repairs).
         _mat_50 = kwargs.get("material_type") or kwargs.get("material")
         _mat_str_50 = str(_mat_50).lower() if _mat_50 is not None else ""
+        threshold_factor = float(kwargs.get("threshold_factor", _THRESHOLD_FACTOR))
+        _runtime_profile_50 = self._compute_threshold_runtime_profile(
+            _mat_str_50,
+            str(kwargs.get("quality_mode", "balanced")),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
+        # §2.54 Material-adaptive threshold: degraded analog needs more aggressive repair
+        # (lower threshold_factor = more bins detected as holes = more repairs).
         _MATERIAL_THRESHOLD_CAPS_50: dict[str, float] = {
             "wax_cylinder": 2.0,
             "shellac": 2.5,
@@ -313,7 +361,7 @@ class SpectralRepairPhase(PhaseInterface):
                 threshold_factor = min(threshold_factor, _mv50)
                 break
         # Lower effective strength should make detection more conservative.
-        threshold_factor_eff = threshold_factor / max(effective_strength, 0.1)
+        threshold_factor_eff = threshold_factor / max(effective_strength, _runtime_profile_50["strength_floor"])
 
         # §PriorPhase-Guard: Protect HF bins from Pass-1 false-positive spike detection.
         # Phase_07 (harmonic restoration) and Phase_06 (SBR) synthesise content at
@@ -362,7 +410,10 @@ class SpectralRepairPhase(PhaseInterface):
             side = (audio[:, 0] - audio[:, 1]).astype(np.float64) * _inv_sqrt2
             repaired_mid, n_mid = _repair_channel(mid, sample_rate, threshold_factor_eff, _hf_protected_bin_start)
             repaired_side, n_side = _repair_channel(
-                side, sample_rate, threshold_factor_eff * 2.0, _hf_protected_bin_start
+                side,
+                sample_rate,
+                threshold_factor_eff * _runtime_profile_50["side_multiplier"],
+                _hf_protected_bin_start,
             )
             total_bins = n_mid + n_side
             left = (repaired_mid + repaired_side) * _inv_sqrt2
@@ -390,9 +441,13 @@ class SpectralRepairPhase(PhaseInterface):
         # §4.5 Psychoacoustic Masking Clamp — only repair where audible (§0 Primum non nocere)
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             repaired_audio = apply_psychoacoustic_masking_clamp(
-                audio, repaired_audio, sample_rate,
-                strength=effective_strength, mode="additive",
+                audio,
+                repaired_audio,
+                sample_rate,
+                strength=effective_strength,
+                mode="additive",
             )
         except Exception as _pm_exc:
             logger.debug("Phase50 masking clamp non-blocking: %s", _pm_exc)
@@ -409,6 +464,9 @@ class SpectralRepairPhase(PhaseInterface):
             metadata={
                 "threshold_factor": threshold_factor,
                 "threshold_factor_effective": threshold_factor_eff,
+                "threshold_runtime_profile": dict(_runtime_profile_50),
+                "strength_floor": float(_runtime_profile_50["strength_floor"]),
+                "side_multiplier": float(_runtime_profile_50["side_multiplier"]),
                 "n_channels": n_channels,
                 "stereo_mode": "ms_domain" if is_stereo else "mono",
                 "phase_locality_factor": phase_locality_factor,

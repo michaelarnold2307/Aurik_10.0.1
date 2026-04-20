@@ -473,7 +473,7 @@ class SongGoalFeedbackStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._entries: list[UserFeedbackEntry] = []
-        self._nudges: dict[str, float] = {g: 1.0 for g in ALL_GOAL_NAMES}
+        self._nudges: dict[str, float] = dict.fromkeys(ALL_GOAL_NAMES, 1.0)
         self._loaded = False
 
     def _persist_path(self) -> str:
@@ -487,7 +487,7 @@ class SongGoalFeedbackStore:
         try:
             p = self._persist_path()
             if _os.path.isfile(p):
-                with open(p, "r", encoding="utf-8") as fh:
+                with open(p, encoding="utf-8") as fh:
                     data = _json.load(fh)
                 if isinstance(data, dict):
                     nudges = data.get("nudges", {})
@@ -496,7 +496,7 @@ class SongGoalFeedbackStore:
                         if isinstance(v, (int, float)) and np.isfinite(v):
                             self._nudges[g] = float(np.clip(v, 0.50, 2.00))
                     entries_raw = data.get("entries", [])
-                    for e in entries_raw[-self.MAX_ENTRIES:]:
+                    for e in entries_raw[-self.MAX_ENTRIES :]:
                         try:
                             self._entries.append(UserFeedbackEntry(**e))
                         except Exception:
@@ -522,7 +522,7 @@ class SongGoalFeedbackStore:
                         "winning_goals": e.winning_goals,
                         "failing_goals": e.failing_goals,
                     }
-                    for e in self._entries[-self.MAX_ENTRIES:]
+                    for e in self._entries[-self.MAX_ENTRIES :]
                 ],
             }
             with open(p, "w", encoding="utf-8") as fh:
@@ -536,20 +536,16 @@ class SongGoalFeedbackStore:
             self._load()
             self._entries.append(entry)
             if len(self._entries) > self.MAX_ENTRIES:
-                self._entries = self._entries[-self.MAX_ENTRIES:]
+                self._entries = self._entries[-self.MAX_ENTRIES :]
 
             gradient_sign = +1.0 if entry.rating_thumbs_up else -1.0
 
             for g in entry.winning_goals:
                 if g in self._nudges:
-                    self._nudges[g] = float(np.clip(
-                        self._nudges[g] * (1.0 + self._EMA_LR * gradient_sign), 0.50, 2.00
-                    ))
+                    self._nudges[g] = float(np.clip(self._nudges[g] * (1.0 + self._EMA_LR * gradient_sign), 0.50, 2.00))
             for g in entry.failing_goals:
                 if g in self._nudges:
-                    self._nudges[g] = float(np.clip(
-                        self._nudges[g] * (1.0 - self._EMA_LR * gradient_sign), 0.50, 2.00
-                    ))
+                    self._nudges[g] = float(np.clip(self._nudges[g] * (1.0 - self._EMA_LR * gradient_sign), 0.50, 2.00))
 
             self._save()
             logger.info(
@@ -772,13 +768,13 @@ def estimate_goal_importance(
         #                          effect) — voice segregation from instrumentation is
         #                          the primary auditory scene analysis task in vocal music.
         _vocal_factor = 0.5 + 0.5 * float(np.clip(vocal_confidence, 0.0, 1.0))
-        weights["artikulation"]          *= 1.0 + 0.30 * _vocal_factor  # London (2012), Repp & Su (2013)
-        weights["emotionalitaet"]        *= 1.0 + 0.20 * _vocal_factor  # Juslin (2019)
-        weights["authentizitaet"]        *= 1.0 + 0.20 * _vocal_factor  # Kreiman & Sidtis (2011)
-        weights["tonal_center"]          *= 1.0 + 0.12 * _vocal_factor  # Marjieh et al. (2023)
-        weights["transparenz"]           *= 1.0 + 0.15 * _vocal_factor  # Bregman (1990), Toole (2018)
+        weights["artikulation"] *= 1.0 + 0.30 * _vocal_factor  # London (2012), Repp & Su (2013)
+        weights["emotionalitaet"] *= 1.0 + 0.20 * _vocal_factor  # Juslin (2019)
+        weights["authentizitaet"] *= 1.0 + 0.20 * _vocal_factor  # Kreiman & Sidtis (2011)
+        weights["tonal_center"] *= 1.0 + 0.12 * _vocal_factor  # Marjieh et al. (2023)
+        weights["transparenz"] *= 1.0 + 0.15 * _vocal_factor  # Bregman (1990), Toole (2018)
         weights["timbre_authentizitaet"] *= 1.0 + 0.10 * _vocal_factor  # Caclin et al. (2005)
-        weights["separation_fidelity"]   *= 1.0 + 0.10 * _vocal_factor  # Bregman (1990), McDermott (2009)
+        weights["separation_fidelity"] *= 1.0 + 0.10 * _vocal_factor  # Bregman (1990), McDermott (2009)
         reasons.append(f"vocal(conf={vocal_confidence:.2f})")
 
     # --- Step 5: Restorability adjustment ---
@@ -1226,9 +1222,9 @@ def estimate_goal_importance(
         if harmonic_to_noise_ratio_db > 5.0:
             _vocal_hnr_f = min((harmonic_to_noise_ratio_db - 5.0) / 15.0, 1.0)
             _vocal_hnr_f *= float(np.clip(vocal_confidence, 0.3, 1.0))
-            weights["timbre_authentizitaet"] *= 1.0 + 0.10 * _vocal_hnr_f   # Siedenburg & McAdams (2017)
-            weights["natuerlichkeit"]        *= 1.0 + 0.08 * _vocal_hnr_f
-            weights["separation_fidelity"]   *= 1.0 + 0.08 * _vocal_hnr_f   # McDermott (2009), Bregman (1990)
+            weights["timbre_authentizitaet"] *= 1.0 + 0.10 * _vocal_hnr_f  # Siedenburg & McAdams (2017)
+            weights["natuerlichkeit"] *= 1.0 + 0.08 * _vocal_hnr_f
+            weights["separation_fidelity"] *= 1.0 + 0.08 * _vocal_hnr_f  # McDermott (2009), Bregman (1990)
             if _vocal_hnr_f > 0.3:
                 reasons.append(f"interact_vocal×hnr({_vocal_hnr_f:.2f})")
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -137,8 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     print(
-        "Consolidated status: final_ready=%s | release_ready=%s | runtime_compliance_ok=%s"
-        % (report.get("final_ready"), report.get("release_ready"), report.get("runtime_compliance_ok"))
+        f"Consolidated status: final_ready={report.get('final_ready')} | release_ready={report.get('release_ready')} | runtime_compliance_ok={report.get('runtime_compliance_ok')}"
     )
     if report.get("reasons"):
         print("Reasons:")

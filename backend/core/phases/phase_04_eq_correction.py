@@ -478,6 +478,52 @@ class EQCorrectionPhase(PhaseInterface):
                 "london_decca_1953": self.LONDON_DECCA_1953,
             }
 
+    @staticmethod
+    def _compute_eq_correction_profile(
+        material_type: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, int]:
+        """Compute lightweight analysis profile for EQ correction planning.
+
+        The FFT size is material- and quality-adaptive, bounded to [1024, 8192],
+        and always a power-of-two.
+        """
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _ = float(restorability_score)  # Advisory only for API compatibility.
+
+        _base_fft_by_material = {
+            "wax_cylinder": 1024,
+            "shellac": 2048,
+            "vinyl": 4096,
+            "tape": 4096,
+            "reel_tape": 4096,
+            "cd_digital": 8192,
+            "digital": 8192,
+            "dat": 8192,
+        }
+        _base = int(_base_fft_by_material.get(_mat, 4096))
+
+        _qm_scale = {
+            "fast": 0.5,
+            "balanced": 1.0,
+            "quality": 2.0,
+            "maximum": 2.0,
+            "restoration": 1.0,
+            "studio_2026": 2.0,
+        }.get(_qm, 1.0)
+
+        _fft = int(_base * _qm_scale)
+        _fft = int(np.clip(_fft, 1024, 8192))
+
+        # Ensure power-of-two.
+        if _fft & (_fft - 1):
+            _fft = 1 << int(np.round(np.log2(max(_fft, 1))))
+            _fft = int(np.clip(_fft, 1024, 8192))
+
+        return {"analysis_fft_size": int(_fft)}
+
     def process(
         self, audio: np.ndarray, material_type: str = "unknown", auto_analyze: bool = True, **kwargs
     ) -> PhaseResult:

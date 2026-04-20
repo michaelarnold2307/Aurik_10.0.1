@@ -44,8 +44,11 @@ def get_accent_colors(mode: str):
 # ── Bridge: einzige erlaubte Schnittstelle zu backend/core/ (§11 Spec 08) ──
 # Frontend importiert Core-Module AUSSCHLIEßLICH über diese Bridge.
 try:
-    from backend.api.bridge import (
+    from backend.api.bridge import (  # type: ignore[assignment]
         PreAnalysisResult as _bridge_PreAnalysisResult,
+    )
+    from backend.api.bridge import (
+        build_export_quality_gate_payload as _build_export_quality_gate_payload,
     )
     from backend.api.bridge import (
         cache_defect_result,
@@ -65,9 +68,6 @@ try:
     )
     from backend.api.bridge import (
         clear_medium_cache as _bridge_clear_medium_cache,
-    )
-    from backend.api.bridge import (
-        build_export_quality_gate_payload as _build_export_quality_gate_payload,
     )
     from backend.api.bridge import (
         export_guard as _export_guard,
@@ -133,7 +133,7 @@ try:
         get_restorer_classes as _bridge_get_restorer_classes,
     )
     from backend.api.bridge import (
-        get_save_checkpoint_fn as _bridge_get_save_checkpoint_fn,  # type: ignore[assignment]
+        get_save_checkpoint_fn as _bridge_get_save_checkpoint_fn,
     )
     from backend.api.bridge import (
         get_unified_restorer_v3_instance as _bridge_get_unified_restorer_v3_instance,
@@ -1165,6 +1165,7 @@ class BatchProcessingThread(QThread):
         # Läuft nur wenn ROCm verfügbar; ist auf CPU-only und DirectML ein No-op.
         try:
             from backend.api.bridge import warmup_rocm as _warmup_rocm
+
             _warmup_rocm()
         except Exception as _wup_exc:
             logger.debug("ROCm warmup im BatchProcessingThread fehlgeschlagen (unkritisch): %s", _wup_exc)
@@ -1178,11 +1179,7 @@ class BatchProcessingThread(QThread):
             _status = str(payload.get("status", "") or "")
             _active = tuple(sorted(str(x) for x in (payload.get("_active_defects") or [])))
             _numerics = tuple(
-                sorted(
-                    (k, round(float(v), 4))
-                    for k, v in payload.items()
-                    if isinstance(v, (int, float))
-                )
+                sorted((k, round(float(v), 4)) for k, v in payload.items() if isinstance(v, (int, float)))
             )
             _sig = (_status, _active, _numerics)
             if _sig == _last_defect_emit_sig:
@@ -2069,11 +2066,15 @@ class BatchProcessingThread(QThread):
                         return  # Keine UI-Aktualisierung für Metadaten-Nachricht
                     if msg.startswith("__carrier_chain__:"):
                         _payload = msg.split(":", 1)[1]
-                        _chain_keys = [str(_part).strip().lower() for _part in _payload.split("|") if str(_part).strip()]
+                        _chain_keys = [
+                            str(_part).strip().lower() for _part in _payload.split("|") if str(_part).strip()
+                        ]
                         if len(_chain_keys) >= 2:
-                            def _apply_chain(_keys=list(_chain_keys)):
+                            _apply_chain_keys = list(_chain_keys)
+
+                            def _apply_chain():
                                 try:
-                                    self._apply_authoritative_chain_display(_keys)
+                                    self._apply_authoritative_chain_display(_apply_chain_keys)
                                 except Exception as _chain_exc:
                                     logger.debug("Live-Kettenanzeige fehlgeschlagen: %s", _chain_exc)
 
@@ -2700,7 +2701,9 @@ class BatchProcessingThread(QThread):
                         "quality_gate_degradation_status": str(_eq_payload.get("degradation_status", "ok")),
                         "quality_gate_fail_reason": str(_eq_payload.get("fail_reason", "")),
                         "quality_gate_recovery_attempted": str(bool(_eq_payload.get("recovery_attempted", False))),
-                        "quality_gate_best_possible_reached": str(bool(_eq_payload.get("best_possible_reached", False))),
+                        "quality_gate_best_possible_reached": str(
+                            bool(_eq_payload.get("best_possible_reached", False))
+                        ),
                         "fallback_quality_floor_status": str(
                             (_eq_payload.get("fallback_quality_floor", {}) or {}).get("status", "passed")
                         ),
@@ -6018,14 +6021,14 @@ class WaveformWidget(QWidget):
         _text = f"Pegel: {_sign}{_delta:.1f} dB"
 
         if _delta < -12.0:
-            _br, _bg_b, _bb = 160, 60, 60          # red background
-            _tr, _tg, _tb = 255, 190, 190           # red text
+            _br, _bg_b, _bb = 160, 60, 60  # red background
+            _tr, _tg, _tb = 255, 190, 190  # red text
         elif _delta < -2.0:
-            _br, _bg_b, _bb = 140, 90, 20           # amber background
-            _tr, _tg, _tb = 255, 210, 90            # amber text
+            _br, _bg_b, _bb = 140, 90, 20  # amber background
+            _tr, _tg, _tb = 255, 210, 90  # amber text
         else:
-            _br, _bg_b, _bb = 40, 90, 160           # blue background
-            _tr, _tg, _tb = 130, 200, 255           # blue text
+            _br, _bg_b, _bb = 40, 90, 160  # blue background
+            _tr, _tg, _tb = 130, 200, 255  # blue text
 
         painter.save()
         _font = QFont(self.font().family(), 7, QFont.Weight.Bold)
@@ -13058,10 +13061,7 @@ class ModernMainWindow(QMainWindow):
                 _svg = os.path.join(_ci_icons_dir, f"{icon_key}.svg")
                 _png = os.path.join(_ci_icons_dir, f"{icon_key}.png")
                 _p = _svg if os.path.isfile(_svg) else _png
-                return (
-                    f'<img src="file:///{_p}" width="22" height="22" '
-                    f'style="vertical-align:middle;">&nbsp;{label}'
-                )
+                return f'<img src="file:///{_p}" width="22" height="22" style="vertical-align:middle;">&nbsp;{label}'
             except (OSError, TypeError):
                 return label
 
@@ -13223,22 +13223,18 @@ class ModernMainWindow(QMainWindow):
                     if not _SD_AVAILABLE or _sd is None:
                         return
                     _dev = _sd.query_devices(kind="output")
-                    _dev_sr = (
-                        int(round(float(_dev.get("default_samplerate", 0.0))))
-                        if isinstance(_dev, dict)
-                        else 0
-                    )
+                    _dev_sr = int(round(float(_dev.get("default_samplerate", 0.0)))) if isinstance(_dev, dict) else 0
                     import math as _math
+
                     # Prepare float32 contiguous data
                     data = np.ascontiguousarray(_w_audio, dtype=np.float32)
                     if data.ndim == 1:
                         data = data.reshape(-1, 1)
                     if _dev_sr > 0 and abs(_dev_sr - _w_sr) >= 2000:
                         from scipy.signal import resample_poly as _rp_w
+
                         _g = _math.gcd(_w_sr, _dev_sr)
-                        data = _rp_w(
-                            data, _dev_sr // _g, _w_sr // _g, axis=0
-                        ).astype(np.float32, copy=False)
+                        data = _rp_w(data, _dev_sr // _g, _w_sr // _g, axis=0).astype(np.float32, copy=False)
                         cached_sr = _dev_sr
                     else:
                         cached_sr = _w_sr
@@ -13249,7 +13245,9 @@ class ModernMainWindow(QMainWindow):
                     _w_self._playback_device_cache = (id(_w_audio), _w_sr, cached_sr, data)
                     logger.debug(
                         "Playback warmup done: source_sr=%d → device_sr=%d, shape=%s",
-                        _w_sr, cached_sr, data.shape,
+                        _w_sr,
+                        cached_sr,
+                        data.shape,
                     )
                 except Exception as _exc:
                     logger.debug("Playback warmup cache failed (non-blocking): %s", _exc)
@@ -14059,7 +14057,7 @@ class ModernMainWindow(QMainWindow):
             # cache.  Creating a copy here would kill the cache (new id()
             # on every call → full re-normalise + resample → GUI freeze +
             # GIL contention → audible stuttering under ML load).
-            if audio is None or (hasattr(audio, 'size') and audio.size == 0):
+            if audio is None or (hasattr(audio, "size") and audio.size == 0):
                 if hasattr(self, "status_text"):
                     self._apply_status_text_style("error")
                     self.status_text.setText(
@@ -14084,9 +14082,7 @@ class ModernMainWindow(QMainWindow):
                 logger.warning("StreamingAudioPlayer.play() returned False — device unavailable?")
                 if hasattr(self, "status_text"):
                     self._apply_status_text_style("error")
-                    self.status_text.setText(
-                        "⚠ Wiedergabe nicht möglich: Audio-Ausgabegerät prüfen."
-                    )
+                    self.status_text.setText("⚠ Wiedergabe nicht möglich: Audio-Ausgabegerät prüfen.")
                 return
 
             # Mark as "playing" for UI state checks
@@ -14158,23 +14154,17 @@ class ModernMainWindow(QMainWindow):
                         if _sd is not None:
                             _dev = _sd.query_devices(kind="output")
                             _dev_sr = (
-                                int(round(float(_dev.get("default_samplerate", 0.0))))
-                                if isinstance(_dev, dict)
-                                else 0
+                                int(round(float(_dev.get("default_samplerate", 0.0)))) if isinstance(_dev, dict) else 0
                             )
                             if _dev_sr > 0 and abs(_dev_sr - play_sr) >= 2000:
                                 from scipy.signal import resample_poly as _rp
 
                                 _g = math.gcd(play_sr, _dev_sr)
-                                _rs = _rp(data, _dev_sr // _g, play_sr // _g, axis=0).astype(
-                                    np.float32, copy=False
-                                )
+                                _rs = _rp(data, _dev_sr // _g, play_sr // _g, axis=0).astype(np.float32, copy=False)
                                 data = np.ascontiguousarray(_rs, dtype=np.float32)
                                 play_sr = _dev_sr
                             if getattr(self, "_playback_warmup_token", -1) >= 0:
-                                self._playback_device_cache = (
-                                    id(prepared_audio), sr, play_sr, data
-                                )
+                                self._playback_device_cache = (id(prepared_audio), sr, play_sr, data)
                     except Exception as exc:
                         logger.debug("A/B playback device-rate adaption skipped: %s", exc)
 
@@ -14288,7 +14278,9 @@ class ModernMainWindow(QMainWindow):
             _dur = _sp.duration_seconds
         else:
             # ── Legacy-Fallback: time.monotonic()-basiert ─────────────────────
-            _thread_alive = hasattr(self, "_play_thread") and self._play_thread is not None and self._play_thread.is_alive()
+            _thread_alive = (
+                hasattr(self, "_play_thread") and self._play_thread is not None and self._play_thread.is_alive()
+            )
             if not _thread_alive:
                 self._on_playback_ended_gui()
                 return
@@ -14360,7 +14352,9 @@ class ModernMainWindow(QMainWindow):
             if _sp is not None and _sp.available:
                 _playing = _sp.is_playing
             else:
-                _playing = hasattr(self, "_play_thread") and self._play_thread is not None and self._play_thread.is_alive()
+                _playing = (
+                    hasattr(self, "_play_thread") and self._play_thread is not None and self._play_thread.is_alive()
+                )
             self.btn_stop_playback.setEnabled(_playing)
 
     def _ab_sync_toggle(self) -> None:
@@ -15495,8 +15489,7 @@ class ModernMainWindow(QMainWindow):
                             return
                         _dev = _sd.query_devices(kind="output")
                         _dev_sr = (
-                            int(round(float(_dev.get("default_samplerate", 0.0))))
-                            if isinstance(_dev, dict) else 0
+                            int(round(float(_dev.get("default_samplerate", 0.0)))) if isinstance(_dev, dict) else 0
                         )
                         data = np.ascontiguousarray(_w_audio, dtype=np.float32)
                         if data.ndim == 1:
@@ -15504,7 +15497,9 @@ class ModernMainWindow(QMainWindow):
                         cached_sr = _w_sr
                         if _dev_sr > 0 and abs(_dev_sr - _w_sr) >= 2000:
                             import math as _mw
+
                             from scipy.signal import resample_poly as _rpw
+
                             _g = _mw.gcd(_w_sr, _dev_sr)
                             data = _rpw(data, _dev_sr // _g, _w_sr // _g, axis=0).astype(np.float32, copy=False)
                             cached_sr = _dev_sr
@@ -16279,9 +16274,7 @@ class ModernMainWindow(QMainWindow):
                 rest_sr = int(_q_result["sr"])
                 return _normalize_audio(rest_audio), rest_sr
             raise RuntimeError(
-                _q_result.get("error", "load_audio_file failed")
-                if _q_result
-                else "load_audio_file returned None"
+                _q_result.get("error", "load_audio_file failed") if _q_result else "load_audio_file returned None"
             )
         except Exception:
             if restoration_result is not None and hasattr(restoration_result, "audio"):
@@ -16856,7 +16849,9 @@ class ModernMainWindow(QMainWindow):
         if phase_gate_notes:
             banner_sections.append("⚠️  Einige Verarbeitungsschritte wurden angepasst, um den Klang zu schützen.")
         if ceiling_reached:
-            banner_sections.append("🏆  Das Beste aus dieser Aufnahme wurde herausgeholt — physikalische Grenzen erreicht.")
+            banner_sections.append(
+                "🏆  Das Beste aus dieser Aufnahme wurde herausgeholt — physikalische Grenzen erreicht."
+            )
 
         fidelity_parts: list[str] = []
         rc_ceiling = float(xp_recovery_certainty.get("recoverability_ceiling", 0.0) or 0.0)
@@ -16873,7 +16868,7 @@ class ModernMainWindow(QMainWindow):
                 f"~{ceil_pct}% Klangpotential rekonstruierbar" + (f" · Konfidenz: {band_de}" if band_de else "")
             )
         hf_fires = int(xp_hf_guard.get("guard_fired_count", 0) or 0)
-        hf_min_cap = xp_hf_guard.get("min_cap_hz", None)
+        hf_min_cap = xp_hf_guard.get("min_cap_hz")
         if hf_fires > 0 and isinstance(hf_min_cap, (int, float)) and hf_min_cap > 0:
             hf_khz = f"{hf_min_cap / 1000:.0f}"
             fidelity_parts.append(f"HF-Limite ≤{hf_khz} kHz eingehalten ({hf_fires}×)")
@@ -17058,7 +17053,9 @@ class ModernMainWindow(QMainWindow):
                     self.defect_count_live_label.setVisible(True)
             else:
                 if has_problem:
-                    summary_lines.append(f"⚠️  Restaurierung mit Einschränkungen\n   {fail_reason or degradation_status}")
+                    summary_lines.append(
+                        f"⚠️  Restaurierung mit Einschränkungen\n   {fail_reason or degradation_status}"
+                    )
                 else:
                     summary_lines.append("✅  Restaurierung erfolgreich abgeschlossen")
                     summary_lines.append("🛡️  Klangcharakter und Originalbalance wurden dabei bewusst geschützt")

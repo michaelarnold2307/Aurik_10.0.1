@@ -1,0 +1,745 @@
+# Spec §09 — Globale Kalibrierungs-Matrix für reproduzierbare Optimalwerte
+
+**Aurik 9.11.14+ | Gültig ab: 18. April 2026 | Stand: 19. April 2026 (v9.11.14+) | Normativ übergeordnet über einzelne Phase-Konfigurationen**
+
+---
+
+## Implementierungsstatus
+
+| Symbol | Bedeutung |
+|---|---|
+| ✅ | Implementiert, getestet, produktionsstabil |
+| 🔲 | Geplant / Roadmap |
+
+| Komponente | Pfad | Status |
+|---|---|---|
+| `CANONICAL_THRESHOLDS_RESTORATION/STUDIO2026` | `backend/core/calibration_matrix.py` | ✅ |
+| `estimate_song_goal_targets` (Pipeline, SongGoalTargets) | `backend/core/studio_goal_targets.py` | ✅ |
+| `estimate_song_goal_targets` (Convenience, dict) | `backend/core/calibration_matrix.py` | ✅ |
+| `predict_quality_score` | `backend/core/calibration_matrix.py` | ✅ |
+| `compute_adaptive_drift_tolerance` | `backend/core/calibration_matrix.py` | ✅ |
+| `compute_tcci`, `compute_ibs` | `backend/core/calibration_matrix.py` | ✅ |
+| `get_phase_strength_range` | `backend/core/calibration_matrix.py` | 🔲 |
+| UV3-Integration (SongGoalTargets → PMGG) | `backend/core/unified_restorer_v3.py` | ✅ |
+
+---
+
+## Übersicht
+
+Dieses Dokument ist die **Single Source of Truth** für alle Aurik-globalen Parameter, die garantieren, dass jeder Song reproduzierbar zum ursprünglichen Studio-Klang am Aufnahmetag restauriert wird.
+
+**Eingaben** (determiniert die Kalibrierung):
+
+1. `material_type` (primäres Trägermedium)
+2. `era_decade` (Aufnahmezeit)
+3. `genre_label` (Musikstil)
+4. `restorability_score` (0–100: wie stark degradiert?)
+5. `transfer_chain` (Multipel-Kopie-Stufen)
+6. `is_studio_2026` (Mode: Restoration oder Studio 2026)
+
+**Ausgaben** (die Pipeline wird damit kalibriert):
+
+- Goal-Schwellwerte pro Mode (14 Goals)
+- Per-Song Goal-Targets (statt nur Floors)
+- Phase-Strength-Ranges material-adaptiv
+- Gate-Toleranzen (PMGG, CIG, AFG)
+- ML-Budget-Grenzen
+- Expected Quality Score (vorhersagbar)
+
+---
+
+## §09.1 Kanonische Musical-Goal-Schwellwerte
+
+### §09.1a RESTORATION-Mode Schwellwerte (Spec §1.2a)
+
+Ziel: Klang zum Original-Studio-Monitor-Tag zurück.
+
+```python
+CANONICAL_THRESHOLDS_RESTORATION = {
+    # P1: Primär (Hartregeln, Minimal-Intervention §2.45)
+    "natuerlichkeit":              0.90,    # keine unnaturalen Artefakte
+    "authentizitaet":              0.88,    # Original-Character bewahrt
+
+    # P2: Kern-Klangtreue
+    "tonalcenter":                 0.95,    # Tonalität präzise
+    "timbre_authentizitaet":       0.87,    # Klangfarbe-Originalität
+    "artikulation":                0.85,    # Transient-Klarheit
+
+    # P3: Musikalische Kohärenz
+    "emotionalitaet":              0.82,    # Gefühlsausdruck erhalten
+    "mikrodynamik":                0.88,    # Feindy-Struktur
+    "groove":                      0.83,    # Rhythmische Intention
+
+    # P4: Transparenz-Komponenten
+    "transparenz":                 0.82,    # Spektral-Klarheit
+    "waerme":                      0.75,    # HF-Wärme (Material-Charakter)
+    "basskraft":                   0.78,    # Subharmonische Kraft
+    "separation_fidelity":         0.78,    # L/R Koherenz
+
+    # P5: Räumlichkeit (optional bei Mono-Quelle)
+    "brillanz":                    0.78,    # HF-Präsenz
+    "raumtiefe":                   0.70,    # Spatial-Tiefe
+}
+```
+
+### §09.1b STUDIO 2026-Mode Schwellwerte (Spec §1.2b)
+
+Ziel: Bestmöglicher modernstuido-Klang (Enhancement statt nur Restoration).
+
+```python
+CANONICAL_THRESHOLDS_STUDIO2026 = {
+    # Erhöhte Ansprüche wegen aktiver Enhancement
+    "natuerlichkeit":              0.92,    # Muss natürlich bleiben trotz Enhancement
+    "authentizitaet":              0.90,    # Künstler-Intention bewahrt
+
+    "tonalcenter":                 0.96,
+    "timbre_authentizitaet":       0.89,
+    "artikulation":                0.87,
+
+    "emotionalitaet":              0.84,
+    "mikrodynamik":                0.90,    # Enhanced, aber nicht künstlich
+    "groove":                      0.85,
+
+    "transparenz":                 0.85,    # Moderne Klarheit
+    "waerme":                      0.78,
+    "basskraft":                   0.80,
+    "separation_fidelity":         0.80,
+
+    "brillanz":                    0.82,    # Modern glänzend, aber nicht hart
+    "raumtiefe":                   0.74,    # Enhanced Spatial
+}
+```
+
+---
+
+## §09.2 Material-adaptive Goal-Targets (§2.56) ✅
+
+Nicht alle Songs sollten zu denselben Schwellwerten führen. Ein 1920er-Shellac-Aufnahme kann unmöglich 0.78 Brillanz haben (technische Grenze 8 kHz, Rolloff). Ein 1990er CD-Pop sollte 0.87+ Brillanz haben.
+
+### §09.2 Zwei-Ebenen-API (normativ)
+
+| Ebene | Modul | Rückgabe | Einsatz |
+|---|---|---|---|
+| **Pipeline** | `backend/core/studio_goal_targets.py` | `SongGoalTargets` (frozen dataclass mit `.targets`, `.confidence`, `.derived`) | UV3 → PMGG `wrap_phase(..., goal_targets=result.targets, goal_targets_confidence=result.confidence)` |
+| **Convenience** | `backend/core/calibration_matrix.py` | `dict[str, float]` | Pre-Analysis-Preview, Tests, Bridge/UI, einfache Scores |
+
+**Invariante**: `studio_goal_targets.estimate_song_goal_targets` ist die Pipeline-Referenz. Die Convenience-API darf nicht für PMGG-Integration oder Phase-Steering eingesetzt werden — dort fehlen Confidence, IBS und Chain-Depth-Pullback.
+
+**Algorithmus**: `target[goal] = floor + kappa × bias + weight_shift`
+
+Wobei:
+
+- `floor` = CANONICAL_THRESHOLDS[goal]
+- `kappa` = 0.45 (Restoration) / 0.65 (Studio 2026), skaliert mit Restorability
+- `bias` = Summe Era-Bias + Material-Bias + Genre-Bias (siehe §09.2a–c)
+- `weight_shift` = `(goal_weight − 1.0) × 0.06` aus §2.56
+
+### §09.2a Era-basierte Goal-Biases (subtrahiert/addiert zum Canonical Floor)
+
+```python
+# 1920–1949 (Shellac, WaxCylinder, earlywire)
+ERA_BIAS_1920S = {
+    "brillanz":     -0.28,   # 8 kHz Rolloff ist Material-Realität
+    "transparenz":  -0.18,
+    "raumtiefe":    -0.14,   # Mono oder Pseudo-Stereo
+    "waerme":       +0.14,   # Warm-ätzender Sound ist Charakter
+    "authentizitaet": +0.10,
+    "natuerlichkeit": +0.08,
+}
+
+# 1950–1969 (Vinyl, earlytape, Radiobroadcast)
+ERA_BIAS_1950S = {
+    "brillanz":     -0.14,   # Vinyl-Rolloff ~10 kHz
+    "transparenz":  -0.08,
+    "waerme":       +0.10,
+    "authentizitaet": +0.08,
+}
+
+# 1970–1989 (Reel-Tape, Cassette, Early-Digital)
+ERA_BIAS_1970S = {
+    "brillanz":     +0.04,
+    "transparenz":  +0.04,
+    "waerme":       +0.02,
+}
+
+# 1990+ (CD, DAT, Digital)
+ERA_BIAS_1990S = {
+    "brillanz":     +0.10,   # Digital hat volle BW
+    "transparenz":  +0.10,
+    "artikulation": +0.06,
+    "waerme":       -0.04,   # Digitale Kälte
+}
+```
+
+### §09.2b Material-basierte Goal-Biases
+
+```python
+# Shellac, Wax, Wire (ultra-degradiert)
+MATERIAL_BIAS_ULTRA_ANALOG = {
+    "brillanz":     -0.24,
+    "transparenz":  -0.12,
+    "waerme":       +0.10,
+    "authentizitaet": +0.10,
+}
+
+# Vinyl, Tape, Cassette (normal-analog)
+MATERIAL_BIAS_ANALOG = {
+    "waerme":       +0.10,
+    "brillanz":     -0.06,
+    "authentizitaet": +0.08,
+}
+
+# CD, Digital, Streaming (clean)
+MATERIAL_BIAS_DIGITAL = {
+    "transparenz":  +0.08,
+    "artikulation": +0.06,
+    "brillanz":     +0.06,
+}
+```
+
+### §09.2c Genre-basierte Goal-Biases
+
+```python
+GENRE_BIAS_KLASSIK = {
+    "raumtiefe":    +0.18,   # Saalakustik zentral
+    "natuerlichkeit": +0.12,
+    "mikrodynamik": +0.10,
+    "brillanz":     -0.08,   # Wärmere Interpretation
+}
+
+GENRE_BIAS_JAZZ = {
+    "waerme":       +0.12,
+    "natuerlichkeit": +0.10,
+    "authentizitaet": +0.10,
+    "transparenz":  -0.04,
+}
+
+GENRE_BIAS_POP = {
+    "transparenz":  +0.08,
+    "artikulation": +0.08,
+    "brillanz":     +0.08,    # Pop modern/glänzend
+}
+```
+
+---
+
+## §09.3 Material-adaptive Strength-Ranges pro Phase (§2.47)
+
+Die Auswahl der Phase-Stärke hängt ab von:
+
+1. Material
+2. Restorability (0–100)
+3. Defekt-Severity an der Phase
+4. GlobalPlan-Vorschlag (§GP)
+
+### §09.3a Beispiel: Phase 03 (Denoise)
+
+```python
+# Phase 03 — Denoise (Broadband subtraktiv)
+PHASE_03_STRENGTH_RANGES = {
+    "vinyl": {
+        "restorability": {
+            "high": (75, 100),      # Rest ≥ 75: strength ∈ [0.25, 0.45]
+            "fair": (50, 74),       # Rest 50–74: strength ∈ [0.35, 0.65]
+            "poor": (20, 49),       # Rest < 50: strength ∈ [0.50, 0.85]
+        }
+    },
+    "shellac": {
+        "high": (0.20, 0.40),       # Shellac-Restorability fast nie >50
+        "fair": (0.40, 0.70),
+        "poor": (0.60, 0.90),
+    },
+    "cd_digital": {
+        "high": (0.0, 0.20),        # Nur bei Defekten
+        "fair": (0.10, 0.35),
+        "poor": (0.30, 0.60),
+    },
+}
+
+# Auswahl der Range:
+# strength_min, strength_max = lookup(phase, material, restorability)
+# strength = GlobalPlan.recommend() within [strength_min, strength_max]
+```
+
+### §09.3b GlobalPlan Recommendation (§2.47.5)
+
+GlobalPlan nutzt Pareto-Optimierung auf den 14 Goals und empfiehlt eine Stärke, die einen lokalen Optimum-Punkt trifft (musikalischer Sweetspot, nicht Extremum).
+
+```python
+# Pseudocode in GP.recommend():
+target = estimate_song_goal_targets(...)  # Per-Song-Targets aus §09.2
+goal_scores_before = measure_goals(audio_before)
+best_strength = None
+best_score = -inf
+
+for s in linspace(strength_min, strength_max, n_steps=15):
+    audio_test = phase(audio_before, strength=s)
+    goal_scores_test = measure_goals(audio_test)
+
+    # Weighted distance zur per-song Target
+    distance = sum(
+        goal_weight[g] * (goal_scores_test[g] - target[g])^2
+        for g in goals
+    )
+    if distance < best_score:
+        best_score = distance
+        best_strength = s
+
+return best_strength
+```
+
+---
+
+## §09.4 PMGG Gate-Toleranzen (§2.29)
+
+PMGG prüft nach jeder Phase, ob die 14 Goals den Schwellwert halten.
+
+### §09.4a Restorability-adaptive Regression-Thresholds
+
+```python
+REGRESSION_THRESHOLDS = {
+    "restorability_high": {     # Rest ≥ 70: präzise Messung möglich
+        "threshold": 0.020,
+        "max_retries": 4,
+        "retry_strengths": [0.65, 0.50, 0.35, 0.20],
+    },
+    "restorability_fair": {     # Rest 40–69: moderate Toleranz
+        "threshold": 0.035,
+        "max_retries": 3,
+        "retry_strengths": [0.60, 0.40, 0.20],
+    },
+    "restorability_poor": {     # Rest < 40: maximal tolerant
+        "threshold": 0.040,
+        "max_retries": 2,
+        "retry_strengths": [0.50, 0.25],
+    },
+}
+
+# Material-spezifischer Bonus (Carrier-Chain-Inversion §2.44)
+MATERIAL_THRESHOLD_BONUS = {
+    "wax_cylinder": 0.022,    # extreme Trägerketten-Inversion
+    "shellac":      0.018,
+    "vinyl":        0.009,
+    "tape":         0.007,
+    "cd_digital":   0.000,    # clean → kein Bonus
+}
+
+# Angewendeter Threshold:
+threshold = base_threshold + material_bonus
+```
+
+### §09.4b Priority-aware Retry-Budgets (§2.29 v9.10.77)
+
+```python
+PRIORITY_MAX_RETRIES = {
+    1: 4,   # P1 (Natürlichkeit, Authentizität) — volle Retry-Kaskade
+    2: 4,   # P2 (TonalCenter, Timbre, Artikulation) — volle Kaskade
+    3: 2,   # P3 (Emotionalität, Groove, MicroDyn) — reduziert
+    4: 1,   # P4 (Transparenz, Wärme, Bass, Sep) — Recovery-Lite
+    5: 1,   # P5 (Brillanz, Raumtiefe) — Recovery-Lite
+}
+
+# Nur ein Ziel mit Priority P ≥ X triggert Retry-Pfad für diese Priority.
+# Sub-Threshold Deltas (JND-unterschwellig) werden akzeptiert ohne Retry.
+```
+
+---
+
+## §09.5 Cumulative-Interaction-Guard Drifttoleranzen (§2.48)
+
+Nach jeder Phase wird der kumulative Drift in P1/P2-Goals geprüft.
+
+### §09.5a Material-adaptive Drift-Toleranzen
+
+```python
+def compute_adaptive_drift_tolerance(
+    restorability: float,       # 0–100
+    material_type: str,         # "vinyl", "shellac", etc.
+    defect_severity_mean: float, # 0–1
+    n_active_phases: int,       # Wie viele Phasen laufen?
+) -> float:
+    """Adaptive Schwelle für kumulativen P1/P2-Drift.
+
+    Begründung: Stark degradiertes Material mit vielen Phasen braucht
+    mehr Spielraum für Zwischendrift (aber muss am Ende unter Threshold sein).
+    """
+
+    # Basis-Toleranz aus Restorability
+    if restorability >= 70:
+        base_tol = -0.05
+    elif restorability >= 50:
+        base_tol = -0.08
+    else:
+        base_tol = -0.12
+
+    # Material-Faktor (Carrier-Chain-Inversion §2.44)
+    material_factor = {
+        "wax_cylinder": 0.22,
+        "shellac":      0.18,
+        "vinyl":        0.09,
+        "tape":         0.07,
+        "cd_digital":   0.00,
+    }.get(material_type, 0.03)
+
+    # Phasenzahl-Faktor (mehr Phasen = mehr Zwischendrift erwartet)
+    phase_factor = min(0.10, n_active_phases * 0.005)
+
+    return base_tol - material_factor - phase_factor
+```
+
+---
+
+## §09.6 Artifact Freedom Gate (AFG) Schwellwerte (§2.49)
+
+AFG blockiert Phasen, die Artefakte einführen würden.
+
+```python
+ARTIFACT_FREEDOM_MATERIAL_THRESHOLDS = {
+    # Menschliche Wahrnehmung (psychoakustische Salienz-Gewichtung)
+    "musical_noise": {
+        "vinyl":        0.95,      # Vinyl-Artefakte sind hörbar
+        "shellac":      0.90,      # Ultra-niedrig (Verlust-Toleranz)
+        "cd_digital":   0.98,      # Digital-rein → strik mit Artefakten
+    },
+    "phase_cancellation": {
+        "vinyl_stereo": 0.92,
+        "mono_source":  1.00,      # Mono → kein Stereo-Artefakt möglich
+    },
+    "spectral_holes": {
+        "all_materials": 0.95,     # Höchst wahrnehmbares Artefakt
+    },
+}
+
+# AFG Verdict:
+# artifact_freedom_score = 1.0 - (percep_weight × detections / max_detections)
+# if artifact_freedom_score < threshold: rollback to best_checkpoint
+```
+
+---
+
+## §09.7 Expected Quality Scores (Baseline-Vorhersage) ✅
+
+Nach Pre-Analysis ist ein Expected Quality Score vorhersagbar, damit das UI eine Erwartung setzen kann.
+
+```python
+def predict_quality_score(
+    material_type: str,
+    restorability: float,
+    defect_severity_mean: float,
+    is_studio_2026: bool,
+) -> float:
+    """Erwarteter OQS (Overall Quality Score) am Ende der Pipeline.
+
+    Basis: Restorability, Material-Limit, Defekt-Schwere.
+    """
+
+    # Restorability als Basis (0–100 → 0–1)
+    rest_contrib = restorability / 100.0
+
+    # Material-spezifisches Ober-Limit (physikalische Grenzen)
+    material_ceiling = {
+        "wax_cylinder": 0.55,      # Ultra-degradiert
+        "shellac":      0.70,
+        "wire_recording": 0.65,
+        "vinyl":        0.88,      # Gut restaurierbar
+        "tape":         0.85,
+        "cassette":     0.80,
+        "cd_digital":   0.95,      # Saubere Quellen
+    }.get(material_type, 0.75)
+
+    # Defekt-Abzug
+    defect_penalty = defect_severity_mean * 0.15  # Max. -15% für schwere Defekte
+
+    # Studio 2026 boost (Enhancement statt nur Restoration)
+    studio_boost = 0.08 if is_studio_2026 else 0.0
+
+    base_score = (rest_contrib * material_ceiling) - defect_penalty + studio_boost
+    return np.clip(base_score, 0.0, 0.99)
+```
+
+---
+
+## §09.8 ML-Budget und Plugin-Lifecycle (§4.6)
+
+### §09.8a Plugin Memory Budgets
+
+```python
+ML_PLUGIN_BUDGETS_GB = {
+    "SGMSE+":           3.5,    # Diffusion Denoising (heaviest)
+    "DeepFilterNet":    2.2,
+    "AudioSR":          4.0,    # Spectral Upsampling
+    "MDX23C":           3.2,    # Stem Separation
+    "CREPE":            1.2,    # Pitch Tracking
+    "PANNs":            0.7,    # Genre/Tagging
+    "LAION-CLAP":       2.2,    # Semantic Analysis
+    "WPE":              0.8,    # Dereverberation DSP
+    "OMLSA":            0.5,    # Gate DSP
+    # ... weitere Plugins
+}
+
+TOTAL_ML_BUDGET_GB = 10.4  # System default für Desktop (adjustable)
+```
+
+### §09.8b Eviction-Schwellen
+
+```python
+PLM_EVICTION_THRESHOLDS = {
+    "ram_percent": 75,          # Wenn RAM > 75%, starte Plugin-Eviction
+    "swap_percent": 80,         # Wenn Swap > 80%, blockiere neue ML-Phase (DSP-Fallback)
+    "priority_keep": [          # Diese Plugins werden NICHT evicted
+        "current_running_plugin",
+        "next_queued_plugin",
+        "WPE",                  # DSP-Fallback wird immer erhalten
+    ],
+}
+```
+
+---
+
+## §09.9 Implementierungs-Integration (Kopieren als Anhang zur copilot-instructions)
+
+**In `denker/aurik_denker.py` Zeile N:**
+
+```python
+# §09 Global Calibration Parameters
+from backend.core.calibration_matrix import (
+    CANONICAL_THRESHOLDS_RESTORATION,
+    CANONICAL_THRESHOLDS_STUDIO2026,
+    estimate_song_goal_targets,
+    compute_adaptive_drift_tolerance,
+    MATERIAL_PRIORITY_PHASES,
+)
+
+def restauriere(self, audio, sr, mode="restoration", **kwargs):
+    # Pre-Analysis gibt material, era, restorability
+    material = medium_result.primary_material
+    era = era_result.decade
+    restorability = restorability_result.restorability_score
+
+    # Lookup Canonical Thresholds
+    thresholds = (
+        CANONICAL_THRESHOLDS_STUDIO2026
+        if is_studio_2026
+        else CANONICAL_THRESHOLDS_RESTORATION
+    )
+
+    # Estimate Per-Song Goal Targets
+    song_targets = estimate_song_goal_targets(
+        is_studio_2026=is_studio_2026,
+        goal_weights=goal_weights,
+        restorability_score=restorability,
+        era_decade=era,
+        material_type=material,
+        transfer_chain=transfer_chain,
+    )
+
+    # Alle Gates nutzen diese Werte
+    pmgg.canonical_thresholds = thresholds
+    pmgg.song_targets = song_targets
+
+    cig.drift_tolerance = compute_adaptive_drift_tolerance(
+        restorability, material, defect_severity_mean, n_active_phases
+    )
+
+    # GlobalPlan nutzt diese Targets zur Strength-Empfehlung
+    gp.goal_targets = song_targets
+    gp.canonical_thresholds = thresholds
+```
+
+---
+
+## §09.10 Abgeleitete Meta-Parameter (universell, keine neuen Inputs)
+
+Die folgenden Parameter sind **nicht zusätzliche Benutzereingaben**. Sie werden aus bereits vorhandenen Signalen
+(`material_type`, `restorability_score`, `transfer_chain`, Goal-Weights, Gate-Metriken) berechnet und erhöhen die
+Robustheit für den gesamten Import-Raum.
+
+### §09.10a Transfer-Chain-Complexity-Index (TCCI)
+
+Zweck: Quantifiziert Mehrgenerationen-Komplexität der Trägerkette als einheitlicher Steuerwert für Gates und Recovery.
+
+```python
+def compute_tcci(transfer_chain: list[str]) -> float:
+    n = max(1, len(transfer_chain))
+    lossy = sum(1 for m in transfer_chain if m in {"mp3_low", "aac", "streaming"})
+    analog = sum(1 for m in transfer_chain if m in {"wax_cylinder", "shellac", "vinyl", "tape", "cassette", "wire_recording", "reel_tape"})
+    score = 0.18 * (n - 1) + 0.22 * lossy + 0.10 * max(0, analog - 1)
+    return float(np.clip(score, 0.0, 1.0))
+```
+
+Integration:
+
+- Erhoeht CIG-Drift-Toleranz innerhalb der bereits materialadaptiven Grenzen.
+- Erhoeht Recovery-Budget bei hoher Kettenkomplexitaet (statt fruehem Hardstop).
+
+### §09.10b Intervention-Budget-Scalar (IBS)
+
+Zweck: Ein globaler Interventions-Regler pro Song, der Minimal-Intervention und notwendige Defekt-Reparatur balanciert.
+
+```python
+def compute_ibs(restorability: float, defect_severity_mean: float, tcci: float) -> float:
+    r = 1.0 - np.clip(restorability / 100.0, 0.0, 1.0)
+    d = np.clip(defect_severity_mean, 0.0, 1.0)
+    budget = 0.55 * r + 0.30 * d + 0.15 * tcci
+    return float(np.clip(budget, 0.15, 0.95))
+```
+
+Integration:
+
+- Skaliert obere Grenzen von Strength-Ranges (nicht die unteren Sicherheitsgrenzen).
+- Wirkt nur advisory; explizite PMGG-Hardcaps bleiben fuehrend.
+
+### §09.10c Target-Confidence-Blend (TCB)
+
+Zweck: Verhindert Uebersteuerung durch unsichere Klassifikationen, indem Per-Song-Targets mit Canonical-Floors gemischt werden.
+
+```python
+def blend_targets_with_confidence(
+    canonical: dict[str, float],
+    song_targets: dict[str, float],
+    medium_conf: float,
+    era_conf: float,
+    genre_conf: float,
+) -> dict[str, float]:
+    conf = float(np.clip(0.45 * medium_conf + 0.30 * era_conf + 0.25 * genre_conf, 0.0, 1.0))
+    return {
+        g: (1.0 - conf) * canonical[g] + conf * song_targets[g]
+        for g in canonical.keys()
+    }
+```
+
+Integration:
+
+- PMGG und GoalPriorityProtocol nutzen `blended_targets` statt rohe Song-Targets.
+- Niedrige Analyse-Konfidenz zieht automatisch Richtung konservativer Canonical-Werte.
+
+### §09.10d Ceiling-Proximity-Budget (CPB)
+
+Zweck: Erzwingt Abstand zu physikalischen Ceilings (DR/BW), damit Enhancement nicht in Artefakte kippt.
+
+```python
+def compute_cpb(material_ceiling: float, current_value: float, mode: str) -> float:
+    margin = max(0.0, material_ceiling - current_value)
+    safety = 0.70 if mode == "restoration" else 0.50
+    return float(np.clip(safety * margin, 0.0, material_ceiling))
+```
+
+Integration:
+
+- Additive Phasen duerfen pro Iteration nur einen Anteil von `cpb` verbrauchen.
+- Bei `cpb -> 0` muss die Phase auf konservatives Wet/Dry zurueckfallen.
+
+### §09.10e Retry-Temperature (RT)
+
+Zweck: Vereinheitlicht Retry-Aggressivitaet in PMGG/CIG/AFG fuer schwere vs. leichte Songs.
+
+```python
+def compute_retry_temperature(restorability: float, tcci: float, artifact_freedom_score: float) -> float:
+    hard_song = 1.0 - np.clip(restorability / 100.0, 0.0, 1.0)
+    artifact_risk = 1.0 - np.clip(artifact_freedom_score, 0.0, 1.0)
+    t = 0.50 * hard_song + 0.30 * tcci + 0.20 * artifact_risk
+    return float(np.clip(t, 0.0, 1.0))
+```
+
+Integration:
+
+- Hohe Temperatur: mehr Strength-Reduktionsstufen statt harter Rollback.
+- Niedrige Temperatur: schnellere Akzeptanz oder frueheres Skip bei unkritischen Deltas.
+
+### §09.10f Export-Reliability-Score (ERS)
+
+Zweck: Einheitlicher Vertrauensindikator fuer Final-Export, ohne neue Metriken einzufuehren.
+
+```python
+def compute_export_reliability(
+    hpi: float,
+    artifact_freedom: float,
+    passed_goals: int,
+    total_goals: int,
+    reference_confidence: float,
+) -> float:
+    goal_ratio = 0.0 if total_goals <= 0 else passed_goals / total_goals
+    score = (
+        0.35 * np.clip(hpi, 0.0, 1.0)
+        + 0.30 * np.clip(artifact_freedom, 0.0, 1.0)
+        + 0.20 * np.clip(goal_ratio, 0.0, 1.0)
+        + 0.15 * np.clip(reference_confidence, 0.0, 1.0)
+    )
+    return float(np.clip(score, 0.0, 1.0))
+```
+
+Integration:
+
+- `ERS < 0.55`: verpflichtende Recovery-Kaskade fortsetzen.
+- `ERS >= 0.55`: Export zulaessig, Status weiterhin transparent (`recovered`/`degraded`).
+
+### §09.10g Invarianten
+
+1. Keine neuen Nutzer-Inputs: alle Parameter sind reine Funktionen vorhandener Signale.
+2. Advisory-only gegenueber Hard-Gates: PMGG/CIG/AFG/HPI bleiben normative Endinstanzen.
+3. Material-Ceilings bleiben unantastbar: DR/BW-Grenzen werden niemals durch Meta-Parameter geloest.
+4. Bei Ausnahme: neutraler Fallback (`1.0` oder konservativer Canonical-Wert), Pipeline darf nicht blockieren.
+
+### §09.10h Goal-Coverage-Index (GCI)
+
+Zweck: Gewichtete Zielabdeckung statt roher Pass-Quote. P1/P2-Fehlschlaege zaehlen staerker als P5.
+
+```python
+def compute_goal_coverage_index(musical_goals_passed: dict[str, bool]) -> float:
+    # P1: 1.4, P2: 1.2, P3: 1.0, P4: 0.8, P5: 0.6
+    return weighted_pass_ratio
+```
+
+Integration:
+
+- `export_reliability.goal_coverage_index` als zusaetzlicher Qualitaetsanker.
+- `goal_deficit_ratio = 1 - GCI` speist Recovery-Pressure.
+
+### §09.10i Calibrated-Reference-Confidence (CRC)
+
+Zweck: Referenzvertrauen aus Target-Confidence plus Kontextstabilitaet (Transfer-Chain + Carrier-Recovery).
+
+```python
+def compute_reference_confidence(target_confidence: float, tcci: float, carrier_chain_recovery_ratio: float) -> float:
+    # hohe TCCI und hohe Carrier-Inversion senken Referenzvertrauen
+    return clipped_confidence_0_1
+```
+
+Integration:
+
+- Ersetzt rohe `targets_confidence` als ERS-Input (`reference_confidence`).
+- Schafft robuste Bewertung bei starker Carrier-Chain-Inversion (§0d).
+
+### §09.10j Recovery-Pressure-Index (RPI)
+
+Zweck: Ein numerischer Druckindikator, ob Recovery-Pfade noch weiterlaufen sollten.
+
+```python
+def compute_recovery_pressure_index(
+    fallback_attempts: int,
+    rollback_count: int,
+    goal_deficit_ratio: float,
+) -> float:
+    # 0..1 aus Fallback-Versuchen, Rollbacks und Zieldefizit
+    return clipped_pressure_0_1
+```
+
+Integration:
+
+- `export_reliability.recovery_pressure_index` fuer UI/Diagnostik.
+- Advisory-only; harte Export-Gates unveraendert.
+
+---
+
+## Referenzen
+
+- Spec §01: Musical Goals (14 Ziele)
+- Spec §02: Pipeline (Phasen, Gates)
+- Spec §2.56: Song-Goal-Importance (per-Song Gewichtung)
+- Spec §2.54: Adaptive Schwellwerte
+- Spec §0a: Modus-Differenzierung (Restoration vs. Studio 2026)
+- Copilot Instructions §2.56, §2.54, §2.29, §2.48, §2.49
+
+---
+
+**Version**: 1.0 | **Datum**: 18. April 2026 | **Status**: normativ

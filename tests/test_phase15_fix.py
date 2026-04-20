@@ -84,7 +84,7 @@ def test_dehum_basic():
 
         except Exception as e:
             print(f"   Pass {pass_num + 1} fehlgeschlagen: {e}")
-            pytest.fail(f"Multi-pass {pass_num+1} failed: {e}")
+            pytest.fail(f"Multi-pass {pass_num + 1} failed: {e}")
 
     if best_x is not None:
         print(f"✅ Multi-Pass erfolgreich! Best Quality: {best_quality:.3f}")

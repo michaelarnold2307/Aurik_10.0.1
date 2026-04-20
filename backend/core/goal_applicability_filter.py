@@ -71,6 +71,16 @@ _MONO_MATERIALS = {
     "lacquer_disc",
 }
 
+_PHYSICALLY_BASS_LIMITED_MATERIALS = frozenset(
+    {
+        "wax_cylinder",
+        "wire_recording",
+        "shellac",
+        "lacquer_disc",
+        "acoustic_78",
+    }
+)
+
 
 class GoalApplicabilityFilter:
     """Spec §2.32: Filtert physikalisch nicht messbare Ziele.
@@ -95,6 +105,7 @@ class GoalApplicabilityFilter:
         era_decade: int | None = None,
         panns_tags: dict[str, float] | None = None,
         audiosr_available: bool = False,
+        mode: str = "restoration",
     ) -> GoalApplicabilityResult:
         """Spec §2.32: Wertet aus, welche Goals anwendbar sind.
 
@@ -204,6 +215,45 @@ class GoalApplicabilityFilter:
         if is_mono_signal or mat_mono:
             inapplicable["separation_fidelity"] = "Mono-Quelle — kein mehrkanaliges Signal auflösbar."
 
+        # REGEL: BassKraftMetric — physikalisch bassarmes Material in Restoration-Modus
+        # §0c Universalitäts-Invariante: Regel basiert auf gemessener Spektraleigenschaft,
+        # NICHT auf Genre-Labels oder Material-Namen. Trifft auf vocal-dominante Aufnahmen
+        # (Schlager, Art Song, frühe Pop), Shellac, Wachswalzen und ähnliche Material zu.
+        # §0 Primum non nocere: Restoration kann keinen Bass hinzufügen, der nicht
+        # aufgezeichnet wurde — bass_kraft-Threshold 0.78 wäre physikalisch unerreichbar
+        # und erzwingt Over-Processing-Versuche (Pipeline-Failure-Kaskade).
+        # Studio 2026: Regel deaktiviert — Enhancement-Phasen (phase_06, phase_07) können
+        # Bass aufbauen; bass_kraft bleibt als Ziel aktiv.
+        # Threshold 0.015 (1.5 % der Spektralenergie in 20–250 Hz):
+        #   < 0.015: vocal-dominante Aufnahmen, Shellac, WaxCyl, 1930s-1960s light music
+        #   ≥ 0.015: Blues, Rock, Jazz mit Bass, Electronic, Hip-hop — bleibt anwendbar
+        _mode_str = str(mode or "restoration").strip().lower()
+        if _mode_str == "restoration" and audio is not None and duration_s >= 5.0:
+            try:
+                # 2-Sekunden-Segment aus Mitte für repräsentative Bass-Analyse.
+                # Center-Segment vermeidet Intro-Stille und vermeidet Outro-Fade.
+                _n_bass = min(len(mono), int(sr * 2))
+                _bass_start = max(0, (len(mono) - _n_bass) // 2)
+                _bass_seg = mono[_bass_start : _bass_start + _n_bass]
+                if len(_bass_seg) >= 512:
+                    _bass_spec = np.abs(np.fft.rfft(_bass_seg)) ** 2 + 1e-15
+                    _bass_freqs = np.fft.rfftfreq(len(_bass_seg), d=1.0 / sr)
+                    _bm = (_bass_freqs >= 20) & (_bass_freqs <= 250)
+                    _input_bass_ratio = float(np.sum(_bass_spec[_bm])) / float(np.sum(_bass_spec))
+                    if _input_bass_ratio < 0.015:
+                        inapplicable["bass_kraft"] = (
+                            f"Input-Bass-Anteil {_input_bass_ratio:.4f} < 0.015 — "
+                            "Restoration kann keinen aufnahmetypischen Bass erzeugen "
+                            "(§0 Primum non nocere). "
+                            "Studio-2026-Modus: Ziel bleibt aktiv (Enhancement-Phasen)."
+                        )
+                        logger.debug(
+                            "§2.32 bass_kraft N/A: input_bass_ratio=%.4f < 0.015 (Restoration)",
+                            _input_bass_ratio,
+                        )
+            except Exception as _bk_exc:
+                logger.debug("§2.32 bass_kraft-Ratio-Check fehlgeschlagen: %s", _bk_exc)
+
         # _ALWAYS_APPLICABLE NIE deaktivieren
         for g in _ALWAYS_APPLICABLE:
             inapplicable.pop(g, None)
@@ -242,6 +292,7 @@ def evaluate_goal_applicability(
     era_decade: int | None = None,
     panns_tags: dict[str, float] | None = None,
     audiosr_available: bool = False,
+    mode: str = "restoration",
 ) -> GoalApplicabilityResult:
     """Convenience-Funktion."""
     return get_goal_filter().evaluate(
@@ -251,6 +302,7 @@ def evaluate_goal_applicability(
         era_decade=era_decade,
         panns_tags=panns_tags,
         audiosr_available=audiosr_available,
+        mode=mode,
     )
 
 

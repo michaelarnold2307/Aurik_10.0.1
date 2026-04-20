@@ -114,6 +114,60 @@ class ClickPopRemoval(PhaseInterface):
     def __init__(self):
         super().__init__()
         self.name = "Click/Pop Removal v3 AR-Residual"
+        self._click_repair_profile_current = {
+            "cubic_context": 5.0,
+            "ar_context": 128.0,
+            "ar_order": 32.0,
+            "crossfade_context": 10.0,
+            "taper_length": 5.0,
+        }
+
+    @staticmethod
+    def _compute_click_repair_profile(
+        material: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive click repair profile (§2.54)."""
+        mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        if restorability_score is None:
+            restorability_score = 50.0
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base = {
+            "shellac": {"cubic": 8.0, "ar_ctx": 220.0, "ar_order": 42.0, "crossfade": 16.0, "taper": 8.0},
+            "vinyl": {"cubic": 7.0, "ar_ctx": 192.0, "ar_order": 38.0, "crossfade": 14.0, "taper": 7.0},
+            "tape": {"cubic": 6.0, "ar_ctx": 170.0, "ar_order": 34.0, "crossfade": 12.0, "taper": 6.0},
+            "reel_tape": {"cubic": 6.0, "ar_ctx": 176.0, "ar_order": 35.0, "crossfade": 12.0, "taper": 6.0},
+            "cd_digital": {"cubic": 4.0, "ar_ctx": 132.0, "ar_order": 26.0, "crossfade": 8.0, "taper": 4.0},
+            "streaming": {"cubic": 4.0, "ar_ctx": 124.0, "ar_order": 24.0, "crossfade": 8.0, "taper": 4.0},
+            "unknown": {"cubic": 5.0, "ar_ctx": 144.0, "ar_order": 28.0, "crossfade": 10.0, "taper": 5.0},
+        }.get(mat, {"cubic": 5.0, "ar_ctx": 144.0, "ar_order": 28.0, "crossfade": 10.0, "taper": 5.0})
+
+        mode = {
+            "fast": -1.0,
+            "balanced": 0.0,
+            "restoration": 0.5,
+            "quality": 1.0,
+            "maximum": 1.8,
+            "studio_2026": 1.8,
+        }.get(qm, 0.0)
+
+        rest_factor = (50.0 - rest) / 50.0
+        cubic_context = float(np.clip(base["cubic"] + mode + 0.8 * rest_factor, 3.0, 12.0))
+        ar_context = float(np.clip(base["ar_ctx"] + mode * 28.0 + 36.0 * rest_factor, 64.0, 320.0))
+        ar_order = float(np.clip(base["ar_order"] + mode * 6.0 + 8.0 * rest_factor, 16.0, 56.0))
+        crossfade_context = float(np.clip(base["crossfade"] + mode * 2.0 + 3.0 * rest_factor, 6.0, 24.0))
+        taper_length = float(np.clip(base["taper"] + 0.9 * mode + 1.5 * rest_factor, 3.0, 12.0))
+
+        return {
+            "cubic_context": cubic_context,
+            "ar_context": ar_context,
+            "ar_order": ar_order,
+            "crossfade_context": crossfade_context,
+            "taper_length": taper_length,
+        }
 
     @staticmethod
     def _derive_safe_click_strength(
@@ -189,6 +243,10 @@ class ClickPopRemoval(PhaseInterface):
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
         _material_key = str(getattr(material, "name", material)).lower()
         _panns_tags = {k: float(v) for k, v in kwargs.get("panns_tags", {}).items() if isinstance(v, (int, float, str))}
+        _quality_mode = kwargs.get("quality_mode")
+        _restorability_score = kwargs.get("restorability_score", 50.0)
+        click_repair_profile = self._compute_click_repair_profile(_material_key, _quality_mode, _restorability_score)
+        self._click_repair_profile_current = click_repair_profile
         _safe_strength = self._derive_safe_click_strength(_effective_strength, _material_key, _panns_tags)
         config["repair_strength"] = float(np.clip(config["repair_strength"] * _safe_strength, 0.0, 1.0))
 
@@ -204,6 +262,7 @@ class ClickPopRemoval(PhaseInterface):
                     "clicks_removed": 0,
                     "clicks_per_second": 0.0,
                     "rt_factor": 0.0,
+                    "click_repair_profile": click_repair_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "safe_strength": _safe_strength,
@@ -241,6 +300,7 @@ class ClickPopRemoval(PhaseInterface):
                 "clicks_per_second": float(total_clicks / (len(audio) / sample_rate)),
                 "rt_factor": float(rt_factor),
                 "stereo_mode": "linked_detection" if is_stereo else "mono",
+                "click_repair_profile": click_repair_profile,
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "safe_strength": _safe_strength,
@@ -410,8 +470,10 @@ class ClickPopRemoval(PhaseInterface):
                 repaired[start : end + 1] * (1 - repair_strength) + repaired_segment * repair_strength
             )
 
-            # Smooth boundaries (5-sample taper)
-            taper_len = min(5, duration // 2)
+            # Smooth boundaries with adaptive taper length.
+            profile = getattr(self, "_click_repair_profile_current", {})
+            taper_target = int(np.clip(float(profile.get("taper_length", 5.0)), 3, 12))
+            taper_len = min(taper_target, duration // 2)
             if taper_len > 0:
                 taper = np.linspace(0, 1, taper_len)
                 repaired[start : start + taper_len] = (
@@ -426,7 +488,8 @@ class ClickPopRemoval(PhaseInterface):
 
     def _cubic_interpolation(self, audio: np.ndarray, start: int, end: int) -> np.ndarray:
         """Cubic spline interpolation for small clicks."""
-        context = 5
+        profile = getattr(self, "_click_repair_profile_current", {})
+        context = int(np.clip(float(profile.get("cubic_context", 5.0)), 3, 12))
         x_known = np.concatenate([np.arange(start - context, start), np.arange(end + 1, end + context + 1)])
         y_known = audio[x_known]
 
@@ -439,8 +502,10 @@ class ClickPopRemoval(PhaseInterface):
 
     def _ar_prediction(self, audio: np.ndarray, start: int, end: int) -> np.ndarray:
         """AR prediction for medium pops (order ≥ 16 @ 48 kHz, §VERBOTEN: LPC < 16)."""
-        context = 128
-        order = min(32, context // 4)  # 32 @ context=128; nie < 16
+        profile = getattr(self, "_click_repair_profile_current", {})
+        context = int(np.clip(float(profile.get("ar_context", 128.0)), 64, 320))
+        configured_order = int(np.clip(float(profile.get("ar_order", 32.0)), 16, 56))
+        order = int(max(16, min(configured_order, max(16, context // 4))))
 
         # Use samples before click for AR coefficients
         if start < context + order:
@@ -479,8 +544,10 @@ class ClickPopRemoval(PhaseInterface):
         fade = np.linspace(1, 0, duration)
 
         # Blend from before and after
-        before_avg = np.mean(audio[max(0, start - 10) : start])
-        after_avg = np.mean(audio[end + 1 : min(len(audio), end + 11)])
+        profile = getattr(self, "_click_repair_profile_current", {})
+        crossfade_context = int(np.clip(float(profile.get("crossfade_context", 10.0)), 6, 24))
+        before_avg = np.mean(audio[max(0, start - crossfade_context) : start])
+        after_avg = np.mean(audio[end + 1 : min(len(audio), end + 1 + crossfade_context)])
 
         repaired = before_avg * fade + after_avg * (1 - fade)
 

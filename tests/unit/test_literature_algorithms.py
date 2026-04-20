@@ -6,6 +6,7 @@ Bedeckt:
   - Phase 50: STFT-Konsistenz-Projektion für Zeit-Achsen-Inpainting
     (Siedenburg & Dörfler 2013, JASA)
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -17,6 +18,7 @@ SR = 48_000
 # ──────────────────────────────────────────────────────────────────────────────
 # Hilfsfunktionen
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _sine(freq: float = 440.0, seconds: float = 2.0, amp: float = 0.3) -> np.ndarray:
     t = np.linspace(0.0, seconds, int(SR * seconds), endpoint=False, dtype=np.float32)
@@ -207,9 +209,7 @@ class TestPhase50ConsistencyInpainting:
         repaired, n_rep = _repair_channel(audio, SR, threshold_factor=4.0)
         assert np.all(np.isfinite(repaired)), "Consistency iterations produced NaN/Inf"
         # Repaired segment should not be identically zero
-        assert not np.allclose(repaired[20000:22000], 0.0), (
-            "Dropout region still all-zero after inpainting"
-        )
+        assert not np.allclose(repaired[20000:22000], 0.0), "Dropout region still all-zero after inpainting"
 
     def test_known_frames_preserved_after_consistency(self, phase50):
         """STFT-Consistency must NOT alter undamaged parts of the spectrum."""
@@ -247,6 +247,4 @@ class TestPhase50ConsistencyInpainting:
 
         silence = np.zeros(SR * 2, dtype=np.float32)
         repaired, n_rep = _repair_channel(silence, SR, threshold_factor=4.0)
-        assert n_rep == 0 or np.allclose(repaired, 0.0, atol=1e-5), (
-            "Silence not passed through intact"
-        )
+        assert n_rep == 0 or np.allclose(repaired, 0.0, atol=1e-5), "Silence not passed through intact"

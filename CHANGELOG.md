@@ -2,6 +2,61 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.11.21 — GlobalPlan-Ära-Floor + Reference-Anchor-Arbitration + Gated-RMS-Zentralisierung (Apr 2026)
+
+### Ziel
+
+- Physikalisch unmögliche Ära-Zuweisungen in Mehrfachketten verhindern.
+- Reference-Anchor gegen falsche GlobalPlan-Dekaden bei starkem Tier-2-Era-Signal absichern.
+- Gated-RMS in gain-nahen Dynamikpfaden zentralisieren statt phasenlokaler Sonderlogik.
+
+### Änderungen
+
+- `musikalischer_globalplan`:
+  - Material-Decade-Floor eingeführt (`vinyl`, `cassette`, `reel_tape`, `cd_digital`, `mp3_*`, `aac`, `minidisc`).
+  - `primary`/`primary_material` aus `chain_info` werden jetzt explizit als Floor-Anker ausgewertet.
+
+- `UnifiedRestorerV3`:
+  - Reference-Anchor-Arbitration ergänzt.
+  - Bei hartem Konflikt (`>= 20 Jahre`) zwischen GlobalPlan und Ära-Signal gewinnt ein hochkonfidentes `tier_used == 2` Era-Ergebnis für den Reference-Anchor.
+  - Arbitration nutzt bewusst das ursprüngliche gecachte Era-Signal, damit frühere GlobalPlan-Overrides den Anchor-Pfad nicht verdecken.
+
+- Neue zentrale Utility:
+  - `backend/core/audio_utils.py`
+  - `compute_gated_rms_linear(...)`
+  - `compute_gated_rms_dbfs(...)`
+
+- Dynamikphasen auf zentrale Utility umgestellt:
+  - `phase_10_compression`
+  - `phase_35_multiband_compression`
+  - RMS-/DR-Metriken nutzen jetzt Gated-RMS; Peak-nahe DR-Pfade verwenden `percentile(99.9)` statt absolutes Maximum.
+
+### Tests
+
+- Neue/erweiterte Regressionstests:
+  - `tests/unit/test_musikalischer_globalplan.py`
+  - `tests/unit/test_unified_restorer_v3.py`
+
+- Validierung nach Fix:
+  - `test_unified_restorer_v3.py`: 118/118 grün
+  - `test_phases_dsp_rewritten.py`: 27/27 grün
+  - `test_musikalischer_globalplan.py`: 64/64 grün
+
+  ### Follow-up (2 Restfehler aus breitem Chunk-C-Lauf geschlossen)
+
+  - `phase_06_frequency_restoration`:
+    - Quality-First-Short-Clip-Guard explizit auf
+      `quality_mode not in ("quality", "maximum")` gehärtet.
+    - Timeout-Policy enthält expliziten Branch
+      `if quality_mode in ("quality", "maximum"):` (inkl. studio_2026-Branch).
+    - Schließt den Policy-Regressionstest `test_quality_first_time_gates_all_phases`.
+
+  - `pitch_detector` (`backend/ml/inference_only/pitch_correction/pitch_detector.py`):
+    - Step-Error-Schätzung erweitert: bei jump-dominierten Regionen wird zusätzlich eine
+      kontextbasierte Vorher/Nachher-Median-Abweichung berechnet.
+    - Verhindert Verdünnung diskreter 100-Cent-Sprünge auf ~50 Cent.
+    - Schließt `tests/pitch_correction/test_pitch_correction_v8.py::test_pitch_error_detection`.
+
 ## Version 9.11.20 — Globaler Quality-First-Schalter + 64-Phasen-Audit (Apr 2026)
 
 ### Ziel

@@ -12,9 +12,6 @@ Normative Referenz:
 
 from __future__ import annotations
 
-import numpy as np
-import pytest
-
 
 class TestSubThresholdPhasesUV3Aggregation:
     """UV3 aggregiert sub_threshold_phases-Einträge aus PMGG-Log-Entries."""
@@ -53,13 +50,19 @@ class TestSubThresholdPhasesUV3Aggregation:
         uv3._pmgg_log_entries = [entry_no_sub, entry_sub]
 
         # Inline-Aggregations-Logik (spiegelt UV3 metadata-dict)
-        result = sorted(set(
-            _st_pid
-            for _pmgg_e in (uv3._pmgg_log_entries or [])
-            for _st_pid in (isinstance(getattr(_pmgg_e, "metadata", None), dict)
-                            and getattr(_pmgg_e, "metadata", {}).get("sub_threshold_phases", [])
-                            or [])
-        ))
+        result = sorted(
+            {
+                _st_pid
+                for _pmgg_e in (uv3._pmgg_log_entries or [])
+                for _st_pid in (
+                    (
+                        isinstance(getattr(_pmgg_e, "metadata", None), dict)
+                        and getattr(_pmgg_e, "metadata", {}).get("sub_threshold_phases", [])
+                    )
+                    or []
+                )
+            }
+        )
 
         assert "phase_07_harmonic_restoration" in result, (
             "sub_threshold_phases aggregation fehlt: phase_07 muss im Ergebnis erscheinen"
@@ -78,13 +81,19 @@ class TestSubThresholdPhasesUV3Aggregation:
             e.metadata = {"some_other_key": True}  # kein sub_threshold_phases
             entries.append(e)
 
-        result = sorted(set(
-            _st_pid
-            for _pmgg_e in entries
-            for _st_pid in (isinstance(getattr(_pmgg_e, "metadata", None), dict)
-                            and getattr(_pmgg_e, "metadata", {}).get("sub_threshold_phases", [])
-                            or [])
-        ))
+        result = sorted(
+            {
+                _st_pid
+                for _pmgg_e in entries
+                for _st_pid in (
+                    (
+                        isinstance(getattr(_pmgg_e, "metadata", None), dict)
+                        and getattr(_pmgg_e, "metadata", {}).get("sub_threshold_phases", [])
+                    )
+                    or []
+                )
+            }
+        )
         assert result == [], f"Erwartet leere Liste, erhalten: {result}"
 
     def test_sub_threshold_phases_deduplicated(self):
@@ -97,13 +106,19 @@ class TestSubThresholdPhasesUV3Aggregation:
             e.metadata = {"sub_threshold_phases": ["phase_07_harmonic_restoration"]}
             entries.append(e)
 
-        result = sorted(set(
-            _st_pid
-            for _pmgg_e in entries
-            for _st_pid in (isinstance(getattr(_pmgg_e, "metadata", None), dict)
-                            and getattr(_pmgg_e, "metadata", {}).get("sub_threshold_phases", [])
-                            or [])
-        ))
+        result = sorted(
+            {
+                _st_pid
+                for _pmgg_e in entries
+                for _st_pid in (
+                    (
+                        isinstance(getattr(_pmgg_e, "metadata", None), dict)
+                        and getattr(_pmgg_e, "metadata", {}).get("sub_threshold_phases", [])
+                    )
+                    or []
+                )
+            }
+        )
         assert result.count("phase_07_harmonic_restoration") == 1, (
             "Duplikate in sub_threshold_phases: Ergebnis muss dedupliziert sein"
         )
@@ -111,6 +126,7 @@ class TestSubThresholdPhasesUV3Aggregation:
     def test_restorationresult_metadata_key_present_in_uv3_code(self):
         """UV3-Quelltext enthält 'sub_threshold_phases' als Metadaten-Schlüssel."""
         import inspect
+
         from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
         src = inspect.getsource(UnifiedRestorerV3)

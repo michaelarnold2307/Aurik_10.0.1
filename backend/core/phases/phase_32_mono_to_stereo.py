@@ -140,6 +140,45 @@ class MonoToStereoPhaseV2(PhaseInterface):
         super().__init__()
         self.name = "Mono-to-Stereo Enhancement v2.0 (Professional)"
 
+    @staticmethod
+    def _compute_mono_to_stereo_profile(
+        material: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive mono-detection profile (§2.56)."""
+        mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        if restorability_score is None:
+            restorability_score = 50.0
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base = {
+            "shellac": 0.84,
+            "wax_cylinder": 0.83,
+            "tape": 0.86,
+            "reel_tape": 0.86,
+            "vinyl": 0.88,
+            "cassette": 0.87,
+            "cd_digital": 0.93,
+            "dat": 0.93,
+            "streaming": 0.92,
+            "unknown": 0.89,
+        }.get(mat, 0.89)
+
+        mode_adj = {
+            "fast": -0.02,
+            "balanced": 0.0,
+            "restoration": 0.0,
+            "quality": 0.02,
+            "maximum": 0.03,
+            "studio_2026": 0.03,
+        }.get(qm, 0.0)
+
+        rest_adj = ((rest - 50.0) / 50.0) * 0.01
+        mono_correlation_threshold = float(np.clip(base + mode_adj + rest_adj, 0.80, 0.97))
+        return {"mono_correlation_threshold": mono_correlation_threshold}
+
     def process(self, audio: np.ndarray, sample_rate: int, material: MaterialType, **kwargs) -> PhaseResult:
         """
         Apply professional-grade mono-to-stereo enhancement.
@@ -163,6 +202,11 @@ class MonoToStereoPhaseV2(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        quality_mode = kwargs.get("quality_mode")
+        restorability_score = kwargs.get("restorability_score", 50.0)
+        material_key = str(getattr(material, "value", material) or "unknown")
+        mono_to_stereo_profile = self._compute_mono_to_stereo_profile(material_key, quality_mode, restorability_score)
+
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
@@ -174,6 +218,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
                     "material": material.name,
                     "algorithm": "skipped_zero_strength",
                     "mono_to_stereo_applied": False,
+                    "mono_to_stereo_profile": mono_to_stereo_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -194,6 +239,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
                     "material": material.name,
                     "mono_to_stereo_applied": False,
                     "reason": "digital_source",
+                    "mono_to_stereo_profile": mono_to_stereo_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -214,6 +260,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
                     "material": material.name,
                     "mono_to_stereo_applied": False,
                     "reason": "already_mono",
+                    "mono_to_stereo_profile": mono_to_stereo_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -224,11 +271,12 @@ class MonoToStereoPhaseV2(PhaseInterface):
 
         # Detect if input is mono (L ≈ R)
         correlation = self._compute_lr_correlation(audio)
-        is_mono = correlation > self.MONO_CORRELATION_THRESHOLD
+        mono_correlation_threshold = float(mono_to_stereo_profile["mono_correlation_threshold"])
+        is_mono = correlation > mono_correlation_threshold
 
         if not is_mono:
             logger.debug(
-                f"Input already stereo (L/R correlation = {correlation:.3f} < {self.MONO_CORRELATION_THRESHOLD})"
+                f"Input already stereo (L/R correlation = {correlation:.3f} < {mono_correlation_threshold:.3f})"
             )
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
@@ -240,13 +288,14 @@ class MonoToStereoPhaseV2(PhaseInterface):
                     "material": material.name,
                     "mono_to_stereo_applied": False,
                     "reason": "already_stereo",
+                    "mono_to_stereo_profile": mono_to_stereo_profile,
                     "lr_correlation": float(correlation),
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
                     "loudness_makeup_db": 0.0,
                 },
-                metrics={"lr_correlation": float(correlation), "threshold": self.MONO_CORRELATION_THRESHOLD},
+                metrics={"lr_correlation": float(correlation), "threshold": mono_correlation_threshold},
             )
 
         # Input is mono → apply pseudo-stereo
@@ -307,6 +356,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
                 "material": material.name,
                 "mono_to_stereo_applied": True,
                 "algorithm": "lauridsen_pseudo_stereo_v2",
+                "mono_to_stereo_profile": mono_to_stereo_profile,
                 "num_bands": 5,
                 "band_splits_hz": self.BAND_SPLITS,
                 "phase_locality_factor": phase_locality_factor,

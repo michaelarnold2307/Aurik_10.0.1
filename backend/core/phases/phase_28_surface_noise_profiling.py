@@ -272,8 +272,11 @@ class SurfaceNoiseProfiling(PhaseInterface):
             _mono_orig = audio if audio.ndim == 1 else audio.mean(axis=1)
             _mono_proc = denoised_audio if denoised_audio.ndim == 1 else denoised_audio.mean(axis=1)
             _masked_mono = apply_psychoacoustic_masking_clamp(
-                _mono_orig, _mono_proc, sample_rate,
-                strength=_safe_strength, mode="subtractive",
+                _mono_orig,
+                _mono_proc,
+                sample_rate,
+                strength=_safe_strength,
+                mode="subtractive",
             )
             if audio.ndim == 2:
                 _gain_mask = np.where(
@@ -381,7 +384,9 @@ class SurfaceNoiseProfiling(PhaseInterface):
         # Step 1: STFT (75% Overlap)
         nperseg = self.FRAME_SIZE
         noverlap = nperseg - self.HOP_SIZE
-        _, t_arr, stft = signal.stft(audio, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann")
+        _, t_arr, stft = signal.stft(
+            audio, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann", boundary="even"
+        )
 
         magnitude = np.abs(stft)
         phase = np.angle(stft)
@@ -415,10 +420,12 @@ class SurfaceNoiseProfiling(PhaseInterface):
             except Exception as _pghi_exc:
                 logger.debug("phase_28 PGHI failed, fallback to istft: %s", _pghi_exc)
                 _, denoised = signal.istft(
-                    cleaned_stft, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann"
+                    cleaned_stft, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann", boundary=True
                 )
         else:
-            _, denoised = signal.istft(cleaned_stft, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann")
+            _, denoised = signal.istft(
+                cleaned_stft, fs=sample_rate, nperseg=nperseg, noverlap=noverlap, window="hann", boundary=True
+            )
 
         # Länge anpassen + NaN/Clipping-Schutz
         denoised = denoised[: len(audio)]

@@ -1,4 +1,5 @@
 """Plugins-Paket — ML- und DSP-Plugin-Registrierung für Aurik 9."""
+
 # Ermöglicht Plugin-Importe als aurik6.plugins.*
 
 # ---------------------------------------------------------------------------

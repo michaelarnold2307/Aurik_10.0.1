@@ -123,6 +123,45 @@ class LimitingPhase(PhaseInterface):
         MaterialType.STREAMING: 0.5,  # Sanfter Übergang
     }
 
+    @staticmethod
+    def _compute_limiting_profile(
+        material_type: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive limiter lookahead profile."""
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _base = {
+            "shellac": 13.0,
+            "wax_cylinder": 13.0,
+            "vinyl": 10.0,
+            "tape": 9.5,
+            "reel_tape": 9.5,
+            "cd_digital": 7.0,
+            "digital": 7.0,
+            "dat": 7.0,
+            "streaming": 8.0,
+            "unknown": 9.0,
+        }.get(_mat, 9.0)
+
+        _mode_adj = {
+            "fast": -1.5,
+            "balanced": 0.0,
+            "quality": +1.5,
+            "maximum": +2.5,
+            "restoration": +1.0,
+            "studio_2026": +2.5,
+        }.get(_qm, 0.0)
+
+        # Low restorability => slightly larger lookahead for safer peak capture
+        _rest_adj = ((50.0 - _rest) / 50.0) * 1.2
+        lookahead_ms = float(np.clip(_base + _mode_adj + _rest_adj, 5.0, 20.0))
+
+        return {"lookahead_ms": lookahead_ms}
+
     def __init__(self):
         super().__init__()
         self.name = "Professional Multi-Band True Peak Limiting"

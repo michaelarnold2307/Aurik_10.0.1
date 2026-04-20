@@ -416,9 +416,7 @@ class TestPhase41TruePeakPercentile:
         # (~50-100 samples elevated) is in the top 0.01% — program level dominates
         measured_peak = phase._measure_true_peak_linear(audio)
         # np.max would return ~1.0; percentile(99.9) should reflect quiet program (~< 0.01)
-        assert measured_peak < 0.1, (
-            f"Spike caused measured peak {measured_peak:.4f} — likely np.max still used"
-        )
+        assert measured_peak < 0.1, f"Spike caused measured peak {measured_peak:.4f} — likely np.max still used"
 
     def test_stereo_path_also_uses_percentile(self):
         """Stereo path must also use percentile(99.9)."""
@@ -431,9 +429,7 @@ class TestPhase41TruePeakPercentile:
         audio[10000, 0] = 1.0  # click in left channel
 
         measured_peak = phase._measure_true_peak_linear(audio)
-        assert measured_peak < 0.1, (
-            f"Stereo click caused over-reduction: measured_peak={measured_peak:.4f} (np.max?)"
-        )
+        assert measured_peak < 0.1, f"Stereo click caused over-reduction: measured_peak={measured_peak:.4f} (np.max?)"
 
 
 class TestAutonomousRestorationEnginePercentile:
@@ -466,9 +462,7 @@ class TestAutonomousRestorationEnginePercentile:
         # With percentile(99.9), program RMS should be close to original 0.05 (or clipped to 1.0)
         # With np.max=3.0, result_rms would be ~0.05/3.0 ≈ 0.017 (too quiet)
         program_rms = float(np.sqrt(np.mean(result**2)))
-        assert program_rms > 0.04, (
-            f"Signal over-attenuated by spike: rms={program_rms:.4f} (np.max bug?)"
-        )
+        assert program_rms > 0.04, f"Signal over-attenuated by spike: rms={program_rms:.4f} (np.max bug?)"
 
 
 class TestQualityGatePercentile:
@@ -499,14 +493,11 @@ class TestQualityGatePercentile:
         audio = np.zeros(48000 * 3, dtype=np.float32)
         t = np.arange(48000) / 48000.0
         # Active section: 440 Hz sine at -10 dBFS + tiny background noise
-        active = (0.3 * np.sin(2.0 * np.pi * 440.0 * t)
-                  + 0.001 * rng.randn(48000)).astype(np.float32)
+        active = (0.3 * np.sin(2.0 * np.pi * 440.0 * t) + 0.001 * rng.randn(48000)).astype(np.float32)
         audio[48000:96000] = active
         # Inject a spike well above TRUE_PEAK_LIMIT (0.8913) in the silence region
         audio[100] = 1.05  # one sample out of 144000 (0.0007%) — well below percentile(99.9)
 
         # With percentile(99.9), the spike is ignored; True-Peak reflects program level
         result = gate._check_audio_array(audio, context="test")
-        assert result is True, (
-            "Single click spike falsely rejected valid audio (True-Peak guard using np.max?)"
-        )
+        assert result is True, "Single click spike falsely rejected valid audio (True-Peak guard using np.max?)"

@@ -37,6 +37,27 @@ import scipy.signal as sps
 
 logger = logging.getLogger(__name__)
 
+
+def _rms_dbfs_gated(sig: np.ndarray) -> float:
+    """§2.45a-I: Frame-basierter RMS in dBFS, ignoriert Frames < −50 dBFS (Stille).
+
+    Stereo → Mono-Downmix vor Framing. Gibt -96.0 zurück wenn kein aktiver Frame.
+    """
+    if sig.ndim == 2:
+        _mono = sig.mean(axis=0).astype(np.float64) if sig.shape[0] <= 2 else sig.mean(axis=1).astype(np.float64)
+    else:
+        _mono = sig.astype(np.float64)
+    _frame = 480  # 10 ms @ 48 kHz
+    _active = [
+        _mono[i : i + _frame]
+        for i in range(0, len(_mono) - _frame, _frame)
+        if 20.0 * np.log10(np.sqrt(np.mean(_mono[i : i + _frame] ** 2)) + 1e-10) > -50.0
+    ]
+    if not _active:
+        return -96.0
+    return float(20.0 * np.log10(np.sqrt(np.mean(np.concatenate(_active) ** 2)) + 1e-10))
+
+
 _MIN_CROSSTALK_SCORE: float = 0.10
 # Maximum α to prevent over-cancellation (α > 0.70 → |det| < 0.51 → unstable)
 _ALPHA_MAX: float = 0.70
@@ -52,6 +73,7 @@ def _estimate_alpha_f(
     right: np.ndarray,
     n_fft: int,
     hop: int,
+    alpha_max: float,
 ) -> np.ndarray:
     """Estimate frequency-dependent crosstalk coefficient α(f) via long-term spectra.
 
@@ -86,7 +108,7 @@ def _estimate_alpha_f(
     denom = np.sqrt(np.maximum(sum_ll * sum_rr, 1e-30))
     alpha_f = np.sqrt(sum_lr_r**2 + sum_lr_i**2) / denom
     # Hard cap to guarantee invertibility and prevent over-correction
-    return np.clip(alpha_f, 0.0, _ALPHA_MAX)
+    return np.clip(alpha_f, 0.0, alpha_max)
 
 
 def apply(
@@ -94,6 +116,8 @@ def apply(
     sample_rate: int,
     strength: float = 0.5,
     defect_scores: dict | None = None,
+    min_crosstalk_score: float = _MIN_CROSSTALK_SCORE,
+    alpha_max: float = _ALPHA_MAX,
 ) -> np.ndarray:
     """Main entry point for Phase 62."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
@@ -101,8 +125,8 @@ def apply(
 
     if defect_scores is not None:
         xt_score = float(defect_scores.get("crosstalk", 0.0))
-        if xt_score < _MIN_CROSSTALK_SCORE:
-            logger.debug("Phase 62: crosstalk score %.3f < %.3f — skipped", xt_score, _MIN_CROSSTALK_SCORE)
+        if xt_score < min_crosstalk_score:
+            logger.debug("Phase 62: crosstalk score %.3f < %.3f — skipped", xt_score, min_crosstalk_score)
             return np.clip(audio, -1.0, 1.0)
 
     # Crosstalk cancellation only applies to stereo
@@ -125,7 +149,7 @@ def apply(
     window = sps.windows.hann(_PROC_NFFT, sym=False)
 
     # ── Step 1: estimate α(f) from full signal ─────────────────────────────
-    alpha_f = _estimate_alpha_f(left, right, _ESTIM_NFFT, _ESTIM_NFFT // 4)
+    alpha_f = _estimate_alpha_f(left, right, _ESTIM_NFFT, _ESTIM_NFFT // 4, alpha_max)
     # Interpolate to processing NFFT bins (ESTIM and PROC have same n_fft here)
     # Scale alpha by strength so we only invert the fraction the user requests
     alpha_applied = alpha_f * float(np.clip(strength, 0.0, 1.0))
@@ -208,6 +232,45 @@ class CrosstalkCancellationPhase(PhaseInterface):
             ),
         )
 
+    @staticmethod
+    def _compute_crosstalk_profile(
+        material_key: str, quality_mode: str, restorability_score: float
+    ) -> dict[str, float]:
+        material = str(material_key or "unknown").strip().lower()
+        mode = str(quality_mode or "balanced").strip().lower()
+        mode = {"restoration": "balanced", "studio_2026": "maximum"}.get(mode, mode)
+
+        if "vinyl" in material:
+            min_score = 0.10
+            alpha_max = 0.62
+        elif "shellac" in material:
+            min_score = 0.12
+            alpha_max = 0.60
+        elif any(token in material for token in ("cd_digital", "dat", "flac", "streaming")):
+            min_score = 0.18
+            alpha_max = 0.68
+        else:
+            min_score = 0.15
+            alpha_max = 0.65
+
+        rest_norm = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0)) / 100.0
+        min_score += (rest_norm - 0.5) * 0.10
+        alpha_max += (rest_norm - 0.5) * 0.08
+
+        score_off, alpha_off = {
+            "fast": (0.03, 0.03),
+            "balanced": (0.00, 0.00),
+            "quality": (-0.02, -0.03),
+            "maximum": (-0.04, -0.05),
+        }.get(mode, (0.0, 0.0))
+        min_score += score_off
+        alpha_max += alpha_off
+
+        return {
+            "min_crosstalk_score": float(np.clip(min_score, 0.05, 0.25)),
+            "alpha_max": float(np.clip(alpha_max, 0.50, 0.70)),
+        }
+
     def process(
         self,
         audio: np.ndarray,
@@ -224,6 +287,11 @@ class CrosstalkCancellationPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", strength))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+        _profile_62 = self._compute_crosstalk_profile(
+            str(kwargs.get("material_type") or kwargs.get("material") or "unknown"),
+            str(kwargs.get("quality_mode", "balanced")),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
             passthrough = np.clip(passthrough, -1.0, 1.0)
@@ -244,12 +312,19 @@ class CrosstalkCancellationPhase(PhaseInterface):
                 },
                 warnings=["Crosstalk cancellation skipped due to zero effective strength"],
             )
-        _rms_in = float(np.sqrt(np.mean(np.asarray(audio, dtype=np.float64) ** 2) + 1e-12))
-        result_audio = apply(audio, sample_rate, strength=_effective_strength, defect_scores=_defect_scores)
+        _rms_in_db = _rms_dbfs_gated(audio)
+        result_audio = apply(
+            audio,
+            sample_rate,
+            strength=_effective_strength,
+            defect_scores=_defect_scores,
+            min_crosstalk_score=_profile_62["min_crosstalk_score"],
+            alpha_max=_profile_62["alpha_max"],
+        )
         elapsed = _time.perf_counter() - t0
 
-        _rms_out = float(np.sqrt(np.mean(np.asarray(result_audio, dtype=np.float64) ** 2) + 1e-12))
-        _rms_drop = 20.0 * np.log10(max(_rms_out / _rms_in, 1e-30)) if _rms_in > 1e-8 else 0.0
+        _rms_out_db = _rms_dbfs_gated(result_audio)
+        _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0
         return PhaseResult(
             audio=result_audio,
             success=True,
@@ -260,6 +335,9 @@ class CrosstalkCancellationPhase(PhaseInterface):
                 "effective_strength": _effective_strength,
             },
             metadata={
+                "crosstalk_profile": dict(_profile_62),
+                "min_crosstalk_score": float(_profile_62["min_crosstalk_score"]),
+                "alpha_max": float(_profile_62["alpha_max"]),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),

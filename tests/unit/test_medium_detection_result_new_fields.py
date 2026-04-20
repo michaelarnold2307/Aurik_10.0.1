@@ -7,18 +7,18 @@ from forensics.medium_detector import MediumDetectionResult, SpectralFingerprint
 
 def _make_result(**kwargs) -> MediumDetectionResult:
     """Helper — minimales MediumDetectionResult."""
-    defaults = dict(
-        transfer_chain=["vinyl"],
-        is_multi_generation=False,
-        primary_material="vinyl",
-        confidence=0.95,
-        spectral_fingerprint=SpectralFingerprint(
+    defaults = {
+        "transfer_chain": ["vinyl"],
+        "is_multi_generation": False,
+        "primary_material": "vinyl",
+        "confidence": 0.95,
+        "spectral_fingerprint": SpectralFingerprint(
             effective_bandwidth_hz=15000.0,
             noise_floor_db=-55.0,
             rolloff_95_hz=14000.0,
             wow_flutter_index=0.01,
         ),
-    )
+    }
     defaults.update(kwargs)
     return MediumDetectionResult(**defaults)
 

@@ -174,6 +174,80 @@ class ClickRemovalPhase(PhaseInterface):
             description="Professional multi-scale click removal with adaptive interpolation (comparable to iZotope RX De-click)",
         )
 
+    @staticmethod
+    def _compute_click_removal_profile(
+        material: str = "vinyl",
+        quality_mode: str | None = "balanced",
+        restorability: float = 50.0,
+    ) -> dict:
+        """Compute material- and quality-adaptive profile for click removal (§2.56).
+
+        Returns a dict with keys:
+          ml_severity_threshold  [0.35, 0.80]
+          cubic_ctx              [6, 20]   — cubic interpolation context (samples)
+          spectral_ctx           [64, 256] — spectral repair context (FFT bins)
+        """
+        # Base thresholds per material (lower = more aggressive)
+        _BASE_THRESHOLD: dict[str, float] = {
+            "shellac": 0.42,
+            "wax_cylinder": 0.40,
+            "vinyl": 0.55,
+            "tape": 0.62,
+            "reel_tape": 0.60,
+            "cassette": 0.58,
+            "cd_digital": 0.70,
+            "mp3_low": 0.65,
+        }
+        base_thr = _BASE_THRESHOLD.get(material, 0.57)
+
+        # Quality-mode adjustment
+        qm = (quality_mode or "balanced").lower()
+        qm_delta = {"fast": +0.08, "balanced": 0.0, "quality": -0.06, "maximum": -0.10}.get(qm, 0.0)
+
+        # Restorability adjustment: low restorability → more aggressive (lower threshold)
+        rest_delta = (float(restorability) - 50.0) * 0.001  # rest=20 → -0.03; rest=80 → +0.03
+
+        ml_threshold = float(base_thr + qm_delta + rest_delta)
+        ml_threshold = max(0.35, min(0.80, ml_threshold))
+
+        # Cubic context: shellac/wax need more context; quality mode → more
+        _BASE_CUBIC: dict[str, int] = {
+            "shellac": 14,
+            "wax_cylinder": 16,
+            "vinyl": 12,
+            "tape": 10,
+            "reel_tape": 10,
+            "cassette": 10,
+            "cd_digital": 8,
+        }
+        cubic_ctx = _BASE_CUBIC.get(material, 12)
+        if qm in ("quality", "maximum"):
+            cubic_ctx = min(20, cubic_ctx + 4)
+        elif qm == "fast":
+            cubic_ctx = max(6, cubic_ctx - 2)
+
+        # Spectral context: shellac/wax → more bins; quality → more
+        _BASE_SPEC: dict[str, int] = {
+            "shellac": 192,
+            "wax_cylinder": 224,
+            "vinyl": 160,
+            "tape": 128,
+            "reel_tape": 128,
+            "cassette": 128,
+            "cd_digital": 96,
+        }
+        spectral_ctx = _BASE_SPEC.get(material, 160)
+        if qm in ("quality", "maximum"):
+            spectral_ctx = min(256, spectral_ctx + 64)
+        elif qm == "fast":
+            spectral_ctx = max(64, spectral_ctx - 64)
+
+        return {
+            "ml_severity_threshold": ml_threshold,
+            "cubic_ctx": cubic_ctx,
+            "spectral_ctx": spectral_ctx,
+        }
+
     def process(
         self,
         audio: np.ndarray,
@@ -787,9 +861,9 @@ class ClickRemovalPhase(PhaseInterface):
         if len(before) < 24 or len(after) < 24:
             return self._interpolate_cubic(audio, start, end)
 
-        # High-Order AR (order ≥ 20, bindet Harmonie-Struktur mehrerer Perioden)
-        # Pflicht: Ordnung darf nicht unter 20 sinken (vgl. Aurik-Coding-Standards)
-        order = max(20, min(48, len(before) // 3, len(after) // 3))
+        # High-Order AR — Pflicht: Ordnung ≥ 30 @ 48 kHz (copilot-instructions §LPC-Pattern)
+        # Minimum 30 bindet mehrere Stimmperioden + Formant-Struktur (Rabiner & Schafer 1978).
+        order = max(30, min(48, len(before) // 3, len(after) // 3))
 
         try:
             # Levinson-Durbin via librosa.lpc (scipy ≥ 1.15 hat kein lpc mehr)

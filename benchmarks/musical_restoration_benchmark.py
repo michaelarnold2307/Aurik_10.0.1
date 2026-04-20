@@ -623,9 +623,7 @@ class MusicalRestorationBenchmark:
         _enforce_fragment_guard = bool(
             self.config.enforce_min_fragment_guard
             and (
-                self.config.enable_mushra_proxy
-                or self.config.enable_musical_goals
-                or self.config.enable_formal_session
+                self.config.enable_mushra_proxy or self.config.enable_musical_goals or self.config.enable_formal_session
             )
         )
         if _enforce_fragment_guard and dur < _MIN_AMRB_FRAGMENT_S:

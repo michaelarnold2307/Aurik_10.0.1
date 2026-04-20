@@ -366,6 +366,7 @@ class CREPEPitchDetector:
 
         for error_id in range(1, n_errors + 1):
             error_region = labeled == error_id
+            error_idx = np.where(error_region)[0]
 
             # Use jump deviation if it's larger than trend deviation
             region_cents_dev = cents_deviation[error_region]
@@ -378,6 +379,22 @@ class CREPEPitchDetector:
                 # over multiple frames and bias the mean downward. Use the jump peak
                 # as representative deviation when jump evidence dominates.
                 mean_dev = float(np.sign(np.sum(region_jump_dev)) * max_dev)
+
+                # Estimate stable-step deviation from context windows around the region.
+                # This recovers full step size (e.g. ~100 cents) when transition frames
+                # dilute the per-frame jump magnitude.
+                if error_idx.size > 0:
+                    i0 = int(error_idx[0])
+                    i1 = int(error_idx[-1])
+                    pre = f0_voiced[max(0, i0 - 4) : i0]
+                    post = f0_voiced[i1 + 1 : i1 + 5]
+                    if pre.size >= 2 and post.size >= 2:
+                        pre_med = float(np.median(pre))
+                        post_med = float(np.median(post))
+                        if pre_med > 1e-6 and post_med > 1e-6:
+                            step_dev = float(1200.0 * np.log2(post_med / pre_med))
+                            if abs(step_dev) > abs(mean_dev) + 20.0:
+                                mean_dev = step_dev
             else:
                 max_dev = np.max(np.abs(region_cents_dev))
                 mean_dev = np.mean(region_cents_dev)

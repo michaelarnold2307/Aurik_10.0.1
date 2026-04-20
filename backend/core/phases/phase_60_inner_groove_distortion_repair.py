@@ -25,6 +25,27 @@ import scipy.signal as sps
 
 logger = logging.getLogger(__name__)
 
+
+def _rms_dbfs_gated(sig: np.ndarray) -> float:
+    """§2.45a-I: Frame-basierter RMS in dBFS, ignoriert Frames < −50 dBFS (Stille).
+
+    Stereo → Mono-Downmix vor Framing. Gibt -96.0 zurück wenn kein aktiver Frame.
+    """
+    if sig.ndim == 2:
+        _mono = sig.mean(axis=0).astype(np.float64) if sig.shape[0] <= 2 else sig.mean(axis=1).astype(np.float64)
+    else:
+        _mono = sig.astype(np.float64)
+    _frame = 480  # 10 ms @ 48 kHz
+    _active = [
+        _mono[i : i + _frame]
+        for i in range(0, len(_mono) - _frame, _frame)
+        if 20.0 * np.log10(np.sqrt(np.mean(_mono[i : i + _frame] ** 2)) + 1e-10) > -50.0
+    ]
+    if not _active:
+        return -96.0
+    return float(20.0 * np.log10(np.sqrt(np.mean(np.concatenate(_active) ** 2)) + 1e-10))
+
+
 _MIN_IGD_SCORE: float = 0.10
 _N_SEGMENTS: int = 8  # Position segments for adaptive processing
 
@@ -34,6 +55,8 @@ def apply(
     sample_rate: int,
     strength: float = 0.6,
     defect_scores: dict | None = None,
+    min_igd_score: float = _MIN_IGD_SCORE,
+    n_segments: int = _N_SEGMENTS,
 ) -> np.ndarray:
     """Main entry point for Phase 60."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
@@ -41,8 +64,8 @@ def apply(
 
     if defect_scores is not None:
         igd_score = float(defect_scores.get("inner_groove_distortion", 0.0))
-        if igd_score < _MIN_IGD_SCORE:
-            logger.debug("Phase 60: IGD score %.3f < %.3f — skipped", igd_score, _MIN_IGD_SCORE)
+        if igd_score < min_igd_score:
+            logger.debug("Phase 60: IGD score %.3f < %.3f — skipped", igd_score, min_igd_score)
             return np.clip(audio, -1.0, 1.0)
 
     stereo = audio.ndim == 2
@@ -62,21 +85,22 @@ def apply(
     x = audio.astype(np.float64)
     n = len(x)
     sr = sample_rate
-    seg_len = n // _N_SEGMENTS
+    n_segments = max(1, int(n_segments))
+    seg_len = max(1, n // n_segments)
 
     out = np.copy(x)
     n_fft = 4096
     hop = n_fft // 4
 
-    for seg_idx in range(_N_SEGMENTS):
+    for seg_idx in range(n_segments):
         start = seg_idx * seg_len
-        end = min(start + seg_len, n) if seg_idx < _N_SEGMENTS - 1 else n
+        end = min(start + seg_len, n) if seg_idx < n_segments - 1 else n
         segment = x[start:end]
         if len(segment) < n_fft:
             continue
 
         # Position-adaptive strength: increases linearly from outer to inner groove
-        position_factor = (seg_idx + 1) / _N_SEGMENTS
+        position_factor = (seg_idx + 1) / n_segments
         local_strength = strength * position_factor
 
         # STFT
@@ -143,6 +167,40 @@ class InnerGrooveDistortionRepairPhase(PhaseInterface):
             ),
         )
 
+    @staticmethod
+    def _compute_igd_profile(material_key: str, quality_mode: str, restorability_score: float) -> dict[str, float]:
+        material = str(material_key or "unknown").strip().lower()
+        mode = str(quality_mode or "balanced").strip().lower()
+        mode = {"restoration": "balanced", "studio_2026": "maximum"}.get(mode, mode)
+
+        if "shellac" in material or "vinyl" in material:
+            min_igd_score = 0.11 if "vinyl" in material else 0.09
+            n_segments = 8 if "vinyl" in material else 10
+        elif any(token in material for token in ("cd_digital", "dat", "flac", "streaming")):
+            min_igd_score = 0.17
+            n_segments = 6
+        else:
+            min_igd_score = 0.14
+            n_segments = 7
+
+        rest_norm = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0)) / 100.0
+        min_igd_score += (rest_norm - 0.5) * 0.10
+        n_segments += int(round((0.5 - rest_norm) * 4.0))
+
+        score_off, seg_off = {
+            "fast": (0.03, -2),
+            "balanced": (0.00, 0),
+            "quality": (-0.02, 2),
+            "maximum": (-0.04, 3),
+        }.get(mode, (0.0, 0))
+        min_igd_score += score_off
+        n_segments += seg_off
+
+        return {
+            "min_igd_score": float(np.clip(min_igd_score, 0.05, 0.25)),
+            "n_segments": int(np.clip(n_segments, 4, 14)),
+        }
+
     def process(
         self,
         audio: np.ndarray,
@@ -159,6 +217,11 @@ class InnerGrooveDistortionRepairPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", strength))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+        _profile_60 = self._compute_igd_profile(
+            str(kwargs.get("material_type") or kwargs.get("material") or "unknown"),
+            str(kwargs.get("quality_mode", "balanced")),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
             passthrough = np.clip(passthrough, -1.0, 1.0)
@@ -179,12 +242,19 @@ class InnerGrooveDistortionRepairPhase(PhaseInterface):
                 },
                 warnings=["Inner groove distortion repair skipped due to zero effective strength"],
             )
-        _rms_in = float(np.sqrt(np.mean(np.asarray(audio, dtype=np.float64) ** 2) + 1e-12))
-        result_audio = apply(audio, sample_rate, strength=_effective_strength, defect_scores=_defect_scores)
+        _rms_in_db = _rms_dbfs_gated(audio)
+        result_audio = apply(
+            audio,
+            sample_rate,
+            strength=_effective_strength,
+            defect_scores=_defect_scores,
+            min_igd_score=_profile_60["min_igd_score"],
+            n_segments=_profile_60["n_segments"],
+        )
         elapsed = _time.perf_counter() - t0
 
-        _rms_out = float(np.sqrt(np.mean(np.asarray(result_audio, dtype=np.float64) ** 2) + 1e-12))
-        _rms_drop = 20.0 * np.log10(max(_rms_out / _rms_in, 1e-30)) if _rms_in > 1e-8 else 0.0
+        _rms_out_db = _rms_dbfs_gated(result_audio)
+        _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0
         return PhaseResult(
             audio=result_audio,
             success=True,
@@ -194,6 +264,9 @@ class InnerGrooveDistortionRepairPhase(PhaseInterface):
                 "strength": _effective_strength,
             },
             metadata={
+                "igd_profile": dict(_profile_60),
+                "min_igd_score": float(_profile_60["min_igd_score"]),
+                "n_segments": int(_profile_60["n_segments"]),
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),
                 "loudness_makeup_db": 0.0,
                 "phase_locality_factor": phase_locality_factor,

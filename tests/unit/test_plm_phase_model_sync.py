@@ -10,14 +10,13 @@ Ensures that:
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 
 import pytest
 
 # ── Load _PHASE_REQUIRED_MODELS dict ─────────────────────────────────────
-from backend.core.plugin_lifecycle_manager import _PHASE_REQUIRED_MODELS  # noqa: E402
+from backend.core.plugin_lifecycle_manager import _PHASE_REQUIRED_MODELS
 
 PHASES_DIR = Path(__file__).resolve().parents[2] / "backend" / "core" / "phases"
 
@@ -65,7 +64,7 @@ class TestPLMPhaseModelSync:
             pytest.skip(f"{phase_id} has no _PHASE_REQUIRED_MODELS entry (may be DSP-only phase using budget directly)")
         missing = code_models - mapping
         assert not missing, (
-            f"{phase_id}: try_allocate() calls models {missing} " f"but _PHASE_REQUIRED_MODELS only has {mapping}"
+            f"{phase_id}: try_allocate() calls models {missing} but _PHASE_REQUIRED_MODELS only has {mapping}"
         )
 
     def test_phase_23_includes_apollo(self):

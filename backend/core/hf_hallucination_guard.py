@@ -21,9 +21,11 @@ Literature anchors:
     Fastl & Zwicker, "Psychoacoustics" (2007): §8 spectral brightness.
     Morton, "Off the Record" (2006): wire recorder HF characteristics.
 """
+
 from __future__ import annotations
 
 import logging
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -35,23 +37,23 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _MATERIAL_HF_CAP_HZ: dict[str, float] = {
     # Pre-electrical / early electrical mechanical recording
-    "wax_cylinder":    5_000.0,   # Acoustic horn 1900-1930; Casey 2007 / IASA TC-04
-    "wire_recording":  6_000.0,   # Steel-wire Magnetophon variants 1940-1955; Morton 2006
+    "wax_cylinder": 5_000.0,  # Acoustic horn 1900-1930; Casey 2007 / IASA TC-04
+    "wire_recording": 6_000.0,  # Steel-wire Magnetophon variants 1940-1955; Morton 2006
     # Groove-cut analogue media
-    "shellac":         7_000.0,   # Shellac / 78 rpm 1898-1960; §0 Vintage Aesthetics ≤7 kHz
-    "lacquer_disc":    8_500.0,   # Acetate lacquer instantaneous discs 1930-1950
-    "vinyl":          22_000.0,   # High-quality vinyl; no meaningful cap
+    "shellac": 7_000.0,  # Shellac / 78 rpm 1898-1960; §0 Vintage Aesthetics ≤7 kHz
+    "lacquer_disc": 8_500.0,  # Acetate lacquer instantaneous discs 1930-1950
+    "vinyl": 22_000.0,  # High-quality vinyl; no meaningful cap
     # Magnetic tape
-    "reel_tape":      18_000.0,   # Biased tape at pro speeds; conservative to prevent ultra-HF
-    "cassette":       14_000.0,   # Compact cassette; head geometry + speed limit
-    "minidisc":       16_000.0,   # ATRAC-1/3 codec HF rolloff
-    "dat":            22_000.0,   # Digital Archive Tape — essentially uncapped
+    "reel_tape": 18_000.0,  # Biased tape at pro speeds; conservative to prevent ultra-HF
+    "cassette": 14_000.0,  # Compact cassette; head geometry + speed limit
+    "minidisc": 16_000.0,  # ATRAC-1/3 codec HF rolloff
+    "dat": 22_000.0,  # Digital Archive Tape — essentially uncapped
     # Digital / lossy
-    "cd_digital":     22_000.0,   # Nyquist-limited at 44.1 kHz; no hallucination risk
-    "mp3_low":        16_000.0,   # ≤128 kbps: psychoacoustic model cuts HF aggressively
-    "mp3_high":       20_000.0,   # 256–320 kbps: near-transparent
-    "aac_low":        16_000.0,
-    "aac_high":       20_000.0,
+    "cd_digital": 22_000.0,  # Nyquist-limited at 44.1 kHz; no hallucination risk
+    "mp3_low": 16_000.0,  # ≤128 kbps: psychoacoustic model cuts HF aggressively
+    "mp3_high": 20_000.0,  # 256–320 kbps: near-transparent
+    "aac_low": 16_000.0,
+    "aac_high": 20_000.0,
 }
 
 # Safe fallback for materials not in the table above
@@ -62,21 +64,23 @@ _DEFAULT_HF_CAP_HZ: float = 20_000.0
 # phase_37 (bass) excluded: operates in low-frequency domain only.
 # phase_55 already has its own internal BW cap; dual-check is safe.
 # ----------------------------------------------------------------------
-ADDITIVE_PHASE_PREFIXES: frozenset[str] = frozenset({
-    "phase_06",   # frequency / bandwidth restoration
-    "phase_07",   # harmonic reconstruction
-    "phase_21",   # harmonic exciter
-    "phase_22",   # tape saturation (adds harmonics)
-    "phase_23",   # spectral repair (can synthesise HF)
-    "phase_38",   # presence boost (2–8 kHz range)
-    "phase_39",   # air band / HF enhancement
-    "phase_50",   # spectral inpainting follow-up
-    "phase_55",   # diffusion inpainting (has own guard — second check is benign)
-    "phase_56",   # spectral band-gap repair
-})
+ADDITIVE_PHASE_PREFIXES: frozenset[str] = frozenset(
+    {
+        "phase_06",  # frequency / bandwidth restoration
+        "phase_07",  # harmonic reconstruction
+        "phase_21",  # harmonic exciter
+        "phase_22",  # tape saturation (adds harmonics)
+        "phase_23",  # spectral repair (can synthesise HF)
+        "phase_38",  # presence boost (2–8 kHz range)
+        "phase_39",  # air band / HF enhancement
+        "phase_50",  # spectral inpainting follow-up
+        "phase_55",  # diffusion inpainting (has own guard — second check is benign)
+        "phase_56",  # spectral band-gap repair
+    }
+)
 
 # HF energy-ratio increase (fraction of total energy) that triggers intervention.
-_HF_ENERGY_DELTA_THRESHOLD: float = 0.035   # 3.5 % of broadband energy
+_HF_ENERGY_DELTA_THRESHOLD: float = 0.035  # 3.5 % of broadband energy
 
 # Minimum wet ratio kept even during rescue (preserves partial phase benefit)
 _MIN_WET_RATIO: float = 0.35
@@ -86,6 +90,7 @@ _MIN_WET_RATIO: float = 0.35
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _estimate_hf_energy_ratio(audio: np.ndarray, sr: int, cutoff_hz: float) -> float:
     """Fast estimate of fraction of signal energy above *cutoff_hz*.
 
@@ -93,12 +98,14 @@ def _estimate_hf_energy_ratio(audio: np.ndarray, sr: int, cutoff_hz: float) -> f
     Returns 0.0 on any error (non-blocking, advisory-only).
     """
     try:
-        mono: np.ndarray = audio[0] if (audio.ndim == 2 and audio.shape[0] == 2) else (
-            np.mean(audio, axis=0) if audio.ndim == 2 else audio
+        mono: np.ndarray = (
+            audio[0]
+            if (audio.ndim == 2 and audio.shape[0] == 2)
+            else (np.mean(audio, axis=0) if audio.ndim == 2 else audio)
         )
         n_fft = 1024
         center = max(0, len(mono) // 2 - n_fft // 2)
-        frame = mono[center: center + n_fft]
+        frame = mono[center : center + n_fft]
         if len(frame) < 64:
             return 0.0
         if len(frame) < n_fft:
@@ -116,6 +123,7 @@ def _estimate_hf_energy_ratio(audio: np.ndarray, sr: int, cutoff_hz: float) -> f
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def get_material_hf_cap(material: str) -> float:
     """Return the material BW cap in Hz (lookup with fallback)."""

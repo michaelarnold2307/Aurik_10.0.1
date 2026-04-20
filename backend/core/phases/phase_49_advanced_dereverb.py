@@ -143,6 +143,63 @@ class AdvancedDereverbPhase(PhaseInterface):
         d50_limit = float(np.clip(0.12 * _ratio * _rest_factor, 0.08, 0.18))
         return c80_down_limit, c80_soft_limit, c80_hard_limit, d50_limit
 
+    @staticmethod
+    def _adaptive_wet_mix_guard_profile(
+        material_key: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """§2.54 Adaptive wet-mix guard profile for dereverb safety."""
+        _material = str(material_key or "unknown").strip().lower()
+        _aliases = {"restoration": "balanced", "studio_2026": "maximum"}
+        _mode = _aliases.get(
+            str(quality_mode or "balanced").strip().lower(), str(quality_mode or "balanced").strip().lower()
+        )
+
+        if any(
+            token in _material for token in ("shellac", "wax_cylinder", "wire_recording", "lacquer_disc", "acoustic_78")
+        ):
+            wet_curve_exp = 1.00
+            attenuation_guard_floor = 0.27
+            rescue_wet_floor = 0.16
+            scratch_guard_floor = 0.20
+        elif any(token in _material for token in ("vinyl", "reel_tape", "tape", "cassette")):
+            wet_curve_exp = 1.08
+            attenuation_guard_floor = 0.31
+            rescue_wet_floor = 0.19
+            scratch_guard_floor = 0.24
+        else:
+            wet_curve_exp = 1.16
+            attenuation_guard_floor = 0.37
+            rescue_wet_floor = 0.24
+            scratch_guard_floor = 0.29
+
+        _rest = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0))
+        _rest_norm = _rest / 100.0
+        wet_curve_exp += (_rest_norm - 0.5) * 0.20
+        attenuation_guard_floor += (_rest_norm - 0.5) * 0.06
+        rescue_wet_floor += (_rest_norm - 0.5) * 0.04
+        scratch_guard_floor += (_rest_norm - 0.5) * 0.05
+
+        _mode_offsets = {
+            "fast": (0.10, 0.05, 0.04, 0.05),
+            "balanced": (0.02, 0.01, 0.00, 0.01),
+            "quality": (0.00, 0.00, 0.00, 0.00),
+            "maximum": (-0.04, -0.02, -0.02, -0.02),
+        }
+        _exp_off, _att_off, _rescue_off, _scratch_off = _mode_offsets.get(_mode, (0.0, 0.0, 0.0, 0.0))
+        wet_curve_exp += _exp_off
+        attenuation_guard_floor += _att_off
+        rescue_wet_floor += _rescue_off
+        scratch_guard_floor += _scratch_off
+
+        return {
+            "wet_curve_exp": float(np.clip(wet_curve_exp, 0.95, 1.35)),
+            "attenuation_guard_floor": float(np.clip(attenuation_guard_floor, 0.25, 0.45)),
+            "rescue_wet_floor": float(np.clip(rescue_wet_floor, 0.15, 0.30)),
+            "scratch_guard_floor": float(np.clip(scratch_guard_floor, 0.18, 0.35)),
+        }
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id=self._PHASE_ID,
@@ -210,6 +267,12 @@ class AdvancedDereverbPhase(PhaseInterface):
         _quality_first_unleashed_49 = bool(
             kwargs.get("quality_first_unleashed", _quality_mode_49 in ("quality", "maximum"))
         )
+        self._current_material = str(kwargs.get("material_type", "unknown"))
+        _wet_mix_profile_49 = self._adaptive_wet_mix_guard_profile(
+            self._current_material,
+            _quality_mode_49,
+            float(kwargs.get("restorability_score", 65.0)),
+        )
         _vocal_conf_49 = float(kwargs.get("vocal_confidence", kwargs.get("panns_singing_confidence", 0.0)))
         _vocal_detected_49 = bool(kwargs.get("vocal_detected", False)) or (_vocal_conf_49 >= 0.35)
 
@@ -244,7 +307,6 @@ class AdvancedDereverbPhase(PhaseInterface):
 
         protect_transients: bool = bool(kwargs.get("protect_transients", True))
         # Store material type for EMA-alpha selection in _dereverb_channel
-        self._current_material = str(kwargs.get("material_type", "unknown"))
         # Sub-phase progress callback: scoped to this phase's range (injected by UV3).
         # Emitting keeps the UI progress bar moving during slow WPE computation.
         _progress_sub_cb = kwargs.get("progress_sub_callback")
@@ -343,6 +405,7 @@ class AdvancedDereverbPhase(PhaseInterface):
         # Make PMGG strength retries audibly monotonic: explicit wet/dry blend at
         # the phase output, independent from internal WPE model scaling.
         wet_mix = float(np.clip(effective_strength, 0.0, 1.0))
+        wet_mix = float(np.clip(wet_mix ** _wet_mix_profile_49["wet_curve_exp"], 0.0, 1.0))
         attenuation_guard_triggered = False
         attenuation_guard_factor = 1.0
 
@@ -355,7 +418,13 @@ class AdvancedDereverbPhase(PhaseInterface):
         _max_rms_drop_db = float(self._MAX_RMS_DROP_DB.get(self._current_material, self._MAX_RMS_DROP_DB["unknown"]))
         if rms_before_db > -80.0 and rms_drop_db < -_max_rms_drop_db and wet_mix > 0.0:
             attenuation_guard_triggered = True
-            attenuation_guard_factor = float(np.clip(_max_rms_drop_db / (abs(rms_drop_db) + 1e-9), 0.35, 1.0))
+            attenuation_guard_factor = float(
+                np.clip(
+                    _max_rms_drop_db / (abs(rms_drop_db) + 1e-9),
+                    _wet_mix_profile_49["attenuation_guard_floor"],
+                    1.0,
+                )
+            )
             wet_mix *= attenuation_guard_factor
 
         # --- §4.5c Early-Reflection-Guard: C80/D50 clarity-based wet-mix limiting ---
@@ -387,7 +456,9 @@ class AdvancedDereverbPhase(PhaseInterface):
             c80_guard_triggered = True
         elif delta_c80 > _c80_hard_lim:
             # Excessive clarity boost → scale wet_mix proportionally
-            _c80_scale = float(np.clip(_c80_hard_lim / (delta_c80 + 1e-9), 0.30, 1.0))
+            _c80_scale = float(
+                np.clip(_c80_hard_lim / (delta_c80 + 1e-9), _wet_mix_profile_49["scratch_guard_floor"], 1.0)
+            )
             wet_mix *= _c80_scale
             c80_guard_triggered = True
             logger.info(
@@ -416,7 +487,9 @@ class AdvancedDereverbPhase(PhaseInterface):
 
         # §4.5c D50 secondary guard: adaptive ΔD50 limit
         if abs(delta_d50) > _d50_lim and not c80_guard_triggered:
-            _d50_scale = float(np.clip(_d50_lim / (abs(delta_d50) + 1e-9), 0.30, 1.0))
+            _d50_scale = float(
+                np.clip(_d50_lim / (abs(delta_d50) + 1e-9), _wet_mix_profile_49["scratch_guard_floor"], 1.0)
+            )
             wet_mix *= _d50_scale
             logger.info(
                 "Phase 49 D50-guard: ΔD50=%.3f > %.3f → wet_mix scaled to %.3f",
@@ -434,7 +507,11 @@ class AdvancedDereverbPhase(PhaseInterface):
         rms_drop_after_blend_db = rms_after_blend_db - rms_before_db if rms_before_db > -80.0 else 0.0
         if rms_before_db > -80.0 and rms_drop_after_blend_db < -_max_rms_drop_db and wet_mix > 0.0:
             _rescue_wet = float(
-                np.clip(wet_mix * (_max_rms_drop_db / (abs(rms_drop_after_blend_db) + 1e-9)), 0.20, wet_mix)
+                np.clip(
+                    wet_mix * (_max_rms_drop_db / (abs(rms_drop_after_blend_db) + 1e-9)),
+                    _wet_mix_profile_49["rescue_wet_floor"],
+                    wet_mix,
+                )
             )
             processed = audio + _rescue_wet * (processed - audio)
             wet_mix = _rescue_wet
@@ -484,6 +561,11 @@ class AdvancedDereverbPhase(PhaseInterface):
                 "window_size": self._WINDOW_SIZE,
                 "hop_size": self._HOP_SIZE,
                 "wet_mix": wet_mix,
+                "wet_mix_guard_profile": dict(_wet_mix_profile_49),
+                "wet_curve_exp": float(_wet_mix_profile_49["wet_curve_exp"]),
+                "attenuation_guard_floor": float(_wet_mix_profile_49["attenuation_guard_floor"]),
+                "rescue_wet_floor": float(_wet_mix_profile_49["rescue_wet_floor"]),
+                "scratch_guard_floor": float(_wet_mix_profile_49["scratch_guard_floor"]),
                 "attenuation_guard_triggered": attenuation_guard_triggered,
                 "attenuation_guard_factor": attenuation_guard_factor,
                 "rms_change_db": rms_change_db,

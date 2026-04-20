@@ -75,7 +75,7 @@ def _rms_dbfs_gated(sig: np.ndarray) -> float:
     ]
     if not _active:
         return -96.0
-    return float(20.0 * np.log10(np.sqrt(np.mean([np.mean(r ** 2) for r in _active])) + 1e-10))
+    return float(20.0 * np.log10(np.sqrt(np.mean([np.mean(r**2) for r in _active])) + 1e-10))
 
 
 class NoiseGate(PhaseInterface):
@@ -355,18 +355,21 @@ class NoiseGate(PhaseInterface):
         # §4.5 Psychoacoustic Masking Clamp — protect musically masked gate regions
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             gated_audio = apply_psychoacoustic_masking_clamp(
-                audio, gated_audio, sample_rate,
-                strength=_effective_strength, mode="subtractive",
+                audio,
+                gated_audio,
+                sample_rate,
+                strength=_effective_strength,
+                mode="subtractive",
             )
         except Exception as _pm_exc:
             logger.debug("Phase18 masking clamp non-blocking: %s", _pm_exc)
 
-        # Metrics
-        rms_original = np.sqrt(np.mean(audio**2))
-        rms_gated = np.sqrt(np.mean(gated_audio**2))
-        # Guard: log10(0) => RuntimeWarning bei Stille-Eingaben; clamp auf >= 1e-30
-        noise_reduction_db = 20 * np.log10(np.maximum(rms_gated / (rms_original + 1e-10), 1e-30))
+        # Metrics — §2.45a-I: gated RMS, ignoriert Stille-Frames
+        _rms_orig_db = _rms_dbfs_gated(audio)
+        _rms_gated_db = _rms_dbfs_gated(gated_audio)
+        noise_reduction_db = (_rms_gated_db - _rms_orig_db) if _rms_orig_db > -80.0 else 0.0
 
         execution_time = time.time() - start_time
         rt_factor = execution_time / (len(audio) / sample_rate)
@@ -548,7 +551,9 @@ class NoiseGate(PhaseInterface):
                 _vad_budget_ok = False
                 _vad_release = None
                 try:
-                    from backend.core.ml_memory_budget import try_allocate as _try_alloc_18, release as _rel_18
+                    from backend.core.ml_memory_budget import release as _rel_18
+                    from backend.core.ml_memory_budget import try_allocate as _try_alloc_18
+
                     if _try_alloc_18("SileroVAD_phase18", 0.08):
                         _vad_budget_ok = True
                         _vad_release = _rel_18

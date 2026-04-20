@@ -179,6 +179,52 @@ _MATERIAL_CONSERVATIVENESS_RANK: dict[str, int] = {
     "unknown": 0,
 }
 
+# §8.5A [RELEASE_MUST] Globales Parameterregister — materialadaptive
+# Noise-Texture-Rollback-Schwellen (dB/oct) für §2.49 Guard.
+_MATERIAL_NOISE_TEXTURE_ROLLBACK_THRESHOLD: dict[str, float] = {
+    "shellac": 6.0,
+    "vinyl": 8.0,
+    "reel_tape": 9.0,
+    "tape": 9.0,
+    "cassette": 10.0,
+    "cd_digital": 12.0,
+    "dat": 12.0,
+    "streaming": 13.0,
+    "aac": 13.0,
+    "mp3_high": 14.0,
+    "mp3_low": 15.0,
+    "unknown": 10.0,
+}
+
+
+def _get_noise_texture_rollback_threshold(material_key: str) -> float:
+    """Return material-adaptive noise texture rollback threshold (§8.5A)."""
+    _k = str(material_key or "unknown").strip().lower()
+    return float(_MATERIAL_NOISE_TEXTURE_ROLLBACK_THRESHOLD.get(_k, 10.0))
+
+
+def _canonicalize_quality_mode(raw: "str | None") -> str:
+    """Bridge ProcessingMode strings to internal QualityMode strings.
+
+    Magic-Button uses ProcessingMode ('restoration', 'studio_2026').
+    Phases that accept a quality_mode kwarg expect QualityMode values
+    ('quality', 'maximum', 'balanced', 'fast').
+    This function normalises both vocabularies into the phase-internal form.
+    (§Mode-Alias copilot-instructions §0b)
+    """
+    s = str(raw or "").strip().lower().replace("-", "_")
+    _MAP: dict[str, str] = {
+        "restoration": "quality",
+        "studio_2026": "maximum",
+        "studio2026": "maximum",
+        "studio": "maximum",
+        "quality": "quality",
+        "maximum": "maximum",
+        "balanced": "balanced",
+        "fast": "fast",
+    }
+    return _MAP.get(s, "quality")
+
 
 def _pick_more_conservative_material(a: "MaterialType", b: "MaterialType") -> "MaterialType":
     """Return the material type with higher conservativeness rank (§Spec Konfliktregel Fallback)."""
@@ -223,6 +269,44 @@ class UnifiedRestorerV3:
         result = restorer.restore(audio, sample_rate=44100)
         restored_audio = result.audio
     """
+
+    @staticmethod
+    def _resolve_pmgg_restorability_score(
+        cached_result: Any,
+        analysis_audio: np.ndarray,
+        analysis_sample_rate: int,
+        material_key: str,
+        fallback_score: float,
+        estimator_fn: Any,
+    ) -> tuple[float, str, Any | None]:
+        """Resolve a stable PMGG restorability score from cache, estimator, or fallback.
+
+        Precedence:
+        1) cached_result.restorability_score (if finite)
+        2) estimator_fn(...).restorability_score (if finite)
+        3) fallback_score
+        """
+        try:
+            _cached_score = getattr(cached_result, "restorability_score", None)
+            if _cached_score is not None and np.isfinite(float(_cached_score)):
+                return float(_cached_score), "cached", cached_result
+        except Exception:
+            pass
+
+        try:
+            _estimated_result = estimator_fn(
+                analysis_audio,
+                analysis_sample_rate,
+                material=material_key,
+                quality_mode="restoration",
+            )
+            _estimated_score = getattr(_estimated_result, "restorability_score", None)
+            if _estimated_score is not None and np.isfinite(float(_estimated_score)):
+                return float(_estimated_score), "estimated", _estimated_result
+        except Exception:
+            return float(fallback_score), "fallback", None
+
+        return float(fallback_score), "fallback", None
 
     def __init__(self, config: RestorationConfig | None = None):
         """
@@ -3883,7 +3967,9 @@ class UnifiedRestorerV3:
         if _schlager_result is not None and bool(getattr(_schlager_result, "is_schlager", False)):
             _era_decade_guard = int(getattr(_era_result, "decade", 0) or 0)
             _genre_conf_guard = float(getattr(_schlager_result, "confidence", 0.0) or 0.0)
-            _is_short_vintage_guard = (_era_decade_guard > 0 and _era_decade_guard <= 1940) and (_audio_duration_s < 10.0)
+            _is_short_vintage_guard = (_era_decade_guard > 0 and _era_decade_guard <= 1940) and (
+                _audio_duration_s < 10.0
+            )
             if _is_short_vintage_guard and _genre_conf_guard < 0.60:
                 _schlager_result.is_schlager = False
                 _schlager_result.genre_label = "Unbekannt"
@@ -4159,16 +4245,42 @@ class UnifiedRestorerV3:
         try:
             from backend.core.reference_anchor_synthesizer import synthesize_reference_anchor
 
-            # Use GlobalPlan decade directly (whole-track analysis) — more reliable
-            # than chunk-level EraClassifier (§Dach principle). Only fall back to
-            # chunk EraResult if no GlobalPlan available.
+            # Resolve reference era with conflict arbitration:
+            # GlobalPlan stays default, but a high-confidence Tier-2 era signal
+            # should win on hard decade conflicts.
             _gp_portrait_anc = getattr(getattr(self, "_active_global_plan", None), "portrait", None)
             _gp_decade_anc = getattr(_gp_portrait_anc, "decade", None) if _gp_portrait_anc is not None else None
-            _era_for_anchor = (
-                int(_gp_decade_anc)
-                if _gp_decade_anc is not None
-                else (int(_era_result.decade) if _era_result is not None else None)
+
+            # Prefer the original cached era signal for arbitration because _era_result
+            # may already be rewritten by GlobalPlan-prior logic earlier in restore().
+            _anchor_era_source = _cached_era_kwarg if _cached_era_kwarg is not None else _era_result
+            _chunk_decade_raw = getattr(_anchor_era_source, "decade", None) if _anchor_era_source is not None else None
+            _chunk_decade_anc = int(_chunk_decade_raw) if _chunk_decade_raw is not None else None
+            _chunk_conf_anc = (
+                float(getattr(_anchor_era_source, "confidence", 0.0)) if _anchor_era_source is not None else 0.0
             )
+            try:
+                _chunk_tier_anc = (
+                    int(getattr(_anchor_era_source, "tier_used", 2)) if _anchor_era_source is not None else 2
+                )
+            except Exception:
+                _chunk_tier_anc = 2
+
+            _era_for_anchor = int(_gp_decade_anc) if _gp_decade_anc is not None else _chunk_decade_anc
+            if (
+                _gp_decade_anc is not None
+                and _chunk_decade_anc is not None
+                and abs(int(_chunk_decade_anc) - int(_gp_decade_anc)) >= 20
+                and _chunk_tier_anc == 2
+                and _chunk_conf_anc >= 0.80
+            ):
+                _era_for_anchor = int(_chunk_decade_anc)
+                logger.info(
+                    "ReferenceAnchor Era-Arbitration: Tier-2 EraClassifier gewinnt (chunk=%s conf=%.2f gp=%s)",
+                    _chunk_decade_anc,
+                    _chunk_conf_anc,
+                    _gp_decade_anc,
+                )
             _mat_for_anchor = _classified_material.value if _classified_material is not None else "unknown"
             _genre_for_anchor = _schlager_result.genre_label if _schlager_result is not None else "unknown"
             _reference_anchor = synthesize_reference_anchor(
@@ -4385,6 +4497,7 @@ class UnifiedRestorerV3:
                 material=material_type.value if material_type else "unknown",
                 era_decade=_era_result.decade if _era_result is not None else None,
                 panns_tags=_panns_merged or None,
+                mode=str(getattr(getattr(self.config, "mode", None), "value", "restoration")).lower(),
             )
             _applicable_goals = set(_goal_applicability.applicable)
             _goal_applicability_result = _goal_applicability
@@ -5354,7 +5467,9 @@ class UnifiedRestorerV3:
 
         # §2.46c / §6.2c Post-Additive BW-Hard-Cap — Material-Bandbreiten-Ceiling
         restored_audio, _bw_guard_applied = self._post_additive_bw_guard(
-            restored_audio, sample_rate, material_type,
+            restored_audio,
+            sample_rate,
+            material_type,
             quality_mode=getattr(self, "_quality_mode", None),
         )
 
@@ -6422,17 +6537,39 @@ class UnifiedRestorerV3:
             _mg_ref = original_audio_for_goals if original_audio_for_goals.shape == restored_audio.shape else None
 
             # §0d Ebene 2 / §1.2a [RELEASE_MUST] Carrier-Recovery-Referenz-Shift:
-            # Bei signifikanter Carrier-Inversion (ratio > 0.15) wird die End-Pipeline-Referenz
-            # für timbral_fidelity/MFCC/Centroid auf best_carrier_checkpoint verschoben,
-            # damit korrekte Carrier-Inversion nicht als Timbre-Regression gewertet wird.
+            # §2.54 Material-adaptiver Threshold: analoge Carrier-Inversion (vinyl/tape/shellac)
+            # erzeugt log-PSD-Kosinusähnlichkeit ~0.92+ (spektrale Form bleibt erhalten),
+            # daher CCR-Ratio natürlich niedrig (~0.07 für vinyl). Analoges Material benötigt
+            # niedrigeren Threshold 0.05 statt 0.15, damit Reference-Shift korrekt triggert.
             _ccr_ratio = getattr(self, "_carrier_chain_recovery_ratio", 0.0)
             _ccr_checkpoint = getattr(self, "_best_carrier_checkpoint", None)
-            if _ccr_ratio > 0.15 and _ccr_checkpoint is not None and _ccr_checkpoint.shape == restored_audio.shape:
+            _ccr_mat_val = str(getattr(material_type, "value", material_type) or "unknown").lower()
+            _CCR_ANALOG_MATS = frozenset(
+                {
+                    "vinyl",
+                    "shellac",
+                    "reel_tape",
+                    "tape",
+                    "cassette",
+                    "wax_cylinder",
+                    "wire_recording",
+                    "minidisc",
+                }
+            )
+            _ccr_threshold = 0.05 if _ccr_mat_val in _CCR_ANALOG_MATS else 0.15
+            _ccr_contract_shift = _ccr_ratio > 0.15
+            if (
+                _ccr_ratio > _ccr_threshold
+                and _ccr_checkpoint is not None
+                and _ccr_checkpoint.shape == restored_audio.shape
+            ):
                 _mg_ref = _ccr_checkpoint
                 logger.info(
-                    "§0d/§1.2a Reference-Shift aktiv: carrier_recovery_ratio=%.3f → "
+                    "§0d/§1.2a Reference-Shift aktiv: mat=%s carrier_recovery_ratio=%.3f > thr=%.2f → "
                     "Goal-Referenz auf best_carrier_checkpoint (statt degradiertem Input)",
+                    _ccr_mat_val,
                     _ccr_ratio,
+                    _ccr_threshold,
                 )
 
             _musical_goal_scores = _mg_checker.measure_all(restored_audio, sample_rate, reference=_mg_ref)
@@ -7909,6 +8046,7 @@ class UnifiedRestorerV3:
         except Exception as _mushra_late_exc:
             logger.debug("MUSHRA post-LUFS re-eval übersprungen: %s", _mushra_late_exc)
 
+        _phase_meta_acc = getattr(self, "_phase_metadata_accumulator", {})
         result = RestorationResult(
             audio=restored_audio,
             config=self.config,
@@ -8082,7 +8220,22 @@ class UnifiedRestorerV3:
                 "carrier_chain_recovery": {
                     "ratio": getattr(self, "_carrier_chain_recovery_ratio", 0.0),
                     "last_carrier_phase": getattr(self, "_last_carrier_phase_id", None),
-                    "reference_shifted": getattr(self, "_carrier_chain_recovery_ratio", 0.0) > 0.15,
+                    "reference_shifted": getattr(self, "_carrier_chain_recovery_ratio", 0.0)
+                    > (
+                        0.05
+                        if str(getattr(material_type, "value", material_type) or "unknown").lower()
+                        in {
+                            "vinyl",
+                            "shellac",
+                            "reel_tape",
+                            "tape",
+                            "cassette",
+                            "wax_cylinder",
+                            "wire_recording",
+                            "minidisc",
+                        }
+                        else 0.15
+                    ),
                 },
                 # §4.7 Noise-Texture-Coherence
                 "noise_texture_coherence": (
@@ -8149,7 +8302,7 @@ class UnifiedRestorerV3:
                 },
                 # §0/§2.46 HF-Hallucination-Guard: aggregate per-phase guard events.
                 "hf_hallucination_guard": (
-                    lambda _acc=getattr(self, "_phase_metadata_accumulator", {}): {
+                    lambda _acc=_phase_meta_acc: {
                         "guard_fired_count": sum(1 for d in _acc.values() if d.get("hf_hallucination_detected")),
                         "phases_guarded": [pid for pid, d in _acc.items() if d.get("hf_hallucination_detected")],
                         "max_delta_ratio": max(
@@ -8172,7 +8325,7 @@ class UnifiedRestorerV3:
                 )(),
                 # §2.46b Spectral Tilt Drift Guard: aggregate per-phase tilt-protection events.
                 "spectral_tilt_guard": (
-                    lambda _acc=getattr(self, "_phase_metadata_accumulator", {}): {
+                    lambda _acc=_phase_meta_acc: {
                         "guard_fired_count": sum(1 for d in _acc.values() if d.get("tilt_guard_fired")),
                         "phases_guarded": [pid for pid, d in _acc.items() if d.get("tilt_guard_fired")],
                         "max_deviation_db_per_oct": max(
@@ -12939,10 +13092,15 @@ class UnifiedRestorerV3:
             "mp3_low": [
                 "phase_23_spectral_repair",
                 "phase_03_denoise",
+                "phase_38_presence_boost",
+                "phase_39_air_band_enhancement",
+                "phase_06_frequency_restoration",
                 "phase_50_spectral_repair",
             ],
             "mp3_high": [
                 "phase_23_spectral_repair",
+                "phase_39_air_band_enhancement",
+                "phase_06_frequency_restoration",
                 "phase_50_spectral_repair",
             ],
             "aac": [
@@ -13197,19 +13355,26 @@ class UnifiedRestorerV3:
         # Bass-Fundament (immer)
         selected.append("phase_37_bass_enhancement")
 
-        # Präsenz (2–6 kHz) — bei Vokalinhalt
-        if vocals_detected:
+        # Präsenz (2–6 kHz) — bei Vokalinhalt.
+        # §8.5A: Lossy-Codec-Material benötigt Presence-Repair auch ohne sichere Vocal-Detektion.
+        _lossy_codec_no_vocal = (material in [MaterialType.MP3_LOW, MaterialType.MP3_HIGH, MaterialType.AAC]) and (
+            not vocals_detected
+        )
+        if vocals_detected or _lossy_codec_no_vocal:
             selected.append("phase_38_presence_boost")
 
         # Air-Band Anhebung > 12 kHz — bei Bandbegrenzung oder analogem Material
         # WAX_CYLINDER und LACQUER_DISC: HF-Rekonstruktion nach physikalischer Bandbegrenzung
-        if sev(DefectType.BANDWIDTH_LOSS) > 0.10 or material in [
+        _needs_airband = sev(DefectType.BANDWIDTH_LOSS) > 0.10 or material in [
             MaterialType.SHELLAC,
             MaterialType.TAPE,
             MaterialType.REEL_TAPE,
             MaterialType.WAX_CYLINDER,
             MaterialType.LACQUER_DISC,
-        ]:
+            MaterialType.MP3_LOW,
+            MaterialType.MP3_HIGH,
+        ]
+        if _needs_airband:
             selected.append("phase_39_air_band_enhancement")
 
         # Tape-Sättigungs-Emulation (Tape/REEL-Material — authentischer Charakter)
@@ -13974,7 +14139,9 @@ class UnifiedRestorerV3:
         # selbst entscheiden (qualitätsmodus × material_type). Advisory-only: explicit
         # caller-Werte überschreiben die Injection nicht.
         _qmode_str = str(kwargs.get("quality_mode", getattr(self.config.mode, "value", "quality"))).strip().lower()
-        _quality_first_unleashed = bool(self.is_studio_mode() or _qmode_str in {"quality", "maximum", "studio", "studio2026"})
+        _quality_first_unleashed = bool(
+            self.is_studio_mode() or _qmode_str in {"quality", "maximum", "studio", "studio2026"}
+        )
         kwargs.setdefault("quality_first_unleashed", _quality_first_unleashed)
 
         if phase_metadata.phase_id == "phase_03_denoise":
@@ -17178,12 +17345,16 @@ class UnifiedRestorerV3:
                             _afg_best_clean_phase = phase_id
                             # Track minimum for final _artifact_freedom_score (Bug A fix)
                             _min_per_phase_afg_score = min(_min_per_phase_afg_score, _afg_result.artifact_freedom)
-                        # Noise texture > 6 dB/oct deviation → rollback (§2.49)
-                        if _afg_result.noise_texture_deviation_db_oct > 6.0:
+                        _ntx_mat_key = str(getattr(material_type, "value", material_type) or "unknown").lower()
+                        _ntx_threshold = _get_noise_texture_rollback_threshold(_ntx_mat_key)
+                        # Noise texture deviation uses materialadaptive threshold (§2.49 / §8.5A)
+                        if _afg_result.noise_texture_deviation_db_oct > _ntx_threshold:
                             logger.warning(
-                                "§2.49 Noise texture deviation %.1f dB/oct > 6.0 after %s → rollback",
+                                "§2.49 Noise texture deviation %.1f dB/oct > %.1f after %s (%s) → rollback",
                                 _afg_result.noise_texture_deviation_db_oct,
+                                _ntx_threshold,
                                 phase_id,
+                                _ntx_mat_key,
                             )
                             current_audio = np.clip(_afg_phase_input.copy(), -1.0, 1.0)
                     except Exception as _afg_exc:
@@ -17296,7 +17467,9 @@ class UnifiedRestorerV3:
                                 material_type.value if hasattr(material_type, "value") else str(material_type)
                             )
                             _cond_rec = _conductor.recommend(
-                                _next_pid, _conductor_state, _mat_str_cond,
+                                _next_pid,
+                                _conductor_state,
+                                _mat_str_cond,
                                 goal_weights=getattr(self, "_song_goal_weights", None),
                             )
                             if not hasattr(self, "_conductor_strength_hints"):
@@ -17548,6 +17721,53 @@ class UnifiedRestorerV3:
                     current_audio = current_audio[:_input_n_samples]
                 else:
                     current_audio = np.pad(current_audio, (0, _input_n_samples - _out_n))
+
+        # §8.5A Final TruePeak hard-guard — universaler End-of-Pipeline-Schutz.
+        # 99.9th-percentile statt np.max(): Impulsartefakte dürfen den finalen Guard
+        # nicht dominieren. Ceiling 0.966 ≈ -0.3 dBFS.
+        try:
+            _tp_guard_peak = float(np.percentile(np.abs(current_audio), 99.9))
+            if math.isfinite(_tp_guard_peak) and _tp_guard_peak > 0.966:
+                _tp_guard_gain = float(0.966 / max(_tp_guard_peak, 1e-12))
+                current_audio = np.asarray(current_audio * _tp_guard_gain, dtype=np.float32)
+                current_audio = np.clip(current_audio, -1.0, 1.0)
+                logger.info(
+                    "§Final TruePeak hard-guard aktiv: p99.9=%.4f > 0.966 → gain=%.4f",
+                    _tp_guard_peak,
+                    _tp_guard_gain,
+                )
+            else:
+                current_audio = np.clip(current_audio, -1.0, 1.0)
+                logger.debug(
+                    "§Final TruePeak hard-guard idle: p99.9=%.4f <= 0.966",
+                    _tp_guard_peak,
+                )
+        except Exception as _tp_guard_exc:
+            logger.debug("§Final TruePeak hard-guard failed (non-blocking): %s", _tp_guard_exc)
+
+        # §2.51 Stereo-correlation guard (input-relativ, non-blocking, §8.5B)
+        try:
+            if (
+                isinstance(_pre_carrier_audio, np.ndarray)
+                and isinstance(current_audio, np.ndarray)
+                and _pre_carrier_audio.ndim == 2
+                and current_audio.ndim == 2
+                and _pre_carrier_audio.shape[0] >= 2
+                and current_audio.shape[0] >= 2
+            ):
+                _corr_before = float(np.corrcoef(_pre_carrier_audio[0], _pre_carrier_audio[1])[0, 1])
+                _corr_after = float(np.corrcoef(current_audio[0], current_audio[1])[0, 1])
+                _input_is_narrow = abs(_corr_before) >= 0.92
+                _delta_limit = 0.04 if _input_is_narrow else 0.12
+                if (_corr_before - _corr_after) > _delta_limit:
+                    logger.warning(
+                        "§2.51 Stereo-correlation guard: corr_before=%.3f corr_after=%.3f delta_limit=%.3f",
+                        _corr_before,
+                        _corr_after,
+                        _delta_limit,
+                    )
+        except Exception as _st_corr_exc:
+            logger.debug("§2.51 Stereo-correlation guard failed (non-blocking): %s", _st_corr_exc)
 
         return current_audio, executed, skipped, deferred
 

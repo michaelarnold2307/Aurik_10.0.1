@@ -359,6 +359,7 @@ class DenoisePhase(PhaseInterface):
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict
+
             _get_plm_evict().evict_for_phase("phase_03_denoise")
         except Exception:
             pass
@@ -657,7 +658,10 @@ class DenoisePhase(PhaseInterface):
         # (Schröter et al. 2022). energy_bias = -6 dB preserves harmonics (§4.4 Spec).
         _dfn_applied = False
         _dfn_eligible = (
-            _is_vocal_material and _panns_singing >= 0.25 and quality_mode in ("quality", "maximum") and not use_lightweight
+            _is_vocal_material
+            and _panns_singing >= 0.25
+            and quality_mode in ("quality", "maximum")
+            and not use_lightweight
         )
         if _dfn_eligible:
             _plm03_dfn = None
@@ -727,6 +731,7 @@ class DenoisePhase(PhaseInterface):
 
                 try:
                     from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm03
+
                     _plm03_sgmse = _get_plm03()
                     _plm03_sgmse.set_active("SGMSE+", True)  # §4.6b: protect from eviction
                 except Exception:
@@ -1295,7 +1300,9 @@ class DenoisePhase(PhaseInterface):
         REF_HOP = REF_WIN * 3 // 4
         REF_NOVERLAP = REF_WIN - REF_HOP
 
-        f_ref, t_ref, Zxx_ref = signal.stft(audio.astype(np.float64), sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)
+        f_ref, t_ref, Zxx_ref = signal.stft(
+            audio.astype(np.float64), sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP, boundary="even"
+        )
         n_bins, n_t = f_ref.shape[0], Zxx_ref.shape[1]
 
         # Accumulated weighted gain: G_acc[k, t] / w_acc[k] → final gain per bin
@@ -1316,7 +1323,7 @@ class DenoisePhase(PhaseInterface):
                 if n_samples >= zone_win * 2:
                     zone_noverlap = zone_win - zone_hop
                     f_z, t_z, Zxx_z = signal.stft(
-                        audio.astype(np.float64), sr, nperseg=zone_win, noverlap=zone_noverlap
+                        audio.astype(np.float64), sr, nperseg=zone_win, noverlap=zone_noverlap, boundary="even"
                     )
                 else:
                     f_z, t_z, Zxx_z = f_ref, t_ref, Zxx_ref
@@ -1456,9 +1463,9 @@ class DenoisePhase(PhaseInterface):
                 )
             except Exception as pghi_exc:
                 logger.warning("PGHI reconstruction failed, using istft fallback: %s", pghi_exc)
-                _, audio_out = signal.istft(Zxx_processed, sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)
+                _, audio_out = signal.istft(Zxx_processed, sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP, boundary=True)
         else:
-            _, audio_out = signal.istft(Zxx_processed, sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP)
+            _, audio_out = signal.istft(Zxx_processed, sr, nperseg=REF_WIN, noverlap=REF_NOVERLAP, boundary=True)
 
         # Length matching
         audio_out = np.asarray(audio_out)
@@ -1758,6 +1765,62 @@ class DenoisePhase(PhaseInterface):
         # Clamp to [g_lo, g_hi] as defensive guard against convolution edge artefacts.
         g_floor_vec = np.clip(g_floor_vec, g_lo, g_hi).astype(np.float32)
         return np.nan_to_num(g_floor_vec, nan=float(g_floor_base))
+
+    @staticmethod
+    def _compute_adaptive_guard_profile(
+        material_type: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive denoise guard targets from song context.
+
+        Returns thresholds for quality warnings and minimum/target energy preservation.
+        """
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _digital_mats = {"cd_digital", "digital", "dat", "streaming", "aac", "mp3_high"}
+        _is_digital = _mat in _digital_mats
+
+        _base_quality_warn = 0.76 if _is_digital else 0.70
+        _base_energy_min = 0.24 if _is_digital else 0.20
+
+        _mode_quality_adj = {
+            "fast": 0.00,
+            "balanced": 0.01,
+            "quality": 0.03,
+            "maximum": 0.05,
+            "restoration": 0.03,
+            "studio_2026": 0.05,
+        }.get(_qm, 0.01)
+        _mode_energy_adj = {
+            "fast": 0.05,
+            "balanced": 0.02,
+            "quality": 0.00,
+            "maximum": -0.01,
+            "restoration": 0.00,
+            "studio_2026": -0.01,
+        }.get(_qm, 0.02)
+
+        _rest_quality_adj = ((_rest - 50.0) / 50.0) * 0.08
+        _rest_energy_adj = ((_rest - 50.0) / 50.0) * 0.04
+
+        quality_warning_threshold = float(
+            np.clip(_base_quality_warn + _mode_quality_adj + _rest_quality_adj, 0.55, 0.85)
+        )
+        energy_min_ratio = float(np.clip(_base_energy_min + _mode_energy_adj + _rest_energy_adj, 0.14, 0.32))
+        _target_margin = 0.06 if _qm in {"quality", "maximum", "restoration", "studio_2026"} else 0.04
+        energy_target_ratio = float(np.clip(energy_min_ratio + _target_margin, 0.20, 0.45))
+
+        if energy_target_ratio < energy_min_ratio + 0.02:
+            energy_target_ratio = float(np.clip(energy_min_ratio + 0.02, 0.20, 0.45))
+
+        return {
+            "quality_warning_threshold": quality_warning_threshold,
+            "energy_min_ratio": energy_min_ratio,
+            "energy_target_ratio": energy_target_ratio,
+        }
 
     @staticmethod
     def _apply_gain_gradient_phase_correction(

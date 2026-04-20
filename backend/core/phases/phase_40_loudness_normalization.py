@@ -152,7 +152,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
-            peak_db = float(20.0 * np.log10(np.max(np.abs(audio)) + 1e-10))
+            peak_db = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
             return PhaseResult(
                 success=True,
                 audio=audio.copy(),

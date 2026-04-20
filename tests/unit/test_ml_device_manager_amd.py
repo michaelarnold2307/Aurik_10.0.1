@@ -8,14 +8,14 @@ Verifies:
   - DeepFilterNetV3 is in _HEAVY_ML_PLUGINS (GPU dispatch)
   - _FP16_ELIGIBLE_PLUGINS is a non-empty frozenset
 """
+
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -25,6 +25,7 @@ import pytest
 def _get_manager_module():
     """Import ml_device_manager without real GPU or torch deps."""
     import importlib
+
     if "backend.core.ml_device_manager" in sys.modules:
         return sys.modules["backend.core.ml_device_manager"]
     return importlib.import_module("backend.core.ml_device_manager")
@@ -40,8 +41,7 @@ class TestPluginSets:
         """§GPU-Mixed-Mode: DeepFilterNetV3 must be GPU-dispatched."""
         mod = _get_manager_module()
         assert "DeepFilterNetV3" in mod._HEAVY_ML_PLUGINS, (
-            "DeepFilterNetV3 missing from _HEAVY_ML_PLUGINS — "
-            "computationally intensive DF-filter must run on AMD GPU"
+            "DeepFilterNetV3 missing from _HEAVY_ML_PLUGINS — computationally intensive DF-filter must run on AMD GPU"
         )
 
     def test_fp16_eligible_plugins_non_empty(self) -> None:
@@ -49,17 +49,13 @@ class TestPluginSets:
         mod = _get_manager_module()
         assert len(mod._FP16_ELIGIBLE_PLUGINS) > 0
         for expected in ("BSRoFormer", "MDXNet", "DeepFilterNetV3", "PANNs"):
-            assert expected in mod._FP16_ELIGIBLE_PLUGINS, (
-                f"{expected} should be in _FP16_ELIGIBLE_PLUGINS"
-            )
+            assert expected in mod._FP16_ELIGIBLE_PLUGINS, f"{expected} should be in _FP16_ELIGIBLE_PLUGINS"
 
     def test_fp16_eligible_subset_of_heavy(self) -> None:
         """Every fp16-eligible plugin must also be in _HEAVY_ML_PLUGINS (it runs on GPU)."""
         mod = _get_manager_module()
         not_heavy = mod._FP16_ELIGIBLE_PLUGINS - mod._HEAVY_ML_PLUGINS
-        assert not not_heavy, (
-            f"fp16-eligible plugins not in _HEAVY_ML_PLUGINS: {not_heavy}"
-        )
+        assert not not_heavy, f"fp16-eligible plugins not in _HEAVY_ML_PLUGINS: {not_heavy}"
 
 
 # ---------------------------------------------------------------------------
@@ -70,11 +66,12 @@ class TestPluginSets:
 class TestFp16EligibilityOnCpu:
     def test_returns_false_on_cpu_only(self) -> None:
         """On a CPU-only system MLDeviceManager.is_fp16_eligible() must return False."""
-        from backend.core.ml_device_manager import MLDeviceManager, GPUBackend
+        from backend.core.ml_device_manager import GPUBackend, MLDeviceManager
 
         mgr = MLDeviceManager.__new__(MLDeviceManager)
         # Manually set CPU-only state (bypasses __init__ GPU detection)
         import threading
+
         mgr._lock = threading.Lock()
         mgr._backend = GPUBackend.NONE
         mgr._gpu_available = False
@@ -90,10 +87,11 @@ class TestFp16EligibilityOnCpu:
 
     def test_get_ort_providers_fp16_falls_back_on_cpu(self) -> None:
         """get_ort_providers_fp16() must return ['CPUExecutionProvider'] on CPU-only."""
-        from backend.core.ml_device_manager import MLDeviceManager, GPUBackend
+        from backend.core.ml_device_manager import GPUBackend, MLDeviceManager
 
         mgr = MLDeviceManager.__new__(MLDeviceManager)
         import threading
+
         mgr._lock = threading.Lock()
         mgr._backend = GPUBackend.NONE
         mgr._gpu_available = False
@@ -117,8 +115,10 @@ class TestFp16EligibilityOnCpu:
 class TestWarmupRocm:
     def test_warmup_returns_false_on_cpu(self) -> None:
         """warmup_rocm_gpu() must return False gracefully on CPU-only systems."""
-        from backend.core.ml_device_manager import warmup_rocm_gpu, MLDeviceManager, GPUBackend
         import threading
+
+        from backend.core.ml_device_manager import GPUBackend, MLDeviceManager, warmup_rocm_gpu
+
         # Patch singleton to return a CPU-only manager
         cpu_mgr = MLDeviceManager.__new__(MLDeviceManager)
         cpu_mgr._lock = threading.Lock()
@@ -126,6 +126,7 @@ class TestWarmupRocm:
         cpu_mgr._gpu_available = False
 
         import backend.core.ml_device_manager as mdm
+
         orig = mdm._instance
         try:
             mdm._instance = cpu_mgr
@@ -136,9 +137,10 @@ class TestWarmupRocm:
 
     def test_warmup_no_exception_on_import_error(self) -> None:
         """warmup_rocm_gpu() must not raise even if torch is unavailable."""
-        from backend.core.ml_device_manager import MLDeviceManager, GPUBackend
         import threading
+
         import backend.core.ml_device_manager as mdm
+        from backend.core.ml_device_manager import GPUBackend, MLDeviceManager
 
         cpu_mgr = MLDeviceManager.__new__(MLDeviceManager)
         cpu_mgr._lock = threading.Lock()
@@ -166,8 +168,9 @@ class TestWarmupRocm:
 class TestPinTensorRocm:
     def test_returns_array_unchanged_on_cpu(self) -> None:
         """pin_tensor_rocm() must return the original numpy array on CPU-only."""
-        from backend.core.ml_device_manager import MLDeviceManager, GPUBackend
         import threading
+
+        from backend.core.ml_device_manager import GPUBackend, MLDeviceManager
 
         mgr = MLDeviceManager.__new__(MLDeviceManager)
         mgr._lock = threading.Lock()
@@ -180,8 +183,9 @@ class TestPinTensorRocm:
 
     def test_returns_non_array_unchanged(self) -> None:
         """Non-ndarray/tensor types must pass through unchanged."""
-        from backend.core.ml_device_manager import MLDeviceManager, GPUBackend
         import threading
+
+        from backend.core.ml_device_manager import GPUBackend, MLDeviceManager
 
         mgr = MLDeviceManager.__new__(MLDeviceManager)
         mgr._lock = threading.Lock()
@@ -202,6 +206,7 @@ class TestGlobalWrappers:
     def test_get_ort_providers_fp16_returns_list(self) -> None:
         """get_ort_providers_fp16() global function must always return a non-empty list."""
         from backend.core.ml_device_manager import get_ort_providers_fp16
+
         providers = get_ort_providers_fp16("BSRoFormer")
         assert isinstance(providers, list)
         assert len(providers) > 0
@@ -209,6 +214,7 @@ class TestGlobalWrappers:
     def test_warmup_rocm_gpu_global_no_raise(self) -> None:
         """warmup_rocm_gpu() global function must not raise under any condition."""
         from backend.core.ml_device_manager import warmup_rocm_gpu
+
         result = warmup_rocm_gpu()
         assert isinstance(result, bool)
 
@@ -216,6 +222,7 @@ class TestGlobalWrappers:
 # ---------------------------------------------------------------------------
 # Plugin source code audit: fp16-eligible plugins must use get_ort_providers_fp16
 # ---------------------------------------------------------------------------
+
 
 class TestFp16PluginAudit:
     """Verify that every fp16-eligible ONNX plugin sources get_ort_providers_fp16, not get_ort_providers.
@@ -240,6 +247,7 @@ class TestFp16PluginAudit:
     def test_uses_fp16_provider_function(self, plugin_name: str, rel_path: str) -> None:
         """Plugin source must import get_ort_providers_fp16 (not plain get_ort_providers)."""
         import pathlib
+
         workspace_root = pathlib.Path(__file__).parents[2]
         plugin_file = workspace_root / rel_path
         if not plugin_file.exists():
@@ -259,6 +267,7 @@ class TestFp16PluginAudit:
         their primary ONNX InferenceSession with the non-fp16 variant.
         """
         import pathlib
+
         workspace_root = pathlib.Path(__file__).parents[2]
         plugin_file = workspace_root / rel_path
         if not plugin_file.exists():
@@ -266,7 +275,8 @@ class TestFp16PluginAudit:
         source = plugin_file.read_text(encoding="utf-8")
         # Strip lines that only mention the legacy name in comments / docstrings
         code_lines = [
-            ln for ln in source.splitlines()
+            ln
+            for ln in source.splitlines()
             if not ln.strip().startswith("#") and not ln.strip().startswith('"""') and not ln.strip().startswith("'''")
         ]
         code_block = "\n".join(code_lines)

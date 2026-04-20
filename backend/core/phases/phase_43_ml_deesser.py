@@ -233,7 +233,8 @@ def _try_mp_senet_refine(audio: np.ndarray, sr: int) -> tuple[np.ndarray | None,
     # §2.47 ml_memory_budget guard (250 MB for MP-SENet)
     _dfn_release = None
     try:
-        from backend.core.ml_memory_budget import try_allocate as _try_alloc_43, release as _rel_43
+        from backend.core.ml_memory_budget import release as _rel_43
+        from backend.core.ml_memory_budget import try_allocate as _try_alloc_43
 
         if not _try_alloc_43("MpSeNet_phase43", 0.25):
             logger.debug("MP-SENet phase_43: ml_memory_budget insufficient — DSP-Fallback")

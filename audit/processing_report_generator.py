@@ -473,8 +473,7 @@ class ReportExporter:
                 [sys.executable, "-c", script, str(payload_path), str(output_path)],
                 cwd=str(Path(__file__).resolve().parent.parent),
                 env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=120,
             )
@@ -522,6 +521,7 @@ class ReportExporter:
                 except ImportError:
                     pass
                 import sys
+
                 import matplotlib
 
                 # A previous failed matplotlib import can leave a half-initialized

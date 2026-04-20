@@ -448,7 +448,7 @@ class MLStemSeparator:
         n_components = 8
         model = _NMF(n_components=n_components, beta_loss="kullback-leibler", solver="mu", max_iter=60, random_state=0)
         W = model.fit_transform(mag)  # (n_freq, n_comp)
-        H = model.components_               # (n_comp, n_time)
+        H = model.components_  # (n_comp, n_time)
 
         # Assign each component: high temporal variance → percussive; else harmonic
         temporal_var = np.var(H, axis=1)
@@ -476,8 +476,8 @@ class MLStemSeparator:
         recon = (harm_a + perc_a).astype(np.float64)
         orig_f = mono.astype(np.float64)
         err = orig_f - recon
-        signal_power = float(np.mean(orig_f ** 2))
-        noise_power = float(np.mean(err ** 2)) + 1e-15
+        signal_power = float(np.mean(orig_f**2))
+        noise_power = float(np.mean(err**2)) + 1e-15
         sdb = 10.0 * np.log10(signal_power / noise_power) if signal_power > 0 else 0.0
         if sdb < 5.0:
             _logger.debug("NMF-β sdB=%.1f dB < 5 dB — quality guard failed", sdb)
@@ -490,6 +490,7 @@ class MLStemSeparator:
         vocals_a = (harm_a - bass_a).astype(dtype)
 
         if audio.ndim == 2:
+
             def _stereo(m: np.ndarray) -> np.ndarray:
                 return np.stack([m, m], axis=1)
 

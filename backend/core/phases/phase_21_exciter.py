@@ -124,6 +124,50 @@ class Exciter(PhaseInterface):
         },
     }
 
+    def _compute_exciter_runtime_profile(
+        self,
+        material_type: str,
+        quality_mode: str,
+        restorability_score: float,
+    ) -> dict[str, float]:
+        """Compute adaptive runtime constants for harmonic excitation."""
+        _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
+        _qm = str(quality_mode or "balanced").lower().replace("-", "_")
+        _rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        _base = {
+            "shellac": {"drive": 2.30, "odd": 0.24, "scale": 0.52},
+            "wax_cylinder": {"drive": 2.10, "odd": 0.22, "scale": 0.48},
+            "vinyl": {"drive": 2.70, "odd": 0.30, "scale": 0.62},
+            "tape": {"drive": 2.80, "odd": 0.31, "scale": 0.64},
+            "reel_tape": {"drive": 2.90, "odd": 0.32, "scale": 0.66},
+            "mp3_low": {"drive": 3.00, "odd": 0.34, "scale": 0.68},
+            "cd_digital": {"drive": 2.40, "odd": 0.26, "scale": 0.56},
+            "digital": {"drive": 2.40, "odd": 0.26, "scale": 0.56},
+            "streaming": {"drive": 2.50, "odd": 0.28, "scale": 0.58},
+            "unknown": {"drive": 2.60, "odd": 0.30, "scale": 0.60},
+        }.get(_mat, {"drive": 2.60, "odd": 0.30, "scale": 0.60})
+
+        _mode_adj = {
+            "fast": -0.22,
+            "balanced": 0.0,
+            "quality": +0.18,
+            "maximum": +0.24,
+            "restoration": +0.10,
+            "studio_2026": +0.24,
+        }.get(_qm, 0.0)
+        _rest_adj = ((_rest - 50.0) / 50.0) * 0.12
+
+        saturation_drive = float(np.clip(_base["drive"] + _mode_adj + _rest_adj, 1.80, 4.00))
+        odd_partial_blend = float(np.clip(_base["odd"] + 0.35 * _mode_adj + 0.30 * _rest_adj, 0.18, 0.45))
+        harmonic_output_scale = float(np.clip(_base["scale"] + 0.60 * _mode_adj + 0.60 * _rest_adj, 0.45, 0.85))
+
+        return {
+            "saturation_drive": saturation_drive,
+            "odd_partial_blend": odd_partial_blend,
+            "harmonic_output_scale": harmonic_output_scale,
+        }
+
     def __init__(self):
         super().__init__()
         self.name = "Harmonic Exciter v2 Professional"
@@ -263,9 +307,13 @@ class Exciter(PhaseInterface):
         # §4.5 Psychoacoustic Masking Clamp — fulfill docstring: harmonic excitation only where audible
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             excited_audio = apply_psychoacoustic_masking_clamp(
-                audio, excited_audio, sample_rate,
-                strength=_effective_strength, mode="additive",
+                audio,
+                excited_audio,
+                sample_rate,
+                strength=_effective_strength,
+                mode="additive",
             )
         except Exception as _pm_exc:
             logger.debug("Phase21 masking clamp non-blocking: %s", _pm_exc)

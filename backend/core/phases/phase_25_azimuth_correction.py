@@ -111,6 +111,53 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
     def __init__(self):
         super().__init__()
         self.name = "Azimuth Correction v2.0 (Professional)"
+        self._xcorr_window_samples_current = self.XCORR_WINDOW_SAMPLES
+
+    @staticmethod
+    def _compute_azimuth_profile(
+        material: str,
+        quality_mode: str | None,
+        restorability_score: float,
+    ) -> dict[str, int]:
+        """Compute adaptive azimuth profile (§2.54) with power-of-two window sizing."""
+        mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
+        qm = str(quality_mode or "restoration").lower().replace("-", "_")
+        if restorability_score is None:
+            restorability_score = 50.0
+        rest = float(np.clip(restorability_score, 0.0, 100.0))
+
+        base_window = {
+            "shellac": 4096,
+            "wax_cylinder": 4096,
+            "tape": 4096,
+            "reel_tape": 4096,
+            "cassette": 4096,
+            "vinyl": 3072,
+            "cd_digital": 3072,
+            "dat": 3072,
+            "streaming": 3072,
+            "unknown": 3072,
+        }.get(mat, 3072)
+
+        mode_mult = {
+            "fast": 0.75,
+            "balanced": 1.0,
+            "restoration": 1.0,
+            "quality": 1.25,
+            "maximum": 1.5,
+            "studio_2026": 1.5,
+        }.get(qm, 1.0)
+
+        # Lower restorability favors shorter windows for better local time tracking.
+        rest_mult = 0.80 + 0.40 * (rest / 100.0)
+        candidate = float(base_window) * mode_mult * rest_mult
+        clamped = int(np.clip(candidate, 2048, 8192))
+
+        # Enforce power-of-two for FFT/correlation-friendly behavior.
+        power = 1 << int(np.round(np.log2(max(2048, clamped))))
+        power = int(np.clip(power, 2048, 8192))
+
+        return {"xcorr_window_samples": power}
 
     def process(self, audio: np.ndarray, sample_rate: int, material: MaterialType, **kwargs) -> PhaseResult:
         """
@@ -136,6 +183,12 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        quality_mode = kwargs.get("quality_mode")
+        restorability_score = kwargs.get("restorability_score", 50.0)
+        material_key = str(getattr(material, "value", material) or "unknown")
+        azimuth_profile = self._compute_azimuth_profile(material_key, quality_mode, restorability_score)
+        self._xcorr_window_samples_current = int(azimuth_profile["xcorr_window_samples"])
+
         # Only applicable to TAPE
         if material != MaterialType.TAPE:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -148,6 +201,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                     "material": material.name,
                     "azimuth_correction_applied": False,
                     "reason": "not_applicable",
+                    "azimuth_runtime_profile": azimuth_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -168,6 +222,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                     "material": material.name,
                     "azimuth_correction_applied": False,
                     "reason": "mono_audio",
+                    "azimuth_runtime_profile": azimuth_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -187,6 +242,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                     "material": material.name,
                     "azimuth_correction_applied": False,
                     "algorithm": "skipped_zero_strength",
+                    "azimuth_runtime_profile": azimuth_profile,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "rms_drop_db": 0.0,
@@ -238,6 +294,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                     "material": material.name,
                     "azimuth_correction_applied": False,
                     "reason": "below_threshold",
+                    "azimuth_runtime_profile": azimuth_profile,
                     "max_phase_shift_samples": float(max_phase_shift),
                     "hf_loss_db": float(hf_loss_db),
                     "phase_locality_factor": phase_locality_factor,
@@ -308,6 +365,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                 "material": material.name,
                 "azimuth_correction_applied": True,
                 "algorithm": "multiband_phase_alignment_v2",
+                "azimuth_runtime_profile": azimuth_profile,
                 "num_bands": 3,
                 "band_splits_hz": self.BAND_SPLITS,
                 "phase_locality_factor": phase_locality_factor,
@@ -374,8 +432,9 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         right = band_audio[:, 1]
 
         # Cross-correlation analysis
-        # Use limited window for efficiency
-        window_samples = min(self.XCORR_WINDOW_SAMPLES, len(left))
+        # Use adaptive limited window for efficiency and material-conditioned tracking.
+        xcorr_window = int(getattr(self, "_xcorr_window_samples_current", self.XCORR_WINDOW_SAMPLES))
+        window_samples = min(xcorr_window, len(left))
         left_window = left[:window_samples]
         right_window = right[:window_samples]
 

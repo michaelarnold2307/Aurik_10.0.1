@@ -22,6 +22,27 @@ import time as _time
 
 import numpy as np
 
+
+def _rms_dbfs_gated(sig: np.ndarray) -> float:
+    """§2.45a-I: Frame-basierter RMS in dBFS, ignoriert Frames < −50 dBFS (Stille).
+
+    Stereo → Mono-Downmix vor Framing. Gibt -96.0 zurück wenn kein aktiver Frame.
+    """
+    if sig.ndim == 2:
+        _mono = sig.mean(axis=0).astype(np.float64) if sig.shape[0] <= 2 else sig.mean(axis=1).astype(np.float64)
+    else:
+        _mono = sig.astype(np.float64)
+    _frame = 480  # 10 ms @ 48 kHz
+    _active = [
+        _mono[i : i + _frame]
+        for i in range(0, len(_mono) - _frame, _frame)
+        if 20.0 * np.log10(np.sqrt(np.mean(_mono[i : i + _frame] ** 2)) + 1e-10) > -50.0
+    ]
+    if not _active:
+        return -96.0
+    return float(20.0 * np.log10(np.sqrt(np.mean(np.concatenate(_active) ** 2)) + 1e-10))
+
+
 logger = logging.getLogger(__name__)
 
 _MIN_SPLICE_SCORE: float = 0.10
@@ -126,6 +147,8 @@ def apply(
     sample_rate: int,
     strength: float = 0.7,
     defect_scores: dict | None = None,
+    min_splice_score: float = _MIN_SPLICE_SCORE,
+    crossfade_ms: float = _CROSSFADE_MS,
 ) -> np.ndarray:
     """Main entry point for Phase 64."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
@@ -133,11 +156,11 @@ def apply(
 
     if defect_scores is not None:
         splice_score = float(defect_scores.get("tape_splice_artifact", 0.0))
-        if splice_score < _MIN_SPLICE_SCORE:
-            logger.debug("Phase 64: splice score %.3f < %.3f — skipped", splice_score, _MIN_SPLICE_SCORE)
+        if splice_score < min_splice_score:
+            logger.debug("Phase 64: splice score %.3f < %.3f — skipped", splice_score, min_splice_score)
             return np.clip(audio, -1.0, 1.0)
 
-    crossfade_samples = max(1, int(_CROSSFADE_MS * 0.001 * sample_rate))
+    crossfade_samples = max(1, int(crossfade_ms * 0.001 * sample_rate))
 
     stereo = audio.ndim == 2
     if stereo:
@@ -195,6 +218,40 @@ class TapeSpliceRepairPhase(PhaseInterface):
             ),
         )
 
+    @staticmethod
+    def _compute_splice_profile(material_key: str, quality_mode: str, restorability_score: float) -> dict[str, float]:
+        material = str(material_key or "unknown").strip().lower()
+        mode = str(quality_mode or "balanced").strip().lower()
+        mode = {"restoration": "balanced", "studio_2026": "maximum"}.get(mode, mode)
+
+        if any(token in material for token in ("reel_tape", "tape", "cassette")):
+            min_splice_score = 0.10
+            crossfade_ms = 15.0
+        elif any(token in material for token in ("cd_digital", "dat", "flac", "streaming")):
+            min_splice_score = 0.18
+            crossfade_ms = 12.0
+        else:
+            min_splice_score = 0.14
+            crossfade_ms = 13.0
+
+        rest_norm = float(np.clip(float(restorability_score or 50.0), 0.0, 100.0)) / 100.0
+        min_splice_score += (rest_norm - 0.5) * 0.12
+        crossfade_ms += (0.5 - rest_norm) * 10.0
+
+        score_off, crossfade_off = {
+            "fast": (0.03, -3.0),
+            "balanced": (0.00, 0.0),
+            "quality": (-0.02, 4.0),
+            "maximum": (-0.04, 6.0),
+        }.get(mode, (0.0, 0.0))
+        min_splice_score += score_off
+        crossfade_ms += crossfade_off
+
+        return {
+            "min_splice_score": float(np.clip(min_splice_score, 0.05, 0.25)),
+            "crossfade_ms": float(np.clip(crossfade_ms, 6.0, 30.0)),
+        }
+
     def process(
         self,
         audio: np.ndarray,
@@ -211,6 +268,11 @@ class TapeSpliceRepairPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", strength))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+        _profile_64 = self._compute_splice_profile(
+            str(kwargs.get("material_type") or kwargs.get("material") or "unknown"),
+            str(kwargs.get("quality_mode", "balanced")),
+            float(kwargs.get("restorability_score", 50.0)),
+        )
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
             passthrough = np.clip(passthrough, -1.0, 1.0)
@@ -230,12 +292,19 @@ class TapeSpliceRepairPhase(PhaseInterface):
                 },
                 warnings=["Tape splice repair skipped due to zero effective strength"],
             )
-        _rms_in = float(np.sqrt(np.mean(np.asarray(audio, dtype=np.float64) ** 2) + 1e-12))
-        result_audio = apply(audio, sample_rate, strength=_effective_strength, defect_scores=_defect_scores)
+        _rms_in_db = _rms_dbfs_gated(audio)
+        result_audio = apply(
+            audio,
+            sample_rate,
+            strength=_effective_strength,
+            defect_scores=_defect_scores,
+            min_splice_score=_profile_64["min_splice_score"],
+            crossfade_ms=_profile_64["crossfade_ms"],
+        )
         elapsed = _time.perf_counter() - t0
 
-        _rms_out = float(np.sqrt(np.mean(np.asarray(result_audio, dtype=np.float64) ** 2) + 1e-12))
-        _rms_drop = 20.0 * np.log10(max(_rms_out / _rms_in, 1e-30)) if _rms_in > 1e-8 else 0.0
+        _rms_out_db = _rms_dbfs_gated(result_audio)
+        _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0
         return PhaseResult(
             audio=result_audio,
             success=True,
@@ -245,6 +314,9 @@ class TapeSpliceRepairPhase(PhaseInterface):
                 "strength": _effective_strength,
             },
             metadata={
+                "splice_profile": dict(_profile_64),
+                "min_splice_score": float(_profile_64["min_splice_score"]),
+                "crossfade_ms": float(_profile_64["crossfade_ms"]),
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),
                 "loudness_makeup_db": 0.0,
                 "phase_locality_factor": phase_locality_factor,

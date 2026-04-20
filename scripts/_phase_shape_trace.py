@@ -4,10 +4,11 @@
 Ausgabe: tabellarisch, bricht bei erstem Problem ab.
 Usage: .venv_aurik/bin/python scripts/_phase_shape_trace.py
 """
+
+import logging
 import os
 import sys
 import time
-import logging
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -27,9 +28,7 @@ for lib in ("matplotlib", "PIL", "urllib3", "numba", "filelock", "acoustics", "t
 import numpy as np
 
 INPUT_FILE = str(
-    PROJECT_ROOT
-    / "test_audio"
-    / "Elke Best - Du wolltest nur ein Abenteuer, aber ich suchte einen Freund.mp3"
+    PROJECT_ROOT / "test_audio" / "Elke Best - Du wolltest nur ein Abenteuer, aber ich suchte einen Freund.mp3"
 )
 if not os.path.exists(INPUT_FILE):
     print(f"[FEHLER] Input nicht gefunden: {INPUT_FILE}")
@@ -58,6 +57,7 @@ def _active_frac(audio: np.ndarray) -> float:
 
 # ── Monkeypatch ────────────────────────────────────────────────────────────
 from backend.core import unified_restorer_v3 as _uv3_mod
+
 _UVcls = _uv3_mod.UnifiedRestorerV3
 _original_profiled = _UVcls._profiled_phase_call
 
@@ -91,7 +91,7 @@ def _patched_profiled_phase_call(self, phase, audio: np.ndarray, **kwargs):
 
     anomaly = ""
     if n_after < n_before - 100:
-        anomaly += f" TRUNCATED({n_before}→{n_after}={n_after/SR:.1f}s)"
+        anomaly += f" TRUNCATED({n_before}→{n_after}={n_after / SR:.1f}s)"
     if not stereo_after and stereo_before:
         anomaly += " STEREO→MONO"
     if nz_after < nz_before - 2.0:
@@ -116,8 +116,7 @@ def _patched_profiled_phase_call(self, phase, audio: np.ndarray, **kwargs):
         f"{flag}{phase_id:45s} "
         f"shape:{str(audio.shape):12s}→{str(out_audio.shape):12s} "
         f"nz:{nz_before:7.2f}s→{nz_after:7.2f}s "
-        f"active:{act_before:.0%}→{act_after:.0%}"
-        + (f"  *** {anomaly} ***" if anomaly else ""),
+        f"active:{act_before:.0%}→{act_after:.0%}" + (f"  *** {anomaly} ***" if anomaly else ""),
         flush=True,
     )
 
@@ -138,7 +137,7 @@ _UVcls._profiled_phase_call = _patched_profiled_phase_call
 
 # ── Load & Run ──────────────────────────────────────────────────────────────
 print("=" * 80)
-print(f"PHASE SHAPE TRACER")
+print("PHASE SHAPE TRACER")
 print(f"  Input: {INPUT_FILE}")
 print(f"  SR: {SR} Hz")
 print("=" * 80)
@@ -149,7 +148,6 @@ print(
 print("-" * 120)
 
 from backend.file_import import load_audio_file
-from cli.aurik_cli import _TARGET_SR, _load_audio, _resample_to_48k
 
 result_dict = load_audio_file(INPUT_FILE)
 if result_dict is None or result_dict.get("error") or result_dict.get("audio") is None:
@@ -161,6 +159,7 @@ print(f"\nLoaded: shape={audio_raw.shape} sr={sr_raw}")
 
 # Resample to 48kHz
 import librosa
+
 if sr_raw != SR:
     if audio_raw.ndim == 2:
         audio_48k = np.stack(
@@ -172,7 +171,7 @@ if sr_raw != SR:
 else:
     audio_48k = audio_raw.astype(np.float32)
 
-print(f"At 48kHz:  shape={audio_48k.shape}  duration={audio_48k.shape[0]/SR:.2f}s\n")
+print(f"At 48kHz:  shape={audio_48k.shape}  duration={audio_48k.shape[0] / SR:.2f}s\n")
 _input_n_samples = audio_48k.shape[0]
 
 from denker.aurik_denker import get_aurik_denker
@@ -195,7 +194,7 @@ result = denker.denke(
 )
 
 elapsed = time.perf_counter() - t0
-print(f"\n{'='*80}")
+print(f"\n{'=' * 80}")
 print(f"FERTIG in {elapsed:.1f}s")
 
 # Zusammenfassung
@@ -212,4 +211,4 @@ else:
     out_audio = result.audio if hasattr(result, "audio") else None
     if isinstance(out_audio, np.ndarray):
         nz_out = _nonzero_len(out_audio, SR)
-        print(f"\nFinal audio: shape={out_audio.shape}  nz={nz_out:.2f}s  n={out_audio.shape[0]/SR:.2f}s")
+        print(f"\nFinal audio: shape={out_audio.shape}  nz={nz_out:.2f}s  n={out_audio.shape[0] / SR:.2f}s")

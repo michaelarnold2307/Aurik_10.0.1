@@ -66,6 +66,7 @@ import time
 import numpy as np
 from scipy import signal
 
+from backend.core.audio_utils import compute_gated_rms_linear
 from backend.core.defect_scanner import MaterialType
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
@@ -228,12 +229,12 @@ class MultibandCompressionPhase(PhaseInterface):
             compressed = audio + _effective_strength * (compressed - audio)
 
         # Metriken
-        rms_before = np.sqrt(np.mean(audio**2))
-        rms_after = np.sqrt(np.mean(compressed**2))
+        rms_before = compute_gated_rms_linear(audio)
+        rms_after = compute_gated_rms_linear(compressed)
         rms_change_db = 20 * np.log10(rms_after / (rms_before + 1e-10))
 
-        peak_before = np.abs(audio).max()
-        peak_after = np.abs(compressed).max()
+        peak_before = float(np.percentile(np.abs(audio), 99.9))
+        peak_after = float(np.percentile(np.abs(compressed), 99.9))
         peak_before_db = 20 * np.log10(peak_before + 1e-10)
         peak_after_db = 20 * np.log10(peak_after + 1e-10)
 
@@ -245,9 +246,13 @@ class MultibandCompressionPhase(PhaseInterface):
         # §4.5 Psychoacoustic Masking Clamp — protect masked dynamics regions
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+
             compressed = apply_psychoacoustic_masking_clamp(
-                audio, compressed, sample_rate,
-                strength=_effective_strength, mode="subtractive",
+                audio,
+                compressed,
+                sample_rate,
+                strength=_effective_strength,
+                mode="subtractive",
             )
         except Exception as _pm_exc:
             logger.debug("Phase35 masking clamp non-blocking: %s", _pm_exc)

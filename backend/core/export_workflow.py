@@ -47,7 +47,11 @@ def _evaluate_export_quality_gate(
     if quality_gate is None:
         return None, None, None, []
 
-    _fqf = quality_gate.get("fallback_quality_floor") if isinstance(quality_gate.get("fallback_quality_floor"), dict) else {}
+    _fqf = (
+        quality_gate.get("fallback_quality_floor")
+        if isinstance(quality_gate.get("fallback_quality_floor"), dict)
+        else {}
+    )
     _fqf_triggered = bool(_fqf.get("triggered", False))
     _fqf_status = str(_fqf.get("status", "")).strip().lower()
 
@@ -171,7 +175,11 @@ def _resolve_export_strategy(quality_gate: dict | None, gate_passed: bool | None
     - quality_gate=None -> "success" (legacy/no gate payload)
     """
     if quality_gate is not None:
-        _fqf = quality_gate.get("fallback_quality_floor") if isinstance(quality_gate.get("fallback_quality_floor"), dict) else {}
+        _fqf = (
+            quality_gate.get("fallback_quality_floor")
+            if isinstance(quality_gate.get("fallback_quality_floor"), dict)
+            else {}
+        )
         if bool(_fqf.get("triggered", False)):
             _fqf_status = str(_fqf.get("status", "")).strip().lower()
             if _fqf_status == "recovered":

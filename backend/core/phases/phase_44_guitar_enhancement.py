@@ -163,7 +163,7 @@ class GuitarEnhancementPhase(PhaseInterface):
         else:
             genre = "Pop"
 
-        peak_in = float(np.max(np.abs(audio)))
+        peak_in = float(np.percentile(np.abs(audio), 99.9))
 
         # 2. Transient-Boost via attack-envelope differentiation (NOT Hilbert envelope)
         # True transient boost: detect fast amplitude rises and amplify the onset

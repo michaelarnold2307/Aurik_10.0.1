@@ -7,6 +7,7 @@ Three properties are verified:
 
 Literature: Kong et al. (2020) PANNs; Won et al. (2020) – genre-tag correlation.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -15,10 +16,10 @@ import pytest
 from backend.core.genre_classifier import GermanSchlagerClassifier as GenreClassifier
 from backend.core.genre_classifier import get_genre_classifier
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def clf() -> GenreClassifier:
@@ -28,6 +29,7 @@ def clf() -> GenreClassifier:
 # ---------------------------------------------------------------------------
 # 1. Fuse: max-merge invariant — PANNs can only raise, never lower DSP scores
 # ---------------------------------------------------------------------------
+
 
 class TestPANNsFuseInvariant:
     """_fuse_non_schlager_with_panns must keep fused >= original at all times."""
@@ -39,9 +41,7 @@ class TestPANNsFuseInvariant:
         panns = {"Rock": 0.10, "Jazz": 0.60, "Klassik": 0.90, "Electronic": 0.95, "Pop": 0.05}
         fused = clf._fuse_non_schlager_with_panns(dsp, panns)
         for genre, orig in dsp.items():
-            assert fused[genre] >= orig - 1e-9, (
-                f"Fuse reduced {genre}: {orig:.3f} → {fused[genre]:.3f}"
-            )
+            assert fused[genre] >= orig - 1e-9, f"Fuse reduced {genre}: {orig:.3f} → {fused[genre]:.3f}"
 
     def test_fuse_can_raise_low_dsp_score(self, clf):
         """PANNs ≥ 0.8 on a low-scoring genre should lift fused score."""
@@ -81,6 +81,7 @@ class TestPANNsFuseInvariant:
 # ---------------------------------------------------------------------------
 # 2. Open-set rescue: unambiguous PANNs signal rescues "Unbekannt"
 # ---------------------------------------------------------------------------
+
 
 class TestPANNsOpenSetRescue:
     """_panns_open_set_rescue must return (genre, conf) for clear evidence."""
@@ -130,6 +131,7 @@ class TestPANNsOpenSetRescue:
 # 3. Schlager immunity — PANNs must not override is_schlager=True decision
 # ---------------------------------------------------------------------------
 
+
 class TestSchlagerImmunityToPANNs:
     """When DSP classifies audio as Schlager, PANNs prior must not override."""
 
@@ -154,9 +156,20 @@ class TestSchlagerImmunityToPANNs:
         monkeypatch.setattr(clf, "_score_rock", lambda *_a, **_k: 0.05)
         monkeypatch.setattr(clf, "_score_jazz", lambda *_a, **_k: 0.05)
         monkeypatch.setattr(clf, "_score_classical", lambda *_a, **_k: 0.05)
-        for m in ("_score_pop", "_score_blues", "_score_soul_rnb", "_score_country",
-                  "_score_folk", "_score_funk", "_score_electronic", "_score_hiphop",
-                  "_score_metal", "_score_latin", "_score_gospel", "_score_reggae"):
+        for m in (
+            "_score_pop",
+            "_score_blues",
+            "_score_soul_rnb",
+            "_score_country",
+            "_score_folk",
+            "_score_funk",
+            "_score_electronic",
+            "_score_hiphop",
+            "_score_metal",
+            "_score_latin",
+            "_score_gospel",
+            "_score_reggae",
+        ):
             monkeypatch.setattr(clf, m, lambda *_a, **_k: 0.05)
         # PANNs returns Jazz=0.95 — should be ignored for the Schlager decision
         monkeypatch.setattr(clf, "_compute_panns_genre_prior", lambda _a, _sr: {"Jazz": 0.95, "Rock": 0.05})
@@ -166,4 +179,6 @@ class TestSchlagerImmunityToPANNs:
         assert result.is_schlager is True, (
             f"PANNs high Jazz prior must not override Schlager (got genre={result.genre_label!r})"
         )
-        assert "schlager" in result.genre_label.lower(), f"genre_label must be Schlager variant, not {result.genre_label!r}"
+        assert "schlager" in result.genre_label.lower(), (
+            f"genre_label must be Schlager variant, not {result.genre_label!r}"
+        )

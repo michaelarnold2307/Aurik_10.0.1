@@ -259,7 +259,7 @@ def detect_dolby_encoding(
             nr_type="none",
             confidence=best_conf,
             hf_excess_db=hf_excess_db,
-            evidence=evidence + [f"best_candidate={best_type} conf={best_conf:.2f} < 0.35"],
+            evidence=[*evidence, f"best_candidate={best_type} conf={best_conf:.2f} < 0.35"],
         )
 
     logger.info(
@@ -275,7 +275,7 @@ def detect_dolby_encoding(
         nr_type=best_type,  # type: ignore[arg-type]
         confidence=best_conf,
         hf_excess_db=hf_excess_db,
-        evidence=evidence + [f"winner={best_type} conf={best_conf:.2f}"],
+        evidence=[*evidence, f"winner={best_type} conf={best_conf:.2f}"],
     )
 
 

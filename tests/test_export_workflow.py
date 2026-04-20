@@ -327,6 +327,7 @@ def test_export_audio_fqf_degraded_overrides_passed_gate(temp_export_dir):
 # §2.46b / §2.49 fidelity_guards — ExportMetadata + sidecar JSON
 # ---------------------------------------------------------------------------
 
+
 def test_fidelity_guards_in_sidecar_json(temp_export_dir):
     """ExportMetadata.fidelity_guards must appear in JSON sidecar when set."""
     from backend.core.export_workflow import ExportMetadata, export_audio
@@ -352,6 +353,7 @@ def test_fidelity_guards_in_sidecar_json(temp_export_dir):
     sidecar = os.path.splitext(path)[0] + ".json"
     assert os.path.exists(sidecar), "Sidecar JSON must exist"
     import json
+
     with open(sidecar, encoding="utf-8") as f:
         payload = json.load(f)
 
@@ -365,8 +367,9 @@ def test_fidelity_guards_in_sidecar_json(temp_export_dir):
 
 def test_build_export_metadata_populates_fidelity_guards():
     """bridge.build_export_metadata extracts both guard dicts from result.metadata."""
-    from backend.api.bridge import build_export_metadata
     from types import SimpleNamespace
+
+    from backend.api.bridge import build_export_metadata
 
     result = SimpleNamespace(
         metadata={
@@ -397,8 +400,9 @@ def test_build_export_metadata_populates_fidelity_guards():
 
 def test_build_export_metadata_no_guards_yields_none():
     """build_export_metadata returns fidelity_guards=None when result has no guard data."""
-    from backend.api.bridge import build_export_metadata
     from types import SimpleNamespace
+
+    from backend.api.bridge import build_export_metadata
 
     result = SimpleNamespace(metadata={"some_key": "some_value"})
     em = build_export_metadata(result)
@@ -408,8 +412,9 @@ def test_build_export_metadata_no_guards_yields_none():
 
 def test_build_export_metadata_sanitizes_nan():
     """build_export_metadata must sanitize NaN/Inf values in guard dicts."""
-    from backend.api.bridge import build_export_metadata
     from types import SimpleNamespace
+
+    from backend.api.bridge import build_export_metadata
 
     result = SimpleNamespace(
         metadata={
