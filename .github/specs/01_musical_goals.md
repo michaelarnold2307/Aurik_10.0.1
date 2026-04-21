@@ -36,7 +36,7 @@ aufgerufen via `MusicalGoalsChecker.measure_all(audio, sr)`.
 | **Mikro-Dynamik** (`MicroDynamicsMetric`) | Momentane LUFS-Profil-Korrelation (400 ms-Fenster), Crest-Faktor-Erhalt ≤ 1.5 dB | **3** | ≥ **0.88** | ≥ **0.90** |
 | **Groove** (`GrooveMetric`) | Mikro-Timing, Swing, Event-Onset-Präzision (DTW ≤ 8 ms RMS) | **3** | ≥ **0.83** | ≥ **0.85** |
 | **Transparenz** (`TransparenzMetric`) | Klarheit, Trennung der Klangelemente | **4** | ≥ **0.82** | ≥ **0.85** |
-| **Wärme** (`WaermeMetric`) | Primär: Even-Harmonic-Ratio (H2/H4 THD_even/THD_total, ISO 226:2023 gewichtet) — misst wahrgenommene Röhren-/Band-Wärme; Sekundär: Warmth Ratio E(200–800)/E(800–3000) als Spektral-Tilt-Proxy (§9.7.14) | **4** | ≥ **0.75** | ≥ **0.80** |
+| **Wärme** (`WaermeMetric`) | Primär: Even-Harmonic-Ratio (H2/H4 THD_even/THD_total, ISO 226:2003 gewichtet) — misst wahrgenommene Röhren-/Band-Wärme; Sekundär: Warmth Ratio E(200–800)/E(800–3000) als Spektral-Tilt-Proxy (§9.7.14) | **4** | ≥ **0.75** | ≥ **0.80** |
 | **Bass-Kraft** (`BassKraftMetric`) | Bassenergie 20–250 Hz + Virtual Pitch (Missing Fundamental, Obertöne 120–500 Hz) | **4** | ≥ **0.78** | ≥ **0.80** |
 | **Separation-Treue** (`SeparationFidelityMetric`) | SDR ≥ 8 dB / SIR ≥ 12 dB nach NMF-Dekomposition | **4** | ≥ **0.78** | ≥ **0.80** |
 | **Brillanz** (`BrillanzMetric`) | HF-Klarheit, 8–20 kHz — Sparkle & Air | **5** | ≥ **0.78** | ≥ **0.82** |
@@ -565,7 +565,7 @@ Formel:  w > 1.5 → w' = 1.5 + excess/(1 + 3·excess)    // Asymptote: 1.83
 - **§9.7.11 tonal_center**: Krumhansl-Schmuckler-Key-Detection — SNR-invariant. Alle früheren Exclusions entfernt.
 - **§9.7.12 brillanz**: HF Spectral Crest Factor (2–16 kHz), p95/p50. Noise hebt p50-Median → Crest steigt nach Denoise. `BrillanzMetric`-Preservation-Penalty entfernt (kontraproduktiv).
 - **§9.7.13 transparenz**: Multi-Band Spectral Crest (5 Oktavbänder 250 Hz–8 kHz). Bug-fix: `TransparenzMetric.measure()` hatte kein `reference=`-Parameter → TypeError in Precise-Override.
-- **§9.7.14 waerme**: **Primär** Even-Harmonic-Ratio `THD_even / THD_total` (H2/H4), ISO 226:2023 gewichtet. **Sekundär** Sub-Band-Verhältnis E(200–800)/E(800–3000) als Tilt-Proxy. Begründung: Parametrischer EQ-Boost bei 400 Hz erhöht Sub-Band-Verhältnis ohne wahrgenommene Wärme; gerade Harmonische (H2, H4) sind Fingerabdruck von Röhren-/Bandsignalketten (Fletcher & Rossing).
+- **§9.7.14 waerme**: **Primär** Even-Harmonic-Ratio `THD_even / THD_total` (H2/H4), ISO 226:2003 gewichtet. **Sekundär** Sub-Band-Verhältnis E(200–800)/E(800–3000) als Tilt-Proxy. Begründung: Parametrischer EQ-Boost bei 400 Hz erhöht Sub-Band-Verhältnis ohne wahrgenommene Wärme; gerade Harmonische (H2, H4) sind Fingerabdruck von Röhren-/Bandsignalketten (Fletcher & Rossing).
 
 ### §9.7.16 [TARGET_2026] NatuerlichkeitMetric-Reform
 

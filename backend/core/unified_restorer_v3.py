@@ -14627,7 +14627,7 @@ class UnifiedRestorerV3:
 
         # §4.1b ISO 532-1 Zwicker Mid-Pipeline-Loudness-Guard
         # Applied AFTER broadband-subtraktive phases. ΔN > 2.0 sone → Dry/Wet-Rescue.
-        # LUFS allein übersieht Tiefton-Rumpeln bis +6 Phon (ISO 226:2023).
+        # LUFS allein übersieht Tiefton-Rumpeln bis +6 Phon (ISO 226:2003).
         if (
             _zwicker_pre_audio is not None
             and hasattr(result, "audio")

@@ -8,7 +8,7 @@ Zwicker & Fastl (Psychoacoustics, 2nd ed. 1999) / ISO 532-1:2017.
 Warum LUFS allein nicht ausreicht (§4.1b):
   ITU-R BS.1770-5 K-Weighting detektiert Tieftonrumpeln (200–300 Hz) NICHT
   als Lautheitszunahme, die das Gehör mit bis zu +6 Phon wahrnimmt
-  (ISO 226:2023 Equal-Loudness-Contours). Rumble-Filter-Phasen werden bei
+  (ISO 226:2003 Equal-Loudness-Contours). Rumble-Filter-Phasen werden bei
   LUFS-Only-Check fälschlich als lautheitsneutral eingestuft.
 
 Algorithmus (stationäre ISO 532-1):
@@ -20,7 +20,7 @@ Algorithmus (stationäre ISO 532-1):
 Referenz-Veröffentlichungen:
   - Zwicker E. & Fastl H. (1999): "Psychoacoustics — Facts and Models", 2nd ed.
   - ISO 532-1:2017: "Acoustics — Zwicker method for calculating loudness"
-  - ISO 226:2023: Equal-Loudness-Level Contours (Fletcher-Munson)
+  - ISO 226:2003: Equal-Loudness-Level Contours (Fletcher-Munson)
   - Chalupper J. & Fastl H. (2002): "Dynamic loudness model (DLM) based on
     Moore's loudness model" — for tonality correction reference
 
@@ -81,12 +81,12 @@ N_BARK: int = 24  # Anzahl kritische Bänder
 BARK_CENTERS_HZ: np.ndarray = 0.5 * (BARK_EDGES_HZ[:-1] + BARK_EDGES_HZ[1:])
 
 # ──────────────────────────────────────────────────────────────────────
-# ISO 226:2023 Equal-Loudness-Level Contour (vereinfacht, Phon-Referenz)
+# ISO 226:2003 Equal-Loudness-Level Contour (vereinfacht, Phon-Referenz)
 # Tabelle: Frequenz → Pegel bei 40 Phon (Kern-Referenzkurve = 1 sone)
 # Interpoliert für Bark-Band-Mitten.
-# Basis: ISO 226:2023 Table A.1 — Absolute Threshold of Hearing + 40 Phon Contour
+# Basis: ISO 226:2003 Table A.1 — Absolute Threshold of Hearing + 40 Phon Contour
 # ──────────────────────────────────────────────────────────────────────
-# Reference SPL at 40 phon (ISO 226:2023) for selected standard frequencies
+# Reference SPL at 40 phon (ISO 226:2003) for selected standard frequencies
 _ISO226_FREQ_HZ: np.ndarray = np.array(
     [
         20,
@@ -163,7 +163,7 @@ _ISO226_40PHON_SPL: np.ndarray = np.array(
 _ATH_SPL: np.ndarray = np.interp(
     BARK_CENTERS_HZ,
     _ISO226_FREQ_HZ,
-    # Approximate ATH from ISO 226:2023 (minimum audible field)
+    # Approximate ATH from ISO 226:2003 (minimum audible field)
     np.array(
         [
             78.5,
@@ -203,7 +203,7 @@ _ATH_SPL: np.ndarray = np.interp(
 
 # ──────────────────────────────────────────────────────────────────────
 # ISO 532-1 Lautheits-Kurve: Pegeldifferenz (dB) bei 40 Phon pro Bark-Band
-# gegenüber 1 kHz-Referenz (ISO 226:2023-basiert)
+# gegenüber 1 kHz-Referenz (ISO 226:2003-basiert)
 # ──────────────────────────────────────────────────────────────────────
 _ISO226_CORRECTION_DB: np.ndarray = (
     np.interp(
@@ -352,7 +352,7 @@ def compute_specific_loudness_zwicker(
       1. Stereo → Mono (Downmix)
       2. 24-Band Bark-Butterworth-Filterbank (4. Ordnung, SOS)
       3. RMS-Leistungspegel pro Band (dBFS → dB SPL via Kalibrieroffset)
-      4. ISO 226:2023 Frequenzkorrektur (Equal-Loudness-Gewichtung)
+      4. ISO 226:2003 Frequenzkorrektur (Equal-Loudness-Gewichtung)
       5. ATH-Gating (Bänder unterhalb Hörschwelle → L'=0)
       6. Sone-Konversion: N'_b = f(L'_b) nach ISO 532-1
       7. Gesamt-Lautheit: N = Σ N'_b × ΔBark (trapz-Integration)
@@ -450,7 +450,7 @@ def _compute_zwicker_internal(
         # dBFS → dB SPL (studio calibration: 0 dBFS ≡ 90 dB SPL)
         db_spl = db_fs + _DBFS_TO_SPL_OFFSET
 
-        # ISO 226:2023 Equal-Loudness-Correction (frequency weighting)
+        # ISO 226:2003 Equal-Loudness-Correction (frequency weighting)
         db_spl_corrected = db_spl - _ISO226_CORRECTION_DB[b]
 
         band_levels_db_spl[b] = db_spl_corrected

@@ -6,7 +6,7 @@ score low; defects in quiet/exposed passages score high.
 
 Scientific basis:
 - Simultaneous masking: Fastl & Zwicker (2007) "Psychoacoustics: Facts and Models"
-- Temporal masking: forward masking ~200 ms, backward masking ~20 ms (ISO 226:2023)
+- Temporal masking: forward masking ~200 ms, backward masking ~20 ms (ISO 226:2003)
 - Loudness model: ITU-R BS.1770-5 momentary loudness (400 ms windows)
 
 The estimator does NOT modify audio — it only annotates DefectScore metadata

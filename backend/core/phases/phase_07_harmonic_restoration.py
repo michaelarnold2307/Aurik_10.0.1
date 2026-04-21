@@ -50,8 +50,8 @@ SCIENTIFIC FOUNDATION:
   → Vacuum tube modeling, triode saturation curves
 - **Välimäki et al. (2011)**: "Virtual Analog Effects"
   → Anti-aliased nonlinear processing, oversampling techniques
-- **Parker & Esquef (2006)**: "Modelling of Nonlinear State-Space Systems Using a Deep Neural Network"
-  → Tape saturation modeling
+- **Parker & Esquef (DAFx 2006)**: Nonlinear state-space modeling of analog audio devices
+  → Tape saturation modeling (Proc. 9th Int. Conference on Digital Audio Effects)
 - **Hurchalla (2019)**: "Reducing Aliasing in Nonlinear Audio Processing Using Polynomial Transition Regions"
   → Anti-aliasing for waveshaping
 
@@ -639,7 +639,7 @@ class HarmonicRestorationPhase(PhaseInterface):
                 "target_range_hz": params["target_range_hz"],
                 "hf_energy_before": hf_energy_before,
                 "hf_energy_after": hf_energy_after,
-                "scientific_ref": "Arfib (1979), Yeh (2008), Välimäki (2011), Parker & Esquef (2006), Hurchalla (2019), Klapuri (2006), Terhardt (1982)",
+                "scientific_ref": "Arfib (1979), Yeh (2008), Välimäki (2011), Parker & Esquef (DAFx 2006), Hurchalla (2019), Klapuri (2006), Terhardt (1982)",
                 "benchmark": "Waves Aphex Vintage Warmer, SPL Vitalizer, iZotope Ozone Exciter, Softube Saturation Knob",
                 "algorithm_version": "3.0_multi_pitch",
                 "execution_time_seconds": execution_time,

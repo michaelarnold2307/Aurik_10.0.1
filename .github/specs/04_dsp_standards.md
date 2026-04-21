@@ -23,7 +23,7 @@
 | **DDSP (Eigenimplementierung)** | Instrument-Resonanzmodellierung | Engel et al. (ICLR 2020) |
 | **ASA (Bregman)** | Common Onset, Common Fate | Bregman (1990) |
 | **Virtual Pitch** | Missing Fundamental → BassKraftMetric | Moore et al. (2006) |
-| **ISO 226:2023 Equal-Loudness** | BrillanzMetric/WaermeMetric-Gewichtung | ISO 226:2023 |
+| **ISO 226:2003 Equal-Loudness** | BrillanzMetric/WaermeMetric-Gewichtung | ISO 226:2003 |
 | **LUFS / ITU-R BS.1770-5** | Lautstärkenormalisierung (2023) | ITU-R BS.1770-5 |
 
 > **DDSP-Implementierung**: Aurik nutzt eine leichtgewichtige NumPy/SciPy-Eigenimplementierung (`dsp/ddsp_synth.py`) — **KEIN** Google-`ddsp`-PyPI-Paket (benötigt TensorFlow). Die Eigenimplementierung deckt additive Synthese + Rauschfilter vollständig ab und ist out-of-the-box ohne TF lauffähig.
@@ -41,7 +41,7 @@
 
 **Warum LUFS nicht ausreicht**: LUFS (ITU-R BS.1770-5) verwendet K-Weighting (~A-Gewichtung +
 Hochregal +4 dB). K-Weighting detektiert Tieftonrumpeln (200–300 Hz) nicht als Lautheitszunahme,
-die das Gehör mit bis zu +6 Phon wahrnimmt (ISO 226:2023 Equal-Loudness-Contours). Ergebnis:
+die das Gehör mit bis zu +6 Phon wahrnimmt (ISO 226:2003 Equal-Loudness-Contours). Ergebnis:
 Rumble-Filter-Phasen werden bei LUFS-Only-Check fälschlich als lautheitsneutral eingestuft.
 
 **MidPipeline-Guard nach subtraktiven Phasen mit großem Breitband-Impact**:
@@ -53,7 +53,7 @@ def compute_specific_loudness_zwicker(audio: np.ndarray, sr: int) -> float:
     ISO 532-1 stationäre Methode (Zwicker/Fastl).
     Returns total loudness N in sone.
     - Bark-Filterbank: 24 kritische Bänder (0–16 kHz)
-    - Fletcher-Munson-Kurven: ISO 226:2023 Tabelle
+    - Fletcher-Munson-Kurven: ISO 226:2003 Tabelle
     - Referenz: 1 sone = 40 phon bei 1 kHz
     """
 ```
@@ -706,7 +706,7 @@ FCPE (Tier-0, primär) → RMVPE (Tier-1, Fallback) → PESTO (Tier-2) → pYIN 
 - Wannamaker et al. (1992): POW-r — _A Theory of Nonsubtractive Dither_
 - Lipman et al. (2023): _Flow Matching for Generative Modeling_
 - Radford et al. (2022): Whisper — _Robust Speech Recognition via Large-Scale Weak Supervision_
-- ISO 226:2023: _Acoustics — Normal Equal-Loudness-Level Contours_
+- ISO 226:2003: _Acoustics — Normal Equal-Loudness-Level Contours_
 - ITU-R BS.1770-5 (2023): _Algorithms to measure audio programme loudness_
 - Záviška et al. (2021): _A Proper Version of Synthesis-based Sparse Audio Declipper_ — EUSIPCO 2021
 - Blauert (1997): _Spatial Hearing — The Psychophysics of Human Sound Localization_ — MIT Press

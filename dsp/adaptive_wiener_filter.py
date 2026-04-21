@@ -3,14 +3,14 @@ Adaptive Wiener Filter DSP-Modul für Aurik 9.10 (SOTA-Maximum)
 
 Implements an MMSE-LSA-inspired Wiener filter with:
 - Decision-directed a-priori SNR estimation (Ephraim & Malah 1984)
-- Psychoacoustic frequency weighting (ISO 226:2023 equal-loudness approximation)
+- Psychoacoustic frequency weighting (ISO 226:2003 equal-loudness approximation)
 - Spectral floor to prevent musical noise artifacts (Cohen 2002)
 - Full NaN/Inf guards on all paths
 
 References:
   Ephraim & Malah (1984): Speech enhancement using MMSE spectral amplitude estimator
   Cohen (2002): Noise spectrum estimation in adverse environments
-  ISO 226:2023: Equal-loudness contours
+  ISO 226:2003: Equal-loudness contours
 """
 
 import logging
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def _iso226_weight_curve(n_bins: int, sr: int) -> np.ndarray:
-    """Approximate ISO 226:2023 equal-loudness weighting curve.
+    """Approximate ISO 226:2003 equal-loudness weighting curve.
 
     Returns per-bin weights [0.5, 1.0] — frequencies where human hearing
     is most sensitive (2-5 kHz) get lower gain reduction (weight closer to 1.0),

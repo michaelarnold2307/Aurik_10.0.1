@@ -57,7 +57,7 @@ def _apply_dither_16bit(audio: np.ndarray) -> np.ndarray:
         # Dual-set: 48 kHz primary (Aurik processing SR), 44.1 kHz secondary.
         # 48 kHz coefficients re-optimised following Wannamaker, Lipshitz &
         # Vanderkooy (1992): minimise audible noise power weighted by
-        # ISO 226:2023 equal-loudness contour at the 16-bit quantisation floor.
+        # ISO 226:2003 equal-loudness contour at the 16-bit quantisation floor.
         # The optimisation shifts spectral energy above 16 kHz (inaudible at
         # 48 kHz Nyquist=24 kHz) more aggressively than the 44.1 kHz set,
         # yielding ~+1.5 dB perceptual SNR improvement.

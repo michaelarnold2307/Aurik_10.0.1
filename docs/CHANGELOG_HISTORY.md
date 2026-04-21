@@ -64,7 +64,7 @@
   Studio 2026: ≤ −72 dBFS (unverändert). Aktualisiert in: Spec 01 §8.2, Spec 02 §1.4, fix-metric,
   quality-benchmark.
 - **WärmeMetric §9.7.14 — reformuliert**: Primär-Proxy: Even-Harmonic-Ratio (H2/H4 THD_even/THD_total,
-  ISO 226:2023 gewichtet) — misst wahrgenommene Wärme von Röhren-/Bandsignalketten. Sekundär:
+  ISO 226:2003 gewichtet) — misst wahrgenommene Wärme von Röhren-/Bandsignalketten. Sekundär:
   Spektral-Band-Ratio E(200–800)/E(800–3000) als Tilt-Proxy.
 - **Studio-2026-Schwellwerte synchronisiert**: Brillanz ≥ 0.90, Bass-Kraft ≥ 0.88, Raumtiefe ≥ 0.78,
   Separation ≥ 0.85 — konsistent zwischen Spec 01, Spec 02 und fix-metric SKILL.

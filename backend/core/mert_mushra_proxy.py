@@ -30,7 +30,7 @@ nichtlinearer Worst-Case-Floor-Bewertung:
     Transienten-Verzerrungen über 4 Frequenzauflösungen
     (Yamamoto et al. 2019).
 8.  **ISO 226 Spektraldistanz** — frequenzgewichtete Distanz nach
-    Equal-Loudness-Kontur @ 40 Phon (ISO 226:2023).
+    Equal-Loudness-Kontur @ 40 Phon (ISO 226:2003).
 9.  **MCD** (Mel-Cepstral Distortion) — Klangfarben-Treue (r ≈ 0.65–0.70).
 10. **Chroma-Korrelation** — Tonart-Erhaltung (r ≈ 0.60).
 11. **LUFS-Differenz** — Lautstärke-Invarianz.
@@ -132,7 +132,7 @@ Referenzen:
     - Thiede et al. (2000): PEAQ — Perceptual Evaluation of Audio Quality. JAES.
     - Wu et al. (2023): LAION-CLAP. arXiv:2211.06687.
     - Kabal (2002): ITU-T P.862 — Perceptual Objective Listening Quality.
-    - ISO 226:2023: Equal-loudness-level contours.
+    - ISO 226:2003: Equal-loudness-level contours.
     - ITU-R BS.1534-3 (2015): Subjective assessment of intermediate quality.
     - Blauert (1997): Spatial Hearing — IACC for spatial fidelity assessment.
     - ITU-R BS.1387 (2001): PEAQ Basic Model — NMR as core MOV.
@@ -1160,7 +1160,7 @@ class MertMushraProxy:
 
     @staticmethod
     def _compute_iso226_distance(ref: np.ndarray, test: np.ndarray, sr: int) -> float:
-        """Frequency-weighted spectral distance using ISO 226:2023 equal-loudness.
+        """Frequency-weighted spectral distance using ISO 226:2003 equal-loudness.
 
         Emphasizes 3–4 kHz sensitivity peak, de-emphasizes sub-bass.
         Lower = better (0.0 = identical).
@@ -3324,7 +3324,7 @@ def _stft_magnitude(audio: np.ndarray, n_fft: int, hop_length: int) -> np.ndarra
     return result
 
 
-# ISO 226:2023 equal-loudness data (40 phon) — 19 anchor frequencies
+# ISO 226:2003 equal-loudness data (40 phon) — 19 anchor frequencies
 _ISO226_FREQS = np.array(
     [
         20,

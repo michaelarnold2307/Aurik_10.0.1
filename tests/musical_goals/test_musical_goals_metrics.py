@@ -497,7 +497,7 @@ class TestRegressionPrevention:
 
 
 class TestISO226WeightingAndVirtualPitch:
-    """Tests für ISO 226:2023 Equal-Loudness-Gewichtung (Brillanz/Wärme) und
+    """Tests für ISO 226:2003 Equal-Loudness-Gewichtung (Brillanz/Wärme) und
     Virtual Pitch / Missing Fundamental (BassKraft) — Spec §8.1."""
 
     SR = 48000

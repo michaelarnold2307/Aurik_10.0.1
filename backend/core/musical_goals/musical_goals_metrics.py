@@ -185,7 +185,7 @@ class GoalMeasurement:
 # ---------------------------------------------------------------------------
 # SPL in dB required at each frequency to sound as loud as 40 dB at 1 kHz.
 # Source: ISO 226:2003 Table 1 — 40-phon equal-loudness contour.
-# The 2023 revision (corrected by BS EN ISO 226:2023) leaves these anchor
+# The 2023 revision (corrected by BS EN ISO 226:2003) leaves these anchor
 # values unchanged within ±0.5 dB for the frequencies listed here.
 _ISO226_FREQS: np.ndarray = np.array(
     [
@@ -219,7 +219,7 @@ _ISO226_SPL40: np.ndarray = np.array(
 
 
 def _iso226_weights(freqs: np.ndarray) -> np.ndarray:
-    """Per-bin perceptual-weight array (float32, shape [F]) — ISO 226:2023 @ 40 phon.
+    """Per-bin perceptual-weight array (float32, shape [F]) — ISO 226:2003 @ 40 phon.
 
     ``weight(f) = 10^((SPL_1kHz − SPL_40phon(f)) / 20)``
 
@@ -643,7 +643,7 @@ class WaermeMetric:
         # Frequency bins
         freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
 
-        # ISO 226:2023 Equal-Loudness weighting (perceptual energy)
+        # ISO 226:2003 Equal-Loudness weighting (perceptual energy)
         _w = _iso226_weights(freqs)
         magnitude_w = magnitude * _w[:, None]  # shape (F, T)
 

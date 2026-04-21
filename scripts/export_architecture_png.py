@@ -796,7 +796,7 @@ ax.text(
     0.5,
     0.012,
     "Aurik 9.10.45 · 6312 Tests · Python 3.10 · PyQt5 · FastAPI · ONNX Runtime (CPU-only) · "
-    "EBU R128 · ITU-R BS.1770-4 · ISO 532-1:2017 · ISO 226:2023 · Stand: Februar 2026",
+    "EBU R128 · ITU-R BS.1770-4 · ISO 532-1:2017 · ISO 226:2003 · Stand: Februar 2026",
     ha="center",
     va="bottom",
     fontsize=5.8,

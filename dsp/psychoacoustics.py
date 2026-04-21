@@ -10,7 +10,7 @@ following the stationary method of ISO 532-1:2017.
 Algorithm:
     1. 24 Butterworth bandpass filters (Bark scale, 4th order)
     2. Band-level computation (dB SPL approximation from digital level)
-    3. Equal-loudness contour correction (ISO 226:2023 approximation)
+    3. Equal-loudness contour correction (ISO 226:2003 approximation)
     4. Inter-band excitation spreading (ISO 532-1 simplified spreading function)
     5. Specific loudness per band (Stevens' power law, Zwicker & Fastl 2007 Eq.8.2)
     6. Total loudness N = sum of specific loudnesses
@@ -22,7 +22,7 @@ References:
     - Zwicker & Fastl (2007): Psychoacoustics — Facts and Models, 3rd ed., Ch. 8.1–8.2
       Eq. 8.2: N' = 0.08·(E_TQ/0.00208)^0.23·[(E/E_TQ+1)^0.23−1] sone/Bark
       Spreading: upward 25 dB/Bark, downward 40 dB/Bark (Table 8.1)
-    - ISO 226:2023 — Equal-loudness-level contours (40-phon reference curve)
+    - ISO 226:2003 — Equal-loudness-level contours (40-phon reference curve)
     - Stevens (1957): On the psychophysical law (power law exponent 0.3 at constant pressure)
 
 Author: Aurik 9.11 — §4.1b implementation with ISO 532-1 spreading function
@@ -66,11 +66,11 @@ _BARK_BANDS: list[tuple[float, float]] = [
     (12000, 15500),
 ]
 
-# ── Equal-Loudness Correction (ISO 226:2023 approximation) ─────────────
+# ── Equal-Loudness Correction (ISO 226:2003 approximation) ─────────────
 # dB offset to apply at each band center so that equal loudness contour
 # at 40 phon is approximately flat.  Positive = ear is MORE sensitive
 # (less energy needed), so we ADD to measured level.
-# Derived from ISO 226:2023 40-phon contour at band center frequencies.
+# Derived from ISO 226:2003 40-phon contour at band center frequencies.
 _EQUAL_LOUDNESS_OFFSET_DB: list[float] = [
     -22.0,  # 60 Hz  — ear very insensitive
     -14.0,  # 150 Hz
@@ -98,7 +98,7 @@ _EQUAL_LOUDNESS_OFFSET_DB: list[float] = [
     -18.0,  # 13750 Hz — ear insensitive again
 ]
 
-# ── Hearing threshold in quiet (ISO 226:2023, dB SPL at band center) ───
+# ── Hearing threshold in quiet (ISO 226:2003, dB SPL at band center) ───
 _THRESHOLD_QUIET_DB: list[float] = [
     55.0,
     35.0,
@@ -236,7 +236,7 @@ def compute_specific_loudness_zwicker(audio: np.ndarray, sr: int) -> float:
         1. Extract 5 s center segment (or full if shorter)
         2. Filter through 24 Bark-band Butterworth bandpass filters
         3. Compute band level in dB SPL (from RMS + digital-to-SPL offset)
-        4. Apply equal-loudness correction (ISO 226:2023)
+        4. Apply equal-loudness correction (ISO 226:2003)
         5. Apply inter-band excitation spreading (ISO 532-1 spreading function,
            Zwicker & Fastl 2007 Table 8.1: 25 dB/Bark upward, 40 dB/Bark downward)
         6. Convert each band to specific loudness via Stevens' power law
