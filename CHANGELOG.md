@@ -2,6 +2,15 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.11.44 — PLM-Active-Guard LyricsEnhancement + np.corrcoef Guards (Apr 2026)
+
+### Fixes (§4.6b / VERBOTEN)
+- **`backend/core/lyrics_guided_enhancement.py`**: §4.6b PLM-Active-Guard für wav2vec2 ONNX-Inferenz hinzugefügt — `set_active("lyrics_aligner_wav2vec2", True)` vor `session.run()`, `False` in `finally`. Verhindert Emergency-Eviction-Crash während aktiver Inferenz.
+- **`backend/core/forensics/analysis_and_modules.py`**: `np.corrcoef(left, right)` in der Stereo-Analyse mit `np.errstate(invalid="ignore")` + `isfinite`-Guard geschützt — kein RuntimeWarning bei stillem/DC-only Stereo-Audio mehr.
+- **`backend/core/musical_goals/ki_quality_model.py`**: `std < 1e-10` Guard + `np.errstate(invalid="ignore")` vor `np.corrcoef` in `_score_phase_coherence()` — korrekte Fallback-Werte (1.0/0.0) statt NaN-Propagation.
+
+---
+
 ## Version 9.11.43 — _PHASE_REQUIRED_MODELS Vollständigkeit (§4.6c) (Apr 2026)
 
 **Fixes (§4.6c VERBOTEN: `_PHASE_REQUIRED_MODELS` unvollständig):**
