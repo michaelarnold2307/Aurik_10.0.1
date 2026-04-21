@@ -311,7 +311,7 @@ Alle GPU-Operationen laufen über den kanonischen `ml_device_manager`-Singleton.
 
 `AurikDenker.denke()` → ReparaturDenker → RekonstruktionsDenker → RestaurierDenker → UV3:
 DCOffset → TDP(HPSS) → RestorabilityEstimator → SongCalibration → Era/Genre/Medium-Classifier →
-GoalApplicabilityFilter → DefectScanner(32) → CausalDefectReasoner → GPOptimizer →
+GoalApplicabilityFilter → DefectScanner(46) → CausalDefectReasoner → GPOptimizer →
 Phasen(01–64) [mit §2.48 Interaktions-Guard] → FeedbackChain → PhysicalCeiling → MusicalGoalsChecker → MDEM →
 **HolisticPerceptualGate** (inkl. artifact_freedom §2.49) → RestorationResult
 

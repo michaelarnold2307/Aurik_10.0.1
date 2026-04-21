@@ -497,7 +497,7 @@ unverändertem Original-Audio gleichbedeutend mit Phasen-Skip.
 # steuern die initiale Stärke materialadaptiv BEVOR der Guard prüft.
 REGRESSION_THRESHOLD_GOOD: float = 0.020   # restorability ≥ 70
 REGRESSION_THRESHOLD_FAIR: float = 0.035   # restorability 40–69
-REGRESSION_THRESHOLD_POOR: float = 0.055   # restorability < 40
+REGRESSION_THRESHOLD_POOR: float = 0.040   # restorability < 40 (reduced from 0.055 v9.11.2 — prevent best_effort cascades)
 SAMPLE_DURATION_S: float = 5.0
 
 # Priority-Aware Retry-Budget (v9.10.79 + §2.31b v9.10.85):
