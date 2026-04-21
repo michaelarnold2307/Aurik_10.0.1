@@ -7221,3 +7221,13 @@ Zwei neue wissenschaftlich begründete kausale Kanten:
   Emergency-Eviction konnte Modellgewichte während aktiver Inferenz entladen
   → Crash / OOM. Fix: `set_active("MERT-330M-HF")` und `set_active("MERT-ONNX")`
   mit fehlertoleranten `try/finally`-Blöcken umgesetzt (§4.6b).
+
+## [9.11.48] – 2026-04-20
+
+### Fixed
+
+- **`plugins/versa_plugin.py`** — `_score_singmos_pro()` rief `_pseudo_mos_metric()`
+  (wav2vec2-large SingMOS PyTorch-Inferenz) ohne PLM-Active-Guard auf. Emergency-
+  Eviction konnte VersaSingMOS während Scoring entladen → Crash. Fix:
+  `set_active("VersaSingMOS", True/False)` mit fehlertoleranten try/finally-Blöcken
+  um den SingMOS-Inferenzloop (§4.6b).
