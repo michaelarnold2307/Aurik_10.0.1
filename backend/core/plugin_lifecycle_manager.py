@@ -56,18 +56,24 @@ _PHASE_REQUIRED_MODELS: dict[str, frozenset[str]] = {
     "phase_09_crackle_removal": frozenset({"BanquetVinyl"}),
     "phase_12_wow_flutter_fix": frozenset({"FCPE", "RMVPE", "CREPE"}),
     "phase_18_noise_gate": frozenset({"SileroVAD"}),
-    "phase_20_reverb_reduction": frozenset({"SGMSE+"}),
+    "phase_20_reverb_reduction": frozenset(
+        {"SGMSE+", "ResembleEnhance"}
+    ),  # §4.6c: HybridDereverb uses SGMSE+ primary + ResembleEnhance fallback
     "phase_23_spectral_repair": frozenset({"Apollo", "AudioSR"}),
     "phase_24_dropout_repair": frozenset({"AudioSR"}),
     "phase_29_tape_hiss_reduction": frozenset({"DeepFilterNetV3"}),
-    "phase_31_speed_pitch_correction": frozenset({"BasicPitch"}),
-    "phase_42_vocal_enhancement": frozenset({"MelBandRoformer", "MDX23C_vocals", "MDX23C_inst"}),
+    "phase_31_speed_pitch_correction": frozenset(
+        {"BasicPitch", "FCPE", "RMVPE", "CREPE"}
+    ),  # §4.6c: HybridSpeedPitch loads FCPE→RMVPE→CREPE cascade
+    "phase_42_vocal_enhancement": frozenset(
+        {"MelBandRoformer", "MDX23C_vocals", "MDX23C_inst", "DemucsV4"}
+    ),  # §4.6c: DemucsV4 is stem-sep fallback
     "phase_43_ml_deesser": frozenset({"MP-SENet"}),
     "phase_49_advanced_dereverb": frozenset({"SGMSE+"}),
     "phase_55_diffusion_inpainting": frozenset(
         {"CQTdiffPlus", "FlowMatching", "DiffWave", "ConsistencyInpaint", "DACInpaint"}
     ),
-    "phase_56_spectral_band_gap_repair": frozenset({"FCPE", "CREPE"}),
+    "phase_56_spectral_band_gap_repair": frozenset({"FCPE", "RMVPE", "CREPE"}),  # §4.6c: f0-cascade FCPE→RMVPE→CREPE
 }
 
 

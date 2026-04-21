@@ -2,6 +2,26 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.11.43 — _PHASE_REQUIRED_MODELS Vollständigkeit (§4.6c) (Apr 2026)
+
+**Fixes (§4.6c VERBOTEN: `_PHASE_REQUIRED_MODELS` unvollständig):**
+
+UV3 ruft `evict_for_phase(phase_id)` vor jeder Phase auf. Fehlende Fallback-Modelle wurden evictiert,
+bevor die Phase sie benötigte — kostenintensiver Reload (performance) oder Inferenz-Gap (stability).
+
+- **`phase_31_speed_pitch_correction`**: `BasicPitch` → `{BasicPitch, FCPE, RMVPE, CREPE}`.
+  `HybridSpeedPitch` lädt FCPE → RMVPE → CREPE Kaskade (§4.4); fehlende 3 Modelle wurden vor phase_31
+  evictiert und mussten on-demand neu geladen werden.
+- **`phase_42_vocal_enhancement`**: `{MelBandRoformer, MDX23C_vocals, MDX23C_inst}` → zusätzlich
+  `DemucsV4`. Stem-Sep-Kaskade fällt von BSRoFormer → MDX23C → DemucsV4 zurück; DemucsV4 wurde
+  vor phase_42 evictiert obwohl als Fallback benötigt.
+- **`phase_20_reverb_reduction`**: `{SGMSE+}` → `{SGMSE+, ResembleEnhance}`. `HybridDereverb`
+  nutzt ResembleEnhance als Fallback-1 wenn SGMSE+ OOM/fehlt; Modell wurde unnötig evictiert.
+- **`phase_56_spectral_band_gap_repair`**: `{FCPE, CREPE}` → `{FCPE, RMVPE, CREPE}`. f0-Kaskade
+  ist FCPE → RMVPE → CREPE → pYIN; RMVPE fehlte und wurde vor phase_56 evictiert.
+
+**Datei:** `backend/core/plugin_lifecycle_manager.py` — `_PHASE_REQUIRED_MODELS`
+
 ## Version 9.11.42 — PLM AudioSR Guards in phase_23 + hybrid_nvsr (Apr 2026)
 
 **Fixes:**
