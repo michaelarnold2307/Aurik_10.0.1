@@ -2,6 +2,27 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.11.50 — do_carrier_analysis=False Output-Dateien in UI (Apr 2026)
+
+### Bugfix (§2.47a [RELEASE_MUST])
+- **`Aurik910/ui/modern_window.py`** `_load_restored_audio_for_quality()`: lädt Output-WAV
+  für Qualitätsbewertung nach Restaurierung — `do_carrier_analysis` war `True` (Default).
+  Aufruf auf Output-Dateien ohne Carrier-Fingerprint-Bedarf: `do_carrier_analysis=False`.
+- **`Aurik910/ui/modern_window.py`** `_do_export()`: lädt `item.output_file` für
+  Format-Konvertierung — `do_carrier_analysis` war `True` (Default). Carrier-Analyse auf
+  prozessierter Ausgabe unnötig: `do_carrier_analysis=False`.
+
+### Scan-Ergebnis v9.11.50 — alle VERBOTEN-Kategorien bestätigt grün ✅
+- PLM-Active-Guard (alle Plugins) ✅ | LUFS/RMS/Peak-Norm ✅ | ONNX Fixed-Shape ✅
+- QualityMode Enum vs String ✅ | DR/BW-Ceiling ✅ | SongCal-Bounds ✅
+- Phase_09 LPC/AR Vollimpl. ✅ | Phase_50 STFT-POCS ✅ | MDX23C NMF-β→HPSS ✅
+- np.corrcoef Guards ✅ | boundary='even' ✅ | AudioSR Wall-Budget ✅
+- PlateauStop material-adaptive ✅ | carrier_chain_recovery_ratio Pflichtfeld ✅
+- frisson_index §2.53 ✅ | use_versa_in_loop=True ✅ | JND_MIN_DELTA ✅
+- Phase_50 HF-Guard ✅ | PMGG Passthrough np.array_equal ✅ | §2.56 Goal-Weights ✅
+- §2.56a _compute_harmonic_adaptation_scalar ✅ | FCPE→RMVPE→PESTO→pYIN ✅
+- _CARRIER_MEDIUM_DISPLAY Single Source of Truth ✅ | chain_info.get("chain") ✅
+
 ## Version 9.11.46 — do_carrier_analysis=False KMV UI-Thread (Apr 2026)
 
 ### Bugfix (§2.47a)
