@@ -1127,46 +1127,48 @@ class DenoisePhase(PhaseInterface):
         quality_mode: str,
     ) -> tuple[np.ndarray, dict[str, float]]:
         """Keep restoration denoise effective while preventing audible loudness collapse."""
+        from backend.core.audio_utils import apply_musical_gain_envelope, compute_gated_rms_dbfs
+
         material_key = str(material_type or "unknown").lower()
         max_rms_drop_db = float(self._MAX_RMS_DROP_DB.get(material_key, self._MAX_RMS_DROP_DB["unknown"]))
         if str(quality_mode).lower() in ("maximum", "studio2026"):
             max_rms_drop_db += 0.5
 
-        rms_in = float(np.sqrt(np.mean(np.asarray(original_audio, dtype=np.float64) ** 2) + 1e-12))
-        rms_out = float(np.sqrt(np.mean(np.asarray(processed_audio, dtype=np.float64) ** 2) + 1e-12))
-        rms_drop_db = 20.0 * np.log10(max(rms_out / rms_in, 1e-30)) if rms_in > 1e-8 else 0.0
+        # §2.45a-I: Gated-RMS — only musical frames (> −50 dBFS) contribute
+        _rms_in_db = compute_gated_rms_dbfs(np.asarray(original_audio, dtype=np.float32))
+        _rms_out_db = compute_gated_rms_dbfs(np.asarray(processed_audio, dtype=np.float32))
+        rms_in = float(10.0 ** (_rms_in_db / 20.0))
+        rms_drop_db = (_rms_out_db - _rms_in_db) if _rms_in_db > -90.0 else 0.0
         makeup_gain_db = 0.0
 
         if rms_in > 1e-8 and rms_drop_db < -max_rms_drop_db:
             target_rms_drop_db = -max_rms_drop_db
             required_gain_db = target_rms_drop_db - rms_drop_db
-            # §2.45a-II fix: apply full gain — do NOT cap via peak-headroom before applying.
-            # For hot signals (peak99 ≥ 0.84) the old max_safe_gain_db collapses to 0.0
-            # and the guard never fires, leaving level destroyed on every normalised input.
-            # §2.45a-III: soft-limiter (tanh) only when real clipping risk (peak99 > 0.98).
             makeup_gain_db = float(np.clip(required_gain_db, 0.0, 6.0))
             if makeup_gain_db > 0.0:
-                processed_audio = np.clip(
-                    processed_audio * (10.0 ** (makeup_gain_db / 20.0)),
-                    -1.0,
-                    1.0,
-                ).astype(np.float32)
+                _gain_lin = float(10.0 ** (makeup_gain_db / 20.0))
+                # §2.45a-II: gain applied ONLY to musical frames via envelope
+                processed_audio = apply_musical_gain_envelope(
+                    processed_audio, _gain_lin, gate_dbfs=-50.0, crossfade_ms=10.0, sr=48000
+                )
+                processed_audio = np.clip(processed_audio, -1.0, 1.0).astype(np.float32)
+                # §2.45a-III: soft-limiter only when real clipping risk
                 current_peak = float(np.percentile(np.abs(processed_audio), 99.9))
                 if current_peak > 0.98:
                     _abs_p = np.abs(processed_audio)
                     _over_p = _abs_p > 0.92
                     if np.any(_over_p):
-                        _sign_p = np.sign(processed_audio)
                         processed_audio = np.where(
-                            _over_p, _sign_p * (0.92 + 0.08 * np.tanh((_abs_p - 0.92) / 0.08)), processed_audio
+                            _over_p,
+                            np.sign(processed_audio) * (0.92 + 0.08 * np.tanh((_abs_p - 0.92) / 0.08)),
+                            processed_audio,
                         )
                 processed_audio = np.clip(processed_audio, -1.0, 1.0).astype(np.float32)
-                rms_out = float(np.sqrt(np.mean(np.asarray(processed_audio, dtype=np.float64) ** 2) + 1e-12))
-                rms_drop_db = 20.0 * np.log10(max(rms_out / rms_in, 1e-30))
+                _rms_out_db = compute_gated_rms_dbfs(np.asarray(processed_audio, dtype=np.float32))
+                rms_drop_db = (_rms_out_db - _rms_in_db) if _rms_in_db > -90.0 else 0.0
                 logger.info(
-                    "Phase 03 loudness-preservation: material=%s rms_drop=%.2f dB → %.2f dB via makeup %.2f dB",
+                    "Phase 03 loudness-preservation: material=%s rms_drop=%.2f dB via makeup %.2f dB (envelope-gated)",
                     material_key,
-                    target_rms_drop_db - required_gain_db,
                     rms_drop_db,
                     makeup_gain_db,
                 )

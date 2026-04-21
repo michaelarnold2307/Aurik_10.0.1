@@ -316,6 +316,16 @@ class CQTdiffPlusPlugin:
         if self._torch_model is None:
             return self._inpaint_dsp_fallback(audio, sr, gap_start, gap_end)
 
+        # §4.6b PLM active-guard: verhindert Emergency-Eviction während Diffusions-Inferenz
+        _plm_cqt = None
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_cqt_fn
+
+            _plm_cqt = _get_plm_cqt_fn()
+            _plm_cqt.set_active(self._BUDGET_NAME, True)
+        except Exception as _exc:
+            logger.debug("CQTdiff+: PLM set_active failed: %s", _exc)
+
         try:
             import gc
 
@@ -452,9 +462,19 @@ class CQTdiffPlusPlugin:
             result[gap_start:gap_end] = gen_gap
             result = self._crossfade_edges(result, gap_start, gap_end, sr, fade_ms=5.0)
             gc.collect()  # Erzwinge Speicherfreigabe nach Diffusion
+            try:
+                if _plm_cqt is not None:
+                    _plm_cqt.set_active(self._BUDGET_NAME, False)
+            except Exception as _exc:
+                logger.debug("CQTdiff+: PLM unset_active failed: %s", _exc)
             return np.clip(result, -1.0, 1.0).astype(np.float32)
 
         except Exception as exc:
+            try:
+                if _plm_cqt is not None:
+                    _plm_cqt.set_active(self._BUDGET_NAME, False)
+            except Exception:
+                pass
             if self._device != "cpu":
                 logger.warning("CQTdiff+: GPU-Inferenz fehlgeschlagen (%s) — CPU-Retry", exc)
                 try:

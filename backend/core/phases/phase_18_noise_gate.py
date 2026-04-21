@@ -493,6 +493,8 @@ class NoiseGate(PhaseInterface):
         processed_audio: np.ndarray,
         material: MaterialType,
     ) -> tuple[np.ndarray, dict[str, float]]:
+        from backend.core.audio_utils import apply_musical_gain_envelope
+
         material_key = getattr(material, "name", str(material)).lower()
         max_rms_drop_db = float(self._MAX_RMS_DROP_DB.get(material_key, self._MAX_RMS_DROP_DB["unknown"]))
 
@@ -500,36 +502,36 @@ class NoiseGate(PhaseInterface):
         _rms_in_db = _rms_dbfs_gated(np.asarray(original_audio, dtype=np.float32))
         _rms_out_db = _rms_dbfs_gated(np.asarray(processed_audio, dtype=np.float32))
         rms_in = float(10.0 ** (_rms_in_db / 20.0))
-        rms_out = float(10.0 ** (_rms_out_db / 20.0))
         rms_drop_db = (_rms_out_db - _rms_in_db) if _rms_in_db > -90.0 else 0.0
         makeup_gain_db = 0.0
 
         if rms_in > 1e-8 and rms_drop_db < -max_rms_drop_db:
             target_rms_drop_db = -max_rms_drop_db
             required_gain_db = target_rms_drop_db - rms_drop_db
-            # §2.45a-II fix: apply full gain — peak-headroom cap disabled (see phase_05 fix).
-            # §2.45a-III: soft-limiter only when peak99 > 0.98.
             makeup_gain_db = float(np.clip(required_gain_db, 0.0, 6.0))
             if makeup_gain_db > 0.0:
-                processed_audio = np.clip(
-                    processed_audio * (10.0 ** (makeup_gain_db / 20.0)),
-                    -1.0,
-                    1.0,
-                ).astype(np.float32)
+                _gain_lin = float(10.0 ** (makeup_gain_db / 20.0))
+                # §2.45a-II: gain applied ONLY to musical frames via envelope
+                processed_audio = apply_musical_gain_envelope(
+                    processed_audio, _gain_lin, gate_dbfs=-50.0, crossfade_ms=10.0, sr=48000
+                )
+                processed_audio = np.clip(processed_audio, -1.0, 1.0).astype(np.float32)
+                # §2.45a-III: soft-limiter only when peak99 > 0.98
                 current_peak = float(np.percentile(np.abs(processed_audio), 99.9))
                 if current_peak > 0.98:
                     _abs_18 = np.abs(processed_audio)
                     _over_18 = _abs_18 > 0.92
                     if np.any(_over_18):
-                        _sign_18 = np.sign(processed_audio)
                         processed_audio = np.where(
-                            _over_18, _sign_18 * (0.92 + 0.08 * np.tanh((_abs_18 - 0.92) / 0.08)), processed_audio
+                            _over_18,
+                            np.sign(processed_audio) * (0.92 + 0.08 * np.tanh((_abs_18 - 0.92) / 0.08)),
+                            processed_audio,
                         )
                 processed_audio = np.clip(processed_audio, -1.0, 1.0).astype(np.float32)
-                rms_out = float(np.sqrt(np.mean(np.asarray(processed_audio, dtype=np.float64) ** 2) + 1e-12))
-                rms_drop_db = 20.0 * np.log10(max(rms_out / rms_in, 1e-30))
+                _rms_out_db = _rms_dbfs_gated(np.asarray(processed_audio, dtype=np.float32))
+                rms_drop_db = (_rms_out_db - _rms_in_db) if _rms_in_db > -90.0 else 0.0
                 logger.info(
-                    "Phase 18 loudness-preservation: material=%s rms_drop=%.2f dB via makeup %.2f dB",
+                    "Phase 18 loudness-preservation: material=%s rms_drop=%.2f dB via makeup %.2f dB (envelope-gated)",
                     material_key,
                     rms_drop_db,
                     makeup_gain_db,

@@ -184,11 +184,22 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
     _AUDIOSR_ZONE_SECONDS: int = 10
     _AUDIOSR_ZONE_SAMPLES: int = _AUDIOSR_ZONE_SECONDS * sr  # 480 000 @ 48 kHz
     _AUDIOSR_FADE_SAMPLES: int = max(1, sr // 200)  # 5 ms boundary fade to suppress clicks
+    # §4.6b PLM active-guard: must be initialised before try-block so except-clause can access it
+    _plm_asr = None
     try:
         # Zuerst Modell laden (injiziert sys.path fuer audiosr-Paket)
         model = _get_ml_model()
         if model is None:
             return None
+
+        # §4.6b: set plugin active to block Emergency-Eviction during inference
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_asr_fn
+
+            _plm_asr = _get_plm_asr_fn()
+            _plm_asr.set_active("AudioSR", True)
+        except Exception as _exc:
+            logger.debug("AudioSR: PLM set_active failed: %s", _exc)
 
         import soundfile as sf
 
@@ -305,10 +316,20 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
         del zone_results
 
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
+        try:
+            if _plm_asr is not None:
+                _plm_asr.set_active("AudioSR", False)
+        except Exception as _exc:
+            logger.debug("AudioSR: PLM unset_active failed: %s", _exc)
         return np.clip(result, -1.0, 1.0)
 
     except Exception as exc:
         logger.warning("AudioSR ML-Inferenz fehlgeschlagen: %s", exc)
+        try:
+            if _plm_asr is not None:
+                _plm_asr.set_active("AudioSR", False)
+        except Exception:
+            pass
         return None
 
 

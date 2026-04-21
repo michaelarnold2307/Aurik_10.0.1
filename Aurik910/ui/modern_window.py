@@ -408,7 +408,7 @@ from Aurik910.i18n import get_language, set_language, t
 try:
     from Aurik910 import __version__ as _AURIK_VERSION
 except Exception:
-    _AURIK_VERSION = "9.11.8"
+    _AURIK_VERSION = "9.11.14"
 
 # SVG-Phasen-Icons (2.5D mystisch-profi)
 try:

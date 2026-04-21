@@ -124,3 +124,68 @@ def compute_gated_rms_dbfs(sig: np.ndarray, gate_dbfs: float = -50.0) -> float:
     """Compute frame-gated RMS in dBFS."""
     rms = compute_gated_rms_linear(sig, gate_dbfs=gate_dbfs)
     return float(20.0 * np.log10(rms + 1e-12))
+
+
+def apply_musical_gain_envelope(
+    audio: np.ndarray,
+    gain: float,
+    gate_dbfs: float = -50.0,
+    crossfade_ms: float = 10.0,
+    sr: int = 48000,
+) -> np.ndarray:
+    """§2.45a-II: Apply makeup gain ONLY to musical frames, leaving silence at gain=1.0.
+
+    Silence frames (frame RMS <= gate_dbfs) remain at unity gain.
+    A short crossfade (box-blur on the gate envelope) prevents hard clicks at
+    music/silence boundaries.
+
+    Args:
+        audio:         Input audio (1D or 2D samples-first or channels-first float32).
+        gain:          Linear gain factor (>= 1.0; values <= 1.0005 are skipped).
+        gate_dbfs:     Frame energy threshold below which a frame is classified as silence.
+        crossfade_ms:  Width of the smoothing window at music/silence transitions.
+        sr:            Sample rate used to convert crossfade_ms to samples.
+
+    Returns:
+        Audio with gain applied only on musical frames, same shape and dtype.
+    """
+    if gain <= 1.0005:
+        return audio
+    arr = np.asarray(audio, dtype=np.float32)
+    was_2d = arr.ndim == 2
+    # Build mono energy signal for gate detection
+    if was_2d:
+        ch_first = arr.shape[0] <= 2 and arr.shape[1] > arr.shape[0]
+        mono = np.mean(arr, axis=0) if ch_first else np.mean(arr, axis=1)
+    else:
+        mono = arr
+    n = len(mono)
+    frame_len = 480  # 10 ms @ 48 kHz
+    n_full = max(1, n // frame_len)
+    gate_env = np.zeros(n, dtype=np.float32)
+    for fi in range(n_full):
+        s = fi * frame_len
+        e = min(s + frame_len, n)
+        chunk = mono[s:e].astype(np.float64)
+        rms_db = float(20.0 * np.log10(float(np.sqrt(np.mean(chunk * chunk) + 1e-12)) + 1e-12))
+        if rms_db > gate_dbfs:
+            gate_env[s:e] = 1.0
+    tail_s = n_full * frame_len
+    if tail_s < n:
+        tail = mono[tail_s:].astype(np.float64)
+        rms_db = float(20.0 * np.log10(float(np.sqrt(np.mean(tail * tail) + 1e-12)) + 1e-12))
+        if rms_db > gate_dbfs:
+            gate_env[tail_s:] = 1.0
+    # Smooth transitions
+    cf_samples = max(1, int(crossfade_ms * sr / 1000.0))
+    if cf_samples > 1:
+        kernel = np.ones(cf_samples, dtype=np.float32) / cf_samples
+        gate_env = np.convolve(gate_env, kernel, mode="same")
+        gate_env = np.clip(gate_env, 0.0, 1.0)
+    per_sample_gain = (1.0 + (gain - 1.0) * gate_env).astype(np.float32)
+    if was_2d:
+        ch_first = arr.shape[0] <= 2 and arr.shape[1] > arr.shape[0]
+        if ch_first:
+            return (arr * per_sample_gain[np.newaxis, :]).astype(np.float32)
+        return (arr * per_sample_gain[:, np.newaxis]).astype(np.float32)
+    return (arr * per_sample_gain).astype(np.float32)

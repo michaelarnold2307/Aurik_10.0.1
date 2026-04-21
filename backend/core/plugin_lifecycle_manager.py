@@ -60,7 +60,9 @@ _PHASE_REQUIRED_MODELS: dict[str, frozenset[str]] = {
         {"SGMSE+", "ResembleEnhance"}
     ),  # §4.6c: HybridDereverb uses SGMSE+ primary + ResembleEnhance fallback
     "phase_23_spectral_repair": frozenset({"Apollo", "AudioSR"}),
-    "phase_24_dropout_repair": frozenset({"AudioSR"}),
+    "phase_24_dropout_repair": frozenset(
+        {"AudioSR", "GACELA", "AudioLDM2"}
+    ),  # §4.6c: cascade DSP→GACELA→AudioSR→AudioLDM2
     "phase_29_tape_hiss_reduction": frozenset({"DeepFilterNetV3"}),
     "phase_31_speed_pitch_correction": frozenset(
         {"BasicPitch", "FCPE", "RMVPE", "CREPE"}
