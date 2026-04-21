@@ -563,6 +563,16 @@ class ClickRemovalPhase(PhaseInterface):
         if plugin is None:
             return False
 
+        # §4.6b: PLM active-guard — prevents emergency-eviction during DeepFilterNet inference
+        _plm01_dfn = None
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm01
+
+            _plm01_dfn = _get_plm01()
+            _plm01_dfn.set_active("DeepFilterNetV3", True)
+        except Exception:
+            pass
+
         try:
             # Create temporary files
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as input_temp:
@@ -613,6 +623,12 @@ class ClickRemovalPhase(PhaseInterface):
                     os.unlink(output_path)
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
+            # §4.6b: release PLM active-guard
+            if _plm01_dfn is not None:
+                try:
+                    _plm01_dfn.set_active("DeepFilterNetV3", False)
+                except Exception:
+                    pass
 
     def _detect_clicks_multiscale(self, audio: np.ndarray, thresholds: dict[str, float]) -> list[tuple[int, int]]:
         """

@@ -1501,6 +1501,16 @@ class DropoutRepairPhase(PhaseInterface):
 
         repaired_count: int = 0
 
+        # §4.6b: PLM active-guard — prevents emergency-eviction during AudioSR inference
+        _plm24_asr = None
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm24
+
+            _plm24_asr = _get_plm24()
+            _plm24_asr.set_active("AudioSR", True)
+        except Exception:
+            pass
+
         for drop_idx, (start, end) in enumerate(dropouts):
             time.sleep(0)  # yield GIL → Qt event loop can breathe between dropouts
 
@@ -1581,9 +1591,19 @@ class DropoutRepairPhase(PhaseInterface):
 
         if repaired_count > 0:
             logger.info("AudioSR dropout repair: %d/%d dropouts repaired (windowed)", repaired_count, len(dropouts))
+            if _plm24_asr is not None:
+                try:
+                    _plm24_asr.set_active("AudioSR", False)
+                except Exception:
+                    pass
             return True
 
         logger.warning("AudioSR: no dropouts could be repaired (all fell back to DSP)")
+        if _plm24_asr is not None:
+            try:
+                _plm24_asr.set_active("AudioSR", False)
+            except Exception:
+                pass
         return False
 
     def _classify_content(self, before: np.ndarray, after: np.ndarray) -> str:

@@ -639,7 +639,7 @@ class TapeHissReductionPhase(PhaseInterface):
         _rms_in_db = _rms_dbfs_gated(np.asarray(original_audio, dtype=np.float32))
         _rms_out_db = _rms_dbfs_gated(np.asarray(processed_audio, dtype=np.float32))
         rms_in = float(10.0 ** (_rms_in_db / 20.0))
-        rms_out = float(10.0 ** (_rms_out_db / 20.0))
+        float(10.0 ** (_rms_out_db / 20.0))
         rms_drop_db = (_rms_out_db - _rms_in_db) if _rms_in_db > -90.0 else 0.0
         makeup_gain_db = 0.0
 
@@ -667,7 +667,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 processed_audio = np.clip(processed_audio, -1.0, 1.0).astype(np.float32)
                 # §2.45a-I: re-measure after makeup-gain with Gated-RMS (consistent with pre-phase measurement)
                 _rms_out_db_final = _rms_dbfs_gated(np.asarray(processed_audio, dtype=np.float32))
-                rms_out = float(10.0 ** (_rms_out_db_final / 20.0))
+                float(10.0 ** (_rms_out_db_final / 20.0))
                 rms_drop_db = (_rms_out_db_final - _rms_in_db) if _rms_in_db > -90.0 else 0.0
                 logger.info(
                     "Phase 29 loudness-preservation: material=%s rms_drop=%.2f dB via makeup %.2f dB",
@@ -1122,6 +1122,16 @@ class TapeHissReductionPhase(PhaseInterface):
         except ImportError:
             pass  # budget tracking unavailable — allow inference
 
+        # §4.6b: PLM active-guard — prevents emergency-eviction during DeepFilterNet inference
+        _plm29_dfn = None
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm29
+
+            _plm29_dfn = _get_plm29()
+            _plm29_dfn.set_active("DeepFilterNetV3", True)
+        except Exception:
+            pass
+
         try:
             # Create temporary files
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as input_temp:
@@ -1193,6 +1203,12 @@ class TapeHissReductionPhase(PhaseInterface):
                 logger.debug("Operation failed (non-critical): %s", _exc)
             if _dfn_release is not None:
                 _dfn_release("DeepFilterNet_phase29")
+            # §4.6b: release PLM active-guard
+            if _plm29_dfn is not None:
+                try:
+                    _plm29_dfn.set_active("DeepFilterNetV3", False)
+                except Exception:
+                    pass
 
     def _apply_adaptive_gate(
         self, band_signal: np.ndarray, noise_floor_db: float, threshold_db: float, reduction_db: float, sample_rate: int

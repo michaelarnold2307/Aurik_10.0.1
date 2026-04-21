@@ -2,7 +2,29 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
-## Version 9.11.40 — MDX23C PLM-Name Mismatch phase_42 + _PHASE_REQUIRED_MODELS (Apr 2026)
+## Version 9.11.41 — PLM set_active Guards in 7 Phasen/Modulen (Apr 2026)
+
+### Fixes (§4.6b VERBOTEN: ML-Inferenz ohne PLM-Active-Guard)
+Systematischer Scan aller Phasen mit ML-Inferenz hat 7 Stellen ohne `set_active()` Guard gefunden.
+Emergency-Eviction hätte diese Modelle während aktiver Inferenz entladen können → Crash / OOM.
+
+- **`backend/core/phases/phase_01_click_removal.py`** — `_repair_clicks_ml()`: PLM-Guard
+  `set_active("DeepFilterNetV3", True/False)` um `plugin.process()` DeepFilterNet-Aufruf.
+- **`backend/core/phases/phase_02_hum_removal.py`** — `_ml_refine_with_deepfilternet()`: PLM-Guard
+  `set_active("DeepFilterNetV3", True/False)` um `plugin.process()` Aufruf.
+- **`backend/core/phases/phase_29_tape_hiss_reduction.py`** — `_ml_refine_hf_with_deepfilternet()`:
+  PLM-Guard `set_active("DeepFilterNetV3", True/False)` im `finally:` Block (neben `_dfn_release`).
+- **`backend/core/hybrid/hybrid_dereverb.py`** — `_apply_dccrn()`: PLM-Guard
+  `set_active("SGMSE+"|"ResembleEnhance", True/False)` — Modellname dynamisch je `_sgmse_active`.
+  Betrifft phase_20 und phase_49 die HybridDereverb nutzen.
+- **`backend/core/phases/phase_24_dropout_repair.py`** — `_repair_with_audiosr()`: PLM-Guard
+  `set_active("AudioSR", True/False)` vor der Dropout-Schleife und an beiden Return-Stellen.
+- **`backend/core/phases/phase_43_ml_deesser.py`** — `_try_mp_senet_refine()`: PLM-Guard
+  `set_active("MP-SENet", True/False)` im `finally:` Block (neben `_dfn_release`).
+- **`backend/core/phases/phase_56_spectral_band_gap_repair.py`** — `_estimate_f0()`:
+  PLM-Guards für FCPE (Tier-1) und RMVPE (Tier-2) als `try/finally` um jeweilige Analyse-Calls.
+
+
 
 ### Fixes
 - **`backend/core/plugin_lifecycle_manager.py`** — `_PHASE_REQUIRED_MODELS["phase_42_vocal_enhancement"]`:

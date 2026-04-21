@@ -576,6 +576,16 @@ class HumRemovalPhase(PhaseInterface):
         if plugin is None:
             return False
 
+        # §4.6b: PLM active-guard — prevents emergency-eviction during DeepFilterNet inference
+        _plm02_dfn = None
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm02
+
+            _plm02_dfn = _get_plm02()
+            _plm02_dfn.set_active("DeepFilterNetV3", True)
+        except Exception:
+            pass
+
         try:
             # Create temporary files
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as input_temp:
@@ -626,6 +636,12 @@ class HumRemovalPhase(PhaseInterface):
                     os.unlink(output_path)
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
+            # §4.6b: release PLM active-guard
+            if _plm02_dfn is not None:
+                try:
+                    _plm02_dfn.set_active("DeepFilterNetV3", False)
+                except Exception:
+                    pass
 
     def _track_harmonics(
         self, audio: np.ndarray, fundamental: int, max_harmonics: int, threshold_db: float

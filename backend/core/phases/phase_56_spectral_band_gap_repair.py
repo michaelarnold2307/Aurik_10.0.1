@@ -145,6 +145,14 @@ def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
         Medianer f₀ in Hz oder None wenn keine Stimmigkeit erkennbar.
     """
     # Tier-1: FCPE
+    _plm56_fcpe = None
+    try:
+        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm56f
+
+        _plm56_fcpe = _get_plm56f()
+        _plm56_fcpe.set_active("FCPE", True)
+    except Exception:
+        pass
     try:
         from plugins.fcpe_plugin import get_fcpe_plugin
 
@@ -155,8 +163,22 @@ def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
             return float(np.median(voiced[voiced > 20.0]))
     except Exception as exc:
         logger.debug("FCPE f0 estimation failed: %s", exc)
+    finally:
+        if _plm56_fcpe is not None:
+            try:
+                _plm56_fcpe.set_active("FCPE", False)
+            except Exception:
+                pass
 
     # Tier-2: RMVPE
+    _plm56_rmvpe = None
+    try:
+        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm56r
+
+        _plm56_rmvpe = _get_plm56r()
+        _plm56_rmvpe.set_active("RMVPE", True)
+    except Exception:
+        pass
     try:
         from plugins.rmvpe_plugin import get_rmvpe_plugin
 
@@ -167,6 +189,12 @@ def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
             return float(np.median(voiced[voiced > 20.0]))
     except Exception as exc:
         logger.debug("RMVPE f0 estimation failed: %s", exc)
+    finally:
+        if _plm56_rmvpe is not None:
+            try:
+                _plm56_rmvpe.set_active("RMVPE", False)
+            except Exception:
+                pass
 
     # Tier-3: PESTO
     try:

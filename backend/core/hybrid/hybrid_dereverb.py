@@ -392,6 +392,18 @@ class HybridDereverb:
             metadata["success"] = False
             metadata["error"] = "ml_plugin_unavailable"
             return audio, metadata
+
+        # §4.6b: PLM active-guard — prevents emergency-eviction during SGMSE+/ResembleEnhance inference
+        _plm_dereverb = None
+        _plm_model_name = "SGMSE+" if self._sgmse_active else "ResembleEnhance"
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_drv
+
+            _plm_dereverb = _get_plm_drv()
+            _plm_dereverb.set_active(_plm_model_name, True)
+        except Exception:
+            pass
+
         try:
             audio_in = audio.astype(np.float32)
             # Detect channel-major (2, N) vs time-major (N, 2) format.
@@ -487,6 +499,13 @@ class HybridDereverb:
             metadata["error"] = err_msg
             metadata["deterministic_error_latched"] = self._disable_ml_due_deterministic_error
             return audio, metadata
+        finally:
+            # §4.6b: release PLM active-guard
+            if _plm_dereverb is not None:
+                try:
+                    _plm_dereverb.set_active(_plm_model_name, False)
+                except Exception:
+                    pass
 
     def _estimate_reverb_level(self, audio: np.ndarray, sample_rate: int) -> float:
         """

@@ -241,6 +241,17 @@ def _try_mp_senet_refine(audio: np.ndarray, sr: int) -> tuple[np.ndarray | None,
         _dfn_release = _rel_43
     except ImportError:
         pass  # budget tracking unavailable — allow inference
+
+    # §4.6b: PLM active-guard — prevents emergency-eviction during MP-SENet inference
+    _plm43_mps = None
+    try:
+        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm43
+
+        _plm43_mps = _get_plm43()
+        _plm43_mps.set_active("MP-SENet", True)
+    except Exception:
+        pass
+
     try:
         from plugins.mp_senet_plugin import get_mp_senet_plugin
 
@@ -253,6 +264,11 @@ def _try_mp_senet_refine(audio: np.ndarray, sr: int) -> tuple[np.ndarray | None,
     finally:
         if _dfn_release is not None:
             _dfn_release("MpSeNet_phase43")
+        if _plm43_mps is not None:
+            try:
+                _plm43_mps.set_active("MP-SENet", False)
+            except Exception:
+                pass
 
 
 class AdaptiveDeEsserPhase(PhaseInterface):
