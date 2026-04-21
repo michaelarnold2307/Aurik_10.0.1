@@ -1129,9 +1129,11 @@ _RESTORATIVE_PHASES: frozenset[str] = frozenset(
 # Scores_before über diesem Wert werden auf diesen Wert gedeckelt,
 # da höhere Werte nur durch Defekt-Inflation entstehen können.
 #
-# P1/P2: identisch für beide Modi.
-# P3–P5: Restoration senkt auf physikalisch erreichbare Werte (Pareto-Konflikte);
-#         Studio 2026 behält ambitionierte Ziele.
+# P1/P2: Studio 2026 strenger (höhere Böden) — mehr Enhancement = stärkerer
+#         Natürlichkeits-/Authentizitäts-Guard gegen Over-Processing.
+# P3–P5: Restoration + Studio 2026 verwenden materialuniversale Böden aus Spec 09.
+#         Song-spezifische Ziele oberhalb der Böden: adaptive Schicht §2.31+§09.2+§2.56.
+# Single Source of Truth: backend/core/calibration_matrix.py
 _CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {
     # P1
     "natuerlichkeit": 0.90,
@@ -1155,25 +1157,25 @@ _CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {
 }
 
 _CANONICAL_THRESHOLDS_STUDIO2026: dict[str, float] = {
-    # P1 — identical
-    "natuerlichkeit": 0.90,
-    "authentizitaet": 0.88,
-    # P2 — identical
-    "tonal_center": 0.97,
-    "timbre_authentizitaet": 0.87,
-    "artikulation": 0.85,
-    # P3 — Studio 2026: higher targets
-    "emotionalitaet": 0.87,
-    "micro_dynamics": 0.92,
-    "groove": 0.88,
-    # P4 — Studio 2026: higher targets
-    "transparenz": 0.89,
-    "waerme": 0.80,
-    "bass_kraft": 0.85,
-    "separation_fidelity": 0.82,
-    # P5 — Studio 2026: higher targets
-    "brillanz": 0.85,
-    "spatial_depth": 0.75,
+    # P1 — stricter in Studio 2026 (more enhancement → stronger naturalness guard)
+    "natuerlichkeit": 0.92,
+    "authentizitaet": 0.90,
+    # P2 — stricter in Studio 2026
+    "tonal_center": 0.96,
+    "timbre_authentizitaet": 0.89,
+    "artikulation": 0.87,
+    # P3 — material-universal floor (Spec 09 / calibration_matrix.py)
+    "emotionalitaet": 0.84,
+    "micro_dynamics": 0.90,
+    "groove": 0.85,
+    # P4 — material-universal floor (Spec 09 / calibration_matrix.py)
+    "transparenz": 0.85,
+    "waerme": 0.78,
+    "bass_kraft": 0.80,
+    "separation_fidelity": 0.80,
+    # P5 — material-universal floor (Spec 09 / calibration_matrix.py)
+    "brillanz": 0.82,
+    "spatial_depth": 0.74,
 }
 
 # Default alias for backward compatibility (Restoration-Modus)
@@ -1181,11 +1183,12 @@ _CANONICAL_THRESHOLDS: dict[str, float] = _CANONICAL_THRESHOLDS_RESTORATION
 
 
 def _get_canonical_thresholds(is_studio_2026: bool = False) -> dict[str, float]:
-    """Return mode-appropriate canonical thresholds (§9.10.77 Pareto-Differenzierung).
+    """Return mode-appropriate canonical thresholds (Spec 09 / §09.1 calibration_matrix.py).
 
-    P1/P2 are identical for both modes.
-    P3–P5 are higher in Studio 2026 (ambitious targets), lower in Restoration
-    (Pareto-conflict-aware, physically achievable).
+    P1/P2 are stricter in Studio 2026 — more aggressive enhancement requires a
+    stronger guard against loss of naturalness and authenticity.
+    P3–P5 use material-universal floors for both modes; per-song targets above
+    these floors are computed by the adaptive layer (§2.31 + §09.2 + §2.56).
     """
     if is_studio_2026:
         return _CANONICAL_THRESHOLDS_STUDIO2026

@@ -54,17 +54,18 @@ class TestPMGGThresholdDifferentiation:
         from backend.core.per_phase_musical_goals_gate import _get_canonical_thresholds
 
         thresholds = _get_canonical_thresholds(is_studio_2026=True)
-        # Studio 2026 P1 same
-        assert thresholds["natuerlichkeit"] >= 0.90
-        assert thresholds["authentizitaet"] >= 0.88
-        # P2 tonal_center higher
-        assert thresholds["tonal_center"] >= 0.97
-        # P3-P5 higher
-        assert thresholds["emotionalitaet"] >= 0.87
-        assert thresholds["micro_dynamics"] >= 0.92
-        assert thresholds["groove"] >= 0.88
-        assert thresholds["transparenz"] >= 0.89
-        assert thresholds["brillanz"] >= 0.85
+        # P1/P2 stricter in Studio 2026 (Spec 09 §09.1)
+        assert thresholds["natuerlichkeit"] >= 0.92
+        assert thresholds["authentizitaet"] >= 0.90
+        assert thresholds["tonal_center"] >= 0.96
+        assert thresholds["timbre_authentizitaet"] >= 0.89
+        assert thresholds["artikulation"] >= 0.87
+        # P3-P5: material-universal floors (Spec 09 / calibration_matrix.py)
+        assert thresholds["emotionalitaet"] >= 0.84
+        assert thresholds["micro_dynamics"] >= 0.90
+        assert thresholds["groove"] >= 0.85
+        assert thresholds["transparenz"] >= 0.85
+        assert thresholds["brillanz"] >= 0.82
 
     def test_studio_thresholds_higher_than_restoration(self):
         from backend.core.per_phase_musical_goals_gate import _get_canonical_thresholds
@@ -88,13 +89,14 @@ class TestPMGGThresholdDifferentiation:
                 f"Studio threshold for {goal} ({studio[goal]}) should be >= Restoration ({rest[goal]})"
             )
 
-    def test_p1_p2_same_between_modes(self):
+    def test_p1_p2_stricter_in_studio(self):
+        """Studio 2026 P1/P2 must be strictly higher than Restoration (Spec 09 §09.1)."""
         from backend.core.per_phase_musical_goals_gate import _get_canonical_thresholds
 
         rest = _get_canonical_thresholds(is_studio_2026=False)
         studio = _get_canonical_thresholds(is_studio_2026=True)
-        assert rest["natuerlichkeit"] == studio["natuerlichkeit"]
-        assert rest["authentizitaet"] == studio["authentizitaet"]
+        assert studio["natuerlichkeit"] > rest["natuerlichkeit"]
+        assert studio["authentizitaet"] > rest["authentizitaet"]
 
 
 # ---------------------------------------------------------------------------
@@ -201,14 +203,17 @@ class TestModusDifferenzierung:
         assert rest["authentizitaet"] >= 0.88
 
     def test_studio_allows_enhancement(self):
-        """Studio 2026 mode allows more aggressive enhancement (higher targets)."""
+        """Studio 2026: P1/P2 stricter (guard against over-processing), P3-P5 Spec-09 floors."""
         from backend.core.per_phase_musical_goals_gate import _get_canonical_thresholds
 
         studio = _get_canonical_thresholds(is_studio_2026=True)
-        # Higher transparenz + brillanz targets = enhancement expected
-        assert studio["transparenz"] >= 0.89
-        assert studio["brillanz"] >= 0.85
-        assert studio["micro_dynamics"] >= 0.92
+        # P1/P2 stricter in Studio 2026 — more enhancement needs stronger naturalness guard
+        assert studio["natuerlichkeit"] >= 0.92
+        assert studio["authentizitaet"] >= 0.90
+        # P3-P5: material-universal floors (Spec 09 / calibration_matrix.py)
+        assert studio["transparenz"] >= 0.85
+        assert studio["brillanz"] >= 0.82
+        assert studio["micro_dynamics"] >= 0.90
 
     def test_restoration_noise_floor_material_adaptive(self):
         """Restoration: noise floor approaches original medium level, not −72 dBFS."""

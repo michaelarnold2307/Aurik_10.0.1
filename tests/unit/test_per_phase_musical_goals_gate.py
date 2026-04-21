@@ -2045,16 +2045,19 @@ class TestRestorativeBaselineCapping:
         assert _CANONICAL_THRESHOLDS_RESTORATION["brillanz"] == pytest.approx(0.78, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["spatial_depth"] == pytest.approx(0.70, abs=1e-9)
 
-    def test_113_studio2026_thresholds_p1_p2_identical(self):
-        """Studio 2026 P1/P2 thresholds must be identical to Restoration (§9.10.77)."""
+    def test_113_studio2026_thresholds_p1_p2_stricter(self):
+        """Studio 2026 P1/P2 thresholds must be stricter than Restoration (Spec 09 §09.1).
+
+        More aggressive enhancement requires a stronger naturalness/authenticity guard.
+        """
         from backend.core.per_phase_musical_goals_gate import (
             _CANONICAL_THRESHOLDS_RESTORATION,
             _CANONICAL_THRESHOLDS_STUDIO2026,
         )
 
         for goal in ("natuerlichkeit", "authentizitaet", "timbre_authentizitaet", "artikulation"):
-            assert _CANONICAL_THRESHOLDS_STUDIO2026[goal] == _CANONICAL_THRESHOLDS_RESTORATION[goal], (
-                f"P1/P2 goal '{goal}' must be identical in both modes (§9.10.77)"
+            assert _CANONICAL_THRESHOLDS_STUDIO2026[goal] > _CANONICAL_THRESHOLDS_RESTORATION[goal], (
+                f"Studio 2026 P1/P2 goal '{goal}' must be stricter than Restoration (Spec 09 §09.1)"
             )
 
     def test_114_studio2026_thresholds_p3_p5_higher(self):
