@@ -743,11 +743,15 @@ class AdvancedDereverbPhase(PhaseInterface):
             mask_res = np.clip(mask_res, 0.0, 1.0)
             output = output * (1.0 - mask_res) + audio[:n_orig] * mask_res
 
-        # Pegel-Erhalt
-        rms_in = np.sqrt(np.mean(audio**2))
-        rms_out = np.sqrt(np.mean(output**2))
-        if rms_out > 1e-8:
-            output = output * (rms_in / rms_out)
+        # Pegel-Erhalt (§2.45a — gated RMS: silence sections after reverb removal must not
+        # inflate the correction factor; ungated mean would amplify silence dramatically)
+        _rms_in_db = self._rms_dbfs_gated(audio)
+        _rms_out_db = self._rms_dbfs_gated(output)
+        if _rms_out_db > -80.0 and _rms_in_db > -80.0:
+            _level_gain = float(10.0 ** ((_rms_in_db - _rms_out_db) / 20.0))
+            _level_gain = min(_level_gain, 4.0)  # hard cap +12 dB — prevents runaway amplification
+            if abs(_level_gain - 1.0) > 0.001:
+                output = output * _level_gain
 
         return np.clip(output, -1.0, 1.0)
 

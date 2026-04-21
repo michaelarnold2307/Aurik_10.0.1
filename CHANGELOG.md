@@ -2,6 +2,37 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.11.27 — Tiefenanalyse-Fixes: PLM-Guards, Korrelation, Pegelexplosion (Apr 2026)
+
+### Ziel
+
+Behebung von 4 RELEASE_MUST-Defekten aus systematischer Tiefenanalyse der Bereiche
+GPU-Beschleunigung, DSP-Korrektheit und Mid-Pipeline-Loudness-Guard.
+
+### Änderungen
+
+**PLM-Active-Guard (7 Plugins)** — `plugins/`:
+- `bs_roformer_plugin.py`, `mdx23c_plugin.py`, `demucs_v4_plugin.py`,
+  `banquet_vinyl_plugin.py`, `panns_plugin.py`, `mp_senet_plugin.py`,
+  `laion_clap_plugin.py`: `set_active(budget_name, True/False)` um `session.run()`/`model()`
+  eingefügt (§4.6b — verhindert Emergency-Eviction während aktiver Inferenz)
+
+**`np.corrcoef` NaN-Guard** — `backend/core/`:
+- `defect_scanner.py` ~L3596: inline dot-product statt `np.corrcoef` (NaN-safe)
+- `mert_mushra_proxy.py` L1338, L1435: std-Guard (`> 1e-12`) wie L2461-Referenz
+- `quality_control.py` ~L57: inline guarded correlation
+
+**O(n²)-Autokorrelation → O(n·order)** — `dsp/`:
+- `vocal_presence_enhancer.py` L119: `np.correlate(audio, audio, mode="full")` →
+  Frame-basierte Lag-Berechnung `[np.dot(s[:n-k], s[k:]) for k in range(max_lag+1)]`
+- `bass_enhancement.py` L182: gleiche Ersetzung
+
+**Pegel-Explosion bei stillen Phasen** — `backend/core/phases/phase_49_advanced_dereverb.py`:
+- Wiener-Filter Pegel-Erhalt (Zeile 747-750): ungegated `np.sqrt(np.mean(audio**2))` →
+  `self._rms_dbfs_gated()` mit Hard-Cap +12 dB (§2.45a-I/II/III)
+- Root Cause: Nach Reverb-Removal in Stille-Sektionen fiel ungated RMS drastisch →
+  Correction-Gain `rms_in / rms_out` >> 1 → stille Passagen wurden massiv verstärkt
+
 ## Version 9.11.26 — Tonträgerketten-Display: Single Source of Truth (Apr 2026)
 
 ### Ziel

@@ -150,7 +150,7 @@ class PANNsPlugin:
                 logger.debug("Operation failed (non-critical): %s", _exc)
 
             try:
-                from backend.core.ml_device_manager import get_ort_providers_fp16 as _get_prov
+                from backend.core.ml_device_manager import get_ort_providers as _get_prov
 
                 _providers = _get_prov("PANNs")
             except Exception:
@@ -275,6 +275,15 @@ class PANNsPlugin:
                 logger.debug("PANNs Cache-Hit: %s", _cache_key)
                 return _tags_cache[_cache_key]
 
+        _plm_panns = None
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+
+            _plm_panns = _get_plm_fn()
+            _plm_panns.set_active("PANNs", True)
+        except Exception as _exc:
+            logger.debug("PANNs: PLM set_active failed: %s", _exc)
+
         try:
             model_input = self._to_model_input(audio, sr)
             ort_out = self._session.run(
@@ -309,6 +318,12 @@ class PANNsPlugin:
         except Exception as exc:
             logger.debug("PANNs-Inferenz fehlgeschlagen — leeres Tag-Dict: %s", exc)
             return {}
+        finally:
+            if _plm_panns is not None:
+                try:
+                    _plm_panns.set_active("PANNs", False)
+                except Exception as _exc:
+                    logger.debug("PANNs: PLM unset_active failed: %s", _exc)
 
     # ------------------------------------------------------------------
     # Backward-Kompatibilität: dateibasierter Aufruf (Legacy-API)

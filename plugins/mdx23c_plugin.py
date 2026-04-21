@@ -114,7 +114,7 @@ class MDX23CModel:
                 opts.intra_op_num_threads = 4
                 opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
                 try:
-                    from backend.core.ml_device_manager import get_ort_providers_fp16 as _get_prov
+                    from backend.core.ml_device_manager import get_ort_providers as _get_prov
 
                     _mdx23c_prov = _get_prov("MDX23C")
                 except Exception:
@@ -182,11 +182,25 @@ class MDX23CModel:
 
         is_vocals = self.stem_key == "vocals"
         if self._ok:
+            _plm_mdx = None
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+
+                _plm_mdx = _get_plm_fn()
+                _plm_mdx.set_active(f"MDX23C_{self.stem_key}", True)
+            except Exception as _exc:
+                logger.debug("MDX23C: PLM set_active failed: %s", _exc)
             try:
                 out = self._mdx_separate(resampled)
             except Exception as exc:
                 logger.warning("MDX23C ONNX-Fehler: %s — NMF-β-Fallback", exc)
                 out = self._nmf_beta_fallback(resampled, is_vocals=is_vocals)
+            finally:
+                if _plm_mdx is not None:
+                    try:
+                        _plm_mdx.set_active(f"MDX23C_{self.stem_key}", False)
+                    except Exception as _exc:
+                        logger.debug("MDX23C: PLM unset_active failed: %s", _exc)
         else:
             out = self._nmf_beta_fallback(resampled, is_vocals=is_vocals)
 

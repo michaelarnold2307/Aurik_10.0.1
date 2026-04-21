@@ -181,7 +181,7 @@ class BSRoFormerPlugin:
             for model_path in (self._LOCAL_MBR, self.MODELS_DIR / "bs_roformer.onnx"):
                 if model_path.exists():
                     try:
-                        from backend.core.ml_device_manager import get_ort_providers_fp16 as _get_prov
+                        from backend.core.ml_device_manager import get_ort_providers as _get_prov
 
                         _bs_prov = _get_prov("BSRoFormer")
                     except Exception:
@@ -380,6 +380,15 @@ class BSRoFormerPlugin:
             logger.warning("MelBandRoformer: ONNX-Session fehlt → Fallback")
             return self._separate_fallback(audio, sr, requested_stems)
 
+        _plm_mbr = None
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+
+            _plm_mbr = _get_plm_fn()
+            _plm_mbr.set_active("MelBandRoformer", True)
+        except Exception as _exc:
+            logger.debug("BSRoFormer: PLM set_active failed: %s", _exc)
+
         try:
             # ── 1. Resample to model SR ──────────────────────────────────────
             # Spec §2.11 (MelBandRoformer): 48kHz→44.1kHz polyphase resampling.
@@ -533,6 +542,12 @@ class BSRoFormerPlugin:
             except Exception as _exc:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
             return self._separate_fallback(audio, sr, requested_stems)
+        finally:
+            if _plm_mbr is not None:
+                try:
+                    _plm_mbr.set_active("MelBandRoformer", False)
+                except Exception as _exc:
+                    logger.debug("BSRoFormer: PLM unset_active failed: %s", _exc)
 
     # ------------------------------------------------------------------
     # ML-Fallback Stufe 1: MDX23C (Kim_Vocal_2 + Kim_Inst ONNX)

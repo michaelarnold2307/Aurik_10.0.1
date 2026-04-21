@@ -89,7 +89,7 @@ class DemucsV4Plugin:
             opts = ort.SessionOptions()
             opts.inter_op_num_threads = 2
             try:
-                from backend.core.ml_device_manager import get_ort_providers_fp16 as _get_prov
+                from backend.core.ml_device_manager import get_ort_providers as _get_prov
 
                 _providers = _get_prov("DemucsV4")
             except Exception:
@@ -152,7 +152,22 @@ class DemucsV4Plugin:
 
         # Fallback 1: HTDemucs 6s ONNX (if loaded)
         if self._session is not None:
-            return self._infer_onnx(audio, sr)
+            _plm_dmu = None
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+
+                _plm_dmu = _get_plm_fn()
+                _plm_dmu.set_active("DemucsV4", True)
+            except Exception as _exc:
+                logger.debug("DemucsV4: PLM set_active failed: %s", _exc)
+            try:
+                return self._infer_onnx(audio, sr)
+            finally:
+                if _plm_dmu is not None:
+                    try:
+                        _plm_dmu.set_active("DemucsV4", False)
+                    except Exception as _exc:
+                        logger.debug("DemucsV4: PLM unset_active failed: %s", _exc)
 
         # Fallback 2: HPSS-DSP
         return self._hpss_fallback(audio, sr)

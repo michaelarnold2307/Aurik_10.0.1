@@ -239,7 +239,7 @@ class LAIONCLAPPlugin:
 
                 try:
                     try:
-                        from backend.core.ml_device_manager import get_ort_providers_fp16 as _get_prov
+                        from backend.core.ml_device_manager import get_ort_providers as _get_prov
 
                         _clap_providers = _get_prov("LaionCLAP_ONNX")
                     except Exception:
@@ -516,7 +516,22 @@ class LAIONCLAPPlugin:
             feat = np.abs(np.fft.rfft(audio_f32[:sr], n=2048)).astype(np.float32)
             feat = feat[np.newaxis, :]
             input_name = self._audio_session.get_inputs()[0].name
-            outputs = self._audio_session.run(None, {input_name: feat})
+            _plm_clap = None
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+
+                _plm_clap = _get_plm_fn()
+                _plm_clap.set_active("LaionCLAP_ONNX", True)
+            except Exception as _exc:
+                logger.debug("LaionCLAP: PLM set_active failed: %s", _exc)
+            try:
+                outputs = self._audio_session.run(None, {input_name: feat})
+            finally:
+                if _plm_clap is not None:
+                    try:
+                        _plm_clap.set_active("LaionCLAP_ONNX", False)
+                    except Exception as _exc:
+                        logger.debug("LaionCLAP: PLM unset_active failed: %s", _exc)
             emb = np.nan_to_num(outputs[0].flatten()[: self.EMBEDDING_DIM], nan=0.0)
         # Path 2: PyTorch laion_clap
         elif self._model_loaded and self._clap_model is not None:
@@ -603,7 +618,22 @@ class LAIONCLAPPlugin:
             feat = feat[np.newaxis, :]
 
             input_name = self._audio_session.get_inputs()[0].name
-            outputs = self._audio_session.run(None, {input_name: feat})
+            _plm_clap = None
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+
+                _plm_clap = _get_plm_fn()
+                _plm_clap.set_active("LaionCLAP_ONNX", True)
+            except Exception as _exc:
+                logger.debug("LaionCLAP: PLM set_active (tag): failed: %s", _exc)
+            try:
+                outputs = self._audio_session.run(None, {input_name: feat})
+            finally:
+                if _plm_clap is not None:
+                    try:
+                        _plm_clap.set_active("LaionCLAP_ONNX", False)
+                    except Exception as _exc:
+                        logger.debug("LaionCLAP: PLM unset_active (tag) failed: %s", _exc)
             audio_emb = np.nan_to_num(outputs[0].flatten()[: self.EMBEDDING_DIM], nan=0.0)
             norm = np.linalg.norm(audio_emb)
             audio_emb = audio_emb / (norm + 1e-12)

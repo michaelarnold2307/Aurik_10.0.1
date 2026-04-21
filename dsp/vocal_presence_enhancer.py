@@ -1,7 +1,3 @@
-import logging
-
-logger = logging.getLogger(__name__)
-
 """
 vocal_presence_enhancer.py - Vocal Presence Enhancement (Phase 2.2)
 
@@ -16,9 +12,12 @@ Version: 1.0.0
 Date: 9. Februar 2026
 """
 
+import logging
 import warnings
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 from scipy import signal
 from scipy.signal import butter, sosfilt
 
@@ -115,16 +114,16 @@ class HarmonicEnhancer:
         """
         Detect fundamental frequency using autocorrelation.
         """
-        # Autocorrelation
-        corr = np.correlate(audio, audio, mode="full")
-        corr = corr[len(corr) // 2 :]
-
         # Find peaks in expected lag range
         min_lag = int(sr / self.fundamental_range[1])
         max_lag = int(sr / self.fundamental_range[0])
 
-        if max_lag >= len(corr):
+        _n = len(audio)
+        if max_lag >= _n or min_lag >= max_lag:
             return 0.0
+
+        # Efficient O(n·order) autocorrelation — only lags 0..max_lag (avoids O(n²) full correlate)
+        corr = np.array([np.dot(audio[: _n - k], audio[k:]) for k in range(max_lag + 1)])
 
         corr_range = corr[min_lag:max_lag]
 

@@ -178,16 +178,16 @@ class SubBassEnhancer:
 
         Returns 0 if no clear fundamental detected.
         """
-        # Autocorrelation
-        autocorr = np.correlate(signal, signal, mode="full")
-        autocorr = autocorr[len(autocorr) // 2 :]
-
         # Find peaks in valid lag range
         min_lag = int(sr / f_max)
         max_lag = int(sr / f_min)
 
-        if max_lag >= len(autocorr):
+        _n = len(signal)
+        if max_lag >= _n or min_lag >= max_lag:
             return 0.0
+
+        # Efficient O(n·order) autocorrelation — only lags 0..max_lag (avoids O(n²) full correlate)
+        autocorr = np.array([np.dot(signal[: _n - k], signal[k:]) for k in range(max_lag + 1)])
 
         valid_autocorr = autocorr[min_lag:max_lag]
         if len(valid_autocorr) == 0:

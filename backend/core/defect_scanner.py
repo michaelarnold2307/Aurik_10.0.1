@@ -3592,8 +3592,10 @@ class DefectScanner:
 
         side_ratio = side_energy / total_energy
 
-        # Auch: Cross-Correlation zwischen L und R (sollte hoch sein)
-        correlation = np.corrcoef(left, right)[0, 1]
+        # Auch: Cross-Correlation zwischen L und R (sollte hoch sein, NaN-safe guarded)
+        _l_c = left - np.mean(left)
+        _r_c = right - np.mean(right)
+        correlation = float(np.dot(_l_c, _r_c) / (np.linalg.norm(_l_c) * np.linalg.norm(_r_c) + 1e-10))
 
         # Severity
         phase_score = max(0, side_ratio - 0.3)  # > 30% Side = problematisch

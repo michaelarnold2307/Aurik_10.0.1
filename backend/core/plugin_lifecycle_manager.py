@@ -53,7 +53,7 @@ _PHASE_REQUIRED_MODELS: dict[str, frozenset[str]] = {
     "phase_02_hum_removal": frozenset({"DeepFilterNetV3"}),
     "phase_03_denoise": frozenset({"SGMSE+", "ResembleEnhance", "DeepFilterNetV3"}),
     "phase_06_frequency_restoration": frozenset({"AudioSR"}),
-    "phase_09_crackle_removal": frozenset({"BANQUET"}),
+    "phase_09_crackle_removal": frozenset({"BanquetVinyl"}),
     "phase_12_wow_flutter_fix": frozenset({"FCPE", "RMVPE", "CREPE"}),
     "phase_18_noise_gate": frozenset({"SileroVAD"}),
     "phase_20_reverb_reduction": frozenset({"SGMSE+"}),

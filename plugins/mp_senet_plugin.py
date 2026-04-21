@@ -133,7 +133,7 @@ class MpSenetPlugin:
             opts = ort.SessionOptions()
             opts.inter_op_num_threads = 2
             try:
-                from backend.core.ml_device_manager import get_ort_providers_fp16 as _get_prov
+                from backend.core.ml_device_manager import get_ort_providers as _get_prov
 
                 _mp_prov = _get_prov("MPSENet")
             except Exception:
@@ -376,6 +376,14 @@ class MpSenetPlugin:
         """
         assert self._session is not None
         _N_BINS = 201  # model's fixed frequency-bin count
+        _plm_mps = None
+        try:
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+
+            _plm_mps = _get_plm_fn()
+            _plm_mps.set_active("MP-SENet", True)
+        except Exception as _exc:
+            logger.debug("MP-SENet: PLM set_active failed: %s", _exc)
         try:
             Z, _, n_orig = self._stft(mono)  # Z: [481, T] complex64
             amp_full = np.abs(Z).astype(np.float32)  # [481, T]
@@ -427,6 +435,12 @@ class MpSenetPlugin:
             )
             fallback_audio = self._omlsa_fallback(mono, sr)
             return fallback_audio, "mp_senet_onnx_runtime"
+        finally:
+            if _plm_mps is not None:
+                try:
+                    _plm_mps.set_active("MP-SENet", False)
+                except Exception as _exc:
+                    logger.debug("MP-SENet: PLM unset_active failed: %s", _exc)
 
     # ------------------------------------------------------------------
     # OMLSA DSP Fallback

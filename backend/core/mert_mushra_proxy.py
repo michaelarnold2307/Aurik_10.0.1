@@ -1335,7 +1335,9 @@ class MertMushraProxy:
                 tuning=0.0,
             ).flatten()
             min_len = min(len(chroma_ref), len(chroma_test))
-            corr = float(np.corrcoef(chroma_ref[:min_len], chroma_test[:min_len])[0, 1])
+            _cr = chroma_ref[:min_len]
+            _ct = chroma_test[:min_len]
+            corr = float(np.corrcoef(_cr, _ct)[0, 1]) if np.std(_cr) > 1e-12 and np.std(_ct) > 1e-12 else 1.0
             return float(np.clip(corr, 0.0, 1.0))
         except Exception:
             return 0.5
@@ -1432,7 +1434,7 @@ class MertMushraProxy:
 
             # Stereo width (L-R correlation drift)
             def _stereo_width(left: np.ndarray, right: np.ndarray) -> float:
-                corr = np.corrcoef(left, right)[0, 1]
+                corr = float(np.corrcoef(left, right)[0, 1]) if np.std(left) > 1e-12 and np.std(right) > 1e-12 else 1.0
                 return float(np.clip(1.0 - abs(corr), 0.0, 1.0))
 
             width_ref = _stereo_width(ref_left, ref_right)

@@ -16,6 +16,18 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+# scipy.signal and numba must be imported at module level — lazy imports inside threads
+# cause circular import errors in the ROCm venv (partially initialized modules).
+try:
+    from scipy.signal import resample_poly as _scipy_resample_poly
+except Exception:
+    _scipy_resample_poly = None  # type: ignore[assignment]
+
+try:
+    pass
+except Exception:
+    pass  # numba optional; librosa falls back to non-JIT path
+
 logger = logging.getLogger(__name__)
 
 
@@ -284,7 +296,7 @@ except ImportError:
     def _bridge_get_unified_restorer_v3_instance() -> object | None:  # type: ignore[misc]
         return None
 
-    _bridge_PreAnalysisResult = None  # type: ignore[assignment,misc]
+    _bridge_PreAnalysisResult = None  # type: ignore[assignment,misc]  # noqa: N816
 
     def _bridge_run_pre_analysis(*args, **kwargs) -> object | None:  # type: ignore[misc]
         return None
@@ -2715,10 +2727,8 @@ class BatchProcessingThread(QThread):
                 target_export_sr = _resolve_export_sample_rate(getattr(item, "settings", None))
                 if target_export_sr != write_sr:
                     try:
-                        from scipy.signal import resample_poly as _rp_export
-
                         _gcd = math.gcd(write_sr, target_export_sr)
-                        write_audio = _rp_export(
+                        write_audio = _scipy_resample_poly(
                             write_audio,
                             target_export_sr // _gcd,
                             write_sr // _gcd,
@@ -12952,10 +12962,8 @@ class ModernMainWindow(QMainWindow):
 
             # Resample to 48 kHz — Aurik internal SR (accepts any input SR)
             if sr != 48_000:
-                from scipy.signal import resample_poly as _rp
-
                 _gcd = math.gcd(int(sr), 48_000)
-                audio = _rp(
+                audio = _scipy_resample_poly(
                     audio,
                     48_000 // _gcd,
                     int(sr) // _gcd,
@@ -13284,10 +13292,10 @@ class ModernMainWindow(QMainWindow):
                     if data.ndim == 1:
                         data = data.reshape(-1, 1)
                     if _dev_sr > 0 and abs(_dev_sr - _w_sr) >= 2000:
-                        from scipy.signal import resample_poly as _rp_w
-
                         _g = _math.gcd(_w_sr, _dev_sr)
-                        data = _rp_w(data, _dev_sr // _g, _w_sr // _g, axis=0).astype(np.float32, copy=False)
+                        data = _scipy_resample_poly(data, _dev_sr // _g, _w_sr // _g, axis=0).astype(
+                            np.float32, copy=False
+                        )
                         cached_sr = _dev_sr
                     else:
                         cached_sr = _w_sr
@@ -14158,10 +14166,10 @@ class ModernMainWindow(QMainWindow):
                                 int(round(float(_dev.get("default_samplerate", 0.0)))) if isinstance(_dev, dict) else 0
                             )
                             if _dev_sr > 0 and abs(_dev_sr - play_sr) >= 2000:
-                                from scipy.signal import resample_poly as _rp
-
                                 _g = math.gcd(play_sr, _dev_sr)
-                                _rs = _rp(data, _dev_sr // _g, play_sr // _g, axis=0).astype(np.float32, copy=False)
+                                _rs = _scipy_resample_poly(data, _dev_sr // _g, play_sr // _g, axis=0).astype(
+                                    np.float32, copy=False
+                                )
                                 data = np.ascontiguousarray(_rs, dtype=np.float32)
                                 play_sr = _dev_sr
                             if getattr(self, "_playback_warmup_token", -1) >= 0:
@@ -15497,12 +15505,10 @@ class ModernMainWindow(QMainWindow):
                             data = data.reshape(-1, 1)
                         cached_sr = _w_sr
                         if _dev_sr > 0 and abs(_dev_sr - _w_sr) >= 2000:
-                            import math as _mw
-
-                            from scipy.signal import resample_poly as _rpw
-
-                            _g = _mw.gcd(_w_sr, _dev_sr)
-                            data = _rpw(data, _dev_sr // _g, _w_sr // _g, axis=0).astype(np.float32, copy=False)
+                            _g = math.gcd(_w_sr, _dev_sr)
+                            data = _scipy_resample_poly(data, _dev_sr // _g, _w_sr // _g, axis=0).astype(
+                                np.float32, copy=False
+                            )
                             cached_sr = _dev_sr
                         data = np.ascontiguousarray(data, dtype=np.float32)
                         if getattr(_w_self, "_playback_warmup_token", 0) == _w_token:
@@ -16038,10 +16044,8 @@ class ModernMainWindow(QMainWindow):
                     _arr = _arr[:, 0]
                 _arr = _normalize_audio(_arr)
                 if _sr_i != 48_000:
-                    from scipy.signal import resample_poly as _rp
-
                     _gcd = math.gcd(_sr_i, 48_000)
-                    _arr = _rp(
+                    _arr = _scipy_resample_poly(
                         _arr,
                         48_000 // _gcd,
                         _sr_i // _gcd,
@@ -18620,10 +18624,8 @@ class ModernMainWindow(QMainWindow):
                         audio = np.asarray(_exp_result["audio"], dtype=np.float32)
                         sr = int(_exp_result["sr"])
                         if sr != export_sr:
-                            from scipy.signal import resample_poly as _rp_export
-
                             _gcd = math.gcd(sr, export_sr)
-                            audio = _rp_export(
+                            audio = _scipy_resample_poly(
                                 audio,
                                 export_sr // _gcd,
                                 sr // _gcd,

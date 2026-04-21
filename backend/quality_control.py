@@ -54,7 +54,9 @@ class QualityControl:
         if np.std(reference) == 0.0 or np.std(candidate) == 0.0:
             return None
 
-        score = float(np.corrcoef(reference, candidate)[0, 1])
+        _r_c = reference - np.mean(reference)
+        _c_c = candidate - np.mean(candidate)
+        score = float(np.dot(_r_c, _c_c) / (np.linalg.norm(_r_c) * np.linalg.norm(_c_c) + 1e-10))
         # NaN/Inf-Guard am Ausgang
         score = float(np.nan_to_num(score, nan=0.0, posinf=0.0, neginf=0.0))
         self.ab_results.append(score)

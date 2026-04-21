@@ -108,7 +108,7 @@ class BanquetVinylPlugin:
             # 'Starts must be a 1-D array' at optimisation time.
             opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
             try:
-                from backend.core.ml_device_manager import get_ort_providers_fp16 as _get_prov
+                from backend.core.ml_device_manager import get_ort_providers as _get_prov
 
                 _providers = _get_prov("BanquetVinyl")
             except Exception:
@@ -207,7 +207,22 @@ class BanquetVinylPlugin:
         resampled, res_sr = self._maybe_resample(audio, sr, self.TARGET_SR)
 
         if self._model_ok:
-            restored = self._process_onnx(resampled, strength)
+            _plm_bvq = None
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+
+                _plm_bvq = _get_plm_fn()
+                _plm_bvq.set_active("BanquetVinyl", True)
+            except Exception as _exc:
+                logger.debug("BanquetVinyl: PLM set_active failed: %s", _exc)
+            try:
+                restored = self._process_onnx(resampled, strength)
+            finally:
+                if _plm_bvq is not None:
+                    try:
+                        _plm_bvq.set_active("BanquetVinyl", False)
+                    except Exception as _exc:
+                        logger.debug("BanquetVinyl: PLM unset_active failed: %s", _exc)
         else:
             restored = self._process_dsp(resampled, res_sr, strength)
 
