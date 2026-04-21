@@ -10,6 +10,10 @@ fastapi==0.128.1
 uvicorn[standard]>=0.30.0
 starlette==0.50.0
 
+# --- Wissenschaftliche Bibliotheken (für CI-Tests: benchmarks, normative) ---
+numpy==1.26.4
+scipy>=1.12.0
+
 # --- Testing ---
 pytest>=8.0.0
 pytest-timeout>=2.3.0
