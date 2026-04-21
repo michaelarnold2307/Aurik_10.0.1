@@ -764,25 +764,41 @@ class LyricsGuidedEnhancement:
             amax = float(np.abs(audio_input).max()) or 1.0
             audio_input = audio_input / amax
 
+            # §4.6b PLM-Active-Guard: prevent Emergency-Eviction during wav2vec2 ONNX inference
+            _plm_w2v: object | None = None
+            try:
+                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_w2v
+
+                _plm_w2v = _get_plm_w2v()
+                _plm_w2v.set_active("lyrics_aligner_wav2vec2", True)
+            except Exception:
+                pass
             # OOM-Guard: chunk wav2vec2 into 30 s segments to prevent 34+ GB
             # intermediate allocation on long files (§2.36 — root cause of OOM).
             _MAX_W2V_CHUNK = 30 * sr_16k  # 480 000 samples @ 16 kHz
-            if len(audio_input) <= _MAX_W2V_CHUNK:
-                # Short file — single pass
-                outputs = self._aligner_session.run(None, {"input_values": audio_input[np.newaxis, :]})
-                logits = outputs[0]  # (1, T_frames, vocab_size)
-            else:
-                # Chunked inference for long files
-                _logit_parts: list[np.ndarray] = []
-                for _cstart in range(0, len(audio_input), _MAX_W2V_CHUNK):
-                    _cchunk = audio_input[_cstart : _cstart + _MAX_W2V_CHUNK]
-                    if len(_cchunk) < self._MIN_WAV2VEC2_SAMPLES:
-                        break
-                    _cout = self._aligner_session.run(None, {"input_values": _cchunk[np.newaxis, :]})
-                    _logit_parts.append(_cout[0][0])  # (T_chunk, vocab)
-                if not _logit_parts:
-                    return words
-                logits = np.concatenate(_logit_parts, axis=0)[np.newaxis, :]  # (1, T_total, vocab)
+            try:
+                if len(audio_input) <= _MAX_W2V_CHUNK:
+                    # Short file — single pass
+                    outputs = self._aligner_session.run(None, {"input_values": audio_input[np.newaxis, :]})
+                    logits = outputs[0]  # (1, T_frames, vocab_size)
+                else:
+                    # Chunked inference for long files
+                    _logit_parts: list[np.ndarray] = []
+                    for _cstart in range(0, len(audio_input), _MAX_W2V_CHUNK):
+                        _cchunk = audio_input[_cstart : _cstart + _MAX_W2V_CHUNK]
+                        if len(_cchunk) < self._MIN_WAV2VEC2_SAMPLES:
+                            break
+                        _cout = self._aligner_session.run(None, {"input_values": _cchunk[np.newaxis, :]})
+                        _logit_parts.append(_cout[0][0])  # (T_chunk, vocab)
+                    if not _logit_parts:
+                        return words
+                    logits = np.concatenate(_logit_parts, axis=0)[np.newaxis, :]  # (1, T_total, vocab)
+            finally:
+                if _plm_w2v is not None:
+                    try:
+                        _plm_w2v.set_active("lyrics_aligner_wav2vec2", False)
+                    except Exception:
+                        pass
 
             # Run encoder: output is (1, T_frames, vocab_size) CTC log-probs
             if logits.ndim != 3:

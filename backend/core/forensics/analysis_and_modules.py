@@ -863,7 +863,11 @@ class AnalysisEngineAdapter:
             side_energy = np.sum(side**2)
             mid_side_balance = side_energy / (mid_energy + 1e-10)
 
-            correlation = np.corrcoef(left, right)[0, 1]
+            # Guard: np.corrcoef on near-constant (silent) signals → RuntimeWarning
+            with np.errstate(invalid="ignore"):
+                correlation = np.corrcoef(left, right)[0, 1]
+            if not np.isfinite(correlation):
+                correlation = 1.0  # Both channels silent → trivially correlated
             stereo_width = 2.0 * (1.0 - correlation)
 
             stereo = StereoAnalysis(

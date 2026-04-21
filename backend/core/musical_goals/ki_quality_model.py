@@ -436,8 +436,16 @@ class KIQualityAnalyzer:
             left = audio_stereo[0]
             right = audio_stereo[1]
 
-            # Correlation
-            correlation = np.corrcoef(left, right)[0, 1]
+            # Correlation — guard against RuntimeWarning on near-constant/silent channels
+            std_l = float(np.std(left))
+            std_r = float(np.std(right))
+            if std_l < 1e-10 or std_r < 1e-10:
+                correlation = 1.0 if (std_l < 1e-10 and std_r < 1e-10) else 0.0
+            else:
+                with np.errstate(invalid="ignore"):
+                    correlation = np.corrcoef(left, right)[0, 1]
+                if not np.isfinite(correlation):
+                    correlation = 1.0
 
             # Bewerte: Optimal ist 0.6 - 0.9
             if 0.6 <= correlation <= 0.9:
