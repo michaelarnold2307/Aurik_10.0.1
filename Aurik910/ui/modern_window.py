@@ -16232,7 +16232,7 @@ class ModernMainWindow(QMainWindow):
         try:
             from backend.file_import import load_audio_file as _laf_q
 
-            _q_result = _laf_q(output_path)
+            _q_result = _laf_q(output_path, do_carrier_analysis=False)
             if _q_result is not None and not _q_result.get("error"):
                 rest_audio = np.asarray(_q_result["audio"], dtype=np.float32)
                 rest_sr = int(_q_result["sr"])
@@ -18616,7 +18616,7 @@ class ModernMainWindow(QMainWindow):
                     if exporter is not None:
                         from backend.file_import import load_audio_file as _laf_exp
 
-                        _exp_result = _laf_exp(str(src))
+                        _exp_result = _laf_exp(str(src), do_carrier_analysis=False)
                         if _exp_result is None or _exp_result.get("error"):
                             raise RuntimeError(
                                 _exp_result.get("error", "load_audio_file failed")
