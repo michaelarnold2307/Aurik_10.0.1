@@ -2,6 +2,16 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
+## Version 9.11.35 — Guarded Pearson Correlation: 7 np.corrcoef-Bugs (Tiefenanalyse R8) (Apr 2026)
+
+- **`backend/core/phases/phase_32_mono_to_stereo.py`**: `np.corrcoef(left, right)` ohne Guard → guarded dot-product (NaN/RuntimeWarning auf Stille beseitigt)
+- **`backend/core/phases/phase_33_stereo_width_limiter.py`**: `np.corrcoef(left_norm, right_norm)` ohne Guard → guarded dot-product
+- **`backend/core/phases/phase_53_semantic_audio.py`**: 2× `np.corrcoef(chroma, profile)` im Tonart-Loop → Profil einmalig zentriert/normiert, dot-product-Loop (kein RuntimeWarning auf Stille-Chroma)
+- **`dsp/authenticity_metrics.py`**: `np.corrcoef` + post-hoc `nan_to_num` → guarded dot-product (RuntimeWarning verhindert)
+- **`dsp/tape_specialist.py`**: `np.corrcoef(audio_f64, cleaned)` ohne pre-Guard → guarded dot-product
+- **`dsp/aurik_deesser_pro/music_vocal_pipeline.py`**: 2× `np.corrcoef` in `quality_ok()` und Audit-Log → guarded dot-product
+- Alle Fixes: §VERBOTEN-Regel `np.corrcoef` → guarded dot-product; verhindert RuntimeWarning unter `-W error::RuntimeWarning` in Tests (§2.54)
+
 ## Version 9.11.34 — PLM set_active Guards DiffWave/DacEncoder/DacDecoder/BEATs/AudioLDM2/BasicPitch/CQTdiff+/WhisperTiny/UTMOSv2 (Tiefenanalyse R7) (Apr 2026)
 
 - **`plugins/diffwave_plugin.py` `_diffuse()`**: `session.run()` ohne PLM-Guard → set_active("DiffWave") try/finally

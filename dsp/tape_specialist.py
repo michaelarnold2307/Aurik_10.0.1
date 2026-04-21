@@ -257,7 +257,16 @@ class TapePrintThroughRemover:
 
         # Korrelationsschutz: Verhindert Over-Processing / Signalumkehr
         if n > 1:
-            corr = float(np.corrcoef(audio_f64, cleaned)[0, 1]) if n > 2 else 1.0
+            if n > 2:
+                # Guarded Pearson correlation — avoids NaN on silent/constant signals (§VERBOTEN: np.corrcoef)
+                _a_g = np.asarray(audio_f64, dtype=np.float64)
+                _b_g = np.asarray(cleaned, dtype=np.float64)
+                _a_g = _a_g - _a_g.mean()
+                _b_g = _b_g - _b_g.mean()
+                _denom_g = (np.linalg.norm(_a_g) * np.linalg.norm(_b_g)) + 1e-12
+                corr = float(np.dot(_a_g, _b_g) / _denom_g)
+            else:
+                corr = 1.0
             if not np.isfinite(corr) or corr < 0.85:
                 # Sanftes Blending: 90 % cleaned + 10 % original
                 cleaned = 0.90 * cleaned + 0.10 * audio_f64

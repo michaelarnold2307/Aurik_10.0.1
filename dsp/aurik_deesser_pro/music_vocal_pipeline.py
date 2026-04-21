@@ -281,7 +281,13 @@ def quality_ok(before: npt.NDArray[np.float32], after: npt.NDArray[np.float32], 
     hf_b: float = band_energy(before, sr, 6000, 11000)
     hf_a: float = band_energy(after, sr, 6000, 11000)
     ratio = hf_a / (hf_b + 1e-9)
-    corr = float(np.corrcoef(before, after)[0, 1])
+    # Guarded Pearson correlation — avoids NaN on silent/constant signals (§VERBOTEN: np.corrcoef)
+    _bef_g = np.asarray(before, dtype=np.float64)
+    _aft_g = np.asarray(after, dtype=np.float64)
+    _bef_g = _bef_g - _bef_g.mean()
+    _aft_g = _aft_g - _aft_g.mean()
+    _denom_g = (np.linalg.norm(_bef_g) * np.linalg.norm(_aft_g)) + 1e-12
+    corr = float(np.dot(_bef_g, _aft_g) / _denom_g)
     # Musikstil könnte als Parameter übergeben werden, hier als Beispiel 'pop'
     style = "pop"
     return adaptive_hf_gate(ratio, style=style) and adaptive_corr_gate(corr, min_corr=0.98)
@@ -426,7 +432,13 @@ def process_vocals(
 
     hf_before = hf_ratio(audio1)
     hf_after = hf_ratio(audio2)
-    corr = float(np.corrcoef(audio1, audio2)[0, 1])
+    # Guarded Pearson correlation — avoids NaN on silent/constant signals (§VERBOTEN: np.corrcoef)
+    _a1_g = np.asarray(audio1, dtype=np.float64)
+    _a2_g = np.asarray(audio2, dtype=np.float64)
+    _a1_g = _a1_g - _a1_g.mean()
+    _a2_g = _a2_g - _a2_g.mean()
+    _denom_g = (np.linalg.norm(_a1_g) * np.linalg.norm(_a2_g)) + 1e-12
+    corr = float(np.dot(_a1_g, _a2_g) / _denom_g)
     write_audit_log(
         {
             "step": "spectral_repair",

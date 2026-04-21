@@ -571,8 +571,14 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
             left_norm = left / (np.sqrt(np.mean(left**2)) + 1e-10)
             right_norm = right / (np.sqrt(np.mean(right**2)) + 1e-10)
 
-            # Correlation (DON'T use abs() - negative correlation = side-dominant)
-            correlation = np.corrcoef(left_norm, right_norm)[0, 1]
+            # Guarded Pearson correlation — avoids NaN on silent/constant signals (§VERBOTEN: np.corrcoef)
+            # DON'T use abs() - negative correlation = side-dominant
+            _ln_g = np.asarray(left_norm, dtype=np.float64)
+            _rn_g = np.asarray(right_norm, dtype=np.float64)
+            _ln_g = _ln_g - _ln_g.mean()
+            _rn_g = _rn_g - _rn_g.mean()
+            _denom_g = (np.linalg.norm(_ln_g) * np.linalg.norm(_rn_g)) + 1e-12
+            correlation = float(np.dot(_ln_g, _rn_g) / _denom_g)
 
             # Convert to width
             # correlation = -1 (L=-R) → pure side → width = very high (10.0)

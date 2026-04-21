@@ -386,8 +386,13 @@ class MonoToStereoPhaseV2(PhaseInterface):
         left = audio[:, 0]
         right = audio[:, 1]
 
-        # Pearson correlation
-        correlation = np.corrcoef(left, right)[0, 1]
+        # Guarded Pearson correlation — avoids NaN on silent/constant signals (§VERBOTEN: np.corrcoef)
+        _left_g = np.asarray(left, dtype=np.float64)
+        _right_g = np.asarray(right, dtype=np.float64)
+        _left_g = _left_g - _left_g.mean()
+        _right_g = _right_g - _right_g.mean()
+        _denom_g = (np.linalg.norm(_left_g) * np.linalg.norm(_right_g)) + 1e-12
+        correlation = float(np.dot(_left_g, _right_g) / _denom_g)
 
         return abs(correlation)
 

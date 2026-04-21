@@ -127,8 +127,13 @@ class AuthenticityMetrics:
         if len(onsets_orig) < 2:
             return 1.0  # Too short to measure
 
-        correlation = np.corrcoef(onsets_orig, onsets_enh)[0, 1]
-        correlation = np.nan_to_num(correlation, nan=1.0, posinf=1.0, neginf=0.0)
+        # Guarded Pearson correlation — avoids NaN on silent/constant signals (§VERBOTEN: np.corrcoef)
+        _a_g = np.asarray(onsets_orig, dtype=np.float64)
+        _b_g = np.asarray(onsets_enh, dtype=np.float64)
+        _a_g = _a_g - _a_g.mean()
+        _b_g = _b_g - _b_g.mean()
+        _denom_g = (np.linalg.norm(_a_g) * np.linalg.norm(_b_g)) + 1e-12
+        correlation = float(np.dot(_a_g, _b_g) / _denom_g)
 
         return float(correlation)
 

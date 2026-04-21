@@ -148,10 +148,20 @@ def _estimate_key(mono: np.ndarray, sr: int) -> str:
     best_r = -2.0
     best_key = "C"
     best_mode = "major"
+    # Pre-compute profile vectors for guarded Pearson correlation (§VERBOTEN: np.corrcoef)
+    _maj_g = np.asarray(_MAJOR_PROFILE, dtype=np.float64)
+    _min_g = np.asarray(_MINOR_PROFILE, dtype=np.float64)
+    _maj_g = _maj_g - _maj_g.mean()
+    _min_g = _min_g - _min_g.mean()
+    _maj_norm_g = np.linalg.norm(_maj_g)
+    _min_norm_g = np.linalg.norm(_min_g)
     for root in range(12):
         shifted = np.roll(chroma, -root)
-        r_maj = float(np.corrcoef(shifted, _MAJOR_PROFILE)[0, 1])
-        r_min = float(np.corrcoef(shifted, _MINOR_PROFILE)[0, 1])
+        _shf_g = np.asarray(shifted, dtype=np.float64)
+        _shf_g = _shf_g - _shf_g.mean()
+        _shf_norm_g = np.linalg.norm(_shf_g)
+        r_maj = float(np.dot(_shf_g, _maj_g) / (_shf_norm_g * _maj_norm_g + 1e-12))
+        r_min = float(np.dot(_shf_g, _min_g) / (_shf_norm_g * _min_norm_g + 1e-12))
         if r_maj > best_r:
             best_r = r_maj
             best_key = _NOTE_NAMES[root]
