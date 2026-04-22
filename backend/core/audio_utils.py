@@ -186,15 +186,24 @@ def apply_musical_gain_envelope(
         frame_rms_db.append(tail_rms_db)
 
     # --- Adaptive gate: raise threshold for recordings with elevated noise floor ---
-    # (Vinyl/shellac surface noise at -35 to -45 dBFS would pass a fixed -50 dBFS gate
+    # (Vinyl/shellac surface noise at -40 to -46 dBFS would pass a fixed -50 dBFS gate
     #  and receive makeup gain, causing Pegelexplosion in "silent" sections.)
+    #
+    # BUG HISTORY (v9.11.70 → v9.11.75): the original condition `p5 > gate_dbfs + 12.0`
+    # (= -38 dBFS) never triggered for vinyl (~-44 dBFS) because -44 < -38. The gate
+    # stayed at -50 dBFS and fadeout hiss frames at -44 dBFS were amplified. Fix: raise
+    # gate whenever p5+6 would exceed the nominal gate, i.e. the noise floor is above it.
     effective_gate = gate_dbfs
     if len(frame_rms_db) >= 10:
         p5_rms_db = float(np.percentile(frame_rms_db, 5))
-        if p5_rms_db > gate_dbfs + 12.0:
-            # Noise floor is well above nominal gate → noisy analog material.
-            # Set effective gate 6 dB above noise floor to separate music from noise.
-            effective_gate = min(p5_rms_db + 6.0, gate_dbfs + 25.0)
+        # Always compute the noise-floor-adaptive gate (p5 + 6 dB above noise floor).
+        # Only raise effective_gate — never lower it below the nominal.
+        _adaptive = p5_rms_db + 6.0
+        if _adaptive > gate_dbfs:
+            # Noise floor is above nominal gate → set effective gate 6 dB above
+            # noise floor so hiss/silence frames are NOT amplified while musical
+            # frames (≥ 6 dB above noise floor) still receive the full gain.
+            effective_gate = min(_adaptive, gate_dbfs + 25.0)
 
     # --- Pass 2: build gate envelope using adaptive threshold ---
     gate_env = np.zeros(n, dtype=np.float32)

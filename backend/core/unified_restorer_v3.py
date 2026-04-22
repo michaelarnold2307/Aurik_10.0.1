@@ -438,15 +438,21 @@ class UnifiedRestorerV3:
             frame_rms_db.append(tail_rms_db)
 
         # --- Adaptive gate: Rauschboden-Schutz für analoge Quellen (§2.45a Pegelexplosion-Fix) ---
+        # BUG HISTORY (v9.11.70 → v9.11.75): `p5 > gate_dbfs + 12.0` (= -38 dBFS) feuerte
+        # nie für Vinyl (~-44 dBFS), weil -44 < -38. Gate blieb bei -50 dBFS und Fadeout-
+        # Rauschframes bei -44 dBFS wurden verstärkt → Pegelexplosion. Fix: adaptiver Gate
+        # greift immer wenn p5+6 über dem nominalen Gate liegt.
         effective_gate = gate_dbfs
         if len(frame_rms_db) >= 10:
             p5_rms_db = float(np.percentile(frame_rms_db, 5))
-            if p5_rms_db > gate_dbfs + 12.0:
-                # Noise-Floor liegt weit über dem nominalen Gate (Vinyl/Shellac ~-40 dBFS).
-                # Effektives Gate 6 dB über Noise-Floor setzen — Stille am Song-Ende
-                # wird NICHT verstärkt; musikalische Frames (≥10 dB über Noise-Floor)
-                # erhalten trotzdem den vollen Makeup-Gain.
-                effective_gate = min(p5_rms_db + 6.0, gate_dbfs + 25.0)
+            # Immer noise-floor-adaptiven Gate berechnen — nur anheben, nie absenken.
+            _adaptive = p5_rms_db + 6.0
+            if _adaptive > gate_dbfs:
+                # Noise-Floor liegt über dem nominalen Gate → Gate 6 dB über Noise-Floor
+                # setzen. Stille/Rausch-Frames (< Noise-Floor + 6 dB) werden NICHT
+                # verstärkt; musikalische Frames (≥ 6 dB über Noise-Floor) erhalten
+                # trotzdem den vollen Makeup-Gain.
+                effective_gate = min(_adaptive, gate_dbfs + 25.0)
 
         # --- Pass 2: Gate-Envelope mit adaptivem Schwellwert aufbauen ---
         gate_envelope = np.zeros(n, dtype=np.float32)
