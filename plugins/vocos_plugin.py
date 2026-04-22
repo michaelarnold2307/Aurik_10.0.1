@@ -370,12 +370,66 @@ class VocosPlugin:
 
             # 2. Mel-Spektrogramm berechnen [n_mels, T] → [1, n_mels, T] (modellspezifisches n_fft/hop)
             mel = self._compute_mel(audio_model, model_sr, n_mels, n_fft=self._mel_n_fft, hop=self._mel_hop)
-            mel_input = mel[np.newaxis].astype(np.float32)  # [1, n_mels, T]
 
-            # 3. ONNX-Inferenz (CPUExecutionProvider — §9.5)
-            input_name = self._onnx_session.get_inputs()[0].name
-            ort_out = self._onnx_session.run(None, {input_name: mel_input})
-            waveform = np.asarray(ort_out[0], dtype=np.float32).reshape(-1)
+            # 3. ONNX Fixed-Shape-Input Guard (§ml-plugin-SKILL):
+            # Check if model expects a fixed T dimension — if so, use chunked inference.
+            _inp_meta = self._onnx_session.get_inputs()[0]
+            input_name = _inp_meta.name
+            _t_dim = _inp_meta.shape[2] if len(_inp_meta.shape) >= 3 else None
+            _fixed_t = isinstance(_t_dim, int) and _t_dim > 0
+
+            if _fixed_t:
+                # Fixed-T model: chunk mel into _t_dim-frame segments, run each, concat waveforms.
+                _chunk_t = int(_t_dim)
+                _overlap_t = min(32, _chunk_t // 8)  # Overlap in mel frames (≈ crossfade region)
+                _hop_samples = self._mel_hop  # samples per mel frame
+                _n_mel_frames = mel.shape[1]
+                waveform_segments: list[np.ndarray] = []
+                _pos = 0
+                while _pos < _n_mel_frames:
+                    _end = min(_pos + _chunk_t, _n_mel_frames)
+                    _seg = mel[:, _pos:_end]
+                    if _seg.shape[1] < _chunk_t:
+                        # Zero-pad last chunk to fixed size
+                        _pad = np.zeros((_seg.shape[0], _chunk_t - _seg.shape[1]), dtype=np.float32)
+                        _seg = np.concatenate([_seg, _pad], axis=1)
+                    _seg_input = _seg[np.newaxis].astype(np.float32)
+                    _seg_out = self._onnx_session.run(None, {input_name: _seg_input})
+                    _seg_wav = np.asarray(_seg_out[0], dtype=np.float32).reshape(-1)
+                    # Trim padding from last chunk
+                    _valid_samples = (_end - _pos) * _hop_samples
+                    waveform_segments.append(_seg_wav[:_valid_samples])
+                    _pos += _chunk_t - _overlap_t
+                # Simple concatenation with linear crossfade at chunk boundaries
+                if len(waveform_segments) == 1:
+                    waveform = waveform_segments[0]
+                else:
+                    _xfade_samples = _overlap_t * _hop_samples
+                    waveform = waveform_segments[0]
+                    for _next_seg in waveform_segments[1:]:
+                        if len(waveform) < _xfade_samples or len(_next_seg) < _xfade_samples:
+                            waveform = np.concatenate([waveform, _next_seg])
+                        else:
+                            _fade_out = np.linspace(1.0, 0.0, _xfade_samples, dtype=np.float32)
+                            _fade_in = np.linspace(0.0, 1.0, _xfade_samples, dtype=np.float32)
+                            waveform[-_xfade_samples:] = (
+                                waveform[-_xfade_samples:] * _fade_out + _next_seg[:_xfade_samples] * _fade_in
+                            )
+                            waveform = np.concatenate([waveform, _next_seg[_xfade_samples:]])
+                waveform = waveform.astype(np.float32)
+            else:
+                # Dynamic-T model: direct run; max-length guard to prevent OOM (60 s cap).
+                _max_mel_frames = int(60 * model_sr / self._mel_hop)
+                if mel.shape[1] > _max_mel_frames:
+                    logger.debug(
+                        "Vocos ONNX: mel T=%d > 60 s cap (%d) — truncating (dynamic-T model)",
+                        mel.shape[1],
+                        _max_mel_frames,
+                    )
+                    mel = mel[:, :_max_mel_frames]
+                mel_input = mel[np.newaxis].astype(np.float32)  # [1, n_mels, T]
+                ort_out = self._onnx_session.run(None, {input_name: mel_input})
+                waveform = np.asarray(ort_out[0], dtype=np.float32).reshape(-1)
 
             # 4. Auf Aurik-SR resampeln und Länge angleichen
             waveform = self._resample(waveform, model_sr, sr)
