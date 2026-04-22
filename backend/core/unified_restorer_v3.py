@@ -16393,6 +16393,38 @@ class UnifiedRestorerV3:
                 "phase_55",
             )
 
+            # §Spec04 RELEASE_MUST: Pipeline-Wall-Time-Budget — verhindert 25:1-Ratio-Hänger.
+            # Material-adaptive: mehr Zeit für schlechte Materialien, weniger für saubere.
+            _PIPELINE_WALL_BUDGET_S: dict[str, float] = {
+                "shellac": 900.0,
+                "wax_cylinder": 900.0,
+                "wire_recording": 900.0,
+                "vinyl": 600.0,
+                "reel_tape": 600.0,
+                "tape": 600.0,
+                "cassette": 540.0,
+                "lacquer_disc": 600.0,
+                "minidisc": 480.0,
+                "mp3_low": 360.0,
+                "mp3_high": 300.0,
+                "cd_digital": 300.0,
+                "streaming": 300.0,
+            }
+            _mat_key_budget = str(getattr(material_type, "value", str(material_type))).lower()
+            _pipeline_wall_budget = float(_PIPELINE_WALL_BUDGET_S.get(_mat_key_budget, 480.0))
+            _pipeline_start_time = time.time()
+            # §6.2a: Diese Phasen dürfen NICHT durch das Wall-Time-Budget übersprungen werden.
+            _WALL_BUDGET_EXEMPT_PHASES = frozenset(
+                {
+                    "phase_01_click_removal",
+                    "phase_09_crackle_removal",
+                    "phase_12_wow_flutter_fix",
+                    "phase_14_phase_correction",
+                    "phase_15_stereo_balance",
+                    "phase_30_dc_offset_removal",
+                }
+            )
+
             for phase_id in selected_phases:
                 phase = self._get_phase(phase_id)
                 if not phase:
@@ -16423,6 +16455,22 @@ class UnifiedRestorerV3:
                     deferred.append(phase_id)  # §2.38 KMV: RT-skipped → Stage 2
                     _record_oom_probe("phase_deferred_rt", phase_id, estimated_time_s=round(float(estimated_time), 3))
                     continue
+
+                # §Spec04 Wall-Time-Budget: Phasen überspringen die das Budget sprengen würden.
+                # §0c: Kein harter Abbruch — verbleibende Phasen als Passthrough, nicht Skip.
+                if phase_id not in _WALL_BUDGET_EXEMPT_PHASES:
+                    _elapsed_wall = time.time() - _pipeline_start_time
+                    if _elapsed_wall > _pipeline_wall_budget:
+                        logger.warning(
+                            "§Wall-Time-Budget: %.0f s > %.0f s (material=%s) — %s als Passthrough übersprungen",
+                            _elapsed_wall,
+                            _pipeline_wall_budget,
+                            _mat_key_budget,
+                            phase_id,
+                        )
+                        skipped.append(phase_id)
+                        continue
+
                 phase_start = self.performance_guard.start_phase(phase_id) if self.performance_guard else time.time()
                 # §OOM-Diagnose: Phase-Identity VOR Eviction loggen — damit der Phase-Name
                 # im Log erscheint, BEVOR PLM-Eviction das RAM-Niveau ändert.

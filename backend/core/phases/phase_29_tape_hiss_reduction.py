@@ -632,46 +632,70 @@ class TapeHissReductionPhase(PhaseInterface):
         processed_audio: np.ndarray,
         material: MaterialType,
     ) -> tuple[np.ndarray, dict[str, float]]:
-        from backend.core.audio_utils import apply_musical_gain_envelope
-
         material_key = getattr(material, "name", str(material)).lower()
         max_rms_drop_db = float(self._MAX_RMS_DROP_DB.get(material_key, self._MAX_RMS_DROP_DB["unknown"]))
 
         # §2.45a-I Gated-RMS: ignoriert Stille-Frames < −50 dBFS
-        _rms_in_db = _rms_dbfs_gated(np.asarray(original_audio, dtype=np.float32))
-        _rms_out_db = _rms_dbfs_gated(np.asarray(processed_audio, dtype=np.float32))
+        # CRITICAL FIX: _rms_dbfs_gated gibt -96.0 zurück wenn nach OMLSA alle Frames
+        # unter -50 dBFS liegen (echtes Signal ~-20 dB gedämpft, NICHT wirklich stumm).
+        # Fallback auf globalen RMS verhindert fälschliche -62 dB "Abfall"-Berechnung.
+        _orig_arr = np.asarray(original_audio, dtype=np.float32)
+        _proc_arr = np.asarray(processed_audio, dtype=np.float32)
+        _rms_in_db = _rms_dbfs_gated(_orig_arr)
+
+        _rms_out_gated = _rms_dbfs_gated(_proc_arr)
+        if _rms_out_gated <= -90.0:
+            # Kein aktiver Frame → globaler RMS als Fallback (verhindert False-Negative)
+            _proc_mono = (
+                _proc_arr.mean(axis=0)
+                if _proc_arr.ndim == 2 and _proc_arr.shape[0] <= 2
+                else (_proc_arr.mean(axis=1) if _proc_arr.ndim == 2 else _proc_arr)
+            )
+            _rms_out_db = float(20.0 * np.log10(np.sqrt(np.mean(_proc_mono.astype(np.float64) ** 2)) + 1e-12))
+            logger.debug("Phase 29: gated-RMS kein aktiver Frame → globaler RMS Fallback %.1f dBFS", _rms_out_db)
+        else:
+            _rms_out_db = _rms_out_gated
+
         rms_in = float(10.0 ** (_rms_in_db / 20.0))
         rms_drop_db = (_rms_out_db - _rms_in_db) if _rms_in_db > -90.0 else 0.0
         makeup_gain_db = 0.0
 
+        # Material-adaptives Makeup-Cap (§2.45a): max. 30 dB (verhindert Explosion),
+        # mindestens so viel dass der Abfall auf max_rms_drop_db begrenzt wird.
+        _MAKEUP_CAP_DB = 30.0
+
         if rms_in > 1e-8 and rms_drop_db < -max_rms_drop_db:
             target_rms_drop_db = -max_rms_drop_db
             required_gain_db = target_rms_drop_db - rms_drop_db
-            makeup_gain_db = float(np.clip(required_gain_db, 0.0, 6.0))
+            makeup_gain_db = float(np.clip(required_gain_db, 0.0, _MAKEUP_CAP_DB))
             if makeup_gain_db > 0.0:
                 _gain_lin = float(10.0 ** (makeup_gain_db / 20.0))
-                # §2.45a-II: gain applied ONLY to musical frames via envelope
-                processed_audio = apply_musical_gain_envelope(
-                    processed_audio, _gain_lin, gate_dbfs=-50.0, crossfade_ms=10.0, sr=self.sample_rate
-                )
-                processed_audio = np.clip(processed_audio, -1.0, 1.0).astype(np.float32)
-                # §2.45a-III: soft-limiter only when peak99 > 0.98
-                current_peak = float(np.percentile(np.abs(processed_audio), 99.9))
-                if current_peak > 0.98:
-                    _abs_29 = np.abs(processed_audio)
-                    _over_29 = _abs_29 > 0.92
-                    if np.any(_over_29):
-                        processed_audio = np.where(
-                            _over_29,
-                            np.sign(processed_audio) * (0.92 + 0.08 * np.tanh((_abs_29 - 0.92) / 0.08)),
-                            processed_audio,
-                        )
-                processed_audio = np.clip(processed_audio, -1.0, 1.0).astype(np.float32)
-                # §2.45a-I: re-measure after makeup-gain with Gated-RMS
+                # §2.45a-II FIX: Direktes Clipping statt apply_musical_gain_envelope.
+                # apply_musical_gain_envelope versagt wenn alle Frames nach OMLSA unter
+                # Gate-Schwelle liegen (gleicher Bug wie phase_12, Fix identisch).
+                _peak_99 = float(np.percentile(np.abs(_proc_arr), 99.9))
+                if _peak_99 > 1e-8:
+                    # Peak-Guard: Gain nur soweit wie Clipping-frei möglich
+                    _safe_gain = min(_gain_lin, 0.999 / _peak_99)
+                    processed_audio = np.clip(_proc_arr * _safe_gain, -1.0, 1.0).astype(np.float32)
+                    # Effektiver Gain für Logging
+                    makeup_gain_db = float(20.0 * np.log10(_safe_gain + 1e-12))
+                else:
+                    processed_audio = _proc_arr  # Signal zu klein — kein Makeup
+                    makeup_gain_db = 0.0
+
+                # §2.45a-I: re-measure after makeup-gain
                 _rms_out_db = _rms_dbfs_gated(np.asarray(processed_audio, dtype=np.float32))
+                if _rms_out_db <= -90.0:
+                    _pm = (
+                        processed_audio.mean(axis=0)
+                        if processed_audio.ndim == 2 and processed_audio.shape[0] <= 2
+                        else (processed_audio.mean(axis=1) if processed_audio.ndim == 2 else processed_audio)
+                    )
+                    _rms_out_db = float(20.0 * np.log10(np.sqrt(np.mean(_pm.astype(np.float64) ** 2)) + 1e-12))
                 rms_drop_db = (_rms_out_db - _rms_in_db) if _rms_in_db > -90.0 else 0.0
                 logger.info(
-                    "Phase 29 loudness-preservation: material=%s rms_drop=%.2f dB via makeup %.2f dB (envelope-gated)",
+                    "Phase 29 loudness-preservation: material=%s rms_drop=%.2f dB via makeup %.2f dB (direct-clip)",
                     material_key,
                     rms_drop_db,
                     makeup_gain_db,

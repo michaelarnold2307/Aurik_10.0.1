@@ -1366,6 +1366,20 @@ class SpectralRepair(PhaseInterface):
         noise_floor = np.nan_to_num(noise_floor, nan=1e-10, posinf=1.0, neginf=1e-10)
         return noise_floor
 
+    # §2.57 BW-Ceiling pro analogem Material (Hz): restaurierte HF über diesem
+    # Schwellwert darf nicht als Codec-Spike erkannt werden (Phase_06-Restaurierung schützen).
+    _ANALOG_HF_PROTECT_HZ: dict[str, float] = {
+        "vinyl": 13600.0,  # vinyl BW_CEILING 16 kHz × 0.85
+        "shellac": 6800.0,  # shellac BW_CEILING 8 kHz × 0.85
+        "wax_cylinder": 4250.0,  # wax_cylinder BW_CEILING 5 kHz × 0.85
+        "wire_recording": 5100.0,
+        "reel_tape": 13600.0,
+        "tape": 13600.0,
+        "cassette": 10200.0,  # cassette BW_CEILING 12 kHz × 0.85
+        "lacquer_disc": 13600.0,
+        "minidisc": 11900.0,
+    }
+
     def _detect_defects(self, magnitude: np.ndarray, phase: np.ndarray, thresholds: dict[str, float]) -> np.ndarray:
         """Defekt-Detektion via IMCRA-adaptivem Rauschboden + Phasenkonsistenz.
 
@@ -1388,10 +1402,19 @@ class SpectralRepair(PhaseInterface):
         """
         defect_mask = np.zeros_like(magnitude, dtype=bool)
 
+        # §2.57: HF-Protected-Bin-Grenze für analoge Materialien.
+        # Bins ≥ _hf_protected_start werden aus Spike-Detektion (Pass-1) ausgeschlossen.
+        # Verhindert False-Positive-Flagging von durch Phase_06 restaurierten HF-Harmoniken.
+        _mat_key = str(getattr(self, "_current_material", "")).lower().replace("-", "_").replace(" ", "_")
+        _hf_protect_hz = self._ANALOG_HF_PROTECT_HZ.get(_mat_key, 0.0)
+        _nfft_est = (magnitude.shape[0] - 1) * 2  # magnitude.shape[0] = nfft//2 + 1
+        _bin_hz = 48000.0 / (_nfft_est + 1e-12)
+        _hf_protected_start = int(_hf_protect_hz / (_bin_hz + 1e-12)) if _hf_protect_hz > 0 else magnitude.shape[0]
+
         # -- Strategie 1 + 2: IMCRA-adaptiver Rauschboden --
         noise_floor = self._estimate_noise_floor_imcra(magnitude)
 
-        # Dropout: Magnitude deutlich unterhalb des geschätzten Rauschbodens
+        # Dropout: Magnitude deutlich unterhalb des geschätzten Rauschbodens (alle Bins)
         dropout_mask = magnitude < (noise_floor * 0.3)
         defect_mask |= dropout_mask
 
@@ -1404,11 +1427,18 @@ class SpectralRepair(PhaseInterface):
         z_scores = (ratio_db - median_ratio) / (mad * 1.4826)
         z_scores = np.nan_to_num(z_scores, nan=0.0, posinf=0.0, neginf=0.0)
         spike_mask = z_scores > thresholds["outlier_z_score"]
+        # §2.57: HF-geschützte Bins (restaurierte Harmoniken) nicht als Spike markieren
+        if _hf_protected_start < magnitude.shape[0]:
+            spike_mask[_hf_protected_start:, :] = False
         defect_mask |= spike_mask
 
         # -- Strategie 3: Phasensprünge --
         phase_diff = np.diff(phase, axis=1)
         phase_jumps = np.abs(phase_diff) > thresholds["phase_jump_threshold"]
+        # §2.57: HF-geschützte Bins auch aus Phase-Sprung-Detektion ausschließen.
+        # Phase_06 verändert HF-Phasenrelationen intentional → kein False-Positive.
+        if _hf_protected_start < magnitude.shape[0]:
+            phase_jumps[_hf_protected_start:, :] = False
         defect_mask[:, 1:] |= phase_jumps
 
         # Morphologische Bereinigung

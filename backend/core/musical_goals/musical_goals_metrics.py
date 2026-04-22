@@ -1207,14 +1207,30 @@ class TransparenzMetric:
             _tr_start = (len(audio) - _MAX_TRANSP_SAMPLES) // 2
             audio = audio[_tr_start : _tr_start + _MAX_TRANSP_SAMPLES]
 
+        # CRITICAL FIX: Guard gegen 0-Länge-Audio → "Invalid number of FFT data points (0)"
+        if len(audio) < 2:
+            return 0.5
+
         # Compute magnitude spectrum (single FFT of full segment)
         fft_mag = np.abs(np.fft.rfft(audio.astype(np.float32)))
         freqs_t = np.fft.rfftfreq(len(audio), d=1.0 / sr)
+
+        # §6.2c BW-adaptive Bänder: Wenn kaum HF vorhanden (sehr_schmale_bandbreite),
+        # werden nur Bänder innerhalb der effektiven Bandbreite gewertet.
+        # Verhindert konstant 0.277 bei Vinyl→Kassette→MP3 mit HF/LF=0.027.
+        _hf_content = float(np.sqrt(np.mean(fft_mag[(freqs_t >= 4000)] ** 2)) + 1e-12)
+        _lf_content = float(np.sqrt(np.mean(fft_mag[(freqs_t < 4000) & (freqs_t >= 250)] ** 2)) + 1e-12)
+        _hf_lf_ratio = _hf_content / (_lf_content + 1e-12)
+        # Schmalband-Erkennung: wenn HF fast leer, obere Bänder aus Score ausschließen
+        _bw_limited = _hf_lf_ratio < 0.05  # < 5 % HF-Energie → Material-BW ≤ ~4 kHz
 
         # 5 octave bands: 250-500, 500-1k, 1k-2k, 2k-4k, 4k-8k Hz
         _oct_bands = [(250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000)]
         _band_crests: list[float] = []
         for _fl, _fh in _oct_bands:
+            # §6.2c: 4k-8k Band bei schmalem BW überspringen (hat keine aussagekräftigen Bins)
+            if _bw_limited and _fl >= 4000:
+                continue
             _bins = fft_mag[(freqs_t >= _fl) & (freqs_t < _fh)]
             if len(_bins) > 5:
                 _p95 = float(np.percentile(_bins, 95))
@@ -1747,26 +1763,40 @@ class TimbralAuthenticityMetric:
 
     def _spectral_centroid(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """Spectral Centroid Zeitreihe (Hz)."""
-        n_fft = min(int(sr * 0.050), len(audio))
-        hop = max(1, int(sr * self.HOP_SIZE_S))
+        # Guard: zu kurzes Audio → Fallback-Wert (kein tuple-index/stft-Fehler)
+        _n_fft_target = int(sr * 0.050)
+        if len(audio) < max(4, _n_fft_target // 4):
+            return np.array([float(sr / 4)], dtype=np.float32)
+        n_fft = min(_n_fft_target, len(audio))
+        hop = max(1, min(n_fft - 1, int(sr * self.HOP_SIZE_S)))
         from scipy.signal import stft as sp_stft
 
         freqs, _, Zxx = sp_stft(audio, fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+        if Zxx.shape[1] == 0:
+            return np.array([float(sr / 4)], dtype=np.float32)
         power = np.abs(Zxx) + 1e-10
         centroid = np.sum(freqs[:, None] * power, axis=0) / (np.sum(power, axis=0) + 1e-10)
         return np.nan_to_num(centroid, nan=float(sr / 4))
 
     def _spectral_rolloff(self, audio: np.ndarray, sr: int, threshold: float = 0.85) -> np.ndarray:
         """Spectral Rolloff Zeitreihe (Hz)."""
-        n_fft = min(int(sr * 0.050), len(audio))
-        hop = max(1, int(sr * self.HOP_SIZE_S))
+        # Guard: zu kurzes Audio → Fallback-Wert (kein tuple-index/stft-Fehler)
+        _n_fft_target = int(sr * 0.050)
+        if len(audio) < max(4, _n_fft_target // 4):
+            return np.array([float(sr / 4)], dtype=np.float32)
+        n_fft = min(_n_fft_target, len(audio))
+        hop = max(1, min(n_fft - 1, int(sr * self.HOP_SIZE_S)))
         from scipy.signal import stft as sp_stft
 
         freqs, _, Zxx = sp_stft(audio, fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+        if Zxx.shape[1] == 0 or len(freqs) == 0:
+            return np.array([float(sr / 4)], dtype=np.float32)
         power = np.abs(Zxx)
         cumsum = np.cumsum(power, axis=0)
         total = cumsum[-1, :] + 1e-10
         rolloff_idx = np.argmax(cumsum >= threshold * total, axis=0)
+        # Guard: rolloff_idx muss in [0, len(freqs)-1] liegen
+        rolloff_idx = np.clip(rolloff_idx, 0, len(freqs) - 1)
         return np.nan_to_num(freqs[rolloff_idx], nan=float(sr / 4))
 
     def _pearson(self, a: np.ndarray, b: np.ndarray) -> float:
@@ -1794,7 +1824,10 @@ class TimbralAuthenticityMetric:
             if _plg is not None:
                 mono = audio if audio.ndim == 1 else np.mean(audio, axis=0)
                 emb = _plg.embed(mono.astype(np.float32), sr)
-                if emb is not None and emb.ndim == 1 and len(emb) > 0:
+                # Guard: plugin könnte Tuple (array, info) zurückgeben statt reinem Array
+                if isinstance(emb, tuple):
+                    emb = emb[0] if len(emb) > 0 else None
+                if emb is not None and isinstance(emb, np.ndarray) and emb.ndim == 1 and len(emb) > 0:
                     norm = float(np.linalg.norm(emb) + 1e-12)
                     return (emb / norm).astype(np.float32)
         except Exception:  # plugin absent → DSP fallback
