@@ -61,8 +61,10 @@ class AurikSplashScreen(QWidget):
         super().__init__(
             None,
             Qt.FramelessWindowHint  # type: ignore[attr-defined]
-            | Qt.WindowStaysOnTopHint  # type: ignore[attr-defined]
             | Qt.Tool,  # type: ignore[attr-defined]  # no taskbar entry
+            # WindowStaysOnTopHint intentionally omitted: would cover dialogs
+            # that appear during startup (model check, warnings). raise_() is
+            # called after show() to bring the splash to the front instead.
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)  # type: ignore[attr-defined]
         self.setAttribute(Qt.WA_DeleteOnClose, True)  # type: ignore[attr-defined]

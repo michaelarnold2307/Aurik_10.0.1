@@ -394,6 +394,7 @@ def main():
         splash = AurikSplashScreen()
         splash.setWindowOpacity(0.0)
         splash.show()
+        splash.raise_()  # bring to front without WindowStaysOnTopHint
         app.processEvents()
 
         # Fade in: 32 steps × 18 ms ≈ 580 ms

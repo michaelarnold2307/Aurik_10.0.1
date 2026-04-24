@@ -348,7 +348,7 @@ Fadeout-Bereiche → Pegelexplosion.
 **Quiet-Zone-Grenze (normativ, modul-adaptiv):**
 
 | Modul | Schwellwert | Logik | Rationale |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `morph()` (MDEM, 400 ms) | **−36 dBFS** | Einzel-Bedingung | Feine Zeitauflösung — Frame-Level reicht |
 | `correct_arc()` (EmotionalArc, 5 s) | **−42 dBFS + 6 dB-Diff** | Zwei-Bedingungen | 5-s-Segmente enthalten Mix aus Musik und Stille — einfaches -36 dBFS wäre zu aggressiv; zweite Bedingung (`rms_orig > rms_rest + 6 dB`) erkennt das „Denoised-Fadeout-Muster" zuverlässig |
 

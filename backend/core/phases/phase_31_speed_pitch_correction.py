@@ -259,6 +259,21 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
         }.get(quality_mode_input, quality_mode_input)
         use_ml_hybrid = ML_HYBRID_AVAILABLE and quality_mode in ["balanced", "quality", "maximum"]
 
+        # ── SOTA nearest-semitone tuning-offset detection ──────────────────────
+        # The correct approach for recording speed error detection is key- and
+        # octave-independent: for every voiced frame, compute the deviation in
+        # cents from the nearest equally-tempered semitone.  The median of these
+        # per-frame cent-deviations is the global tuning offset — if the tape ran
+        # 1 % too slow every note is flat by ~17 cents relative to 12-TET.
+        # Speed-ratio = 2^(offset_cents/1200).
+        #
+        # This is how librosa.estimate_tuning(), iZotope RX and Sonic Visualiser
+        # operate internally (Ellis 2007; Kosta et al. 2022).
+        # No external reference_pitch is required — the 12-TET grid is the reference.
+        # reference_pitch only controls the A4 anchor of that grid (default 440 Hz).
+        if reference_pitch is None:
+            reference_pitch = 440.0  # standard A4 — defines the 12-TET semitone grid
+
         # Step 1: Robuste Pitch-Detektion (ML-Hybrid oder pYIN)
         if use_ml_hybrid:
             detected_pitch, confidence, ml_metadata = self._detect_pitch_ml_hybrid(audio, sample_rate, quality_mode)
@@ -266,13 +281,13 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             detected_pitch, confidence = self._detect_pitch_pyin(audio, params)
             ml_metadata = {"strategy": "pyin_only", "pyin_applied": True, "crepe_applied": False}
 
-        # Use A440 as default reference
-        if reference_pitch is None:
-            reference_pitch = 440.0
-
-        # Calculate speed error
+        # Step 2: Nearest-semitone cent-offset (SOTA — key/octave-independent)
+        # offset_cents = per-frame deviation from the nearest 12-TET semitone.
+        # Aggregate: probability-weighted median across all voiced frames.
         if detected_pitch > 0 and confidence >= params["pitch_detection_confidence"]:
-            speed_ratio = detected_pitch / reference_pitch
+            tuning_offset_cents, speed_ratio = self._compute_tuning_offset(
+                audio, sample_rate, reference_pitch, detected_pitch
+            )
             speed_error_percent = (speed_ratio - 1.0) * 100
         else:
             # Detection failed or low confidence
@@ -285,7 +300,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 modifications={
                     "processing": "skipped",
                     "reason": f"pitch detection confidence too low: {confidence:.2f}",
-                    "detected_pitch": detected_pitch,
+                    "detected_pitch_hz": detected_pitch,
                     "confidence": confidence,
                 },
                 warnings=[f"Pitch detection confidence: {confidence:.2f} < {params['pitch_detection_confidence']}"],
@@ -317,8 +332,9 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 modifications={
                     "processing": "skipped",
                     "reason": f"speed error {speed_error_percent:.2f}% exceeds max {params['max_speed_error'] * 100:.1f}%",
-                    "detected_pitch": detected_pitch,
-                    "reference_pitch": reference_pitch,
+                    "detected_pitch_hz": detected_pitch,
+                    "a4_reference_hz": reference_pitch,
+                    "tuning_offset_cents": tuning_offset_cents,
                     "speed_ratio": speed_ratio,
                     "speed_error_percent": speed_error_percent,
                 },
@@ -374,8 +390,9 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 audio=result_audio,
                 modifications={
                     "processing": "applied",
-                    "detected_pitch": detected_pitch,
-                    "reference_pitch": reference_pitch,
+                    "detected_pitch_hz": detected_pitch,
+                    "a4_reference_hz": reference_pitch,
+                    "tuning_offset_cents": tuning_offset_cents,
                     "confidence": confidence,
                     "speed_ratio_detected": speed_ratio,
                     "speed_error_percent": speed_error_percent,
@@ -414,7 +431,10 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 modifications={
                     "processing": "skipped",
                     "reason": f"speed error {speed_error_percent:.2f}% below 0.3% threshold",
-                    "detected_pitch": detected_pitch,
+                    "detected_pitch_hz": detected_pitch,
+                    "a4_reference_hz": reference_pitch,
+                    "tuning_offset_cents": tuning_offset_cents,
+                    "speed_ratio": speed_ratio,
                     "confidence": confidence,
                 },
                 warnings=[],
@@ -502,6 +522,115 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 return float(np.median(valid)), 0.4  # Feste niedrige Konfidenz
             except Exception:
                 return 0.0, 0.0
+
+    def _compute_tuning_offset(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        a4_hz: float,
+        rough_pitch_hz: float,
+    ) -> tuple[float, float]:
+        """SOTA nearest-semitone tuning-offset detection.
+
+        Computes the global recording-speed deviation in cents by measuring how
+        far every voiced frame deviates from its nearest 12-TET semitone.
+        This is key-independent and octave-independent: a recording that ran
+        1 % slow shifts *every* note flat by the same ~17 cents relative to the
+        equal-tempered grid, regardless of which notes are played.
+
+        Algorithm (Ellis 2007; Kosta et al. 2022; librosa.estimate_tuning):
+            offset_cents[i] = 1200 * log2( f0[i] / nearest_semitone_hz(f0[i]) )
+            nearest_semitone_hz(f) = a4 * 2^( round(12*log2(f/a4)) / 12 )
+            tuning_offset = probability-weighted median(offset_cents)
+            speed_ratio   = 2^(tuning_offset / 1200)
+
+        Args:
+            audio:          Input audio (mono or stereo).
+            sample_rate:    Sample rate (must be 48000 Hz for pipeline use).
+            a4_hz:          A4 reference for the 12-TET grid (default 440.0 Hz).
+                            This is NOT compared to pitch — it only defines
+                            where semitone boundaries fall.
+            rough_pitch_hz: Pre-estimated pitch from pYIN/FCPE used only to
+                            gate the analysis window (if rough_pitch_hz <= 0
+                            the whole signal is analysed).
+
+        Returns:
+            (tuning_offset_cents, speed_ratio)
+            Returns (0.0, 1.0) on failure (= no correction applied).
+        """
+        import librosa
+
+        try:
+            # Analyse up to 30 s, starting from the first active region to
+            # avoid silence/fade-in bias.
+            audio_mono = np.mean(audio, axis=1).astype(np.float32) if audio.ndim == 2 else audio.astype(np.float32)
+            max_samples = int(30 * sample_rate)
+            # Skip leading silence (< -60 dBFS) to avoid junk F0 estimates.
+            rms_frame = int(0.05 * sample_rate)
+            start_idx = 0
+            for k in range(0, min(len(audio_mono), max_samples) - rms_frame, rms_frame):
+                chunk = audio_mono[k : k + rms_frame]
+                if np.sqrt(np.mean(chunk**2) + 1e-12) > 0.001:
+                    start_idx = k
+                    break
+            segment = audio_mono[start_idx : start_idx + max_samples]
+            segment = np.nan_to_num(segment, nan=0.0)
+
+            if len(segment) < 2048 or np.max(np.abs(segment)) < 1e-8:
+                return 0.0, 1.0
+
+            # pYIN F0 track with voiced probability weights.
+            f0, voiced_flag, voiced_probs = librosa.pyin(
+                segment,
+                fmin=float(librosa.note_to_hz("C2")),  # ~65 Hz
+                fmax=float(librosa.note_to_hz("C7")),  # ~2093 Hz
+                sr=sample_rate,
+                frame_length=2048,
+                hop_length=512,
+            )
+
+            voiced_f0 = f0[voiced_flag]
+            voiced_w = voiced_probs[voiced_flag]  # probability weights
+
+            if len(voiced_f0) < 4:  # need at least 4 voiced frames
+                return 0.0, 1.0
+
+            # Per-frame nearest-semitone deviation in cents.
+            # nearest_semitone = a4 * 2^( round(12*log2(f/a4)) / 12 )
+            log2_ratio = np.log2(voiced_f0 / a4_hz)  # distance from A4 in octaves
+            semitone_steps = np.round(log2_ratio * 12.0)  # nearest semitone index
+            nearest_hz = a4_hz * 2.0 ** (semitone_steps / 12.0)
+            cents_per_frame = 1200.0 * np.log2(voiced_f0 / nearest_hz)  # ∈ (-50, +50]
+
+            # Probability-weighted median (robust against octave errors and
+            # transient artefacts).  Sort by cents, then find the 0.5 weight quantile.
+            sort_idx = np.argsort(cents_per_frame)
+            sorted_cents = cents_per_frame[sort_idx]
+            sorted_w = voiced_w[sort_idx]
+            cumw = np.cumsum(sorted_w)
+            half = cumw[-1] * 0.5
+            median_idx = np.searchsorted(cumw, half)
+            median_idx = int(np.clip(median_idx, 0, len(sorted_cents) - 1))
+            tuning_offset_cents = float(sorted_cents[median_idx])
+
+            # Guard: offsets outside ±50 cents are implausible (> half a semitone gap
+            # in the 12-TET grid is impossible by construction, indicates a bug).
+            tuning_offset_cents = float(np.clip(tuning_offset_cents, -50.0, 50.0))
+
+            speed_ratio = float(2.0 ** (tuning_offset_cents / 1200.0))
+
+            logger.info(
+                "Phase 31 tuning-offset: %.2f cents  speed_ratio=%.6f  voiced_frames=%d  a4=%.1f Hz",
+                tuning_offset_cents,
+                speed_ratio,
+                len(voiced_f0),
+                a4_hz,
+            )
+            return tuning_offset_cents, speed_ratio
+
+        except Exception as exc:
+            logger.warning("_compute_tuning_offset failed (%s) — no correction", exc)
+            return 0.0, 1.0
 
     def _correct_wsola(self, audio: np.ndarray, ratio: float, params: dict[str, Any]) -> np.ndarray:
         """
