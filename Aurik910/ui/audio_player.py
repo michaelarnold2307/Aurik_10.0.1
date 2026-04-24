@@ -455,16 +455,24 @@ class StreamingAudioPlayer:
         data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
         data = np.clip(data, -1.0, 1.0)
 
-        # Resample to device SR if needed
+        # Resample to device SR if needed.
+        # soxr: pure-C, ~1s for 4 min stereo at 48→44.1 kHz.
+        # scipy.signal.resample_poly(160, 147) hangs 6+ min → VERBOTEN here.
         if output_sr > 0 and abs(sr - output_sr) >= 2000:
             try:
-                from scipy.signal import resample_poly
+                import soxr as _soxr_player
 
-                g = math.gcd(sr, output_sr)
-                data = resample_poly(data, output_sr // g, sr // g, axis=0).astype(np.float32)
+                data = _soxr_player.resample(data, sr, output_sr, quality="HQ").astype(np.float32)
             except Exception as exc:
-                logger.debug("Resample to device SR failed: %s", exc)
-                # Fallback: play at wrong SR (slight pitch shift, better than silence)
+                logger.debug("soxr resample failed (%s), trying resample_poly", exc)
+                try:
+                    from scipy.signal import resample_poly
+
+                    g = math.gcd(sr, output_sr)
+                    data = resample_poly(data, output_sr // g, sr // g, axis=0).astype(np.float32)
+                except Exception as exc2:
+                    logger.debug("resample_poly also failed: %s — playing at source SR", exc2)
+                    # Fallback: play at wrong SR (slight pitch shift, better than silence)
 
         data = np.ascontiguousarray(data, dtype=np.float32)
 

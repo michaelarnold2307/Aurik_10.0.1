@@ -12288,6 +12288,12 @@ class ModernMainWindow(QMainWindow):
         """Leertaste: Play/Pause — Wiedergabe stoppen oder Original starten."""
         if not _SD_AVAILABLE:
             return
+        # ── Streaming-Player: Zustand direkt abfragen ─────────────────────────
+        _sp = self._streaming_player
+        if _sp is not None and _sp.available and _sp.is_playing:
+            _sp.stop()
+            return
+        # ── Legacy sd.play() Pfad ──────────────────────────────────────────────
         if self._play_thread is not None and self._play_thread.is_alive():
             try:
                 if not hasattr(self, "_sd_lock"):
@@ -14103,29 +14109,20 @@ class ModernMainWindow(QMainWindow):
                 label="",
                 on_finished=self._on_streaming_playback_finished,
             )
-            if not ok:
-                logger.warning("StreamingAudioPlayer.play() returned False — device unavailable?")
-                if hasattr(self, "status_text"):
-                    self._apply_status_text_style("error")
-                    self.status_text.setText("⚠ Wiedergabe nicht möglich: Audio-Ausgabegerät prüfen.")
+            if ok:
+                if hasattr(self, "btn_stop_playback"):
+                    self.btn_stop_playback.setEnabled(True)
+
+                # ── Playhead-Timer ────────────────────────────────────────────────
+                self._playback_audio_duration = _sp.duration_seconds
+                self._last_playhead_pos = -1.0
+                if not hasattr(self, "_playhead_timer"):
+                    self._playhead_timer = QTimer(self)
+                    self._playhead_timer.timeout.connect(self._update_playhead)
+                self._playhead_timer.start(120)
                 return
-
-            # Mark as "playing" for UI state checks
-            # Use a lightweight sentinel so existing is_playing checks work.
-            self._play_thread = threading.Thread(target=lambda: None, daemon=True)
-            self._play_thread.start()  # finishes immediately — just sets is_alive() briefly
-
-            if hasattr(self, "btn_stop_playback"):
-                self.btn_stop_playback.setEnabled(True)
-
-            # ── Playhead-Timer ────────────────────────────────────────────────
-            self._playback_audio_duration = _sp.duration_seconds
-            self._last_playhead_pos = -1.0
-            if not hasattr(self, "_playhead_timer"):
-                self._playhead_timer = QTimer(self)
-                self._playhead_timer.timeout.connect(self._update_playhead)
-            self._playhead_timer.start(120)
-            return
+            # StreamingAudioPlayer.play() failed → fall through to sd.play() fallback
+            logger.warning("StreamingAudioPlayer.play() returned False — falling back to sd.play()")
 
         # ── Legacy-Fallback: sd.play() (nicht gapless) ───────────────────────
         if not _SD_AVAILABLE:
@@ -14293,7 +14290,7 @@ class ModernMainWindow(QMainWindow):
         """120-ms-Timer-Slot: aktualisiert Playhead-Position und Zeitanzeige im Hauptthread."""
         # ── Streaming-Player: sample-genaue Position ─────────────────────────
         _sp = self._streaming_player
-        if _sp is not None and _sp.available:
+        if _sp is not None and _sp.available and _sp.is_playing:
             _pos = _sp.position_frac
             if _pos < 0.0:
                 # Playback ended
