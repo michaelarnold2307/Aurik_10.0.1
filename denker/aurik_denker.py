@@ -965,6 +965,7 @@ class AurikDenker:
                     restorability_score=_pid_rest_score,
                     goal_risk_map=_goal_risk_map or None,
                     strategie_plan=strategie,
+                    causal_plan=defekt,
                 )
                 if _pid_plan.is_valid:
                     _pid_phase_plan = _pid_plan.phases

@@ -113,6 +113,11 @@ class DefektErgebnis:
     keinen zweiten internen Scan (mit falscher Material-Erkennung) starten muss.
     Bug-17-Fix: materialkorrektes Scan-Ergebnis fließt durch die gesamte Kette."""
 
+    @property
+    def primary_cause(self) -> str:
+        """Alias for primary_defect — required by UV3._select_phases() causal_plan protocol."""
+        return self.primary_defect
+
     @classmethod
     def from_bericht(cls, bericht: DefektBericht, raw_scan_result: Any | None = None) -> DefektErgebnis:
         """Konvertiert DefektBericht → DefektErgebnis."""

@@ -13301,16 +13301,22 @@ class UnifiedRestorerV3:
                 "phase_60_inner_groove_distortion_repair",
                 "phase_61_groove_echo_cancellation",
             ],
-            "shellac": [
+            "shellac": [  # §6.2a: pressed shellac always has severe crackle + surface noise
+                "phase_09_crackle_removal",
                 "phase_03_denoise",
                 "phase_06_frequency_restoration",
                 "phase_01_click_removal",
+                "phase_28_surface_noise_profiling",
             ],
-            "wax_cylinder": [
+            "wax_cylinder": [  # §6.2a: mechanisch graviert, severe crackle+wow/flutter+dropout+BW≤5kHz
+                "phase_09_crackle_removal",
+                "phase_12_wow_flutter_fix",
                 "phase_03_denoise",
                 "phase_06_frequency_restoration",
                 "phase_01_click_removal",
+                "phase_24_dropout_repair",
                 "phase_29_tape_hiss_reduction",
+                "phase_55_diffusion_inpainting",  # BW-Cap 5 kHz per _MATERIAL_BW_CAP_HZ
             ],
             "wire_recording": [
                 "phase_12_wow_flutter_fix",
