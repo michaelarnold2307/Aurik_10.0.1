@@ -13417,10 +13417,13 @@ class ModernMainWindow(QMainWindow):
                 if _both_done or getattr(self, "_preanalysis_timeout_fired", False):
                     _finalize_preanalysis()
                 elif "defect_scan" in self._preanalysis_flags:
-                    # Defect scan done but era/genre still running → indeterminate
+                    # Defect scan done but era/genre still running → marquee (indeterminate)
+                    # DO NOT set a fixed value here — setValue(9950) caused the "permanent
+                    # 99,0 %" display bug: bar jumped to 99.50 % and stayed there the entire
+                    # time era/genre detection ran (could be many seconds).
                     if hasattr(self, "progress_bar"):
-                        self.progress_bar.setRange(0, 10000)
-                        self.progress_bar.setValue(9950)
+                        self.progress_bar.setRange(0, 0)  # Qt marquee / busy-indicator mode
+                        self.progress_bar.setFormat(t("status.era_genre_detecting"))
                         self.progress_bar.setVisible(True)
                     if hasattr(self, "status_text"):
                         self.status_text.setText(t("status.era_genre_detecting"))
