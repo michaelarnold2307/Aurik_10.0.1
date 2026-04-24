@@ -103,7 +103,6 @@ def _warm_up_librosa() -> None:
         # MUSS _sr_cqt=22050 verwenden — bei sr=4000 oder sr=8000 schlägt CQT fehl
         (librosa.feature.chroma_cqt, (), {"y": np.zeros(int(_sr_cqt * 0.5), dtype=np.float32) + 0.1, "sr": _sr_cqt}),
         (librosa.onset.onset_strength, (), {"y": _dummy_short, "sr": _sr_low}),
-        (librosa.beat.beat_track, (), {"y": _dummy_short, "sr": _sr_low}),
     ]:
         try:
             with warnings.catch_warnings():
@@ -120,6 +119,18 @@ def _warm_up_librosa() -> None:
                 _call(*_args, **_kwargs)
         except Exception as exc:
             logger.debug("librosa warm-up %s: %s", getattr(_call, "__name__", _call), exc)
+
+    # librosa.beat.beat_track triggers numba gufunc JIT at import time (module-level decorator).
+    # In some environments (e.g. ROCm venv) the numba dispatcher lacks get_call_template,
+    # causing AttributeError that propagates and prevents UV3 from loading.
+    # Guard with a separate try/except so numba failures are isolated to this warm-up only.
+    try:
+        _bt_fn = librosa.beat.beat_track  # lazy import → numba compile happens here
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _bt_fn(y=_dummy_short, sr=_sr_low)
+    except Exception as exc:
+        logger.debug("librosa warm-up beat_track: %s", exc)
 
     # util-Attribute explizit auflösen (alle lazy-loader-Ziele)
     for _attr in ("MAX_MEM_BLOCK", "pad_center", "frame", "expand_to", "normalize", "valid_audio", "fix_length"):
@@ -377,7 +388,15 @@ class BassKraftMetric:
                 bass_voiced = np.sum((f0 >= 20) & (f0 <= 120) & (voiced_probs > 0.7))
                 bass_harmonic_strength = float(bass_voiced / max(1, len(f0)))
             except Exception:
-                bass_harmonic_strength = 0.5
+                # Spectral-energy proxy: mid-bass (60–120 Hz) mean energy relative to
+                # full-band mean, using already-computed STFT data — no extra cost.
+                # Replaces the fixed 0.5 constant that made PMGG blind to bass changes.
+                try:
+                    _fb_mid = float(np.mean(magnitude[mid_bass_mask]))
+                    _fb_all = float(np.mean(magnitude)) + 1e-10
+                    bass_harmonic_strength = float(np.clip(_fb_mid / _fb_all, 0.0, 1.0))
+                except Exception:
+                    bass_harmonic_strength = 0.4  # below neutral → signals "not verified"
 
         # Virtual Pitch / Missing Fundamental (Spec §8.1: Oberton-Analyse 120–500 Hz)
         virtual_pitch = self._virtual_pitch_score(magnitude, freqs)
@@ -1301,14 +1320,14 @@ class GrooveMetric:
             audio = np.mean(audio, axis=1)
         audio = np.nan_to_num(audio, nan=0.0)
 
-        # §9.7.6 Audio-Cap — onset characteristics representative over 20 s; longer not required.
-        _MAX_GROOVE_SAMPLES = int(sr * 20)
+        # §9.7.6 Audio-Cap — 8 s is sufficient for IOI statistics; backtrack=False avoids O(N²) predecessor tracking.
+        _MAX_GROOVE_SAMPLES = int(sr * 8)
         if len(audio) > _MAX_GROOVE_SAMPLES:
             _g_start = (len(audio) - _MAX_GROOVE_SAMPLES) // 2
             audio = audio[_g_start : _g_start + _MAX_GROOVE_SAMPLES]
 
         try:
-            onset_times = librosa.onset.onset_detect(y=audio, sr=sr, hop_length=512, backtrack=True, units="time")
+            onset_times = librosa.onset.onset_detect(y=audio, sr=sr, hop_length=512, backtrack=False, units="time")
             if len(onset_times) < 4:
                 # Zu wenige Onsets → kein Rhythmusmuster erkennbar.
                 # Neutral-Score: kein Fehler des Restaurierungs-Systems.
@@ -1364,6 +1383,20 @@ class GrooveMetric:
 
         Falls back to IOI-proxy if DTW module unavailable or fails.
         """
+        # §9.7.6 Performance-Cap — DTW onset detection in pure Python is O(N/hop).
+        # Cap both signals to 30 s (1.44 M samples at 48 kHz) to bound runtime.
+        # Groove characteristics are stationary; 30 s is more than sufficient.
+        _MAX_DTW_SAMPLES = int(sr * 30)
+        if audio.ndim > 1:
+            audio = np.mean(audio, axis=1 if audio.shape[1] <= 2 else 0)
+        if reference.ndim > 1:
+            reference = np.mean(reference, axis=1 if reference.shape[1] <= 2 else 0)
+        if len(audio) > _MAX_DTW_SAMPLES:
+            _g_start = (len(audio) - _MAX_DTW_SAMPLES) // 2
+            audio = audio[_g_start : _g_start + _MAX_DTW_SAMPLES]
+        if len(reference) > _MAX_DTW_SAMPLES:
+            _r_start = (len(reference) - _MAX_DTW_SAMPLES) // 2
+            reference = reference[_r_start : _r_start + _MAX_DTW_SAMPLES]
         try:
             from dsp.dtw_groove import get_groove_measurer
 
@@ -1407,8 +1440,8 @@ class GrooveMetric:
             logger.debug("GrooveMetric.compare DTW fallback: %s", exc)
             # Legacy naive alignment fallback
             try:
-                o_t = librosa.onset.onset_detect(y=original, sr=sr, hop_length=512, backtrack=True, units="time")
-                p_t = librosa.onset.onset_detect(y=processed, sr=sr, hop_length=512, backtrack=True, units="time")
+                o_t = librosa.onset.onset_detect(y=original, sr=sr, hop_length=512, backtrack=False, units="time")
+                p_t = librosa.onset.onset_detect(y=processed, sr=sr, hop_length=512, backtrack=False, units="time")
                 min_len = min(len(o_t), len(p_t), 200)
                 if min_len < 2:
                     return self.measure(processed, sr), 0.0
@@ -2312,7 +2345,7 @@ class SeparationFidelityMetric:
             _res_fft_lf[_hf_start_bw:] = 0.0
             _residual_lf = np.fft.irfft(_res_fft_lf, n=_n_guard)
             rms_sig = float(np.sqrt(np.mean(reference_t[:_n_guard] ** 2)) + 1e-10)
-            rms_res = float(np.sqrt(np.mean(_residual_lf ** 2)) + 1e-10)
+            rms_res = float(np.sqrt(np.mean(_residual_lf**2)) + 1e-10)
         else:
             rms_sig = float(np.sqrt(np.mean(reference_t**2)) + 1e-10)
             rms_res = float(np.sqrt(np.mean(residual**2)) + 1e-10)
@@ -2877,6 +2910,7 @@ class MusicalGoalsChecker:
                         "waerme",
                         "artikulation",
                         "spatial_depth",
+                        "tonal_center",  # §0d: reference = carrier_checkpoint → chroma-correlation vs. carrier-corrected audio
                     )
                     and reference is not None
                 ):

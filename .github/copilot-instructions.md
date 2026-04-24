@@ -4,7 +4,7 @@
 > kontextbewusstes Musik- und Gesangs-Restaurations-, Reparatur- und
 > Rekonstruktions-Denkersystem.* Stand: April 2026 — Version **9.11.14**
 >
-> **instructions_version: 7.3** — §0a DR/BW/Rauschtextur-Ceiling + §0d Carrier-Recovery-Referenzmodell + §1.2a/§4.7/§6.2b normiert 13.04.2026
+> **instructions_version: 7.4** — §0a DR/BW/Rauschtextur-Ceiling + §0d Carrier-Recovery-Referenzmodell + §1.2a/§4.7/§6.2b normiert 13.04.2026; §09.2 PMGG-Blend-Invariante + §2.54 Headroom-Scalar + MDEM Quiet-Zone normiert 23.04.2026
 >
 > Aktuelle Testzahl: **~11598 `def test_`-Funktionen** (436 Testdateien; alle grün)
 >
@@ -228,6 +228,10 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print()
 | `detected_medium_label.setText(...)` ohne `_carrier_bg_label`-Sync | Era-Badge-Block liest `self._carrier_bg_label` und schreibt `detected_medium_label` neu → wenn `_carrier_bg_label` ≠ aktuelle Ketten-HTML → Era-Badge-Update überschreibt die Kettenanzeige mit altem/leerem Content (Silent Data Loss) | Jedes `detected_medium_label.setText(html)` MUSS unmittelbar gefolgt von `self._carrier_bg_label = html` sein — keine Ausnahme |
 | Kettenanzeige-Update bei len < 2 ohne Logging | `if len(chain_keys) < 2: return` — stilles Überspringen; kein Debug-Log; Anzeige bleibt bei Voranalyse-Wert obwohl TontraegerketteDenker geringere/andere Kette meldet | Immer `logger.debug("Kettenanzeige übersprungen – len=%d < 2 (chain=%s)", len(chain_keys), chain_keys)` wenn Guard feuert |
 | Icon-HTML ohne Plaintext-Fallback | `f'<img src="file:///{path}"...'` ohne `if path is None: return label` — fehlendes Icon → kaputtes Bild-Tag im Label; besonders in Background-Threads ohne Exception-Handling fatal | `_render_carrier_html()` nutzen: prüft `_svg` → `_png` → `return label` wenn kein Icon gefunden; immer `except (OSError, TypeError, ValueError): return label` |
+| MDEM Quiet-Zone mit fester Amplitude | `if _tail_rms < 0.003` / `MIN_LEVEL_LUFS = -60.0` — Vinyl/Shellac-Fadeout bei −40 dBFS wird als Musik-Frame klassifiziert → positiver Gain auf Rauschboden → Pegelexplosion bei 15 % Progress | Threshold immer in **dBFS**: `if _tail_rms_dbfs < -36.0` und `if lr < -36.0` → clamp G[k] ≤ 0 (kein positiver Boost im Quiet-Zone). Ausbreitungsregel: Quiet-Zone-Grenze = −36 dBFS, gilt für Frame-Level und Tail-Guard in `micro_dynamics_envelope_morphing.py` |
+| Gain-Morphing ohne Post-Smoothing-Quiet-Zone-Clamp | Pre-Smoothing Guard setzt stille/Fadeout-Segmente korrekt auf 0 dB — aber Savitzky-Golay (window=7, z. B. 17,5 s Reichweite bei HOP_S=2.5 s) verteilt positiven Gain aus Musik-Segmenten zurück → `correct_emotional_arc` boost­et denoised Fadeout → Pegelexplosion trotz korrektem MDEM. `np.interp` erzeugt zusätzlich positiven Übergangs-Boost zwischen Musik- und Stille-Segmenten | **Drei-Stufen-Invariante (§2.30b)**: (1) Pre-Smoothing Guard; (2) Smoother; **(3) Post-Smoothing Guard — MUSS erneut angewendet werden**; (4) `np.interp`; **(5) Per-Sample Quiet-Zone Guard auf interpoliertem Gain**. Gilt für ALLE Gain-Morphing-Funktionen: `morph()` in `micro_dynamics_envelope_morphing.py` UND `correct_arc()` in `emotional_arc_preservation.py`. Regressions-Test: `test_36_no_pegelexplosion_in_denoised_fadeout` — **Schwellwert modul-adaptiv**: `morph()` = −36 dBFS (Einzel-Bedingung); `correct_arc()` = −42 dBFS + 6-dB-Differenz-Bedingung (5-s-Segmente enthalten Mix aus Musik und Stille → einfaches −36 dBFS wäre zu aggressiv auf leise Musikpassagen) |
+| PMGG fixer 60/40-Blend canonical/SGT | `_blended_thr = 0.60 * _cur_thr + 0.40 * float(_sgt_val)` global für alle Ziele und alle Materialien — Shellac `brillanz`: 0.60×0.78+0.40×0.51=0.71 obwohl physikalisches Ceiling 0.51 → 5 Retries bei 15 % Stärke → degradierte Restaurierung | **Delta-adaptiver Blend** (§09.2, §2.54): `delta = canonical − SGT`; `delta > 0.10` → SGT direkt (Ceiling-Fall); `delta > 0.04` → 40 % canonical + 60 % SGT; sonst 60/40. **Pre-Pipeline**: `_pmgg_ceiling_capped_targets = min(SGT, PhysicalCeiling)` VOR Phase-Loop berechnen und als `adaptive_goal_thresholds` an PMGG + Pipeline-Ende übergeben |
+| Headroom-Scalar mit relativer Normierung | `hr_range = ceil − 0.30; hr_ratio = 1 − (curr − 0.30) / hr_range` — CD `brillanz=0.60, ceil=0.99`: scalar=0.57 obwohl 0.39 Headroom (Over-Dampening); Vinyl `waerme=0.65, ceil=0.85`: scalar=0.40 trotz 0.20 Headroom | **Absoluter Headroom** (§2.54 Psychoakustik): `headroom = ceil − curr; hr_ratio = min(1.0, headroom / 0.25)` — bei ≥ 0.25 Abstand zur Decke → Scalar=1.0 (volle Stärke); linear bis Scalar=0.40 an der Decke. Nur für additive/Enhancement-Familien in `_PHASE_INTERVENTION_CLASS`; Restorative/Pflicht-Phasen ausgenommen |
 
 ### Sprachkonvention
 - **UI-Texte, Fehlermeldungen**: Deutsch (Ursache + Lösungsvorschlag)
@@ -925,4 +929,4 @@ ein stark verrauschter Vinyl-Song akzeptiert mehr Chroma-Drift nach Denoise als 
 
 *Diese Richtlinien gelten für alle KI-Agenten (GitHub Copilot, Claude, GPT) die an Aurik 9 arbeiten.*
 *Vollständige normative Spezifikation: `.github/specs/01–08`.*
-*Stand: April 2026 — Aurik 9.11.14 — instructions_version 7.3*
+*Stand: April 2026 — Aurik 9.11.14 — instructions_version 7.4*

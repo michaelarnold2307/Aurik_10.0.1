@@ -281,7 +281,7 @@ class SemanticAudioAnalyzer:
         instruments = []
 
         # Compute STFT
-        f, _t, Zxx = signal.stft(audio, sr, nperseg=2048)
+        f, _t, Zxx = signal.stft(audio, sr, nperseg=2048, boundary="even")
         power = np.abs(Zxx) ** 2
 
         # 1. Vocals detection (formant structure + harmonic energy)
@@ -547,7 +547,7 @@ class SemanticAudioAnalyzer:
     def _compute_onset_envelope(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """Compute onset strength envelope."""
         # Compute STFT
-        _f, _t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=1536)
+        _f, _t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=1536, boundary="even")
 
         # Spectral flux (frame-to-frame change)
         spec_diff = np.diff(np.abs(Zxx), axis=1)

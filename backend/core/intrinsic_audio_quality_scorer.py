@@ -296,6 +296,7 @@ class IntrinsicAudioQualityScorer:
             noverlap=self.fft_size - self.hop_size,
             window=window,
             padded=True,
+            boundary="even",
         )
         return z  # shape (freqs, frames)
 

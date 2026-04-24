@@ -885,8 +885,55 @@ class MusicalQualityAssurance:
             recommendations.append("Rollback to previous checkpoint")
 
         # 4. Check frequency imbalance
+        # §0d Carrier-Recovery-Referenz-Paradoxon: For analog carrier restoration
+        # (vinyl, shellac, tape, etc.) the HF-extension phases (phase_06, phase_07)
+        # intentionally increase brightness — this is the goal, not a violation.
+        # The degraded input has HF loss from the carrier chain; comparing brightness
+        # against it yields false "Over-brightened" flags (e.g. +76% for vinyl).
+        # Fix: use a material-adaptive ceiling instead of a fixed 0.30 threshold.
+        _ANALOG_CARRIER_MATERIALS = frozenset(
+            {
+                MediumType.VINYL_33,
+                MediumType.VINYL_45,
+                MediumType.SHELLAC_78,
+                MediumType.ACETATE,
+                MediumType.REEL_TO_REEL,
+                MediumType.CASSETTE,
+                MediumType.WAX_CYLINDER,
+                MediumType.WIRE_RECORDING,
+                MediumType.MINIDISC,
+                MediumType.ELCASET,
+                MediumType.EIGHT_TRACK,
+                MediumType.BETAMAX_AUDIO,
+                MediumType.VHS_HIFI,
+                MediumType.TRANSCRIPTION_DISC,
+                MediumType.ANALOG_UNKNOWN,
+            }
+        )
+        _is_restoration = processing_mode == ProcessingMode.RESTORATION
+        # §0d/§2.46 Step 5 — BW-Extension raises brightness from near-zero (bandlimited
+        # carrier) to full spec. The relative change (e.g. +77% for vinyl 7→16 kHz) is
+        # intentional and correct. Only an absolute check matters here: if the restored
+        # signal is brighter than medium_gates.max_brightness it's a real issue.
+        # For analog carrier restoration we therefore skip the relative threshold and
+        # rely solely on the absolute gate below.
+        _bright_threshold = (
+            2.0  # Effectively disabled: relative change can be 100 %+ for BW-restored analog
+            if (_is_restoration and medium_type in _ANALOG_CARRIER_MATERIALS)
+            else 0.30  # Studio/digital: standard 30% ceiling
+        )
+        # Absolute brightness gate (both modes): if restored audio exceeds the medium's
+        # physical brightness ceiling we always flag, regardless of relative change.
+        if processed_quality.brightness > medium_gates.max_brightness + 0.15:
+            violations.append(IntegrityViolation.FREQUENCY_IMBALANCE)
+            violation_details[IntegrityViolation.FREQUENCY_IMBALANCE] = (
+                f"Over-brightened (absolute): {processed_quality.brightness:.2f} > "
+                f"{medium_gates.max_brightness:.2f} ceiling"
+            )
+            recommendations.append("High frequencies boosted beyond physical medium ceiling")
+            recommendations.append("Reduce phase_06 / phase_07 strength")
         brightness_change = processed_quality.brightness - original_quality.brightness
-        if brightness_change > 0.30:  # More than 30% brighter
+        if brightness_change > _bright_threshold:  # Never fires for analog restoration (threshold=2.0)
             violations.append(IntegrityViolation.FREQUENCY_IMBALANCE)
             violation_details[IntegrityViolation.FREQUENCY_IMBALANCE] = (
                 f"Over-brightened: brightness increased {brightness_change:.2%}"
@@ -912,11 +959,40 @@ class MusicalQualityAssurance:
             recommendations.append("Reduce compression/limiting")
 
         # 6. Check artifact introduction (THD increase)
+        # NOTE: _estimate_thd measures 2–10 kHz energy relative to 0.2–2 kHz, not
+        # true harmonic distortion. For analog materials where HF restoration intentionally
+        # increases the 2–10 kHz band, a high "THD delta" is correct behaviour, not a defect.
+        # Use a material-adaptive threshold: tight for digital (0.5 pct-pts), generous for
+        # bandwidth-limited analog (30 pct-pts) to avoid false-positive artifact flags.
+        _ANALOG_BW_LIMITED_MEDIA = frozenset(
+            {
+                MediumType.VINYL_33,
+                MediumType.VINYL_45,
+                MediumType.CASSETTE,
+                MediumType.REEL_TO_REEL,
+                MediumType.SHELLAC_78,
+                MediumType.ACETATE,
+                MediumType.WAX_CYLINDER,
+                MediumType.WIRE_RECORDING,
+                MediumType.EIGHT_TRACK,
+                MediumType.ANALOG_UNKNOWN,
+            }
+        )
+        # §0d Carrier-Recovery: In Restoration mode, HF extension (phase_06, phase_07)
+        # legitimately increases 2–10 kHz energy by 30–60 pct-pts. Tight 30% threshold
+        # caused false ARTIFACT_INTRODUCTION on every vinyl/tape HF restoration.
+        # Fix: raise to 60% for restoration of BW-limited analog media.
+        _thd_threshold = (
+            60.0
+            if (_is_restoration and medium_type in _ANALOG_BW_LIMITED_MEDIA)
+            else (30.0 if medium_type in _ANALOG_BW_LIMITED_MEDIA else 0.5)
+        )
         thd_increase = processed_quality.thd_percent - original_quality.thd_percent
-        if thd_increase > 0.5:  # More than 0.5% THD increase
+        if thd_increase > _thd_threshold:
             violations.append(IntegrityViolation.ARTIFACT_INTRODUCTION)
             violation_details[IntegrityViolation.ARTIFACT_INTRODUCTION] = (
-                f"THD increased {thd_increase:.2%} (new artifacts introduced)"
+                # thd_percent is in [0, 100] units — use :.2f to avoid double-×100 via :.2%
+                f"THD increased {thd_increase:.2f}% pts (new artifacts introduced)"
             )
             recommendations.append("Processing introduced distortion")
             recommendations.append("Check for clipping or aggressive processing")

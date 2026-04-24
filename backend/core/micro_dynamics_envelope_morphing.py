@@ -158,10 +158,28 @@ class MicroDynamicsEnvelopeMorphing:
                 # phase_40 to attenuate the musical content (regression).
                 G[k] = float(np.clip(lo - lr, -_frame_max, 0.0))
                 continue
+            # §2.30 Bug-Fix: Denoised-Fade-Out-Guard — if restored frame is in the
+            # quiet/fade-out zone (< -36 dBFS), any positive gain would boost the
+            # cleaned noise floor. Original at -40 dBFS was carrier noise, not music.
+            # Applying positive gain here would cause Pegelexplosion in the fade-out.
+            # -36 dBFS covers vinyl fade-out noise floor range (-40 to -46 dBFS restored).
+            _FADEOUT_QUIET_LUFS = -36.0  # dBFS threshold for fade-out detection
+            if lr < _FADEOUT_QUIET_LUFS:
+                # Restored is in the quiet/noise-floor zone → no positive boost allowed
+                G[k] = float(np.clip(lo - lr, -_frame_max, 0.0))
+                continue
             G[k] = np.clip(lo - lr, -_frame_max, _frame_max)
 
         # Glaettung
         G_smooth = _savgol_smooth(G)
+
+        # §2.30 Post-Smoothing Quiet-Zone-Clamp: SG-Glaettung kann den Boost aus
+        # Musik-Frames in angrenzende Fadeout-Frames verschleppen (window=7 → 1.4 s).
+        # Nach der Glaettung alle Frames nochmals auf kein-positiver-Boost prüfen,
+        # wenn das restaurierte Signal in der Quiet-Zone (< -36 dBFS) liegt.
+        for k in range(n_frames):
+            if L_rest[k] < -36.0 and G_smooth[k] > 0.0:
+                G_smooth[k] = 0.0
 
         # Gain-Anwendung: frame-weise lineare Interpolation
         hop = self.HOP_SIZE_SAMPLES
@@ -193,12 +211,22 @@ class MicroDynamicsEnvelopeMorphing:
             # Check if tail audio is silence/noise floor (RMS < -50 dBFS ≈ 0.003)
             _tail_audio = res_mono[_last_covered:] if _last_covered < len(res_mono) else np.zeros(1)
             _tail_rms = float(np.sqrt(np.mean(_tail_audio**2) + 1e-12))
-            if _tail_rms < 0.003:
-                # Tail is silence: hold last gain (don't boost noise to unity)
-                gain_envelope[_last_covered:] = _last_gain
+            _tail_rms_dbfs = 20.0 * math.log10(_tail_rms + 1e-12)
+            # §2.30 Tail-Guard: covers both digital silence (<-50 dBFS) and
+            # vinyl/tape fade-out noise floor (<-36 dBFS). In both cases do NOT
+            # boost — clamp gain to min(last_gain, 1.0) to avoid Pegelexplosion.
+            _tail_in_quiet_zone = _tail_rms_dbfs < -36.0  # vinyl noise floor threshold
+            if _tail_in_quiet_zone:
+                # Tail is silence or noise floor: cap gain at unity (no boost)
+                _safe_gain = min(_last_gain, 1.0)
+                gain_envelope[_last_covered:] = _safe_gain
             else:
-                # Tail has content: smooth interpolation to unity
-                gain_envelope[_last_covered:] = np.linspace(_last_gain, 1.0, _tail_len, dtype=np.float32)
+                # Tail has musical content: smooth interpolation to unity,
+                # but never exceed 1.0 when last_gain > 1.0 (avoids fade-out boost)
+                _interp = np.linspace(_last_gain, 1.0, _tail_len, dtype=np.float32)
+                if _last_gain > 1.0:
+                    _interp = np.minimum(_interp, 1.0)
+                gain_envelope[_last_covered:] = _interp
 
         # Auf Stereo/Mono anwenden
         if is_stereo:

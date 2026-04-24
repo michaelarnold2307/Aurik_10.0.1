@@ -71,6 +71,57 @@ _PGHI_TOL: float = 1e-6  # PGHI convergence tolerance
 _KL_THRESHOLD: float = 0.15
 
 
+def _one_sided_gap_envelope(
+    gap_length: int,
+    *,
+    fade_direction: str,
+    goal_weights: dict[str, float] | None = None,
+    restorability_score: float = 65.0,
+) -> np.ndarray:
+    """Return a bounded, goal-aware envelope for BOF/EOF gap synthesis.
+
+    One-sided gaps have only one physical anchor. The envelope therefore must
+    always converge to the missing boundary, while its curvature is modulated by
+    the already computed per-song goal profile (§2.56) and restorability.
+    """
+    if gap_length <= 0:
+        return np.zeros(0, dtype=np.float32)
+
+    _gw = goal_weights if isinstance(goal_weights, dict) else {}
+    _preserve = float(
+        np.mean(
+            [
+                np.clip(float(_gw.get("natuerlichkeit", 1.0)), 0.30, 2.00),
+                np.clip(float(_gw.get("authentizitaet", 1.0)), 0.30, 2.00),
+                np.clip(float(_gw.get("timbre_authentizitaet", 1.0)), 0.30, 2.00),
+                np.clip(float(_gw.get("emotionalitaet", 1.0)), 0.30, 2.00),
+                np.clip(float(_gw.get("mikrodynamik", 1.0)), 0.30, 2.00),
+            ]
+        )
+    )
+    _detail = float(
+        np.mean(
+            [
+                np.clip(float(_gw.get("transparenz", 1.0)), 0.30, 2.00),
+                np.clip(float(_gw.get("brillanz", 1.0)), 0.30, 2.00),
+                np.clip(float(_gw.get("artikulation", 1.0)), 0.30, 2.00),
+            ]
+        )
+    )
+    _rest = float(np.clip(restorability_score, 0.0, 100.0))
+    _shape = float(
+        np.clip(
+            1.10 + 0.30 * (_preserve - 1.0) - 0.18 * (_detail - 1.0) - 0.20 * ((_rest - 50.0) / 50.0),
+            0.85,
+            1.65,
+        )
+    )
+    _phase = np.linspace(0.0, np.pi / 2.0, gap_length, dtype=np.float32)
+    if fade_direction == "out":
+        return (np.cos(_phase) ** _shape).astype(np.float32)
+    return (np.sin(_phase) ** _shape).astype(np.float32)
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # PGHI — Phase Gradient Heap Integration (Pruša & Rajmic 2017)
 # ───────────────────────────────────────────────────────────────────────────
@@ -342,6 +393,8 @@ def _build_target_estimate(
     post_ctx: np.ndarray,
     gap_length: int,
     sr: int,
+    goal_weights: dict[str, float] | None = None,
+    restorability_score: float = 65.0,
 ) -> np.ndarray:
     """Build context-conditioned target estimate x_1 for flow matching.
 
@@ -438,6 +491,21 @@ def _build_target_estimate(
     # 7. Combine: sinusoidal (harmonic) + shaped noise (stochastic) + temporal (transition)
     # Weights: sinusoidal dominates for tonal content, temporal for continuity
     target = 0.50 * sinusoidal + 0.15 * shaped_noise + 0.35 * temporal
+
+    if pre_tile_len > 0 and post_tile_len == 0:
+        target *= _one_sided_gap_envelope(
+            gap_length,
+            fade_direction="out",
+            goal_weights=goal_weights,
+            restorability_score=restorability_score,
+        )
+    elif post_tile_len > 0 and pre_tile_len == 0:
+        target *= _one_sided_gap_envelope(
+            gap_length,
+            fade_direction="in",
+            goal_weights=goal_weights,
+            restorability_score=restorability_score,
+        )
 
     return np.nan_to_num(target, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
 
@@ -549,6 +617,8 @@ def _pghi_finalize(
     pre_ctx: np.ndarray,
     post_ctx: np.ndarray,
     sr: int,
+    goal_weights: dict[str, float] | None = None,
+    restorability_score: float = 65.0,
 ) -> np.ndarray:
     """Apply PGHI phase reconstruction and boundary crossfade.
 
@@ -581,13 +651,39 @@ def _pghi_finalize(
         reconstructed = generated.copy()
 
     # Energy matching to context
-    ctx_rms = 0.5 * (
-        (np.sqrt(np.mean(pre_ctx**2)) if len(pre_ctx) > 0 else 0.01)
-        + (np.sqrt(np.mean(post_ctx**2)) if len(post_ctx) > 0 else 0.01)
-    )
+    _has_pre = len(pre_ctx) > 0
+    _has_post = len(post_ctx) > 0
+    _pre_rms = np.sqrt(np.mean(pre_ctx**2)) if _has_pre else 0.01
+    _post_rms = np.sqrt(np.mean(post_ctx**2)) if _has_post else 0.01
+    if _has_pre and _has_post:
+        ctx_rms = 0.5 * (_pre_rms + _post_rms)
+    elif _has_pre:
+        ctx_rms = _pre_rms * 0.6
+    elif _has_post:
+        ctx_rms = _post_rms * 0.6
+    else:
+        ctx_rms = 0.01
     gen_rms = np.sqrt(np.mean(reconstructed**2)) + 1e-10
     if gen_rms > 0 and ctx_rms > 0:
-        reconstructed *= ctx_rms / gen_rms
+        if _has_pre and _has_post:
+            reconstructed *= ctx_rms / gen_rms
+        else:
+            reconstructed *= min(1.0, ctx_rms / gen_rms)
+
+    if _has_pre and not _has_post:
+        reconstructed *= _one_sided_gap_envelope(
+            gap_length,
+            fade_direction="out",
+            goal_weights=goal_weights,
+            restorability_score=restorability_score,
+        )
+    elif _has_post and not _has_pre:
+        reconstructed *= _one_sided_gap_envelope(
+            gap_length,
+            fade_direction="in",
+            goal_weights=goal_weights,
+            restorability_score=restorability_score,
+        )
 
     # Boundary crossfade (Hanning, 10 ms per spec)
     fade_samples = min(int(sr * _FADE_MS / 1000.0), gap_length // 4)
@@ -646,6 +742,8 @@ class FlowAudioModel:
         *,
         n_steps: int = 8,
         conditioning: np.ndarray | None = None,
+        goal_weights: dict[str, float] | None = None,
+        restorability_score: float = 65.0,
     ) -> np.ndarray | None:
         """Inpaint a gap in the audio signal via conditional flow matching.
 
@@ -719,7 +817,14 @@ class FlowAudioModel:
             return None
 
         # ── Build target estimate x_1 ──
-        x_1 = _build_target_estimate(pre_ctx, post_ctx, gap_length, sr)
+        x_1 = _build_target_estimate(
+            pre_ctx,
+            post_ctx,
+            gap_length,
+            sr,
+            goal_weights=goal_weights,
+            restorability_score=restorability_score,
+        )
 
         # ── Sample noise x_0 ──
         ctx_rms = max(
@@ -745,7 +850,14 @@ class FlowAudioModel:
 
         # ── PGHI finalization + crossfade ──
         try:
-            inpainted = _pghi_finalize(generated, pre_ctx, post_ctx, sr)
+            inpainted = _pghi_finalize(
+                generated,
+                pre_ctx,
+                post_ctx,
+                sr,
+                goal_weights=goal_weights,
+                restorability_score=restorability_score,
+            )
         except Exception as exc:
             logger.warning("FlowAudio PGHI finalization failed: %s", exc)
             return None

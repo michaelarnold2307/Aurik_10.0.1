@@ -94,7 +94,7 @@ def analyze_zones(
             window="hann",
             nperseg=effective_win,
             noverlap=effective_noverlap,
-            boundary="zeros",
+            boundary="even",
             padded=True,
         )
         # complex64 instead of complex128: halves STFT memory footprint.

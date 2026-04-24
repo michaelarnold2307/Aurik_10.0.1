@@ -1169,7 +1169,7 @@ class DropoutRepairPhase(PhaseInterface):
         # STFT
         nperseg = min(2048, len(audio))  # Cap nperseg to audio length
         noverlap = nperseg // 2
-        _f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+        _f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary="even")
 
         # Total spectral energy per frame
         energy_per_frame = np.sum(np.abs(Zxx) ** 2, axis=0)
@@ -1704,8 +1704,8 @@ class DropoutRepairPhase(PhaseInterface):
             try:
                 from scipy.signal import stft as _stft_fn
 
-                _, _, Z_bef = _stft_fn(ctx_bef, sr, nperseg=eff_win, noverlap=eff_win - eff_hop)
-                _, _, Z_aft = _stft_fn(ctx_aft, sr, nperseg=eff_win, noverlap=eff_win - eff_hop)
+                _, _, Z_bef = _stft_fn(ctx_bef, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
+                _, _, Z_aft = _stft_fn(ctx_aft, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
             except Exception:
                 continue
 
@@ -1730,7 +1730,7 @@ class DropoutRepairPhase(PhaseInterface):
                 from scipy.signal import istft as _istft_fn
                 from scipy.signal import stft as _stft_fn
 
-                _, _, Zxx_fill = _stft_fn(audio_fill, sr, nperseg=eff_win, noverlap=eff_win - eff_hop)
+                _, _, Zxx_fill = _stft_fn(audio_fill, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
             except Exception:
                 continue
 
@@ -1809,8 +1809,8 @@ class DropoutRepairPhase(PhaseInterface):
         TOP_K = 20  # Top-Sinusoide pro Frame
 
         try:
-            _, _, Z_bef = signal.stft(before, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
-            _, _, Z_aft = signal.stft(after, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+            _, _, Z_bef = signal.stft(before, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary="even")
+            _, _, Z_aft = signal.stft(after, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary="even")
 
             mag_bef = np.abs(Z_bef[:, -1])  # Letzter Frame vor Lücke
             phase_bef = np.angle(Z_bef[:, -1])
@@ -1904,7 +1904,7 @@ class DropoutRepairPhase(PhaseInterface):
 
         try:
             context = np.concatenate([before, after])
-            _, _, Z_ctx = signal.stft(context, self.sample_rate, nperseg=nperseg, noverlap=noverlap)
+            _, _, Z_ctx = signal.stft(context, self.sample_rate, nperseg=nperseg, noverlap=noverlap, boundary="even")
             V = np.abs(Z_ctx) ** 2 + EPS  # Leistungsspektrum (F×T, positiv)
             n_freq, n_frames_ctx = V.shape
 

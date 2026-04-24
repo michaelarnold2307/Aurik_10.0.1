@@ -4983,9 +4983,34 @@ class UnifiedRestorerV3:
                 " ".join(f"{k}={v:.2f}" for k, v in sorted(_sgi.weights.items())),
             )
         except Exception as _sgi_err:
-            logger.warning("§2.56 SongGoalImportance failed (uniform fallback): %s", _sgi_err)
-            self._song_goal_importance = None
-            self._song_goal_weights = None
+            logger.warning("§2.56 SongGoalImportance failed (label-stage fallback): %s", _sgi_err)
+            # Label-stage-only fallback: genre+era+material+vocal weights without audio features.
+            # Better than None — gives PMGG/CIG meaningful per-song context even when audio
+            # feature extraction fails. NaN from audio features won't contaminate this path.
+            try:
+                _sgi_fallback = estimate_goal_importance(
+                    genre_label=_cal_genre_label or "",
+                    era_decade=getattr(_era_result, "decade", None) if _era_result is not None else None,
+                    material_type=material_type,
+                    restorability_score=float(_pmgg_restorability_score),
+                    vocal_detected=bool(
+                        getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0) > 0.4
+                    ),
+                    vocal_confidence=float(
+                        getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0)
+                    ),
+                    is_studio_2026=self.is_studio_mode(),
+                )
+                self._song_goal_importance = _sgi_fallback
+                self._song_goal_weights = _sgi_fallback.weights
+                logger.info(
+                    "§2.56 Label-stage fallback active: %s",
+                    " ".join(f"{k}={v:.2f}" for k, v in sorted(_sgi_fallback.weights.items())),
+                )
+            except Exception as _sgi_fb_err:
+                logger.warning("§2.56 Label-stage fallback also failed: %s", _sgi_fb_err)
+                self._song_goal_importance = None
+                self._song_goal_weights = None
 
         # §09.2 [RELEASE_MUST] Per-Song Goal Targets (Era × Material × Genre Bias)
         # Single Source of Truth: calibration_matrix.estimate_song_goal_targets()
@@ -5019,6 +5044,45 @@ class UnifiedRestorerV3:
         except Exception as _sgt_err:
             logger.warning("§09.2 SongGoalTargets failed (canonical fallback): %s", _sgt_err)
             self._song_goal_targets = None
+
+        # §2.54 Pre-Pipeline Physical Ceiling — gecappte PMGG-Targets für per-Phase Nutzung.
+        # Berechnet PhysicalCeiling auf dem Eingabe-Audio (degradiert) um die Signal-SNR-
+        # und Bandbreiten-basierten Goal-Obergrenzen zu ermitteln. Combined mit SGT ergibt
+        # min(SGT, ceiling) pro Goal — verhindert, dass PMGG Ziele fordert die physikalisch
+        # unerreichbar sind (z.B. brillanz > 0.75 für Shellac-8kHz-Signal).
+        self._pmgg_ceiling_capped_targets: dict[str, float] | None = None
+        try:
+            if isinstance(getattr(self, "_song_goal_targets", None), dict) and self._song_goal_targets:
+                from backend.core.physical_ceiling_estimator import PhysicalCeilingEstimator as _EarlyPCE
+
+                _pce_mat_key = _sgt_mat_str if "_sgt_mat_str" in dir() else ""
+                _pce_audio = audio if audio.ndim <= 2 else audio[:2]  # max stereo
+                _pce_result = _EarlyPCE().estimate(_pce_audio, sample_rate, {}, _pce_mat_key)
+                _pce_ceiling = _pce_result.ceiling  # dict[str, float]
+                # min(SGT, ceiling) per goal — ceiling-cap only when ceiling < SGT
+                self._pmgg_ceiling_capped_targets = {
+                    g: float(min(v, _pce_ceiling[g]) if g in _pce_ceiling else v)
+                    for g, v in self._song_goal_targets.items()
+                }
+                _capped_log = [
+                    f"{g}:{self._song_goal_targets[g]:.3f}→{self._pmgg_ceiling_capped_targets[g]:.3f}"
+                    for g in self._pmgg_ceiling_capped_targets
+                    if abs(self._pmgg_ceiling_capped_targets[g] - self._song_goal_targets[g]) > 0.005
+                ]
+                if _capped_log:
+                    logger.info(
+                        "§2.54 PrePipelineCeiling: mat=%s bw=%.0f Hz → ceiling caps: %s",
+                        _pce_mat_key,
+                        _pce_result.effective_bandwidth_hz,
+                        ", ".join(_capped_log[:6]),
+                    )
+                else:
+                    self._pmgg_ceiling_capped_targets = dict(self._song_goal_targets)
+        except Exception as _ppc_err:
+            logger.debug("§2.54 PrePipelineCeiling fehlgeschlagen (SGT-Fallback): %s", _ppc_err)
+            self._pmgg_ceiling_capped_targets = (
+                dict(self._song_goal_targets) if isinstance(getattr(self, "_song_goal_targets", None), dict) else None
+            )
 
         if _pass_through_mode:
             if _clean_digital_mode and not (_input_snr_db > 40.0 and _max_defect_severity < 0.15):
@@ -5063,6 +5127,7 @@ class UnifiedRestorerV3:
                 defekt_hint=self._active_defekt_hint,
                 audio=audio,
                 sr=sample_rate,
+                goal_weights=getattr(self, "_song_goal_weights", None),
             )
             # Kein Denker-Plan — UV3 optimiert autonom (Legacy-Pfad / fail-safe).
             selected_phases = self._optimize_phase_plan_intelligence(
@@ -5814,6 +5879,13 @@ class UnifiedRestorerV3:
                 )
                 # §2.56: Inject song-specific goal weights into FeedbackChain
                 _fc_chain.goal_weights = getattr(self, "_song_goal_weights", None)
+                # §09.2 + §2.54: Inject ceiling-capped adaptive goal targets so FeedbackChain
+                # uses physically achievable thresholds (min(SGT, PhysicalCeiling)).
+                # Falls back to raw SGT if ceiling-capped targets not yet computed.
+                _sgt_fc = getattr(self, "_pmgg_ceiling_capped_targets", None) or getattr(
+                    self, "_song_goal_targets", None
+                )
+                _fc_chain.adaptive_goal_thresholds = dict(_sgt_fc) if isinstance(_sgt_fc, dict) and _sgt_fc else None
                 # §2.34 GPP-WIRE: GoalPriorityProtocol als in-loop Phase-Callback verdrahten
                 try:
                     from backend.core.goal_priority_protocol import check_iteration_abort as _check_gpp
@@ -6620,7 +6692,6 @@ class UnifiedRestorerV3:
                 "🎯 AdaptiveGoalThresholds: konfiguriert (material=%s rest=%.0f)",
                 getattr(_classified_material, "value", str(_classified_material)),
                 float(_pmgg_restorability_score),
-                getattr(_classified_material, "value", str(_classified_material)),
             )
         except Exception as _agt_exc:
             logger.debug("AdaptiveGoalThresholds nicht verfügbar: %s", _agt_exc)
@@ -6664,15 +6735,29 @@ class UnifiedRestorerV3:
 
             # §09.2 [RELEASE_MUST] Song-Goal-Targets: Era × Material × Genre adaptive floors
             # Computed earlier in restore() as self._song_goal_targets (calibration_matrix.estimate_song_goal_targets)
-            _sgt_local = getattr(self, "_song_goal_targets", None)
+            # §2.54 Material-adaptive blend: large canonical-vs-SGT delta → weight strongly toward SGT.
+            # Same logic as PMGG per-phase (§09.2 adaptive blend) so pipeline-end threshold
+            # is consistent with what PMGG accepted during the phase loop.
+            _sgt_local = getattr(self, "_pmgg_ceiling_capped_targets", None) or getattr(
+                self, "_song_goal_targets", None
+            )
             if isinstance(_sgt_local, dict) and _sgt_local:
                 try:
                     for _sgt_goal, _sgt_val in _sgt_local.items():
                         if _sgt_goal in _effective_goal_thresholds:
-                            _cur_thr = _effective_goal_thresholds[_sgt_goal]
-                            # Conservative blend: 40% SGT, 60% v8-adaptive current value.
-                            # SGT refines era/material/genre context without overriding signal-level adaptation.
-                            _blended_thr = 0.60 * _cur_thr + 0.40 * float(_sgt_val)
+                            _cur_thr = float(_effective_goal_thresholds[_sgt_goal])
+                            _sgt_f = float(_sgt_val)
+                            _delta = _cur_thr - _sgt_f
+                            # Material-adaptive blend weight (same logic as PMGG §09.2 per-phase):
+                            if _delta > 0.10:
+                                # Large constraint: use SGT directly (physical ceiling or strong bias)
+                                _blended_thr = _sgt_f
+                            elif _delta > 0.04:
+                                # Moderate constraint: 40% canonical / 60% SGT
+                                _blended_thr = 0.40 * _cur_thr + 0.60 * _sgt_f
+                            else:
+                                # Small or upward: 60% canonical / 40% SGT (conservative)
+                                _blended_thr = 0.60 * _cur_thr + 0.40 * _sgt_f
                             _effective_goal_thresholds[_sgt_goal] = float(np.clip(_blended_thr, 0.30, 0.99))
                 except Exception as _sgt_apply_exc:
                     logger.debug("§09.2 SongGoalTargets konnten nicht angewendet werden: %s", _sgt_apply_exc)
@@ -8116,7 +8201,11 @@ class UnifiedRestorerV3:
                         _joint_needed_db = float(np.clip(float(_lufs_orig_final - _joint_lufs_current), -12.0, 12.0))
                         for _scale in (1.00, 0.85, 0.70, 0.55, 0.40, 0.28):
                             _cand_gain = float(10.0 ** ((_joint_needed_db * _scale) / 20.0))
-                            _cand = _apply_music_only_gain(_joint_base, _cand_gain)
+                            # _apply_music_only_gain was undefined — use _musical_gain_envelope
+                            # (envelope-gated gain, adaptive noise-floor guard §2.45a)
+                            _cand = UnifiedRestorerV3._musical_gain_envelope(
+                                _joint_base, _cand_gain, gate_dbfs=-50.0, crossfade_ms=10.0, sr=sample_rate
+                            )
                             _cand_noise = _nf_dbfs(_cand)
                             if _cand_noise > _noise_limit_final:
                                 _cand_reduce_db = float(np.clip((_cand_noise - _noise_limit_final) + 1.0, 1.5, 12.0))
@@ -12520,7 +12609,15 @@ class UnifiedRestorerV3:
         }
 
     def _select_phases(
-        self, defect_result, *, causal_plan=None, chain_info=None, defekt_hint=None, audio=None, sr=48000
+        self,
+        defect_result,
+        *,
+        causal_plan=None,
+        chain_info=None,
+        defekt_hint=None,
+        audio=None,
+        sr=48000,
+        goal_weights=None,
     ) -> list[str]:
         """
         Wählt Phasen kontextadaptiv basierend auf Defektbefund, Material und Modus.
@@ -13379,6 +13476,56 @@ class UnifiedRestorerV3:
                         _dh_conf,
                         _dh_added,
                     )
+
+        # ════════════════════════════════════════════════════════════════════
+        # TIER 1.8 — Goal-Gap Phase Injection (§2.56 Goal-Weight-Driven)
+        # Wenn ein musikalisches Ziel hohe song-spezifische Wichtigkeit hat
+        # (weight ≥ 1.4), aber keine einzige zugehörige Phase vom DefectScanner
+        # oder CausalReasoner ausgewählt wurde, wird die primäre Serving-Phase
+        # injiziert. Nur broadly-applicable, leichte Phasen — kein schweres ML,
+        # keine material-spezifischen Phasen (die sind schon via TIER 0/1 aktiv).
+        # §0 Primum non nocere: Injection ergänzt Coverage, ersetzt nie.
+        # ════════════════════════════════════════════════════════════════════
+        if goal_weights:
+            # goal → liste primärer Phasen (erste verfügbare wird injiziert)
+            _GOAL_GAP_SAFE_PHASES: dict[str, list[str]] = {
+                "brillanz": ["phase_06_frequency_restoration"],
+                "timbre_authentizitaet": ["phase_07_harmonic_restoration"],
+                "artikulation": ["phase_08_transient_preservation"],
+                "transparenz": ["phase_23_spectral_repair"],
+                "waerme": ["phase_07_harmonic_restoration"],
+                "micro_dynamics": ["phase_26_dynamic_range_expansion"],
+                "spatial_depth": ["phase_48_stereo_imaging"],
+            }
+            _GOAL_GAP_THRESHOLD = 1.4
+            _selected_set_18 = set(selected)
+            _goal_gap_added: list[str] = []
+            for _gg_goal, _gg_candidates in _GOAL_GAP_SAFE_PHASES.items():
+                _gg_weight = float((goal_weights or {}).get(_gg_goal, 1.0))
+                if _gg_weight < _GOAL_GAP_THRESHOLD:
+                    continue
+                # Prüfe ob bereits eine Phase aus dieser Ziel-Gruppe aktiv ist
+                # (startswith "phase_XX_" where XX = phase number)
+                _already_covered = any(
+                    any(_sel.startswith("phase_" + _ggp.split("_")[1] + "_") for _sel in _selected_set_18)
+                    for _ggp in _gg_candidates
+                )
+                if _already_covered:
+                    continue
+                # Injiziere primäre Phase für dieses Ziel
+                for _ggp in _gg_candidates:
+                    if _ggp not in _selected_set_18:
+                        selected.append(_ggp)
+                        _selected_set_18.add(_ggp)
+                        _goal_gap_added.append(_ggp)
+                        break
+            if _goal_gap_added:
+                logger.info(
+                    "🎯 Goal-Gap §2.56 Tier-1.8: %d Phase(n) für hohe Ziel-Gewichtung (≥%.1f) injiziert: %s",
+                    len(_goal_gap_added),
+                    _GOAL_GAP_THRESHOLD,
+                    _goal_gap_added,
+                )
 
         # ════════════════════════════════════════════════════════════════════
         # TIER 2 — Frequenz- / Spektral-Restaurierung
@@ -16153,6 +16300,18 @@ class UnifiedRestorerV3:
                     phase_start = (
                         self.performance_guard.start_phase(phase_id) if self.performance_guard else time.time()
                     )
+                    # §PROGRESS: Set heartbeat scope for parallel phases so sub-bar fills
+                    # proportionally during long ML phases (same as sequential phases).
+                    _hb_n_sel_p = max(len(selected_phases), 1)
+                    _hb_idx_p = len(future_map)  # index at submission time
+                    _hb_pct_start_p = _phase_progress_start + int(
+                        (_phase_progress_end - _phase_progress_start) * _hb_idx_p / _hb_n_sel_p
+                    )
+                    _hb_pct_end_p = _phase_progress_start + int(
+                        (_phase_progress_end - _phase_progress_start) * (_hb_idx_p + 1) / _hb_n_sel_p
+                    )
+                    self._active_pipeline_cb_for_sub = progress_callback
+                    self._active_phase_pct_for_sub = (_hb_pct_start_p, _hb_pct_end_p)
                     # §PROGRESS: Emit on phase activation (parallel submission) — real-time ML plugin detection
                     if progress_callback is not None:
                         try:
@@ -16356,10 +16515,13 @@ class UnifiedRestorerV3:
                 "phase_02",
                 "phase_03",
                 "phase_05",
+                "phase_06",  # §2.46 Step 5: BW-Extension (additiv) — Checkpoint NACH HF-Recovery
+                "phase_07",  # §2.46 Step 5: Harmonic Restoration (additiv)
                 "phase_09",
                 "phase_12",
                 "phase_18",
                 "phase_20",
+                "phase_23",  # §2.46 Step 5: Spectral Repair (additiv)
                 "phase_24",
                 "phase_25",
                 "phase_27",
@@ -16771,6 +16933,66 @@ class UnifiedRestorerV3:
                                     _vocal_strength_scale,
                                 )
 
+                            # §2.54 Ceiling-Aware Headroom Scalar
+                            # Additive/Enhancement-Phasen arbeiten mit einer Stärke proportional
+                            # zum verbleibenden Headroom bis zur physikalischen Deckengrenze.
+                            # Wenn das Audio bereits nah an der Decke ist (z.B. brillanz=0.48 bei
+                            # Ceiling=0.51), soll die Phase mit reduzierter Stärke laufen —
+                            # Over-Processing wird vermieden, Artefakt-Risiko sinkt.
+                            # Restorative/Carrier-Repair-Phasen und Pflicht-Phasen sind ausgenommen.
+                            _ceiling_tgts = getattr(self, "_pmgg_ceiling_capped_targets", None)
+                            if (
+                                isinstance(_ceiling_tgts, dict)
+                                and _ceiling_tgts
+                                and isinstance(_pmgg_scores_curr, dict)
+                                and _pmgg_scores_curr
+                                and not _is_restorative_phase
+                                and not _is_mandatory_phase
+                            ):
+                                _hr_family = self._PHASE_INTERVENTION_CLASS.get(phase_id, "general")
+                                _ADDITIVE_HR_FAMILIES = frozenset(
+                                    {
+                                        "harmonic_reconstruction",
+                                        "harmonic_enhancement",
+                                        "tonal_enhancement",
+                                        "source_enhancement",
+                                        "stereo_enhancement",
+                                        "stereo_generation",
+                                    }
+                                )
+                                if _hr_family in _ADDITIVE_HR_FAMILIES:
+                                    # P4/P5-Goals — am stärksten von Enhancement-Phasen beeinflusst
+                                    _HR_GOALS = ("brillanz", "waerme", "raumtiefe", "bass_kraft", "sep_fidelity")
+                                    # Headroom-Fenster: innerhalb der letzten 0.25 zur Decke wird gedämpft.
+                                    # Jenseits von 0.25 Headroom → volle Stärke (Phase kann frei arbeiten).
+                                    # Wissen: psychoakustisches Sättigungsgesetz — Grenznutzen sinkt nahe
+                                    # physikalischer Decke; Artefakt-Risiko steigt gleichzeitig.
+                                    _HR_WINDOW = 0.25
+                                    _min_hr = 1.0
+                                    for _hrg in _HR_GOALS:
+                                        _hr_ceil = float(_ceiling_tgts.get(_hrg, 1.0))
+                                        _hr_curr = float(_pmgg_scores_curr.get(_hrg, 0.0))
+                                        # Absoluter Headroom (Abstand bis zur Decke)
+                                        _headroom = max(0.0, _hr_ceil - _hr_curr)
+                                        # Linear: 1.0 bei ≥ HR_WINDOW Abstand; 0.0 an der Decke
+                                        _hr_ratio = min(1.0, _headroom / _HR_WINDOW)
+                                        _min_hr = min(_min_hr, _hr_ratio)
+                                    # Bound: nie unter 40 % (Phase soll immer einen Beitrag leisten)
+                                    _hr_strength = float(np.clip(_min_hr, 0.40, 1.0))
+                                    if _hr_strength < 0.95:  # Nur bei bedeutsamer Differenz
+                                        _pre_hr_s = _combined_strength
+                                        _combined_strength = float(
+                                            np.clip(_combined_strength * _hr_strength, 0.05, 1.0)
+                                        )
+                                        logger.debug(
+                                            "§2.54 HeadroomScalar %s: family=%s min_hr=%.2f strength %.3f→%.3f",
+                                            phase_id,
+                                            _hr_family,
+                                            _min_hr,
+                                            _pre_hr_s,
+                                            _combined_strength,
+                                        )
+
                             _pmgg_audio_out, _pmgg_scores_curr, _pmgg_entry = _pmgg_gate.wrap_phase(
                                 _phase_for_exec,
                                 current_audio,
@@ -16809,12 +17031,26 @@ class UnifiedRestorerV3:
                                     "vocal_strength_scale": float(
                                         getattr(self, "_restoration_context", {}).get("vocal_strength_scale", 1.0)
                                     ),  # §2.9a: explicit soft-activation hint for vocal phases
+                                    "song_goal_weights": getattr(
+                                        self, "_song_goal_weights", None
+                                    ),  # §2.56 phase-local adaptive guards (phase_20/49/55)
                                 },
                                 restorability_score=_pmgg_restorability_score,  # §2.29 normativ
                                 applicable_goals=applicable_goals,  # §2.32 normativ
                                 initial_strength=_combined_strength,  # §2.31 + §Harmonisierung
                                 is_studio_2026=self.is_studio_mode(),  # §9.10.77 Pareto-differenzierte P3–P5-Schwellwerte
                                 goal_weights=getattr(self, "_song_goal_weights", None),  # §2.56 Song-Goal-Importance
+                                adaptive_goal_thresholds=(  # §09.2 + §2.54 ceiling-capped adaptive floors → PMGG per-phase
+                                    dict(self._pmgg_ceiling_capped_targets)
+                                    if isinstance(getattr(self, "_pmgg_ceiling_capped_targets", None), dict)
+                                    and self._pmgg_ceiling_capped_targets
+                                    else (
+                                        dict(self._song_goal_targets)
+                                        if isinstance(getattr(self, "_song_goal_targets", None), dict)
+                                        and self._song_goal_targets
+                                        else None
+                                    )
+                                ),
                             )
                             _pmgg_log_entries.append(_pmgg_entry)
                             _collect_guard_payload(_phase_for_exec, phase_id)
@@ -18020,6 +18256,7 @@ class UnifiedRestorerV3:
                     _ma, _mb = float(np.mean(_a)), float(np.mean(_b))
                     _v = float(np.dot(_a - _ma, _b - _mb)) / (float(len(_a)) * _sa * _sb + 1e-12)
                     return float(max(-1.0, min(1.0, _v)))
+
                 _corr_before = _safe_corr(_pre_carrier_audio[0], _pre_carrier_audio[1])
                 _corr_after = _safe_corr(current_audio[0], current_audio[1])
                 _input_is_narrow = abs(_corr_before) >= 0.92

@@ -3493,7 +3493,7 @@ class DefectScanner:
            of frequency bins → tonal narrowband → heavy discount.
         """
         # STFT for Time-Frequency Analysis
-        _f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=1024)
+        _f, _t, Zxx = signal.stft(audio, self.sample_rate, nperseg=1024, boundary="even")
         spectrogram = np.abs(Zxx)
 
         # Spectral Flatness Measure (SFM)

@@ -703,29 +703,29 @@ def _defect_analysis_to_display(scores: dict, status: str = "detected") -> dict:
         "wow": round(sev_wow * 3.0, 3),  # 0–3 % Tonhöhenschwankung (< 0.5 Hz)
         "flutter": round(sev_flutter * 3.0, 3),  # 0–3 % Tonhöhenschwankung (0.5–200 Hz)
         # Float-Felder (0–100 % Schwere) für defect_summary_label
-        "rumble": round(sev_rumble * 100.0, 1),
-        "digital_artifacts": round(sev_digital * 100.0, 1),
-        "compression_artifacts": round(sev_compress * 100.0, 1),
-        "stereo_imbalance": round(sev_stereo * 100.0, 1),
-        "phase_issues": round(sev_phase * 100.0, 1),
-        "dc_offset": round(sev_dc * 100.0, 1),
-        "bandwidth_loss": round(sev_bw * 100.0, 1),
-        "pitch_drift": round(sev_pitch * 100.0, 1),
-        "reverb_excess": round(sev_reverb * 100.0, 1),
-        "print_through": round(sev_print * 100.0, 1),
-        "quantization_noise": round(sev_quant * 100.0, 1),
-        "jitter_artifacts": round(sev_jitter * 100.0, 1),
-        "dynamic_compression_excess": round(sev_dyncomp * 100.0, 1),
-        "pre_echo": round(sev_pre_echo * 100.0, 1),
-        "transient_smearing": round(sev_transient * 100.0, 1),
-        "soft_saturation": round(sev_soft_sat * 100.0, 1),
-        "head_wear": round(sev_head * 100.0, 1),
-        "azimuth_error": round(sev_azimuth * 100.0, 1),
-        "riaa_curve_error": round(sev_riaa * 100.0, 1),
-        "aliasing": round(sev_alias * 100.0, 1),
-        "bias_error": round(sev_bias * 100.0, 1),
-        "transport_bump": round(sev_transport_bump * 100.0, 1),
-        "vocal_harshness": round(sev_vocal_harshness * 100.0, 1),
+        "rumble": round(sev_rumble * 100.0, 2),
+        "digital_artifacts": round(sev_digital * 100.0, 2),
+        "compression_artifacts": round(sev_compress * 100.0, 2),
+        "stereo_imbalance": round(sev_stereo * 100.0, 2),
+        "phase_issues": round(sev_phase * 100.0, 2),
+        "dc_offset": round(sev_dc * 100.0, 2),
+        "bandwidth_loss": round(sev_bw * 100.0, 2),
+        "pitch_drift": round(sev_pitch * 100.0, 2),
+        "reverb_excess": round(sev_reverb * 100.0, 2),
+        "print_through": round(sev_print * 100.0, 2),
+        "quantization_noise": round(sev_quant * 100.0, 2),
+        "jitter_artifacts": round(sev_jitter * 100.0, 2),
+        "dynamic_compression_excess": round(sev_dyncomp * 100.0, 2),
+        "pre_echo": round(sev_pre_echo * 100.0, 2),
+        "transient_smearing": round(sev_transient * 100.0, 2),
+        "soft_saturation": round(sev_soft_sat * 100.0, 2),
+        "head_wear": round(sev_head * 100.0, 2),
+        "azimuth_error": round(sev_azimuth * 100.0, 2),
+        "riaa_curve_error": round(sev_riaa * 100.0, 2),
+        "aliasing": round(sev_alias * 100.0, 2),
+        "bias_error": round(sev_bias * 100.0, 2),
+        "transport_bump": round(sev_transport_bump * 100.0, 2),
+        "vocal_harshness": round(sev_vocal_harshness * 100.0, 2),
         # Zeitpositionen (Sekunden) für vertikale Wellenform-Marker
         "_locations": {
             "clicks": _locs(DefectType.CLICKS),
@@ -888,29 +888,29 @@ def _result_scores_to_display(defect_scores: dict, status: str = "completed") ->
         "noise_level": round(sev_noise * 75.0, 2),
         "wow": round(sev_wow * 3.0, 3),
         "flutter": round(sev_flutter * 3.0, 3),
-        "rumble": round(sev_rumble * 100.0, 1),
-        "digital_artifacts": round(sev_digital * 100.0, 1),
-        "compression_artifacts": round(sev_compress * 100.0, 1),
-        "stereo_imbalance": round(sev_stereo * 100.0, 1),
-        "phase_issues": round(sev_phase * 100.0, 1),
-        "dc_offset": round(sev_dc * 100.0, 1),
-        "bandwidth_loss": round(sev_bw * 100.0, 1),
-        "pitch_drift": round(sev_pitch * 100.0, 1),
-        "reverb_excess": round(sev_reverb * 100.0, 1),
-        "print_through": round(sev_print * 100.0, 1),
-        "quantization_noise": round(sev_quant * 100.0, 1),
-        "jitter_artifacts": round(sev_jitter * 100.0, 1),
-        "dynamic_compression_excess": round(sev_dyncomp * 100.0, 1),
-        "pre_echo": round(sev_pre_echo * 100.0, 1),
-        "transient_smearing": round(sev_transient * 100.0, 1),
-        "soft_saturation": round(sev_soft_sat * 100.0, 1),
-        "head_wear": round(sev_head * 100.0, 1),
-        "azimuth_error": round(sev_azimuth * 100.0, 1),
-        "riaa_curve_error": round(sev_riaa * 100.0, 1),
-        "aliasing": round(sev_alias * 100.0, 1),
-        "bias_error": round(sev_bias * 100.0, 1),
-        "transport_bump": round(sev_transport_bump * 100.0, 1),
-        "vocal_harshness": round(sev_vocal_harshness * 100.0, 1),
+        "rumble": round(sev_rumble * 100.0, 2),
+        "digital_artifacts": round(sev_digital * 100.0, 2),
+        "compression_artifacts": round(sev_compress * 100.0, 2),
+        "stereo_imbalance": round(sev_stereo * 100.0, 2),
+        "phase_issues": round(sev_phase * 100.0, 2),
+        "dc_offset": round(sev_dc * 100.0, 2),
+        "bandwidth_loss": round(sev_bw * 100.0, 2),
+        "pitch_drift": round(sev_pitch * 100.0, 2),
+        "reverb_excess": round(sev_reverb * 100.0, 2),
+        "print_through": round(sev_print * 100.0, 2),
+        "quantization_noise": round(sev_quant * 100.0, 2),
+        "jitter_artifacts": round(sev_jitter * 100.0, 2),
+        "dynamic_compression_excess": round(sev_dyncomp * 100.0, 2),
+        "pre_echo": round(sev_pre_echo * 100.0, 2),
+        "transient_smearing": round(sev_transient * 100.0, 2),
+        "soft_saturation": round(sev_soft_sat * 100.0, 2),
+        "head_wear": round(sev_head * 100.0, 2),
+        "azimuth_error": round(sev_azimuth * 100.0, 2),
+        "riaa_curve_error": round(sev_riaa * 100.0, 2),
+        "aliasing": round(sev_alias * 100.0, 2),
+        "bias_error": round(sev_bias * 100.0, 2),
+        "transport_bump": round(sev_transport_bump * 100.0, 2),
+        "vocal_harshness": round(sev_vocal_harshness * 100.0, 2),
         "_locations": {},  # Nach Restaurierung keine Zeitpositionen verfügbar
         "status": status,
     }
@@ -1272,6 +1272,10 @@ class BatchProcessingThread(QThread):
         except Exception as _wup_exc:
             logger.debug("ROCm warmup im BatchProcessingThread fehlgeschlagen (unkritisch): %s", _wup_exc)
 
+        # librosa.resample würde librosa.core.audio lazy-importieren → numba gufunc JIT
+        # im BackgroundThread → AttributeError 'get_call_template' (numba thread-safety bug).
+        # Fix: soxr direkt verwenden — pure C library, kein Python-JIT, vollständig thread-safe.
+
         _last_defect_emit_sig: tuple[Any, ...] | None = None
 
         def _emit_defect_update(payload: dict) -> None:
@@ -1384,15 +1388,16 @@ class BatchProcessingThread(QThread):
                     "BatchDiag: audio loaded in %.2fs (sr=%d, shape=%s)", _t_load_1 - _t_load_0, sr, audio.shape
                 )
                 if sr != 48_000:
-                    import librosa as _lr_resample
+                    # soxr: pure-C resampler, ~3s for 225s stereo, fully thread-safe (no numba).
+                    # librosa.resample (SoXR backend) triggers numba JIT in thread → crash.
+                    # scipy.signal.resample_poly(160, 147) hangs 6+ min (enormous polyphase FIR).
+                    import soxr as _soxr_rs
 
-                    # librosa.resample uses SoXR C-backend: ~3s for 225s stereo.
-                    # scipy.signal.resample_poly(160, 147) hangs for 6+ min
-                    # because the polyphase FIR filter with up=160 is enormous.
                     if audio.ndim == 2:
-                        audio = _lr_resample.resample(audio.T, orig_sr=sr, target_sr=48_000).T.astype(np.float32)
+                        # soxr expects (samples, channels)
+                        audio = _soxr_rs.resample(audio, sr, 48_000, quality="HQ").astype(np.float32)
                     else:
-                        audio = _lr_resample.resample(audio, orig_sr=sr, target_sr=48_000).astype(np.float32)
+                        audio = _soxr_rs.resample(audio, sr, 48_000, quality="HQ").astype(np.float32)
                     sr = 48_000
                     logger.info(
                         "BatchDiag: resampled in %.2fs (shape=%s)", time.perf_counter() - _t_load_1, audio.shape
@@ -1747,7 +1752,10 @@ class BatchProcessingThread(QThread):
                                 if gap > 0:
                                     velocity += gap * 0.04
 
-                                velocity = max(0.0025, velocity)
+                                # Minimum velocity ensures the bar never freezes during
+                                # very long repair phases (dropout, crackle, tape hiss).
+                                # 0.018 pts/frame × 30 fps = 0.54 pts/s → 12 pp in ~22 s.
+                                velocity = max(_SP_MIN_VELOCITY, velocity)
 
                                 # Dynamische Deckelung: adaptiv per Song — keine hartcodierten Phasenzahlen.
                                 #
@@ -1781,7 +1789,12 @@ class BatchProcessingThread(QThread):
                                     # main bar does not look frozen during ML phases (60–120 s).
                                     # Cap raised from 2.6 → 5.0 pts: a 90 s ML phase can advance
                                     # ~5 % instead of freezing at +2.6 % for the last 85 seconds.
-                                    _time_drift_cap = min(5.0, 0.055 * elapsed_since_tgt)
+                                    # Cap raised from 5.0 → 12.0 pp: long repair phases
+                                    # (phase_24 dropout, phase_09 crackle, phase_29 tape hiss)
+                                    # can take 60–180 s without progress callbacks — 5 pp cap
+                                    # caused the main bar to freeze for most of that time.
+                                    # 0.07 pts/s × 170 s = ~12 pp max drift before next callback.
+                                    _time_drift_cap = min(12.0, 0.07 * elapsed_since_tgt)
                                     _overshoot_cap = tgt + max(expected_advance, _time_drift_cap)
                                     new_cur = min(cur + velocity, _overshoot_cap, 96.0)
 
@@ -8018,46 +8031,46 @@ class DefectStoryWidget(QFrame):
             if not isinstance(raw, (int, float)):
                 raw = 0.0
             sev = self._normalize(key, float(raw))
-            sev_pct = int(round(sev * 100.0))
+            sev_f = sev * 100.0  # 0.00–100.00, 2-decimal precision
             impact = self._impact_score(key, sev)
-            if sev_pct >= 1:
+            if sev_f >= 0.01:
                 n_active += 1
 
             title, what, why = self._DEFECT_META.get(key, (key, "Signalabweichung", "wahrnehmbare Klangabweichung"))
             where_txt = self._where_text(key, loc_map, ch_map)
             method_txt = self._METHODS.get(key, "adaptive Schadensbehandlung")
             prio = self._PRIORITY.get(key, "P5")
-            _is_active_now = key in _active_defects_set and status == "correcting" and sev_pct >= 1
+            _is_active_now = key in _active_defects_set and status == "correcting" and sev_f >= 0.01
             if _is_active_now:
                 method_txt = f"🔧 wird behoben · {method_txt}"
-            elif active_tool and status == "correcting" and sev_pct >= 1:
+            elif active_tool and status == "correcting" and sev_f >= 0.01:
                 method_txt = f"{method_txt} · aktiv: {active_tool}"
 
             if _is_active_now:
                 # Override icon and color for the defect being worked on right now
                 # Blu-ray disc read-side iridescent metallic blue-violet
                 icon = "🔧"
-                sev_txt = f"{sev_pct}%"
+                sev_txt = f"{sev_f:.2f}%"
                 sev_color = "#7BA8EE"
-            elif status == "completed" and sev_pct <= 1:
+            elif status == "completed" and sev_f <= 1.0:
                 icon = "✅"
                 sev_txt = "behoben"
                 sev_color = "#78C99B"
-            elif sev_pct >= 50:
+            elif sev_f >= 50.0:
                 icon = "🔴"
-                sev_txt = f"{sev_pct}%"
+                sev_txt = f"{sev_f:.2f}%"
                 sev_color = "#E06D6D"
-            elif sev_pct >= 15:
+            elif sev_f >= 15.0:
                 icon = "🟠"
-                sev_txt = f"{sev_pct}%"
+                sev_txt = f"{sev_f:.2f}%"
                 sev_color = "#D7B25A"
-            elif sev_pct >= 1:
+            elif sev_f >= 0.01:
                 icon = "🟡"
-                sev_txt = f"{sev_pct}%"
+                sev_txt = f"{sev_f:.2f}%"
                 sev_color = "#AFCF72"
             else:
                 icon = "⚪"
-                sev_txt = "0%"
+                sev_txt = "0.00%"
                 sev_color = "#7F8FA6"
 
             when_txt = status_text
@@ -8075,7 +8088,7 @@ class DefectStoryWidget(QFrame):
                     "when": when_txt,
                     "prio": prio,
                     "impact": impact,
-                    "sev_pct": sev_pct,
+                    "sev_pct": sev_f,
                     "icon": icon,
                     "sev_txt": sev_txt,
                     "sev_color": sev_color,
@@ -8089,14 +8102,14 @@ class DefectStoryWidget(QFrame):
                 key=lambda e: (
                     not e.get("is_active"),  # active entries first
                     -float(e["impact"]),  # then by impact descending
-                    -int(e["sev_pct"]),
+                    -float(e["sev_pct"]),
                 )
             )
         else:
             # Reorder by psychoacoustic impact (descending), then severity.
-            entries.sort(key=lambda e: (float(e["impact"]), int(e["sev_pct"])), reverse=True)
+            entries.sort(key=lambda e: (float(e["impact"]), float(e["sev_pct"])), reverse=True)
 
-        # Only render entries that were actually detected (sev_pct >= 1).
+        # Only render entries that were actually detected (sev_pct >= 0.01).
         # Zero-score defect types stay hidden — they don't pollute the legend
         # with "0%" rows when compression_artifacts / vocal_harshness were
         # not found in this recording.
@@ -8106,7 +8119,7 @@ class DefectStoryWidget(QFrame):
         compact_limit = 12
         hidden_count = 0
         display_entries = [
-            e for e in entries if int(e["sev_pct"]) >= 1 or (status == "completed" and e["key"] in _explicit_keys)
+            e for e in entries if float(e["sev_pct"]) >= 0.01 or (status == "completed" and e["key"] in _explicit_keys)
         ]
         if len(display_entries) > compact_limit and status in ("detected", "correcting"):
             hidden_count = len(display_entries) - compact_limit
@@ -8860,7 +8873,7 @@ class ModernProgressBar(QProgressBar):
         mx = self.maximum()
         if mx > 0:
             pct = value * 100.0 / mx
-            super().setFormat(f"{pct:.1f} %")
+            super().setFormat(f"{pct:.2f} %")
         else:
             super().setFormat("")
 
@@ -8886,15 +8899,15 @@ class ModernProgressBar(QProgressBar):
         self._set_value_immediately(int(round(self._smooth_current_value)))
 
     def setValue(self, value: int) -> None:
-        """Setzt den Fortschrittswert und aktualisiert die Anzeige auf 0.1 % genau.
+        """Setzt den Fortschrittswert und aktualisiert die Anzeige auf 0.01 % genau.
 
         Interner Bereich 0–10000 entspricht 0.00 %–100.00 % für flüssige Updates.
-        Anzeige wird nur aktualisiert wenn Δ ≥ 10 (= 0.1 %), um Render-Last zu begrenzen.
+        Anzeige wird nur aktualisiert wenn Δ ≥ 1 (= 0.01 %), um maximale Präzision zu zeigen.
         """
         value = max(0, min(self.maximum(), int(value)))
         prev_target = int(self._smooth_target_value)
-        if abs(value - prev_target) < 10 and value not in (0, self.maximum()):
-            return  # Änderung < 0.1 % → kein Repaint
+        if abs(value - prev_target) < 1 and value not in (0, self.maximum()):
+            return  # Änderung < 0.01 % → kein Repaint
         self._smooth_target_value = value
         if value in (0, self.maximum()):
             self._smooth_timer.stop()

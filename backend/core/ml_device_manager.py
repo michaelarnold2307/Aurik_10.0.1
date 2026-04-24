@@ -412,6 +412,10 @@ _GPU_UNSUPPORTED_ERROR_HINTS: tuple[str, ...] = (
     "failed to find kernel",
     "not supported",
     "execution provider",
+    "hiperror",
+    "hip error",
+    "invaliddevicefunction",
+    "invalid device function",
 )
 
 # ---------------------------------------------------------------------------
@@ -600,8 +604,123 @@ class MLDeviceManager:
                 self._vram_total_gb,
             )
 
+            # ROCm ONNX Pad-Probe: test if ROCMExecutionProvider can execute a Pad
+            # operator. On some APU/iGPU variants (e.g. gfx1103) the ROCm ORT build
+            # does not include the Pad kernel → hipErrorInvalidDeviceFunction at
+            # runtime. Detecting this once avoids per-plugin 5-min fallback cycles
+            # and Wall-Time-Budget exhaustion.
+            self._probe_rocm_onnx_pad()
+
         except Exception as exc:
             logger.debug("MLDeviceManager: ROCm detection failed: %s", exc)
+
+    def _probe_rocm_onnx_pad(self) -> None:
+        """Probe ROCm ONNX Runtime with a minimal GPU-compute op.
+
+        Some AMD APU/iGPU targets (e.g. gfx1103, Phoenix/Hawk Point) ship with
+        ROCm ORT builds that do not include kernels compiled for that specific arch.
+        Running even a trivial model then raises hipErrorInvalidDeviceFunction.
+        This probe runs once at startup and blacklists ROCMExecutionProvider for all
+        ONNX sessions if inference fails — preventing per-plugin retry cycles that
+        exhaust the Wall-Time budget (§0d, §2.47).
+
+        The probe model is a minimal Relu(float[1]) graph serialised as raw protobuf
+        bytes to avoid any dependency on the ``onnx`` package.
+        """
+        try:
+            import numpy as np
+            import onnxruntime as ort  # type: ignore[import]
+
+            # Minimal ONNX model: x (float[1]) → Relu → y (float[1])
+            # Opset 7, IR version 7 — hand-computed protobuf bytes (no onnx dep).
+            # Verified: 63 bytes total.
+            #   ir_version=7, opset_import {version=7},
+            #   graph { node {Relu x→y}, input float[1], output float[1] }
+            # NodeProto field mapping: input=1, output=2, op_type=4 (not 3!)
+            # TensorShapeProto field mapping: dim=1 (not 2!)
+            _MODEL_BYTES: bytes = (
+                b"\x08\x07"  # ir_version: 7
+                b"\x42\x02\x10\x07"  # opset_import: {version: 7}
+                b"\x3a\x37"  # graph: len=55
+                b"\x0a\x0c"  # node: len=12
+                b"\x0a\x01\x78"  # input: "x"
+                b"\x12\x01\x79"  # output: "y"
+                b"\x22\x04\x52\x65\x6c\x75"  # op_type: "Relu" (field 4)
+                b"\x12\x05\x70\x72\x6f\x62\x65"  # name: "probe"
+                b"\x5a\x0f"  # input ValueInfo: len=15
+                b"\x0a\x01\x78"  # name: "x"
+                b"\x12\x0a\x0a\x08\x08\x01\x12\x04\x0a\x02\x08\x01"  # dtype: float[1]
+                b"\x62\x0f"  # output ValueInfo: len=15
+                b"\x0a\x01\x79"  # name: "y"
+                b"\x12\x0a\x0a\x08\x08\x01\x12\x04\x0a\x02\x08\x01"  # dtype: float[1]
+            )
+
+            sess_opts = ort.SessionOptions()
+            sess_opts.log_severity_level = 4  # silent
+            sess = ort.InferenceSession(
+                _MODEL_BYTES,
+                sess_opts=sess_opts,
+                providers=["ROCMExecutionProvider", "CPUExecutionProvider"],
+            )
+            inp = np.zeros((1,), dtype=np.float32)
+            sess.run(None, {"x": inp})
+            # Verify ROCMExecutionProvider was actually activated (not silent CPU fallback)
+            active = sess.get_providers()
+            if "ROCMExecutionProvider" not in active:
+                logger.info(
+                    "MLDeviceManager: ROCm ONNX Probe — Provider silently fell back to CPU "
+                    "(ROCm libs unavailable or not in LD_LIBRARY_PATH) → ORT CPU-only"
+                )
+                with self._lock:
+                    self._ort_gpu_providers = ["CPUExecutionProvider"]
+                    self._gpu_disabled_plugins.update(_HEAVY_ML_PLUGINS)
+                    self._ort_gpu_compatible_plugins.clear()
+            else:
+                logger.info("MLDeviceManager: ROCm ONNX Probe OK — ROCMExecutionProvider aktiv")
+                # Opportunistic MIGraphX upgrade: if MIGraphXExecutionProvider is
+                # available, prepend it as highest-priority provider. ORT will use it
+                # for ops it supports and fall back to ROCMExecutionProvider otherwise.
+                # MIGraphX is AMD's graph-compiler backend — measurably faster than
+                # ROCMExecutionProvider on RDNA2/3 for many inference graphs.
+                _avail = ort.get_available_providers()
+                if "MIGraphXExecutionProvider" in _avail:
+                    with self._lock:
+                        self._ort_gpu_providers = [
+                            "MIGraphXExecutionProvider",
+                            "ROCMExecutionProvider",
+                            "CPUExecutionProvider",
+                        ]
+                    logger.info(
+                        "MLDeviceManager: MIGraphXExecutionProvider verfügbar — "
+                        "als primärer ORT-Provider eingetragen (ROCM als Fallback)"
+                    )
+
+        except Exception as exc:
+            exc_str = str(exc).lower()
+            _hip_hints = (
+                "hiperror",
+                "hip error",
+                "invaliddevicefunction",
+                "invalid device function",
+                "no kernel",
+                "kernel not found",
+            )
+            if any(h in exc_str for h in _hip_hints):
+                logger.warning(
+                    "MLDeviceManager: ROCm ONNX Probe FEHLGESCHLAGEN (%s) — "
+                    "ROCMExecutionProvider für alle ONNX-Plugins deaktiviert (CPU-Fallback)",
+                    exc,
+                )
+                with self._lock:
+                    # Downgrade ORT providers to CPU-only.
+                    self._ort_gpu_providers = ["CPUExecutionProvider"]
+                    # Disable GPU for all ONNX-heavy plugins so is_ort_gpu_supported()
+                    # returns False immediately — no per-plugin retry overhead.
+                    self._gpu_disabled_plugins.update(_HEAVY_ML_PLUGINS)
+                    self._ort_gpu_compatible_plugins.clear()
+            else:
+                # Unexpected probe error (e.g. import issue) — log but don't blacklist.
+                logger.debug("MLDeviceManager: ROCm ONNX Probe-Fehler (nicht HIP): %s", exc)
 
     def _detect_directml(self) -> None:
         """Detect DirectML on Windows via onnxruntime-directml."""
@@ -982,8 +1101,8 @@ class MLDeviceManager:
         """
         if not self.is_fp16_eligible(plugin_name):
             return self.get_ort_providers(plugin_name)
-        return [
-            (
+        return [  # type: ignore[list-item]  # ORT accepts (str, dict) tuples as providers
+            (  # type: ignore[list-item]
                 "ROCMExecutionProvider",
                 {
                     "device_id": 0,

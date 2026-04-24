@@ -84,6 +84,7 @@ def detect_onsets(
     hop_ms: float = 10.0,
     threshold: float = 0.3,
     min_onset_gap_ms: float = 50.0,
+    max_duration_s: float = 30.0,
 ) -> OnsetDetectionResult:
     """Erkennt Onset-Ereignisse aus dem Energiefluss.
 
@@ -100,6 +101,7 @@ def detect_onsets(
         hop_ms:            Frame-Hop in ms
         threshold:         Relativer Schwellwert für Onset-Erkennung (0–1)
         min_onset_gap_ms:  Mindestabstand zwischen Onsets in ms
+        max_duration_s:    Maximale Audiolänge in Sekunden (Performance-Cap).
 
     Returns:
         OnsetDetectionResult mit Onset-Positionen und Stärken.
@@ -107,6 +109,11 @@ def detect_onsets(
     if audio.ndim > 1:
         audio = np.mean(audio, axis=-1)
     audio = audio.astype(np.float64)
+    # §9.7.6 Performance-Cap — pure-Python STFT loop is O(N/hop); cap to 30 s.
+    _max_samples = int(sr * max_duration_s)
+    if len(audio) > _max_samples:
+        _start = (len(audio) - _max_samples) // 2
+        audio = audio[_start : _start + _max_samples]
     n_samples = len(audio)
 
     hop = int(sr * hop_ms / 1000.0)

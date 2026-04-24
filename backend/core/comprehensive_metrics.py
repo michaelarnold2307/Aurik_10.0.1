@@ -453,7 +453,7 @@ class ComprehensiveMetricsCalculator:
         seg = max(1, min(int(nperseg), x.size))
         ov = min(seg // 2, seg - 1) if noverlap is None else min(int(noverlap), seg - 1)
 
-        return signal.stft(x, self.sr, nperseg=seg, noverlap=ov)
+        return signal.stft(x, self.sr, nperseg=seg, noverlap=ov, boundary="even")
 
     def _compute_spectral_features(self, audio: np.ndarray) -> tuple[float, float, float, float]:
         """Spektrale Merkmale: Flatness, Centroid, Rolloff, Flux (vektorisiert)."""

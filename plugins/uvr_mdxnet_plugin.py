@@ -159,6 +159,7 @@ class UVRMDXNetPlugin:
         # §4.6b PLM-Active-Guard: verhindert Emergency-Eviction während Inferenz.
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_uvr
+
             _plm_uvr = _get_plm_uvr()
             _plm_uvr.set_active("UVR_MDXNet", True)
         except Exception as _exc:
@@ -171,24 +172,24 @@ class UVRMDXNetPlugin:
             masks_sum = np.zeros_like(mag)
 
             for sess in sessions:
-            mask_out = np.zeros_like(mag)
-            for s in range(0, n_frames, _CHUNK):
-                e = min(s + _CHUNK, n_frames)
-                T = e - s
-                seg = mag[:, s:e]
-                # Pad zu [batch=1, 4, 3072, 256]
-                inp = np.zeros((1, 4, _BINS, _CHUNK), dtype=np.float32)
-                inp[0, 0, :, :T] = seg
-                inp[0, 1, :, :T] = seg  # 4 Kanäle mit gleicher Magnitude
-                inp[0, 2, :, :T] = seg
-                inp[0, 3, :, :T] = seg
-                try:
-                    out = sess.run(None, {"input": inp})[0]  # [1,4,3072,256]
-                    mask_out[:, s:e] = np.clip(out[0, 0, :, :T], 0, 1)
-                except Exception as exc:
-                    logger.debug("UVR chunk-Fehler: %s", exc)
-                    mask_out[:, s:e] = 0.5
-            masks_sum += mask_out
+                mask_out = np.zeros_like(mag)
+                for s in range(0, n_frames, _CHUNK):
+                    e = min(s + _CHUNK, n_frames)
+                    T = e - s
+                    seg = mag[:, s:e]
+                    # Pad zu [batch=1, 4, 3072, 256]
+                    inp = np.zeros((1, 4, _BINS, _CHUNK), dtype=np.float32)
+                    inp[0, 0, :, :T] = seg
+                    inp[0, 1, :, :T] = seg  # 4 Kanäle mit gleicher Magnitude
+                    inp[0, 2, :, :T] = seg
+                    inp[0, 3, :, :T] = seg
+                    try:
+                        out = sess.run(None, {"input": inp})[0]  # [1,4,3072,256]
+                        mask_out[:, s:e] = np.clip(out[0, 0, :, :T], 0, 1)
+                    except Exception as exc:
+                        logger.debug("UVR chunk-Fehler: %s", exc)
+                        mask_out[:, s:e] = 0.5
+                masks_sum += mask_out
 
             mask = np.clip(masks_sum / float(len(sessions)), 0, 1)
             inst_spec = mask * np.abs(cplx) * np.exp(1j * np.angle(cplx))

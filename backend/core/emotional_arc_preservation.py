@@ -584,10 +584,49 @@ class EmotionalArcPreservationMetric:
 
         gain_db = np.clip(gain_db, -max_gain_db, max_gain_db).astype(np.float32)
 
+        # §2.30 Post-Smoothing Quiet-Zone-Clamp: Savitzky-Golay (window=7, covers
+        # up to 17.5 s at HOP_S=2.5 s) can spread positive gain from musical segments
+        # into adjacent denoised/quiet segments that were previously zeroed by the
+        # guard above. Re-apply the guard after smoothing — mirrors the identical fix
+        # in MDEM (MicroDynamicsEnvelopeMorphing). Without this, a loud intro section
+        # (0–30 s) causes a Pegelexplosion in a quiet fadeout at ~35 s (15.83 %).
+        for _i in range(len(gain_db)):
+            if gain_db[_i] > 0.0:
+                if rms_rest[_i] < _silence_rms_thresh:
+                    gain_db[_i] = 0.0
+                elif rms_rest[_i] < _quiet_rms_thresh:
+                    _diff_ps = 20.0 * np.log10((rms_orig[_i] + eps) / (rms_rest[_i] + eps))
+                    if _diff_ps >= _noise_diff_thresh_db:
+                        gain_db[_i] = 0.0  # Post-smoothing: denoised fade-out, no boost
+
         # ---- Interpolate to sample-level via segment centres ----
         centres = np.array([start + seg_len // 2 for start in positions], dtype=np.float64)
         sample_idx = np.arange(n, dtype=np.float64)
         gain_db_interp = np.interp(sample_idx, centres, gain_db).astype(np.float32)
+
+        # §2.30 Per-Sample Quiet-Zone-Guard: np.interp creates a positive ramp in
+        # the transition region between a high-gain musical segment and a 0-gain
+        # quiet segment (e.g., +4 dB at 32.5 s → 0 dB at 35 s gives +2 dB at 33.75 s).
+        # Suppress positive interpolated gain wherever the restored signal itself is
+        # below the quiet-zone threshold (-42 dBFS). Fully vectorised for speed.
+        _frame_len_ps = 480  # 10 ms @ 48 kHz
+        _n_full_ps = n // _frame_len_ps
+        if _n_full_ps > 0:
+            _segs_ps = rest_mono[: _n_full_ps * _frame_len_ps].reshape(_n_full_ps, _frame_len_ps)
+            _rms_ps = np.sqrt(np.mean(_segs_ps**2, axis=1) + 1e-12)
+            _is_quiet_ps = _rms_ps < float(_quiet_rms_thresh)
+            _quiet_mask = np.repeat(_is_quiet_ps, _frame_len_ps)
+            if _n_full_ps * _frame_len_ps < n:
+                _tail_rms_ps = float(np.sqrt(np.mean(rest_mono[_n_full_ps * _frame_len_ps :] ** 2) + 1e-12))
+                _quiet_mask = np.concatenate(
+                    [
+                        _quiet_mask,
+                        np.full(n - _n_full_ps * _frame_len_ps, _tail_rms_ps < float(_quiet_rms_thresh)),
+                    ]
+                )
+            # Zero out any positive interpolated gain in the quiet zone
+            gain_db_interp[_quiet_mask[:n] & (gain_db_interp[:n] > 0.0)] = 0.0
+
         gain_linear = np.float32(10.0) ** (gain_db_interp / np.float32(20.0))
 
         # ---- Apply gain ----

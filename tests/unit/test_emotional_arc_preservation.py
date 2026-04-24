@@ -321,3 +321,51 @@ class TestCorrectArc:
         corrected, _ = self.m.correct_arc(orig, rest, SR, max_gain_db=3.0)
         # Bei max 3 dB Gain: Faktor ≤ 10^(3/20) ≈ 1.41
         assert np.max(np.abs(corrected)) <= 1.0
+
+    def test_36_no_pegelexplosion_in_denoised_fadeout(self):
+        """Regression §2.30 Post-Smoothing Quiet-Zone-Clamp.
+
+        Szenario: Lauter Musik-Intro (0-30 s) gefolgt von denoised Fadeout (30-42 s).
+        Die EmotionalArc-Korrektur darf im Fadeout keinen positiven Gain erzeugen,
+        auch nicht durch SG-Smoothing-Verschleppung aus dem Intro.
+
+        Symptom (vor Fix): SG-Fenster 7 × 2,5 s = 17,5 s — Boost aus Intro-Segmenten
+        wurde in den Fadeout (15,83 % bei 222 s → 35 s) verschleppt → Pegelexplosion.
+        """
+        from backend.core.emotional_arc_preservation import correct_emotional_arc
+
+        rng = np.random.default_rng(42)
+        total_s = 42.0
+        fadeout_start_s = 30.0
+        n_total = int(SR * total_s)
+        n_music = int(SR * fadeout_start_s)
+
+        # Original: Musik + Vinyl-Rauschen (−40 dBFS ≈ 0.01)
+        vinyl_noise_amp = 10.0 ** (-40.0 / 20.0)  # −40 dBFS
+        music = np.sin(2 * np.pi * 440 * np.linspace(0, fadeout_start_s, n_music)).astype(np.float32)
+        music *= 0.5  # −6 dBFS
+        fadeout_noise_orig = (rng.standard_normal(n_total - n_music) * vinyl_noise_amp).astype(np.float32)
+        original = np.concatenate([music, fadeout_noise_orig])
+
+        # Restored: Musik gleich (leicht reduziert durch Denoise) + fast stille Fadeout
+        music_rest = music * 0.92  # −0.72 dB durch Denoise-Beeinflussung
+        # Denoised Fadeout: vinyl noise entfernt → nur digitales Rauschen (−65 dBFS)
+        fadeout_rest = (rng.standard_normal(n_total - n_music) * 10.0 ** (-65.0 / 20.0)).astype(np.float32)
+        restored = np.concatenate([music_rest, fadeout_rest])
+
+        corrected, _ = correct_emotional_arc(original, restored, SR, max_gain_db=6.0, damping=0.70)
+
+        # Im Fadeout darf kein positiver Gain angewendet worden sein
+        fadeout_corrected = corrected[n_music:]
+        fadeout_restored = restored[n_music:]
+
+        # Der korrigierte Fadeout darf nicht signifikant lauter als der denoised Fadeout sein.
+        # Erlaubt: minimale SG-Überblendung im ersten Frame (≤ 0.5 dB)
+        rms_before = float(np.sqrt(np.mean(fadeout_restored**2) + 1e-12))
+        rms_after = float(np.sqrt(np.mean(fadeout_corrected**2) + 1e-12))
+        gain_db_applied = 20.0 * np.log10((rms_after + 1e-12) / (rms_before + 1e-12))
+        assert gain_db_applied < 0.5, (
+            f"Pegelexplosion im Fadeout: correct_emotional_arc boosted denoised fadeout "
+            f"by {gain_db_applied:.2f} dB (max erlaubt: 0.5 dB). "
+            f"Post-Smoothing Quiet-Zone-Clamp fehlt oder defekt."
+        )

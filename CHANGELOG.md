@@ -2,7 +2,34 @@
 
 > Hinweis: Dieses Dokument ist eine Versionshistorie. Ältere Versionsnummern und Kennzahlen sind hier erwartbar und keine veralteten Reststände.
 
-## Version 9.11.51 — phase_55 Fadeout/Achsen/LogSpam-Bugfix (Apr 2026)
+## Version 9.11.52 — §09.2 Adaptive Goal Thresholds → PMGG Propagation (Apr 2026)
+
+### Feature §09.2 / §2.29 / §2.47 (Adaptive Intelligence — Normative Gap geschlossen)
+
+**Problem**: `estimate_song_goal_targets()` berechnet era/material/genre-adaptive Qualitätsschwellen
+(z. B. `brillanz` für 1920s Shellac: ~0.55 statt 0.78) und speichert sie in `self._song_goal_targets` in UV3.
+Jede Phase lief jedoch gegen statische `_get_canonical_thresholds()` — die adaptiven Werte erreichten die
+per-Phase PMGG-Gates nie. Phasen bewerteten sich gegen unrealistische 1980s-CD-Schwellen auf 1920s-Shellac-Material.
+
+**Fix**:
+
+- **`backend/core/per_phase_musical_goals_gate.py`**:
+  - `wrap_phase()` und `_run_with_retry()` erhalten neuen Parameter `adaptive_goal_thresholds: dict[str, float] | None`.
+  - In `_run_with_retry()`: Nach `_get_canonical_thresholds()` wird ein song-adaptiver 60/40-Blend angewendet
+    (60 % kanonisch / 40 % adaptiv), geclippt auf [0.30, 0.99]. Konsistent mit `_effective_goal_thresholds`
+    am Pipeline-Ende. Restorative Baseline-Capping nutzt dann die gemischten (nicht die starren kanonischen) Schwellen.
+
+- **`backend/core/unified_restorer_v3.py`**:
+  - `_pmgg_gate.wrap_phase()` erhält `adaptive_goal_thresholds=dict(self._song_goal_targets)` injiziert,
+    sofern `_song_goal_targets` befüllt ist (nach `estimate_song_goal_targets()` aus §09.2).
+
+**Auswirkung**: Phasen auf 1920s-Shellac-Material tolerieren jetzt `brillanz`-Werte ~0.65–0.69 (statt 0.78).
+Phasen auf klassischen Genres erlauben höhere `raumtiefe`-Schwellen. Schlager-Songs laufen ohne
+`bass_kraft`-False-Positive-Rollbacks (realistischer Genre-Threshold ~0.46 statt 0.78).
+
+- **`tests/unit/test_per_phase_musical_goals_gate.py`**:
+  - `test_121`: 60/40-Blend-Formel für 1920s-Shellac `brillanz` (0.688 < 0.78, ≥ 0.30).
+  - `test_122`: `wrap_phase()` akzeptiert `adaptive_goal_thresholds` ohne Fehler und liefert gültigen `action`-String.
 
 ### Bugfix §2.47 / §0 (Primum non nocere)
 

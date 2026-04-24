@@ -309,9 +309,12 @@ Audio-Eingang (mono/stereo, beliebige SR)
     ↓
 [MusicalGoalsChecker]  → Dict[str, float] (alle 14 Ziele)
     ↓
-[EmotionalArcPreservationMetric]  (bei Dateien ≥ 30 s)
+[MicroDynamicsEnvelopeMorphing]  § 2.30 — Mikro-Dynamik (400 ms LUFS-Profil-Morphing)
     ↓
-[MicroDynamicsEnvelopeMorphing]  ← LETZTER Schritt vor Export
+[EmotionalArcPreservationMetric.measure()]  (bei Dateien ≥ 30 s — Messung post-MDEM)
+    ↓
+[correct_emotional_arc()]  (optional: nur wenn Bogen nicht erhalten — Makro-Korrektur 5 s)
+    ← §2.30 Post-Smoothing-Quiet-Zone-Clamp Pflicht (siehe §2.30b)
     ↓
 [HolisticPerceptualGate]  → HPI-Score (inkl. artifact_freedom §2.49)
     ↓
@@ -319,6 +322,71 @@ Audio-Eingang (mono/stereo, beliebige SR)
     ↓
 Audio-Ausgang + RestorationResult
 ```
+
+---
+
+## §2.30b [RELEASE_MUST] Post-Smoothing-Quiet-Zone-Clamp-Invariante (v9.11.15)
+
+**Normative Reihenfolge in UV3 (kanonisch):**
+
+1. `MicroDynamicsEnvelopeMorphing.morph()` — 400 ms LUFS-Morphing
+2. `measure_emotional_arc()` — Messung post-MDEM (≥ 30 s)
+3. `correct_emotional_arc()` — Makro-Korrektur (5 s, **nur wenn Bogen nicht erhalten**)
+
+**Systemisches Anti-Pattern (VERBOTEN in allen Gain-Morphing-Funktionen):**
+
+Jede Funktion, die:
+
+1. Pre-Smoothing Guard stille/Fadeout-Frames auf 0 setzt
+2. Savitzky-Golay oder Boxcar-Glättung anwendet
+3. `np.interp` auf Sample-Ebene interpoliert
+
+**MUSS** nach Schritt 2 UND nach Schritt 3 den Guard erneut anwenden — sonst
+verschleppt der Smoother positiven Gain aus Musiksegmenten in still/denoised
+Fadeout-Bereiche → Pegelexplosion.
+
+**Quiet-Zone-Grenze (normativ, modul-adaptiv):**
+
+| Modul | Schwellwert | Logik | Rationale |
+|---|---|---|---|
+| `morph()` (MDEM, 400 ms) | **−36 dBFS** | Einzel-Bedingung | Feine Zeitauflösung — Frame-Level reicht |
+| `correct_arc()` (EmotionalArc, 5 s) | **−42 dBFS + 6 dB-Diff** | Zwei-Bedingungen | 5-s-Segmente enthalten Mix aus Musik und Stille — einfaches -36 dBFS wäre zu aggressiv; zweite Bedingung (`rms_orig > rms_rest + 6 dB`) erkennt das „Denoised-Fadeout-Muster" zuverlässig |
+
+**VERBOTEN:** Einzel-Bedingung (`< −36 dBFS`) in `correct_arc()` ohne zweite Schutz-Bedingung — das würde normale leise Musikpassagen (Pianissimo, Fade-in) fälschlicherweise sperren.
+
+**Kanonisches Muster (Pflicht für MDEM und correct_emotional_arc):**
+
+```python
+# 1. Pre-Smoothing Guard
+for i in range(len(gain_db)):
+    if gain_db[i] > 0.0 and rms_rest[i] < QUIET_THRESH:
+        gain_db[i] = 0.0
+
+# 2. Smoother (SG / Boxcar)
+gain_db = savgol_filter(gain_db, ...)
+
+# 3. POST-Smoothing Guard (PFLICHT — Smoother kann Guard aus Schritt 1 aufheben)
+for i in range(len(gain_db)):
+    if gain_db[i] > 0.0 and rms_rest[i] < QUIET_THRESH:
+        gain_db[i] = 0.0
+
+# 4. np.interp auf Sample-Ebene
+gain_db_interp = np.interp(sample_idx, centres, gain_db)
+
+# 5. Per-Sample Guard (PFLICHT — interp erzeugt Übergangs-Boost Musik→Stille)
+quiet_mask = (frame_rms_rest_per_sample < QUIET_THRESH_LINEAR)
+gain_db_interp[quiet_mask & (gain_db_interp > 0.0)] = 0.0
+```
+
+**Betroffene Module (Pflicht-Implementierung):**
+
+- `backend/core/micro_dynamics_envelope_morphing.py` — `MicroDynamicsEnvelopeMorphing.morph()`
+- `backend/core/emotional_arc_preservation.py` — `EmotionalArcPreservationCorrector.correct_arc()`
+
+**Testpflicht:** Regression-Test mit lauter Intro (0–30 s) + denoised Fadeout (30–42 s):
+
+- Kein positiver Gain im Fadeout (`rms_after ≤ rms_before × 1.06`, d. h. < 0.5 dB)
+- Datei: `tests/unit/test_emotional_arc_preservation.py::TestCorrectArc::test_36_no_pegelexplosion_in_denoised_fadeout`
 
 ---
 
@@ -2505,7 +2573,7 @@ ist dieser Plan der **verbindliche Ausführungsplan**.
 Hybrid-Orchestrierung (Denker + UV3-Autoselektion im selben Lauf) erzeugt nicht-deterministische
 Planabweichungen und erschwert Reproduzierbarkeit, QA und Root-Cause-Analyse.
 
-## §2.54 [RELEASE_MUST] Adaptives Phasen-Optimum — Messen-Handeln-Validieren (v9.11.2)
+## §2.54 [RELEASE_MUST] Adaptives Phasen-Optimum — Messen-Handeln-Validieren (v9.11.2, erweitert v9.11.14)
 
 > Dieses Paradigma ist normativ übergeordnet gegenüber allen festen Schwellwerten in §2.48, §2.29d, §2.45.
 > Feste Schwellwerte sind **Notbremsen** (letztes Sicherheitsnetz), nicht die Steuerung.
@@ -2584,6 +2652,62 @@ adaptive_drift_tolerance = compute_adaptive_drift_tolerance(
 - `compute_adaptive_drift_tolerance()` in `backend/core/cumulative_interaction_guard.py`
 - `compute_adaptive_max_rollbacks()` ebenda
 - Testpflicht: `tests/unit/test_adaptive_drift_tolerance.py`
+
+### §2.54a PMGG-Blend-Invariante und Pre-Pipeline-Ceiling (v9.11.14)
+
+**Problem**: Fixer 60/40-Blend in PMGG `_run_with_retry()` und UV3 `_effective_goal_thresholds` erzeugt Schwellwerte **über** der physikalischen Ceiling — bei Shellac `brillanz` (canonical 0.78, SGT 0.51): `0.60×0.78 + 0.40×0.51 = 0.71` bei physikalischer Grenze 0.51 → PMGG startet 5-fachen Retry-Zyklus → Stärke sinkt auf 15 % → Restaurierung versagt.
+
+**Normative Lösung — zwei Mechanismen gemeinsam**:
+
+**1. Pre-Pipeline `_pmgg_ceiling_capped_targets`** (Pflicht, UV3 `restore()` vor Phase-Loop):
+
+```python
+from backend.core.physical_ceiling_estimator import PhysicalCeilingEstimator
+_pce = PhysicalCeilingEstimator().estimate(input_audio, sample_rate, {}, material_key)
+_pmgg_ceiling_capped_targets = {
+    g: float(min(sgt[g], _pce.ceiling[g]))
+    for g in sgt
+}
+# wird als adaptive_goal_thresholds an jede wrap_phase() übergeben
+```
+
+**2. Delta-adaptiver Blend** (Pflicht, identisch in PMGG + Pipeline-Ende, §09.2):
+
+```python
+delta = canonical[goal] - adaptive[goal]   # positiv = adaptiv ist niedriger
+if delta > 0.10:
+    blended = adaptive[goal]               # Ceiling-Fall → adaptiv direkt
+elif delta > 0.04:
+    blended = 0.40 * canonical[goal] + 0.60 * adaptive[goal]
+else:
+    blended = 0.60 * canonical[goal] + 0.40 * adaptive[goal]
+blended = float(np.clip(blended, 0.30, 0.99))
+```
+
+**Invariante**: PMGG `_run_with_retry()` und UV3 `_effective_goal_thresholds`-Block verwenden **identische** delta-adaptive Logik.
+
+### §2.54b Headroom-Scalar für additive Enhancement-Phasen (v9.11.14)
+
+Additive Phase-Familien (`harmonic_reconstruction`, `harmonic_enhancement`, `tonal_enhancement`, `source_enhancement`, `stereo_enhancement`, `stereo_generation`) erhalten vor `wrap_phase()` einen Strength-Scalar proportional zum **absoluten** Headroom bis zur physikalischen Decke:
+
+```python
+HR_WINDOW = 0.25   # volle Stärke wenn Headroom >= 0.25; linear gedämpft darunter
+HR_GOALS  = ("brillanz", "waerme", "raumtiefe", "bass_kraft", "sep_fidelity")
+
+min_hr = 1.0
+for goal in HR_GOALS:
+    headroom = max(0.0, _pmgg_ceiling_capped_targets[goal] - current_score[goal])
+    hr_ratio  = min(1.0, headroom / HR_WINDOW)
+    min_hr    = min(min_hr, hr_ratio)
+
+hr_strength = float(np.clip(min_hr, 0.40, 1.0))   # Minimum 40 % auch nahe der Decke
+if hr_strength < 0.95:
+    combined_strength = float(np.clip(combined_strength * hr_strength, 0.05, 1.0))
+```
+
+**Psychoakustischer Hintergrund**: Grenznutzen sinkt asymptotisch nahe der physikalischen Ceiling; Artefaktrisiko (Over-Processing, spektrale Artefakte) steigt gleichzeitig. Das 0.25-Fenster entspricht typischem JND-Bereich für timbrale Änderungen. Restorative und Pflicht-Phasen (`_is_restorative_phase`, `_is_mandatory_phase`) sind ausgenommen.
+
+**VERBOTEN**: Relative Normierung `(curr - 0.30) / (ceil - 0.30)` — überdämpft CD-Phasen mit großem Headroom (CD `brillanz=0.60, ceil=0.99` → scalar=0.57 trotz 0.39 freiem Raum). Nur absoluter Headroom ist korrekt.
 
 ## §2.55 [RELEASE_MUST] PMGG-CIG-Synchronisations-Invariante (v9.11.3)
 
@@ -2790,7 +2914,7 @@ PlateauStop aktiv. Fix: `mono = a[:, 0] if a.ndim == 2 else a`.
 | Prinzip | Gewicht | Modul |
 | --- | --- | --- |
 | Transient-Punch | ~40 % | TDP |
-| Mikro-Dynamik | ~25 % | MDEM (400 ms) + EmotionalArcCorrection (5 s) |
+| Mikro-Dynamik | ~25 % | MDEM (400 ms, läuft zuerst) → EmotionalArcCorrection (5 s, läuft danach — nur wenn Bogen nicht erhalten) |
 | Klarheit | ~20 % | SGMSE+ / OMLSA |
 | Vokal-Präsenz | ~10 % | Phase 42/43 + VocalAI |
 | Neurale Synthese | ~5 % | Vocos 48k (Studio, MOS < 4.3) |

@@ -258,7 +258,7 @@ class HybridMLDenoiser:
         _sig_len = len(audio_mono)
         _nperseg = int(min(2048, max(1, _sig_len)))
         _noverlap = int(min(1536, max(0, _nperseg - 1)))
-        _f, _t, Zxx = signal.stft(audio_mono, fs=sample_rate, nperseg=_nperseg, noverlap=_noverlap)
+        _f, _t, Zxx = signal.stft(audio_mono, fs=sample_rate, nperseg=_nperseg, noverlap=_noverlap, boundary="even")
 
         noisy_mag = np.abs(Zxx)
         noisy_phase = np.angle(Zxx)

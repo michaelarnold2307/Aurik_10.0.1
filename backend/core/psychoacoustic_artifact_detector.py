@@ -83,7 +83,7 @@ class PsychoacousticArtifactDetector:
         n_fft = min(1024, len(audio_f))
         hop = n_fft // 2
 
-        _, _, S = scipy.signal.stft(audio_f, fs=sr, window="hann", nperseg=n_fft, noverlap=n_fft - hop)
+        _, _, S = scipy.signal.stft(audio_f, fs=sr, window="hann", nperseg=n_fft, noverlap=n_fft - hop, boundary="even")
         power = np.abs(S) ** 2  # (n_bins, n_frames)
         n_bins = power.shape[0]
 
@@ -151,7 +151,7 @@ class PsychoacousticArtifactDetector:
         n_fft = min(1024, len(audio_f))
         hop = n_fft // 4  # Feineres Zeitraster für Transienten
 
-        _, _, S = scipy.signal.stft(audio_f, fs=sr, window="hann", nperseg=n_fft, noverlap=n_fft - hop)
+        _, _, S = scipy.signal.stft(audio_f, fs=sr, window="hann", nperseg=n_fft, noverlap=n_fft - hop, boundary="even")
         mag = np.abs(S)  # (n_bins, n_frames)
 
         if mag.shape[1] < 3:
@@ -235,7 +235,9 @@ class PsychoacousticArtifactDetector:
             # Sanftes Whitening: Divide-by-Envelope im FFT-Bereich
             n_fft = min(2048, len(audio_f))
             hop = n_fft // 4
-            _, _, S = scipy.signal.stft(audio_f, fs=sr, window="hann", nperseg=n_fft, noverlap=n_fft - hop)
+            _, _, S = scipy.signal.stft(
+                audio_f, fs=sr, window="hann", nperseg=n_fft, noverlap=n_fft - hop, boundary="even"
+            )
             mag = np.abs(S) + 1e-30
             # Glatte Hüllkurve (Median über Frequenz)
             envelope = np.median(mag, axis=0, keepdims=True) + 1e-30

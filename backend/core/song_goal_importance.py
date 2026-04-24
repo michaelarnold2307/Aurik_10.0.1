@@ -1268,6 +1268,17 @@ def estimate_goal_importance(
             if _deg_f > 0.2:
                 reasons.append(f"interact_chain×noisy({_deg_f:.2f})")
 
+    # --- Step 6u: NaN/Inf guard before soft-capping ---
+    # Multiplicative compounding across 4 stages can produce NaN/Inf if any
+    # input feature (roughness, HNR, coherence, carrier-chain conf) is NaN/Inf.
+    # NaN weights make PMGG's weighted_reg = raw_reg * NaN → NaN → all retries
+    # pass silently (NaN > threshold == False), effectively disabling PMGG.
+    import math as _math_sgi
+
+    for goal in ALL_GOAL_NAMES:
+        if not _math_sgi.isfinite(weights[goal]):
+            weights[goal] = 1.0  # reset to neutral; partial result > no result
+
     # --- Step 7: Diminishing returns for multiplicative stacking ---
     # With 4 stages (genre/era/material, audio, psychoacoustic, vocal/transient)
     # multiplicative compounding can push weights to extreme values.

@@ -342,6 +342,14 @@ class TestTargetEstimate:
         assert target.shape == (4800,)
         assert np.isfinite(target).all()
 
+    def test_31b_target_estimate_eof_context_decays_to_silence(self) -> None:
+        pre = _make_audio(1.0, freq=440.0)
+        post = np.array([], dtype=np.float32)
+        target = _build_target_estimate(pre, post, 4800, _SR)
+        head_rms = float(np.sqrt(np.mean(target[:600] ** 2)))
+        tail_rms = float(np.sqrt(np.mean(target[-600:] ** 2)))
+        assert tail_rms < head_rms * 0.25
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. PGHI Finalization (Tests 32–34)
@@ -377,6 +385,15 @@ class TestPGHIFinalize:
         result = _pghi_finalize(generated, pre, post, _SR)
         assert result.shape == (500,)
         assert np.isfinite(result).all()
+
+    def test_34b_finalize_one_sided_context_preserves_tail_decay(self) -> None:
+        generated = np.ones(4800, dtype=np.float32) * 0.25
+        pre = _make_audio(0.5)
+        post = np.array([], dtype=np.float32)
+        result = _pghi_finalize(generated, pre, post, _SR)
+        head_rms = float(np.sqrt(np.mean(result[:600] ** 2)))
+        tail_rms = float(np.sqrt(np.mean(result[-600:] ** 2)))
+        assert tail_rms < head_rms * 0.25
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -445,6 +462,19 @@ class TestFullPipeline:
         result = model.inpaint(audio, gs, ge, _SR)
         assert result is not None
         assert np.isfinite(result).all()
+
+    def test_40b_inpaint_gap_to_eof_decays_instead_of_sustaining(self) -> None:
+        audio = _make_audio(6.0, freq=220.0) * 0.56
+        gs = int(4.8 * _SR)
+        ge = len(audio)
+        audio[gs:ge] = 0.0
+        model = FlowAudioModel()
+        result = model.inpaint(audio, gs, ge, _SR)
+        assert result is not None
+        win = _SR // 10
+        head_rms = float(np.sqrt(np.mean(result[gs : gs + win] ** 2)))
+        tail_rms = float(np.sqrt(np.mean(result[-win:] ** 2)))
+        assert tail_rms < head_rms * 0.35
 
     def test_41_inpaint_large_gap_1s(self) -> None:
         audio, gs, ge = _make_audio_with_gap(dur_s=5.0, gap_start_s=2.0, gap_end_s=3.0)

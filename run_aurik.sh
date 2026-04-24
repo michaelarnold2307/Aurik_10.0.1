@@ -1,19 +1,32 @@
 #!/bin/bash
 # Aurik 9 — Startskript mit venv-Python (.venv_aurik, Python 3.10.12)
-# GPU-Modus: wenn .venv_rocm und /dev/kfd vorhanden → ROCm-Beschleunigung (AMD GPU)
+# GPU-Modus: ROCm-venv auf ext4 (~/.local/share/aurik/venv_rocm) + /dev/kfd vorhanden
 # Verwendung: ./run_aurik.sh [Argumente]
 #   AURIK_FORCE_CPU=1  ./run_aurik.sh  — erzwingt CPU-only (deaktiviert ROCm)
+#
+# Hinweis: Das ROCm-venv liegt absichtlich auf ext4 (~/.local/share/aurik/venv_rocm),
+# da ROCm GPU Code Objects per mmap() aus ELF-Sektionen geladen werden und
+# FUSE/fuseblk (NTFS) dieses mmap nicht unterstützt → hipErrorInvalidDeviceFunction.
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_CPU="$SCRIPT_DIR/.venv_aurik/bin/python"
-VENV_ROCM="$SCRIPT_DIR/.venv_rocm/bin/python"
+# ROCm-venv liegt auf ext4 (Home), nicht auf dem FUSE/NTFS-Workspace-Laufwerk
+VENV_ROCM="$HOME/.local/share/aurik/venv_rocm/bin/python"
 PID_FILE="$SCRIPT_DIR/temp_repro/aurik_gui.pid"
 LOG_FILE="$SCRIPT_DIR/logs/aurik_frontend.out"
 
-# GPU-Erkennung: ROCm-venv + KFD-Device vorhanden und nicht explizit deaktiviert
+# GPU-Erkennung: ROCm-venv (ext4) + KFD-Device vorhanden und nicht explizit deaktiviert
 if [[ "${AURIK_FORCE_CPU:-0}" != "1" && -x "$VENV_ROCM" && -e "/dev/kfd" ]]; then
     VENV_PYTHON="$VENV_ROCM"
     _GPU_MODE="ROCm (AMD GPU)"
+    # ORT's libonnxruntime_providers_rocm.so benötigt libhipblas.so.2, libhipfft.so etc.
+    # Diese liegen im PyTorch-lib-Verzeichnis des ROCm-venv (ext4).
+    _TORCH_LIB="$HOME/.local/share/aurik/venv_rocm/lib/python3.10/site-packages/torch/lib"
+    if [[ -d "$_TORCH_LIB" ]]; then
+        export LD_LIBRARY_PATH="${_TORCH_LIB}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+    # .pth-Bridge: aurik_bridge.pth im ROCm-venv-Site-Packages verweist auf venv_aurik-Pakete.
+    # .pth-Dateien werden NACH den eigenen Site-Packages geladen → ROCm-torch hat Vorrang.
 else
     VENV_PYTHON="$VENV_CPU"
     _GPU_MODE="CPU-only"

@@ -254,6 +254,8 @@ class FlowMatchingPlugin:
         sr: int,
         n_steps: int = 8,
         phrase_context: np.ndarray | None = None,
+        goal_weights: dict[str, float] | None = None,
+        restorability_score: float = 65.0,
     ) -> InpaintingResult:
         """Inpainted eine Lücke in audio von gap_start bis gap_end.
 
@@ -297,7 +299,16 @@ class FlowMatchingPlugin:
         )
 
         # Ebene 1: FlowAudio
-        out = self._try_flow_audio(audio, gap_start, gap_end, sr, n_steps, phrase_context)
+        out = self._try_flow_audio(
+            audio,
+            gap_start,
+            gap_end,
+            sr,
+            n_steps,
+            phrase_context,
+            goal_weights,
+            restorability_score,
+        )
         if out is not None:
             kl = self._compute_kl(out, audio, gap_start, gap_end, sr)
             return InpaintingResult(
@@ -339,6 +350,8 @@ class FlowMatchingPlugin:
         sr: int,
         n_steps: int,
         phrase_context: np.ndarray | None,
+        goal_weights: dict[str, float] | None,
+        restorability_score: float,
     ) -> np.ndarray | None:
         """Versucht Flow Matching Inpainting via FlowAudio-Plugin."""
         allocated = False
@@ -356,7 +369,16 @@ class FlowMatchingPlugin:
             from plugins.flow_audio_sota import FlowAudioModel  # type: ignore[import]
 
             model = FlowAudioModel()
-            result = model.inpaint(audio, gap_start, gap_end, sr, n_steps=n_steps, conditioning=phrase_context)
+            result = model.inpaint(
+                audio,
+                gap_start,
+                gap_end,
+                sr,
+                n_steps=n_steps,
+                conditioning=phrase_context,
+                goal_weights=goal_weights,
+                restorability_score=restorability_score,
+            )
             if allocated:
                 try:
                     _release("FlowAudioCFM")
@@ -474,6 +496,8 @@ def inpaint_flow(
     sr: int,
     n_steps: int = 8,
     phrase_context: np.ndarray | None = None,
+    goal_weights: dict[str, float] | None = None,
+    restorability_score: float = 65.0,
 ) -> InpaintingResult:
     """Convenience-Funktion: Generatives Inpainting via Flow Matching.
 
@@ -489,5 +513,12 @@ def inpaint_flow(
         InpaintingResult mit inpainted Audio.
     """
     return get_flow_matching_plugin().inpaint(
-        audio, gap_start, gap_end, sr, n_steps=n_steps, phrase_context=phrase_context
+        audio,
+        gap_start,
+        gap_end,
+        sr,
+        n_steps=n_steps,
+        phrase_context=phrase_context,
+        goal_weights=goal_weights,
+        restorability_score=restorability_score,
     )

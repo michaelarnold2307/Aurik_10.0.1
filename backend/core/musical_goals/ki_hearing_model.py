@@ -137,7 +137,7 @@ class KIHörbarkeitsAnalyzer:
                 return 0.0
 
             # STFT
-            f, _t, Zxx = signal.stft(audio, fs=sr, nperseg=window_size, noverlap=hop_size)
+            f, _t, Zxx = signal.stft(audio, fs=sr, nperseg=window_size, noverlap=hop_size, boundary="even")
 
             # Magnitude Spektrum
             magnitude = np.abs(Zxx)

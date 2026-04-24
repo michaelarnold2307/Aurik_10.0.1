@@ -116,6 +116,38 @@ CANONICAL_THRESHOLDS_STUDIO2026 = {
 
 Nicht alle Songs sollten zu denselben Schwellwerten führen. Ein 1920er-Shellac-Aufnahme kann unmöglich 0.78 Brillanz haben (technische Grenze 8 kHz, Rolloff). Ein 1990er CD-Pop sollte 0.87+ Brillanz haben.
 
+### §09.2 PMGG-Blend-Invariante (normativ, v9.11.14)
+
+**Problem**: Fixer 60/40-Blend (60 % canonical, 40 % SGT) erzeugt PMGG-Schwellwerte **über** der physikalischen Ceiling — z.B. `brillanz` Shellac: `0.60 × 0.78 + 0.40 × 0.51 = 0.71` bei physikalischer Grenze 0.51. Resultat: 5 Retries → 15 % Stärke → degradierte Restaurierung.
+
+**Normative Regel — delta-adaptiver Blend (Pflicht in PMGG + Pipeline-Ende)**:
+
+```python
+delta = canonical[goal] - sgt[goal]   # positiv = SGT ist niedriger (Material-Constraint)
+if delta > 0.10:
+    blended = sgt[goal]                # Direkt — Ceiling-Fall, kein Blend sinnvoll
+elif delta > 0.04:
+    blended = 0.40 * canonical[goal] + 0.60 * sgt[goal]   # Moderate Constraint
+else:
+    blended = 0.60 * canonical[goal] + 0.40 * sgt[goal]   # Kleine/aufwärts Differenz
+blended = float(np.clip(blended, 0.30, 0.99))
+```
+
+**Pre-Pipeline Physical Ceiling (Pflicht)**:
+
+Vor dem Phase-Loop muss UV3 `PhysicalCeilingEstimator` auf dem Input-Audio ausführen und `_pmgg_ceiling_capped_targets` bilden:
+
+```python
+_pmgg_ceiling_capped_targets = {
+    g: float(min(sgt[g], physical_ceiling[g]))
+    for g in sgt
+}
+```
+
+Diese werden als `adaptive_goal_thresholds` an **jede** `wrap_phase()`-Aufrufe und an die Pipeline-Ende-Schwellwertberechnung übergeben.
+
+**Invariante**: PMGG-Blend und Pipeline-Ende-Blend verwenden identische delta-adaptive Logik — kein Split-Behavior zwischen per-Phase-Steuerung und Final-Gate.
+
 ### §09.2 Zwei-Ebenen-API (normativ)
 
 | Ebene | Modul | Rückgabe | Einsatz |
@@ -628,6 +660,28 @@ Integration:
 
 - Additive Phasen duerfen pro Iteration nur einen Anteil von `cpb` verbrauchen.
 - Bei `cpb -> 0` muss die Phase auf konservatives Wet/Dry zurueckfallen.
+
+### §09.10d-2 Headroom-Scalar für Additive Phasen (v9.11.14)
+
+Ergänzt §09.10d. Enhancement-Phasen der Familien `harmonic_reconstruction`, `harmonic_enhancement`, `tonal_enhancement`, `source_enhancement`, `stereo_enhancement`, `stereo_generation` erhalten einen Strength-Scalar proportional zum **absoluten Headroom** bis zur physikalischen Decke:
+
+```python
+HR_WINDOW = 0.25   # Fenster: innerhalb 0.25 zur Decke → Dämpfung beginnt
+HR_GOALS  = ("brillanz", "waerme", "raumtiefe", "bass_kraft", "sep_fidelity")
+
+min_hr = 1.0
+for goal in HR_GOALS:
+    headroom = max(0.0, ceiling[goal] - current_score[goal])  # absolut
+    hr_ratio  = min(1.0, headroom / HR_WINDOW)
+    min_hr    = min(min_hr, hr_ratio)
+
+hr_strength = float(np.clip(min_hr, 0.40, 1.0))
+# strength_used = combined_strength * hr_strength   (nur wenn hr_strength < 0.95)
+```
+
+**Rationale**: Psychoakustisches Sättigungsgesetz — Grenznutzen sinkt asymptotisch nahe der physikalischen Decke; Artefaktrisiko steigt gleichzeitig. Die lineare Skalierung über ein 0.25-Fenster ist konservativ und vermeidet Over-Processing bei Shellac/Wachszylinder. Restorative und Pflicht-Phasen sind ausgenommen (Repair bleibt immer auf voller Stärke).
+
+**VERBOTEN**: `hr_range = ceil - 0.30; hr_ratio = 1 - (curr - 0.30) / hr_range` — relative Normierung mit 0.30-Baseline dämpft CD-Phasen mit 0.39 Headroom (CD `brillanz=0.60, ceil=0.99` → scalar=0.57 obwohl kein Ceiling-Problem).
 
 ### §09.10e Retry-Temperature (RT)
 

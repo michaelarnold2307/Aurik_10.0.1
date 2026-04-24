@@ -780,7 +780,7 @@ class UnifiedAudioRestorer:
         from scipy import signal
 
         # STFT
-        _f, _t, Zxx = signal.stft(audio, self.sr, nperseg=2048)
+        _f, _t, Zxx = signal.stft(audio, self.sr, nperseg=2048, boundary="even")
         magnitude = np.abs(Zxx)
         phase = np.angle(Zxx)
 

@@ -2624,6 +2624,7 @@ class PerPhaseMusicalGoalsGate:
         initial_strength: float = 1.0,
         is_studio_2026: bool = False,
         goal_weights: dict[str, float] | None = None,
+        adaptive_goal_thresholds: dict[str, float] | None = None,
     ) -> tuple[np.ndarray, dict[str, float], PhaseGateLogEntry]:
         """
         Führt eine Phase aus und prüft Musical-Goals-Regression.
@@ -2782,6 +2783,7 @@ class PerPhaseMusicalGoalsGate:
             defect_locations=_defect_locs,
             is_studio_2026=is_studio_2026,
             goal_weights=goal_weights,
+            adaptive_goal_thresholds=adaptive_goal_thresholds,
         )
 
         # Best-Effort-Zähler (Phase wurde mit reduzierter Stärke angewendet, nicht übersprungen)
@@ -2918,6 +2920,7 @@ class PerPhaseMusicalGoalsGate:
         defect_locations: dict[str, list[tuple[float, float]]] | None = None,
         is_studio_2026: bool = False,
         goal_weights: dict[str, float] | None = None,
+        adaptive_goal_thresholds: dict[str, float] | None = None,
     ) -> tuple[np.ndarray, dict[str, float], str, float]:
         """
         Führt Phase aus, ggf. mit Retry bei Regression.
@@ -2984,6 +2987,40 @@ class PerPhaseMusicalGoalsGate:
             phase_id.startswith(p) for p in _RESTORATIVE_PHASES
         )
         _thresholds = _get_canonical_thresholds(is_studio_2026)
+        # §09.2 Song-adaptive threshold blend: align per-phase PMGG with pipeline-end effective
+        # thresholds so restorative baseline capping uses realistic song-specific floors.
+        # §2.54 Adaptive blend weight: large downward delta (physical ceiling / genre constraint)
+        # → use adaptive value directly; small delta → 60/40 conservative blend.
+        # This prevents PMGG from demanding goals physically impossible for the material (e.g.
+        # brillanz>0.70 for Shellac, bass_kraft>0.70 for Schlager) which causes endless retries
+        # at 15 % strength and degrades overall restoration quality.
+        if adaptive_goal_thresholds:
+            _thresholds = dict(_thresholds)  # mutable copy — do not mutate module-level dict
+            _blended_goals = []
+            for _g, _v in adaptive_goal_thresholds.items():
+                if _g in _thresholds:
+                    _canon = float(_thresholds[_g])
+                    _adap = float(_v)
+                    _delta = _canon - _adap  # positive = adaptive is lower (constrained)
+                    if _delta > 0.10:
+                        # Large constraint (physical ceiling or strong genre/material bias):
+                        # use adaptive value directly — blending would still exceed the ceiling.
+                        _blended = float(np.clip(_adap, 0.30, 0.99))
+                    elif _delta > 0.04:
+                        # Moderate constraint: weight 40 % canonical / 60 % adaptive.
+                        _blended = float(np.clip(0.40 * _canon + 0.60 * _adap, 0.30, 0.99))
+                    else:
+                        # Small or upward adjustment: conservative 60/40 blend (unchanged).
+                        _blended = float(np.clip(0.60 * _canon + 0.40 * _adap, 0.30, 0.99))
+                    if abs(_blended - _canon) > 1e-6:
+                        _blended_goals.append(f"{_g}:{_canon:.2f}→{_blended:.2f}")
+                    _thresholds[_g] = _blended
+            if _blended_goals:
+                logger.debug(
+                    "PMGG §09.2 adaptive thresholds blended (%s): %s",
+                    phase_id,
+                    ", ".join(_blended_goals[:5]),
+                )
         if _is_restorative:
             effective_scores_before = {g: min(v, _thresholds.get(g, v) + 0.05) for g, v in scores_before.items()}
             _capped_goals = [
@@ -2992,12 +3029,48 @@ class PerPhaseMusicalGoalsGate:
             if _capped_goals:
                 logger.debug(
                     "PMGG restorative baseline cap (%s): %s — defect-inflated scores capped at"
-                    " canonical thresholds to prevent false-positive regressions",
+                    " adaptive thresholds to prevent false-positive regressions",
                     phase_id,
                     {g: round(scores_before[g], 3) for g in _capped_goals},
                 )
         else:
             effective_scores_before = scores_before
+
+        # §2.54 Goal-Gap Adaptive Strength Boost: jede Phase hinarbeiten auf die
+        # individuell berechneten song-spezifischen Ziel-Schwellwerte.
+        # Je größer das Defizit (Abstand Goal-Score → Zielwert), desto mehr Stärke
+        # erhält die Phase — gedeckelt auf bestehende team_cap / safe_cap (advisory-only).
+        # Nur wenn adaptive_goal_thresholds vorhanden (§09.2 estimate_song_goal_targets).
+        # Wirkt auf initial_strength NACH allen Caps — darf Caps nicht überschreiten.
+        if adaptive_goal_thresholds and effective_scores_before:
+            _gap_vals: list[float] = []
+            for _gg in effective_goals:
+                if _gg in adaptive_goal_thresholds and _gg in effective_scores_before:
+                    _t = float(adaptive_goal_thresholds[_gg])
+                    _c = float(effective_scores_before[_gg])
+                    _d = _t - _c
+                    if _d > 0.005:  # nur substantielles Defizit berücksichtigen
+                        _w = float((goal_weights or {}).get(_gg, 1.0))
+                        _gap_vals.append(min(_d, 0.25) * _w)  # cap per-goal auf 0.25
+            if _gap_vals:
+                _mean_gap = sum(_gap_vals) / len(_gap_vals)
+                # 0.05 Ø-Defizit → +8% Stärke; 0.15+ → +25% (Asymptote)
+                _gap_factor = float(np.clip(1.0 + 1.666 * _mean_gap, 1.0, 1.25))
+                if _gap_factor > 1.02 and initial_strength < 0.99:
+                    _cap_upper = min(float(_team_cap), float(_safe_cap), 1.0)
+                    _old_is = initial_strength
+                    initial_strength = float(np.clip(initial_strength * _gap_factor, 0.0, _cap_upper))
+                    if abs(initial_strength - _old_is) > 0.005:
+                        logger.debug(
+                            "PMGG §2.54 goal-gap boost (%s): mean_gap=%.3f factor=%.3f "
+                            "strength %.3f→%.3f (cap_upper=%.2f)",
+                            phase_id,
+                            _mean_gap,
+                            _gap_factor,
+                            _old_is,
+                            initial_strength,
+                            _cap_upper,
+                        )
 
         # §2.29a ML-Inference-Caching: ML-deterministische Phasen werden nur
         # einmal mit strength=1.0 ausgeführt.  Retries variieren Wet/Dry-Blending.

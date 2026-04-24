@@ -684,11 +684,21 @@ class PianoRestorationV1(PhaseInterface):
         # Guard: bei Stille (max==0) wäre threshold=0 => division by zero
         threshold = max(0.1 * float(np.max(rms_envelope)), 1e-12)  # -20 dB
 
-        # Calculate gain (boost below threshold)
+        # §2.45a Silence gate: frames below -46 dBFS are true silence (noise floor /
+        # fadeout) and must NOT be boosted — expansion is only for musical content.
+        # Without this gate, silence frames receive gain = expansion_ratio (1.08–1.35),
+        # which raises the noise floor by 3–11 dB (Pegelexplosion in quiet sections).
+        _SILENCE_GATE_LINEAR = 10.0 ** (-46.0 / 20.0)  # ≈ 0.005 linear
+
+        # Calculate gain (boost below threshold, but never below silence gate)
         gain = np.where(
-            rms_envelope < threshold,
-            expansion_ratio ** np.clip((threshold - rms_envelope) / threshold, -40.0, 40.0),
-            1.0,  # No change above threshold
+            rms_envelope < _SILENCE_GATE_LINEAR,
+            1.0,  # True silence — no expansion, preserve noise floor
+            np.where(
+                rms_envelope < threshold,
+                expansion_ratio ** np.clip((threshold - rms_envelope) / threshold, -40.0, 40.0),
+                1.0,  # No change above threshold
+            ),
         )
 
         # Smooth gain (avoid artifacts)

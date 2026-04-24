@@ -794,7 +794,7 @@ class TestPhase23SpectralRepair:
         assert called["ml"] == 1
 
     def test_thrashing_relax_mrsa_attempt_cap_limits_retries(self, monkeypatch):
-        long_mono = np.random.default_rng(11).uniform(-0.1, 0.1, SR * 2).astype(np.float32)
+        long_mono = np.random.default_rng(11).uniform(-0.1, 0.1, SR + 200).astype(np.float32)
         monkeypatch.setattr(self.phase, "_is_system_thrashing", lambda: True)
         monkeypatch.setattr(
             self.phase,

@@ -292,7 +292,7 @@ class DamageAnalyzer:
         from scipy import signal
 
         # Compute STFT
-        f, _t, Zxx = signal.stft(audio, fs=sample_rate, nperseg=1024)
+        f, _t, Zxx = signal.stft(audio, fs=sample_rate, nperseg=1024, boundary="even")
 
         # Power spectrum
         power = np.abs(Zxx) ** 2

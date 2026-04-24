@@ -285,7 +285,7 @@ class BowNoiseDetector:
         # Compute spectral flatness (noise-like vs tonal)
         # Bow noise is broadband → high flatness
         nperseg = 2048
-        _f, _t, Zxx = signal.stft(filtered, sample_rate, nperseg=nperseg)
+        _f, _t, Zxx = signal.stft(filtered, sample_rate, nperseg=nperseg, boundary="even")
 
         # Spectral flatness per frame
         mag = np.abs(Zxx) + 1e-8

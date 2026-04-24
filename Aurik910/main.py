@@ -416,6 +416,23 @@ def main():
 
     _run_startup_model_check(app)
 
+    # ── librosa numba JIT warmup (main thread) ────────────────────────────────
+    # numba 0.64.0 gufunc JIT in librosa.core.audio._resample_multi ist thread-unsafe:
+    # erstes Ausführen im nicht-Hauptthread → AttributeError 'get_call_template'.
+    # Fix: librosa.resample() einmal mit Dummy-Signal im Hauptthread aufrufen, damit
+    # numba JIT here abgearbeitet wird. Alle späteren Thread-Aufrufe treffen auf
+    # bereits kompilierten JIT-Code und sind sicher (numba cache ist thread-safe).
+    try:
+        import librosa as _librosa_warmup
+        import numpy as _np_warmup
+
+        _dummy = _np_warmup.zeros(1024, dtype=_np_warmup.float32)
+        _librosa_warmup.resample(_dummy, orig_sr=44100, target_sr=48000)
+        logger.info("librosa numba JIT warmup abgeschlossen (main thread)")
+        del _dummy, _np_warmup, _librosa_warmup
+    except Exception as _wup_exc:
+        logger.warning("librosa warmup fehlgeschlagen (non-fatal): %s", _wup_exc)
+
     # ── Build main window ─────────────────────────────────────────────────────
     if splash:
         splash.set_status("Benutzeroberfläche wird aufgebaut...")

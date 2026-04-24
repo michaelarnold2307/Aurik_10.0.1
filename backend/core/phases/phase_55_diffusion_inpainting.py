@@ -489,7 +489,14 @@ def _try_cqtdiff_plus_plugin(audio: np.ndarray, start: int, end: int, sample_rat
         return None
 
 
-def _try_flow_matching_plugin(audio: np.ndarray, start: int, end: int, sample_rate: int) -> np.ndarray | None:
+def _try_flow_matching_plugin(
+    audio: np.ndarray,
+    start: int,
+    end: int,
+    sample_rate: int,
+    goal_weights: dict[str, float] | None = None,
+    restorability_score: float = 65.0,
+) -> np.ndarray | None:
     """
     Versucht FlowMatchingPlugin (Primär-Inpainting, §4.5) für Lücken aller Größen.
 
@@ -512,7 +519,14 @@ def _try_flow_matching_plugin(audio: np.ndarray, start: int, end: int, sample_ra
         _plm55b = _get_plm55b()
         _plm55b.set_active("FlowMatching", True)
         try:
-            result = inpaint_flow(audio, start, end, sample_rate)
+            result = inpaint_flow(
+                audio,
+                start,
+                end,
+                sample_rate,
+                goal_weights=goal_weights,
+                restorability_score=restorability_score,
+            )
         finally:
             _plm55b.set_active("FlowMatching", False)
         if result is not None and result.success:
@@ -750,6 +764,8 @@ def _process_channel(
     bw_cap_hz: float | None = None,
     precomputed_gaps: list[tuple[int, int]] | None = None,
     wall_budget_s: float = _PHASE55_WALL_BUDGET_S,
+    goal_weights: dict[str, float] | None = None,
+    restorability_score: float = 65.0,
 ) -> tuple[np.ndarray, dict]:
     """Inpainting für einen Mono-Kanal. Returns (repaired, stats)."""
     result = channel.copy()
@@ -789,9 +805,7 @@ def _process_channel(
         _now_warn = time.monotonic()
         _last_warn_ts = getattr(_is_ml_thrashing, "_last_warn_ts", 0.0)
         if _now_warn - _last_warn_ts >= 60.0:
-            logger.warning(
-                "phase_55: ML-Thrashing erkannt — konservativer DSP-Pfad zum Schutz von Musik/Sprache aktiv"
-            )
+            logger.warning("phase_55: ML-Thrashing erkannt — konservativer DSP-Pfad zum Schutz von Musik/Sprache aktiv")
             _is_ml_thrashing._last_warn_ts = _now_warn  # type: ignore[attr-defined]
 
     for start, end in gaps:
@@ -849,7 +863,14 @@ def _process_channel(
             # Priorität 0 [TIER-0]: FlowMatchingPlugin (Lipman et al. 2023, §4.4 SOTA-Matrix primär)
             # Flow Matching: 4–16 Schritte statt 50–200 DDPM-Schritte → 10–50× schneller,
             # gleichwertige oder bessere Qualität. Aktiviert für Lücken aller Größen (20 ms – 30 s).
-            plugin_result = _try_flow_matching_plugin(channel, start, end, sample_rate)
+            plugin_result = _try_flow_matching_plugin(
+                channel,
+                start,
+                end,
+                sample_rate,
+                goal_weights=goal_weights,
+                restorability_score=restorability_score,
+            )
             if plugin_result is not None:
                 candidate = plugin_result[: end - start]
                 stats["plugin_used"] = True
@@ -1164,6 +1185,10 @@ class DiffusionInpaintingPhase(PhaseInterface):
         if _vocals_conf == 0.0:  # Fallback: direct callers may use panns_singing key
             _vocals_conf = float(kwargs.get("panns_singing", 0.0))
         safe_strength = self._derive_safe_inpainting_strength(effective_strength, _mat_key, _vocals_conf)
+        _goal_weights = kwargs.get("song_goal_weights")
+        if not isinstance(_goal_weights, dict):
+            _goal_weights = None
+        _restorability_score = float(kwargs.get("restorability_score", 50.0))
         # Accept both enum value strings like "MaterialType.WAX_CYLINDER" and plain keys
         for _mk, _cap in _MATERIAL_BW_CAP_HZ.items():
             if _mk in _mat_key:
@@ -1208,6 +1233,8 @@ class DiffusionInpaintingPhase(PhaseInterface):
                 _repaired_gaps,
                 _bw_cap_hz,
                 wall_budget_s=wall_budget_s,
+                goal_weights=_goal_weights,
+                restorability_score=_restorability_score,
             )
             gaps = _detect_gaps(audio, sample_rate, min_gap_ms_eff)
             quality = _reconstruction_quality_score(audio, repaired, gaps)
@@ -1226,11 +1253,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
             # Phase_55 verarbeitet sample-first (N, 2). Falsche Orientation führt dazu, dass
             # `for ch in range(audio.shape[1])` N-mal statt 2-mal iteriert → 94K+ Warnungen
             # und keine Gap-Detektion (2-Sample-Arrays haben keine Gaps).
-            _was_channel_first = (
-                audio.ndim == 2
-                and audio.shape[0] in (1, 2)
-                and audio.shape[1] > audio.shape[0]
-            )
+            _was_channel_first = audio.ndim == 2 and audio.shape[0] in (1, 2) and audio.shape[1] > audio.shape[0]
             if _was_channel_first:
                 audio = audio.T  # (2, N) → (N, 2) für korrekte sample-first-Verarbeitung
                 logger.debug("phase_55: Axis-Orientierungs-Korrektur (2,N) → (N,2) angewendet")
@@ -1256,6 +1279,8 @@ class DiffusionInpaintingPhase(PhaseInterface):
                     _bw_cap_hz,
                     precomputed_gaps=mono_gaps,
                     wall_budget_s=wall_budget_s,
+                    goal_weights=_goal_weights,
+                    restorability_score=_restorability_score,
                 )
                 channels_repaired.append(ch_rep)
                 n_gaps = max(n_gaps, stats["n_gaps"])

@@ -68,6 +68,7 @@ class FeedbackChain:
         self.use_versa_in_loop = bool(use_versa_in_loop)
         self.goal_priority_callback: Callable[[np.ndarray, np.ndarray], tuple[bool, str]] | None = None
         self.goal_weights: dict[str, float] | None = None  # §2.56 Song-Goal-Importance
+        self.adaptive_goal_thresholds: dict[str, float] | None = None  # §09.2 per-song adaptive targets
         self._pqs_score_fn: Callable[[np.ndarray, int], object] | None = None
         self._versa_score_fn: Callable[[np.ndarray, int], object] | None = None
         self._last_score_source: str = "heuristic_rms"
@@ -540,7 +541,20 @@ class FeedbackChain:
                         _is_restorative = any(str(_pid).startswith(rp) for rp in _RESTORATIVE_PREFIXES)
                         _prune_threshold = self._compute_adaptive_prune_threshold(_is_restorative)
                         if _delta >= _prune_threshold:
-                            _surviving_phases.append((_pid, _fn, _kw))
+                            # §2.56 FeedbackChain Strength-Adaptation:
+                            # Phasen mit klar positivem Delta (> 0.01) werden leicht geboostet;
+                            # marginal hilfreiche Nicht-Restaurierungs-Phasen leicht gedämpft.
+                            # Nur aktiv wenn Phase einen expliziten 'strength'-Kwarg hat.
+                            _kw_adapted = dict(_kw) if _kw else {}
+                            if "strength" in _kw_adapted:
+                                _cur_str = float(_kw_adapted["strength"])
+                                if _delta > 0.010:
+                                    # Clearly beneficial: modest boost (capped at 1.0)
+                                    _kw_adapted["strength"] = float(np.clip(_cur_str * 1.12, 0.1, 1.0))
+                                elif _delta < 0.002 and not _is_restorative:
+                                    # Marginally helpful: slight reduction to prevent over-processing
+                                    _kw_adapted["strength"] = float(np.clip(_cur_str * 0.90, 0.1, 1.0))
+                            _surviving_phases.append((_pid, _fn, _kw_adapted))
                             logger.debug(
                                 "FeedbackChain: phase %s kept (Δ=%.4f)",
                                 _pid,
@@ -616,8 +630,17 @@ class FeedbackChain:
                         logger.warning("⚠ %s", _log_entry)
                         break  # Rollback auf best (§2.34)
                     _prev_goals = _curr_goals
+                    # §09.2: use song-adaptive targets if available, else canonical thresholds
+                    _fc_agt = self.adaptive_goal_thresholds
                     _curr_goal_pass_count = sum(
-                        1 for g, v in _curr_goals.items() if v >= _checker.thresholds.get(g, 0.85)
+                        1
+                        for g, v in _curr_goals.items()
+                        if v
+                        >= (
+                            _fc_agt.get(g, _checker.thresholds.get(g, 0.85))
+                            if _fc_agt
+                            else _checker.thresholds.get(g, 0.85)
+                        )
                     )
                 except Exception as _gpp_exc:
                     logger.debug("GoalPriorityProtocol in FeedbackChain nicht verfügbar: %s", _gpp_exc)
@@ -632,8 +655,17 @@ class FeedbackChain:
                     _prev_goals = _checker.measure_all(_goal_window(candidate), _sr)
                     _analytics_dt = _time_fc.perf_counter() - _t_goals
                     self._last_analytics_overhead_s = getattr(self, "_last_analytics_overhead_s", 0.0) + _analytics_dt
+                    # §09.2: use song-adaptive targets if available, else canonical thresholds
+                    _fc_agt = self.adaptive_goal_thresholds
                     _curr_goal_pass_count = sum(
-                        1 for g, v in _prev_goals.items() if v >= _checker.thresholds.get(g, 0.85)
+                        1
+                        for g, v in _prev_goals.items()
+                        if v
+                        >= (
+                            _fc_agt.get(g, _checker.thresholds.get(g, 0.85))
+                            if _fc_agt
+                            else _checker.thresholds.get(g, 0.85)
+                        )
                     )
                 except Exception as mg_exc:
                     logger.debug("FeedbackChain: initial musical-goals read failed: %s", mg_exc)

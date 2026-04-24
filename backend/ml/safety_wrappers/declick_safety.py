@@ -175,7 +175,7 @@ def compute_transient_density(audio: np.ndarray, sr: int) -> float:
     hop_length = 512
 
     # Compute STFT
-    _f, _t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=2048 - hop_length)
+    _f, _t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=2048 - hop_length, boundary="even")
 
     # Spectral flux (change in spectrum)
     mag = np.abs(Zxx)
