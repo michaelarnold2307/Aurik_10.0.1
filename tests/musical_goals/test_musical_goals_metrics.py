@@ -472,16 +472,17 @@ class TestRegressionPrevention:
         # Changes vs v9.13:
         #   - brillanz:    §9.7.12 HF Crest Factor (2-16 kHz): 8000 Hz tone in HF band →
         #                  strong tonal peak → high crest → score near 1.0
-        #   - waerme:      §9.7.14 E(200-800)/E(800-3000) ratio: signal has 500 Hz (warm,
-        #                  200-800 band) vs 2000 Hz (cool, 800-3000 band);
-        #                  ISO-226-weighted ratio is <1 → moderate score ~0.33
+        #   - waerme:      §9.7.14 (§2.54 fix: /4.0 not /1.5) E(200-800)/E(800-3000) ratio:
+        #                  signal has 500 Hz (warm, 200-800 band) vs 2000 Hz (cool, 800-3000 band);
+        #                  ISO-226-weighted ratio/4.0 → mixed signal ~0.22
         #   - transparenz: §9.7.13 5-band crest: multi-tone signal spans several octave
         #                  bands → high crest in each band → score near 1.0
         # Signal: 100+500+2000+8000 Hz tones, amplitudes 0.3/0.3/0.2/0.2
         baseline_scores = {
             "bass_kraft": (0.94, 1.01),  # Bass-heavy signal always near 1.0
             "brillanz": (0.90, 1.01),  # §9.7.12: 8000 Hz tonal peak → high crest in 2-16 kHz
-            "waerme": (0.25, 0.45),  # §9.7.14: E(500Hz)/E(2000Hz) with ISO-226 → ratio ~0.33
+            "waerme": (0.15, 0.30),  # §9.7.14 (§2.54 fix /4.0): 500 Hz warm-band vs 2000 Hz cool-band;
+            # ratio/4.0 → realistic ~0.22 for mixed tonal signal
             "natuerlichkeit": (0.94, 1.01),  # Low flatness (pure tones) → high naturalness
             "authentizitaet": (0.94, 1.01),  # v9.13: flatness≈0 for pure tones → tonal_score≈1.0
             "emotionalitaet": (0.26, 0.40),  # v9.13: crest_score denom 12→9; 4-tone crest ~8.9 dB

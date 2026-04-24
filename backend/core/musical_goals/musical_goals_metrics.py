@@ -653,7 +653,8 @@ class WaermeMetric:
         Not 200-2000 Hz single-band measurement (legacy, reverb-sensitive).
         Scientific basis: Fletcher & Rossing vocal formant structure;
         Moore & Glasberg (1983) auditory filter bandwidths.
-        Calibration: ratio 1.5 -> score 1.0 (warm body); ratio 0 -> score 0.0 (thin).
+        Calibration (§2.54): ratio 4.0 -> score 1.0 (warm body); ratio 0 -> score 0.0 (thin).
+        Typical warm music ratios after ISO 226 weighting: 3.0–4.0 (bass/lower-mid dominant).
         """
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
@@ -682,8 +683,11 @@ class WaermeMetric:
 
         # Warmth ratio — reverb-invariant (both bands affected proportionally by reverb)
         warmth_ratio = warmth_low_energy / (warmth_high_energy + 1e-10)
-        # Calibration: ratio 1.5 -> score 1.0 (warm body energy ~ upper-mid energy)
-        warmth_ratio_score = float(np.clip(warmth_ratio / 1.5, 0.0, 1.0))
+        # §2.54 Calibration: typical warm music ratio is 3.0–4.0 (bass/lower-mid dominant
+        # after ISO 226 weighting); dividing by 4.0 maps ratio=4.0 → score=1.0 and
+        # ratio=1.0 → score=0.25. Division by 1.5 caused near-universal saturation at 1.0
+        # (VERBOTEN: "before=1.0000/after=1.0000/delta=+0.0000" in production, 2026-04-24).
+        warmth_ratio_score = float(np.clip(warmth_ratio / 4.0, 0.0, 1.0))
 
         # H2/H4 harmonic warmth: tube/tape even-harmonic character (supplementary)
         spectral_flatness = librosa.feature.spectral_flatness(y=audio, n_fft=2048, hop_length=512)[0]

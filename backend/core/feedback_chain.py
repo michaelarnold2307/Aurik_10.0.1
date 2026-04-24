@@ -182,16 +182,50 @@ class FeedbackChain:
         remaining improvements. Low-quality uses relaxed delta to avoid
         wasting iterations on negligible gains.
 
+        §2.54 Material-Adaptive Plateau (VERBOTEN: fixed _PLATEAU_THRESHOLD=0.005):
+        Shellac produces ~0.002 improvements per iteration; a universal 0.005
+        threshold causes early termination. Material-specific deltas applied:
+            shellac/wax_cylinder: 0.002   (tiny gains are real progress)
+            reel_tape/tape:       0.003
+            cassette:             0.004
+            vinyl/acetate_disc:   0.004
+            mp3_low/streaming:    0.008
+            cd_digital and above: 0.010
+        Additionally: restorability < 40 → floor the delta at 0.002 (heavily
+        degraded songs must not be stopped on marginally improving iterations).
+
         §2.56: P1/P2-heavy songs (naturalness/authenticity) get a tighter
         delta at high MOS to extract maximum perceptual quality on the
         goals that matter most. P4/P5-heavy songs remain at standard delta.
         """
+        # §2.54 Material-adaptive base delta (plateau threshold)
+        _mat = (self.material or "").lower()
+        _MATERIAL_DELTA: dict[str, float] = {
+            "shellac": 0.002,
+            "wax_cylinder": 0.002,
+            "acetate_disc": 0.003,
+            "wire_recording": 0.002,
+            "reel_tape": 0.003,
+            "tape": 0.003,
+            "cassette": 0.004,
+            "vinyl": 0.004,
+            "mp3_low": 0.008,
+            "streaming": 0.008,
+            "cd_digital": 0.010,
+        }
+        _mat_delta = _MATERIAL_DELTA.get(_mat, self.convergence_delta)
+
+        # Restorability floor: heavily degraded songs (restorability < 40) use minimum delta
+        if self.restorability_score < 40:
+            _mat_delta = min(_mat_delta, 0.002)
+
+        # MOS-level scaling on top of material base
         if current_mos >= 4.0:
-            base_delta = max(1e-6, self.convergence_delta * 0.25)  # 0.005 for default 0.02
+            base_delta = max(1e-6, _mat_delta * 0.5)  # tighten at near-ceiling quality
         elif current_mos >= 3.5:
-            base_delta = self.convergence_delta  # 0.02 default
+            base_delta = _mat_delta
         else:
-            base_delta = min(0.05, self.convergence_delta * 2.5)  # 0.05 for poor audio
+            base_delta = min(_mat_delta * 3.0, 0.05)  # relax for poor-quality audio
 
         # §2.56: tighten convergence for P1/P2-dominant songs at high quality
         if current_mos >= 4.0 and isinstance(self.goal_weights, dict) and self.goal_weights:
