@@ -1674,7 +1674,7 @@ if rms_drop < -threshold:
 **Betroffene Phasen (kein Makeup-Gain-Guard erlaubt):**
 
 - `phase_05_rumble_filter` (HPF) — Guard entfernt in v9.11.17 (commit 72d993a)
-- `phase_02_hum_removal` (Notch) — Guard noch aktiv (PENDING FIX: §2.45a-VI-Verletzung im Code)
+- `phase_02_hum_removal` (Notch) — Guard entfernt in v9.11.18
 - Jede zukünftige Phase die primär als Spektralband-Filter arbeitet
 
 ## §2.46 [RELEASE_MUST] Carrier-Chain-Inversion (v9.10.122)

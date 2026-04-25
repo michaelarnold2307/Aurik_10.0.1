@@ -15932,7 +15932,7 @@ class UnifiedRestorerV3:
                     _g = min(_g, 4.0)
                     if _g > 1.0005:
                         # Envelope-aware gain: only amplify musical frames, leave silence untouched
-                        _work = self._musical_gain_envelope(_work, _g, gate_dbfs=-50.0, sr=sample_rate)
+                        _work = self._musical_gain_envelope(_work, _g, gate_dbfs=-36.0, sr=sample_rate)
                         # Soft-limiter only if actual clipping risk (peak > 0.98),
                         # NOT as routine post-gain step — avoids compressing musical dynamics
                         # §2.45a-III + §v9.10.125: 99.9th-percentile, not np.max — impulse artefacts
@@ -17810,7 +17810,7 @@ class UnifiedRestorerV3:
                                 if _cum_g > 1.0005:
                                     # Envelope-aware gain: only amplify musical frames
                                     current_audio = self._musical_gain_envelope(
-                                        current_audio, _cum_g, gate_dbfs=-50.0, sr=sample_rate
+                                        current_audio, _cum_g, gate_dbfs=-36.0, sr=sample_rate
                                     )
                                     # Soft-limiter only if actual clipping risk
                                     # §v9.10.125: 99.9th-percentile — impulse artefact must not block normalisation
@@ -18222,7 +18222,7 @@ class UnifiedRestorerV3:
                         if _cum_gain > 1.0005:
                             # Envelope-aware gain: only amplify musical frames
                             current_audio = self._musical_gain_envelope(
-                                current_audio, _cum_gain, gate_dbfs=-50.0, sr=sample_rate
+                                current_audio, _cum_gain, gate_dbfs=-36.0, sr=sample_rate
                             )
                             # Soft-limiter only if actual clipping risk
                             # §v9.10.125: 99.9th-percentile — impulse artefact must not block normalisation
