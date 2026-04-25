@@ -663,16 +663,23 @@ class RumbleFilterPhase(PhaseInterface):
 
         sos = signal.butter(order, normalized_cutoff, btype="high", output="sos")
 
+        # §Anti-Pegelexplosion (direkter Fix): sosfiltfilt braucht padlen ≥ SR/cutoff Samples,
+        # damit der Rückwärtsdurchlauf korrekt einschwingt. Default ≈ 30 Samples (0.6 ms) ist
+        # für einen 35-Hz-HPF 45× zu kurz (Einschwingzeit ≈ 1400 Samples = 29 ms).
+        # Zu kurzes padlen → falsche Filterinitialisierung → Randüberschwinger im Intro/Outro,
+        # die 3–10× die Rumpelenergie überschreiten können → Pegelexplosion.
+        _padlen = min(int(3.0 * self.sample_rate / max(float(cutoff_hz), 1.0)), (audio.shape[0] - 1) // 2)
+
         # Apply filter
         if audio.ndim == 2:
             filtered = np.zeros_like(audio)
             for ch in range(2):
-                filtered_channel = signal.sosfiltfilt(sos, audio[:, ch])
+                filtered_channel = signal.sosfiltfilt(sos, audio[:, ch], padlen=_padlen)
 
                 # Blend: transient regions = original, non-transient = filtered
                 filtered[:, ch] = np.where(transient_mask, audio[:, ch], filtered_channel)
         else:
-            filtered_audio = signal.sosfiltfilt(sos, audio)
+            filtered_audio = signal.sosfiltfilt(sos, audio, padlen=_padlen)
             filtered = np.where(transient_mask, audio, filtered_audio)
 
         return filtered
@@ -693,13 +700,18 @@ class RumbleFilterPhase(PhaseInterface):
         # Design FIR high-pass
         fir_coeffs = signal.firwin(numtaps, normalized_cutoff, pass_zero=False, window="hamming")
 
+        # §Anti-Pegelexplosion: FIR-filtfilt braucht ebenfalls ausreichend padlen.
+        # FIR-Filter hat numtaps Koeffizienten → Gruppenlatenz = numtaps//2 Samples.
+        # Mindestens diese Länge als padlen verwenden, damit Randtransiente unterdrückt werden.
+        _padlen_fir = min(numtaps, (audio.shape[0] - 1) // 2)
+
         # Apply filter
         if audio.ndim == 2:
             filtered = np.zeros_like(audio)
-            filtered[:, 0] = signal.filtfilt(fir_coeffs, 1.0, audio[:, 0])
-            filtered[:, 1] = signal.filtfilt(fir_coeffs, 1.0, audio[:, 1])
+            filtered[:, 0] = signal.filtfilt(fir_coeffs, 1.0, audio[:, 0], padlen=_padlen_fir)
+            filtered[:, 1] = signal.filtfilt(fir_coeffs, 1.0, audio[:, 1], padlen=_padlen_fir)
         else:
-            filtered = signal.filtfilt(fir_coeffs, 1.0, audio)
+            filtered = signal.filtfilt(fir_coeffs, 1.0, audio, padlen=_padlen_fir)
 
         return filtered
 

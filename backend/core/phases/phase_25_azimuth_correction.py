@@ -405,19 +405,22 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
 
         # Band 0: Low-pass 500 Hz (Bass)
         sos_lp = signal.butter(4, self.BAND_SPLITS[0], btype="lowpass", fs=sample_rate, output="sos")
-        band_0 = signal.sosfilt(sos_lp, audio, axis=0)
+        # §2.51 Anti-Zeitversatz: sosfiltfilt (Zero-Phase) statt sosfilt (kausal) — kausale Filter
+        # erzeugen frequenzabhängige Gruppenlatenz; nach per-Band-Korrektur des R-Kanals via np.roll
+        # entsteht ein frequenzabhängiger L/R-Zeitversatz → „starker Zeitversatz" zwischen Kanälen.
+        band_0 = signal.sosfiltfilt(sos_lp, audio, axis=0)
         bands.append(band_0)
 
         # Band 1: Band-pass 500-5000 Hz (Mid)
         sos_bp = signal.butter(
             4, [self.BAND_SPLITS[0], self.BAND_SPLITS[1]], btype="bandpass", fs=sample_rate, output="sos"
         )
-        band_1 = signal.sosfilt(sos_bp, audio, axis=0)
+        band_1 = signal.sosfiltfilt(sos_bp, audio, axis=0)  # Zero-Phase (§2.51)
         bands.append(band_1)
 
         # Band 2: High-pass 5000 Hz (High)
         sos_hp = signal.butter(4, self.BAND_SPLITS[1], btype="highpass", fs=sample_rate, output="sos")
-        band_2 = signal.sosfilt(sos_hp, audio, axis=0)
+        band_2 = signal.sosfiltfilt(sos_hp, audio, axis=0)  # Zero-Phase (§2.51)
         bands.append(band_2)
 
         return bands
@@ -706,10 +709,10 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
             # Use SOS form to keep scipy typing unambiguous in strict mode.
             sos_hf = signal.butter(2, 5000.0, btype="highpass", fs=sample_rate, output="sos")
 
-            # Apply boost to both channels
+            # Apply boost to both channels — sosfiltfilt (Zero-Phase) für konsistente Phase L/R (§2.51)
             restored = corrected_audio.copy()
             for ch in range(2):
-                hf_signal = signal.sosfilt(sos_hf, restored[:, ch])
+                hf_signal = signal.sosfiltfilt(sos_hf, restored[:, ch])
                 boost_linear = 10 ** (boost_db / 20)
                 restored[:, ch] = restored[:, ch] + hf_signal * (boost_linear - 1.0)
 

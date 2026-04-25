@@ -13303,9 +13303,17 @@ class UnifiedRestorerV3:
             selected.append("phase_14_phase_correction")
             selected.append("phase_06_frequency_restoration")
 
-        # Azimuth-Fehler (Kopfausrichtung — nur Tape/Reel; eigenständig neben PHASE_ISSUES)
+        # Azimuth-Fehler (Kopfausrichtung — NUR physikalische Bandmaterialien; eigenständig neben PHASE_ISSUES)
         # §7.2 CAUSE_TO_PHASES: phase_14 (Phasenkonsistenz L/R) MUSS vor phase_25 (Kopf-EQ) laufen.
-        if sev(DefectType.AZIMUTH_ERROR) > 0.12:
+        # §2.46b Material-Guard: Azimuth-Fehler ist ein physikalischer Defekt des Magnetkopfs —
+        # bei reinen Digitalquellen (MP3, CD, DAT als Endformat) ist er physikalisch unmöglich.
+        # Ohne Guard: MP3-Joint-Stereo-Asymmetrien → false-positive AZIMUTH_ERROR → phase_25
+        # mit kausaler Bandaufteilung → frequenzabhängiger L/R-Zeitversatz → „starker Zeitversatz".
+        if sev(DefectType.AZIMUTH_ERROR) > 0.12 and material in (
+            MaterialType.TAPE,
+            MaterialType.REEL_TAPE,
+            MaterialType.SHELLAC,
+        ):
             selected.append("phase_14_phase_correction")  # §7.2: zuerst Phasenkonsistenz L/R normieren
             selected.append("phase_25_azimuth_correction")  # §7.2: dann Kopfausrichtungs-EQ-Kompensation
             selected.append("phase_06_frequency_restoration")
@@ -17920,7 +17928,12 @@ class UnifiedRestorerV3:
                 _ZWICKER_SUBTRAKTIVE_PHASES: frozenset = frozenset(
                     {
                         "phase_03",
-                        "phase_05",
+                        # phase_05 (HPF) und phase_02 (Notch) bewusst NICHT in dieser Liste:
+                        # HPF entfernt gezielt Subbass → Zwicker ΔN > 2.0 sone ist INTENTIONAL.
+                        # Zwicker-Rescue würde bis zu 70 % des Vor-HPF-Signals zurückmischen,
+                        # d.h. das Rumpeln würde teilweise wiederhergestellt → kontraproduktiv.
+                        # §2.45a-VI: HPF-Energieverlust ist beabsichtigte Carrier-Inversion,
+                        # nicht ein Loudness-Kollaps der korrigiert werden muss.
                         "phase_18",
                         "phase_20",
                         "phase_28",
