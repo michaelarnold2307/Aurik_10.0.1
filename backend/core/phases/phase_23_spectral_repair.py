@@ -695,17 +695,24 @@ class SpectralRepair(PhaseInterface):
             _clip_level = float(np.percentile(np.abs(audio), 99.5))
             _clip_level = float(np.clip(_clip_level, 0.85, 1.0))
             logger.info("ADMM declipping activated: clip_level=%.4f", _clip_level)
+            # §Spec04b ADMM max_iter: length-adaptive — fewer iterations for long signals
+            # to avoid exhausting the UV3 wall-time budget.
+            # Literature: 30–50 iterations typically sufficient for convergence
+            # (Záviška 2021). 200 iter × 12 s/iter on 10.8 M samples = 40 min.
+            _dur_s = float(audio.shape[-1] if audio.ndim > 1 else len(audio)) / float(sample_rate)
+            _admm_max_iter = int(np.clip(round(200.0 * min(1.0, 30.0 / max(_dur_s, 1.0))), 30, 200))
+            logger.info("ADMM max_iter=%d (duration=%.1fs)", _admm_max_iter, _dur_s)
             if is_stereo:
                 # §2.51 M/S: Reparatur auf Mid-Kanal; Side minimal (Stereo-Kohärenz-Invariante).
                 _sqrt2 = np.sqrt(2.0)
                 _mid = (audio[:, 0] + audio[:, 1]) / _sqrt2
                 _side = (audio[:, 0] - audio[:, 1]) / _sqrt2
                 _report_progress(35.0, "Spektralreparatur: ADMM Mid-Kanal")
-                _repaired_mid = self._admm_declip(_mid, _clip_level, sample_rate)
+                _repaired_mid = self._admm_declip(_mid, _clip_level, sample_rate, max_iter=_admm_max_iter)
                 # Side: declip mildly (half strength) to avoid breaking stereo field
                 _side_clip = float(np.clip(_clip_level * 1.05, 0.85, 1.0))
                 _report_progress(55.0, "Spektralreparatur: ADMM Side-Kanal")
-                _repaired_side = self._admm_declip(_side, _side_clip, sample_rate)
+                _repaired_side = self._admm_declip(_side, _side_clip, sample_rate, max_iter=_admm_max_iter)
                 repaired_audio = np.column_stack(
                     (
                         (_repaired_mid + _repaired_side) / _sqrt2,
@@ -714,7 +721,7 @@ class SpectralRepair(PhaseInterface):
                 )
             else:
                 _report_progress(60.0, "Spektralreparatur: ADMM")
-                repaired_audio = self._admm_declip(audio, _clip_level, sample_rate)
+                repaired_audio = self._admm_declip(audio, _clip_level, sample_rate, max_iter=_admm_max_iter)
         else:
             # Process via standard spectral inpainting — §2.51 M/S for stereo.
             if is_stereo:
