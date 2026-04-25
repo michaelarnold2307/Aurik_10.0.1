@@ -1605,8 +1605,15 @@ nur wenn die Noise-Floor-Evidenz eindeutig genug ist. Der Aufrufer MUSS explizit
 **Checkliste für alle Phases mit Makeup-Gain-Logik:**
 
 - [ ] `apply_musical_gain_envelope(..., gate_dbfs=-36.0, ...)` — NICHT −50.0
+- [ ] `self._musical_gain_envelope(..., gate_dbfs=-36.0, ...)` (UV3-intern) — NICHT −50.0
 - [ ] `_rms_dbfs_gated(audio)` für RMS-Messung verwendet den internen Default (−50 dBFS) — korrekt
 - [ ] Per-Sample-Guard nach `np.interp` (§2.30b) nutzt −36 dBFS
+
+**UV3-intern betroffene Stellen (alle drei benötigen −36.0):**
+
+- `_active_quality_intervention()` — per-Phase-Rescue bei Loudness-Kollaps
+- Mid-Pipeline-Cumulative-Guard — kumulativer Pegel-Drift nach jeder Phase
+- End-of-Pipeline-Guard — finales Sicherheitsnetz vor Export-Gates
 
 ### Normativer Scope (typische Kandidaten)
 
@@ -1666,8 +1673,8 @@ if rms_drop < -threshold:
 
 **Betroffene Phasen (kein Makeup-Gain-Guard erlaubt):**
 
-- `phase_05_rumble_filter` (HPF)
-- `phase_02_hum_removal` (Notch)
+- `phase_05_rumble_filter` (HPF) — Guard entfernt in v9.11.17 (commit 72d993a)
+- `phase_02_hum_removal` (Notch) — Guard noch aktiv (PENDING FIX: §2.45a-VI-Verletzung im Code)
 - Jede zukünftige Phase die primär als Spektralband-Filter arbeitet
 
 ## §2.46 [RELEASE_MUST] Carrier-Chain-Inversion (v9.10.122)
