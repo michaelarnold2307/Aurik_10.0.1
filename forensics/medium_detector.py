@@ -1218,11 +1218,44 @@ class MediumDetector:
 
     # ── Bayesian Material Scoring ──────────────────────────────────────
 
-    def _bayesian_score(self, fp: SpectralFingerprint) -> dict[str, float]:
+    # Minimum audio duration (seconds) needed for reliable turntable-rotation ACF.
+    # 33⅓ RPM → period ≈ 1.82 s; reliable ACF requires ≥4 cycles → ≥7.3 s.
+    # 45 RPM → period ≈ 1.33 s → ≥4 cycles → ≥5.3 s.
+    # Conservative minimum: 6 s covers all standard speeds with ≥3 cycles.
+    _MIN_ROTATION_ANALYSIS_DURATION_S: float = 6.0
+
+    def _bayesian_score(self, fp: SpectralFingerprint, duration_s: float = 0.0) -> dict[str, float]:
         """Compute posterior probabilities for all 16 material types via Gaussian log-likelihood.
+
+        Args:
+            fp:         Spectral fingerprint of the audio.
+            duration_s: Audio duration in seconds.  When > 0 and shorter than
+                        _MIN_ROTATION_ANALYSIS_DURATION_S, rotation_strength is
+                        excluded from the Bayesian update (treated as unobserved).
+                        This prevents short vinyl excerpts from being classified as
+                        tape, because the turntable ACF requires ≥3 full rotations
+                        (≥6 s at 33⅓ RPM) for a reliable peak estimate.
 
         Returns dict[material_name → posterior_probability], sorted descending.
         """
+        # Duration-adaptive feature masking (§2.47, §0c — general, not song-specific).
+        # rotation_strength requires ≥3 full turntable cycles for reliable ACF detection.
+        # Short clips (< 6 s) produce rotation_strength ≈ 0 regardless of material;
+        # this 0 is a perfect fit for tape (μ=0.0, σ=0.08) but strongly penalises vinyl
+        # (μ=0.40, σ=0.20 → 2 σ penalty) → vinyl mis-classified as tape.
+        # Fix: treat rotation_strength as unobserved for short clips (skip feature;
+        # all materials receive equal log-likelihood for this dimension → other
+        # features dominate the posterior — physically correct).
+        _short_clip = 0.0 < duration_s < self._MIN_ROTATION_ANALYSIS_DURATION_S
+        if _short_clip:
+            logger.debug(
+                "MediumDetector: short clip (%.1fs < %.1fs) — "
+                "rotation_strength excluded from Bayesian update (unreliable ACF)",
+                duration_s,
+                self._MIN_ROTATION_ANALYSIS_DURATION_S,
+            )
+        _masked_features: frozenset[str] = frozenset({"rotation_strength"}) if _short_clip else frozenset()
+
         feature_vals = {
             "bandwidth_hz": fp.effective_bandwidth_hz,
             "snr_db": fp.snr_db,
@@ -1240,6 +1273,8 @@ class MediumDetector:
         for mat, params in self._MATERIAL_MODELS.items():
             ll = 0.0
             for feat_key in self._FEATURE_KEYS:
+                if feat_key in _masked_features:
+                    continue  # treat as unobserved — equal likelihood for all materials
                 mu, sigma = params[feat_key]
                 sigma = max(sigma, 1e-6)
                 x = feature_vals.get(feat_key, 0.0)
@@ -1281,7 +1316,10 @@ class MediumDetector:
             logger.debug("MediumDetector: SR=%d (erwartet 48000), arbeite trotzdem weiter", sr)
 
         fp = self._compute_fingerprint(audio, sr)
-        posteriors = self._bayesian_score(fp)
+        # Pass audio duration for rotation_strength masking in short clips (§2.47 §0c)
+        _mono_len: int = audio.shape[0] if audio.ndim == 1 else int(max(audio.shape))
+        _duration_s: float = float(_mono_len) / max(float(sr), 1.0)
+        posteriors = self._bayesian_score(fp, duration_s=_duration_s)
 
         # §6.7b File-Extension Prior: digital file formats cannot originate from
         # analog physical media.  A .mp3 file was encoded digitally at capture time —

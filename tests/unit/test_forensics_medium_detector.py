@@ -400,7 +400,7 @@ class TestMediumDetector:
         monkeypatch.setattr(
             detector,
             "_bayesian_score",
-            lambda _fp: {
+            lambda _fp, **_kw: {
                 "vinyl": 0.55,
                 "tape": 0.33,
                 "cd_digital": 0.24,
@@ -438,7 +438,7 @@ class TestMediumDetector:
         monkeypatch.setattr(
             detector,
             "_bayesian_score",
-            lambda _fp: {
+            lambda _fp, **_kw: {
                 "vinyl": 0.46,
                 "cassette": 0.39,
                 "cd_digital": 0.28,
@@ -489,7 +489,7 @@ class TestMediumDetector:
         monkeypatch.setattr(
             detector,
             "_bayesian_score",
-            lambda _fp: {
+            lambda _fp, **_kw: {
                 "vinyl": 0.46,
                 "cassette": 0.39,
                 "cd_digital": 0.00,
@@ -532,7 +532,7 @@ class TestMediumDetector:
         monkeypatch.setattr(
             detector,
             "_bayesian_score",
-            lambda _fp: {
+            lambda _fp, **_kw: {
                 "vinyl": 0.50,
                 "cassette": 0.45,
                 "reel_tape": 0.41,
@@ -585,7 +585,7 @@ class TestMediumDetector:
         monkeypatch.setattr(
             detector,
             "_bayesian_score",
-            lambda _fp: {
+            lambda _fp, **_kw: {
                 "vinyl": 0.38,
                 "cassette": 0.30,
                 "cd_digital": 0.10,
