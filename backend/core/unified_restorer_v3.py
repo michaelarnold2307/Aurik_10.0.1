@@ -8045,6 +8045,7 @@ class UnifiedRestorerV3:
                     sample_rate,
                     max_gain_db=_arc_max_gain_db,
                     damping=_arc_damping,
+                    frisson_zones=_frisson_zones,  # §Frisson: Gänsehaut-Schutz auch in Makro-Korrektur
                 )
                 restored_audio = np.clip(
                     np.nan_to_num(restored_audio, nan=0.0, posinf=0.0, neginf=0.0),

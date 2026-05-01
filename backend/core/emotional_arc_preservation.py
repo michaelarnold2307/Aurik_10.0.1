@@ -487,6 +487,7 @@ class EmotionalArcPreservationMetric:
         sr: int,
         max_gain_db: float = 6.0,
         damping: float = 0.7,
+        frisson_zones=None,
     ) -> tuple[np.ndarray, EmotionalArcResult]:
         """Correct emotional arc via macro-level RMS-based gain envelope.
 
@@ -535,6 +536,21 @@ class EmotionalArcPreservationMetric:
 
         if len(positions) < 3:
             return restored.copy(), self.measure(original, restored, sr)
+
+        # §Frisson: Gänsehaut-Schutz-Frames → Frame-Index aus .start_s/.end_s
+        _frisson_frame_set: set[int] = set()
+        if frisson_zones:
+            try:
+                _hop_s = float(self.HOP_S)  # 2.5 s
+                for _fz in frisson_zones:
+                    _fi_start = max(0, int(float(getattr(_fz, "start_s", 0.0)) / _hop_s))
+                    _fi_end = int(float(getattr(_fz, "end_s", 0.0)) / _hop_s) + 1
+                    for _fi in range(_fi_start, min(_fi_end, len(positions))):
+                        _frisson_frame_set.add(_fi)
+                if _frisson_frame_set:
+                    logger.debug("correct_arc §Frisson: %d Frames geschützt", len(_frisson_frame_set))
+            except Exception:
+                _frisson_frame_set = set()
 
         # ---- Per-segment RMS ----
         rms_orig = np.empty(len(positions), dtype=np.float32)
@@ -609,6 +625,12 @@ class EmotionalArcPreservationMetric:
                     if _diff_any > max_gain_db:
                         gain_db[_i] = 0.0  # Noise-removal at any level: no boost
 
+        # §Frisson Pre-SG: Klimax-Frames vor SG-Dämpfung schützen (max. −1.0 LU Absenkung)
+        if _frisson_frame_set:
+            for _fk in _frisson_frame_set:
+                if 0 <= _fk < len(gain_db):
+                    gain_db[_fk] = max(gain_db[_fk], -1.0)
+
         # Savitzky-Golay smooth (boxcar fallback)
         if len(gain_db) >= 7:
             try:
@@ -650,6 +672,12 @@ class EmotionalArcPreservationMetric:
                     _diff_ps_any = 20.0 * np.log10((rms_orig[_i] + eps) / (rms_rest[_i] + eps))
                     if _diff_ps_any > max_gain_db:
                         gain_db[_i] = 0.0  # Post-smoothing: noise-removal at any level
+
+        # §Frisson Post-SG: Zwei-Stufen-Invariante — SG verteilt Dämpfung in Frisson-Frames zurück
+        if _frisson_frame_set:
+            for _fk in _frisson_frame_set:
+                if 0 <= _fk < len(gain_db):
+                    gain_db[_fk] = max(gain_db[_fk], -1.0)
 
         # ---- Interpolate to sample-level via segment centres ----
         centres = np.array([start + seg_len // 2 for start in positions], dtype=np.float64)
@@ -775,6 +803,7 @@ def correct_emotional_arc(
     sr: int,
     max_gain_db: float = 6.0,
     damping: float = 0.7,
+    frisson_zones=None,
 ) -> tuple[np.ndarray, EmotionalArcResult]:
     """Convenience wrapper: correct emotional arc macro-dynamics.
 
@@ -784,11 +813,15 @@ def correct_emotional_arc(
         sr:       48000 (mandatory)
         max_gain_db: Max per-segment gain (default 6 dB)
         damping:  Correction fraction 0–1 (default 0.7)
+        frisson_zones: Optional list of FrissonZone objects (.start_s, .end_s) —
+            §Frisson Zwei-Stufen-Invariante: Pre-SG + Post-SG floor −1.0 LU
 
     Returns:
         (corrected_audio, EmotionalArcResult)
     """
-    return get_emotional_arc_metric().correct_arc(original, restored, sr, max_gain_db=max_gain_db, damping=damping)
+    return get_emotional_arc_metric().correct_arc(
+        original, restored, sr, max_gain_db=max_gain_db, damping=damping, frisson_zones=frisson_zones
+    )
 
 
 # ---------------------------------------------------------------------------
