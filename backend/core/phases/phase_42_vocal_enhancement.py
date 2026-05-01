@@ -969,7 +969,9 @@ class VocalEnhancement(PhaseInterface):
             import psutil as _psutil
 
             _avail_gb = float(_psutil.virtual_memory().available / (1024**3))
-            if _avail_gb < 8.0:
+            # MelBandRoformer (T²-Transformer) needs ~9 GB working memory per 15s chunk.
+            # With 7s chunks (v9.11.16) ~2 GB each — but swap pressure can still OOM at <12 GB.
+            if _avail_gb < 12.0:
                 _skip_roformer_reason = f"low_ram_{_avail_gb:.1f}GB"
         except Exception:
             _avail_gb = None  # type: ignore[assignment]

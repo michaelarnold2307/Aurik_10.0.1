@@ -407,12 +407,24 @@ class BSRoFormerPlugin:
             bin_pts = self._mbr_mel_band_boundaries()
             input_name = session.get_inputs()[0].name
 
-            # OOM-Guard: chunk audio into ~15 s segments with 1 s crossfade.
-            # v9.11.14: reduced from 60 s to 15 s to prevent 69 GB OOM on MelBandRoformer.
-            # Transformer attention is O(T²): 60s→T=6000 frames→36M weights→OOM on most CPUs.
-            # 15s→T=1500 frames→2.25M weights (16× smaller) → fits in ~4-5 GB RAM.
+            # OOM-Guard: RAM-adaptive chunk size (v9.11.16).
+            # Transformer attention is O(T²): T=frames per chunk.
+            # v9.11.14: 60s→15s prevented 69 GB OOM. But 15s still OOMs on 32 GB systems
+            # with heavy swap pressure (confirmed: 9 GB consumed per 15s chunk on 32 GB, 2026-05-01).
+            # Reduction schedule: avail<16GB→5s(T=500,~0.5GB), 16-24GB→7s(T=700,~1GB), >24GB→10s(T=1000,~2GB).
             # Adaptive OOM-retry: if a segment still OOMs, halve chunk size and retry once.
-            _CHUNK_S = 15
+            try:
+                import psutil as _psutil_mbr
+
+                _avail_mbr = float(_psutil_mbr.virtual_memory().available / (1024**3))
+            except Exception:
+                _avail_mbr = 16.0  # conservative fallback
+            if _avail_mbr < 16.0:
+                _CHUNK_S = 5
+            elif _avail_mbr < 24.0:
+                _CHUNK_S = 7
+            else:
+                _CHUNK_S = 10
             _OVERLAP_S = 1
             _chunk_samples = _CHUNK_S * _SR
             _overlap_samples = _OVERLAP_S * _SR
@@ -484,6 +496,19 @@ class BSRoFormerPlugin:
                 _weight = np.zeros(n_orig_44, dtype=np.float32)
 
                 for _cs in range(0, n_orig_44, _step):
+                    # Per-chunk RAM guard: abort to fallback before OOM kill
+                    try:
+                        import psutil as _psutil_chk
+
+                        _avail_chk = float(_psutil_chk.virtual_memory().available / (1024**3))
+                        if _avail_chk < 3.0:
+                            logger.warning(
+                                "MelBandRoformer: RAM < 3 GB vor Chunk (avail=%.1f GB) → Fallback",
+                                _avail_chk,
+                            )
+                            return self._separate_fallback(audio, sr, requested_stems)
+                    except Exception:
+                        pass
                     _ce = min(_cs + _chunk_samples, n_orig_44)
                     voc_chunk = _process_segment(audio_44[_cs:_ce])
                     if voc_chunk is None:
