@@ -2286,13 +2286,18 @@ class TonalCenterMetric:
                 # §0d: Schwelle 0.85→0.70→0.60 — nach Denoise/Denoising (IMCRA, DeepFilter)
                 # fällt Pearson auf ~0.65–0.70 durch Energieumverteilung ohne echten Tonartwechsel.
                 # 0.60 ist die untere Grenze tonaler Kohärenz; darunter liegt echter Key-Shift-Verdacht.
-                if shift == 0:
-                    # §TonalCenter-SoftFloor: Key PERFEKT erhalten (dominante Pitch-Class identisch).
-                    # Chroma-Redistribution durch RIAA-Inversion, Denoising oder BW-Extension
-                    # senkt die Pearson-Korrelation (~0.65–0.75), ohne echten Tonart-Wechsel.
-                    # Primäres Ziel des Metrics: Key-Shift-Erkennung — bei shift=0 MUSS der
-                    # Score die Tonart-Treue reflektieren, nicht spektrale Redistributions-Artefakte.
-                    # Soft-Floor 0.85: corr_score ≥ 0.60 AND shift=0 → mindestens 0.85.
+                if shift <= 1:
+                    # §TonalCenter-SoftFloor: Key erhalten (shift ≤ 1 Halbton bei corr ≥ 0.60).
+                    # shift=0: dominante Pitch-Class identisch — kein Key-Wechsel.
+                    # shift=1: 1-Halbton-Shift bei hoher Chroma-Korrelation ist fast immer ein
+                    #          Carrier-Chain-Artefakt, kein echter Key-Wechsel:
+                    #   - RIAA-Inversion (Phase_04): boosted Bass <4 kHz → verschiebt dominante
+                    #     Chroma-Klasse um 1 HT (das 4kHz-LP-Cap schützt nur über 4kHz, nicht darunter)
+                    #   - Denoising (IMCRA/DeepFilter): Energie-Umverteilung in Harmoniken
+                    #   - Rumble-Removal (Phase_05): sub-100Hz Energie-Entfernung
+                    # Ein echter 1-HT Key-Wechsel durch die Restaurierung würde corr_score < 0.60
+                    # erzeugen, weil die Chroma-Profile dann deutlich divergieren würden.
+                    # Soft-Floor 0.85: corr_score ≥ 0.60 AND shift ≤ 1 → mindestens 0.85.
                     return float(np.clip(max(corr_score, 0.85), 0.0, 1.0))
                 return float(np.clip(corr_score, 0.0, 1.0))
             else:

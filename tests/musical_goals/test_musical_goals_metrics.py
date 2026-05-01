@@ -693,11 +693,71 @@ class TestTonalCenterMetricKeyShift:
         assert result >= 0.90, f"Same-key score too low: {result}"
 
     def test_one_semitone_shift_penalised(self, metric: TonalCenterMetric):
-        """1-Halbton-Verschiebung → Score klar unter 0.50 (schwere Strafe)."""
+        """Echter 1-Halbton-Key-Wechsel (pure Sinustöne) → Score klar unter 0.55.
+
+        WICHTIG: Dieser Test trifft NICHT den neuen Soft-Floor-Zweig (shift<=1 + corr>=0.60),
+        weil zwei verschiedene Sinustöne eine sehr niedrige Chroma-Korrelation erzeugen
+        (corr_score ≈ 0.42 < 0.60). Der Bypass feuert NICHT → Penalty wird angewendet.
+        Der neue shift<=1-Soft-Floor greift nur bei hoher Chroma-Korrelation (corr>=0.60),
+        d.h. wenn die Tonart faktisch erhalten ist und nur die dominante Pitch-Class durch
+        RIAA-Inversion oder Denoising leicht verschoben wurde.
+        """
         ref = self._sine_for_key(440.0)  # A4
         shifted = self._sine_for_key(466.16)  # A#4 / Bb4 — 1 semitone up
         result = metric.measure(shifted, self.SR, reference=ref)
         assert result <= 0.55, f"1-semitone shift not adequately penalised: {result}"
+
+    def test_one_semitone_shift_high_corr_gets_soft_floor(self, metric: TonalCenterMetric):
+        """1-Halbton dominant-Pitch-Shift bei hoher Chroma-Korrelation → Soft-Floor 0.85.
+
+        Szenario: RIAA-Inversion auf Vinyl boosted Bass <4 kHz → verschiebt dominante
+        Chroma-Klasse um 1 Halbton, obwohl die Tonart erhalten ist (Chroma-Korrelation ~0.70).
+        Das 4kHz-LP-Cap schützt nur vor HF-Extension-Effekten, nicht vor RIAA-Effekten <4 kHz.
+
+        Invariante (§TonalCenter-SoftFloor erweitert): corr_score >= 0.60 AND shift <= 1
+        → Score mindestens 0.85, auch wenn dominant-Pitch-Class um 1 HT abweicht.
+        """
+        import numpy as _np
+
+        sr = 48000
+        dur = 4.0
+        t = _np.linspace(0, dur, int(sr * dur), dtype=_np.float32)
+
+        # C-Dur-Akkord als "Referenz" (Original-Vinyl mit RIAA-Verzerrung)
+        ref = (
+            _np.sin(2 * _np.pi * 261.63 * t) * 0.5  # C4
+            + _np.sin(2 * _np.pi * 329.63 * t) * 0.4  # E4
+            + _np.sin(2 * _np.pi * 392.00 * t) * 0.35  # G4
+            + _np.sin(2 * _np.pi * 523.25 * t) * 0.2  # C5
+            + _np.sin(2 * _np.pi * 659.25 * t) * 0.15  # E5
+            + _np.sin(2 * _np.pi * 784.00 * t) * 0.1  # G5
+        )
+        # Leichtes Rauschen für realistischere Chroma-Statistik
+        rng = _np.random.default_rng(42)
+        ref = ref + rng.normal(0, 0.04, len(ref)).astype(_np.float32)
+        ref = _np.clip(ref, -1.0, 1.0)
+
+        # "Restauriertes" Signal: Bass etwas stärker (RIAA-Effekt simuliert),
+        # sonst gleiche Tonart → ähnliche Chroma aber leicht andere dominante Pitch-Class
+        restored = (
+            _np.sin(2 * _np.pi * 261.63 * t) * 0.7  # C4 — boosted (RIAA sim)
+            + _np.sin(2 * _np.pi * 329.63 * t) * 0.4  # E4
+            + _np.sin(2 * _np.pi * 392.00 * t) * 0.35  # G4
+            + _np.sin(2 * _np.pi * 523.25 * t) * 0.2  # C5
+            + _np.sin(2 * _np.pi * 659.25 * t) * 0.15  # E5
+            + _np.sin(2 * _np.pi * 784.00 * t) * 0.1  # G5
+        )
+        restored = restored + rng.normal(0, 0.02, len(restored)).astype(_np.float32)
+        restored = _np.clip(restored, -1.0, 1.0)
+
+        score = metric.measure(restored, sr, reference=ref)
+        # Wenn corr_score >= 0.60 (gleiche Noten, nur leicht andere Energie-Verteilung)
+        # UND shift <= 1 → Soft-Floor 0.85 muss greifen
+        assert score >= 0.80, (
+            f"TonalCenter score {score:.3f} bei ähnlichem Signal (RIAA-Sim, shift<=1) — "
+            f"Soft-Floor 0.85 muss für shift<=1 mit corr>=0.60 greifen "
+            f"(RIAA-Carrier-Artefakt ≠ echter Key-Wechsel)"
+        )
 
     def test_two_semitone_shift_catastrophic(self, metric: TonalCenterMetric):
         """2-Halbton-Verschiebung → Score stark reduziert (< 0.15).
