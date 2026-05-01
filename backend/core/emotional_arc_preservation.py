@@ -591,15 +591,15 @@ class EmotionalArcPreservationMetric:
         # audible volume jump at the end of the song.
         _quiet_rms_thresh = 10.0 ** (-42.0 / 20.0)  # −42 dBFS = quiet/fade-out zone
         _noise_diff_thresh_db = 6.0
-        # §WPG-Quiet-Zone: frames quieter than -24 dBFS (WPG _QUIET_ZONE_DBFS) must
-        # NEVER receive positive gain. This covers vinyl surface noise at -33 to -35 dBFS
-        # restored frames (which fall in the -42 to -24 dBFS range after denoising).
-        # The moderate quiet zone check (-30 dBFS) was too permissive — it allowed a
-        # 1.2 dB boost for frames where diff (2 dB) ≤ max_gain_db (5 dB).
-        _wpg_quiet_rms_thresh = 10.0 ** (-24.0 / 20.0)  # −24 dBFS = WPG quiet zone
-        # §2.30b Guard 2 — Moderate quiet zone (-30 to -24 dBFS restored) combined
-        # with large Original-vs-Restored gap (> max_gain_db dB).
-        _moderate_quiet_rms_thresh = 10.0 ** (-30.0 / 20.0)  # −30 dBFS
+        # §WPG-Quiet-Zone: frames quieter than -36 dBFS must NEVER receive positive gain.
+        # −36 dBFS matches MDEM + per-sample guard thresholds (§2.30b, §2.45a).
+        # Vinyl surface noise sits at −33 to −38 dBFS after denoising — using −24 dBFS
+        # let those frames through the quiet-zone guard when diff < 6 dB (only the
+        # _quiet_rms_thresh=-42 dBFS branch blocks at diff≥6 dB, not these frames).
+        # −36 dBFS ensures vinyl noise-floor frames are always blocked by the WPG branch.
+        # NOTE: _moderate_quiet_rms_thresh (−30 dBFS) was dead code — every value < −30 dBFS
+        # is also < −36 dBFS so that elif was never reached; removed.
+        _wpg_quiet_rms_thresh = 10.0 ** (-36.0 / 20.0)  # −36 dBFS = vinyl noise floor gate
         for _i in range(len(gain_db)):
             if gain_db[_i] > 0.0:
                 # §0a Guard 0: Original frame at carrier noise floor — no positive boost.
@@ -612,15 +612,10 @@ class EmotionalArcPreservationMetric:
                     if _diff >= _noise_diff_thresh_db:
                         gain_db[_i] = 0.0  # Denoised fade-out: no boost
                 elif rms_rest[_i] < _wpg_quiet_rms_thresh:
-                    # WPG quiet zone (-42 to -24 dBFS): ALWAYS block positive boost.
+                    # WPG quiet zone (-42 to -36 dBFS): ALWAYS block positive boost.
                     gain_db[_i] = 0.0
-                elif rms_rest[_i] < _moderate_quiet_rms_thresh:
-                    # Moderate quiet zone (-24 to -30 dBFS): only block if gap > max_gain_db
-                    _diff_mod = 20.0 * np.log10((rms_orig[_i] + eps) / (rms_rest[_i] + eps))
-                    if _diff_mod > max_gain_db:
-                        gain_db[_i] = 0.0  # Carrier-noise reduction, not music dynamics
                 else:
-                    # §2.30b Guard 3 — Any-level noise-removal guard (rms_rest >= −30 dBFS):
+                    # §2.30b Guard 3 — Any-level noise-removal guard (rms_rest >= −36 dBFS):
                     _diff_any = 20.0 * np.log10((rms_orig[_i] + eps) / (rms_rest[_i] + eps))
                     if _diff_any > max_gain_db:
                         gain_db[_i] = 0.0  # Noise-removal at any level: no boost
@@ -661,12 +656,8 @@ class EmotionalArcPreservationMetric:
                     if _diff_ps >= _noise_diff_thresh_db:
                         gain_db[_i] = 0.0  # Post-smoothing: denoised fade-out, no boost
                 elif rms_rest[_i] < _wpg_quiet_rms_thresh:
-                    # Post-SG WPG quiet zone: always block
+                    # Post-SG WPG quiet zone (-36 dBFS): always block
                     gain_db[_i] = 0.0
-                elif rms_rest[_i] < _moderate_quiet_rms_thresh:
-                    _diff_ps_mod = 20.0 * np.log10((rms_orig[_i] + eps) / (rms_rest[_i] + eps))
-                    if _diff_ps_mod > max_gain_db:
-                        gain_db[_i] = 0.0  # Post-smoothing: carrier-noise reduction, no boost
                 else:
                     # §2.30b Guard 3 post-smoothing — mirror of pre-smoothing Guard 3:
                     _diff_ps_any = 20.0 * np.log10((rms_orig[_i] + eps) / (rms_rest[_i] + eps))
@@ -862,7 +853,10 @@ class WaveformPlausibilityGuard:
     MAX_ATTENUATION_DB: float = -12.0
     # Quiet-zone emergency policy (§2.30c hard catch): if explosions are concentrated
     # in quiet/fade windows, prioritize attenuation over proxy correlation stability.
-    _QUIET_ZONE_DBFS: float = -24.0
+    # §2.30b: vinyl surface noise floor sits at −33 to −38 dBFS after denoising.
+    # −24.0 was too permissive — those frames bypassed the quiet-zone emergency trigger.
+    # −36.0 aligns with the per-sample guard (same value used throughout MDEM + correct_arc).
+    _QUIET_ZONE_DBFS: float = -36.0
     _QUIET_EXPLOSION_RATIO_MIN: float = 0.80
 
     # Mode-adaptive explosion thresholds
