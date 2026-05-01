@@ -4,7 +4,7 @@
 > kontextbewusstes Musik- und Gesangs-Restaurations-, Reparatur- und
 > Rekonstruktions-Denkersystem.* Stand: Mai 2026 — Version **9.12.0**
 >
-> **instructions_version: 9.0** — Far-beyond-SOTA-Revision: §0h Music-Death-Shield + §0g Autonomes-Entscheidungs-Doktrin + §0i Perceptual-Transparency-Guarantee + §0a Crossfire-Modus-Invariante + §2.44 HPI-Floor-Bug-Fix + §2.46e Hallucination-Guard + §2.60 Rollback-Hierarchie-Komplettierung + §4.4 SOTA-Matrix 2026-Update + §0j KI-Modell-Limitation-Awareness normiert 01.05.2026
+> **instructions_version: 9.0** — Far-beyond-SOTA-Revision: §0h Music-Death-Shield + §0g Autonomes-Entscheidungs-Doktrin + §0i Perceptual-Transparency-Guarantee + §0a Crossfire-Modus-Invariante + §2.44 HPI-Floor-Bug-Fix + §2.44 VERSA-Primärpflicht + §2.46e Hallucination-Guard + §2.46f Natural-Performance-Artifacts-Guard + §2.60 Rollback-Hierarchie-Komplettierung + §2.61 Output-Length-Guard + §2.62 Psychoakustischer-Masking-Guard + §4.4 SOTA-Matrix 2026-Update + §0j KI-Modell-Limitation-Awareness + §2.46b-Deduplizierung normiert 01.05.2026
 >
 > Aktuelle Testzahl: **~11598 `def test_`-Funktionen** (436 Testdateien; alle grün)
 >
@@ -305,9 +305,11 @@ Letztes Gate vor Export. Misst **Gesamt-Hörverbesserung** statt nur Einzel-Goal
 - `emotional_arc_preservation`: Arousal/Valence + Makrodynamik + Lyrics-Salienz (§2.36)
 - **HPI > 0** → Export | **HPI ≤ 0** → Rollback
 
-**[BUG-FIX v9.12.0]** `MERT_similarity`-Floor: `MERT_similarity = max(raw_mert, 0.5)` — verhindert dass MERT=0 (Modell nicht verfügbar) das gesamte Gate auf 0 kollabieren lässt. Bei MERT-Ausfall MUSS `ml_fallbacks_used["mert"]` gesetzt werden.
+**[RELEASE_MUST] VERSA-Primärpflicht**: `VERSA` (`use_versa_in_loop=True`) ist das primäre MOS-Modell in HPI. `MERT_similarity` ist **nur Proxy-Fallback** wenn VERSA fehlschlägt → `metadata["mert_proxy_used"] = True`. **VERBOTEN**: `use_versa_in_loop=False` oder MERT als primäre Qualitätsmetrik bei verfügbarem VERSA.
 
-> Details (Referenz-Paradoxon, MERT-Aufbau, Gewichtungs-Semantik, Wertebereiche): Spec 02 §2.44 + Skill `fix-metric`
+**[BUG-FIX v9.12.0]** `MERT_similarity`-Floor: `MERT_similarity = max(raw_mert, 0.5)` — verhindert dass MERT=0 das gesamte Gate auf 0 kollabieren lässt. Bei MERT-Ausfall MUSS `ml_fallbacks_used["mert"]` gesetzt werden.
+
+> Details (Referenz-Paradoxon, VERSA/MERT-Aufbau, Gewichtungs-Semantik, Wertebereiche): Spec 02 §2.44 + Skill `fix-metric`
 
 ### [RELEASE_MUST] §2.45 Minimal-Intervention-Prinzip (v9.10.122)
 
@@ -363,7 +365,7 @@ Details: Skill `fix-metric`
 
 **Keine additive Phase darf Material in das Ausgangssignal einbringen, das im Eingangssignal physikalisch nicht vorhanden war.** Dies gilt absolut für `restoration`-Modus.
 
-**Drei Kategorien halluzimierten Materials** (alle verboten in Restoration):
+**Drei Kategorien halluzinierten Materials** (alle verboten in Restoration):
 1. **Harmonik-Halluzination**: Obertöne die über das physikalische BW-Ceiling (§6.2c) hinausgehen oder deren Amplitude das Trägerprofil überschreitet
 2. **Raum-Halluzination**: Raumklang, Reverb-Schwänze oder Stereobreite, die im degradierten Signal nicht nachweisbar sind und nicht aus der Recording-Chain stammen
 3. **Textur-Halluzination**: Spektrale Texturen (Harmonischer Hiss, Formant-Muster) die durch ML-Modelle generiert wurden und kein physikalisches Gegenstück im Source-Material haben
@@ -373,17 +375,22 @@ Details: Skill `fix-metric`
 - Wenn spectral_novelty > 0.15 → **Phase-Rollback** (Restoration) oder MUSHRA-Check (Studio 2026)
 - `harmonic_ceiling_violation`: wenn rekonstruierte Harmonics > material BW_CEILING → Hard-Rollback
 
+### [RELEASE_MUST] §2.46f Natural-Performance-Artifacts-Guard (v9.12.0)
+
+**Performancebedingte Klangereignisse sind keine Defekte und dürfen nicht entfernt werden.**
+
+**Drei geschützte Kategorien** (dürfen in Restoration und Studio 2026 nicht getilgt werden):
+1. **Atemgeräusche** zwischen Phrasen (Energie −55 bis −40 dBFS, Dauer 50–500 ms, spectral_flatness > 0.4) — sind Teil der Vokal-Performance und des emotionalen Ausdrucks; kein NR, kein Gate
+2. **Natürliches Vibrato / Portamento** (F0-Modulation 4–7 Hz, Amplitude ≤ ±50 Cent) — darf durch keine Pitch-Phase geglättet oder quantisiert werden; Pitch-Phase überspringt diese Segmente
+3. **Recording-Chain-Early-Reflections** (0–50 ms nach Onset, §4.5c) — definieren Studio-Raumcharakter; Dereverb wet_mix cap = 0.35 wenn C80-Proxy > 3 dB; VERBOTEN: Dereverb entfernt Early Reflections des originalen Aufnahmestudios
+
+> Implementierung: `natural_performance_detector.py`; Kreuzreferenz: Spec 04 §4.5c (Early-Reflection-Guard)
+
 ### [RELEASE_MUST] §2.46a / §2.46b — Transfer-Chain-Vollständigkeit + Dateicontainer-Invariante
 
-`transfer_chain` modelliert alle Stufen vollständig (§2.46a — keine Verkürzung auf Primär+1). `file_ext` bestimmt **nur** die letzte Kettenstufe (§2.46b): Fallback-Gate `rotation_strength ≥ 0.30 AND conf ≥ 0.20 → vinyl akzeptiert` trotz `.mp3`. Studio-Tape: `wow < 0.06 WRMS → reel_tape; ≥ 0.06 WRMS → cassette` (IEC 60386:1987). **Produktions-Invariante**: `["vinyl","reel_tape","mp3_low"]` bei `rotation=0.371, file_ext=.mp3`.
+`transfer_chain` modelliert alle Stufen vollständig (§2.46a — keine Verkürzung auf Primär+1). `file_ext` bestimmt **nur** die letzte Kettenstufe (§2.46b): `file_ext` unterdrückt **nie** physikalische Fingerabdruck-Evidenz. Fallback-Gate Vinyl: `rotation_strength ≥ 0.30 AND conf ≥ 0.20 → vinyl akzeptiert` auch bei `.mp3`. Studio-Tape: `_thresh_rt = max(0.010, 0.025*(1−0.55*codec_contamination))`; `wow < 0.06 WRMS → reel_tape; ≥ 0.06 WRMS → cassette` (IEC 60386:1987). **VERBOTEN**: bei `file_ext=.mp3 AND rotation=0.371` Einzelergebnis `mp3_low`. **Produktions-Invariante**: `["vinyl","reel_tape","mp3_low"]` bei `rotation=0.371, file_ext=.mp3`.
 
-> Details: Spec 05 §6.7; Test: `test_vinyl_tape_mp3_chain_detection.py::test_vinyl_reel_tape_mp3_full_chain_production_case`
-
-### [RELEASE_MUST] §2.46b Dateicontainer-Invariante — file_ext ≠ Quellanalyse (v9.11.14)
-
-`file_ext` unterdrückt nie physikalische Fingerabdruck-Evidenz. Fallback-Gate Vinyl: `rotation_strength ≥ 0.30 AND conf ≥ 0.20` auch bei `.mp3`. Studio-Tape: `_thresh_rt = max(0.010, 0.025*(1−0.55*codec_contamination))`. Cassette vs. Reel: `wow < 0.06 WRMS → reel_tape`. VERBOTEN: bei `file_ext=.mp3 AND rotation=0.371` Einzelergebnis `mp3_low` — RELEASE_MUST-Verstoß.
-
-> Spec 05 §6.7 Phase 1b; Test: `test_vinyl_tape_mp3_chain_detection.py`
+> Details: Spec 05 §6.7; Test: `test_vinyl_tape_mp3_chain_detection.py`
 
 ### [RELEASE_MUST] §2.47 Adaptive-Intelligence-Prinzip (9-Schritt-Kaskade)
 
@@ -469,6 +476,32 @@ Feste Schwellwerte sind **Notbremsen**, nicht die Routine-Steuerung. Jede Phase:
 **Invariante**: Stufe 5 (Input-Export) ist immer besser als ein über-prozessiertes Artefakt. Status `degraded` ist kein Fehler — er ist die korrekte Antwort wenn alle Recovery-Versuche scheitern.
 
 > Implementierung: UV3 `_recovery_cascade()`, `RestorationResult.status ∈ {"success", "recovered", "degraded"}`
+
+### [RELEASE_MUST] §2.61 Output-Length-Guard (v9.12.0)
+
+**Jede Phase und der finale Export müssen dieselbe Sample-Anzahl wie das Input-Audio haben** (±64 Samples Toleranz für Resampling-Rundung). STFT/ISTFT-, Resampling- und Chunk-Stitching-Phasen MÜSSEN die Ausgabelänge explizit trimmen/padden.
+
+```python
+# UV3: nach jeder Phase automatisch prüfen
+if abs(len(output) - len(input)) > 64:
+    logger.error("length_mismatch phase=%s delta=%d", phase_id, len(output) - len(input))
+    output = output[:len(input)]  # harter Crop — besser als stilles Padding oder AV-Desync
+    metadata["length_corrections"].append(phase_id)
+```
+
+**VERBOTEN**: Stilles Zero-Padding als Längenkorrektur (maskiert den Bug, erzeugt Stille am Ende). **Richtig**: Harter Crop + Log-Eintrag + `metadata["length_corrections"]`.
+
+### [RELEASE_MUST] §2.62 Psychoakustischer Masking-Guard (v9.12.0)
+
+**NR-Algorithmen dürfen nur Rauschkomponenten entfernen, die über der psychoakustischen Maskierungsschwelle liegen** (ISO 11172-3). Rauschen, das vom Musiksignal maskiert wird, ist für den Hörer unsichtbar — aggressives Entfernen erzeugt hörbare Stille-Artefakte (klinisches Klangbild, tote Stille zwischen Phrasen).
+
+**Bindende Invariante**:
+- Vor NR (DeepFilterNet, OMLSA, SGMSE+): `masking_threshold = compute_masking_threshold_iso11172(audio, sr)` berechnen
+- NR-Gain-Floor pro Band: `G_floor[band] = max(0.10, masking_threshold[band] / noise_estimate[band])`
+- **VERBOTEN**: `G_floor < 0.10` in Frequenzbändern mit aktiver Musik-Energie > −60 dBFS
+- Implementierung: `backend/core/dsp/psychoacoustics.py`
+
+> Kreuzreferenz: Spec 04 §4.1 (Psychoacoustic Masking), §4.5 NR-Routing
 
 ## Vintage Aesthetics
 

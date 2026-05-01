@@ -1868,6 +1868,91 @@ def _post_additive_bw_guard(audio, sr, material_type, mode):
 - Material-Keys folgen `SUPPORTED_MATERIALS` (§6.1).
 - Telemetrie: `metadata["bw_ceiling_applied_hz"]` nur wenn tatsächlich gefiltert wurde.
 
+## §2.46e [RELEASE_MUST] Hallucination-Guard (v9.12.0)
+
+**Keine additive Phase darf Material in das Ausgangssignal einbringen, das im Eingangssignal physikalisch nicht vorhanden war.** Dies gilt absolut für `restoration`-Modus.
+
+### Drei Kategorien halluzinierten Materials (alle verboten in Restoration)
+
+1. **Harmonik-Halluzination**: Obertöne, die über das physikalische BW-Ceiling (§2.46c / §6.2c) hinausgehen oder deren Amplitude das Trägerprofil überschreitet
+2. **Raum-Halluzination**: Raumklang, Reverb-Schwänze oder Stereobreite, die im degradierten Signal nicht nachweisbar sind und nicht aus der Recording-Chain stammen
+3. **Textur-Halluzination**: Spektrale Texturen (Harmonischer Hiss, Formant-Muster), die durch ML-Modelle generiert wurden und kein physikalisches Gegenstück im Source-Material haben
+
+### Mess-Gate (`hallucination_guard.py`)
+
+```python
+# Pre/Post-Additive-Phase:
+spectral_novelty = energy_new_bins / energy_total
+
+if spectral_novelty > 0.08:
+    phase_score_penalty = 0.3   # PMGG-Penalty
+if spectral_novelty > 0.15:
+    if mode == "restoration":
+        # Phase-Rollback — Restoration ist absolut
+        return pre_phase_audio, {"hallucination_rollback": True, "spectral_novelty": spectral_novelty}
+    else:
+        # Studio 2026: MUSHRA-Check entscheidet
+        if mushra_score < 3.5:
+            return pre_phase_audio, {"hallucination_rollback": True}
+
+# Hard-Rollback unabhängig von spectral_novelty:
+if harmonic_ceiling_violation:   # rekonstruierte Harmonics > material BW_CEILING
+    return pre_phase_audio, {"bw_ceiling_rollback": True}
+```
+
+**Invarianten**:
+
+- Gate wird nach jeder additiven Phase (family `"additive"` oder `"reconstruction"`) aufgerufen
+- Restoration: `spectral_novelty > 0.15` → Hard-Rollback ohne Ausnahme
+- Studio 2026: Flexibel, aber MUSHRA ≥ 3.5 pflicht für Phase-Accept mit `spectral_novelty > 0.15`
+- BW-Ceiling-Verletzung → Hard-Rollback in beiden Modi
+- Telemetrie: `metadata["hallucination_rollbacks"]` (Liste betroffener Phase-IDs)
+
+## §2.46f [RELEASE_MUST] Natural-Performance-Artifacts-Guard (v9.12.0)
+
+**Performancebedingte Klangereignisse sind keine Defekte und dürfen nicht entfernt werden.**
+
+### Drei geschützte Kategorien
+
+| Kategorie | Erkennungskriterien | Schutzregel |
+|---|---|---|
+| **Atemgeräusche** | Energie −55 bis −40 dBFS, Dauer 50–500 ms, spectral_flatness > 0.4, Silero-VAD off | NR-Bypass + Gate-Bypass für dieses Segment |
+| **Natürliches Vibrato/Portamento** | F0-Varianz 4–7 Hz, Amplitude ≤ ±50 Cent | Pitch-Phase überspringt Segment; keine Quantisierung |
+| **Studio-Early-Reflections** | C80-Proxy > 3 dB in Onset-Fenstern (0–50 ms, §4.5c) | Dereverb wet_mix cap = 0.35; Early Reflections werden nicht entfernt |
+
+### Implementierung (`natural_performance_detector.py`)
+
+```python
+def classify_segment(audio_segment, sr, onset_context=False):
+    """Returns protection flags for a short audio segment."""
+    result = {
+        "is_breath": False,
+        "is_vibrato": False,
+        "has_early_reflection": False,
+    }
+    energy_dbfs = 20 * np.log10(np.max(np.abs(audio_segment)) + 1e-9)
+    flatness = spectral_flatness(audio_segment, sr)
+
+    if -55 <= energy_dbfs <= -40 and flatness > 0.4:
+        result["is_breath"] = True
+
+    f0_mod_rate = estimate_f0_modulation_rate(audio_segment, sr)
+    f0_mod_cents = estimate_f0_modulation_amplitude_cents(audio_segment, sr)
+    if 3.5 <= f0_mod_rate <= 8.0 and f0_mod_cents <= 50:
+        result["is_vibrato"] = True
+
+    if onset_context:
+        c80 = compute_c80_proxy(audio_segment, sr)
+        if c80 > 3.0:
+            result["has_early_reflection"] = True
+
+    return result
+```
+
+**Integration in UV3**: Vor jeder NR/Pitch/Dereverb-Phase wird `classify_segment()` frameweise aufgerufen. Flags aus `classify_segment()` werden als `_protected_segments` in `phase_context` weitergegeben und von den betroffenen Phasen ausgewertet.
+
+> Kreuzreferenz: Spec 04 §4.5c (Early-Reflection-Guard); §2.46 (Carrier-Chain-Inversion)
+
 ## §2.47 [RELEASE_MUST] Adaptive-Intelligence-Prinzip (v9.10.123)
 
 Aurik verarbeitet **kein generisches Audio** — jede Eingabe ist ein einzigartiges Musikstück. Das System muss sich **vor Beginn der Verarbeitung** vollständig an das konkrete Material anpassen.
@@ -3073,3 +3158,88 @@ PlateauStop aktiv. Fix: `mono = a[:, 0] if a.ndim == 2 else a`.
 | Klarheit | ~20 % | SGMSE+ / OMLSA |
 | Vokal-Präsenz | ~10 % | Phase 42/43 + VocalAI |
 | Neurale Synthese | ~5 % | Vocos 48k (Studio, MOS < 4.3) |
+
+---
+
+## §2.60 [RELEASE_MUST] Rollback-Hierarchie (v9.12.0)
+
+**Wenn ein Gate scheitert, MUSS Aurik die nächste Stufe versuchen — nie sofort abbrechen oder exportieren.**
+
+### Vollständige Recovery-Kaskade
+
+| Stufe | Aktion | Trigger |
+|---|---|---|
+| 1 | **Phase-Rollback**: Einzelphase zurückrollen → vorheriges Audio, Phase-Score negativ markiert | PMGG-Fail oder artifact_freedom < 0.95 für diese Phase |
+| 2 | **Strength-Reduktion**: Phase mit 50 % Strength wiederholen → neues PMGG-Check | Phase-Rollback × 2 für dieselbe Phase |
+| 3 | **Carrier-Checkpoint**: Rollback auf `best_carrier_checkpoint` (nach Stufe 1–4, vor Enhancement) | HPI ≤ 0 oder artifact_freedom < 0.95 am Pipeline-Ende |
+| 4 | **Pre-Pipeline-Checkpoint**: Rollback auf Audio direkt nach TDP (vor allen Phases) | Carrier-Checkpoint nicht verfügbar oder schlechter als Pre-Pipeline |
+| 5 | **Input-Export**: Original degradierter Input exportieren, Status: `degraded` | Alle Recovery-Stufen ausgeschöpft |
+| — | **VERBOTEN**: Leerer Export, Prozess-Abbruch ohne Ausgabe, Export mit bekanntem Artefakt | — |
+
+### Implementierung (`backend/core/unified_restorer_v3.py`)
+
+```python
+def _recovery_cascade(self, gate_fail_reason: str) -> RestorationResult:
+    """Vollständige 5-Stufen-Recovery-Kaskade."""
+
+    # Stufe 1: Phase-Rollback (wird pro Phase inline ausgeführt, nicht hier)
+
+    # Stufe 2: Strength-Reduktion (wird inline mit retry ausgeführt)
+
+    # Stufe 3: Carrier-Checkpoint
+    if self._best_carrier_checkpoint is not None:
+        audio = self._best_carrier_checkpoint
+        hpi = self._compute_hpi(audio)
+        if hpi > 0:
+            return RestorationResult(audio=audio, status="recovered",
+                                     metadata={**self.metadata, "recovery_stage": 3,
+                                               "recovery_reason": gate_fail_reason})
+
+    # Stufe 4: Pre-Pipeline-Checkpoint
+    if self._pre_pipeline_audio is not None:
+        audio = self._pre_pipeline_audio
+        hpi = self._compute_hpi(audio)
+        if hpi > 0:
+            return RestorationResult(audio=audio, status="recovered",
+                                     metadata={**self.metadata, "recovery_stage": 4,
+                                               "recovery_reason": gate_fail_reason})
+
+    # Stufe 5: Input-Export — IMMER besser als Artefakt
+    logger.warning("All recovery stages failed — exporting degraded input. reason=%s", gate_fail_reason)
+    return RestorationResult(audio=self._original_input, status="degraded",
+                             metadata={**self.metadata, "recovery_stage": 5,
+                                       "recovery_reason": gate_fail_reason})
+```
+
+**Invariante**: `RestorationResult.status ∈ {"success", "recovered", "degraded"}`. Status `degraded` ist kein Fehler — er ist die korrekte Antwort wenn alle Recovery-Versuche scheitern. Status `degraded` ist **immer besser** als ein über-prozessiertes Artefakt.
+
+---
+
+## §2.61 [RELEASE_MUST] Output-Length-Guard (v9.12.0)
+
+**Jede Phase und der finale Export müssen dieselbe Sample-Anzahl wie das Input-Audio haben** (±64 Samples Toleranz für Resampling-Rundung).
+
+### Pflicht-Check in UV3 nach jeder Phase
+
+```python
+# In UV3._execute_pipeline(), nach jeder Phase:
+if abs(len(output) - len(audio_in)) > 64:
+    logger.error("length_mismatch phase=%s delta=%d samples",
+                 phase_id, len(output) - len(audio_in))
+    # Harter Crop — besser als stilles Padding oder AV-Desync
+    if len(output) > len(audio_in):
+        output = output[:len(audio_in)]
+    else:
+        output = np.pad(output, [(0, len(audio_in) - len(output))] + [(0,0)] * (output.ndim - 1))
+    metadata.setdefault("length_corrections", []).append(phase_id)
+```
+
+**Betroffene Phasen-Typen** (MÜSSEN Ausgabelänge explizit sicherstellen):
+
+- STFT/ISTFT-Phasen (Resampling-Überlauf bei Edge-Frames)
+- Resampling-Phasen (Rundungsfehler ± N Samples)
+- Chunk-Stitching-Phasen (Overlap-Add-Residuen)
+
+**VERBOTEN**: Stilles Zero-Padding als primäre Längenkorrektur (maskiert den Wurzelbug, erzeugt Stille am Ende). Richtig: Phase muss Länge intern korrekt einhalten; UV3-Guard ist Fangschicht, nicht Lösung.
+
+> Telemetrie: `metadata["length_corrections"]` (Liste betroffener Phase-IDs); CI-Test: `test_output_length_guard.py`

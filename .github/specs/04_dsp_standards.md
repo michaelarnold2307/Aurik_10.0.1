@@ -408,6 +408,60 @@ INVARIANTE: NatuerlichkeitMetric darf nach phase_49 nicht sinken
 VERBOTEN: Aggressives Dereverb ohne Early-Reflection-Guard (klingt klinisch/steril).
 ```
 
+### §4.5d [RELEASE_MUST] Psychoakustischer Masking-Guard für NR-Algorithmen (v9.12.0)
+
+Ergänzt §4.1 (ISO 11172-3) mit einer **bindenden Gain-Floor-Invariante** für alle NR-Algorithmen.
+
+**Grundprinzip (ISO 11172-3 Psychoacoustic Model 2)**:
+Rauschen, das vom Musik-Signal maskiert wird, ist für das Gehör nicht wahrnehmbar.
+Aggressives Entfernen dieser maskierten Komponenten erzeugt hörbare Stille-Artefakte
+(Over-NR: tote Stille, klinisches Klangbild zwischen Phrasen).
+
+**Bindende Invariante**:
+
+```python
+# backend/core/dsp/psychoacoustics.py
+def compute_masking_threshold_iso11172(
+    audio: np.ndarray,
+    sr: int,
+    n_fft: int = 2048,
+) -> np.ndarray:
+    """
+    ISO 11172-3 Psychoacoustic Model 2 (approximiert).
+    Returns masking threshold per FFT bin in linear power scale.
+    """
+    # ... Bark-Filterbank, Spreading Function, Absolute Threshold of Hearing
+    ...
+
+# Aufruf VOR NR (DeepFilterNet, OMLSA, SGMSE+):
+masking_threshold = compute_masking_threshold_iso11172(pre_nr_audio, sr)
+
+# NR-Gain-Floor pro Frequenzband:
+G_floor[band] = max(0.10, masking_threshold[band] / noise_estimate[band])
+
+# VERBOTEN — kein NR-Gate unter G_floor in Bins mit aktiver Musik-Energie:
+assert G_floor[band] >= 0.10 for band where signal_energy_db[band] > -60.0
+```
+
+**Auswirkung**: Erhält den lebendigen Rauschboden, der Musik „atmen" lässt — kein steriles, klinisches Klangbild. Rauschen unterhalb der Maskierungsschwelle bleibt erhalten, da es vom Gehör nicht als störend wahrgenommen wird.
+
+**Integration**:
+
+- DeepFilterNet-Wrapper: `energy_bias` bereits −6 dB (vocal) / −9 dB (instrumental) für Spec 04 §0j konform
+- OMLSA: `noise_floor_softening_factor = G_floor` pro Bark-Band
+- SGMSE+: `sigma_scale` per-frame so begrenzt, dass effektiver Gain-Floor ≥ 0.10
+
+> Kreuzreferenz: §4.1 (Psychoacoustic Masking), §4.1b (ISO 532-1 Loudness), §4.5 NR-Routing; Spec 02 §2.62
+
+### §4.5e [RELEASE_MUST] Hallucination-Guard-Referenz für additive DSP-Phasen (v9.12.0)
+
+Jede additive DSP-Phase in Spec 04 MUSS `hallucination_guard.py` (`§2.46e`) aufrufen.
+Insbesondere betroffen: Bandbreiten-Extension (phase_06), Harmonik-Synthese (phase_07), AudioSR (phase_23).
+
+Vollständige Spec: **Spec 02 §2.46e** (Hallucination-Guard).
+
+> Kreuzreferenz: Spec 02 §2.46e; `backend/core/dsp/hallucination_guard.py`
+
 ### Phasen-Rekonstruktion (nach JEDER Spektral-Modifikation)
 
 ```text
