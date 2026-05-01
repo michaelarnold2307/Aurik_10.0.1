@@ -19107,7 +19107,7 @@ class UnifiedRestorerV3:
                             _dr = _afg_result.detail_report
                             logger.warning(
                                 "§2.49 artifact_freedom=%.3f < 0.95 after %s (%d artifacts) "
-                                "[PE:%d PC:%d MN:%d SH:%d wsum=%.3f] → rollback",
+                                "[PE:%d PC:%d MN:%d SH:%d MR:%d wsum=%.3f] → rollback",
                                 _afg_result.artifact_freedom,
                                 phase_id,
                                 len(_afg_result.detected_artifacts),
@@ -19115,6 +19115,7 @@ class UnifiedRestorerV3:
                                 _dr.get("n_phase_cancellation", 0),
                                 _dr.get("n_musical_noise", 0),
                                 _dr.get("n_spectral_holes", 0),
+                                _dr.get("n_metallic_ringing", 0),
                                 _dr.get("weighted_artifact_sum", 0.0),
                             )
                             # Roll back to audio state just before this phase ran
