@@ -4,7 +4,7 @@
 > kontextbewusstes Musik- und Gesangs-Restaurations-, Reparatur- und
 > Rekonstruktions-Denkersystem.* Stand: Mai 2026 — Version **9.12.0**
 >
-> **instructions_version: 9.0** — Far-beyond-SOTA-Revision: §0h Music-Death-Shield + §0g Autonomes-Entscheidungs-Doktrin + §0i Perceptual-Transparency-Guarantee + §0a Crossfire-Modus-Invariante + §2.44 HPI-Floor-Bug-Fix + §2.44 VERSA-Primärpflicht + §2.46e Hallucination-Guard + §2.46f Natural-Performance-Artifacts-Guard + §2.60 Rollback-Hierarchie-Komplettierung + §2.61 Output-Length-Guard + §2.62 Psychoakustischer-Masking-Guard + §4.4 SOTA-Matrix 2026-Update + §0j KI-Modell-Limitation-Awareness + §2.46b-Deduplizierung normiert 01.05.2026
+> **instructions_version: 9.0** — Far-beyond-SOTA-Revision: §0h Music-Death-Shield + §0g Autonomes-Entscheidungs-Doktrin + §0i Perceptual-Transparency-Guarantee + §0a Crossfire-Modus-Invariante + §2.44 HPI-Floor-Bug-Fix + §2.44 VERSA-Primärpflicht + §2.45b Hochrestorabilität-Gate + §2.46e Hallucination-Guard + §2.46f Natural-Performance-Artifacts-Guard + §2.60 Rollback-Hierarchie-Komplettierung + §2.61 Output-Length-Guard + §2.62 Psychoakustischer-Masking-Guard + §4.4 SOTA-Matrix 2026-Update + §0j KI-Modell-Limitation-Awareness + §2.46b-Deduplizierung + Material-adaptive-Böden-Erklärung normiert 01.05.2026
 >
 > Aktuelle Testzahl: **~11598 `def test_`-Funktionen** (436 Testdateien; alle grün)
 >
@@ -161,7 +161,7 @@ punktuell (Einzelfall) oder systemisch (Muster über mehrere Stellen) ist — un
 | **06** Phasen 01–64 | Phase-Liste, CAUSE_TO_PHASES | §7.3a Phase-Implementierung, Caching & Checkliste |
 | **07** Tests/Qualität | PQS, AMRB, OQS, MUSHRA | §8.4a Test-Patterns, 6 Pitfalls & CI-Gates |
 | **08** Architektur/Distribution | Layers, Plugins, CLI, AppImage | §11.4c UI-State-Machines & Thread-Safety, §11.5a Mermaid-Visualisierung |
-| **09** Kalibrierungsmatrix | CANONICAL_THRESHOLDS (Restoration + Studio 2026), Material-/Ära-/Genre-Bias, SongGoalTargets-API | §09.2 Zwei-Ebenen-API (Pipeline vs. Convenience) — **normativ übergeordnet für alle Schwellwerte** |
+| **09** Kalibrierungsmatrix | CANONICAL_THRESHOLDS (Restoration + Studio 2026), Material-/Ära-/Genre-Bias, SongGoalTargets-API | §09.2 Zwei-Ebenen-API (Pipeline vs. Convenience) — **normativ übergeordnet für alle Schwellwerte**; material-adaptive Böden: Shellac ~0.72, Vinyl ~0.82, CD ~0.90 (bewusst verschieden — sonst werden Shellac-Restaurierungen als permanenter Fail markiert) |
 
 Änderungshistorie: `docs/CHANGELOG_HISTORY.md`
 
@@ -316,6 +316,26 @@ Letztes Gate vor Export. Misst **Gesamt-Hörverbesserung** statt nur Einzel-Goal
 **Restoration**: `perceptual_delta > 0` Pflicht für jede Phase; ≤ 0 → Skip. So wenige Phasen wie nötig.
 **Studio 2026**: Volle Enhancement-Kette, aber `perceptual_delta > 0` bleibt Pflicht — kein Over-Processing.
 
+### [RELEASE_MUST] §2.45b Hochrestorabilität-Gate — Near-Passthrough (v9.12.0)
+
+**Ein sauberer Import darf nicht verschlechtert werden.** Wenn das Material nahezu unversehrt ist, ist minimaler Eingriff keine Option — er ist Pflicht.
+
+**Zwei-Stufen-Invariante**:
+
+1. **Pass-Through-Invariante** (Spec 07 §8.2 #7): `restorability_score > 80 AND SNR > 40 dB` →
+   - PQS-Verlust ≤ 0.05, alle Goals ≤ ±0.02, LUFS ≤ 0.3 LU
+   - Phasen mit `defect_severity < 0.05` werden **übersprungen** (kein PMGG-Run)
+   - Carrier-Phasen (Stufen 1–3 §2.46) werden nur aktiviert wenn DefectScanner Evidenz liefert
+
+2. **Minimal-Pipeline-Gate**: `restorability_score > 80 AND DefectScanner.severity_total < 0.15` →
+   - `_MATERIAL_PRIORITY_PHASES` (§6.2a) werden dennoch geprüft — aber mit Strength ≤ 0.30
+   - `_NEVER_SKIP`-Phasen (phase_01/09/12/14/15) bleiben aktiv, aber Gate senkt ihre Stärke auf Restorability-adaptiven Minimalwert
+   - Export-Status: `"success"` — kein Alarm, kein Degraded-Flag
+
+**Invariante**: Jede Pipeline-Konfiguration muss diese Gate-Bedingung prüfen und dokumentieren (`metadata["high_restorability_gate"] = True`). VERBOTEN: Volles Phase-Set auf hochwertigen digitalen Quellen (CD, DAT, mp3_high mit SNR > 40 dB) ohne Restorability-Check.
+
+> Details: Spec 07 §8.2 #7; Spec 02 §2.45; Spec 09 Restorability-Tiers
+
 ### [RELEASE_MUST] §2.45a Mid-Pipeline-Loudness-Drift-Guard
 
 Breitbandig-subtraktive Phasen (Denoise/Noise-Gate/Dereverb): Gated-RMS-Guard → envelope-aware Makeup-Gain (nur Musik-Frames, `gate_dbfs=-36.0` + `reference_for_gate=pre_phase_audio`, V04) → Soft-Limiter NUR wenn `peak > 0.98`. HPF/LPF/Notch/Bandpass: **kein** per-Phase-Guard (4-stufige Checkliste; vgl. VERBOTEN-Tabelle). Finale Fangschicht §2.30c: `apply_waveform_plausibility_guard(original, restored, sr, mode, material_type, restorability_score)` nach MDEM in UV3 — NIE Boost, non-blocking.
@@ -333,6 +353,9 @@ Breitbandig-subtraktive Phasen (Denoise/Noise-Gate/Dereverb): Gated-RMS-Guard �
 | **P5** | Brillanz ≥ 0.78, Raumtiefe ≥ 0.70 | Brillanz ≥ 0.82, Raumtiefe ≥ 0.74 |
 
 > Alle Werte = **kanonische Böden** (Spec 09 / `calibration_matrix.py`). Song-spezifische Ziele berechnet die adaptive Schicht §2.31 + §09.2 + §2.56 aus Material, Ära, Genre und Restorability.
+
+**[RELEASE_MUST] Material-adaptive Böden — Warum verschiedene Schwellwerte korrekt sind:**
+Shellac (1920–1950) hat physikalisch SNR ~15 dB, BW ~7 kHz, kein Stereo — ein Natürlichkeit-Score von 0.90 wäre auf diesem Medium physikalisch unmöglich. Die Kalibrierungsmatrix definiert daher material-spezifische Böden: Shellac ~0.72, Vinyl ~0.82, CD ~0.90. **VERBOTEN**: Alle Böden auf den CD-Wert anheben (→ Shellac-Restaurierungen als permanenter Fail, Recovery-Kaskade wird sinnlos aktiviert). **Richtig**: `calibration_matrix.get_material_floor(material_type, goal)` aufrufen — nie hardcodierte Goal-Konstanten.
 
 **Regressions-Regime** (differenziert — §2.29d, aktualisiert §2.54):
 - **P1/P2** (Natürlichkeit, Authentizität, Tonal, Timbre, Artikulation): **Pipeline-Ende-Pflicht** — am Ende der gesamten Kette müssen alle P1/P2-Goals ≥ Schwellwert liegen. Einzelphasen dürfen vorübergehend P1/P2-Proxy-Werte senken, wenn Carrier-Repair (§2.44 Referenz-Paradoxon) oder restorative Defektentfernung (§2.29c Baseline-Capping) der Grund ist. Der CumulativeInteractionGuard (§2.48) ist die materialadaptive **Notbremse** (§2.54), nicht die Routine-Steuerung.
