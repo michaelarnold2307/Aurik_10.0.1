@@ -7193,6 +7193,9 @@ class UnifiedRestorerV3:
                     "timbre_authentizitaet": 0.65,
                     "artikulation": 0.61,
                     "waerme": 0.62,
+                    "brillanz": 0.52,  # BW ≤ 8 kHz → HF crest physically low
+                    "transparenz": 0.55,
+                    "separation_fidelity": 0.60,
                 },
                 "wax_cylinder": {
                     "natuerlichkeit": 0.66,
@@ -7201,6 +7204,9 @@ class UnifiedRestorerV3:
                     "timbre_authentizitaet": 0.63,
                     "artikulation": 0.59,
                     "waerme": 0.60,
+                    "brillanz": 0.40,  # BW ≤ 5 kHz
+                    "transparenz": 0.50,
+                    "separation_fidelity": 0.55,
                 },
                 "wire_recording": {
                     "natuerlichkeit": 0.66,
@@ -7209,6 +7215,9 @@ class UnifiedRestorerV3:
                     "timbre_authentizitaet": 0.63,
                     "artikulation": 0.59,
                     "waerme": 0.60,
+                    "brillanz": 0.44,  # BW ≤ 6 kHz
+                    "transparenz": 0.52,
+                    "separation_fidelity": 0.56,
                 },
                 "vinyl": {
                     "natuerlichkeit": 0.82,
@@ -7217,6 +7226,9 @@ class UnifiedRestorerV3:
                     "timbre_authentizitaet": 0.79,
                     "artikulation": 0.76,
                     "waerme": 0.74,
+                    "brillanz": 0.82,  # Vinyl BW ≤ 16 kHz; crest achievable post-phase_06
+                    "transparenz": 0.78,
+                    "separation_fidelity": 0.76,
                 },
                 "reel_tape": {
                     "natuerlichkeit": 0.82,
@@ -7225,6 +7237,9 @@ class UnifiedRestorerV3:
                     "timbre_authentizitaet": 0.79,
                     "artikulation": 0.76,
                     "waerme": 0.74,
+                    "brillanz": 0.82,
+                    "transparenz": 0.78,
+                    "separation_fidelity": 0.76,
                 },
                 "tape": {
                     "natuerlichkeit": 0.78,
@@ -7233,6 +7248,9 @@ class UnifiedRestorerV3:
                     "timbre_authentizitaet": 0.75,
                     "artikulation": 0.72,
                     "waerme": 0.72,
+                    "brillanz": 0.78,
+                    "transparenz": 0.74,
+                    "separation_fidelity": 0.72,
                 },
                 "cassette": {
                     "natuerlichkeit": 0.76,
@@ -7241,14 +7259,25 @@ class UnifiedRestorerV3:
                     "timbre_authentizitaet": 0.73,
                     "artikulation": 0.70,
                     "waerme": 0.70,
+                    "brillanz": 0.72,
+                    "transparenz": 0.68,
+                    "separation_fidelity": 0.68,
                 },
                 "mp3_low": {
+                    # MP3 128kbps or lower: severe HF codec artefacts, BW ~15.5 kHz.
+                    # brillanz (HF crest 2-16 kHz): achievable ~0.20-0.35 after Apollo repair;
+                    # transparenz and separation_fidelity similarly constrained.
+                    # These ceilings prevent false FAIL against canonical 0.78/0.82 thresholds
+                    # that assume clean 20 kHz audio (§0a Material-Ceiling, §0d).
                     "natuerlichkeit": 0.76,
                     "authentizitaet": 0.74,
                     "tonal_center": 0.78,
                     "timbre_authentizitaet": 0.74,
                     "artikulation": 0.70,
                     "waerme": 0.70,
+                    "brillanz": 0.45,  # MP3 codec destroys HF crest; crest <2.5 even post-Apollo
+                    "transparenz": 0.60,  # Codec masking residuals floor transparenz
+                    "separation_fidelity": 0.62,  # Stem-sep on lossy source physically limited
                 },
             }
             try:
@@ -7268,6 +7297,43 @@ class UnifiedRestorerV3:
                             _n_capped,
                             _mat_str_ceil,
                         )
+                # §2.46a Chain-End-Ceiling: the LAST stage of the transfer chain can impose
+                # stricter ceilings than the primary source material (e.g. vinyl→cassette→mp3_low:
+                # primary=vinyl but codec destroys HF → brillanz ceiling from mp3_low applies).
+                # Only HF-sensitive goals are chain-end-adjusted; P1/P2 goals remain primary-based.
+                _chain_end_hf_goals = {"brillanz", "transparenz", "separation_fidelity"}
+                try:
+                    _chain_info_obj = getattr(self, "_active_chain_info", None)
+                    _chain_list: list[str] = []
+                    if _chain_info_obj is not None:
+                        _cl = None
+                        if isinstance(_chain_info_obj, dict):
+                            _cl = _chain_info_obj.get("chain") or _chain_info_obj.get("transfer_chain")
+                        else:
+                            _cl = getattr(_chain_info_obj, "chain", None) or getattr(
+                                _chain_info_obj, "transfer_chain", None
+                            )
+                        if isinstance(_cl, (list, tuple)):
+                            _chain_list = [str(s).lower() for s in _cl]
+                    if len(_chain_list) >= 2:
+                        _chain_end = _chain_list[-1]
+                        _chain_end_map = _ADAPTIVE_THR_MATERIAL_CEILING.get(_chain_end, {})
+                        _n_chain_capped = 0
+                        for _hf_goal in _chain_end_hf_goals:
+                            if _hf_goal in _chain_end_map and _hf_goal in _effective_goal_thresholds:
+                                _chain_ceil = float(_chain_end_map[_hf_goal])
+                                if float(_effective_goal_thresholds[_hf_goal]) > _chain_ceil:
+                                    _effective_goal_thresholds[_hf_goal] = _chain_ceil
+                                    _n_chain_capped += 1
+                        if _n_chain_capped:
+                            logger.info(
+                                "§2.46a Chain-End-Ceiling: %d HF-Goal(s) gekappt durch Ketten-Ende '%s' (chain=%s).",
+                                _n_chain_capped,
+                                _chain_end,
+                                _chain_list,
+                            )
+                except Exception as _chain_ceil_exc:
+                    logger.debug("§2.46a Chain-End-Ceiling fehlgeschlagen (non-blocking): %s", _chain_ceil_exc)
             except Exception as _mc_exc:
                 logger.debug("§0a Material-Ceiling-Check fehlgeschlagen (non-blocking): %s", _mc_exc)
 

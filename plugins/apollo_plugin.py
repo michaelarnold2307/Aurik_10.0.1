@@ -133,7 +133,7 @@ class ApolloPlugin:
     # Bei Überschreitung: DSP-Fallback für restliche Chunks — kein Hardstop.
     _WALL_BUDGET_FACTOR: float = 2.0  # Faktor × Audio-Dauer
     _WALL_BUDGET_MIN_S: float = 60.0  # Untergrenze (sehr kurze Clips)
-    _WALL_BUDGET_MAX_S: float = 240.0  # Obergrenze (konsistent mit §phase_55: 40–240 s)
+    _WALL_BUDGET_MAX_S: float = 600.0  # Obergrenze: 2.0× für Songs bis 5 min (300s × 2 = 600s)
     _CHUNK_S: float = 30.0  # Apollo-Inferenz-Chunk: 30 s → kontrolliertes RAM-Profil + Budget-Checks
 
     def _try_load_model(self) -> None:

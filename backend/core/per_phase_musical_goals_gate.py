@@ -1880,7 +1880,13 @@ def _measure_quick(
         _wm = fft_mag * _w  # perceptually weighted magnitude
         _e_low_mid = float(np.mean(_wm[(freqs >= 200) & (freqs < 800)] ** 2)) + 1e-9
         _e_upper_mid = float(np.mean(_wm[(freqs >= 800) & (freqs < 3000)] ** 2)) + 1e-9
-        scores["waerme"] = float(np.clip(_e_low_mid / _e_upper_mid / 4.0, 0.0, 1.0))
+        # Soft-sigmoid normalization (§9.7.14 fix v9.11.15):
+        # With ISO-226 weighting, warm Schlager has ratio ~6 → hard /4.0 clips to 1.0 always
+        # → delta never detectable → PMGG blind for waerme regressions.
+        # Soft norm: ratio/(ratio+0.70) → neutral=0.59, warm(~2.5)=0.78, Schlager(~6)=0.90,
+        # delta for small change detectable (~0.005–0.01). Satisfies spec: warm→0.75–1.0.
+        _ratio_w = _e_low_mid / _e_upper_mid
+        scores["waerme"] = float(np.clip(_ratio_w / (_ratio_w + 0.70), 0.0, 1.0))
     except Exception:
         scores["waerme"] = 0.5
 

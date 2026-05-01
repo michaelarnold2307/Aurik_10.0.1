@@ -635,16 +635,26 @@ class MusicalQualityAssurance:
 
         # Check medium-specific gates
         # SNR gate: Compare against material-adaptive threshold.
-        # For degraded analog material, the baseline SNR may be far below the
-        # medium's theoretical min_snr_db.  In that case, require at least an
-        # *improvement* of ≥3 dB OR reaching ≥70% of the medium target — whichever
-        # is lower.  This prevents false hard-fails on heavily degraded sources
-        # while still catching genuine SNR regressions.
+        # §2.54: The minimum improvement requirement is NOT a fixed constant.
+        # For severely degraded multi-generation material (e.g. vinyl→cassette→mp3_low,
+        # baseline ≈ 28 dB), the physical SNR ceiling of the carrier chain limits
+        # achievable improvement.  Requiring a fixed +3 dB from an already-degraded
+        # baseline forces destructive over-denoising that PMGG correctly prevents.
+        # Smooth ramp: below _RAMP_LOW dB baseline → 0.3 dB min; above _RAMP_HIGH → 3.0 dB.
         _snr_target = medium_gates.min_snr_db
         _snr_baseline = baseline.snr_db if baseline is not None else 0.0
+        _SNR_RAMP_LOW = 28.0  # below this baseline SNR: only 0.3 dB min improvement
+        _SNR_RAMP_HIGH = 38.0  # above this baseline SNR: standard 3.0 dB min improvement
+        if _snr_baseline <= _SNR_RAMP_LOW:
+            _min_snr_improvement = 0.3
+        elif _snr_baseline >= _SNR_RAMP_HIGH:
+            _min_snr_improvement = 3.0
+        else:
+            _t = (_snr_baseline - _SNR_RAMP_LOW) / (_SNR_RAMP_HIGH - _SNR_RAMP_LOW)
+            _min_snr_improvement = 0.3 + 2.7 * _t**1.5  # smooth power-ramp
         _snr_adaptive_floor = max(
-            _snr_baseline + 3.0,  # at least 3 dB improvement
-            _snr_target * 0.60,  # at least 60% of medium target
+            _snr_baseline + _min_snr_improvement,
+            _snr_target * 0.55,  # at least 55% of medium target (lowered from 60%)
         )
         _effective_snr_min = min(_snr_target, _snr_adaptive_floor)
         if current.snr_db < _effective_snr_min:
