@@ -45,6 +45,7 @@ from backend.core.defect_scanner import MaterialType
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
+# pylint: disable=import-outside-toplevel,redefined-outer-name
 # ML-Hybrid Support
 try:
     import soundfile as sf
@@ -54,7 +55,7 @@ except ImportError:
     SOUNDFILE_AVAILABLE = False
 
 try:
-    from backend.core.quality_mode import QualityMode, should_use_ml
+    from backend.core.quality_mode import QualityMode, should_use_ml  # type: ignore[attr-defined]
 
     QUALITY_MODE_AVAILABLE = True
 except ImportError:
@@ -275,7 +276,7 @@ class TapeHissReductionPhase(PhaseInterface):
         try:
             from plugins.deepfilternet_v3_ii_plugin import get_deepfilternet_plugin
 
-            self._deepfilternet_plugin = get_deepfilternet_plugin()
+            self._deepfilternet_plugin = get_deepfilternet_plugin()  # type: ignore[assignment]
             logger.info("✅ DeepFilterNet v3 II Plugin loaded for Tape Hiss Reduction")
             return self._deepfilternet_plugin
         except Exception as e:
@@ -300,7 +301,7 @@ class TapeHissReductionPhase(PhaseInterface):
             description="HF-OMLSA-Rauschunterdrückung (Cohen 2002/2003) — Über-SOTA",
         )
 
-    def process(
+    def process(  # type: ignore[override]  # pylint: disable=arguments-renamed
         self,
         audio: np.ndarray,
         sample_rate: int,
@@ -380,6 +381,9 @@ class TapeHissReductionPhase(PhaseInterface):
 
         # Skip for digital sources identified by string key (mp3, aac, dat, cd variants).
         # These sources never have tape hiss; OMLSA processing would only add artefacts (§0).
+        # EXCEPTION §6.2a: If transfer_chain contains an analog tape/reel_tape/cassette stage
+        # (e.g. vinyl→tape→mp3_low), tape hiss reduction MUST run — the mp3 is only the
+        # digital container; the actual source has tape hiss.
         _DIGITAL_KEYS = frozenset(
             {
                 "mp3_low",
@@ -395,8 +399,13 @@ class TapeHissReductionPhase(PhaseInterface):
                 "mp3",
             }
         )
+        _ANALOG_TAPE_KEYS = frozenset({"tape", "reel_tape", "cassette"})
+        _transfer_chain_raw = kwargs.get("transfer_chain", [])
+        _transfer_chain = [str(c).lower() for c in _transfer_chain_raw] if isinstance(_transfer_chain_raw, list) else []
+        _chain_has_tape = any(c in _ANALOG_TAPE_KEYS for c in _transfer_chain)
+
         _mat_key_norm = material_key.lower().replace("-", "_").replace(" ", "_")
-        if _mat_key_norm in _DIGITAL_KEYS:
+        if _mat_key_norm in _DIGITAL_KEYS and not _chain_has_tape:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
             logger.info(
@@ -417,6 +426,16 @@ class TapeHissReductionPhase(PhaseInterface):
                 },
                 warnings=[f"Digital source '{material_key}' - tape hiss reduction skipped"],
             )
+        if _mat_key_norm in _DIGITAL_KEYS and _chain_has_tape:
+            logger.info(
+                "Phase 29: Digital-Material '%s' aber transfer_chain=%s enthält Tape-Stufe "
+                "— OMLSA läuft (§6.2a Carrier-Chain-Invariante, §2.46a)",
+                material_key,
+                _transfer_chain,
+            )
+            # Für die weiteren Verarbeitungsschritte material_key auf "tape" setzen,
+            # damit OMLSA-Profile und Gate-Berechnungen auf Tape-Standards basieren.
+            material_key = "tape"
 
         # §2.47 [RELEASE_MUST] SNR > 35 dB Dry-Signal Bypass
         # If the signal is essentially clean, tape hiss reduction is unnecessary
@@ -493,7 +512,7 @@ class TapeHissReductionPhase(PhaseInterface):
             (v for k, v in self.HF_FOCUS_RANGE.items() if getattr(k, "value", None) == _mat_val),
             (8000, 18000),
         )
-        hf_low, hf_high = _hf
+        hf_low, hf_high = _hf  # type: ignore[misc]
 
         # Locality-aware modulation from UV3.
         # Sparse hiss-related defect coverage -> conservative denoising outside affected regions.
@@ -523,8 +542,7 @@ class TapeHissReductionPhase(PhaseInterface):
             )
 
         # Create frequency bands (logarithmic spacing)
-        nyquist = sample_rate / 2
-        np.logspace(np.log10(hf_low), np.log10(min(hf_high, nyquist * 0.95)), self.NUM_BANDS + 1)
+        _nyquist = sample_rate / 2  # used by helper methods referencing sample_rate
 
         is_stereo = audio.ndim == 2
         _stereo_lag_stats = {
@@ -677,8 +695,8 @@ class TapeHissReductionPhase(PhaseInterface):
             execution_time_seconds=execution_time,
             metadata={
                 "material": material.name,
-                "gate_threshold_db": float(gate_threshold_db),
-                "reduction_depth_db": float(reduction_depth_db),
+                "gate_threshold_db": float(gate_threshold_db),  # type: ignore[arg-type]
+                "reduction_depth_db": float(reduction_depth_db),  # type: ignore[arg-type]
                 "hf_focus_range_hz": [int(hf_low), int(hf_high)],
                 "omlsa_runtime_profile": omlsa_runtime_profile,
                 "hf_reduction_db": round(float(hf_reduction_db), 2),
@@ -1079,6 +1097,7 @@ class TapeHissReductionPhase(PhaseInterface):
         _masking_freqs_p29: np.ndarray | None = None
         try:
             from backend.core.dsp.psychoacoustics import compute_masking_threshold_iso11172 as _cmask_p29
+
             _mask_ratio_p29 = _cmask_p29(channel, sample_rate, n_fft=2048, hop_length=512)
             _masking_floor_p29 = np.mean(_mask_ratio_p29, axis=1).astype(np.float32)  # (n_freq_2048,)
             _masking_freqs_p29 = np.linspace(0.0, sample_rate / 2.0, _mask_ratio_p29.shape[0], dtype=np.float32)
@@ -1285,7 +1304,8 @@ class TapeHissReductionPhase(PhaseInterface):
                     G_combined[:, _pidx_29] = 1.0
                     logger.debug(
                         "§2.36 phase_29 Phonem-Bypass: %d/%d Frames auf G=1.0",
-                        len(_pidx_29), _n_t_29,
+                        len(_pidx_29),
+                        _n_t_29,
                     )
         except Exception as _pm29_exc:
             logger.debug("§2.36 phase_29 Phonem-Mask (non-blocking): %s", _pm29_exc)

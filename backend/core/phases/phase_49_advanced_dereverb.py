@@ -48,7 +48,7 @@ Version: 3.0.0 (scipy.signal.stft/istft, kein np.fft.rfft mehr)
 
 from __future__ import annotations
 
-# pylint: disable=import-outside-toplevel,reimported
+# pylint: disable=import-outside-toplevel
 import logging
 import time
 
@@ -255,7 +255,9 @@ class AdvancedDereverbPhase(PhaseInterface):
 
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
-            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict49  # pylint: disable=import-outside-toplevel # noqa: I001
+            from backend.core.plugin_lifecycle_manager import (
+                get_plugin_lifecycle_manager as _get_plm_evict49,
+            )
 
             _get_plm_evict49().evict_for_phase("phase_49_advanced_dereverb")
         except Exception:

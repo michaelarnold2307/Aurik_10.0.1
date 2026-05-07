@@ -72,6 +72,7 @@ from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coh
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 
+# pylint: disable=import-outside-toplevel
 logger = logging.getLogger(__name__)
 
 # PGHI phase reconstruction after spectral modification (Spec §DSP — PFLICHT)
@@ -234,7 +235,8 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
 
         # Get material-specific parameters
         params: dict[str, Any] = dict(self.MATERIAL_PARAMS.get(material_type, self.MATERIAL_PARAMS["unknown"]))
-        params["correction_strength"] = float(float(params["correction_strength"]) * _effective_strength)  # type: ignore[arg-type]
+        _cs_p31 = float(params["correction_strength"])  # type: ignore[arg-type]
+        params["correction_strength"] = float(_cs_p31 * _effective_strength)
 
         # Skip digital sources
         if params["max_speed_error"] == 0:
@@ -364,7 +366,8 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
         # Apply correction if error significant (>0.3%)
         if abs(speed_error_percent) > 0.3:
             # Calculate corrected ratio
-            correction_ratio = 1.0 + (speed_ratio - 1.0) * float(params["correction_strength"])  # type: ignore[arg-type]
+            _cs2_p31 = float(params["correction_strength"])  # type: ignore[arg-type]
+            correction_ratio = 1.0 + (speed_ratio - 1.0) * _cs2_p31
 
             # Select algorithm
             if params["algorithm"] == "wsola":
@@ -987,7 +990,8 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             if not voiced.any():
                 return None
             f0_safe = np.where(voiced & (f0 > 1.0), f0, 200.0)
-            return np.clip(np.round(sr / np.maximum(f0_safe, 1.0)).astype(int), 20, sr // 50)  # type: ignore[no-any-return]
+            _p31_periods = np.clip(np.round(sr / np.maximum(f0_safe, 1.0)).astype(int), 20, sr // 50)
+            return _p31_periods  # type: ignore[no-any-return]
         except Exception:
             return None
 
