@@ -25,13 +25,18 @@ Date: 2026-02-15
 """
 # pylint: disable=import-outside-toplevel,reimported
 
+import contextlib
 import dataclasses
 import gc
+import importlib
 import logging
 import math
+import os
 import pathlib
+import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Optional
@@ -54,12 +59,6 @@ try:
     MEMORY_PROFILING_AVAILABLE = True
 except ImportError:
     MEMORY_PROFILING_AVAILABLE = False
-import contextlib
-import importlib
-import os
-import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 from backend.core.adaptive_core_scheduler import AdaptiveCoreScheduler
 
 # Import Aurik 9.0 Core Components
