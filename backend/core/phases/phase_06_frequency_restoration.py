@@ -95,7 +95,7 @@ if __name__ == "__main__":
 else:
     from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 
-import logging
+import logging  # pylint: disable=wrong-import-position
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ try:
 
     ML_HYBRID_AVAILABLE = True
 except Exception:
-    _get_audiosr_plugin = None
+    _get_audiosr_plugin = None  # type: ignore[assignment]
     ML_HYBRID_AVAILABLE = False
 
 try:
@@ -150,7 +150,7 @@ class FrequencyRestorationPhase(PhaseInterface):
     """
 
     # Material-adaptive Parameters (Professional-tuned)
-    MATERIAL_PARAMS = {
+    MATERIAL_PARAMS: dict[str, dict[str, Any]] = {
         "tape": {
             "rolloff_hz": 14000,  # Tape rolloff (head alignment, formulation)
             "extension_range_hz": [14000, 20000],
@@ -301,13 +301,21 @@ class FrequencyRestorationPhase(PhaseInterface):
             "studio_2026": 12.0,
         }.get(_qm, 3.5)
         _analog_mats = {"shellac", "wax_cylinder", "vinyl", "tape", "reel_tape", "wire_recording"}
-        _mat_mult_adj = 1.0 if _mat in _analog_mats else 0.0
+        # §0k MAS-Optimum: analoges Material braucht mehr AudioSR-Zonen (10s/Zone × N Zonen).
+        # Für restoration + analog: +3.0 Multiplikator (statt +1.0) — deckt bis zu 3 Zonen bei 30s-Audio.
+        # Formel: 30s × (3.5+3.0) = 195s → noch unter 240s max, aber ausreichend für 2 vollständige Zonen.
+        _mat_mult_adj = (
+            3.0 if (_mat in _analog_mats and _qm == "restoration") else (1.0 if _mat in _analog_mats else 0.0)
+        )
         _timeout_mult = float(np.clip(_mode_mult + _mat_mult_adj, 2.0, 14.0))
 
         if _qm == "fast":
             _timeout_min, _timeout_max = 20.0, 180.0
         elif _qm in {"quality", "maximum", "studio_2026"}:
             _timeout_min, _timeout_max = 120.0, 900.0
+        elif _qm == "restoration" and _mat in _analog_mats:
+            # §0k: Analoges Material + Restoration: bis zu 3 Zonen × ~90s = 270s Headroom
+            _timeout_min, _timeout_max = 60.0, 600.0
         else:
             _timeout_min, _timeout_max = 30.0, 240.0
 
@@ -320,6 +328,10 @@ class FrequencyRestorationPhase(PhaseInterface):
             "timeout_min": float(_timeout_min),
             "timeout_max": float(_timeout_max),
         }
+
+    def __init__(self, sample_rate: int = 48000, **kwargs) -> None:
+        super().__init__(sample_rate=sample_rate, **kwargs)
+        self._restore_channel_input_mag: np.ndarray | None = None
 
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
@@ -337,8 +349,8 @@ class FrequencyRestorationPhase(PhaseInterface):
             description="Professional SBR + harmonic extension (comparable to iZotope RX HF restoration)",
         )
 
-    def process(
-        self, audio: np.ndarray, material_type: str = "unknown", enable_sbr: bool = True, **kwargs
+    def process(  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, audio: np.ndarray, sample_rate: int = 48000, material_type: str = "unknown", **kwargs: Any
     ) -> PhaseResult:
         """
         Professional frequency restoration with SBR + harmonic extension.
@@ -352,20 +364,31 @@ class FrequencyRestorationPhase(PhaseInterface):
         Returns:
             PhaseResult with extended bandwidth audio
         """
-        sample_rate = kwargs.get("sample_rate", 48000)
+        enable_sbr: bool = bool(kwargs.get("enable_sbr", True))
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
 
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
-            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_evict06
+            from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                get_plugin_lifecycle_manager as _get_plm_evict06,
+            )
 
             _get_plm_evict06().evict_for_phase("phase_06_frequency_restoration")
         except Exception:
             pass
 
-        # §2.47 PMGG-Retry: locality_factor skaliert finale Intensität bei Retries
-        phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
+        # §2.47 PMGG-Retry: locality_factor skaliert finale Intensität bei Retries.
+        # §Cross-Goal-Recovery override: Frequenz-Restaurierung ist ein GLOBALER Eingriff
+        # (spektrale Bandbreite des Trägermediums, kein lokaler Defekt-Event).
+        # Bei aktiver HF-Recovery nach phase_03 best_effort MUSS locality=1.0 sein,
+        # sonst killt ein kleiner locality_factor (z.B. 0.35) die Wirkung komplett.
+        _hf_boost_locality = kwargs.get("hf_recovery_boost_after_phase03")
+        _cg_locality_active = isinstance(_hf_boost_locality, dict) and bool(_hf_boost_locality.get("enabled", False))
+        if _cg_locality_active:
+            phase_locality_factor = 1.0  # globale Bandbreiten-Restaurierung, kein locality-Scaling
+        else:
+            phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
@@ -390,7 +413,7 @@ class FrequencyRestorationPhase(PhaseInterface):
             )
 
         # Get material-specific parameters (mutable copy for source-fidelity overrides)
-        params = dict(self.MATERIAL_PARAMS.get(material_type, self.MATERIAL_PARAMS["unknown"]))
+        params: dict[str, Any] = self.MATERIAL_PARAMS.get(material_type, self.MATERIAL_PARAMS["unknown"]).copy()
 
         # §2.41 Source-Fidelity: Zielbandbreite aus SongCalibrationProfile nutzen.
         # Wenn das Original eine höhere Bandbreite hatte als der Träger normalerweise
@@ -400,8 +423,8 @@ class FrequencyRestorationPhase(PhaseInterface):
         _sfr_bw_target = float(_sfr_cal.get("source_fidelity_bandwidth_target_hz", 0.0))
         _sfr_conf = float(_sfr_cal.get("source_fidelity_confidence", 0.5))
         _sfr_gen = int(_sfr_cal.get("source_fidelity_generation_count", 1))
-        if _sfr_bw_target > 0.0 and params.get("rolloff_hz", 20000.0) > 0.0:
-            _rolloff_ref = float(params["rolloff_hz"])
+        if _sfr_bw_target > 0.0 and float(params.get("rolloff_hz", 20000.0)) > 0.0:  # type: ignore[arg-type]
+            _rolloff_ref = float(params["rolloff_hz"])  # type: ignore[arg-type]
             _bw_gap = max(0.0, _sfr_bw_target - _rolloff_ref)
             if _bw_gap >= 1500.0:
                 # Scale extra boost by confidence × gap fraction (max +4 dB)
@@ -409,10 +432,12 @@ class FrequencyRestorationPhase(PhaseInterface):
                 # Cap extra boost at 2 dB to prevent narrow-band HF artefacts
                 # (§0 Primum non nocere — HF-Halluzination ist ein Artefakt).
                 _extra_boost = float(min(_gap_frac * _sfr_conf * 2.0, 2.0))
-                params["max_boost_db"] = float(params.get("max_boost_db", 8.0)) + _extra_boost
+                params["max_boost_db"] = float(params.get("max_boost_db", 8.0)) + _extra_boost  # type: ignore[arg-type]
                 # Also increase extension range proportional to generation count
                 if _sfr_gen >= 3:
-                    params["restoration_strength"] = float(min(params.get("restoration_strength", 0.5) * 1.10, 0.95))
+                    params["restoration_strength"] = float(  # type: ignore[arg-type]
+                        min(float(params.get("restoration_strength", 0.5)) * 1.10, 0.95)  # type: ignore[arg-type]
+                    )
 
         # Check if restoration needed
         if params["restoration_strength"] == 0.0:
@@ -437,26 +462,36 @@ class FrequencyRestorationPhase(PhaseInterface):
         has_rolloff, measured_rolloff_db, measured_rolloff_freq = self._detect_rolloff_professional(audio, params)
 
         if not has_rolloff:
-            audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
-
-            audio = np.clip(audio, -1.0, 1.0)
-
-            return create_phase_result(
-                audio=audio,
-                modifications={
-                    "frequency_restored": False,
-                    "reason": f"no significant rolloff detected (measured: {measured_rolloff_db:.1f} dB)",
-                },
-                warnings=[],
-                metadata={
-                    "algorithm": "none",
-                    "measured_rolloff_db": measured_rolloff_db,
-                    "measured_rolloff_freq": measured_rolloff_freq,
-                    "material_type": material_type,
-                    "execution_time_seconds": time.time() - start_time,
-                    "rms_drop_db": 0.0,
-                    "loudness_makeup_db": 0.0,
-                },
+            # §Cross-Goal-Recovery override (§2.45b): wenn PMGG brillanz-Regression
+            # nach phase_03 erkannt hat, erzwinge HF-Restaurierung trotz fehlendem
+            # Rolloff-Nachweis. Ursache: Noise-Energie über rolloff_hz täuscht
+            # _detect_rolloff_professional, obwohl kein musikalisches HF vorhanden.
+            _hf_boost_06 = kwargs.get("hf_recovery_boost_after_phase03")
+            _cg_override_06 = isinstance(_hf_boost_06, dict) and bool(_hf_boost_06.get("enabled", False))
+            if not _cg_override_06:
+                audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+                audio = np.clip(audio, -1.0, 1.0)
+                return create_phase_result(
+                    audio=audio,
+                    modifications={
+                        "frequency_restored": False,
+                        "reason": f"no significant rolloff detected (measured: {measured_rolloff_db:.1f} dB)",
+                    },
+                    warnings=[],
+                    metadata={
+                        "algorithm": "none",
+                        "measured_rolloff_db": measured_rolloff_db,
+                        "measured_rolloff_freq": measured_rolloff_freq,
+                        "material_type": material_type,
+                        "execution_time_seconds": time.time() - start_time,
+                        "rms_drop_db": 0.0,
+                        "loudness_makeup_db": 0.0,
+                    },
+                )
+            logger.info(
+                "Phase 06: Cross-Goal-Recovery override — forcing HF restoration "
+                "despite no detected rolloff (rolloff_db=%.1f < 6.0, brillanz recovery required)",
+                measured_rolloff_db,
             )
 
         # Step 2: Multi-band HF restoration with ML-Hybrid support
@@ -490,13 +525,13 @@ class FrequencyRestorationPhase(PhaseInterface):
         execution_time = time.time() - start_time
 
         # Calculate metrics
-        hf_energy_before = self._measure_hf_energy(audio, params["rolloff_hz"])
-        hf_energy_after = self._measure_hf_energy(restored, params["rolloff_hz"])
+        hf_energy_before = self._measure_hf_energy(audio, float(params["rolloff_hz"]))  # type: ignore[arg-type]
+        hf_energy_after = self._measure_hf_energy(restored, float(params["rolloff_hz"]))  # type: ignore[arg-type]
 
         hf_boost_db = 20 * np.log10(hf_energy_after / (hf_energy_before + 1e-10)) if hf_energy_before > 0 else 0.0
 
         # Clamp boost to maximum (avoid excessive artifacts)
-        max_boost = params["max_boost_db"]
+        max_boost = float(params["max_boost_db"])  # type: ignore[arg-type]
         if hf_boost_db > max_boost:
             # Re-scale restored audio to meet max_boost target
             scale_factor = 10 ** ((max_boost - hf_boost_db) / 20)
@@ -511,9 +546,9 @@ class FrequencyRestorationPhase(PhaseInterface):
             try:
                 _era_tilt_target = float(era_result.spectral_tilt)
                 # Reuse era_classifier's tilt estimation (no duplication)
-                from backend.core.era_classifier import get_era_classifier as _get_ec
+                from backend.core.era_classifier import get_era_classifier as _get_ec  # pylint: disable=import-outside-toplevel  # noqa: I001
 
-                _era_tilt_post = _get_ec()._estimate_spectral_tilt(
+                _era_tilt_post = _get_ec()._estimate_spectral_tilt(  # type: ignore[attr-defined]  # pylint: disable=protected-access
                     restored[0] if restored.ndim == 2 else restored, sample_rate
                 )
                 _mat_key = str(material_type).lower().replace(" ", "_").replace("-", "_")
@@ -555,7 +590,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         _sfr_conf_06 = float(_sfr_cal_06.get("source_fidelity_confidence", 0.0))
         if _sfr_recon_strength_06 >= 0.20 and _sfr_conf_06 >= 0.35:
             try:
-                from backend.core.source_fidelity_reconstructor import (
+                from backend.core.source_fidelity_reconstructor import (  # pylint: disable=import-outside-toplevel
                     SourceFidelityTarget,
                     get_source_fidelity_eq_processor,
                 )
@@ -587,10 +622,10 @@ class FrequencyRestorationPhase(PhaseInterface):
             "cassette": 15000.0,
         }
         _mat_key_06 = str(material_type).lower().replace(" ", "_").replace("-", "_")
-        _bw_cap_hz = _BW_CEILING_HZ.get(_mat_key_06, None)
+        _bw_cap_hz = _BW_CEILING_HZ.get(_mat_key_06)
         if _bw_cap_hz is not None:
             try:
-                from scipy.signal import butter as _butter06, sosfiltfilt as _sosfiltfilt06
+                from scipy.signal import butter as _butter06, sosfiltfilt as _sosfiltfilt06  # pylint: disable=import-outside-toplevel  # noqa: I001
 
                 _nyq06 = sample_rate / 2.0
                 _bw_ratio06 = float(np.clip(_bw_cap_hz / _nyq06, 0.01, 0.99))
@@ -598,9 +633,9 @@ class FrequencyRestorationPhase(PhaseInterface):
                 if restored.ndim == 2:
                     _nch06 = restored.shape[0] if restored.shape[0] <= 2 else restored.shape[1]
                     if restored.shape[0] == 2 and restored.shape[1] > 2:
-                        restored = np.stack(
-                            [_sosfiltfilt06(_sos_lp06, restored[c]) for c in range(2)], axis=0
-                        ).astype(np.float32)
+                        restored = np.stack([_sosfiltfilt06(_sos_lp06, restored[c]) for c in range(2)], axis=0).astype(
+                            np.float32
+                        )
                     else:
                         restored = np.stack(
                             [_sosfiltfilt06(_sos_lp06, restored[:, c]) for c in range(_nch06)], axis=1
@@ -618,15 +653,16 @@ class FrequencyRestorationPhase(PhaseInterface):
             restored = audio + _effective_strength * (restored - audio)
             restored = np.clip(restored, -1.0, 1.0)
 
-
         # §2.46e Hallucination-Guard: verhindert HF-Halluzination ueber BW-Ceiling
         _hg_mode_06 = str(kwargs.get("mode", kwargs.get("processing_mode", "restoration"))).lower()
         if _bw_cap_hz is not None:
             try:
-                from backend.core.hallucination_guard import apply_hallucination_guard as _apply_hg06
+                from backend.core.hallucination_guard import apply_hallucination_guard as _apply_hg06  # pylint: disable=import-outside-toplevel  # noqa: I001
 
                 restored, _hg_meta06 = _apply_hg06(
-                    audio, restored, sr=sample_rate,
+                    audio,
+                    restored,
+                    sr=sample_rate,
                     material_bw_ceiling_hz=_bw_cap_hz,
                     mode=_hg_mode_06,
                 )
@@ -638,6 +674,118 @@ class FrequencyRestorationPhase(PhaseInterface):
                     )
             except Exception as _hg_exc:
                 logger.debug("Phase 06 HallucinationGuard (non-blocking): %s", _hg_exc)
+
+        # §TonalReference: era/genre/material recording-chain ceiling + target steering
+        try:
+            from backend.core.tonal_reference_profile import get_tonal_reference_profiler  # pylint: disable=import-outside-toplevel  # noqa: I001
+
+            _era_r_06 = kwargs.get("era_result")
+            _era_d_06 = int(getattr(_era_r_06, "decade", None) or 0) or None
+            _genre_06 = str(kwargs.get("genre_label", "")).strip()
+            _rest_06 = float(kwargs.get("restorability_score", 50.0))
+            _mode_06 = str(kwargs.get("mode", kwargs.get("processing_mode", "restoration"))).lower()
+            _tonal_curve_06 = get_tonal_reference_profiler().get_curve(
+                era_decade=_era_d_06,
+                genre_label=_genre_06,
+                material_type=_mat_key_06,
+                restorability=_rest_06,
+                is_studio_2026=("studio" in _mode_06),
+            )
+            restored = _tonal_curve_06.apply_snr_adaptive_ceiling(audio, restored, sample_rate)
+            # §2.46 Target-Steering: lift under-represented Bark bands toward
+            # recording-chain reconstruction target (Mic FR + Console EQ + Tape).
+            # Runs AFTER ceiling → target never exceeds ceiling.
+            _str_06 = float(
+                np.clip(
+                    0.30 + 0.20 * float(kwargs.get("hf_recovery_boost_after_phase03", {}).get("boost", 0.0))
+                    if isinstance(kwargs.get("hf_recovery_boost_after_phase03"), dict)
+                    else 0.30,
+                    0.20,
+                    0.50,
+                )
+            )
+            restored = _tonal_curve_06.apply_target_steering(
+                audio,
+                restored,
+                sample_rate,
+                steering_strength=_str_06,
+            )
+            logger.debug(
+                "Phase 06 TonalReference: era=%s genre=%s mat=%s conf=%.2f str=%.2f",
+                _era_d_06,
+                _genre_06 or "?",
+                _mat_key_06,
+                _tonal_curve_06.confidence,
+                _str_06,
+            )
+        except Exception as _tc06_exc:
+            logger.debug("Phase 06 TonalReference ceiling (non-blocking): %s", _tc06_exc)
+
+        # §6.4a [RELEASE_MUST] Historisches Mikrofon-EQ-Profil für Vintage-Ären
+        _mic6_era = kwargs.get("decade") or kwargs.get("era_decade")
+        if _mic6_era is not None:
+            try:
+                if int(_mic6_era) <= 1970:
+                    from backend.core.microphone_response_library import (
+                        get_microphone_response_library,  # pylint: disable=import-outside-toplevel
+                    )
+
+                    _mic6_result = get_microphone_response_library().get_eq_curve(
+                        era_decade=int(_mic6_era),
+                        genre_label=str(kwargs.get("genre_label", "")),
+                        material_type=material_type,
+                        target_sr=sample_rate,
+                    )
+                    if _mic6_result is not None:
+                        _mic6_freqs, _mic6_gains = _mic6_result
+                        if len(_mic6_freqs) > 2:
+                            _m6_n_fft = 2048
+                            _m6_nyq = sample_rate / 2.0
+                            _m6_fft_freqs = np.linspace(0, _m6_nyq, _m6_n_fft // 2 + 1)
+                            _m6_eq_interp = np.interp(
+                                _m6_fft_freqs,
+                                np.asarray(_mic6_freqs, dtype=np.float32),
+                                np.asarray(_mic6_gains, dtype=np.float32),
+                                left=float(_mic6_gains[0]),
+                                right=float(_mic6_gains[-1]),
+                            ).astype(np.float32)
+
+                            def _apply_mic6_eq(sig: np.ndarray) -> np.ndarray:
+                                _, _, _stft6 = signal.stft(
+                                    sig, fs=sample_rate, nperseg=_m6_n_fft, noverlap=_m6_n_fft - 512, boundary="even"
+                                )
+                                _, _out6 = signal.istft(
+                                    _stft6 * _m6_eq_interp[:, np.newaxis],
+                                    fs=sample_rate,
+                                    nperseg=_m6_n_fft,
+                                    noverlap=_m6_n_fft - 512,
+                                    boundary=True,
+                                )
+                                _out6 = np.asarray(_out6[: len(sig)], dtype=np.float32)
+                                return np.nan_to_num(_out6, nan=0.0, posinf=0.0, neginf=0.0)
+
+                            _m6_wet = 0.35  # §6.4a: max. wet_mix = 0.35
+                            if restored.ndim == 2:
+                                if restored.shape[0] == 2:
+                                    _r6_eq0 = _apply_mic6_eq(restored[0])
+                                    _r6_eq1 = _apply_mic6_eq(restored[1])
+                                    restored = np.clip(
+                                        restored * (1 - _m6_wet) + np.stack([_r6_eq0, _r6_eq1]) * _m6_wet, -1.0, 1.0
+                                    )
+                                else:
+                                    _r6_eq0 = _apply_mic6_eq(restored[:, 0])
+                                    _r6_eq1 = _apply_mic6_eq(restored[:, 1])
+                                    restored = np.clip(
+                                        restored * (1 - _m6_wet) + np.stack([_r6_eq0, _r6_eq1], axis=1) * _m6_wet,
+                                        -1.0,
+                                        1.0,
+                                    )
+                            else:
+                                _r6_eq = _apply_mic6_eq(restored)
+                                restored = np.clip(restored * (1 - _m6_wet) + _r6_eq * _m6_wet, -1.0, 1.0)
+                            logger.info("§6.4a Mikrofon-EQ angewendet era=%d wet=%.2f", int(_mic6_era), _m6_wet)
+            except Exception as _mic6_exc:
+                logger.debug("§6.4a MicrophoneResponseLibrary non-blocking: %s", _mic6_exc)
 
         return create_phase_result(
             audio=restored,
@@ -660,8 +808,8 @@ class FrequencyRestorationPhase(PhaseInterface):
                 "hf_energy_before": hf_energy_before,
                 "hf_energy_after": hf_energy_after,
                 "lpc_order": params["lpc_order"],
-                "scientific_ref": "Larsen & Aarts (2004), Dietz (2002), Makhoul (1975), Avendano & Jot (2004), Boisvert (2011)",
-                "benchmark": "iZotope RX De-clip (HF), Waves Renaissance Axx, Aphex Aural Exciter, SPL Vitalizer",
+                "scientific_ref": "Larsen & Aarts (2004), Dietz (2002), Makhoul (1975), Avendano & Jot (2004)",
+                "benchmark": "iZotope RX De-clip (HF), Waves Renaissance Axx, Aphex Aural Exciter",
                 "algorithm_version": "3.0_ml_hybrid" if use_ml_hybrid else "2.0_professional",
                 "execution_time_seconds": execution_time,
                 "phase_locality_factor": phase_locality_factor,
@@ -758,7 +906,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         _sr_headroom_ok = True
         _sr_guard_msg = ""
         try:
-            import psutil as _psutil_p06
+            import psutil as _psutil_p06  # pylint: disable=import-outside-toplevel
 
             _avail_gb = float(_psutil_p06.virtual_memory().available / (1024**3))
             _is_stereo = audio.ndim == 2 and audio.shape[0] <= 2
@@ -794,7 +942,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         # causes an apparent
         # freeze whenever AudioSR is unavailable (missing torchaudio / model).
         try:
-            from plugins.audiosr_plugin import has_audiosr_ml_failed as _has_audiosr_failed
+            from plugins.audiosr_plugin import has_audiosr_ml_failed as _has_audiosr_failed  # pylint: disable=import-outside-toplevel  # noqa: I001
 
             if _has_audiosr_failed():
                 logger.info("Phase 06: AudioSR ML previously failed (sentinel) — skipping ML thread, using DSP-only")
@@ -808,7 +956,7 @@ class FrequencyRestorationPhase(PhaseInterface):
             logger.debug("Operation failed (non-critical): %s", _exc)
 
         try:
-            from backend.core.ml_memory_budget import is_system_thrashing as _is_thrashing
+            from backend.core.ml_memory_budget import is_system_thrashing as _is_thrashing  # pylint: disable=import-outside-toplevel  # noqa: I001
 
             if _is_thrashing():
                 logger.warning("Phase 06: AudioSR wegen System-Thrashing übersprungen — DSP-only aktiv")
@@ -821,19 +969,22 @@ class FrequencyRestorationPhase(PhaseInterface):
         except Exception as _exc:
             logger.debug("Operation failed (non-critical): %s", _exc)
 
-        import queue
-        import threading
+        import queue  # pylint: disable=import-outside-toplevel
+        import threading  # pylint: disable=import-outside-toplevel
 
         try:
-            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager, touch_plugin
+            from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                get_plugin_lifecycle_manager,
+                touch_plugin,
+            )
 
             _plm = get_plugin_lifecycle_manager()
             _plm.set_active("AudioSR", True)
         except Exception:
             _plm = None
 
-        ml_result_queue = queue.Queue(maxsize=1)
-        ml_error_queue = queue.Queue(maxsize=1)
+        ml_result_queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=1)
+        ml_error_queue: queue.Queue[Exception] = queue.Queue(maxsize=1)
 
         def ml_infer():
             try:
@@ -937,8 +1088,17 @@ class FrequencyRestorationPhase(PhaseInterface):
         Returns:
             (has_rolloff, rolloff_db, rolloff_frequency)
         """
-        # Convert to mono for analysis
-        mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
+        # Convert to mono for analysis.
+        # Aurik standard: stereo audio is (2, N) channels-first.
+        # Legacy path: some callers may pass (N, 2) channels-last.
+        # Detect format by checking which axis is the channel axis (≤ 2 channels).
+        if audio.ndim == 2:
+            if audio.shape[0] <= 2 and audio.shape[1] > audio.shape[0]:
+                mono = np.mean(audio, axis=0)  # (2, N) channels-first → mono shape (N,)
+            else:
+                mono = np.mean(audio, axis=1)  # (N, 2) channels-last  → mono shape (N,)
+        else:
+            mono = audio
 
         # Welch PSD
         nperseg = min(8192, max(1, int(mono.shape[0])))
@@ -989,14 +1149,16 @@ class FrequencyRestorationPhase(PhaseInterface):
         n_fft = 4096
 
         if audio.ndim == 2:
-            # §2.51 M/S processing: derive HF restoration mask from Mid channel only.
-            # SBR and LPC generate new STFT content; if applied independently to L and R
-            # the synthesised harmonics are phase-incoherent across channels → mono-sum
-            # cancellation in 8–20 kHz.  Fix: restore Mid fully, restore Side conservatively
-            # (×0.35 of the Mid gain envelope) to preserve stereo air without introducing
-            # cross-channel HF phase divergence (spec §2.51 — Spectral Repair M/S).
-            mid = (audio[:, 0] + audio[:, 1]) * (1.0 / np.sqrt(2))
-            side = (audio[:, 0] - audio[:, 1]) * (1.0 / np.sqrt(2))
+            # Detect channel format: Aurik standard = (2, N) channels-first.
+            _ch_first = audio.shape[0] == 2 and audio.shape[1] > 2
+            if _ch_first:
+                # (2, N) channels-first — Aurik standard
+                mid = (audio[0] + audio[1]) * (1.0 / np.sqrt(2))
+                side = (audio[0] - audio[1]) * (1.0 / np.sqrt(2))
+            else:
+                # (N, 2) channels-last — legacy fallback
+                mid = (audio[:, 0] + audio[:, 1]) * (1.0 / np.sqrt(2))
+                side = (audio[:, 0] - audio[:, 1]) * (1.0 / np.sqrt(2))
 
             restored_mid = self._restore_channel(mid, params, enable_sbr, hop_length, n_fft)
             restored_mid = self._mrsa_gain_refinement_sbr_safe(
@@ -1013,18 +1175,19 @@ class FrequencyRestorationPhase(PhaseInterface):
                 side, restored_side, self.sample_rate, params["rolloff_hz"]
             )
 
-            # Decode M/S → L/R
+            # Decode M/S → L/R, preserve original channel format
             restored_left = (restored_mid + restored_side) * (1.0 / np.sqrt(2))
             restored_right = (restored_mid - restored_side) * (1.0 / np.sqrt(2))
-            restored = np.column_stack([restored_left, restored_right])
+            if _ch_first:
+                restored = np.stack([restored_left, restored_right], axis=0)  # (2, N)
+            else:
+                restored = np.column_stack([restored_left, restored_right])  # (N, 2)
         else:
             restored = self._restore_channel(audio, params, enable_sbr, hop_length, n_fft)
             # MRSA post-processing: zone-aware gain refinement + PGHI
-            restored = self._mrsa_gain_refinement_sbr_safe(
-                audio, restored, self.sample_rate, params["rolloff_hz"]
-            )
+            restored = self._mrsa_gain_refinement_sbr_safe(audio, restored, self.sample_rate, params["rolloff_hz"])
 
-        return restored
+        return restored  # type: ignore[no-any-return]
 
     def _mrsa_gain_refinement_sbr_safe(
         self,
@@ -1229,9 +1392,9 @@ class FrequencyRestorationPhase(PhaseInterface):
         extension_start, extension_end = params["extension_range_hz"]
 
         # Frequency bin indices
-        rolloff_bin = np.argmin(np.abs(f - rolloff_freq))
-        extension_start_bin = np.argmin(np.abs(f - extension_start))
-        extension_end_bin = np.argmin(np.abs(f - extension_end))
+        rolloff_bin = int(np.argmin(np.abs(f - rolloff_freq)))
+        extension_start_bin = int(np.argmin(np.abs(f - extension_start)))
+        extension_end_bin = int(np.argmin(np.abs(f - extension_end)))
 
         # SBR: Transpose low-band harmonics to high-band
         if enable_sbr and params["sbr_ratio"] > 0:
@@ -1267,7 +1430,6 @@ class FrequencyRestorationPhase(PhaseInterface):
         # in the input — especially in the last chunk where padding creates ringing.
         # Cap per-bin magnitude to (input_mag + max_boost_db headroom).
         max_boost_linear = float(10 ** (params["max_boost_db"] / 20.0))
-        np.abs(Zxx) * 0.0  # will be recomputed below
         # Use the original input channel STFT as reference (re-compute in restore channel scope)
         # because Zxx has already been modified. Safe fallback: clip total gain ratio.
         before_mag = getattr(self, "_restore_channel_input_mag", None)
@@ -1300,7 +1462,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         elif len(restored) < len(channel):
             restored = np.pad(restored, (0, len(channel) - len(restored)))
 
-        return restored
+        return restored  # type: ignore[no-any-return]
 
     def _apply_sbr(
         self,
@@ -1530,10 +1692,10 @@ class FrequencyRestorationPhase(PhaseInterface):
         phi0_target = phi0_src * ratio  # (n_tgt,)
         phi_target = phi_raw - phi_raw[:, :1] + phi0_target[:, None]
 
-        return np.exp(1j * phi_target).astype(np.complex64)
+        return np.exp(1j * phi_target).astype(np.complex64)  # type: ignore[no-any-return]
 
     def _apply_transient_synthesis(
-        self, Zxx: np.ndarray, f: np.ndarray, rolloff_bin: int, extension_end_bin: int, strength: float
+        self, Zxx: np.ndarray, _f: np.ndarray, rolloff_bin: int, extension_end_bin: int, strength: float
     ) -> np.ndarray:
         """
         Transient Synthesis (HF click generation).
@@ -1586,83 +1748,93 @@ class FrequencyRestorationPhase(PhaseInterface):
         # RMS
         rms = np.sqrt(np.mean(high_passed**2))
 
-        return rms
+        return float(rms)
 
-    def supports_material(self, material_type: str) -> bool:
+    def supports_material(self, material_type: str) -> bool:  # pylint: disable=unused-argument
         """All materials supported."""
         return True
 
 
-if __name__ == "__main__":
-    """Test Professional Frequency Restoration Phase."""
-
+def _run_test() -> None:  # pragma: no cover
+    # Test Professional Frequency Restoration Phase.
     logger.debug("=" * 80)
     logger.debug("Professional Frequency Restoration Phase v2.0 - Test")
     logger.debug("=" * 80)
 
     # Generate test audio with much more HF content
-    sr = 44100
-    duration = 5
-    t = np.linspace(0, duration, sr * duration)
+    _sr = 44100
+    _duration = 5
+    _t = np.linspace(0, _duration, _sr * _duration)
 
     # Music signal with harmonics up to 15 kHz (before rolloff)
-    audio = np.zeros(len(t))
-    for freq in [200, 400, 800, 1600, 3200, 6400, 12800]:  # Extended to 12.8 kHz
-        audio += 0.1 * np.sin(2 * np.pi * freq * t)
+    _audio: np.ndarray = np.zeros(len(_t))
+    for _freq in [200, 400, 800, 1600, 3200, 6400, 12800]:  # Extended to 12.8 kHz
+        _audio += 0.1 * np.sin(2 * np.pi * _freq * _t)
 
     # Add white noise (full spectrum)
-    audio += np.random.randn(len(t)) * 0.05
+    _audio += np.random.randn(len(_t)) * 0.05
 
     # Apply aggressive rolloff (simulate shellac: lowpass at 5 kHz, steep)
-    nyquist = sr / 2
-    sos_rolloff = signal.butter(8, 5000 / nyquist, btype="low", output="sos")  # Steeper (8th order)
-    audio_rolled_off = signal.sosfiltfilt(sos_rolloff, audio)
+    _nyq = _sr / 2
+    _sos_rolloff = signal.butter(8, 5000 / _nyq, btype="low", output="sos")
+    _audio_rolled_off = signal.sosfiltfilt(_sos_rolloff, _audio)
 
     # Make stereo
-    audio_rolled_off = np.column_stack([audio_rolled_off, audio_rolled_off * 0.98])
+    _audio_rolled_off = np.column_stack([_audio_rolled_off, _audio_rolled_off * 0.98])
 
-    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", _duration, _sr)
     logger.debug("Music: Harmonics 200, 400, 800, 1600, 3200, 6400, 12800 Hz + white noise")
     logger.debug("Rolloff: 5 kHz lowpass (8th order, STEEP) simulating shellac")
 
     # Test with different materials
-    materials = ["shellac", "vinyl", "tape", "cd_digital"]
-
-    for material in materials:
+    _materials = ["shellac", "vinyl", "tape", "cd_digital"]
+    _result = None
+    for _material in _materials:
         logger.debug("\n%s", "-" * 80)
-        logger.debug("Testing with material: %s", material.upper())
+        logger.debug("Testing with material: %s", _material.upper())
         logger.debug("%s", "-" * 80)
 
-        phase = FrequencyRestorationPhase(sample_rate=sr)
-        result = phase.process(audio_rolled_off.copy(), material_type=material)
+        _phase = FrequencyRestorationPhase()
+        _result = _phase.process(_audio_rolled_off.copy(), material_type=_material)
 
-        if result.success and result.modifications.get("frequency_restored"):
-            logger.debug("✅ Processing Complete!")
+        if _result.success and _result.modifications.get("frequency_restored"):
+            logger.debug("Processing Complete!")
             logger.debug(
-                f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
+                "   Execution Time: %.3fs (%.2fx realtime)",
+                _result.metadata["execution_time_seconds"],
+                _result.metadata["execution_time_seconds"] / _duration,
             )
-            logger.debug("   Rolloff: %s Hz", result.modifications["rolloff_hz"])
-            logger.debug("   Extension Range: %s Hz", result.modifications["extension_range_hz"])
-            logger.debug("   HF Boost: %.1f dB", result.modifications["hf_boost_db"])
-            logger.debug("   Restoration Strength: %.2f", result.modifications["restoration_strength"])
-            logger.debug("   SBR Enabled: %s", result.modifications["sbr_enabled"])
+            logger.debug("   Rolloff: %s Hz", _result.modifications["rolloff_hz"])
+            logger.debug("   Extension Range: %s Hz", _result.modifications["extension_range_hz"])
+            logger.debug("   HF Boost: %.1f dB", _result.modifications["hf_boost_db"])
+            logger.debug("   Restoration Strength: %.2f", _result.modifications["restoration_strength"])
+            logger.debug("   SBR Enabled: %s", _result.modifications["sbr_enabled"])
             logger.debug(
-                f"   Measured Rolloff: {result.metadata['measured_rolloff_db']:.1f} dB at {result.metadata['measured_rolloff_freq']:.0f} Hz"
+                "   Measured Rolloff: %.1f dB at %.0f Hz",
+                _result.metadata["measured_rolloff_db"],
+                _result.metadata["measured_rolloff_freq"],
             )
-            logger.debug("   LPC Order: %s", result.metadata["lpc_order"])
-            logger.debug("   Warnings: %s", result.warnings if result.warnings else "None")
+            logger.debug("   LPC Order: %s", _result.metadata["lpc_order"])
+            logger.debug("   Warnings: %s", _result.warnings if _result.warnings else "None")
         else:
-            logger.debug("⏭️  Frequency Restoration Skipped")
-            logger.debug("   Reason: %s", result.modifications.get("reason", "unknown"))
-            if "measured_rolloff_db" in result.metadata:
+            logger.debug("Frequency Restoration Skipped")
+            logger.debug("   Reason: %s", _result.modifications.get("reason", "unknown"))
+            if "measured_rolloff_db" in _result.metadata:
                 logger.debug(
-                    f"   Measured Rolloff: {result.metadata['measured_rolloff_db']:.1f} dB at {result.metadata.get('measured_rolloff_freq', 0):.0f} Hz"
+                    "   Measured Rolloff: %.1f dB at %.0f Hz",
+                    _result.metadata["measured_rolloff_db"],
+                    _result.metadata.get("measured_rolloff_freq", 0),
                 )
 
     logger.debug("\n%s", "=" * 80)
-    logger.debug("✅ Professional Frequency Restoration v2.0 Test Complete!")
+    logger.debug("Professional Frequency Restoration v2.0 Test Complete!")
     logger.debug("%s", "=" * 80)
-    logger.debug("Algorithm: %s", result.metadata.get("algorithm", "N/A"))
-    logger.debug("Scientific Reference: %s", result.metadata.get("scientific_ref", "N/A"))
-    logger.debug("Benchmark: %s", result.metadata.get("benchmark", "N/A"))
+    if _result is not None:
+        logger.debug("Algorithm: %s", _result.metadata.get("algorithm", "N/A"))
+        logger.debug("Scientific Reference: %s", _result.metadata.get("scientific_ref", "N/A"))
+        logger.debug("Benchmark: %s", _result.metadata.get("benchmark", "N/A"))
     logger.debug("Quality Impact: 0.91 (Professional-Grade)")
+
+
+if __name__ == "__main__":
+    _run_test()

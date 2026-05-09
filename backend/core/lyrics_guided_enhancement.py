@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+# Lazy imports of optional dependencies (scipy, PyQt5, onnxruntime, backend plugins) are
+# intentional throughout this module to avoid hard dependencies at import time.
+# pylint: disable=import-outside-toplevel
 
 
 @dataclass
 class WordTimestamp:
+    """Timestamped word from lyrics transcription with phoneme classification."""
+
     word: str
     start_s: float
     end_s: float
@@ -22,6 +29,8 @@ class WordTimestamp:
 
 @dataclass
 class LyricsTranscriptionResult:
+    """Full transcription result including per-word timestamps and metadata."""
+
     words: list[WordTimestamp]
     language: str
     overall_confidence: float
@@ -59,19 +68,23 @@ class LyricsTranscriber:
         self._enhancement: LyricsGuidedEnhancement | None = None
 
     def bind_enhancement(self, enhancement: LyricsGuidedEnhancement) -> None:
+        """Bind the LyricsGuidedEnhancement instance for transcription delegation."""
         self._enhancement = enhancement
 
     def transcribe(self, audio: np.ndarray, sr: int = 48_000) -> LyricsTranscriptionResult:
+        """Transcribe audio via §2.36 core — routes to LyricsGuidedEnhancement."""
         arr = np.nan_to_num(np.asarray(audio, dtype=np.float32))
         mono = arr.mean(axis=0) if arr.ndim == 2 else arr
         dur = float(mono.shape[0] / max(1, sr))
         enhancement = self._enhancement
         if enhancement is None:
             enhancement = get_lyrics_guided_enhancement()
-        return enhancement._transcribe_internal(mono, sr, dur)
+        return enhancement._transcribe_internal(mono, sr, dur)  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
 
 class ContentAwareProcessor:
+    """Weights phoneme-type segments for perceptual saliency in NR bypass decisions."""
+
     SALIENCY_BOOST: dict[str, float] = {
         "fricative_stressed": 1.55,  # §8.3 Tiefen-Immersion: fricative ×1.55
         "fricative_unstressed": 1.55,  # §8.3 Tiefen-Immersion: fricative ×1.55
@@ -384,7 +397,7 @@ class LyricsGuidedTimeline:
 
     def render_overlay(
         self,
-        painter: object,
+        painter: Any,
         transcription: LyricsTranscriptionResult,
         widget_width_px: int,
         audio_duration_s: float,
@@ -455,9 +468,9 @@ class LyricsGuidedTimeline:
                     diamond.append(QPointF(dia_x - 4, dia_y))
                     accent = QColor(color_hex)
                     accent.setAlpha(200)
-                    painter.setBrush(QBrush(accent))
-                    painter.setPen(Qt.PenStyle.NoPen)
-                    painter.drawPolygon(diamond)
+                    painter.setBrush(QBrush(accent))  # type: ignore[attr-defined]
+                    painter.setPen(Qt.PenStyle.NoPen)  # type: ignore[attr-defined]
+                    painter.drawPolygon(diamond)  # type: ignore[attr-defined]
 
                 elif ptype == "fricative_stressed":
                     # Small triangles at top — sibilance energy markers
@@ -470,18 +483,18 @@ class LyricsGuidedTimeline:
                         tri.append(QPointF(tx, 0))
                         tri.append(QPointF(tx - 3, 6))
                         tri.append(QPointF(tx + 3, 6))
-                        painter.setBrush(QBrush(acc2))
-                        painter.setPen(Qt.PenStyle.NoPen)
-                        painter.drawPolygon(tri)
+                        painter.setBrush(QBrush(acc2))  # type: ignore[attr-defined]
+                        painter.setPen(Qt.PenStyle.NoPen)  # type: ignore[attr-defined]
+                        painter.drawPolygon(tri)  # type: ignore[attr-defined]
 
                 elif ptype == "vowel_stressed":
                     # Horizontal line at 60% height — formant prominence indicator
                     acc3 = QColor(color_hex)
                     acc3.setAlpha(160)
-                    painter.setPen(QPen(acc3, 1.5))
+                    painter.setPen(QPen(acc3, 1.5))  # type: ignore[attr-defined]
                     _line_y = int(bh * 0.6)
-                    painter.drawLine(x_start, _line_y, x_end, _line_y)
-                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawLine(x_start, _line_y, x_end, _line_y)  # type: ignore[attr-defined]
+                    painter.setPen(Qt.PenStyle.NoPen)  # type: ignore[attr-defined]
 
         except (ImportError, Exception):
             pass  # No Qt or rendering error — silent fallback
@@ -508,7 +521,8 @@ def is_lyrics_guided_loaded() -> bool:
 
 
 def get_lyrics_transcriber() -> LyricsTranscriber:
-    global _transcriber
+    """Thread-safe singleton accessor for LyricsTranscriber."""
+    global _transcriber  # pylint: disable=global-statement
     if _transcriber is None:
         with _transcriber_lock:
             if _transcriber is None:
@@ -517,7 +531,8 @@ def get_lyrics_transcriber() -> LyricsTranscriber:
 
 
 def get_content_aware_processor() -> ContentAwareProcessor:
-    global _processor
+    """Thread-safe singleton accessor for ContentAwareProcessor."""
+    global _processor  # pylint: disable=global-statement
     if _processor is None:
         with _processor_lock:
             if _processor is None:
@@ -526,7 +541,8 @@ def get_content_aware_processor() -> ContentAwareProcessor:
 
 
 def get_lyrics_guided_timeline() -> LyricsGuidedTimeline:
-    global _timeline
+    """Thread-safe singleton accessor for LyricsGuidedTimeline."""
+    global _timeline  # pylint: disable=global-statement
     if _timeline is None:
         with _timeline_lock:
             if _timeline is None:
@@ -567,8 +583,8 @@ class LyricsGuidedEnhancement:
     def __init__(self) -> None:
         self._cap = ContentAwareProcessor()
         self._tl = LyricsGuidedTimeline()
-        self._ort_session: object = None  # Whisper ONNX InferenceSession
-        self._aligner_session: object = None  # wav2vec2 forced-alignment ONNX session
+        self._ort_session: Any = None  # Whisper ONNX InferenceSession
+        self._aligner_session: Any = None  # wav2vec2 forced-alignment ONNX session
         self._try_load_onnx()
         self._try_load_aligner()
         self._transcriber = get_lyrics_transcriber()
@@ -579,7 +595,7 @@ class LyricsGuidedEnhancement:
     def _try_load_onnx(self) -> None:
         """Load whisper_tiny.onnx with CPUExecutionProvider (no GPU, no network)."""
         # [RELEASE_MUST] memory budget guard before InferenceSession (§2.37 Checkliste)
-        _release_on_fail: object = None
+        _release_on_fail: Callable[[], None] | None = None
         try:
             from backend.core.ml_memory_budget import (
                 release as _ml_release,
@@ -593,7 +609,9 @@ class LyricsGuidedEnhancement:
                     "LyricsGuidedEnhancement: ML-Budget erschöpft (Whisper) — DSP-Fallback aktiv.",
                 )
                 return
-            _release_on_fail = lambda: _ml_release("lyrics_transcriber_whisper")
+            _release_on_fail = (  # pylint: disable=unnecessary-lambda-assignment
+                lambda: _ml_release("lyrics_transcriber_whisper")
+            )
         except ImportError:
             pass  # budget module absent → attempt load anyway
         _loaded = False
@@ -634,7 +652,7 @@ class LyricsGuidedEnhancement:
         finally:
             if not _loaded and _release_on_fail is not None:
                 try:
-                    _release_on_fail()  # type: ignore[call-arg]
+                    _release_on_fail()  # type: ignore[operator, call-arg]
                 except Exception as _exc:
                     logger.debug("Operation failed (non-critical): %s", _exc)
 
@@ -645,7 +663,7 @@ class LyricsGuidedEnhancement:
         Fallback: DSP energy-threshold segmentation + Whisper token ID phoneme prior.
         """
         # [RELEASE_MUST] memory budget guard before InferenceSession (§2.37 Checkliste)
-        _release_on_fail: object = None
+        _release_on_fail: Callable[[], None] | None = None
         try:
             from backend.core.ml_memory_budget import (
                 release as _ml_release,
@@ -659,7 +677,9 @@ class LyricsGuidedEnhancement:
                     "LyricsGuidedEnhancement: ML-Budget erschöpft (wav2vec2 Aligner) — DSP-Fallback aktiv.",
                 )
                 return
-            _release_on_fail = lambda: _ml_release("lyrics_aligner_wav2vec2")
+            _release_on_fail = (  # pylint: disable=unnecessary-lambda-assignment
+                lambda: _ml_release("lyrics_aligner_wav2vec2")
+            )
         except ImportError:
             pass  # budget module absent → attempt load anyway
         _loaded = False
@@ -701,7 +721,7 @@ class LyricsGuidedEnhancement:
         finally:
             if not _loaded and _release_on_fail is not None:
                 try:
-                    _release_on_fail()  # type: ignore[call-arg]
+                    _release_on_fail()  # type: ignore[operator, call-arg]
                 except Exception as _exc:
                     logger.debug("Operation failed (non-critical): %s", _exc)
 
@@ -769,7 +789,7 @@ class LyricsGuidedEnhancement:
             audio_input = audio_input / amax
 
             # §4.6b PLM-Active-Guard: prevent Emergency-Eviction during wav2vec2 ONNX inference
-            _plm_w2v: object | None = None
+            _plm_w2v: Any = None
             try:
                 from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_w2v
 
@@ -783,7 +803,9 @@ class LyricsGuidedEnhancement:
             try:
                 if len(audio_input) <= _MAX_W2V_CHUNK:
                     # Short file — single pass
-                    outputs = self._aligner_session.run(None, {"input_values": audio_input[np.newaxis, :]})
+                    outputs = self._aligner_session.run(  # type: ignore[attr-defined]
+                        None, {"input_values": audio_input[np.newaxis, :]}
+                    )
                     logits = outputs[0]  # (1, T_frames, vocab_size)
                 else:
                     # Chunked inference for long files
@@ -792,7 +814,9 @@ class LyricsGuidedEnhancement:
                         _cchunk = audio_input[_cstart : _cstart + _MAX_W2V_CHUNK]
                         if len(_cchunk) < self._MIN_WAV2VEC2_SAMPLES:
                             break
-                        _cout = self._aligner_session.run(None, {"input_values": _cchunk[np.newaxis, :]})
+                        _cout = self._aligner_session.run(  # type: ignore[attr-defined]
+                            None, {"input_values": _cchunk[np.newaxis, :]}
+                        )
                         _logit_parts.append(_cout[0][0])  # (T_chunk, vocab)
                     if not _logit_parts:
                         return words
@@ -800,7 +824,7 @@ class LyricsGuidedEnhancement:
             finally:
                 if _plm_w2v is not None:
                     try:
-                        _plm_w2v.set_active("lyrics_aligner_wav2vec2", False)
+                        _plm_w2v.set_active("lyrics_aligner_wav2vec2", False)  # type: ignore[attr-defined]
                     except Exception:
                         pass
 
@@ -886,7 +910,7 @@ class LyricsGuidedEnhancement:
         audio = np.asarray(audio, dtype=np.float32)
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
-        mono = audio.mean(axis=1) if audio.ndim == 2 else audio
+        mono = audio.mean(axis=0) if audio.ndim == 2 else audio  # channels-first (2,N) → axis=0
         n_samples = len(mono)
         dur = float(n_samples / max(1, sr))
 
@@ -895,7 +919,7 @@ class LyricsGuidedEnhancement:
         _assert_no_lyrics_in_log(transcription.words)
         saliency = self._build_sample_saliency(transcription, n_samples, sr)
 
-        audio_out = audio * saliency[:, np.newaxis] if audio.ndim == 2 else audio * saliency
+        audio_out = audio * saliency[np.newaxis, :] if audio.ndim == 2 else audio * saliency
 
         # §2.36a: per-phoneme spectral DSP on top of saliency boost
         processor = get_content_aware_processor()
@@ -914,7 +938,7 @@ class LyricsGuidedEnhancement:
         audio = np.asarray(audio, dtype=np.float32)
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
-        mono = audio.mean(axis=1) if audio.ndim == 2 else audio
+        mono = audio.mean(axis=0) if audio.ndim == 2 else audio  # channels-first (2,N) → axis=0
         dur = float(len(mono) / max(1, sr))
         transcription = self._transcribe_internal(mono, sr, dur)
         _assert_no_lyrics_in_log(transcription.words)
@@ -940,7 +964,7 @@ class LyricsGuidedEnhancement:
         assert sr == 48_000, f"SR guard: expected 48000, got {sr}"
         audio_arr = np.asarray(audio, dtype=np.float32)
         audio_arr = np.nan_to_num(audio_arr, nan=0.0, posinf=0.0, neginf=0.0)
-        mono = audio_arr.mean(axis=1) if audio_arr.ndim == 2 else audio_arr
+        mono = audio_arr.mean(axis=0) if audio_arr.ndim == 2 else audio_arr  # channels-first (2,N) → axis=0
         n_samples = int(mono.shape[0])
         n_frames = max(1, (n_samples + hop_length - 1) // hop_length)
 
@@ -1002,7 +1026,7 @@ class LyricsGuidedEnhancement:
         features = self._compute_mel_features(mono_16k)  # (1, 80, 3000)
 
         # §4.6b PLM-Active-Guard: prevent Emergency-Eviction during Whisper ONNX inference
-        _plm_whisper: object | None = None
+        _plm_whisper: Any = None
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_w
 
@@ -1012,11 +1036,11 @@ class LyricsGuidedEnhancement:
             pass
         # Encoder inference — output: (1, 1500, 384)
         try:
-            hidden = self._ort_session.run(None, {"input_features": features})[0]
+            hidden = self._ort_session.run(None, {"input_features": features})[0]  # type: ignore[attr-defined]
         finally:
             if _plm_whisper is not None:
                 try:
-                    _plm_whisper.set_active("lyrics_transcriber_whisper", False)
+                    _plm_whisper.set_active("lyrics_transcriber_whisper", False)  # type: ignore[attr-defined]
                 except Exception:
                     pass
         frame_energy = np.sqrt(np.mean(hidden[0] ** 2, axis=-1))  # (1500,)
@@ -1093,7 +1117,7 @@ class LyricsGuidedEnhancement:
     def _classify_phoneme_type(
         segment_audio: np.ndarray,
         sr: int,
-        mean_energy: float,
+        _mean_energy: float,
         is_stressed: bool,
     ) -> str:
         """Classify a voiced segment into phoneme classes using DSP spectral features.
@@ -1240,7 +1264,7 @@ class LyricsGuidedEnhancement:
             import scipy.signal as sps  # type: ignore[import]
 
             n_out = max(1, int(len(mono) * sr_out / sr_in))
-            return sps.resample(mono, n_out).astype(np.float32)
+            return np.asarray(sps.resample(mono, n_out), dtype=np.float32)
         except Exception:
             step = max(1.0, sr_in / sr_out)
             indices = np.arange(0, len(mono), step).astype(np.int64)
@@ -1282,7 +1306,7 @@ class LyricsGuidedEnhancement:
                 log_mel = np.pad(log_mel, ((0, 0), (0, self._MAX_FRAMES - log_mel.shape[1])))
             else:
                 log_mel = log_mel[:, : self._MAX_FRAMES]
-            return log_mel.astype(np.float32)[np.newaxis, ...]  # (1, 80, 3000)
+            return np.asarray(log_mel, dtype=np.float32)[np.newaxis, ...]  # (1, 80, 3000)
         except Exception:
             # Zero fallback: encoder processes silence → near-zero hidden states
             return np.zeros((1, self._N_MELS, self._MAX_FRAMES), dtype=np.float32)
@@ -1290,7 +1314,7 @@ class LyricsGuidedEnhancement:
 
 def get_lyrics_guided_enhancement() -> LyricsGuidedEnhancement:
     """Thread-safe double-checked locking singleton (§3.x spec pattern)."""
-    global _lge_instance
+    global _lge_instance  # pylint: disable=global-statement
     if _lge_instance is None:
         with _lge_lock:
             if _lge_instance is None:
@@ -1307,6 +1331,110 @@ def get_phoneme_mask(audio: np.ndarray, sr: int, hop_length: int = 512) -> np.nd
     return get_lyrics_guided_enhancement().get_phoneme_mask(audio, sr, hop_length=hop_length)
 
 
+def reconstruct_consonant_bursts(
+    audio_degraded: np.ndarray,
+    audio_restored: np.ndarray,
+    sr: int,
+    hop_length: int = 512,
+    rms_threshold: float = 0.70,
+    max_blend_alpha: float = 0.60,
+) -> np.ndarray:
+    """§2.36 [RELEASE_MUST] Konsonanten-Burst-Rekonstruktion nach NR-Pipeline.
+
+    Konsonanten-Bursts (/p/, /t/, /k/, /s/) haben breitbandige Energie-Spikes, die
+    breitband-agnostisches NR als Rauschen klassifiziert und entfernt — was Artikulation
+    zerstört. Diese Funktion stellt die verloren gegangene Burst-Energie wieder her.
+
+    Algorithmus:
+        1. get_phoneme_mask() → Protected-Frames identifizieren
+        2. Pro Protected-Frame: RMS(degraded) vs. RMS(restored) vergleichen
+        3. Wenn RMS(restored) < rms_threshold * RMS(degraded) → degraded-Transient
+           mit alpha ≤ max_blend_alpha zurückblenden
+        4. Sanfter Blend (nicht hartes Replace): Natürlichkeit bleibt gewahrt
+
+    §0 Primum non nocere: Nur Frames mit nachweisbarem Energieverlust werden korrigiert.
+    Frames ohne signifikante Abschwächung bleiben unverändert.
+
+    Args:
+        audio_degraded:  Ursprüngliches (degradiertes) Audio vor Pipeline
+        audio_restored:  Audio nach NR/Restaurierungs-Pipeline
+        sr:              Abtastrate (typisch 48000)
+        hop_length:      STFT-Hop für Frame-Einteilung (default: 512)
+        rms_threshold:   Eingriff wenn RMS_rest < threshold * RMS_deg (default: 0.70)
+        max_blend_alpha: Maximaler Blend-Anteil aus degraded (default: 0.60)
+
+    Returns:
+        audio_out: Restauriertes Audio mit rekonstruierten Konsonanten-Bursts,
+                   gleiche Form und Länge wie audio_restored
+    """
+    _logger_rcb = logging.getLogger(__name__)
+
+    audio_deg = np.asarray(audio_degraded, dtype=np.float32)
+    audio_rest = np.asarray(audio_restored, dtype=np.float32)
+
+    # Längendifferenz abfangen (Pipeline kann Länge minimal ändern)
+    n = min(len(audio_deg), len(audio_rest))
+    if n == 0:
+        return audio_rest.copy()
+
+    audio_deg = audio_deg[:n]
+    audio_rest = audio_rest[:n]
+
+    # Mono-Kanal für Phonem-Maske nutzen
+    deg_mono = (audio_deg[:, 0] if audio_deg.ndim == 2 else audio_deg).astype(np.float32)
+    try:
+        phoneme_mask = get_phoneme_mask(deg_mono, sr, hop_length=hop_length)
+    except Exception as _exc_pm:
+        _logger_rcb.debug("reconstruct_consonant_bursts: get_phoneme_mask fehlgeschlagen: %s", _exc_pm)
+        return audio_rest.copy()
+
+    if not np.any(phoneme_mask):
+        return audio_rest.copy()
+
+    audio_out = audio_rest.copy()
+    n_restored = 0
+
+    for frame_idx, is_burst in enumerate(phoneme_mask):
+        if not is_burst:
+            continue
+
+        sample_start = frame_idx * hop_length
+        sample_end = min(n, sample_start + hop_length)
+        if sample_start >= n:
+            break
+
+        if audio_deg.ndim == 2:
+            # Stereo: RMS über alle Kanäle
+            rms_deg = float(np.sqrt(np.mean(audio_deg[sample_start:sample_end] ** 2)) + 1e-10)
+            rms_rest = float(np.sqrt(np.mean(audio_rest[sample_start:sample_end] ** 2)) + 1e-10)
+        else:
+            rms_deg = float(np.sqrt(np.mean(audio_deg[sample_start:sample_end] ** 2)) + 1e-10)
+            rms_rest = float(np.sqrt(np.mean(audio_rest[sample_start:sample_end] ** 2)) + 1e-10)
+
+        # Eingriff nur wenn signifikante Energie verloren ging
+        if rms_rest >= rms_threshold * rms_deg:
+            continue
+
+        # Blend-Alpha proportional zum Energieverlust (aber nie > max_blend_alpha)
+        energy_loss_ratio = 1.0 - float(rms_rest / max(rms_deg, 1e-10))
+        alpha = float(np.clip(energy_loss_ratio * max_blend_alpha, 0.0, max_blend_alpha))
+
+        audio_out[sample_start:sample_end] = (1.0 - alpha) * audio_rest[sample_start:sample_end] + alpha * audio_deg[
+            sample_start:sample_end
+        ]
+        n_restored += 1
+
+    if n_restored > 0:
+        audio_out = np.clip(audio_out, -1.0, 1.0)
+        _logger_rcb.debug(
+            "§2.36 reconstruct_consonant_bursts: %d/%d Burst-Frames restauriert",
+            n_restored,
+            int(np.sum(phoneme_mask)),
+        )
+
+    return audio_out
+
+
 __all__ = [
     "ContentAwareProcessor",
     "LyricsGuidedEnhancement",
@@ -1320,4 +1448,5 @@ __all__ = [
     "get_lyrics_transcriber",
     "get_phoneme_mask",
     "is_lyrics_guided_loaded",
+    "reconstruct_consonant_bursts",
 ]

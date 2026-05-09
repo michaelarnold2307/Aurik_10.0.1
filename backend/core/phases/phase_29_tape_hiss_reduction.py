@@ -34,6 +34,8 @@ import time
 
 import numpy as np
 from scipy import signal
+from scipy.ndimage import minimum_filter1d as _min_filter1d_p29  # vectorised sliding-min
+from scipy.signal import lfilter as _lfilter_p29  # vectorised IIR smoothing (Cappé 1994)
 
 from backend.core.audio_utils import (
     apply_musical_gain_envelope,
@@ -62,14 +64,9 @@ except ImportError:
     QUALITY_MODE_AVAILABLE = False
 
 try:
-    pass
-
     _PGHI_AVAILABLE_P29 = True
-except ImportError:
+except ImportError:  # pragma: no cover
     _PGHI_AVAILABLE_P29 = False
-
-from scipy.ndimage import minimum_filter1d as _min_filter1d_p29  # vectorised sliding-min
-from scipy.signal import lfilter as _lfilter_p29  # vectorised IIR smoothing (Cappé 1994)
 
 logger = logging.getLogger(__name__)
 
@@ -648,9 +645,11 @@ class TapeHissReductionPhase(PhaseInterface):
                 )
 
         # ML Refinement for HF (>2kHz) - if enabled and significant hiss present
+        # §0j [RELEASE_MUST]: PANNs-Singing-Score für energy_bias-äquivalente Anpassung
+        _p29_panns = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)))
         ml_refined = False
         if use_ml and _effective_strength > 0.0 and hf_reduction_db > 3:  # Only refine if significant hiss was removed
-            ml_success = self._refine_hf_with_ml(audio_processed, sample_rate)
+            ml_success = self._refine_hf_with_ml(audio_processed, sample_rate, panns_singing=_p29_panns)
             if ml_success:
                 ml_refined = True
                 logger.info("✅ ML HF refinement applied (DeepFilterNet): residual hiss removal >2kHz")
@@ -1055,7 +1054,7 @@ class TapeHissReductionPhase(PhaseInterface):
         # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
         MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
         if len(channel) < MIN_AUDIO_SAMPLES:
-            logger.debug(f"phase_29: audio too short ({len(channel)} < {MIN_AUDIO_SAMPLES}), passthrough")
+            logger.debug("phase_29: audio too short (%d < %d), passthrough", len(channel), MIN_AUDIO_SAMPLES)
             return np.asarray(channel, dtype=np.float32).copy()
 
         n = len(channel)
@@ -1370,7 +1369,7 @@ class TapeHissReductionPhase(PhaseInterface):
 
         return noise_floor_db
 
-    def _refine_hf_with_ml(self, audio: np.ndarray, sample_rate: int) -> bool:
+    def _refine_hf_with_ml(self, audio: np.ndarray, sample_rate: int, panns_singing: float = 0.0) -> bool:
         """
         Refine HF hiss reduction (>2kHz) using DeepFilterNet v3 II.
 
@@ -1428,11 +1427,26 @@ class TapeHissReductionPhase(PhaseInterface):
             # Write audio to temp file
             sf.write(input_path, audio, sample_rate)
 
+            # §0j [RELEASE_MUST] Energy-Bias PANNs-adaptiv:
+            # Vokal (panns_singing >= 0.40) → leichtere HF-Unterdrückung (post_filter=False),
+            # äquivalent zu energy_bias=-6 dB (Harmonik-Schutz §0j Spec 04).
+            # Instrumental → aggressivere Unterdrückung (post_filter=True), äquivalent energy_bias=-9 dB.
+            _is_vocal_content_p29 = float(panns_singing) >= 0.40
+            _energy_bias_equiv_db = -6.0 if _is_vocal_content_p29 else -9.0
+            _post_filter_p29 = not _is_vocal_content_p29  # True für Instrumental
+            logger.debug(
+                "§0j phase_29 energy_bias_equiv=%.1f dB (panns_singing=%.2f vocal=%s post_filter=%s)",
+                _energy_bias_equiv_db,
+                float(panns_singing),
+                _is_vocal_content_p29,
+                _post_filter_p29,
+            )
+
             # Process with DeepFilterNet
             returncode, _stdout, _stderr = plugin.process(
                 input_path,
                 output_path,
-                post_filter=True,  # Enable post-filter for smooth HF reduction
+                post_filter=_post_filter_p29,
             )
 
             if returncode == 0 and os.path.exists(output_path):
