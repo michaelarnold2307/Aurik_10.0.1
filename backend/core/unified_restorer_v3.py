@@ -2440,7 +2440,10 @@ class UnifiedRestorerV3:
                 {
                     "priority": "info",
                     "focus": "defect_topology",
-                    "reason": f"dominant defect={_top.get('type', 'unknown')} severity={float(_top.get('severity', 0.0)):.3f}",
+                    "reason": (
+                        f"dominant defect={_top.get('type', 'unknown')}"
+                        f" severity={float(_top.get('severity', 0.0)):.3f}"
+                    ),
                     "action": "prioritize related material-mandatory phases earlier in future runs",
                 }
             )
