@@ -2133,7 +2133,7 @@ class UnifiedRestorerV3:
         try:
             from backend.core.carrier_transfer_characteristics import (
                 get_bw_ceiling_hz,
-                get_chain_bw_ceiling_hz,  # type: ignore[attr-defined]
+                get_chain_bw_ceiling_hz,
             )
 
             _bw_mat_key = material_type.value if hasattr(material_type, "value") else str(material_type)
@@ -8821,9 +8821,6 @@ class UnifiedRestorerV3:
                     mode=_mdem_mode,
                     phoneme_timeline=_phoneme_timeline,  # §2.36a: stressed-vowel frame headroom
                     frisson_zones=_frisson_zones,  # §Frisson: Gänsehaut-Schutz
-                    material_key=(  # type: ignore[call-arg]
-                        str(getattr(material_type, "value", material_type)).lower() if material_type else None
-                    ),
                 )
                 restored_audio = np.clip(np.nan_to_num(restored_audio, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
                 logger.info("§2.30 MDEM: Mikro-Dynamik-Morphing abgeschlossen (mode=%s)", _mdem_mode)
@@ -8874,9 +8871,6 @@ class UnifiedRestorerV3:
                     max_gain_db=_arc_max_gain_db,
                     damping=_arc_damping,
                     frisson_zones=_frisson_zones,  # §Frisson: Gänsehaut-Schutz auch in Makro-Korrektur
-                    material_key=(  # type: ignore[call-arg]
-                        str(getattr(material_type, "value", material_type)).lower() if material_type else None
-                    ),
                 )
                 restored_audio = np.clip(
                     np.nan_to_num(restored_audio, nan=0.0, posinf=0.0, neginf=0.0),
@@ -19251,7 +19245,6 @@ class UnifiedRestorerV3:
                         n_active_phases=len(selected_phases),
                         n_carrier_phases=_n_carrier_248,
                         goal_weights=getattr(self, "_song_goal_weights", None),  # §2.56
-                        transfer_chain=self._restoration_context.get("transfer_chain", []),  # §2.47 Chain-Correction
                     )
                 except Exception as _ig_baseline_exc:
                     logger.debug("§2.48 InteractionGuard baseline failed: %s", _ig_baseline_exc)

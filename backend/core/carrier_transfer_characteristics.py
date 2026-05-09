@@ -20,7 +20,12 @@ CARRIER_TRANSFER_CHARACTERISTICS: dict[str, tuple[int, int, float, int]] = {
     "lacquer_disc": (8000, -32, -4.5, 50),
     "wire_recording": (6000, -28, -5.5, 40),
     "vinyl": (16000, -55, -2.0, 70),
-    "tape": (15000, -50, -3.0, 62),  # Kompaktkassette: MediumDetector normiert cassette→tape; DR Typ I ~55 dB, Typ II ~65 dB, Mittel 62 dB (§0a, §Bug#4)
+    "tape": (
+        15000,
+        -50,
+        -3.0,
+        62,
+    ),  # Kompaktkassette: MediumDetector normiert cassette→tape; DR Typ I ~55 dB, Typ II ~65 dB, Mittel 62 dB (§0a, §Bug#4)
     "reel_tape": (18000, -60, -1.5, 72),
     "cassette": (14000, -48, -3.5, 60),
     "dat": (22000, -90, -0.2, 92),
@@ -63,6 +68,17 @@ def compute_cumulative_generation_loss(transfer_chain: list[str]) -> float:
 def get_bw_ceiling_hz(material_type: str) -> int:
     """§6.2c — Gibt das BW-Ceiling für ein Material zurück (Default: 20000 Hz)."""
     return MATERIAL_BW_CEILING_HZ.get(material_type, 20000)
+
+
+def get_chain_bw_ceiling_hz(transfer_chain: list[str]) -> int:
+    """§6.2c — Minimum-BW-Ceiling über die gesamte Trägerkette.
+
+    Verhindert, dass AudioSR/Phase_06 über den schwächsten Kettenstufen-Ceiling
+    hinaus Obertöne halluziniert. Beispiel: vinyl→mp3_low → min(16000, 11000) = 11000 Hz.
+    """
+    if not transfer_chain:
+        return 20000
+    return min(MATERIAL_BW_CEILING_HZ.get(m, 20000) for m in transfer_chain)
 
 
 def get_dr_ceiling_db(material_type: str) -> int:
