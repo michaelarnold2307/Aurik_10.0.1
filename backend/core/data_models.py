@@ -317,7 +317,7 @@ class GenreWeights(BaseModel):
         "spatiality",
     )
     @classmethod
-    def check_weights_sum(cls, v: float, info) -> float:
+    def check_weights_sum(cls, v: float, _info) -> float:
         """Weights should sum to approximately 1.0 (validated at model level)"""
         return v
 
@@ -398,19 +398,9 @@ class QualityReport(BaseModel):
     aesthetic_scores_after: AestheticScores
 
     # Objective metrics (Spec 3.5.1)
-    pesq_score: float | None = Field(
-        None, description="Legacy compat field (forbidden for music in runtime)", ge=0.0, le=5.0
-    )
-    visqol_score: float | None = Field(
-        None, description="ViSQOL legacy compat field (use --audio mode when populated)", ge=0.0, le=5.0
-    )
-    nisqa_score: float | None = Field(
-        None, description="Legacy compat field (forbidden for music in runtime)", ge=0.0, le=5.0
-    )
     dnsmos_score: float | None = Field(
         None, description="Legacy compat field (forbidden for music in runtime)", ge=0.0, le=5.0
     )
-    si_sdr_db: float | None = Field(None, description="Legacy compat field (not used for music quality gating)")
     cdpam_score: float | None = Field(None, description="Legacy compat field (forbidden for music in runtime)", ge=0.0)
 
     # Constraint system results (Spec 3.2.3)

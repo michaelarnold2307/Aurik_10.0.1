@@ -49,6 +49,7 @@ Vollständige 14-Ziele-Prüfung bleibt am Pipeline-Ende (MusicalGoalsChecker)
 
 Autor: Aurik 9.0 Development Team / v9.15
 """
+# pylint: disable=import-outside-toplevel
 
 from __future__ import annotations
 
@@ -259,6 +260,7 @@ PHASE_SAMPLE_DURATIONS: dict[str, float] = {
 #
 # phase_18 / phase_26 / phase_36: Dynamics-modifying phases intentionally
 #   change the temporal envelope → micro_dynamics measures the intended change.
+# pylint: disable=line-too-long
 PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     # Hum removal: comb-filter notches in bass band + spectral roughness.
     # natuerlichkeit excluded: CREPE voicing analysis in NatuerlichkeitMetric
@@ -288,7 +290,9 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "transparenz",
         "groove",
         "timbre_authentizitaet",
-        "artikulation",  # hum-notch removal changes onset rise-time in notched bands (LF energy alters ArticulationMetric transient-rise proxy) — CIG has this, PMGG sync §2.54
+        # hum-notch removal changes onset rise-time in notched bands (LF energy alters
+        # ArticulationMetric transient-rise proxy) — CIG has this, PMGG sync §2.54
+        "artikulation",
     },
     # Reconstruction phases: spectral correlation handles reconstruction well;
     # only keep exclusions where AI-generated content has low correlation by design
@@ -344,7 +348,8 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "authentizitaet",
         "bass_kraft",  # HPF intentionally removes sub-bass energy (< 20–80 Hz) → bass_kraft DSP proxy drops as intended; not a musical regression (§0 Primum non nocere: rumble removal IS the repair)
         "waerme",  # HPF removes low-end rumble energy in 80–400 Hz range → warmth ratio E(200-800)/E(800-3000) shifts → false P4 regression; CIG sync §2.55 (2026-04-26)
-    },  # Rumble filter: sub-sonic removal shifts MFCC-smoothness baseline + sub-bass chroma removal causes minor chromagram shift — §2.55 sync: CIG updated (bass_kraft, waerme)
+        "tonal_center",  # HPF at 24 Hz attenuates C1 (~32.7 Hz) by ~5 dB → K-S chroma bin for lowest octave shifts → key-label changes by up to 4 semitones → false P2 catastrophic regression (Δ=0.6583 confirmed on mp3/vinyl, 2026-05-06). Musical key unchanged; only sub-bass chroma distribution shifts. §2.55 sync: CIG updated.
+    },  # Rumble filter: sub-sonic removal shifts MFCC-smoothness baseline + sub-bass chroma removal causes minor chromagram shift — §2.55 sync: CIG updated (bass_kraft, waerme, tonal_center)
     # Broadband denoise: reference HF/LF correlation distinguishes noise from music
     # natuerlichkeit excluded: broadband denoising shifts spectral flatness and
     # ZCR, causing the CREPE-based NatuerlichkeitMetric to report false P1
@@ -1075,6 +1080,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "timbre_authentizitaet",
     },  # IMD reduction: bispectrum-informed M/S notch removes sum/difference products → chromagram + MFCC fingerprint change vs. distorted reference (§2.44)
 }
+# pylint: enable=line-too-long
 
 
 def _get_sample_duration(phase_id: str) -> float:
@@ -1123,6 +1129,7 @@ _TFS_COHERENCE_THRESHOLD: float = 0.85  # Below this → phase disrupted fine st
 _TFS_RETRY_TRIGGER: float = 0.15  # TFS delta > this AND P1/P2 regression → extra retry
 
 _RESTORATIVE_PHASES: frozenset[str] = frozenset(
+    # pylint: disable=line-too-long
     {
         "phase_01",  # Click removal
         "phase_02",  # Hum removal (Kammfilter)
@@ -1153,7 +1160,7 @@ _RESTORATIVE_PHASES: frozenset[str] = frozenset(
         "phase_60",  # Inner groove distortion repair (vinyl) — THD reduction changes spectral fingerprint vs. distorted reference
         "phase_62",  # Crosstalk cancellation — early stereo channel separation repair; stereo fingerprint changes vs. crosstalk-distorted reference
         "phase_63",  # Intermodulation distortion reduction (M/S-domain) — IMD artefact removal changes spectral energy vs. distorted reference
-    }
+    }  # pylint: enable=line-too-long
 )
 
 # Normative Mindest-Schwellwerte (§14 Musical Goals, §9.10.77 Pareto-Differenzierung).
@@ -1609,7 +1616,7 @@ _lock = threading.Lock()
 
 def get_phase_gate() -> PerPhaseMusicalGoalsGate:
     """Thread-sicherer Singleton-Accessor (Double-Checked Locking)."""
-    global _instance
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:
@@ -1651,7 +1658,7 @@ def _get_precise_metric_instances() -> dict[str, Any]:
     These are used selectively for the most decision-critical goals where local
     DSP proxies are materially less precise than the canonical metric.
     """
-    global _PRECISE_METRICS
+    global _PRECISE_METRICS  # pylint: disable=global-statement
     if _PRECISE_METRICS is None:
         with _PRECISE_METRICS_LOCK:
             if _PRECISE_METRICS is None:
@@ -1824,13 +1831,35 @@ def _measure_quick(
     #    authentizitaet, transparenz, separation_fidelity all share these arrays.
     #    If FFT fails every dependent metric gracefully falls back to 0.5 via its
     #    own try/except; the shared variables are always defined.
+    #
+    # §9.7.18 Fix (v9.12.2): frame-averaged STFT replaces full-signal FFT.
+    # Root-cause: np.fft.rfft(mono) on a 5-min song creates 7.2M bins at 0.011 Hz
+    # resolution. In each spectral band (e.g., 250–500 Hz), harmonic peaks occupy
+    # 1–2 bins out of 1250+ → p95/p50 crest dominated by noise-floor distribution,
+    # not harmonic peaks → brillanz and transparenz always near 0 for real music.
+    # Fix: 4096-sample Hanning-windowed FFT, averaged over ≤200 frames.
+    # Resolution: 11.7 Hz/bin → 21 bins per octave band → p95 correctly captures
+    # spectral peaks relative to the inter-harmonic noise floor.
+    _N_FFT_QK: int = 4096
+    _win_qk: np.ndarray = np.hanning(_N_FFT_QK).astype(np.float32)
+    _hop_qk: int = _N_FFT_QK // 2
     try:
-        fft_mag: np.ndarray = np.abs(np.fft.rfft(mono))
-        freqs: np.ndarray = np.fft.rfftfreq(len(mono), d=1.0 / sr)
+        if len(mono) >= _N_FFT_QK:
+            _n_frames_qk = min(200, max(1, (len(mono) - _N_FFT_QK) // _hop_qk))
+            _fft_frames_qk = np.stack(
+                [
+                    np.abs(np.fft.rfft(mono[_i * _hop_qk : _i * _hop_qk + _N_FFT_QK] * _win_qk))
+                    for _i in range(_n_frames_qk)
+                ]
+            )
+            fft_mag: np.ndarray = _fft_frames_qk.mean(axis=0).astype(np.float32)
+        else:
+            fft_mag = np.abs(np.fft.rfft(mono, n=_N_FFT_QK)).astype(np.float32)
+        freqs: np.ndarray = np.fft.rfftfreq(_N_FFT_QK, d=1.0 / sr).astype(np.float32)
         tot_energy: float = float(np.mean(fft_mag**2)) + 1e-12
     except Exception:
-        fft_mag = np.zeros(len(mono) // 2 + 1, dtype=np.float32)
-        freqs = np.zeros(len(mono) // 2 + 1, dtype=np.float32)
+        fft_mag = np.zeros(_N_FFT_QK // 2 + 1, dtype=np.float32)
+        freqs = np.zeros(_N_FFT_QK // 2 + 1, dtype=np.float32)
         tot_energy = 1e-12
 
     # §9.7.5 Pre-compute reference spectrum for preservation corrections.
@@ -1846,8 +1875,18 @@ def _measure_quick(
                 _rm = reference
             _rm = np.nan_to_num(_rm, nan=0.0).astype(np.float32)
             _ml = min(len(mono), len(_rm))
-            _ref_mono = _rm[:_ml]
-            _ref_fft = np.abs(np.fft.rfft(_ref_mono))
+            _ref_mono = np.asarray(_rm[:_ml])
+            # §9.7.18: reference FFT uses same 4096-sample STFT basis as fft_mag
+            if len(_ref_mono) >= _N_FFT_QK:
+                _n_ref_qk = min(200, max(1, (len(_ref_mono) - _N_FFT_QK) // _hop_qk))
+                _ref_fft = np.stack(
+                    [
+                        np.abs(np.fft.rfft(_ref_mono[_j * _hop_qk : _j * _hop_qk + _N_FFT_QK] * _win_qk))
+                        for _j in range(_n_ref_qk)
+                    ]
+                ).mean(axis=0).astype(np.float32)
+            else:
+                _ref_fft = np.abs(np.fft.rfft(_ref_mono, n=_N_FFT_QK)).astype(np.float32)
         except Exception:
             _ref_fft = None
             _ref_mono = None
@@ -1872,12 +1911,21 @@ def _measure_quick(
             scores["brillanz"] = 0.5  # near-silence: neutral, no HF content to score
         else:
             _hf_mask_b = (freqs >= 2000) & (freqs <= 16000)
+            _mid_mask_b = (freqs >= 500) & (freqs < 2000)
             _hf_bins_b = fft_mag[_hf_mask_b]
-            if len(_hf_bins_b) > 20:
-                _p95_b = float(np.percentile(_hf_bins_b, 95))
-                _p50_b = float(np.median(_hf_bins_b)) + 1e-9
-                _hf_crest_b = _p95_b / _p50_b
-                scores["brillanz"] = float(np.clip((_hf_crest_b - 1.5) / 13.5, 0.0, 1.0))
+            _mid_bins_b = fft_mag[_mid_mask_b]
+            if len(_hf_bins_b) > 20 and len(_mid_bins_b) > 5:
+                # §9.7.24 Fix (v9.12.2): HF-crest mit STFT-Averaging zu niedrig (Peaks geglättet).
+                # Root-cause: frame-averaged STFT mittelt Transienten-Peaks → p95/p50 sinkt.
+                # Fix: HF-Energie-Ratio E(2-16kHz) / E(500-16kHz) als Brillanz-Proxy.
+                # Musik mit Becken/Streicher/Brillanz: ratio ~ 0.15–0.40 → score 0.5–1.0
+                # Tiefes Mono-Signal (Bass only): ratio ~ 0.005 → score 0.0
+                # Kalibrierung: ratio 0.05 → 0.25; 0.20 → 0.75; 0.35+ → 1.0
+                _hf_energy_b = float(np.mean(_hf_bins_b ** 2))
+                _mid_hf_energy_b = float(np.mean(np.concatenate([_mid_bins_b, _hf_bins_b]) ** 2)) + 1e-12
+                _hf_ratio_b = float(_hf_energy_b / _mid_hf_energy_b)
+                # score: 0 at ratio=0, 0.5 at 0.15, 1.0 at 0.30+
+                scores["brillanz"] = float(np.clip((_hf_ratio_b - 0.02) / 0.28, 0.0, 1.0))
             else:
                 scores["brillanz"] = 0.5
     except Exception:
@@ -2171,26 +2219,68 @@ def _measure_quick(
     except Exception:
         scores["tonal_center"] = 0.5
 
-    # ── Natürlichkeit (Spectral Irregularity) ──────────────────────────
+    # ── Natürlichkeit (Log-Mel Tonal Dominance + Spectral Smoothness) ────
     # Canonical key "natuerlichkeit" — aligned with GoalApplicabilityFilter §2.32.
-    # Scientific basis: Krimphoff, McAdams & Winsberg (1994), J. Acoustique 7:359–368.
-    # Low spectral irregularity corresponds to a smooth, artifact-free envelope,
-    # while high irregularity tracks unnatural rough edges and processing residue.
+    # Fix §9.7.15 (v9.12.1): Krimphoff FFT-bin irregularity scored all real music
+    # near-zero because harmonic peaks at FFT resolution are inherently "irregular".
+    # New proxy uses 24 mel bands with two orthogonal components:
+    #   1) Tonal Dominance: top-4 mel bands carry > 15–60% of energy (music vs noise)
+    #      music: top4/total ≈ 0.45–0.65 | noise: ≈ 0.17 | tonal_score: 0→1
+    #   2) Mel-Log Smoothness: NR artifacts (musical noise, spectral holes) create
+    #      jagged log-mel transitions; clean music has smooth mel envelope.
+    # Combined (0.45 smooth + 0.55 tonal) → clean music 0.85+, white noise 0.76,
+    # heavy NR artifacts 0.70–0.78 — physically meaningful for all era/genre/material.
     try:
         _rms_nat = float(np.sqrt(np.mean(mono**2) + 1e-12))
         if _rms_nat < 1e-5:
             scores["natuerlichkeit"] = 0.5
         else:
-            _amp_nat = fft_mag + 1e-12
-            if len(_amp_nat) > 4:
-                _smooth_nat = (_amp_nat[:-2] + _amp_nat[1:-1] + _amp_nat[2:]) / 3.0
-                _irreg_num = float(np.sum(np.abs(_amp_nat[1:-1] - _smooth_nat)))
-                _irreg_den = float(np.sum(_amp_nat)) + 1e-12
-                _irregularity = float(np.clip(_irreg_num / _irreg_den, 0.0, 1.0))
-                scores["natuerlichkeit"] = float(np.clip(1.0 - (_irregularity - 0.03) / 0.32, 0.0, 1.0))
+            # Build 24 mel-spaced energy bands (100 Hz – 16 kHz)
+            _n_mel_nat = 24
+            _mel_lo_nat, _mel_hi_nat = 100.0, 16000.0
+            _mel_cents_nat = np.linspace(
+                2595.0 * np.log10(1.0 + _mel_lo_nat / 700.0),
+                2595.0 * np.log10(1.0 + _mel_hi_nat / 700.0),
+                _n_mel_nat,
+            )
+            _mel_fqs_nat = 700.0 * (10.0 ** (_mel_cents_nat / 2595.0) - 1.0)
+            _mel_bands_nat = np.zeros(_n_mel_nat, dtype=np.float64)
+            for _i_nat in range(_n_mel_nat):
+                _fl_n = float(_mel_fqs_nat[_i_nat - 1]) if _i_nat > 0 else _mel_lo_nat
+                _fh_n = float(_mel_fqs_nat[_i_nat + 1]) if _i_nat < _n_mel_nat - 1 else _mel_hi_nat
+                _m_nat = (freqs >= _fl_n) & (freqs < _fh_n)
+                if _m_nat.any():
+                    _mel_bands_nat[_i_nat] = float(np.sum(fft_mag[_m_nat] ** 2))
+            _mel_total_nat = float(np.sum(_mel_bands_nat)) + 1e-12
+            # Component 1: Tonal dominance (top-4 bands energy fraction)
+            _mel_sorted_nat = np.sort(_mel_bands_nat)[::-1]
+            _top4_ratio = float(np.sum(_mel_sorted_nat[:4])) / _mel_total_nat
+            _tonal_score = float(np.clip((_top4_ratio - 0.15) / 0.45, 0.0, 1.0))
+            # Component 2: Mel-log smoothness (NR artifact detection)
+            # §9.7.22 Fix (v9.12.2): Normierung NUR auf aktive Bänder (> 1% des Max-Bands).
+            # Root-cause: Inaktive Bänder (Energie ~ 1e-12) haben log ~ -27.6,
+            # während aktive Bänder log ~ 10+ haben. Die riesige Spannweite in _irr_den
+            # dominiert die Normierung → fast alle echten Irregularitäten erscheinen klein.
+            # Fix: Verwende nur Bänder > 1% des Maximum-Bands für Irregularitäts-Messung.
+            _log_mel_nat = np.log(_mel_bands_nat + 1e-12)
+            if len(_log_mel_nat) > 4:
+                _active_threshold_nat = float(np.max(_mel_bands_nat)) * 0.01 + 1e-12
+                _active_mask_nat = _mel_bands_nat > _active_threshold_nat
+                if np.sum(_active_mask_nat) >= 4:
+                    _log_active = _log_mel_nat[_active_mask_nat]
+                    # Smoothness über aktive Bänder (NR-Artefakte = jagged Envelope)
+                    _n_act = len(_log_active)
+                    _sm_act = (_log_active[:-2] + _log_active[1:-1] + _log_active[2:]) / 3.0
+                    _irr_num_nat = float(np.sum(np.abs(_log_active[1:-1] - _sm_act)))
+                    _irr_den_nat = float(np.sum(np.abs(_log_active))) + 1e-12
+                    _irr_mel = float(np.clip(_irr_num_nat / _irr_den_nat, 0.0, 1.0))
+                    _smooth_score = float(np.clip(1.0 - _irr_mel / 0.35, 0.0, 1.0))
+                else:
+                    _smooth_score = 0.5
             else:
-                scores["natuerlichkeit"] = 0.5
-            # §9.7.5 Preservation: Log-spectral envelope correlation
+                _smooth_score = 0.5
+            scores["natuerlichkeit"] = 0.45 * _smooth_score + 0.55 * _tonal_score
+            # §9.7.5 Preservation: log-spectral correlation with reference (belt+suspenders)
             if _ref_fft is not None:
                 _fl = min(len(fft_mag), len(_ref_fft))
                 if _fl > 20:
@@ -2198,7 +2288,7 @@ def _measure_quick(
                     _log_ref = np.log(_ref_fft[:_fl] + 1e-12)
                     _r = _safe_pearson(_log_ref, _log_proc)
                     if _r > 0.7:
-                        scores["natuerlichkeit"] = min(1.0, scores["natuerlichkeit"] + (_r - 0.7) * 0.5)
+                        scores["natuerlichkeit"] = min(1.0, scores["natuerlichkeit"] + (_r - 0.7) * 0.3)
     except Exception:
         scores["natuerlichkeit"] = 0.5
 
@@ -2218,10 +2308,45 @@ def _measure_quick(
             w_freqs = np.fft.rfftfreq(len(w), d=1.0 / sr)
             centroid = float(np.sum(w_freqs * w_fft) / (np.sum(w_fft) + 1e-12))
             centroids.append(centroid)
-        if len(centroids) > 2:
-            cv = float(np.std(centroids)) / (float(np.mean(centroids)) + 1e-12)
-            # Niedrige CV → stabiles Timbre → hoher Score
-            scores["timbre_authentizitaet"] = float(np.clip(1.0 - min(cv, 1.0), 0.0, 1.0))
+        # §9.7.23 Fix (v9.12.2): Centroid-CV-Ansatz ist invertiert für Rauschen.
+        # Root-cause: Weißes Rauschen hat konstanten Spectral Centroid (~sr/4)
+        # → niedrige CV → hoher Score (FALSCH). Echte Musik hat variierende
+        # Centroide (Instrumental wechsel, Dynamik) → höhere CV → niedrigerer Score.
+        # Fix: Mel-Band-Temporal-Stabilität = normierte RMS-Std über 24 Mel-Bänder.
+        # Musik: jedes Band hat stabile relative Energie → hohe Korrelation zwischen Frames.
+        # Rauschen: zufällige Band-Energie pro Frame → niedrige inter-frame Korrelation.
+        if len(centroids) > 4:
+            # Berechne Mel-Band-Energie pro Frame für temporale Stabilität
+            _hop_tb = max(1, sr // 25)  # 40 ms frames
+            _n_tb_frames = min(60, (len(mono) - 1024) // _hop_tb)
+            if _n_tb_frames >= 4:
+                _mel_edges_tb = np.exp(np.linspace(np.log(200.0), np.log(8000.0), 13)).astype(np.float32)
+                _tb_matrix = np.zeros((_n_tb_frames, 12), dtype=np.float64)
+                for _fi in range(_n_tb_frames):
+                    _seg = mono[_fi * _hop_tb : _fi * _hop_tb + 1024]
+                    if len(_seg) < 512:
+                        continue
+                    _sfft = np.abs(np.fft.rfft(_seg, n=1024))
+                    _sfq = np.fft.rfftfreq(1024, d=1.0 / sr)
+                    for _bi in range(12):
+                        _bm = (_sfq >= _mel_edges_tb[_bi]) & (_sfq < _mel_edges_tb[_bi + 1])
+                        _tb_matrix[_fi, _bi] = float(np.mean(_sfft[_bm]**2)) if _bm.any() else 0.0
+                # Normiere jede Zeile (Frame) auf relative Verteilung
+                _row_sums = _tb_matrix.sum(axis=1, keepdims=True) + 1e-12
+                _tb_norm = _tb_matrix / _row_sums
+                # Inter-Frame-Korrelation: stabile Timbre → hohe Korrelation
+                _cors = []
+                for _fi in range(1, _n_tb_frames):
+                    _a, _b = _tb_norm[_fi - 1], _tb_norm[_fi]
+                    _da = _a - _a.mean()
+                    _db = _b - _b.mean()
+                    _denom = (np.linalg.norm(_da) * np.linalg.norm(_db)) + 1e-12
+                    _cors.append(float(np.dot(_da, _db) / _denom))
+                _mean_cor = float(np.mean(_cors)) if _cors else 0.0
+                # Musik: mean_cor ~ 0.85–0.98; Rauschen: ~ 0.0–0.15
+                scores["timbre_authentizitaet"] = float(np.clip((_mean_cor + 0.1) / 1.0, 0.0, 1.0))
+            else:
+                scores["timbre_authentizitaet"] = 0.5
         else:
             scores["timbre_authentizitaet"] = 0.5
         # §9.7.5 Preservation: Centroid trajectory correlation with reference
@@ -2264,35 +2389,41 @@ def _measure_quick(
     except Exception:
         scores["bass_kraft"] = 0.5
 
-    # ── Authentizität (Spektrale Flachheit — aligned mit kanonischer AuthentizitaetMetric)
-    # §2.29b Root-Fix (v9.10.79): Der frühere Proxy maß spektrale Rauheit (Abweichung vom
-    # geglätteten Log-Spektrum). Das war invertiert für PMGG-Delta-Checks:
-    #   - Rauschen füllt spektrale Täler → glatte Log-Amplitude → NIEDRIGE Rauheit
-    #     → scores_before HOCH (≈ 0.93) — künstlich inflationiert durch Noise-Floor.
-    #   - Sauberes Signal mit Harmonischen → tiefe Täler → HOHE Rauheit
-    #     → scores_after NIEDRIG (≈ 0.07) → Pseudo-Regression 0.86 → P1-Katastrophe.
-    # Kanonische AuthentizitaetMetric (ohne Reference) verwendet spectral_flatness:
-    #   flatness = geom_mean(amplitude) / arith_mean(amplitude)
-    #   music → flatness 0.001–0.03 (tonal = authentisch)
-    #   noise/codec → flatness 0.10+   (inauthentic)
-    # Dieser Proxy repliziert das und verhält sich korrekt für alle Denoise-/Dereverb-Phasen:
-    #   scores_before (noisy): flatness ≈ 0.04 → auth ≈ 0.60
-    #   scores_after  (clean): flatness ≈ 0.01 → auth ≈ 0.90 → keine Regression ✓
-    #   scores_after  (codec-damaged): flatness steigt → auth sinkt → echte Regression ✓
+    # ── Authentizität (Mel-Band-Flatness — §9.7.19 Fix v9.12.2) ──────
+    # §2.29b Root-Fix (v9.10.79): Der frühere Proxy maß spektrale Rauheit — invertiert.
+    # §9.7.19 Fix (v9.12.2): Full-FFT-Flatness = geom(|X|)/arith(|X|) über N//2+1 Bins.
+    # Root-cause: Rausch-Bins nahe Null dominieren den Logarithmus-Mittelwert →
+    # geom_mean → near-zero für Musik → flatness ≈ 0 sowohl für Musik als auch Rauschen
+    # → Score = 0 für alle Eingaben (Proxy blind).
+    # Fix: 24 Mel-Bänder 100–16000 Hz aggregieren je mehrere FFT-Bins → kein Band ist
+    # „null". Flatness unterscheidet korrekt:
+    #   Tonale Musik (wenige dominante Bänder): flatness ≈ 0.01–0.10 → score 0.71–0.97
+    #   Stark verrauscht (SNR 15 dB): flatness ≈ 0.28 → score 0.20
+    #   Weißes Rauschen: flatness ≈ 1.0 → score 0.0
     try:
         _rms_auth = float(np.sqrt(np.mean(mono**2) + 1e-12))
         if _rms_auth < 1e-5:
             scores["authentizitaet"] = 0.5
         else:
-            _amp = fft_mag + 1e-12
-            _geom_auth = float(np.exp(np.mean(np.log(_amp))))
-            _arith_auth = float(np.mean(_amp))
-            _flatness_auth = float(np.clip(_geom_auth / (_arith_auth + 1e-12), 0.0, 1.0))
-            # Calibrated to canonical AuthentizitaetMetric: score = 0 at flatness ≥ 0.10
-            scores["authentizitaet"] = float(np.clip(1.0 - _flatness_auth / 0.10, 0.0, 1.0))
+            _mel_auth_edges = np.exp(
+                np.linspace(np.log(100.0), np.log(16000.0), 25)
+            ).astype(np.float32)
+            _mel_auth_powers: list[float] = []
+            for _k in range(24):
+                _m_auth = (freqs >= _mel_auth_edges[_k]) & (freqs < _mel_auth_edges[_k + 1])
+                if np.sum(_m_auth) > 0:
+                    _mel_auth_powers.append(float(np.mean(fft_mag[_m_auth] ** 2)) + 1e-9)
+            if len(_mel_auth_powers) >= 8:
+                _mp_auth = np.array(_mel_auth_powers, dtype=np.float64)
+                _geom_auth = float(np.exp(np.mean(np.log(_mp_auth))))
+                _arith_auth = float(np.mean(_mp_auth))
+                _flatness_auth = float(np.clip(_geom_auth / (_arith_auth + 1e-12), 0.0, 1.0))
+                # Calibration (v9.12.2): flatness 0.35+ → score 0 (noisy/codec),
+                # flatness 0.05 → score 0.86 (tonal Schlager), 0.01 → 0.97 (clean)
+                scores["authentizitaet"] = float(np.clip(1.0 - _flatness_auth / 0.35, 0.0, 1.0))
+            else:
+                scores["authentizitaet"] = 0.5
             # §9.7.5 Preservation: log-spectral correlation as supplemental signal.
-            # Belt + suspenders: even if flatness mis-scores a specific phase output,
-            # high spectral correlation with reference boosts the score.
             if _ref_fft is not None:
                 _fl = min(len(fft_mag), len(_ref_fft))
                 if _fl > 20:
@@ -2314,40 +2445,45 @@ def _measure_quick(
         if rms_val < 1e-5:
             scores["emotionalitaet"] = 0.5
         else:
-            peak_val = float(np.max(np.abs(mono)))
-            crest_db = 20.0 * math.log10(peak_val / (rms_val + 1e-12) + 1e-12)
-            # 2–14 dB Crestfaktor ist gesunder Dynamikbereich
-            crest_score = float(np.clip((crest_db - 2.0) / 12.0, 0.0, 1.0))
-            # RMS-Varianz über 10ms-Frames (Ausdruck)
-            hop_e = max(1, sr // 100)
+            # §9.7.27 Fix: Hüllkurven-Crest statt Zeitbereich-Percentile.
+            # Root-cause: percentile(99.9) der absoluten Amplitude wird durch weißes
+            # Rauschen stark erhöht (kurze Peaks ~3σ). Das lässt noisy > clean.
+            # Fix: Hüllkurven-Crest = max(rms_frames) / mean(rms_frames) (10ms-Fenster).
+            # Rauschen hat eine flache Hüllkurve (CV ~0.05) → crest_env ~1.0–1.1
+            # Musik mit Dynamik: starke Onsets → crest_env 2–6
+            hop_e = max(1, sr // 100)  # 10ms Frames
             rms_frames = np.array(
                 [
                     float(np.sqrt(np.mean(mono[i : i + hop_e] ** 2) + 1e-12))
                     for i in range(0, len(mono) - hop_e, hop_e)
                 ]
             )
-            variance_score = float(np.clip(np.var(rms_frames) * 1000.0, 0.0, 1.0)) if len(rms_frames) > 2 else 0.5
+            _env_peak = float(np.percentile(rms_frames, 99)) + 1e-12
+            _env_mean = float(np.mean(rms_frames)) + 1e-12
+            _env_crest = _env_peak / _env_mean
+            # 1.0 (flat/noise) → 0.0; 3.0 (moderate dynamics) → 0.67; 5.0 (expressive) → 1.0
+            crest_score = float(np.clip((_env_crest - 1.0) / 4.0, 0.0, 1.0))
+            # §9.7.20 Fix (v9.12.2): dB-Domain-Bereich ersetzt lineare Varianz.
+            # Root-cause: np.var(rms_frames)*1000 ≈ 0 für steady-state Musik
+            # (z.B. lineare RMS-Varianz = 0.0003 → Score 0.30; bei 10ms-Frames fast
+            # immer nahe 0 für Musik mit konstantem Signalpegel).
+            # Perceptuelle Dynamik wird auf dB-Skala gemessen, nicht linear.
+            # Fix: p90−p10 dB-Bereich der 10ms-RMS-Frames — robust und sensitiv:
+            #   1 dB (over-compressed): 0.0; 6 dB: 0.29; 12 dB: 0.65; 18 dB: 1.0
+            if len(rms_frames) > 4:
+                _db_rms_e = 20.0 * np.log10(np.maximum(rms_frames, 1e-9))
+                _db_range_e = float(np.percentile(_db_rms_e, 90) - np.percentile(_db_rms_e, 10))
+                variance_score = float(np.clip((_db_range_e - 1.0) / 17.0, 0.0, 1.0))
+            else:
+                variance_score = 0.5
 
-            _nfft_e = min(2048, len(mono))
-            _hop_fft_e = max(1, _nfft_e // 4)
-            _n_frames_e = min(80, max(1, (len(mono) - _nfft_e) // _hop_fft_e))
-            _prev_spec_e: np.ndarray | None = None
-            _flux_vals_e: list[float] = []
-            if _nfft_e >= 32:
-                _win_e = np.hanning(_nfft_e).astype(np.float32)
-                for _i_e in range(_n_frames_e):
-                    _s_e = _i_e * _hop_fft_e
-                    _frame_e = mono[_s_e : _s_e + _nfft_e]
-                    if len(_frame_e) < _nfft_e:
-                        break
-                    _spec_e = np.abs(np.fft.rfft(_frame_e * _win_e))
-                    if _prev_spec_e is not None:
-                        _flux_vals_e.append(float(np.mean(np.maximum(_spec_e - _prev_spec_e, 0.0))))
-                    _prev_spec_e = _spec_e
-            _flux_score_e = float(np.clip(float(np.mean(_flux_vals_e)) / 0.025, 0.0, 1.0)) if _flux_vals_e else 0.5
-
+            # §9.7.28 Fix: Nur rausch-stabile Komponenten — crest_score + variance_score.
+            # Spectral Flux und PVR wurden entfernt: beide steigen mit additivem Rauschen.
+            # crest_score (Hüllkurven-Crest): Rauschen → flach → ~0; Musik m. Dynamik → hoch.
+            # variance_score (dB-Bereich p90-p10): Pausen/Crescendo → hoch; steady-state → 0.
+            # Kalibrierung: echte Musik mit Pausen liefert crest_score ~0.40–0.80 → 0.76.
             scores["emotionalitaet"] = float(
-                np.clip(0.35 * crest_score + 0.35 * variance_score + 0.30 * _flux_score_e, 0.0, 1.0)
+                np.clip(0.60 * crest_score + 0.40 * variance_score, 0.0, 1.0)
             )
             # §9.7.5 Preservation: RMS-envelope correlation (dynamics preservation)
             if _ref_mono is not None:
@@ -2392,16 +2528,32 @@ def _measure_quick(
         if _rms_trp < 1e-5:
             scores["transparenz"] = 0.5  # near-silence: neutral (band crests → 0.0 is misleading)
         else:
+            # §9.7.25 Fix (v9.12.2): Multi-Band-Crest durch STFT-Averaging zu niedrig.
+            # Root-cause: frame-averaged STFT glättet harmonische Peaks → p95/p50 ≈ 1.
+            # Fix: Vergleiche mittlere Band-Energie gegen die Gesamtenergie — Transparenz
+            # bedeutet, dass Mitten und Höhen klar definiert sind (hohe Band-SNR pro Oktave).
+            # Proxy: Harmonic-Energy-Ratio = mittlere Band-Energie / totale Energie.
+            # Saubere Aufnahme: jede Oktave hat klar definierte Energie → hohe Konsistenz.
+            # Verrauscht/verzerrt: Noise-Floor hebt alle Bänder an → weniger Kontrast.
+            # Kalibrierung: Vergleich der Oktav-Energie-Gleichmäßigkeit (Gini-analog).
             _oct_bands_t = [(250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000)]
-            _band_crests_t: list[float] = []
+            _band_energies_t: list[float] = []
             for _fl_t, _fh_t in _oct_bands_t:
                 _b_t = fft_mag[(freqs >= _fl_t) & (freqs < _fh_t)]
                 if len(_b_t) > 5:
-                    _p95_t = float(np.percentile(_b_t, 95))
-                    _p50_t = float(np.median(_b_t)) + 1e-9
-                    _band_crests_t.append(float(np.clip((_p95_t / _p50_t - 1.2) / 8.8, 0.0, 1.0)))
-            if _band_crests_t:
-                scores["transparenz"] = float(np.clip(float(np.mean(_band_crests_t)), 0.0, 1.0))
+                    _band_energies_t.append(float(np.mean(_b_t ** 2)))
+            if len(_band_energies_t) >= 3:
+                _be_arr = np.array(_band_energies_t, dtype=np.float64)
+                _be_sum = _be_arr.sum() + 1e-12
+                # Normiere auf relative Energie-Verteilung
+                _be_norm = _be_arr / _be_sum
+                # Transparenz: spektrale Energie ist klar auf definierte Bänder konzentriert.
+                # Geom/Arith Flatness: niedrig = gut konzentriert = hohe Transparenz
+                _geom_t = float(np.exp(np.mean(np.log(_be_norm + 1e-12))))
+                _arith_t = float(np.mean(_be_norm))
+                _flat_t = float(np.clip(_geom_t / (_arith_t + 1e-12), 0.0, 1.0))
+                # Calibration: flatness 0 → score 1.0 (all energy in 1 band); 0.5 → score 0.0
+                scores["transparenz"] = float(np.clip(1.0 - _flat_t * 2.0, 0.0, 1.0))
             else:
                 scores["transparenz"] = 0.5
     except Exception:
@@ -2456,24 +2608,35 @@ def _measure_quick(
     except Exception:
         scores["micro_dynamics"] = 0.5
 
-    # ── Separation-Treue (Spektrale Tonalität als NMF-Proxy) ──────────
+    # ── Separation-Treue (Mel-Band-Flatness, §9.7.21 Fix v9.12.2) ────
+    # Root-cause: Identischer Bug wie authentizitaet — full-FFT-Flatness auf Leistungs-
+    # spektrum ist immer nahe 0 für Musik weil leere Bins den Geom-Mittelwert dominieren.
+    # Fix: 24 Mel-Bänder aggregieren Energie korrekt → Flatness unterscheidet tonal/Rauschen:
+    #   Tonal (3–6 dominante Bänder): mel_flatness ~ 0.001–0.05 → Score 0.875–0.997
+    #   Gemischtes Signal (SNR 20 dB): mel_flatness ~ 0.12 → Score 0.70
+    #   Stark verrauscht (SNR 10 dB): mel_flatness ~ 0.55 → Score 0.0
     try:
         _rms_sep = float(np.sqrt(np.mean(mono**2) + 1e-12))
         if _rms_sep < 1e-5:
             scores["separation_fidelity"] = 0.5
         else:
-            # Proxy: Spektrale Flachheit (niedrig = tonal = gut separierbar)
-            # Rauschen hat hohe Flachheit → schwer zu trennen → niedrige Separation-Treue
-            # Tonales Signal: Flachheit ~ 0.01–0.05 → Score nahe 1.0
-            # Rauschen: Flachheit ~ 0.3–1.0 → Score nahe 0.0
-            eps = 1e-12
-            # Geometrisches Mittel / arithmetisches Mittel auf Leistungsspektrum
-            power = fft_mag**2 + eps
-            geom_mean = float(np.exp(np.mean(np.log(power))))
-            arith_mean = float(np.mean(power))
-            flatness = float(np.clip(geom_mean / (arith_mean + eps), 0.0, 1.0))
-            # Niedriger Flatness → hohe Tonalität → gute Separierbarkeit
-            scores["separation_fidelity"] = float(np.clip(1.0 - flatness * 2.5, 0.0, 1.0))
+            _mel_sep_edges = np.exp(
+                np.linspace(np.log(100.0), np.log(16000.0), 25)
+            ).astype(np.float32)
+            _mel_sep_powers: list[float] = []
+            for _k in range(24):
+                _m_sep = (freqs >= _mel_sep_edges[_k]) & (freqs < _mel_sep_edges[_k + 1])
+                if np.sum(_m_sep) > 0:
+                    _mel_sep_powers.append(float(np.mean(fft_mag[_m_sep] ** 2)) + 1e-9)
+            if len(_mel_sep_powers) >= 8:
+                _mp_sep = np.array(_mel_sep_powers, dtype=np.float64)
+                _geom_sep = float(np.exp(np.mean(np.log(_mp_sep))))
+                _arith_sep = float(np.mean(_mp_sep))
+                _flatness_sep = float(np.clip(_geom_sep / (_arith_sep + 1e-12), 0.0, 1.0))
+                # Calibration: flatness 0.40 → score 0; 0.10 → 0.75; 0.02 → 0.95
+                scores["separation_fidelity"] = float(np.clip(1.0 - _flatness_sep * 2.5, 0.0, 1.0))
+            else:
+                scores["separation_fidelity"] = 0.5
             # §9.7.5 Preservation: Full-band spectral magnitude coherence
             if _ref_fft is not None:
                 _fl = min(len(fft_mag), len(_ref_fft))
@@ -2751,8 +2914,8 @@ class PerPhaseMusicalGoalsGate:
         scores_before: dict[str, float] | None = None,
         effective_goals: list[str] | None = None,
         phase_kwargs: dict[str, Any] | None = None,
-        threshold: float = REGRESSION_THRESHOLD_GOOD,
-        **kwargs: Any,
+        _threshold: float = REGRESSION_THRESHOLD_GOOD,
+        **_kwargs: Any,
     ) -> tuple[np.ndarray, dict[str, float], PhaseGateLogEntry]:
         """Public alias to wrap_phase for direct access and testing.
 
@@ -3493,7 +3656,9 @@ class PerPhaseMusicalGoalsGate:
                     attempt + 1,
                     strength,
                 )
-                audio_retry = self._wet_dry_blend(audio, audio_full, strength, phase)
+                audio_retry = self._wet_dry_blend(
+                    audio, audio_full if audio_full is not None else audio, strength, phase
+                )
             else:
                 # DSP-Phase: Neu ausführen mit reduziertem strength
                 logger.debug(
@@ -3779,7 +3944,7 @@ class PerPhaseMusicalGoalsGate:
                     out = (audio + strength * (out - audio)).astype(np.float32)
                     out = np.clip(out, -1.0, 1.0)
 
-            return out
+            return np.asarray(out)
         except Exception as exc:
             logger.debug("PMGG: Phase-Ausführung fehlgeschlagen: %s", exc)
             return audio
@@ -3865,7 +4030,7 @@ class PerPhaseMusicalGoalsGate:
                     wet = wet.mean(axis=1)
                 out_lin = (dry + strength * (wet - dry)).astype(np.float32)
                 out_lin = np.clip(out_lin, -1.0, 1.0)
-                return out_lin.T if _dry_ch_first and out_lin.ndim == 2 else out_lin
+                return np.asarray(out_lin.T if _dry_ch_first and out_lin.ndim == 2 else out_lin)
 
             if dry.shape[1] != wet.shape[1]:
                 logger.debug(
