@@ -43,6 +43,17 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
+from backend.core.adaptive_core_scheduler import AdaptiveCoreScheduler
+
+# Import Aurik 9.0 Core Components
+from backend.core.defect_scanner import DefectScanner, DefectType, MaterialType
+from backend.core.musical_goals.adaptive_goal_resolver import (
+    resolve_adaptive_goal_thresholds as _resolve_adaptive_goal_thresholds_fn,
+)
+from backend.core.performance_guard import DeploymentMode, PerformanceGuard, QualityMode
+from backend.core.phase_skipping import PhaseSkipper
+from backend.core.phases.phase_interface import PhaseInterface
+
 if TYPE_CHECKING:
     from backend.core.recovery_checkpoint import RecoveryCheckpoint
 
@@ -59,16 +70,6 @@ try:
     MEMORY_PROFILING_AVAILABLE = True
 except ImportError:
     MEMORY_PROFILING_AVAILABLE = False
-from backend.core.adaptive_core_scheduler import AdaptiveCoreScheduler
-
-# Import Aurik 9.0 Core Components
-from backend.core.defect_scanner import DefectScanner, DefectType, MaterialType
-from backend.core.musical_goals.adaptive_goal_resolver import (
-    resolve_adaptive_goal_thresholds as _resolve_adaptive_goal_thresholds_fn,
-)
-from backend.core.performance_guard import DeploymentMode, PerformanceGuard, QualityMode
-from backend.core.phase_skipping import PhaseSkipper
-from backend.core.phases.phase_interface import PhaseInterface
 
 logger = logging.getLogger(__name__)
 
