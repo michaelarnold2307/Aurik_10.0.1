@@ -262,6 +262,27 @@ class PresenceBoost(PhaseInterface):
 
         enhanced_audio = np.nan_to_num(enhanced_audio, nan=0.0, posinf=0.0, neginf=0.0)
         enhanced_audio = np.clip(enhanced_audio, -1.0, 1.0)
+        # §2.46e Hallucination-Guard (Pflicht für additive Phasen)
+        try:
+            from backend.core.dsp.hallucination_guard import (
+                check_hallucination as _check_hg_38,  # pylint: disable=import-outside-toplevel
+            )
+
+            _mode_38 = str(kwargs.get("mode", "restoration"))
+            _hg_38 = _check_hg_38(audio, enhanced_audio, sr=sample_rate, mode=_mode_38)
+            if _hg_38.requires_rollback:
+                logger.warning(
+                    "phase_38: hallucination_guard rollback (spectral_novelty=%.3f)", _hg_38.spectral_novelty
+                )
+                enhanced_audio = np.clip(np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
+            elif _hg_38.score_penalty > 0.0:
+                logger.info(
+                    "phase_38: hallucination_guard penalty=%.1f (spectral_novelty=%.3f)",
+                    _hg_38.score_penalty,
+                    _hg_38.spectral_novelty,
+                )
+        except Exception as _hg38_exc:
+            logger.debug("phase_38: hallucination_guard failed (non-blocking): %s", _hg38_exc)
         return PhaseResult(
             success=True,
             audio=enhanced_audio,

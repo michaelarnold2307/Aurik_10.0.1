@@ -952,16 +952,24 @@ class TapeHissReductionPhase(PhaseInterface):
         # STFT + OMLSA via MRSA 5-zone processing (§DSP-Spezialregeln)
         # §2.51: When linked_sidechain is provided, IMCRA/OMLSA gain is computed on
         # the sidechain (Mid) but applied to this channel's STFT magnitudes.
+        # §2.63: Reflect-Padding VOR OMLSA-STFT (root-cause boundary fix §2.63)
+        # Provides context for the IMCRA noise estimator at signal boundaries.
+        _pad_len_29 = 2048
+        _channel_padded_29 = np.pad(channel, _pad_len_29, mode="reflect")
+        _sidechain_padded_29 = (
+            np.pad(linked_sidechain, _pad_len_29, mode="reflect") if linked_sidechain is not None else None
+        )
         processed = self._process_channel_omlsa_mrsa(
-            channel,
+            _channel_padded_29,
             sample_rate,
             hf_low,
             hf_high,
             material,
             intensity_scale,
-            linked_sidechain=linked_sidechain,
+            linked_sidechain=_sidechain_padded_29,
         )
-        processed = processed[: len(channel)]
+        # §2.63: Strip reflect-padding deterministisch (Originallänge wiederherstellen)
+        processed = processed[_pad_len_29 : _pad_len_29 + len(channel)]
         if len(processed) < len(channel):
             processed = np.pad(processed, (0, len(channel) - len(processed)))
         processed = np.nan_to_num(processed, nan=0.0, posinf=0.0, neginf=0.0)

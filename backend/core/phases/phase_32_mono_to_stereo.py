@@ -348,6 +348,27 @@ class MonoToStereoPhaseV2(PhaseInterface):
 
         pseudo_stereo = np.nan_to_num(pseudo_stereo, nan=0.0, posinf=0.0, neginf=0.0)
         pseudo_stereo = np.clip(pseudo_stereo, -1.0, 1.0)
+        # §2.46e Hallucination-Guard (Pflicht für additive Phasen)
+        try:
+            from backend.core.dsp.hallucination_guard import (
+                check_hallucination as _check_hg_32,  # pylint: disable=import-outside-toplevel
+            )
+
+            _mode_32 = str(kwargs.get("mode", "restoration"))
+            _hg_32 = _check_hg_32(audio, pseudo_stereo, sr=sample_rate, mode=_mode_32)
+            if _hg_32.requires_rollback:
+                logger.warning(
+                    "phase_32: hallucination_guard rollback (spectral_novelty=%.3f)", _hg_32.spectral_novelty
+                )
+                pseudo_stereo = np.clip(np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
+            elif _hg_32.score_penalty > 0.0:
+                logger.info(
+                    "phase_32: hallucination_guard penalty=%.1f (spectral_novelty=%.3f)",
+                    _hg_32.score_penalty,
+                    _hg_32.spectral_novelty,
+                )
+        except Exception as _hg32_exc:
+            logger.debug("phase_32: hallucination_guard failed (non-blocking): %s", _hg32_exc)
         return PhaseResult(
             success=True,
             audio=pseudo_stereo,

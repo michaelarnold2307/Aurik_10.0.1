@@ -450,6 +450,15 @@ class CrackleRemovalPhase(PhaseInterface):
             _inp_shape[1] if (len(_inp_shape) > 1 and isinstance(_inp_shape[1], int) and _inp_shape[1] > 0) else None
         )
 
+        # §2.63: Reflect-Padding VOR BANQUET-Inferenz (root-cause boundary fix, §2.63)
+        # Provides intro/outro context for the ML model (like phase_03 for DeepFilterNet).
+        _ctx_n09 = min(int(sample_rate), len(audio_norm) // 4)
+        _banquet_use_pad = _ctx_n09 > 0 and len(audio_norm) > _ctx_n09 * 4
+        if _banquet_use_pad:
+            _audio_norm_09 = np.pad(audio_norm, _ctx_n09, mode="reflect")
+        else:
+            _audio_norm_09 = audio_norm
+
         # PLM Active-Guard: verhindert Emergency-Eviction während aktiver Inferenz (§VERBOTEN)
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager
@@ -460,20 +469,25 @@ class CrackleRemovalPhase(PhaseInterface):
             _plm = None
 
         try:
-            if _fixed_len is not None and len(audio_norm) != _fixed_len:
-                # Chunking-Loop: zero-pad letzten Chunk
+            if _fixed_len is not None and len(_audio_norm_09) != _fixed_len:
+                # Chunking-Loop: zero-pad letzten Chunk (§2.63: iterates over padded audio)
                 _chunks_out: list[np.ndarray] = []
-                for _ci in range(0, len(audio_norm), _fixed_len):
-                    _chunk = audio_norm[_ci : _ci + _fixed_len]
+                for _ci in range(0, len(_audio_norm_09), _fixed_len):
+                    _chunk = _audio_norm_09[_ci : _ci + _fixed_len]
                     if len(_chunk) < _fixed_len:
                         _chunk = np.pad(_chunk, (0, _fixed_len - len(_chunk)))
                     _cout = session.run(None, {input_name: _chunk[np.newaxis, :]})[0].squeeze(0)
-                    _chunks_out.append(_cout[: min(_fixed_len, len(audio_norm) - _ci)])
-                restored_48k = (np.concatenate(_chunks_out) * max_val).astype(np.float32)
+                    _chunks_out.append(_cout[: min(_fixed_len, len(_audio_norm_09) - _ci)])
+                restored_48k_raw = (np.concatenate(_chunks_out) * max_val).astype(np.float32)
             else:
-                audio_input = audio_norm[np.newaxis, :]  # [1, n_samples]
+                audio_input = _audio_norm_09[np.newaxis, :]  # [1, n_samples]
                 outputs = session.run(None, {input_name: audio_input})
-                restored_48k = (outputs[0].squeeze(0) * max_val).astype(np.float32)
+                restored_48k_raw = (outputs[0].squeeze(0) * max_val).astype(np.float32)
+            # §2.63: Strip reflect-padding deterministisch (Originallänge wiederherstellen)
+            if _banquet_use_pad:
+                restored_48k = restored_48k_raw[_ctx_n09 : _ctx_n09 + len(audio_norm)]
+            else:
+                restored_48k = restored_48k_raw
         finally:
             if _plm is not None:
                 try:

@@ -814,9 +814,11 @@ class ReverbReduction(PhaseInterface):
             from backend.core.lyrics_guided_enhancement import get_phoneme_mask as _get_pmask_20
 
             _hop_20 = 512
-            _mono_20 = reduced.mean(axis=0) if (
-                reduced.ndim == 2 and reduced.shape[0] == 2 and reduced.shape[1] > 2
-            ) else (reduced.mean(axis=1) if reduced.ndim == 2 else reduced)
+            _mono_20 = (
+                reduced.mean(axis=0)
+                if (reduced.ndim == 2 and reduced.shape[0] == 2 and reduced.shape[1] > 2)
+                else (reduced.mean(axis=1) if reduced.ndim == 2 else reduced)
+            )
             _pmask_20 = _get_pmask_20(_mono_20.astype(np.float32), sample_rate, hop_length=_hop_20)
             if np.any(_pmask_20):
                 _n_20 = _mono_20.shape[0]
@@ -1038,13 +1040,18 @@ class ReverbReduction(PhaseInterface):
         n_audio = len(audio)
         nyquist = float(sample_rate // 2)
 
+        # §2.63 Reflect-Padding: VOR STFT (root-cause boundary fix, §2.63)
+        # Prevents intro/outro artefacts from STFT-boundary mismatch.
+        _pad_len_20 = 2048  # REF_WIN context on each side
+        _audio_padded_20 = np.pad(audio, _pad_len_20, mode="reflect")
+
         # Reference STFT (win=2048, 75 % overlap) — same as original _reduce_reverb
         REF_WIN = 2048
         REF_HOP = REF_WIN - self.WINDOW_SIZE + self.HOP_SIZE  # preserves original 512-hop
         REF_NOVERLAP = REF_WIN - REF_HOP
 
         f_ref, _, Zxx_ref = signal.stft(
-            audio,
+            _audio_padded_20,  # §2.63: reflect-padded input
             fs=sample_rate,
             window="hann",
             nperseg=REF_WIN,
@@ -1065,6 +1072,7 @@ class ReverbReduction(PhaseInterface):
         _masking_freqs_p20: np.ndarray | None = None
         try:
             from backend.core.dsp.psychoacoustics import compute_masking_threshold_iso11172 as _cmask_p20
+
             _src_p20 = audio.mean(axis=0) if audio.ndim == 2 else audio
             _mask_ratio_p20 = _cmask_p20(_src_p20, sample_rate, n_fft=2048, hop_length=512)
             _masking_floor_p20 = np.mean(_mask_ratio_p20, axis=1).astype(np.float32)
@@ -1083,7 +1091,7 @@ class ReverbReduction(PhaseInterface):
                 if n_audio >= zone_win * 2:
                     zone_noverlap = zone_win - zone_hop
                     f_z, _, Zxx_z = signal.stft(
-                        audio,
+                        _audio_padded_20,  # §2.63: reflect-padded input
                         fs=sample_rate,
                         window="hann",
                         nperseg=zone_win,
@@ -1273,10 +1281,12 @@ class ReverbReduction(PhaseInterface):
             audio_out = np.zeros(n_audio, dtype=np.float32)
 
         audio_out = np.real(audio_out).astype(np.float32)
+        # §2.63: Strip reflect-padding deterministisch (Originallänge wiederherstellen)
+        audio_out = audio_out[_pad_len_20 : _pad_len_20 + n_audio]
         if len(audio_out) > n_audio:
             audio_out = audio_out[:n_audio]
         elif len(audio_out) < n_audio:
-            audio_out = np.pad(audio_out, (0, n_audio - len(audio_out)), mode="constant", constant_values=0.0)
+            audio_out = np.pad(audio_out, (0, n_audio - len(audio_out)))
 
         audio_out = np.nan_to_num(audio_out, nan=0.0, posinf=0.0, neginf=0.0)
         audio_out = np.clip(audio_out, -1.0, 1.0)

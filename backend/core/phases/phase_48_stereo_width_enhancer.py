@@ -288,6 +288,27 @@ class StereoWidthEnhancerPhase(PhaseInterface):
 
         processed = np.nan_to_num(processed, nan=0.0, posinf=0.0, neginf=0.0)
         processed = np.clip(processed, -1.0, 1.0)
+        # §2.46e Hallucination-Guard (Pflicht für additive Phasen)
+        try:
+            from backend.core.dsp.hallucination_guard import (
+                check_hallucination as _check_hg_48,  # pylint: disable=import-outside-toplevel
+            )
+
+            _mode_48 = "studio_2026" if _p48_studio else "restoration"
+            _hg_48 = _check_hg_48(audio, processed, sr=sample_rate, mode=_mode_48)
+            if _hg_48.requires_rollback:
+                logger.warning(
+                    "phase_48: hallucination_guard rollback (spectral_novelty=%.3f)", _hg_48.spectral_novelty
+                )
+                processed = np.clip(np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
+            elif _hg_48.score_penalty > 0.0:
+                logger.info(
+                    "phase_48: hallucination_guard penalty=%.1f (spectral_novelty=%.3f)",
+                    _hg_48.score_penalty,
+                    _hg_48.spectral_novelty,
+                )
+        except Exception as _hg48_exc:
+            logger.debug("phase_48: hallucination_guard failed (non-blocking): %s", _hg48_exc)
 
         logger.info(
             "Phase 48 StereoWidth: width=%.2f, diffuse=%s, iacc=%.3f, side_red=%.2f",
