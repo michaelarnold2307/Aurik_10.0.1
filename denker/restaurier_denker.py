@@ -23,6 +23,24 @@ from typing import Any
 
 import numpy as np
 
+try:
+    from backend.core.unified_restorer_v3 import (
+        QualityMode,
+        RestorationConfig,
+        UnifiedRestorerV3,
+    )
+except Exception:  # pragma: no cover — optional heavy dependency
+    QualityMode = None  # type: ignore[assignment,misc]
+    RestorationConfig = None  # type: ignore[assignment,misc]
+    UnifiedRestorerV3 = None  # type: ignore[assignment,misc]
+
+try:
+    from backend.core.pipeline_main import AurikAutonomousPipeline
+    from backend.core.processing_modes import ProcessingMode
+except Exception:  # pragma: no cover — optional heavy dependency
+    AurikAutonomousPipeline = None  # type: ignore[assignment,misc]
+    ProcessingMode = None  # type: ignore[assignment,misc]
+
 logger = logging.getLogger(__name__)
 
 # RT-Budget-Konstante (§9.5) — caps reported rt_factor
@@ -535,11 +553,8 @@ class RestaurierDenker:
     def _build_restorer(self, mode: str) -> Any:
         """Baut UnifiedRestorerV3 mit zwingend enforce_3x_rt=True."""
         try:
-            from backend.core.unified_restorer_v3 import (
-                QualityMode,
-                RestorationConfig,
-                UnifiedRestorerV3,
-            )
+            if UnifiedRestorerV3 is None or QualityMode is None or RestorationConfig is None:
+                raise ImportError("backend.core.unified_restorer_v3 nicht verfügbar")
 
             # §11.7a: studio2026 → MAXIMUM quality + studio_2026 flag
             _is_studio = mode == "studio2026"
@@ -548,15 +563,15 @@ class RestaurierDenker:
             cfg = RestorationConfig(
                 mode=qmode,
                 studio_2026=_is_studio,  # §11.7a — activates Stem-Sep, Matchering, Vocos
-                enforce_3x_rt=False,  # RT enforcement opt-in only; standard paths use no_rt_limit=True + UI watchdog (§2.38)
+                enforce_3x_rt=False,  # RT opt-in only; standard uses no_rt_limit=True (§2.38)
                 enable_performance_guard=True,
-                enable_adaptive_skipping=False,  # Adaptive skipping opt-in only (tests/benchmarks)
+                enable_adaptive_skipping=False,  # Adaptive skipping opt-in only
                 enable_phase_gate=True,
                 num_cores=4,
                 enable_psychoacoustic_enhancement=True,
             )
 
-            logger.info("🎵 RestaurierDenker: UnifiedRestorerV3 init (mode=%s, enforce_3x_rt=False)", mode)
+            logger.info("\U0001f3b5 RestaurierDenker: UnifiedRestorerV3 init (mode=%s)", mode)
             return UnifiedRestorerV3(config=cfg)
 
         except Exception as exc:
@@ -578,8 +593,8 @@ class RestaurierDenker:
     def _build_are_pipeline(self) -> Any:
         """Erstellt AurikAutonomousPipeline als primäre Restaurierungs-Engine (M-5)."""
         try:
-            from backend.core.pipeline_main import AurikAutonomousPipeline  # lazy import
-            from backend.core.processing_modes import ProcessingMode
+            if AurikAutonomousPipeline is None or ProcessingMode is None:
+                raise ImportError("backend.core.pipeline_main nicht verfügbar")
 
             pipeline = AurikAutonomousPipeline(
                 mode=ProcessingMode.RESTORATION,
@@ -675,15 +690,14 @@ class RestaurierDenker:
 # Thread-sicherer Singleton (Double-Checked Locking — §3.2)
 # ---------------------------------------------------------------------------
 
-_instance: RestaurierDenker | None = None
+_instance_holder: list = [None]  # [RestaurierDenker | None] — list-Container vermeidet global (W0603)
 _lock: threading.Lock = threading.Lock()
 
 
 def get_restaurier_denker() -> RestaurierDenker:
     """Gibt den thread-sicheren Singleton-RestaurierDenker zurück."""
-    global _instance
-    if _instance is None:
+    if _instance_holder[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = RestaurierDenker()
-    return _instance
+            if _instance_holder[0] is None:
+                _instance_holder[0] = RestaurierDenker()
+    return _instance_holder[0]

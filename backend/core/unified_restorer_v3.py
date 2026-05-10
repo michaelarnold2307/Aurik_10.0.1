@@ -7900,6 +7900,7 @@ class UnifiedRestorerV3:
         _musical_goal_scores: dict = {}
         _musical_goals_passed: dict = {}
         _musical_excellence_score: float = 0.0
+        _effective_goal_thresholds: dict = {}  # §Bug#3: Pre-init vor try-Block — NameError-Guard
         try:
             from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
 
