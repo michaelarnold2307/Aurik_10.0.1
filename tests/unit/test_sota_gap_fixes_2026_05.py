@@ -751,3 +751,118 @@ class TestCrossGoalRecoveryMainLoopFix:
         assert "bronze" in src.lower() or "bypass" in src.lower(), (
             "§Cross-Goal-Recovery: _profiled_phase_call fehlt Hinweis auf Bronze/Bypass-Pfad"
         )
+
+
+# ---------------------------------------------------------------------------
+# Todo 2 — §4.4 Era-Aware ML-NR Routing (v9.12.x)
+# ---------------------------------------------------------------------------
+
+
+class TestEraAwareNrModelRouting:
+    """§4.4 SOTA Era-Aware NR routing: MIIPHER/DFN/OMLSA selection."""
+
+    def _routing(self, era_decade, material_type, est_snr_db, panns_singing, is_vocal=True, is_non_digital=True):
+        from backend.core.phases.phase_03_denoise import _determine_era_nr_routing
+
+        return _determine_era_nr_routing(era_decade, material_type, est_snr_db, panns_singing, is_vocal, is_non_digital)
+
+    def test_acoustic_era_1920_returns_omlsa_only(self):
+        """1920s phonograph: no ML NR — carrier character must be preserved (§0a)."""
+        tier = self._routing(era_decade=1920, material_type="shellac", est_snr_db=8.0, panns_singing=0.5)
+        assert tier == "omlsa_only", f"Expected omlsa_only for 1920 shellac, got {tier!r}"
+
+    def test_acoustic_era_1930_boundary_returns_omlsa_only(self):
+        """Era 1930 (boundary): omlsa_only."""
+        tier = self._routing(era_decade=1930, material_type="shellac", est_snr_db=6.0, panns_singing=0.4)
+        assert tier == "omlsa_only", f"Expected omlsa_only at 1930 boundary, got {tier!r}"
+
+    def test_early_electric_shellac_1940_returns_dfn_restricted(self):
+        """1940 shellac electrical: DFN restricted to 30% wet (preserve H2/H4)."""
+        tier = self._routing(era_decade=1940, material_type="shellac", est_snr_db=12.0, panns_singing=0.4)
+        assert tier == "dfn_restricted", f"Expected dfn_restricted for 1940 shellac, got {tier!r}"
+
+    def test_early_electric_1945_shellac_returns_dfn_restricted(self):
+        """Era 1945, shellac — still dfn_restricted (boundary)."""
+        tier = self._routing(era_decade=1945, material_type="shellac", est_snr_db=15.0, panns_singing=0.5)
+        assert tier == "dfn_restricted", f"Expected dfn_restricted at era=1945, got {tier!r}"
+
+    def test_wax_cylinder_always_omlsa_only(self):
+        """Wax cylinder: always omlsa_only regardless of decade."""
+        tier = self._routing(era_decade=1965, material_type="wax_cylinder", est_snr_db=5.0, panns_singing=0.6)
+        assert tier == "omlsa_only", f"Expected omlsa_only for wax_cylinder, got {tier!r}"
+
+    def test_digital_material_omlsa_only(self):
+        """Digital material: omlsa_only (no ML broadband NR needed)."""
+        tier = self._routing(
+            era_decade=1995, material_type="cd_digital", est_snr_db=35.0, panns_singing=0.5, is_non_digital=False
+        )
+        assert tier == "omlsa_only", f"Expected omlsa_only for cd_digital, got {tier!r}"
+
+    def test_deep_snr_vocal_post1950_returns_miipher_primary(self):
+        """1965 vinyl, SNR 8 dB, panns 0.4 → MIIPHER primary (§4.4 SOTA)."""
+        tier = self._routing(era_decade=1965, material_type="vinyl", est_snr_db=8.0, panns_singing=0.4)
+        assert tier == "miipher_primary", f"Expected miipher_primary for deep SNR vocal, got {tier!r}"
+
+    def test_moderate_snr_post1950_returns_dfn_primary(self):
+        """1975 vinyl, SNR 18 dB → DFN primary (current SOTA behavior)."""
+        tier = self._routing(era_decade=1975, material_type="vinyl", est_snr_db=18.0, panns_singing=0.4)
+        assert tier == "dfn_primary", f"Expected dfn_primary for moderate SNR, got {tier!r}"
+
+    def test_snr_boundary_exactly_10_dfn_primary(self):
+        """SNR exactly 10.0 dB (boundary): dfn_primary (MIIPHER only below 10 dB)."""
+        tier = self._routing(era_decade=1970, material_type="vinyl", est_snr_db=10.0, panns_singing=0.4)
+        assert tier == "dfn_primary", f"Expected dfn_primary at SNR=10 dB boundary, got {tier!r}"
+
+    def test_low_panns_no_miipher(self):
+        """Low panns_singing (0.25) below MIIPHER threshold 0.35 → dfn_primary."""
+        tier = self._routing(era_decade=1965, material_type="vinyl", est_snr_db=7.0, panns_singing=0.25)
+        assert tier == "dfn_primary", f"Expected dfn_primary for low panns, got {tier!r}"
+
+    def test_snr_none_no_miipher_routing(self):
+        """None SNR: MIIPHER not activated (cannot confirm deep noise) → dfn_primary."""
+        tier = self._routing(era_decade=1965, material_type="vinyl", est_snr_db=None, panns_singing=0.5)
+        assert tier == "dfn_primary", f"Expected dfn_primary when SNR unknown, got {tier!r}"
+
+    def test_routing_function_is_importable(self):
+        """_determine_era_nr_routing must be importable from phase_03_denoise."""
+        from backend.core.phases.phase_03_denoise import _determine_era_nr_routing
+
+        assert callable(_determine_era_nr_routing), "_determine_era_nr_routing must be callable"
+
+    def test_era_routing_key_in_phase03_process_source(self):
+        """phase_03 process() must call _determine_era_nr_routing."""
+        import inspect
+
+        from backend.core.phases.phase_03_denoise import DenoisePhase
+
+        src = inspect.getsource(DenoisePhase.process)
+        assert "_determine_era_nr_routing" in src, "process() must call _determine_era_nr_routing"
+
+    def test_miipher_block_in_phase03_source(self):
+        """MIIPHER block must appear in phase_03 process()."""
+        import inspect
+
+        from backend.core.phases.phase_03_denoise import DenoisePhase
+
+        src = inspect.getsource(DenoisePhase.process)
+        assert "miipher_primary" in src, "process() must contain MIIPHER primary routing"
+        assert "miipher_applied" in src, "process() must track _miipher_applied flag"
+
+    def test_sgmse_guard_for_omlsa_only_routing(self):
+        """SGMSE+ must be blocked when _era_nr_routing == 'omlsa_only'."""
+        import inspect
+
+        from backend.core.phases.phase_03_denoise import DenoisePhase
+
+        src = inspect.getsource(DenoisePhase.process)
+        assert "omlsa_only" in src, "process() must guard SGMSE+ with omlsa_only check"
+
+    def test_dfn_restricted_blend_in_source(self):
+        """DFN restricted 30% blend must be applied for early-electrical era."""
+        import inspect
+
+        from backend.core.phases.phase_03_denoise import DenoisePhase
+
+        src = inspect.getsource(DenoisePhase.process)
+        assert "dfn_restricted" in src, "process() must implement dfn_restricted blend"
+        assert "0.30" in src or "0.70" in src, "dfn_restricted must use 30%/70% wet/dry blend"

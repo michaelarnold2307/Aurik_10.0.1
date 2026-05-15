@@ -103,6 +103,54 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# §4.4 Era-Aware NR-Routing constants
+_OMLSA_ONLY_MATERIALS_P03 = frozenset({"wax_cylinder", "wire_recording", "acoustic_recording"})
+_ERA_ACOUSTIC_CUTOFF = 1930  # Phonograph era: character noise, no ML NR
+_ERA_EARLY_ELECTRIC_CUTOFF = 1945  # Shellac electrical: restricted DFN only
+_MIIPHER_SNR_CUTOFF_DB = 10.0  # MIIPHER primary when SNR below this threshold
+_MIIPHER_SINGING_MIN = 0.35  # Minimum PANNs confidence for MIIPHER activation
+
+
+def _determine_era_nr_routing(
+    era_decade: int,
+    material_type: str,
+    est_snr_db: "float | None",
+    panns_singing: float,
+    is_vocal_material: bool,
+    is_non_digital: bool,
+) -> str:
+    """
+    §4.4 SOTA Era-Aware ML-NR Routing decision (v9.12.x).
+
+    Returns one of:
+      "miipher_primary"  — MIIPHER → DFN fallback (deep SNR, post-1950, vocal)
+      "dfn_primary"      — DFN primary, current SOTA behavior
+      "dfn_restricted"   — DFN capped at 30 %% wet (early electrical 1930-1945, shellac)
+      "omlsa_only"       — No ML NR (acoustic era, wax/wire, digital material)
+
+    §0a Carrier-Chain compliance: Pre-1945 phonograph surface noise IS carrier
+    character (SOFT_SATURATION = BEWAHREN). DFN/MIIPHER are speech-trained; applied
+    to 1930s shellac they remove harmonic texture → timbral corruption. OMLSA with
+    conservative g_floor is correct for those eras (§2.46 Carrier-Chain-Stufen).
+    For post-1950 deep-noise vocal (SNR < 10 dB), MIIPHER delivers highest vocal
+    quality (Zhang et al. 2023, Google; §4.4 SOTA Matrix 2026).
+    """
+    mat = str(getattr(material_type, "value", material_type) or "unknown").lower()
+    if mat in _OMLSA_ONLY_MATERIALS_P03 or not is_non_digital:
+        return "omlsa_only"
+    if era_decade <= _ERA_ACOUSTIC_CUTOFF:
+        return "omlsa_only"
+    if era_decade <= _ERA_EARLY_ELECTRIC_CUTOFF and mat in ("shellac", "shellac_early"):
+        return "dfn_restricted"
+    if (
+        is_vocal_material
+        and panns_singing >= _MIIPHER_SINGING_MIN
+        and est_snr_db is not None
+        and est_snr_db < _MIIPHER_SNR_CUTOFF_DB
+    ):
+        return "miipher_primary"
+    return "dfn_primary"
+
 
 class DenoisePhase(PhaseInterface):
     """
@@ -668,6 +716,20 @@ class DenoisePhase(PhaseInterface):
         _is_vocal_material = _panns_singing >= 0.25 or (_genre_is_vocal and _panns_singing >= 0.10)
         _is_non_digital = material_type not in ("cd_digital", "streaming", "mp3_high")
 
+        # §4.4 SOTA Era-Aware ML-NR Routing (v9.12.x)
+        _era_decade_p03 = int(decade) if decade is not None else 1970
+        _era_nr_routing = _determine_era_nr_routing(
+            _era_decade_p03, material_type, _est_snr_db, _panns_singing, _is_vocal_material, _is_non_digital
+        )
+        logger.info(
+            "§4.4 Era-Aware NR-Routing: decade=%d material=%s snr=%s panns=%.2f -> %s",
+            _era_decade_p03,
+            material_type,
+            f"{_est_snr_db:.1f} dB" if _est_snr_db is not None else "unknown",
+            _panns_singing,
+            _era_nr_routing,
+        )
+
         # §4.5b-Instrumental: Rein instrumentales Material (PANNs-Gesang < 0.10) braucht
         # erhöhten g_floor um Obertonstrukturen bei Streichern/Bläsern/Chor (harmonische
         # Obertöne 2–8 kHz) nicht als Rauschen zu supprimieren. Sprach-trainierte Denoiser
@@ -715,12 +777,82 @@ class DenoisePhase(PhaseInterface):
             except Exception as _reg_exc:
                 logger.debug("§0p Passaggio temporal phase_03 (non-blocking): %s", _reg_exc)
         _dfn_applied = False
+        # §4.4 MIIPHER Primary Tier (v9.12.x): vocal, SNR < 10 dB, post-1950.
+        # MIIPHER (W2v-BERT 2.0) delivers highest vocal quality for deep-noise material
+        # (Zhang et al. 2023, Google). Fallback: DFN → Wiener (via MiipherPlugin cascade).
+        # §0p [RELEASE_MUST]: HNR-Blend after MIIPHER when ΔHNR > 3 dB.
+        # §2.46e [RELEASE_MUST]: Hallucination-Guard after MIIPHER (spectral_novelty > 0.15).
+        _miipher_applied = False
+        if _era_nr_routing == "miipher_primary" and not use_lightweight:
+            try:
+                from plugins.miipher_plugin import get_miipher_plugin  # pylint: disable=import-outside-toplevel
+
+                _miipher_plugin = get_miipher_plugin()
+                _miipher_snr = _est_snr_db if _est_snr_db is not None else 0.0
+                if _miipher_plugin.should_activate(noise_snr_db=_miipher_snr, panns_singing=_panns_singing):
+                    _miipher_audio_pre = np.asarray(audio, dtype=np.float32).copy()
+                    _miipher_out = _miipher_plugin.enhance(audio, sr=sample_rate, noise_snr_db=_miipher_snr)
+                    _miipher_out = np.nan_to_num(
+                        np.asarray(_miipher_out, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
+                    )
+                    _miipher_out = np.clip(_miipher_out, -1.0, 1.0)
+                    # §0p HNR-Blend [RELEASE_MUST]
+                    try:
+                        from backend.core.dsp.hnr_guard import (
+                            apply_hnr_blend as _hnr_blend_m,  # pylint: disable=import-outside-toplevel
+                        )
+
+                        _miipher_out, _miipher_hnr = _hnr_blend_m(_miipher_audio_pre, _miipher_out, sample_rate)
+                        if _miipher_hnr.get("over_cleaned"):
+                            logger.debug(
+                                "§0p MIIPHER HNR-Blend: ΔHNR=%.1f dB -> blend applied",
+                                float(_miipher_hnr.get("hnr_delta_db", 0.0)),
+                            )
+                    except Exception as _miipher_hnr_exc:
+                        logger.debug("MIIPHER HNR-Blend (non-blocking): %s", _miipher_hnr_exc)
+                    # §2.46e Hallucination-Guard [RELEASE_MUST]
+                    try:
+                        from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                            check_hallucination as _check_hall_m,
+                        )
+
+                        _miipher_hall = _check_hall_m(_miipher_audio_pre, _miipher_out, sample_rate, mode="restoration")
+                        if getattr(_miipher_hall, "requires_rollback", False):
+                            logger.warning(
+                                "§2.46e MIIPHER: Hallucination-Guard Rollback "
+                                "(spectral_novelty=%.3f > 0.15) — MIIPHER skipped",
+                                float(getattr(_miipher_hall, "spectral_novelty", 0.0)),
+                            )
+                            _miipher_out = _miipher_audio_pre
+                        else:
+                            audio = _miipher_out
+                            _miipher_applied = True
+                            logger.info(
+                                "§4.4 MIIPHER Primary: vocal restoration applied "
+                                "(snr=%.1f dB panns=%.2f decade=%d material=%s)",
+                                _miipher_snr,
+                                _panns_singing,
+                                _era_decade_p03,
+                                material_type,
+                            )
+                    except Exception as _miipher_hall_exc:
+                        # Guard unavailable: accept result (non-blocking, §0j)
+                        logger.debug("MIIPHER Hallucination-Guard (non-blocking): %s", _miipher_hall_exc)
+                        audio = _miipher_out
+                        _miipher_applied = True
+            except Exception as _miipher_exc:
+                logger.debug("MIIPHER Primary nicht verfügbar (non-blocking): %s", _miipher_exc)
+
         _dfn_eligible = (
             _is_vocal_material
             and _panns_singing >= 0.25
             and quality_mode in ("quality", "maximum")
             and not use_lightweight
+            and _era_nr_routing in ("dfn_primary", "dfn_restricted")  # §4.4 era-aware
+            and not _miipher_applied  # skip when MIIPHER already applied
         )
+        # For dfn_restricted (early-electrical shellac): capture pre-DFN audio for 30% wet blend
+        _dfn_audio_pre_restricted = audio.astype(np.float32).copy() if _era_nr_routing == "dfn_restricted" else None
         if _dfn_eligible:
             _plm03_dfn = None
             try:
@@ -813,6 +945,17 @@ class DenoisePhase(PhaseInterface):
                             logger.debug("§2.36 DFN Phonem-Bypass (non-blocking): %s", _dfn_pmask_exc)
                         audio = np.nan_to_num(_dfn_result, nan=0.0, posinf=0.0, neginf=0.0)
                         audio = np.clip(audio, -1.0, 1.0)
+                        # §4.4 dfn_restricted: 30% wet blend for early-electrical era
+                        # Preserves shellac carrier character (H2/H4 harmonics, §0a)
+                        if _era_nr_routing == "dfn_restricted" and _dfn_audio_pre_restricted is not None:
+                            _restr_pre = _dfn_audio_pre_restricted
+                            if _restr_pre.shape == audio.shape:
+                                audio = np.clip(0.70 * _restr_pre + 0.30 * audio, -1.0, 1.0).astype(np.float32)
+                                logger.info(
+                                    "§4.4 DFN-Restricted 30%%%% wet blend: era=%d material=%s",
+                                    _era_decade_p03,
+                                    material_type,
+                                )
                         _dfn_applied = True
                         # §2.35c HNR-Guard: Stimmrauigkeit nach DFN prüfen.
                         # Wenn ΔHNR > 3 dB → Dry-Blend um natürliche Rauigkeit zu erhalten.
@@ -869,6 +1012,8 @@ class DenoisePhase(PhaseInterface):
             and _is_non_digital
             and not use_lightweight
             and not _dfn_applied
+            and not _miipher_applied  # §4.4: MIIPHER already applied
+            and _era_nr_routing != "omlsa_only"  # §4.4: no ML NR for acoustic/digital era
         )
         if _sgmse_eligible:
             _plm03_sgmse = None
