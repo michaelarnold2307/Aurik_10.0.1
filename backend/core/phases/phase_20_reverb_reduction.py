@@ -264,7 +264,7 @@ class ReverbReduction(PhaseInterface):
             ),
         )
 
-    def process(  # type: ignore[override]  # pylint: disable=arguments-renamed
+    def process(  # type: ignore[override]  # pylint: disable=arguments-renamed,redefined-outer-name
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.VINYL, **kwargs
     ) -> PhaseResult:
         """
@@ -1092,7 +1092,7 @@ class ReverbReduction(PhaseInterface):
 
         return audio_out
 
-    def _reduce_reverb_mrsa(self, audio: np.ndarray, sample_rate: int, strength: float, damping: float) -> np.ndarray:
+    def _reduce_reverb_mrsa(self, audio: np.ndarray, sample_rate: int, strength: float, damping: float) -> np.ndarray:  # pylint: disable=redefined-outer-name,unused-argument
         """MRSA 5-zone OMLSA/IMCRA reverb reduction with PGHI phase reconstruction.
 
         Multi-Resolution Spectral Analysis (MRSA): each frequency zone is processed
@@ -1157,7 +1157,7 @@ class ReverbReduction(PhaseInterface):
             _mask_ratio_p20 = _cmask_p20(_src_p20, sample_rate, n_fft=2048, hop_length=512)
             _masking_floor_p20 = np.mean(_mask_ratio_p20, axis=1).astype(np.float32)
             _masking_freqs_p20 = np.linspace(0.0, sample_rate / 2.0, _mask_ratio_p20.shape[0], dtype=np.float32)
-            logger.debug("§2.62 phase_20 Masking-Guard: mean_floor=%.3f", float(np.mean(_masking_floor_p20)))
+            logger.debug("§2.62 phase_20 Masking-Guard: mean_floor=%.3f", float(np.mean(_masking_floor_p20)))  # type: ignore[arg-type]
         except Exception as _msk20_exc:
             logger.debug("§2.62 phase_20 Masking-Guard nicht verfügbar (non-blocking): %s", _msk20_exc)
 
