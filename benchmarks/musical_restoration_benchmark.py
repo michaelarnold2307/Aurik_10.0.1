@@ -936,8 +936,8 @@ class MusicalRestorationBenchmark:
         material_type: str = "unknown",
     ) -> dict[str, float]:
         try:
-            from backend.core.musical_goals.musical_goals_metrics import (
-                get_checker,  # pylint: disable=import-outside-toplevel
+            from backend.core.musical_goals.musical_goals_metrics import (  # pylint: disable=import-outside-toplevel
+                get_checker,
             )
 
             return get_checker().measure_all(audio, sr, reference=reference, material_type=material_type)
