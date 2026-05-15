@@ -46,7 +46,7 @@ from backend.core.multi_pass_strategy import (
     ProcessingVariant,
     VariantStrategy,
 )
-from backend.core.processing_modes import ProcessingMode
+from backend.core.processing_modes import ProcessingMode, get_processing_config
 from backend.core.provenance_audit import ProvenanceAudit
 from backend.core.quality_prediction import QualityAnalyzer, QualityEstimate
 from backend.core.self_learning_optimizer import SelfLearningOptimizer
@@ -172,6 +172,7 @@ class AutonomousRestorationEngine:
         self._chain_model = PhysicalMediumChainModel()
         self._quality_reporter = DefectQualityReporter()
         self._gap_reconstructor = GapReconstructor()
+        self._denker_context: dict = {}
 
         logger.info(
             "AutonomousRestorationEngine initialisiert | Modus: %s | Self-Learning: %s",
@@ -231,7 +232,9 @@ class AutonomousRestorationEngine:
         _audio_clip = audio[:_clip30] if len(audio) > _clip30 else audio
         quality_before_estimate: QualityEstimate = self._quality_analyzer.analyze_quality(_audio_clip, sample_rate)
         logger.debug(
-            f"[ENGINE] Phase 1a fertig ({time.perf_counter() - _t1:.1f}s): level={quality_before_estimate.quality_level.value}",
+            "[ENGINE] Phase 1a fertig (%.1fs): level=%s",
+            time.perf_counter() - _t1,
+            quality_before_estimate.quality_level.value,
         )
         # IAQS-Score für Rollback-Vergleich (0–1 × 100 = 0–100)
         logger.debug("[ENGINE] Phase 1b: IAQS.score_as_float …")
@@ -326,7 +329,10 @@ class AutonomousRestorationEngine:
         else:
             chain_result = self._chain_model.invert_chain(audio, sample_rate, material, all_defects)
         logger.debug(
-            f"[ENGINE] Diff#2 fertig ({time.perf_counter() - _td2:.1f}s): corrections={len(chain_result.corrections_applied)}, Δ={chain_result.spectral_change_db:.2f}dB",
+            "[ENGINE] Diff#2 fertig (%.1fs): corrections=%d, delta=%.2f dB",
+            time.perf_counter() - _td2,
+            len(chain_result.corrections_applied),
+            chain_result.spectral_change_db,
         )
         audio = chain_result.audio  # Ab hier: kettenentzerrtes Audio
         audit.append(
@@ -356,7 +362,10 @@ class AutonomousRestorationEngine:
             material_hint=material.value.split("_")[0].lower(),
         )
         logger.debug(
-            f"[ENGINE] Diff#3 fertig ({time.perf_counter() - _td3:.1f}s): gaps_found={gap_result.gaps_found}, repaired={gap_result.gaps_repaired}",
+            "[ENGINE] Diff#3 fertig (%.1fs): gaps_found=%d, repaired=%d",
+            time.perf_counter() - _td3,
+            gap_result.gaps_found,
+            gap_result.gaps_repaired,
         )
         audio = gap_result.audio  # Ab hier: Lücken-bereinigtes Audio
         audit.append(
@@ -423,7 +432,9 @@ class AutonomousRestorationEngine:
         _top_defect_str = ", ".join(d.defect_type.value for d in causal_ordered[:3]) if causal_ordered else "unbekannt"
         _p(42, f"Multi-Pass-Restaurierung: {len(variants)} Varianten · Defekte: {_top_defect_str} …")
         logger.debug(
-            f"[ENGINE] Phase 5: Starte _multi_pass() mit {len(variants)} Variante(n): {[v.name for v in variants]} …",
+            "[ENGINE] Phase 5: Starte _multi_pass() mit %d Variante(n): %s …",
+            len(variants),
+            [v.name for v in variants],
         )
         best_audio, best_variant_name, pass_scores = self._multi_pass(
             audio=audio,
@@ -615,7 +626,7 @@ class AutonomousRestorationEngine:
     def _build_variants(
         self,
         defect_result: DefectAnalysisResult,
-        goal_profile: MusicalGoalProfile,
+        goal_profile: MusicalGoalProfile,  # pylint: disable=unused-argument
         audio_duration_s: float = 60.0,
     ) -> list[ProcessingVariant]:
         """
@@ -715,8 +726,6 @@ class AutonomousRestorationEngine:
         if defect_type is None or severity < 0.2:
             return None
 
-        from backend.core.processing_modes import get_processing_config
-
         base_config = get_processing_config(base_mode)
 
         config, variant_name = self._phase_mapper.build_specialist_config(
@@ -743,9 +752,9 @@ class AutonomousRestorationEngine:
     def _multi_pass(
         self,
         audio: np.ndarray,
-        sample_rate: int,
+        sample_rate: int,  # pylint: disable=unused-argument
         variants: list[ProcessingVariant],
-        goal_profile: MusicalGoalProfile,
+        goal_profile: MusicalGoalProfile,  # pylint: disable=unused-argument
         progress_callback=None,
     ) -> tuple[np.ndarray, str, dict[str, float]]:
         """
