@@ -773,6 +773,53 @@ class HarmonicRestorationPhase(PhaseInterface):
         except Exception as _tc07_exc:
             logger.debug("Phase 07 TonalReference ceiling (non-blocking): %s", _tc07_exc)
 
+        # §ERA_HARMONIC H2-Target-Steering: blend wenn gemessenes H2/H1-Ratio
+        # vom era-authentischen Soll abweicht (Spec §04, _ERA_HARMONIC_PROFILE).
+        try:
+            from backend.core.tonal_reference_profile import (  # pylint: disable=import-outside-toplevel
+                get_era_harmonic_profile as _get_era_h2,
+            )
+
+            _h2_prof_07 = _get_era_h2(_era_d_07)
+            _h2_target_07 = float(_h2_prof_07.h2_ratio)
+            _h2_actual_07 = self._measure_h2_ratio(restored, sample_rate)
+            _h2_tol_07 = 0.002  # ±0.002 Toleranzband
+            if _h2_actual_07 > _h2_target_07 + _h2_tol_07:
+                # Over-restoration: zu viele Harmonics → Dry-Wet-Blend (§0 Primum non nocere)
+                _h2_excess_07 = (_h2_actual_07 - _h2_target_07) / max(_h2_target_07 + 1e-6, 0.001)
+                _h2_blend_07 = float(np.clip(_h2_excess_07 * 0.5, 0.0, 0.40))
+                restored = np.clip(
+                    (1.0 - _h2_blend_07) * restored + _h2_blend_07 * audio,
+                    -1.0,
+                    1.0,
+                ).astype(np.float32)
+                logger.info(
+                    "§ERA_HARMONIC phase_07: era=%s h2_target=%.4f h2_actual=%.4f excess → blend=%.2f",
+                    _era_d_07,
+                    _h2_target_07,
+                    _h2_actual_07,
+                    _h2_blend_07,
+                )
+            elif _h2_actual_07 < _h2_target_07 - _h2_tol_07 and _h2_actual_07 > 1e-5:
+                # Under-restoration: nur in Studio 2026 leichte Anhebung (§0a)
+                if "studio" in _mode_07:
+                    _h2_deficit_07 = (_h2_target_07 - _h2_actual_07) / max(_h2_target_07 + 1e-6, 0.001)
+                    _h2_boost_07 = float(np.clip(_h2_deficit_07 * 0.15, 0.0, 0.10))
+                    restored = np.clip(
+                        (1.0 + _h2_boost_07) * restored,
+                        -1.0,
+                        1.0,
+                    ).astype(np.float32)
+                    logger.info(
+                        "§ERA_HARMONIC phase_07 Studio: era=%s h2_target=%.4f h2_actual=%.4f deficit → boost=%.2f",
+                        _era_d_07,
+                        _h2_target_07,
+                        _h2_actual_07,
+                        _h2_boost_07,
+                    )
+        except Exception as _h2_exc:
+            logger.debug("§ERA_HARMONIC phase_07 H2-Target (non-blocking): %s", _h2_exc)
+
         restored = restore_layout(restored, _p07_transposed)
         return create_phase_result(
             audio=restored,
@@ -1263,6 +1310,64 @@ class HarmonicRestorationPhase(PhaseInterface):
         thd = rms_harmonics / rms_original * 100.0 if rms_original > 0 else 0.0
 
         return thd
+
+    @staticmethod
+    def _measure_h2_ratio(audio: np.ndarray, sample_rate: int) -> float:
+        """Estimate H2/H1 amplitude ratio via multi-frame FFT averaging.
+
+        Averages over up to 8 non-overlapping 2048-sample frames from the
+        middle 60 % of the signal.  Returns 0.0 on any failure (non-blocking).
+        """
+        try:
+            mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
+            n = len(mono)
+            if n < 4096:
+                return 0.0
+            # Central 60 % of the signal
+            start = int(n * 0.20)
+            end = int(n * 0.80)
+            segment = mono[start:end]
+            frame_size = 2048
+            hop = len(segment) // 8
+            if hop < frame_size:
+                hop = frame_size
+            h1_vals: list[float] = []
+            h2_vals: list[float] = []
+            pos = 0
+            while pos + frame_size <= len(segment):
+                frame = segment[pos : pos + frame_size]
+                window = np.hanning(frame_size)
+                spec = np.abs(np.fft.rfft(frame * window))
+                freqs = np.fft.rfftfreq(frame_size, 1.0 / sample_rate)
+                # Find F0 peak above 80 Hz
+                f0_mask = (freqs >= 80.0) & (freqs <= 1200.0)
+                if not np.any(f0_mask):
+                    pos += hop
+                    continue
+                f0_idx_rel = int(np.argmax(spec[f0_mask]))
+                f0_idx = int(np.where(f0_mask)[0][f0_idx_rel])
+                if f0_idx < 1:
+                    pos += hop
+                    continue
+                # H2 is at approximately twice the F0 index
+                h2_idx = f0_idx * 2
+                if h2_idx >= len(spec):
+                    pos += hop
+                    continue
+                h1_amp = float(spec[f0_idx])
+                # Local max in ±3-bin window around H2 index
+                lo2 = max(0, h2_idx - 3)
+                hi2 = min(len(spec), h2_idx + 4)
+                h2_amp = float(np.max(spec[lo2:hi2]))
+                if h1_amp > 0:
+                    h1_vals.append(h1_amp)
+                    h2_vals.append(h2_amp)
+                pos += hop
+            if not h1_vals:
+                return 0.0
+            return float(np.mean(h2_vals)) / max(float(np.mean(h1_vals)), 1e-10)
+        except Exception:  # pylint: disable=broad-except
+            return 0.0
 
     def supports_material(self, _material_type: str) -> bool:
         """All materials supported."""

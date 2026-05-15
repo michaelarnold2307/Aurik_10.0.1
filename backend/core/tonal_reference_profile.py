@@ -1609,6 +1609,27 @@ def get_tonal_reference_profiler() -> TonalReferenceProfiler:
     return _profiler_instance
 
 
+def get_era_harmonic_profile(era_decade: int | None) -> HarmonicProfile:
+    """Return the nearest HarmonicProfile for the given decade (rounds down).
+
+    Looks up ``_ERA_HARMONIC_PROFILE`` for the largest available key that is
+    <= *era_decade*.  Falls back to the 1970 Transistor-Era entry when
+    *era_decade* is ``None`` or below the earliest available decade.
+
+    Args:
+        era_decade: Four-digit decade integer (e.g. 1940, 1960, 2000) or None.
+
+    Returns:
+        Matching :class:`HarmonicProfile` instance.
+    """
+    if era_decade is None:
+        return _ERA_HARMONIC_PROFILE[1970]
+    d = int(era_decade)
+    available = sorted(_ERA_HARMONIC_PROFILE.keys())
+    key = max((k for k in available if k <= d), default=available[0])
+    return _ERA_HARMONIC_PROFILE[key]
+
+
 __all__ = [
     "TonalCurve",
     "TonalReferenceProfiler",
@@ -1616,4 +1637,5 @@ __all__ = [
     "NoiseTextureProfile",
     "compute_tonal_reference_curve",
     "get_tonal_reference_profiler",
+    "get_era_harmonic_profile",
 ]

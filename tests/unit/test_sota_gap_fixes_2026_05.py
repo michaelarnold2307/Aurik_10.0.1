@@ -965,3 +965,133 @@ class TestRoomAcousticsFingerprinter:
         src = inspect.getsource(UnifiedRestorerV3.restore)
         assert "room_acoustics_fingerprint" in src, "UV3.restore() must inject room_acoustics_fingerprint"
         assert "room_acoustics_fingerprinter" in src, "UV3.restore() must import room_acoustics_fingerprinter"
+
+
+class TestEraHarmonicProfileAndPhase07H2Steering:
+    """Todo 4: get_era_harmonic_profile() + phase_07 H2-Target-Steering."""
+
+    def test_get_era_harmonic_profile_importable(self):
+        """get_era_harmonic_profile must be importable from tonal_reference_profile."""
+        from backend.core.tonal_reference_profile import (
+            HarmonicProfile,
+            get_era_harmonic_profile,
+        )
+
+        assert callable(get_era_harmonic_profile)
+        profile = get_era_harmonic_profile(1940)
+        assert isinstance(profile, HarmonicProfile)
+
+    def test_era_1940_h2_ratio_correct(self):
+        """1940 decade should return the Golden Tube era H2 ratio (0.020)."""
+        from backend.core.tonal_reference_profile import get_era_harmonic_profile
+
+        profile = get_era_harmonic_profile(1940)
+        assert abs(profile.h2_ratio - 0.020) < 1e-6, f"Expected 0.020, got {profile.h2_ratio}"
+        assert profile.era_label == "Golden Tube"
+
+    def test_era_none_returns_fallback_1970(self):
+        """None decade must fall back to 1970 Transistor-Era profile."""
+        from backend.core.tonal_reference_profile import get_era_harmonic_profile
+
+        profile = get_era_harmonic_profile(None)
+        assert abs(profile.h2_ratio - 0.006) < 1e-6, f"Expected 0.006, got {profile.h2_ratio}"
+        assert "Transistor" in profile.era_label
+
+    def test_era_beyond_2000_uses_nearest(self):
+        """Decade 2030 (beyond last entry 2025) must use the 2025 entry."""
+        from backend.core.tonal_reference_profile import get_era_harmonic_profile
+
+        profile = get_era_harmonic_profile(2030)
+        # 2025 is the max available key — Contemporary era
+        assert abs(profile.h2_ratio - 0.0002) < 1e-7
+        assert "Contemporary" in profile.era_label
+
+    def test_era_exact_key_match(self):
+        """Exact decade key must return that entry directly."""
+        from backend.core.tonal_reference_profile import get_era_harmonic_profile
+
+        p1960 = get_era_harmonic_profile(1960)
+        assert abs(p1960.h2_ratio - 0.014) < 1e-6
+
+        p1970 = get_era_harmonic_profile(1970)
+        assert abs(p1970.h2_ratio - 0.006) < 1e-6
+
+    def test_era_between_decades_rounds_down(self):
+        """Decade between entries (e.g. 1955) rounds down to 1950."""
+        from backend.core.tonal_reference_profile import get_era_harmonic_profile
+
+        profile = get_era_harmonic_profile(1955)
+        assert abs(profile.h2_ratio - 0.018) < 1e-6  # 1950 Classic Tube
+
+    def test_get_era_harmonic_profile_in_all_export(self):
+        """get_era_harmonic_profile must appear in __all__ of tonal_reference_profile."""
+        import backend.core.tonal_reference_profile as mod
+
+        assert "get_era_harmonic_profile" in mod.__all__, "get_era_harmonic_profile missing from __all__"
+
+    def test_phase07_source_contains_h2_target_steering(self):
+        """phase_07 process() must contain the ERA_HARMONIC H2-target-steering block."""
+        import inspect
+
+        from backend.core.phases.phase_07_harmonic_restoration import (
+            HarmonicRestorationPhase,
+        )
+
+        src = inspect.getsource(HarmonicRestorationPhase.process)
+        assert "ERA_HARMONIC" in src, "phase_07.process() must contain §ERA_HARMONIC steering"
+        assert "get_era_harmonic_profile" in src, "phase_07 must call get_era_harmonic_profile"
+        assert "_measure_h2_ratio" in src, "phase_07 must call _measure_h2_ratio"
+
+    def test_phase07_measure_h2_ratio_method_exists(self):
+        """_measure_h2_ratio must be a static method of HarmonicRestorationPhase."""
+        from backend.core.phases.phase_07_harmonic_restoration import (
+            HarmonicRestorationPhase,
+        )
+
+        assert hasattr(HarmonicRestorationPhase, "_measure_h2_ratio"), (
+            "_measure_h2_ratio method missing from HarmonicRestorationPhase"
+        )
+        assert callable(HarmonicRestorationPhase._measure_h2_ratio)
+
+    def test_measure_h2_ratio_pure_sine_returns_small(self):
+        """Pure 440 Hz sine without harmonics should yield a very small H2 ratio."""
+        import numpy as np
+
+        from backend.core.phases.phase_07_harmonic_restoration import (
+            HarmonicRestorationPhase,
+        )
+
+        sr = 48000
+        t = np.linspace(0, 5.0, sr * 5)
+        audio = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+        ratio = HarmonicRestorationPhase._measure_h2_ratio(audio, sr)
+        # No harmonic content → should be well below 0.01
+        assert ratio < 0.10, f"Expected small ratio for pure sine, got {ratio:.4f}"
+
+    def test_measure_h2_ratio_with_harmonics_detects_h2(self):
+        """Signal with explicit H2 component must yield a detectable H2 ratio."""
+        import numpy as np
+
+        from backend.core.phases.phase_07_harmonic_restoration import (
+            HarmonicRestorationPhase,
+        )
+
+        sr = 48000
+        t = np.linspace(0, 5.0, sr * 5)
+        # H1 = 440 Hz at amplitude 1.0, H2 = 880 Hz at amplitude 0.03
+        audio = (1.0 * np.sin(2 * np.pi * 440 * t) + 0.03 * np.sin(2 * np.pi * 880 * t)).astype(np.float32)
+        ratio = HarmonicRestorationPhase._measure_h2_ratio(audio, sr)
+        # Should detect H2 around 0.03 ± some tolerance
+        assert ratio > 0.005, f"H2 ratio too low: {ratio:.4f}"
+
+    def test_measure_h2_ratio_short_audio_returns_zero(self):
+        """Audio shorter than 4096 samples must return 0.0 safely."""
+        import numpy as np
+
+        from backend.core.phases.phase_07_harmonic_restoration import (
+            HarmonicRestorationPhase,
+        )
+
+        short = np.zeros(100, dtype=np.float32)
+        ratio = HarmonicRestorationPhase._measure_h2_ratio(short, 48000)
+        assert ratio == 0.0
