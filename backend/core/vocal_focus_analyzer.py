@@ -71,7 +71,7 @@ class VFAResult:
     """True wenn panns_singing ≥ 0.25."""
 
     dominant_register: str = "chest"
-    """Vokalregister: "head", "chest", "fry_whisper", "unknown"."""
+    """Vokalregister: "head", "chest", "fry_whisper", "falsetto", "unknown"."""
 
     energy_bias_db: float = -6.0
     """Register-adaptiver Energy-Bias für NR-Algorithmen (dB, negativ)."""

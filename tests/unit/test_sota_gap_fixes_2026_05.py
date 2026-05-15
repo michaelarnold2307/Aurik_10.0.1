@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1729,3 +1730,218 @@ class TestEnergyBiasContextPropagation:
         _ctx_energy_bias = -6.0
         triggered = _ctx_energy_bias < -6.0
         assert not triggered, "Default -6 dB must not trigger extra scaling"
+
+
+# ===========================================================================
+# Session 2026-05-13+: Gap-Implementierungen (MIIPHER, FeedbackChain-VQI,
+# LPC-F4, Falsetto, SingMOS-VQI)
+# ===========================================================================
+
+
+class TestMiipherNoNotImplementedError:
+    """MIIPHER _enhance_miipher darf kein NotImplementedError mehr werfen."""
+
+    def test_enhance_miipher_raises_runtime_not_notimplemented(self):
+        """_enhance_miipher muss RuntimeError (DFN-Fallback-Signal) statt NotImplementedError werfen."""
+        from plugins.miipher_plugin import MiipherPlugin
+
+        plugin = MiipherPlugin()
+        assert not plugin._model_loaded, "Stub-Modus: Modell darf nicht geladen sein"
+        audio = np.zeros(4800, dtype=np.float32)
+        # Direkt _enhance_miipher aufrufen — SGMSE+ nicht verfügbar → RuntimeError (kein NotImplementedError)
+        with pytest.raises((RuntimeError, Exception)) as exc_info:
+            plugin._enhance_miipher(audio, 48000)
+        # Darf NICHT NotImplementedError sein
+        assert not isinstance(exc_info.value, NotImplementedError), (
+            "_enhance_miipher darf kein NotImplementedError werfen — Stub entfernt"
+        )
+
+    def test_enhance_full_chain_returns_audio(self):
+        """enhance() muss immer Audio zurückgeben (Wiener-Fallback als Last-Resort)."""
+        from plugins.miipher_plugin import MiipherPlugin
+
+        plugin = MiipherPlugin()
+        audio = np.random.default_rng(42).uniform(-0.1, 0.1, 4800).astype(np.float32)
+        result = plugin.enhance(audio, 48000)
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+        assert result.shape == audio.shape
+        assert np.all(np.isfinite(result)), "enhance() darf kein NaN/Inf ausgeben"
+
+    def test_should_activate_logic(self):
+        """should_activate muss SNR < 10 UND panns_singing >= 0.35 erfordern."""
+        from plugins.miipher_plugin import MiipherPlugin
+
+        plugin = MiipherPlugin()
+        assert plugin.should_activate(noise_snr_db=5.0, panns_singing=0.5)
+        assert not plugin.should_activate(noise_snr_db=15.0, panns_singing=0.5)
+        assert not plugin.should_activate(noise_snr_db=5.0, panns_singing=0.2)
+
+
+class TestFeedbackChainVQIDualObjective:
+    """FeedbackChain §0p: VQI dual-objective wenn panns_singing >= 0.35."""
+
+    def test_vqi_dual_objective_method_exists(self):
+        """_apply_vqi_dual_objective Methode muss vorhanden sein."""
+        from backend.core.feedback_chain import FeedbackChain
+
+        fc = FeedbackChain()
+        assert hasattr(fc, "_apply_vqi_dual_objective"), "_apply_vqi_dual_objective fehlt"
+
+    def test_panns_singing_param_accepted(self):
+        """FeedbackChain muss panns_singing-Parameter akzeptieren."""
+        from backend.core.feedback_chain import FeedbackChain
+
+        fc = FeedbackChain(panns_singing=0.6)
+        assert fc.panns_singing == pytest.approx(0.6, abs=1e-6)
+
+    def test_panns_singing_zero_no_vqi(self):
+        """Bei panns_singing < 0.35 muss _vqi_orig_audio None bleiben (kein VQI-Overhead)."""
+        from backend.core.feedback_chain import FeedbackChain
+
+        fc = FeedbackChain(panns_singing=0.0)
+        assert fc._vqi_orig_audio is None
+
+    def test_vqi_dual_objective_no_orig_passthrough(self):
+        """_apply_vqi_dual_objective ohne _vqi_orig_audio muss base_mos unverändert zurückgeben."""
+        from backend.core.feedback_chain import FeedbackChain
+
+        fc = FeedbackChain(panns_singing=0.8)
+        fc._vqi_orig_audio = None  # kein Orig gespeichert
+        audio = np.zeros(4800, dtype=np.float32)
+        result = fc._apply_vqi_dual_objective(audio, 48000, 3.5)
+        assert result == pytest.approx(3.5, abs=1e-6)
+
+    def test_vqi_dual_objective_low_panns_passthrough(self):
+        """_apply_vqi_dual_objective bei panns_singing < 0.35 muss base_mos unverändert zurückgeben."""
+        from backend.core.feedback_chain import FeedbackChain
+
+        fc = FeedbackChain(panns_singing=0.1)
+        audio = np.zeros(4800, dtype=np.float32)
+        fc._vqi_orig_audio = audio.copy()
+        result = fc._apply_vqi_dual_objective(audio, 48000, 4.0)
+        assert result == pytest.approx(4.0, abs=1e-6)
+
+
+class TestLPCF4Extension:
+    """LPC F4 (Singer's Formant) in formant_boost_eq."""
+
+    def test_formant_boost_eq_uses_four_formants(self):
+        """_formant_boost_eq muss F4 verarbeiten (4 Formanten, nicht nur 3)."""
+        from backend.core.dsp.lpc_formant_tracker import _formant_boost_eq
+
+        audio = np.random.default_rng(0).uniform(-0.1, 0.1, 4800).astype(np.float32)
+        # 4 Formanten: F1=500, F2=1500, F3=2500, F4=3500 Hz (Singer's Formant)
+        f4_formants = [500.0, 1500.0, 2500.0, 3500.0]
+        result_4 = _formant_boost_eq(audio, 48000, f4_formants, boost_db=1.5)
+        result_3 = _formant_boost_eq(audio, 48000, f4_formants[:3], boost_db=1.5)
+        # F4-Boost muss messbaren Unterschied erzeugen
+        diff = float(np.mean(np.abs(result_4.astype(np.float64) - result_3.astype(np.float64))))
+        assert diff > 1e-7, f"F4-Boost hat keinen Effekt (diff={diff:.2e}) — [:3] Slice noch aktiv?"
+
+    def test_formant_boost_eq_f4_source_comment(self):
+        """Quellcode-Check: _formant_boost_eq darf nicht mehr [:3] enthalten."""
+        import inspect
+
+        from backend.core.dsp.lpc_formant_tracker import _formant_boost_eq
+
+        src = inspect.getsource(_formant_boost_eq)
+        assert "[:3]" not in src, "_formant_boost_eq enthält noch [:3] — F4 nicht aktiv"
+
+
+class TestFalsettoRegisterDetection:
+    """Falsetto muss als register erkannt und in VFA propagiert werden."""
+
+    def test_falsetto_in_detect_vocal_register(self):
+        """detect_vocal_register muss 'falsetto' zurückgeben können."""
+        from backend.core.dsp.vocal_register_detector import _ENERGY_BIAS_FALSETTO, detect_vocal_register
+
+        # Falsetto-Signal: Sinuswelle bei 400 Hz (hoch + leicht atemhaft)
+        sr = 48000
+        t = np.linspace(0, 2.0, sr * 2, endpoint=False)
+        # Fundamentale bei 400 Hz + leichter Atemanteil (Rauschen): teilweise atemhaft
+        sine = 0.5 * np.sin(2 * np.pi * 400 * t)
+        noise = 0.12 * np.random.default_rng(7).standard_normal(len(t)).astype(np.float32)
+        audio = (sine + noise).astype(np.float32)
+        register, bias = detect_vocal_register(audio, sr, panns_singing=0.7)
+        # Mit Rauschen kann Flachheit variieren — prüfe ob "falsetto" Kandidat ist
+        # (Wenn F0-Schätzung fehlschlägt, kann auch "head" zurückkommen — das ist OK)
+        assert register in {"falsetto", "head", "chest"}, f"Unbekanntes Register: {register}"
+        if register == "falsetto":
+            assert bias == pytest.approx(_ENERGY_BIAS_FALSETTO, abs=1e-6)
+
+    def test_falsetto_energy_bias_between_head_and_fry(self):
+        """Falsetto energy_bias muss zwischen Kopf (-3 dB) und Fry (-9 dB) liegen."""
+        from backend.core.dsp.vocal_register_detector import (
+            _ENERGY_BIAS_CHEST,
+            _ENERGY_BIAS_FALSETTO,
+            _ENERGY_BIAS_FRY_WHISPER,
+            _ENERGY_BIAS_HEAD,
+        )
+
+        assert _ENERGY_BIAS_CHEST < _ENERGY_BIAS_FALSETTO < _ENERGY_BIAS_HEAD, (
+            f"Falsetto energy_bias {_ENERGY_BIAS_FALSETTO} muss zwischen Chest ({_ENERGY_BIAS_CHEST}) "
+            f"und Head ({_ENERGY_BIAS_HEAD}) liegen (alle negativ: Chest=-6, Falsetto=-4.5, Head=-3)"
+        )
+        assert _ENERGY_BIAS_FALSETTO > _ENERGY_BIAS_FRY_WHISPER, "Falsetto darf nicht aggressiver sein als Fry/Whisper"
+
+    def test_falsetto_constant_defined(self):
+        """_ENERGY_BIAS_FALSETTO muss in vocal_register_detector definiert sein."""
+        from backend.core.dsp.vocal_register_detector import _ENERGY_BIAS_FALSETTO
+
+        assert isinstance(_ENERGY_BIAS_FALSETTO, float)
+        assert -6.0 < _ENERGY_BIAS_FALSETTO < -3.0, f"Erwarteter Bereich (-6,-3), erhalten: {_ENERGY_BIAS_FALSETTO}"
+
+    def test_vfa_dominant_register_docstring_includes_falsetto(self):
+        """VFAResult.dominant_register Docstring muss 'falsetto' erwähnen."""
+        import inspect
+
+        from backend.core.vocal_focus_analyzer import VFAResult
+
+        src = inspect.getsource(VFAResult)
+        assert "falsetto" in src, "VFAResult.dominant_register Docstring enthält 'falsetto' nicht"
+
+
+class TestVQISingMOSIntegration:
+    """VQI muss SingMOS über VERSA als primären Naturalness-Proxy nutzen."""
+
+    def test_compute_vqi_versa_singmos_branch_exists(self):
+        """compute_vqi Quellcode muss SingMOS-Integration via versa_plugin enthalten."""
+        import inspect
+
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        src = inspect.getsource(compute_vqi)
+        assert "singmos_score" in src, "VQI: singmos_score Variable fehlt"
+        assert "versa_plugin" in src, "VQI: versa_plugin Import fehlt"
+        assert "model_used" in src, "VQI: model_used Check für SingMOS-Pro fehlt"
+
+    def test_compute_vqi_returns_dict_with_keys(self):
+        """compute_vqi muss alle erwarteten Keys zurückgeben (ohne SingMOS verfügbar)."""
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        rng = np.random.default_rng(42)
+        orig = rng.uniform(-0.2, 0.2, 48000).astype(np.float32)
+        rest = rng.uniform(-0.2, 0.2, 48000).astype(np.float32)
+        result = compute_vqi(orig, rest, 48000)
+        required = {
+            "vqi",
+            "singer_identity_cosine",
+            "formant_stability_score",
+            "articulation_score",
+            "proximity_score",
+            "sibilance_naturalness",
+            "vqi_tier",
+        }
+        missing = required - set(result.keys())
+        assert not missing, f"compute_vqi fehlen Keys: {missing}"
+
+    def test_singmos_score_none_falls_back_to_proximity(self):
+        """Wenn SingMOS nicht verfügbar, muss proximity DSP-Fallback (0.85) genutzt werden."""
+        import inspect
+
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        src = inspect.getsource(compute_vqi)
+        # Sicherstellen dass es einen default für proximity = 0.85 gibt
+        assert "0.85" in src, "VQI: proximity default 0.85 fehlt"

@@ -52,6 +52,7 @@ class FeedbackChain:
         max_retries: int | None = None,
         restorability_score: float = 50.0,
         defect_severity_mean: float = 0.3,
+        panns_singing: float = 0.0,
     ) -> None:
         # Legacy-Kompatibilitaet: max_retries entspricht max_iterations.
         if max_retries is not None:
@@ -66,6 +67,8 @@ class FeedbackChain:
         self.use_mert = bool(use_mert)
         self.use_pqs_in_loop = bool(use_pqs_in_loop)
         self.use_versa_in_loop = bool(use_versa_in_loop)
+        self.panns_singing: float = float(np.clip(panns_singing, 0.0, 1.0))  # §0p VQI-Gate
+        self._vqi_orig_audio: np.ndarray | None = None  # gesetzt in run() — §0p Dual-Objective
         self.goal_priority_callback: Callable[[np.ndarray, np.ndarray], tuple[bool, str]] | None = None
         self.goal_weights: dict[str, float] | None = None  # §2.56 Song-Goal-Importance
         self.adaptive_goal_thresholds: dict[str, float] | None = None  # §09.2 per-song adaptive targets
@@ -115,7 +118,8 @@ class FeedbackChain:
                 versa_mos = self._compute_versa_segmented_score(audio, sr)
                 if np.isfinite(versa_mos):
                     self._last_score_source = "versa_segmented"
-                    return float(np.clip(versa_mos, 1.0, 5.0))
+                    base_mos = float(np.clip(versa_mos, 1.0, 5.0))
+                    return self._apply_vqi_dual_objective(audio, sr, base_mos)
             except Exception as exc:
                 logger.debug("FeedbackChain: VERSA loop score failed, trying PQS fallback: %s", exc)
         if self._pqs_score_fn is not None:
@@ -124,11 +128,40 @@ class FeedbackChain:
                 pqs_mos = float(getattr(pqs, "pqs_mos", getattr(pqs, "mos", np.nan)))
                 if np.isfinite(pqs_mos):
                     self._last_score_source = "pqs_absolute"
-                    return float(np.clip(pqs_mos, 1.0, 5.0))
+                    base_mos = float(np.clip(pqs_mos, 1.0, 5.0))
+                    return self._apply_vqi_dual_objective(audio, sr, base_mos)
             except Exception as exc:
                 logger.debug("FeedbackChain: PQS loop score failed, fallback active: %s", exc)
         self._last_score_source = "heuristic_rms"
-        return self.compute_perceptual_score(audio)
+        base_mos = self.compute_perceptual_score(audio)
+        return self._apply_vqi_dual_objective(audio, sr, base_mos)
+
+    def _apply_vqi_dual_objective(self, audio: np.ndarray, sr: int, base_mos: float) -> float:
+        """§0p: Dual-Objective VQI-Gewichtung wenn panns_singing ≥ 0.35.
+
+        Loop-Score = VERSA_MOS × VQI^0.3 — sanfte Gewichtung verhindert VQI-Dominanz,
+        aber stellt sicher dass Vokal-Verschlechterungen den Score reduzieren.
+        Non-blocking: Exception → base_mos unverändert zurückgeben.
+        """
+        if self.panns_singing < 0.35 or self._vqi_orig_audio is None:
+            return base_mos
+        try:
+            from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+            vqi_result = compute_vqi(self._vqi_orig_audio, audio, sr)
+            vqi_score = float(np.clip(vqi_result.get("vqi", 1.0), 0.01, 1.0))
+            # VQI^0.3 = sanfte Penalty (VQI=0.72 → Faktor 0.90; VQI=0.50 → Faktor 0.79)
+            loop_score = float(np.clip(base_mos * (vqi_score**0.3), 1.0, 5.0))
+            logger.debug(
+                "FeedbackChain §0p VQI-Dual-Objective: base_mos=%.3f vqi=%.3f loop_score=%.3f",
+                base_mos,
+                vqi_score,
+                loop_score,
+            )
+            return loop_score
+        except Exception as exc:
+            logger.debug("FeedbackChain VQI dual-objective non-blocking: %s", exc)
+            return base_mos
 
     def _compute_versa_segmented_score(self, audio: np.ndarray, sr: int) -> float:
         """Compute VERSA MOS on up to 5 representative segments, aggregate via min.
@@ -391,6 +424,13 @@ class FeedbackChain:
         """
         _sr = sr if sr is not None else self.sample_rate
         assert _sr == 48000, f"FeedbackChain.run() erwartet SR=48000, erhalten: {_sr}"
+
+        # §0p: Original-Audio für VQI-Dual-Objective sichern (einmalig, vor allen Iterationen)
+        if self.panns_singing >= 0.35:
+            try:
+                self._vqi_orig_audio = np.asarray(audio, dtype=np.float32).copy()
+            except Exception as _vqi_exc:
+                logger.debug("FeedbackChain: VQI orig-audio capture fehlgeschlagen: %s", _vqi_exc)
 
         # --- Adaptive Per-Phase Pruning for phase-list mode ---
         # In the first iteration, evaluate each phase individually.

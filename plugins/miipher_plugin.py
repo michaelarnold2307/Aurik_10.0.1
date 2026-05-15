@@ -156,13 +156,67 @@ class MiipherPlugin:
         audio: npt.NDArray[np.float32],
         sr: int,
     ) -> npt.NDArray[np.float32]:
-        """
-        MIIPHER ONNX-Inferenz.
+        """MIIPHER ONNX-Inferenz — primär via SGMSE+ (bester verfügbarer W2v-BERT-Ersatz für SNR < 10 dB).
 
-        TODO: Nach Modell-Integration implementieren.
-        W2v-BERT Conditioning benötigt 16kHz Input → Resampling → Inferenz → Upsample.
+        Kaskade: SGMSE+ → HNR-Blend (§0p) → Hallucination-Guard (§2.46e).
+        Fallback auf DFN via raise RuntimeError → Aufrufer fängt und leitet an _enhance_dfn_fallback.
+        Nach Modell-Integration: ONNX-Pfad setzen + W2v-BERT Conditioning einfügen.
         """
-        raise NotImplementedError("MIIPHER ONNX-Inferenz: TODO nach Modell-Integration")
+        try:
+            from plugins.sgmse_plugin import get_sgmse_plugin  # type: ignore[import]
+
+            sgmse = get_sgmse_plugin()
+            if sgmse is None or not getattr(sgmse, "available", False):
+                raise RuntimeError("SGMSE+ nicht verfügbar")
+            raw = sgmse.enhance(audio, sr)
+            enhanced: npt.NDArray[np.float32] = np.clip(
+                np.nan_to_num(np.asarray(raw, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0),
+                -1.0,
+                1.0,
+            )
+            # §0p HNR-Blend Pflicht nach ML-NR auf Gesangsmaterial
+            try:
+                from backend.core.dsp.hnr_guard import apply_hnr_blend  # type: ignore[import]
+
+                blended, hnr_diag = apply_hnr_blend(audio, enhanced, sr)
+                if float(hnr_diag.get("hnr_delta_db", 0.0)) > 3.0:
+                    logger.debug(
+                        "MIIPHER-SGMSE+: HNR-Blend aktiv (Δ=%.1f dB) — klinischen Klang verhindert",
+                        hnr_diag["hnr_delta_db"],
+                    )
+                enhanced = np.clip(
+                    np.nan_to_num(np.asarray(blended, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0),
+                    -1.0,
+                    1.0,
+                )
+            except Exception as hnr_exc:
+                logger.debug("MIIPHER-SGMSE+: HNR-Blend nicht verfügbar (non-blocking): %s", hnr_exc)
+
+            # §2.46e Hallucination-Guard — verhindert halluzinierte Harmonics
+            try:
+                from backend.core.dsp.hallucination_guard import check_hallucination  # type: ignore[import]
+
+                hg_result = check_hallucination(audio, enhanced, sr=sr)
+                if getattr(hg_result, "requires_rollback", False):
+                    logger.info(
+                        "MIIPHER-SGMSE+: Hallucination-Guard Rollback — spectral_novelty=%.3f",
+                        getattr(hg_result, "spectral_novelty", float("nan")),
+                    )
+                    raise RuntimeError("Hallucination-Guard: SGMSE+ Rollback → DFN-Fallback")
+            except ImportError:
+                pass
+            except RuntimeError:
+                raise
+            except Exception as hg_exc:
+                logger.debug("MIIPHER-SGMSE+: Hallucination-Guard Fehler (non-blocking): %s", hg_exc)
+
+            logger.debug("MIIPHER: SGMSE+-Kette erfolgreich (SNR-Restaurierung via Diffusion)")
+            return enhanced
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            logger.debug("MIIPHER: SGMSE+ Fehler: %s — DFN-Fallback", exc)
+            raise RuntimeError(f"SGMSE+ für MIIPHER-Ersatz nicht verfügbar: {exc}") from exc
 
     def _enhance_dfn_fallback(
         self,

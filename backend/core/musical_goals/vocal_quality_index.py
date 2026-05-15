@@ -380,15 +380,38 @@ def compute_vqi(
     # Komponente 3: Artikulation
     articulation = _compute_articulation_score(orig_m, rest_m, sr)
 
-    # Komponente 4: Vocal Proximity (aus §2.35b)
-    proximity = 0.85  # default
+    # §SOTA-Matrix: SingMOS als primärer Naturalness-Proxy für Gesangsmaterial (§0p + copilot-instructions)
+    # SingMOS Pro ist über versa_plugin verfügbar (VersaPlugin.score → model_used="singmos_pro").
+    # Normiert auf [0,1]: SingMOS MOS ∈ [1,5] → (mos - 1) / 4.
+    singmos_score: float | None = None
     try:
-        from backend.core.musical_goals.ki_hearing_model import compute_vocal_proximity_score  # pylint: disable=import-outside-toplevel  # noqa: I001
+        from plugins.versa_plugin import get_versa_plugin  # type: ignore[import]
 
-        prox_result = compute_vocal_proximity_score(audio_orig, audio_restored, sr, vocal_segments)
-        proximity = float(prox_result.get("proximity_score", 0.85))
-    except Exception as exc:
-        logger.debug("vocal_proximity import failed: %s", exc)
+        _versa = get_versa_plugin()
+        if _versa is not None:
+            _vm_result = _versa.score(audio_restored, sr)
+            if _vm_result is not None:
+                _mos = float(getattr(_vm_result, "mos", float("nan")))
+                _model = str(getattr(_vm_result, "model_used", ""))
+                if np.isfinite(_mos) and 1.0 <= _mos <= 5.0 and "singmos" in _model:
+                    singmos_score = float(np.clip((_mos - 1.0) / 4.0, 0.0, 1.0))
+                    logger.debug("VQI: SingMOS Pro MOS=%.3f → normiert=%.3f", _mos, singmos_score)
+    except Exception as _sm_exc:
+        logger.debug("VQI: SingMOS (VERSA) nicht verfügbar (non-blocking): %s", _sm_exc)
+
+    # Komponente 4: Vocal Proximity (aus §2.35b) — oder SingMOS als Ersatz
+    proximity = 0.85  # default
+    if singmos_score is not None:
+        proximity = singmos_score  # SingMOS primär (§SOTA-Matrix Mai 2026)
+        logger.debug("VQI: SingMOS ersetzt Proximity-Komponente (primärer Naturalness-Proxy)")
+    else:
+        try:
+            from backend.core.musical_goals.ki_hearing_model import compute_vocal_proximity_score  # pylint: disable=import-outside-toplevel  # noqa: I001
+
+            prox_result = compute_vocal_proximity_score(audio_orig, audio_restored, sr, vocal_segments)
+            proximity = float(prox_result.get("proximity_score", 0.85))
+        except Exception as exc:
+            logger.debug("vocal_proximity import failed: %s", exc)
 
     # Komponente 5: Sibilance
     sibilance = _compute_sibilance_naturalness(orig_m, rest_m, sr)

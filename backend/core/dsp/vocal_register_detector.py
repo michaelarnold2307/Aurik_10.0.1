@@ -28,14 +28,18 @@ logger = logging.getLogger(__name__)
 # Vokalregister-Schwellen für F0-basierte Klassifikation
 # Kopfstimme: F0 > 300 Hz (Sopran/Tenor-Kopfregister); Fry: F0 < 80 Hz oder stark inharmonisch
 _HEAD_VOICE_F0_HZ = 300.0
+_FALSETTO_F0_HZ = 350.0  # Falsetto: F0 > 350 Hz + teilweise atemhaft (§0p)
 _FRY_F0_HZ = 80.0
 _FRY_FLATNESS_THRESHOLD = 0.60  # hohe spektrale Flachheit = wenig harmonische Struktur
+_FALSETTO_FLATNESS_MIN = 0.30  # Falsetto: leicht atemhafte Textur, F1-Absenkung
+_FALSETTO_FLATNESS_MAX = 0.72  # Grenze zu Flüstern
 _WHISPER_FLATNESS_THRESHOLD = 0.75  # sehr flach = Flüstern
 
 # Energy-Bias-Werte pro Register (dB, negativ = Harmonik-Schutz)
 _ENERGY_BIAS_HEAD = -3.0
 _ENERGY_BIAS_CHEST = -6.0
 _ENERGY_BIAS_FRY_WHISPER = -9.0
+_ENERGY_BIAS_FALSETTO = -4.5  # Falsetto: zwischen Kopf (-3) und Fry (-9)
 
 
 def _spectral_flatness(mono: np.ndarray, sr: int) -> float:
@@ -103,8 +107,8 @@ def detect_vocal_register(
         panns_singing: PANNs-Gesangskonfidenz [0,1] — bei < 0.25 wird Fallback genutzt
 
     Returns:
-        (register, energy_bias_db) — register ∈ {"head", "chest", "fry_whisper", "unknown"}
-        energy_bias_db ∈ {-3.0, -6.0, -9.0}
+        (register, energy_bias_db) — register ∈ {"head", "chest", "fry_whisper", "falsetto", "unknown"}
+        energy_bias_db ∈ {-3.0, -4.5, -6.0, -9.0}
     """
     # Mono extrahieren
     mono: np.ndarray
@@ -143,6 +147,16 @@ def detect_vocal_register(
             _ENERGY_BIAS_FRY_WHISPER,
         )
         return "fry_whisper", _ENERGY_BIAS_FRY_WHISPER
+
+    if f0_med >= _FALSETTO_F0_HZ and _FALSETTO_FLATNESS_MIN <= flatness <= _FALSETTO_FLATNESS_MAX:
+        # Falsetto: hohe F0 + teilweise atemhaft (F1-Absenkung, §0p)
+        logger.debug(
+            "§2.35c VocalRegister: f0_median=%.1f Hz + flatness=%.3f → Falsett (energy_bias=%.1f dB)",
+            f0_med,
+            flatness,
+            _ENERGY_BIAS_FALSETTO,
+        )
+        return "falsetto", _ENERGY_BIAS_FALSETTO
 
     if f0_med >= _HEAD_VOICE_F0_HZ:
         logger.debug(
@@ -311,6 +325,9 @@ def detect_vocal_register_temporal(
         if f0_med < _FRY_F0_HZ:
             registers.append("fry_whisper")
             biases.append(_ENERGY_BIAS_FRY_WHISPER)
+        elif f0_med >= _FALSETTO_F0_HZ and _FALSETTO_FLATNESS_MIN <= flatness <= _FALSETTO_FLATNESS_MAX:
+            registers.append("falsetto")
+            biases.append(_ENERGY_BIAS_FALSETTO)
         elif f0_med >= _HEAD_VOICE_F0_HZ:
             registers.append("head")
             biases.append(_ENERGY_BIAS_HEAD)

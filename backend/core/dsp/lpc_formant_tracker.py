@@ -105,7 +105,7 @@ def _formant_boost_eq(
         return audio
 
     out = audio.copy().astype(np.float64)
-    for f_hz in formants_hz[:3]:  # Nur F1, F2, F3
+    for f_hz in formants_hz[:4]:  # F1–F4 (inkl. Singer's Formant 3–4 kHz, §0p)
         if f_hz <= 0 or f_hz >= sr / 2.0:
             continue
         # Q-Wert: breit genug für Formant-Envelope, eng genug um Nachbar nicht zu berühren
