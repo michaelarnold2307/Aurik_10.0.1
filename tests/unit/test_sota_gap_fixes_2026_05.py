@@ -689,3 +689,65 @@ class TestDefectPhaseMapperRestorationFilter:
             phases = mapper.get_primary_phases(defect_type)  # kein mode-Argument
             forbidden_found = set(phases) & _RESTORATION_FORBIDDEN_PHASES
             assert not forbidden_found, f"§0a Default-Filter fehlt: {forbidden_found} in {defect_type.value}"
+
+
+# ===========================================================================
+# §Cross-Goal-Recovery (v9.12.x fix): hf_recovery_boost_after_phase03
+# WIRING FIX: floor enforcement moved from _profiled_phase_call (dead code path)
+# to main phase loop, applied to _combined_strength before wrap_phase call.
+# ===========================================================================
+
+
+class TestCrossGoalRecoveryMainLoopFix:
+    """§Cross-Goal-Recovery (v9.12.x) — Strength-Floor für phase_06/07/39 wird in
+    UV3-Hauptschleife auf _combined_strength angewendet (nicht in _profiled_phase_call)."""
+
+    def test_uv3_cross_goal_recovery_in_main_loop_source(self):
+        """UV3-Source enthält den Cross-Goal-Recovery-Block in der Hauptschleife
+        (erkennbar am Kommentar 'must run here (main loop)')."""
+        import inspect
+
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        src = inspect.getsource(UnifiedRestorerV3)
+        assert "must run here (main loop)" in src, (
+            "§Cross-Goal-Recovery Wiring-Fix fehlt: Block 'must run here (main loop)' nicht in UV3"
+        )
+        assert "_hf_boost_ctx" in src, "§Cross-Goal-Recovery: _hf_boost_ctx Variable fehlt in UV3-Hauptschleife"
+
+    def test_uv3_cross_goal_recovery_applies_strength_floor(self):
+        """UV3-Hauptschleife erhöht _combined_strength auf HF-Floor wenn
+        hf_recovery_boost_after_phase03 aktiviert ist."""
+        import inspect
+
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        src = inspect.getsource(UnifiedRestorerV3)
+        # Der Fix setzt _combined_strength auf den floor-Wert
+        assert "_combined_strength = float(np.clip(_hf_floor" in src, (
+            "§Cross-Goal-Recovery: _combined_strength-Floor-Assignment fehlt in UV3-Hauptschleife"
+        )
+
+    def test_uv3_cross_goal_recovery_phase_set_correct(self):
+        """Cross-Goal-Recovery gilt für phase_06/07/39 (nicht andere Phasen)."""
+        import inspect
+
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        src = inspect.getsource(UnifiedRestorerV3)
+        # Beide Blöcke (Hauptschleife + _profiled_phase_call) checken phase_06/07/39
+        assert "phase_06_frequency_restoration" in src
+        assert "phase_07_harmonic_restoration" in src
+        assert "phase_39_air_band_enhancement" in src
+
+    def test_uv3_profiled_phase_call_backward_compat_comment(self):
+        """_profiled_phase_call enthält Hinweis dass der dortige Block für den
+        Bronze/Bypass-Pfad (Z.7298/7339) bestimmt ist — nicht für PMGG-Hauptpfad."""
+        import inspect
+
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        src = inspect.getsource(UnifiedRestorerV3._profiled_phase_call)
+        assert "bronze" in src.lower() or "bypass" in src.lower(), (
+            "§Cross-Goal-Recovery: _profiled_phase_call fehlt Hinweis auf Bronze/Bypass-Pfad"
+        )

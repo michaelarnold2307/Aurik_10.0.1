@@ -17626,9 +17626,10 @@ class UnifiedRestorerV3:
                         _s_stable,
                     )
 
-        # §Cross-Goal-Recovery (v9.12.3): if phase_03_denoise ended in PMGG best_effort,
-        # restore HF-recovery authority for the immediate additive chain so phase_06/07/39
-        # cannot stay under-powered and collapse brillanz/transparenz at final goal gate.
+        # §Cross-Goal-Recovery (v9.12.3): HF-floor for phase_06/07/39 after phase_03 best_effort.
+        # NOTE (v9.12.x): The authoritative fix is in the main loop (_combined_strength before
+        # wrap_phase). This block remains active for the bronze/bypass path (Z.7298/7339) which
+        # calls _profiled_phase_call directly — it is NOT reached through _pmgg_gate.wrap_phase.
         if (
             (not self.is_studio_mode())
             and (not _strength_explicit)
@@ -20961,6 +20962,74 @@ class UnifiedRestorerV3:
                                         _mat_strength,
                                     )
                                     _combined_strength = float(np.clip(_mandatory_floor, 0.05, 1.0))
+
+                            # §Cross-Goal-Recovery (v9.12.3 → v9.12.x fix): HF-floor enforcement
+                            # for phase_06/07/39 when phase_03 ended in PMGG best_effort.
+                            # CRITICAL: must run here (main loop), NOT in _profiled_phase_call,
+                            # because _pmgg_gate.wrap_phase uses _combined_strength as
+                            # initial_strength and PMGG._run_phase overwrites kwargs["strength"]
+                            # with its own retry-strength — so _profiled_phase_call floor is
+                            # unreachable for PMGG-gated phases (dead code path confirmed).
+                            if (not self.is_studio_mode()) and phase_id in {
+                                "phase_06_frequency_restoration",
+                                "phase_07_harmonic_restoration",
+                                "phase_39_air_band_enhancement",
+                            }:
+                                _hf_boost_ctx = getattr(self, "_restoration_context", {}).get(
+                                    "hf_recovery_boost_after_phase03"
+                                )
+                                if isinstance(_hf_boost_ctx, dict) and bool(_hf_boost_ctx.get("enabled", False)):
+                                    _mat_key_hf = str(
+                                        getattr(material_type, "value", material_type) or "unknown"
+                                    ).lower()
+                                    _hf_fallback_floor = {
+                                        "phase_06_frequency_restoration": 0.52,
+                                        "phase_07_harmonic_restoration": 0.24,
+                                        "phase_39_air_band_enhancement": 0.14,
+                                    }
+                                    _hf_analog_floor: dict[str, dict[str, float]] = {
+                                        "phase_06_frequency_restoration": {
+                                            "vinyl": 0.56,
+                                            "tape": 0.58,
+                                            "reel_tape": 0.58,
+                                            "shellac": 0.50,
+                                            "wax_cylinder": 0.46,
+                                            "wire_recording": 0.46,
+                                        },
+                                        "phase_07_harmonic_restoration": {
+                                            "vinyl": 0.28,
+                                            "tape": 0.30,
+                                            "reel_tape": 0.30,
+                                            "shellac": 0.22,
+                                            "wax_cylinder": 0.18,
+                                            "wire_recording": 0.18,
+                                        },
+                                        "phase_39_air_band_enhancement": {
+                                            "vinyl": 0.16,
+                                            "tape": 0.18,
+                                            "reel_tape": 0.18,
+                                            "shellac": 0.12,
+                                            "wax_cylinder": 0.10,
+                                            "wire_recording": 0.10,
+                                        },
+                                    }
+                                    _hf_floor = float(
+                                        _hf_analog_floor.get(phase_id, {}).get(
+                                            _mat_key_hf,
+                                            _hf_fallback_floor.get(phase_id, 0.0),
+                                        )
+                                    )
+                                    if _hf_floor > _combined_strength:
+                                        logger.info(
+                                            "§Cross-Goal-Recovery %s: phase_03 best_effort (%s)"
+                                            " -> initial_strength floor %.2f (was %.2f, mat=%s)",
+                                            phase_id,
+                                            str(_hf_boost_ctx.get("source_action", "best_effort")),
+                                            _hf_floor,
+                                            _combined_strength,
+                                            _mat_key_hf,
+                                        )
+                                        _combined_strength = float(np.clip(_hf_floor, 0.05, 1.0))
 
                             _pmgg_scores_before_phase = (
                                 dict(_pmgg_scores_curr) if isinstance(_pmgg_scores_curr, dict) else {}
