@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Phase 29: Tape Hiss Reduction v3.0 - Über-SOTA OMLSA/IMCRA
+Phase 29: Tape Hiss Reduction v3.1 - Über-SOTA OMLSA/IMCRA + MMSE-LSA
 Adaptive HF-Rauschunterdrückung für Tape-Aufnahmen via spektraler OMLSA/IMCRA-Verarbeitung.
 
-Algorithmus (v3.0):
+Algorithmus (v3.1):
 1. STFT (nperseg=2048, 75% Overlap) des gesamten Signals
 2. IMCRA-Rauschschätzung (Cohen & Berdugo 2002):
    - Bias-korrigiertes gleitendes Minimum im HF-Bereich
    - b_min=1.66, alpha_n=0.85, Fenster ~1.5s
-3. OMLSA-Gain (Cohen 2003):
-   - G(t,f) = G_floor^(1-p) * (xi/(1+xi))^p
+3. MMSE-LSA-Gain (Ephraim-Malah 1985, §DSP-Instructions):
+   - G_H1(t,f) = xi/(1+xi)  [Wiener-Estimate]
+   - G_mmse_lsa(t,f) = G_H1 * exp(0.5 * E1(nu))  [MMSE-LSA — verhindert Musical Noise]
+   - G(t,f) = G_floor^(1-p) * G_mmse_lsa^p  [OMLSA-Wrapper für Speech-Presence]
    - HF-selektiv: Bins < hf_low erhalten G=1.0 (unangetastet)
-   - Bins >= hf_low: OMLSA-Gain mit materialadaptivem G_floor
+   - Bins >= hf_low: MMSE-LSA-Gain mit materialadaptivem G_floor
 4. Cappé-Gain-Glättung (1994): temporal geglättet
 5. ISTFT + NaN-Schutz + clip[-1, 1]
 6. ML-Hybrid: DeepFilterNet v3 II für Residual-Hiss >2kHz (optional)
@@ -36,6 +38,27 @@ import numpy as np
 from scipy import signal
 from scipy.ndimage import minimum_filter1d as _min_filter1d_p29  # vectorised sliding-min
 from scipy.signal import lfilter as _lfilter_p29  # vectorised IIR smoothing (Cappé 1994)
+
+# §DSP-Instructions: MMSE-LSA Gain (Ephraim-Malah 1985) — E1 = exponential integral
+try:
+    from scipy.special import exp1 as _scipy_exp1_p29
+
+    def _exp1_p29_gain(nu: np.ndarray) -> np.ndarray:
+        """MMSE-LSA gain factor exp(0.5 * E1(ν)) per Ephraim-Malah (1985).
+
+        Reduces Musical Noise by preventing over-suppression of low-SNR bins:
+        - For ν → 0  (low SNR):  E1(ν) → large → gain > Wiener (less suppression)
+        - For ν → ∞  (high SNR): E1(ν) → 0    → gain ≈ Wiener
+        All gains are subsequently clamped to [G_floor, 1.0].
+        """
+        return np.exp(np.clip(0.5 * _scipy_exp1_p29(np.maximum(nu, 1e-10)), 0.0, 5.0))
+
+except ImportError:  # pragma: no cover
+
+    def _exp1_p29_gain(nu: np.ndarray) -> np.ndarray:  # type: ignore[misc]
+        """Fallback: identity = degenerate Wiener gain (scipy.special unavailable)."""
+        return np.ones_like(nu)
+
 
 from backend.core.audio_utils import (
     apply_musical_gain_envelope,
@@ -1151,14 +1174,18 @@ class TapeHissReductionPhase(PhaseInterface):
                 S_min_z = _min_filter1d_p29(power_z, size=M_z, axis=1, mode="reflect")
                 noise_sq_z = np.maximum(b_min * S_min_z, eps)
 
-                # Vectorised OMLSA gain
+                # Vectorised OMLSA gain + MMSE-LSA (Ephraim-Malah 1985, §DSP-Instructions)
                 gamma_z = power_z / noise_sq_z
                 xi_z = np.maximum(gamma_z - 1.0, 0.0)
                 nu_z = np.clip(xi_z * gamma_z / (xi_z + 1.0 + eps), 0.0, 500.0)
                 lam_z = np.exp(np.clip(-xi_z + nu_z, -50.0, 50.0))
                 p_z = 1.0 / (1.0 + q / ((1.0 - q) * lam_z + eps))
                 G_H1_z = xi_z / (xi_z + 1.0 + eps)
-                log_G_z = (1.0 - p_z) * np.log(G_floor + eps) + p_z * np.log(np.maximum(G_H1_z, eps))
+                # MMSE-LSA: G = G_H1 * exp(0.5 * E1(ν))  where ν = G_H1 * γ = nu_z
+                # Prevents Musical Noise: low-SNR bins get less suppression than Wiener.
+                G_mmse_lsa_z = G_H1_z * _exp1_p29_gain(nu_z)
+                G_mmse_lsa_z = np.clip(np.nan_to_num(G_mmse_lsa_z, nan=G_floor), G_floor, 1.0)
+                log_G_z = (1.0 - p_z) * np.log(G_floor + eps) + p_z * np.log(np.maximum(G_mmse_lsa_z, eps))
                 G_z = np.exp(np.clip(log_G_z, np.log(G_floor + eps), 0.0))
                 G_z = np.clip(np.nan_to_num(G_z, nan=G_floor), G_floor, 1.0)
 

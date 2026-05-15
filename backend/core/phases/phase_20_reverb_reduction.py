@@ -113,6 +113,21 @@ except ImportError:
 from scipy.ndimage import minimum_filter1d as _min_filter1d_p20  # vectorised sliding-min
 from scipy.signal import lfilter as _lfilter_p20  # vectorised IIR smoothing
 
+# §DSP-Instructions: MMSE-LSA Gain (Ephraim-Malah 1985) — E1 = exponential integral
+try:
+    from scipy.special import exp1 as _scipy_exp1_p20
+
+    def _exp1_p20_gain(nu: np.ndarray) -> np.ndarray:
+        """MMSE-LSA gain factor exp(0.5 * E1(ν)) per Ephraim-Malah (1985)."""
+        return np.exp(np.clip(0.5 * _scipy_exp1_p20(np.maximum(nu, 1e-10)), 0.0, 5.0))
+
+except ImportError:  # pragma: no cover
+
+    def _exp1_p20_gain(nu: np.ndarray) -> np.ndarray:  # type: ignore[misc]
+        """Fallback: identity = degenerate Wiener gain (scipy.special unavailable)."""
+        return np.ones_like(nu)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -1125,7 +1140,10 @@ class ReverbReduction(PhaseInterface):
                     Lambda_z / (1.0 + Lambda_z + 1e-12) / (1.0 + q / ((1.0 - q) * Lambda_z + 1e-12)), 0.0, 1.0
                 )
                 G_wiener_z = xi_z / (xi_z + 1.0 + 1e-12)
-                log_G_z = (1.0 - p_H1_z) * np.log(G_floor + 1e-10) + p_H1_z * np.log(np.maximum(G_wiener_z, 1e-10))
+                # MMSE-LSA (Ephraim-Malah 1985, §DSP-Instructions): G = G_H1 * exp(0.5 * E1(ν))
+                G_mmse_lsa_z = G_wiener_z * _exp1_p20_gain(nu_z)
+                G_mmse_lsa_z = np.clip(np.nan_to_num(G_mmse_lsa_z, nan=G_floor), G_floor, 1.0)
+                log_G_z = (1.0 - p_H1_z) * np.log(G_floor + 1e-10) + p_H1_z * np.log(np.maximum(G_mmse_lsa_z, 1e-10))
                 G_z = np.exp(np.clip(log_G_z, np.log(G_floor + 1e-10), 0.0))
                 G_z = np.clip(G_z, G_floor, 1.0)
 
