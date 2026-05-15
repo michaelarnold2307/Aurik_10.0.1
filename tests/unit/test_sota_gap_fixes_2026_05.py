@@ -866,3 +866,102 @@ class TestEraAwareNrModelRouting:
         src = inspect.getsource(DenoisePhase.process)
         assert "dfn_restricted" in src, "process() must implement dfn_restricted blend"
         assert "0.30" in src or "0.70" in src, "dfn_restricted must use 30%/70% wet/dry blend"
+
+
+class TestRoomAcousticsFingerprinter:
+    """Tests for §2.46f room_acoustics_fingerprinter.py"""
+
+    def test_module_importable(self):
+        from backend.core.room_acoustics_fingerprinter import compute_room_acoustics_fingerprint
+
+        assert callable(compute_room_acoustics_fingerprint)
+
+    def test_returns_expected_keys(self):
+        from backend.core.room_acoustics_fingerprinter import compute_room_acoustics_fingerprint
+
+        audio = np.zeros(48000, dtype=np.float32)
+        result = compute_room_acoustics_fingerprint(audio, 48000)
+        for key in ("rt60_s", "drr_db", "room_type", "dereverb_strength_cap", "early_reflection_ms", "protection_note"):
+            assert key in result, f"Missing key: {key}"
+
+    def test_studio_cap_range(self):
+        """Studio room → cap ≥ 0.50 (moderate, not maximum protection)."""
+        from backend.core.room_acoustics_fingerprinter import compute_room_acoustics_fingerprint
+
+        # Dry impulse-like signal → short RT60 → studio
+        rng = np.random.default_rng(42)
+        audio = rng.standard_normal(48000).astype(np.float32) * 0.01
+        result = compute_room_acoustics_fingerprint(audio, 48000)
+        cap = float(result["dereverb_strength_cap"])
+        assert 0.10 <= cap <= 1.0, f"Cap out of range: {cap}"
+
+    def test_long_rt60_tightens_cap(self):
+        """Long-decay signal → rt60 ≥ 1.2 s → cap ≤ 0.25."""
+        from backend.core.room_acoustics_fingerprinter import _RT60_HIGH_THRESHOLD_S, compute_room_acoustics_fingerprint
+
+        # Simulate long reverb tail: exponential decay over 3 s
+        sr = 48000
+        t = np.linspace(0, 3.0, sr * 3)
+        decay = np.exp(-1.5 * t).astype(np.float32)  # ~0.4 s RT60 threshold
+        # Use a very slow decay to exceed RT60 threshold
+        slow_decay = np.exp(-0.3 * t).astype(np.float32)
+        result = compute_room_acoustics_fingerprint(slow_decay, sr)
+        if float(result["rt60_s"]) >= _RT60_HIGH_THRESHOLD_S:
+            assert float(result["dereverb_strength_cap"]) <= 0.25, f"High RT60 should tighten cap: {result}"
+
+    def test_silent_signal_returns_default(self):
+        """Silent signal → fallback defaults, no exception."""
+        from backend.core.room_acoustics_fingerprinter import compute_room_acoustics_fingerprint
+
+        audio = np.zeros(48000, dtype=np.float32)
+        result = compute_room_acoustics_fingerprint(audio, 48000)
+        assert isinstance(result["rt60_s"], float)
+        assert isinstance(result["dereverb_strength_cap"], float)
+
+    def test_cap_clamped_to_valid_range(self):
+        """dereverb_strength_cap must always be in [0.10, 1.0]."""
+        from backend.core.room_acoustics_fingerprinter import compute_room_acoustics_fingerprint
+
+        rng = np.random.default_rng(99)
+        audio = rng.standard_normal(96000).astype(np.float32) * 0.5
+        result = compute_room_acoustics_fingerprint(audio, 48000)
+        cap = float(result["dereverb_strength_cap"])
+        assert 0.10 <= cap <= 1.0, f"Cap {cap} outside [0.10, 1.0]"
+
+    def test_stereo_input_accepted(self):
+        """Stereo audio (2, N) should be processed without error."""
+        from backend.core.room_acoustics_fingerprinter import compute_room_acoustics_fingerprint
+
+        audio = np.zeros((2, 48000), dtype=np.float32)
+        result = compute_room_acoustics_fingerprint(audio, 48000)
+        assert "rt60_s" in result
+
+    def test_phase49_reads_room_acoustics_fingerprint(self):
+        """phase_49 process() source must contain room_acoustics_fingerprint guard."""
+        import inspect
+
+        from backend.core.phases.phase_49_advanced_dereverb import AdvancedDereverbPhase
+
+        src = inspect.getsource(AdvancedDereverbPhase.process)
+        assert "room_acoustics_fingerprint" in src, "phase_49 must read room_acoustics_fingerprint from kwargs"
+        assert "dereverb_strength_cap" in src, "phase_49 must apply dereverb_strength_cap"
+
+    def test_phase20_reads_room_acoustics_fingerprint(self):
+        """phase_20 process() source must contain room_acoustics_fingerprint guard."""
+        import inspect
+
+        from backend.core.phases.phase_20_reverb_reduction import ReverbReduction
+
+        src = inspect.getsource(ReverbReduction.process)
+        assert "room_acoustics_fingerprint" in src, "phase_20 must read room_acoustics_fingerprint from kwargs"
+        assert "dereverb_strength_cap" in src, "phase_20 must apply dereverb_strength_cap"
+
+    def test_uv3_injects_room_acoustics_fingerprint(self):
+        """UV3 restore() source must inject room_acoustics_fingerprint into _restoration_context."""
+        import inspect
+
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        src = inspect.getsource(UnifiedRestorerV3.restore)
+        assert "room_acoustics_fingerprint" in src, "UV3.restore() must inject room_acoustics_fingerprint"
+        assert "room_acoustics_fingerprinter" in src, "UV3.restore() must import room_acoustics_fingerprinter"

@@ -5356,6 +5356,24 @@ class UnifiedRestorerV3:
             self._restoration_context.setdefault("passaggio_zones", [])
             self._restoration_context.setdefault("vibrato_zones", [])
 
+        # §2.46f [RELEASE_MUST] Room-Acoustics-Fingerprint — nach VFA, vor Phasen.
+        # Schätzt RT60, DRR und Schutz-Cap für phase_20 + phase_49.
+        # Non-blocking: Fehler blockieren nie die Pipeline.
+        try:
+            from backend.core.room_acoustics_fingerprinter import (  # pylint: disable=import-outside-toplevel
+                compute_room_acoustics_fingerprint as _comp_raf,
+            )
+
+            _raf = _comp_raf(
+                audio,
+                sample_rate,
+                era_decade=self._restoration_context.get("decade"),
+            )
+            self._restoration_context["room_acoustics_fingerprint"] = _raf
+        except Exception as _raf_exc:
+            logger.debug("§2.46f RoomAcousticsFingerprinter non-blocking: %s", _raf_exc)
+            self._restoration_context.setdefault("room_acoustics_fingerprint", {})
+
         logger.info(
             "📋 RestorationContext: decade=%s genre=%s bpm=%.0f subgenre=%s transfer_chain=%s",
             self._restoration_context.get("decade"),

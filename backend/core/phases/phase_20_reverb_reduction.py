@@ -369,6 +369,20 @@ class ReverbReduction(PhaseInterface):
             strength = min(strength, 0.30)
             logger.debug("Phase 20: decade=%d → reverb strength capped to %.2f", decade, strength)
 
+        # §2.46f Room-Acoustics-Fingerprint guard — authentic room character protection.
+        # Injected by UV3 from room_acoustics_fingerprinter into _restoration_context.
+        _raf_20 = kwargs.get("room_acoustics_fingerprint") or {}
+        _raf_cap_20 = float(_raf_20.get("dereverb_strength_cap", 1.0))
+        if _raf_cap_20 < 1.0 and strength > _raf_cap_20:
+            logger.debug(
+                "Phase 20 §2.46f RoomAcoustics guard: rt60=%.2fs room=%s → strength %.2f → %.2f",
+                float(_raf_20.get("rt60_s", 0.0)),
+                _raf_20.get("room_type", "?"),
+                strength,
+                _raf_cap_20,
+            )
+            strength = _raf_cap_20
+
         # ML-Hybrid Mode Routing (v3.0)
         quality_mode = kwargs.get("quality_mode", "quality")
 

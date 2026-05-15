@@ -371,6 +371,20 @@ class AdvancedDereverbPhase(PhaseInterface):
                 )
                 strength = _vocal_cap_49
 
+        # §2.46f Room-Acoustics-Fingerprint guard — authentic room character protection.
+        # Injected by UV3 from room_acoustics_fingerprinter into _restoration_context.
+        _raf_49 = kwargs.get("room_acoustics_fingerprint") or {}
+        _raf_cap_49 = float(_raf_49.get("dereverb_strength_cap", 1.0))
+        if _raf_cap_49 < 1.0 and strength > _raf_cap_49:
+            logger.debug(
+                "Phase 49 §2.46f RoomAcoustics guard: rt60=%.2fs room=%s → strength %.2f → %.2f",
+                float(_raf_49.get("rt60_s", 0.0)),
+                _raf_49.get("room_type", "?"),
+                strength,
+                _raf_cap_49,
+            )
+            strength = _raf_cap_49
+
         protect_transients: bool = bool(kwargs.get("protect_transients", True))
         # Store material type for EMA-alpha selection in _dereverb_channel
         # Sub-phase progress callback: scoped to this phase's range (injected by UV3).
