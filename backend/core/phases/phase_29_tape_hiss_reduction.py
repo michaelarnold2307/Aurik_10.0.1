@@ -711,6 +711,43 @@ class TapeHissReductionPhase(PhaseInterface):
             except Exception as _npa_rest_29:
                 logger.debug("§2.46f NPA restoration non-blocking: %s", _npa_rest_29)
 
+        # §TimbralCoherence: Carrier-Rauchtextur nach Over-NR wiederherstellen.
+        # Wenn OMLSA/DFN den Rauschboden zu stark abgetragen hat (deviation > 3 dB),
+        # wird die material-typische Rauchtextur in Stille-Passagen reiniziert.
+        try:
+            from backend.core.dsp.noise_texture_resynth import restore_carrier_noise_texture as _restore_ntr_p29
+
+            _ntr_strength_p29 = float(np.clip(_effective_strength * 0.6, 0.0, 0.8))
+            _mat_str_p29 = str(getattr(material, "value", material)).lower()
+            audio_processed = _restore_ntr_p29(
+                audio,
+                audio_processed,
+                sample_rate,
+                material_type=_mat_str_p29,
+                strength=_ntr_strength_p29,
+            )
+            audio_processed = np.clip(np.nan_to_num(audio_processed, nan=0.0), -1.0, 1.0)
+        except Exception as _ntr_exc_p29:
+            logger.debug("§TimbralCoherence noise_texture_resynth phase29 (non-blocking): %s", _ntr_exc_p29)
+
+        # §0p VQI per-Phase Gate: Stimmqualität nach Tape-NR messen.
+        # Over-aggressive OMLSA kann Formanten beschädigen → Rollback auf Original.
+        if _p29_panns >= 0.35:
+            try:
+                from backend.core.musical_goals.vocal_quality_index import compute_vqi as _compute_vqi_p29
+
+                _vqi_result_p29 = _compute_vqi_p29(audio_orig=audio, audio_restored=audio_processed, sr=sample_rate)
+                _vqi_p29 = float(_vqi_result_p29.get("vqi", 1.0))
+                if _vqi_p29 < 0.95:
+                    logger.info(
+                        "phase_29: VQI per-phase rollback (vqi=%.3f < 0.95, panns_singing=%.2f)",
+                        _vqi_p29,
+                        _p29_panns,
+                    )
+                    audio_processed = audio.copy()
+            except Exception as _vqi_exc_p29:
+                logger.debug("VQI per-phase phase29 (non-blocking): %s", _vqi_exc_p29)
+
         return PhaseResult(
             success=True,
             audio=restore_layout(audio_processed, _p29_transposed),
@@ -1001,16 +1038,17 @@ class TapeHissReductionPhase(PhaseInterface):
         # §4.5 Psychoakustischer Masking-Gain-Clamp (ISO 11172-3, Painter & Spanias 2000)
         # Berechnet auf Input-Audio → Schutzmaske für Stille / ungemaskierte Bereiche
         try:
-            _pmm = masking_result
-            if _pmm is None:
-                from backend.core.psychoacoustic_masking_model import compute_masking_threshold
+            # §2.62 Canonical iso11172 masking guard (replaces legacy psychoacoustic_masking_model).
+            # masking_result (if pre-computed upstream) may be a legacy MaskingResult object with
+            # .gain_modifier or a raw ndarray from compute_masking_threshold_iso11172.
+            # Always recompute via the canonical iso11172 API for consistency.
+            _ = masking_result  # unused — iso11172 recomputes from channel directly
+            from backend.core.dsp.psychoacoustics import compute_masking_threshold_iso11172 as _cmask_p29_td
 
-                _pmm = compute_masking_threshold(channel.astype(np.float32), sample_rate)
-            # Use max over Bark bands: if ANY band has active signal, the frame must not be suppressed.
-            # mean() was incorrect — a 1 kHz sine only has energy in ~1 of 24 bands → mean ≈ 0.33,
-            # causing 3× RMS reduction on clean tonal signals. max() gives 1.0 for active frames,
-            # and correctly reduces only true silence frames (all bands near g_floor).
-            _pmm_gain_t = np.max(_pmm.gain_modifier, axis=1).astype(np.float32)
+            _pmm_arr = _cmask_p29_td(channel.astype(np.float32), sample_rate, n_fft=2048, hop_length=512)
+            # _pmm_arr: (n_freq_bins, n_frames), values ∈ [0,1]: 1.0 = full masking
+            # max over freq axis → (n_frames,): if ANY band has signal, frame is unmasked (gain=1).
+            _pmm_gain_t = np.max(_pmm_arr, axis=0).astype(np.float32)
             _hop = 512  # entspricht nperseg=2048, noverlap=1536
             _pmm_centers = np.arange(len(_pmm_gain_t)) * float(_hop) + _hop * 0.5
             _pmm_x = np.arange(len(processed), dtype=np.float32)
@@ -1022,8 +1060,8 @@ class TapeHissReductionPhase(PhaseInterface):
             _gain_samples_scaled = (1.0 + intensity_scale * (_gain_samples - 1.0)).astype(np.float32)
             processed = np.clip((processed * _gain_samples_scaled).astype(np.float32), -1.0, 1.0)
             logger.debug(
-                "🎭 PsychoacousticMasking [phase29]: silence=%.1f%% mean_gain=%.3f scaled_mean=%.3f (scale=%.2f)",
-                100.0 * float(np.mean(_pmm.silence_frames)),
+                "🎭 PsychoacousticMasking [phase29]: mean_floor=%.3f mean_gain=%.3f scaled_mean=%.3f (scale=%.2f)",
+                float(np.mean(_pmm_arr)),
                 float(np.mean(_pmm_gain_t)),
                 float(np.mean(_gain_samples_scaled)),
                 intensity_scale,

@@ -1400,6 +1400,42 @@ class DenoisePhase(PhaseInterface):
         except Exception as _et03_exc:
             logger.debug("Phase03 edge-taper non-blocking: %s", _et03_exc)
 
+        # §TimbralCoherence: Carrier-Rauchtextur nach Over-NR wiederherstellen.
+        # ML-NR (DFN, SGMSE+) kann den Träger-Rauschboden zu stark abtragen.
+        try:
+            from backend.core.dsp.noise_texture_resynth import restore_carrier_noise_texture as _restore_ntr_p03
+
+            _ntr_strength_p03 = float(np.clip(effective_strength * 0.6, 0.0, 0.8))
+            _mat_str_p03 = str(material_type).lower()
+            result_audio = _restore_ntr_p03(
+                audio,
+                result_audio,
+                sample_rate,
+                material_type=_mat_str_p03,
+                strength=_ntr_strength_p03,
+            )
+            result_audio = np.clip(np.nan_to_num(result_audio, nan=0.0), -1.0, 1.0).astype(np.float32)
+        except Exception as _ntr_exc_p03:
+            logger.debug("§TimbralCoherence noise_texture_resynth phase03 (non-blocking): %s", _ntr_exc_p03)
+
+        # §0p VQI per-Phase Gate: Bei Vokalaufnahmen VQI messen und bei Rollback-Grenzwert
+        # auf Eingangs-Audio zurückfallen, um Stimmqualitätsverlust durch NR zu verhindern.
+        if _panns_singing >= 0.35:
+            try:
+                from backend.core.musical_goals.vocal_quality_index import compute_vqi as _compute_vqi_p03
+
+                _vqi_result_p03 = _compute_vqi_p03(audio_orig=audio, audio_restored=result_audio, sr=sample_rate)
+                _vqi_p03 = float(_vqi_result_p03.get("vqi", 1.0))
+                if _vqi_p03 < 0.95:
+                    logger.info(
+                        "phase_03: VQI per-phase rollback (vqi=%.3f < 0.95, panns_singing=%.2f)",
+                        _vqi_p03,
+                        _panns_singing,
+                    )
+                    result_audio = audio.copy()
+            except Exception as _vqi_exc_p03:
+                logger.debug("VQI per-phase phase03 (non-blocking): %s", _vqi_exc_p03)
+
         return create_phase_result(
             audio=result_audio,
             modifications={

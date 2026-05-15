@@ -110,6 +110,16 @@ except Exception:
     _get_audiosr_plugin = None  # type: ignore[assignment]
     ML_HYBRID_AVAILABLE = False
 
+# §SOTA-Matrix: NVSR für 8–16 kHz Gap (Vinyl/MP3-128kbps).
+# AudioSR (Diffusion) nur für severe BW-Loss < 8 kHz (Shellac).
+try:
+    from plugins.nvsr_plugin import get_nvsr_plugin as _get_nvsr_plugin
+
+    NVSR_AVAILABLE = True
+except Exception:
+    _get_nvsr_plugin = None  # type: ignore[assignment]
+    NVSR_AVAILABLE = False
+
 try:
     from dsp.pghi import pghi_reconstruct_from_stft as _pghi_p06
 
@@ -865,13 +875,56 @@ class FrequencyRestorationPhase(PhaseInterface):
         enable_sbr: bool,
         audiosr_min_duration_s: float,
     ) -> tuple[np.ndarray, dict[str, Any]]:
-        """Run DSP restoration first, then blend in AudioSR HF delta when available.
+        """Run DSP restoration first, then blend in ML HF delta when available.
+
+        §SOTA-Matrix Routing (Mai 2026):
+          rolloff < 7 kHz  → AudioSR (Diffusion, für Shellac/Wax — starker BW-Verlust)
+          rolloff ≥ 7 kHz  → NVSR-SBR (deterministisch, für Vinyl/MP3-128kbps — 8–16kHz Gap)
 
         The blend is intentionally HF-limited to preserve low/mid authenticity and
         avoid broad tonal shifts while still improving perceived openness.
         """
         dsp_restored = self._restore_highs_professional(audio, params, enable_sbr)
 
+        _rolloff_hz_routing = float(params.get("rolloff_hz", float(self.sample_rate) * 0.90))
+        _use_nvsr = _rolloff_hz_routing >= 7_000.0  # §SOTA: NVSR für 8–16kHz Gap
+
+        # ── NVSR-Pfad (8–16 kHz Gap: Vinyl/MP3-128kbps) ─────────────────────
+        if _use_nvsr and NVSR_AVAILABLE and _get_nvsr_plugin is not None:
+            try:
+                _nvsr = _get_nvsr_plugin()
+                _nvsr_strength = float(np.clip(params.get("restoration_strength", 0.7) * 0.65, 0.0, 0.80))
+                _panns = float(params.get("panns_singing", 0.0))
+                _energy_bias = -6.0 if _panns >= 0.4 else (-9.0 if _panns < 0.1 else 0.0)
+                _nvsr_result = _nvsr.process(
+                    dsp_restored,
+                    self.sample_rate,
+                    target_hz=float(params.get("rolloff_hz", 16_000.0)) * 1.2,
+                    strength=_nvsr_strength,
+                    material_type=str(material_type),
+                    energy_bias_db=_energy_bias,
+                    panns_singing=_panns,
+                )
+                logger.info(
+                    "Phase 06: NVSR-SBR aktiv (rolloff=%.0f Hz → %.0f Hz, strength=%.2f, hf_added=%.1f dB)",
+                    _rolloff_hz_routing,
+                    _nvsr_result.get("target_hz", 16_000.0),
+                    _nvsr_strength,
+                    _nvsr_result.get("hf_energy_added_db", 0.0),
+                )
+                return _nvsr_result["audio"], {
+                    "ml_hybrid_available": True,
+                    "nvsr_available": True,
+                    "quality_mode": quality_mode,
+                    "strategy_used": "nvsr_sbr",
+                    "nvsr_target_hz": _nvsr_result.get("target_hz"),
+                    "nvsr_ceiling_hz": _nvsr_result.get("ceiling_hz"),
+                    "nvsr_hf_added_db": _nvsr_result.get("hf_energy_added_db"),
+                }
+            except Exception as _nvsr_exc:
+                logger.warning("Phase 06: NVSR-Fehler → AudioSR-Fallback: %s", _nvsr_exc)
+
+        # ── AudioSR-Pfad (0–8 kHz: Shellac/Wax oder NVSR-Fallback) ──────────
         if _get_audiosr_plugin is None:
             return dsp_restored, {
                 "ml_hybrid_available": False,

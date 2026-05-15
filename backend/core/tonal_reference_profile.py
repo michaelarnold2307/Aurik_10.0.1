@@ -1442,6 +1442,24 @@ class TonalReferenceProfiler:
                 )
             return self._cache[key]
 
+    def get_studio_console_curve(
+        self,
+        console_type: str = "neve_1073",
+    ) -> list[tuple[float, float]]:
+        """Return EQ breakpoints for a classic Studio-2026 console fingerprint.
+
+        Returns frequency-gain pairs (Hz, dB) from :data:`_STUDIO_CONSOLE_CURVES`.
+        Designed for use in Studio 2026 mode as a subtle coloration pass
+        (§Gap5 Console Character).
+
+        Parameters
+        ----------
+        console_type : str
+            Console profile name: ``"neve_1073"``, ``"ssl_4000"``, ``"api_2500"``,
+            ``"neutral"``. Falls back to ``"neve_1073"`` if unknown.
+        """
+        return list(_STUDIO_CONSOLE_CURVES.get(str(console_type).lower(), _STUDIO_CONSOLE_CURVES["neve_1073"]))
+
     def get_curve_with_provenance(
         self,
         *,
@@ -1525,6 +1543,60 @@ class TonalReferenceProfiler:
 
 _profiler_instance: TonalReferenceProfiler | None = None
 _profiler_lock = threading.Lock()
+
+
+# ===========================================================================
+# §Gap5 Studio-Console-Character-Profile (Studio 2026 only)
+# Neve 1073 / SSL 4000 / API 2500 subtle EQ fingerprints for studio-mode
+# coloration. Values are frequency (Hz) → gain (dB), applied as a steering
+# suggestion (never exceed hallucination-guard or BW ceiling).
+# References: Neve 1073 datasheet; SSL 4000G service manual; Maselec MEA-2.
+# ===========================================================================
+_STUDIO_CONSOLE_CURVES: dict[str, list[tuple[float, float]]] = {
+    # Neve 1073: 1073 mic-pre / EQ — iconic warm transformer core.
+    # Characteristics: low-end weight (+2 dB shelf@80Hz), upper-mid presence
+    # bump (+1 dB@3 kHz), gentle HF air roll (~-0.5 dB@18 kHz).
+    "neve_1073": [
+        (20.0, 0.5),
+        (80.0, 2.0),  # Low shelf
+        (200.0, 0.5),
+        (1000.0, 0.0),
+        (3000.0, 1.0),  # Presence peak
+        (6000.0, 0.5),
+        (10000.0, 0.0),
+        (18000.0, -0.5),
+        (20000.0, -0.8),
+    ],
+    # SSL 4000G: solid-state console — tighter, more transient, extended air.
+    # Characteristics: tight bass (+1 dB@100Hz), presence (+1.5 dB@5 kHz),
+    # extended HF air (+1 dB@16 kHz).
+    "ssl_4000": [
+        (20.0, 0.0),
+        (100.0, 1.0),  # Low-end tightness
+        (300.0, 0.0),
+        (1000.0, 0.0),
+        (5000.0, 1.5),  # Presence/clarity
+        (10000.0, 0.8),
+        (16000.0, 1.0),  # Air
+        (20000.0, 0.5),
+    ],
+    # API 2500: VCA bus compressor character — punchy midrange.
+    # Characteristics: midrange focus (+1.2 dB@1 kHz), slight low cut at 60Hz.
+    "api_2500": [
+        (60.0, -0.5),
+        (200.0, 0.3),
+        (1000.0, 1.2),  # Punch focus
+        (3000.0, 0.5),
+        (8000.0, 0.0),
+        (16000.0, -0.2),
+        (20000.0, -0.3),
+    ],
+    # Flat (passthrough) — no console coloration
+    "neutral": [
+        (20.0, 0.0),
+        (20000.0, 0.0),
+    ],
+}
 
 
 def get_tonal_reference_profiler() -> TonalReferenceProfiler:
