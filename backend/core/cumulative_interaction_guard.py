@@ -413,7 +413,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
 
 
 def _resolve_phase_specific_drift_exclusions(phase_id: str) -> frozenset[str]:
-    """Return goal exclusions for known false-positive phase patterns (prefix-based)."""
+    """Gibt goal exclusions for known false-positive phase patterns (prefix-based) zurück."""
     for prefix, exclusions in _PHASE_SPECIFIC_DRIFT_EXCLUSIONS.items():
         if phase_id.startswith(prefix):
             return exclusions
@@ -678,7 +678,7 @@ class CumulativeInteractionGuard:
     """
 
     def reset(self) -> InteractionGuardState:
-        """Create fresh state for a new pipeline run."""
+        """Erstellt fresh state for a new pipeline run."""
         return InteractionGuardState()
 
     def set_pre_pipeline_baseline(
@@ -764,7 +764,7 @@ class CumulativeInteractionGuard:
         current_goals: dict[str, float],
         sr: int,
     ) -> tuple[np.ndarray, bool]:
-        """Check cumulative drift after a phase.
+        """Prüft cumulative drift after a phase.
 
         Returns:
             (audio_to_use, was_rolled_back): either current_audio or best_checkpoint
@@ -1032,7 +1032,7 @@ class CumulativeInteractionGuard:
         return current_audio, False
 
     def get_rollback_metadata(self, state: InteractionGuardState) -> dict:
-        """Get metadata for RestorationResult."""
+        """Gibt zurück: metadata for RestorationResult."""
         return {
             "interaction_rollbacks": [
                 {
@@ -1055,7 +1055,7 @@ class CumulativeInteractionGuard:
         phase_id: str,
         goals: dict[str, float],
     ) -> str | None:
-        """Check if current phase + already-executed phases form a critical pair.
+        """Prüft if current phase + already-executed phases form a critical pair.
 
         §2.54: max_reg is scaled adaptively for material/restorability so that
         carrier-repair pairs (denoise+hiss) on analog material don't fire false-positive
@@ -1203,7 +1203,7 @@ class CumulativeInteractionGuard:
         phase_id: str = "",  # pylint: disable=unused-argument
         state: InteractionGuardState | None = None,  # pylint: disable=unused-argument
     ) -> float:
-        """Measure 95th-percentile STFT group delay deviation in milliseconds.
+        """Misst 95th-percentile STFT group delay deviation in milliseconds.
 
         Uses a 5-window median spread across the signal to avoid false positives
         from transient-heavy single-window positions (§2.48 spatial_depth fix).
@@ -1254,7 +1254,7 @@ class CumulativeInteractionGuard:
         phase_id: str = "",
         state: InteractionGuardState | None = None,
     ) -> bool:
-        """Check STFT group delay deviation stays within per-phase threshold.
+        """Prüft STFT group delay deviation stays within per-phase threshold.
 
         §2.54: threshold is adaptive — computed via _compute_gdd_threshold() from
         material type and restorability score.  Falls back to fixed constants when
@@ -1289,7 +1289,7 @@ class CumulativeInteractionGuard:
         state: InteractionGuardState,
         goals: dict[str, float],
     ) -> bool:
-        """Check if current goals are better than best checkpoint."""
+        """Prüft if current goals are better than best checkpoint."""
         if state.best_checkpoint is None:
             return True
 

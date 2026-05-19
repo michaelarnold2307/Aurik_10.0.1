@@ -31,7 +31,7 @@ class AdaptiveMMSESTSA:
         self.spectral_floor = spectral_floor
 
     def mmse_stsa(self, noisy_mag: np.ndarray, noise_mag: np.ndarray, **kwargs) -> np.ndarray:
-        """Compute MMSE-STSA gain for magnitude spectra (Ephraim & Malah 1985).
+        """Berechnet MMSE-STSA gain for magnitude spectra (Ephraim & Malah 1985).
 
         This is the spectral-amplitude domain estimator — optimal for short-time
         frames under the assumption of Gaussian distributed DFT coefficients.

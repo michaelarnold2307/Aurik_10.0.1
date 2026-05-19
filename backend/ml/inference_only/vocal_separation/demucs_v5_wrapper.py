@@ -50,7 +50,7 @@ class DemucsV5Separator:
         segment_duration: float = 10.0,
     ):
         """
-        Initialize Demucs v5 separator
+        Initialisiert Demucs v5 separator.
 
         Args:
             model_name: Model variant ('htdemucs', 'htdemucs_ft')
@@ -82,7 +82,7 @@ class DemucsV5Separator:
         self.nebenwirkungen_log: list[dict] = []
 
     def _get_default_model_path(self) -> Path:
-        """Get default Demucs model path"""
+        """Gibt zurück: default Demucs model path."""
         base_path = Path(__file__).parent.parent.parent.parent.parent
         model_dir = base_path / "models" / "demucs"
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +95,7 @@ class DemucsV5Separator:
 
     def _load_model(self):
         """
-        Load Demucs v5 model
+        Lädt Demucs v5 model.
 
         Note: Requires demucs package:
         pip install demucs
@@ -325,7 +325,7 @@ class DemucsV5Separator:
 
         # Transient preservation (onset detection)
         def transient_score(audio: np.ndarray) -> float:
-            """Measure transient density"""
+            """Misst transient density."""
             onset_env = librosa.onset.onset_strength(y=audio[0], sr=self.sample_rate)
             return np.std(onset_env)
 
@@ -337,7 +337,7 @@ class DemucsV5Separator:
 
         # Phase coherence
         def phase_coherence(a: np.ndarray, b: np.ndarray) -> float:
-            """Measure phase alignment between signals"""
+            """Misst phase alignment between signals."""
             if a.shape[0] < 2 or b.shape[0] < 2:
                 return 1.0
 

@@ -61,7 +61,7 @@ class StemRemixBalancer:
 
     @staticmethod
     def _estimate_vocal_weight(original: np.ndarray, sr: int) -> float:
-        """Estimate optimal vocal-to-instrumental LUFS weight from spectral analysis.
+        """Schätzt optimal vocal-to-instrumental LUFS weight from spectral analysis.
 
         Analyses up to 10 s of the original (centre excerpt, spec §1.5) and measures
         the power ratio in the vocal frequency range (300 Hz – 3500 Hz) relative to

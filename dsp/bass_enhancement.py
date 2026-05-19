@@ -113,7 +113,7 @@ class SubBassEnhancer:
             return np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(orig_dtype), report
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Extract sub-bass band (20-60 Hz)
         sos_sub = butter(4, [20, 60], btype="band", fs=sr, output="sos")
         sub_bass = sosfilt(sos_sub, audio)
@@ -174,7 +174,7 @@ class SubBassEnhancer:
 
     def _detect_fundamental(self, signal: np.ndarray, sr: int, f_min: float, f_max: float) -> float:
         """
-        Detect fundamental frequency using autocorrelation.
+        Erkennt fundamental frequency using autocorrelation.
 
         Returns 0 if no clear fundamental detected.
         """
@@ -270,7 +270,7 @@ class MidBassClarifier:
             return np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(orig_dtype), report
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Extract mid-bass band (60-250 Hz)
         sos_mid = butter(4, [60, 250], btype="band", fs=sr, output="sos")
         mid_bass = sosfilt(sos_mid, audio)
@@ -405,7 +405,7 @@ class BassHarmonicsEnhancer:
             return np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(orig_dtype), report
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Extract harmonics band (250-500 Hz)
         sos_harm = butter(4, [250, 500], btype="band", fs=sr, output="sos")
         harmonics = sosfilt(sos_harm, audio)
@@ -540,7 +540,7 @@ class BassDynamicsController:
             return np.clip(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(orig_dtype), report
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Extract bass band (20-250 Hz) for dynamics control
         sos_bass = butter(4, [20, 250], btype="band", fs=sr, output="sos")
         bass_band = sosfilt(sos_bass, audio)
@@ -613,7 +613,7 @@ class BassDynamicsController:
 
 class BassEnhancementSystem:
     """
-    Unified API for Bass Enhancement.
+    Einheitliche API für Bass-Verbesserung.
 
     Combines all bass processing components into a single pipeline:
     1. Sub-Bass Enhancement (20-60 Hz)

@@ -48,7 +48,7 @@ class ConversionConfig:
 
 class ONNXConverter:
     """
-    Converts PyTorch audio models to ONNX format.
+    Konvertiert PyTorch audio models to ONNX format.
 
     Features:
     - Automatic shape inference
@@ -67,7 +67,7 @@ class ONNXConverter:
 
     def __init__(self, config: ConversionConfig | None = None, validation_tolerance: float = 1e-5):
         """
-        Initialize ONNX converter.
+        Initialisiert ONNX converter.
 
         Args:
             config: Conversion configuration
@@ -86,7 +86,7 @@ class ONNXConverter:
         use_external_data: bool = False,
     ) -> bool:
         """
-        Convert PyTorch model to ONNX format.
+        Konvertiert PyTorch model to ONNX format.
 
         Args:
             pytorch_model: PyTorch model to convert
@@ -165,7 +165,7 @@ class ONNXConverter:
 
     def _validate_conversion(self, onnx_path: Path, sample_input: Any, pytorch_output: Any) -> bool:
         """
-        Validate ONNX model produces same output as PyTorch.
+        Validiert ONNX model produces same output as PyTorch.
 
         Args:
             onnx_path: Path to ONNX model
@@ -213,7 +213,7 @@ class ONNXConverter:
 
     def _save_external_data(self, onnx_path: Path) -> None:
         """
-        Convert ONNX model to use external data format.
+        Konvertiert ONNX model to use external data format.
 
         For models >2GB, ONNX requires external data storage.
 
@@ -243,7 +243,7 @@ class ONNXConverter:
 
     def convert_batch(self, models: dict[str, tuple[Any, Any, Path]], validate: bool = True) -> dict[str, bool]:
         """
-        Convert multiple PyTorch models to ONNX.
+        Konvertiert multiple PyTorch models to ONNX.
 
         Args:
             models: Dict of {name: (model, sample_input, output_path)}
@@ -278,17 +278,17 @@ class ONNXConverter:
         return results
 
     def get_stats(self) -> dict[str, Any]:
-        """Get conversion statistics."""
+        """Gibt zurück: conversion statistics."""
         return self.conversion_stats.copy()
 
     def reset_stats(self) -> None:
-        """Reset conversion statistics."""
+        """Setzt zurück: conversion statistics."""
         self.conversion_stats = {"total_conversions": 0, "successful_conversions": 0, "failed_conversions": 0}
 
 
 class ModelSpecificConverter:
     """
-    Handles model-specific conversion quirks.
+    Verarbeitet model-specific conversion quirks.
 
     Different models have different requirements:
     - DeepFilterNet: Separate encoder/decoder
@@ -299,7 +299,7 @@ class ModelSpecificConverter:
     @staticmethod
     def convert_deepfilternet(model_dir: Path, output_dir: Path, converter: ONNXConverter) -> dict[str, bool]:
         """
-        Convert DeepFilterNet model (encoder + decoder).
+        Konvertiert DeepFilterNet model (encoder + decoder).
 
         DeepFilterNet has 3 components:
         - Encoder (ERB)
@@ -327,7 +327,7 @@ class ModelSpecificConverter:
     @staticmethod
     def convert_demucs(model: Any, output_path: Path, converter: ONNXConverter, sample_rate: int = 44100) -> bool:
         """
-        Convert Demucs model (stem separation).
+        Konvertiert Demucs model (stem separation).
 
         Demucs is a large model (~650MB) requiring external data.
 
@@ -359,7 +359,7 @@ class ModelSpecificConverter:
     @staticmethod
     def convert_dccrn(model: Any, output_path: Path, converter: ONNXConverter, sample_rate: int = 16000) -> bool:
         """
-        Convert DCCRN model (speech denoising).
+        Konvertiert DCCRN model (speech denoising).
 
         Args:
             model: DCCRN PyTorch model

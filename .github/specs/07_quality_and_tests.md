@@ -2,6 +2,12 @@
 
 > PQS-Metriken, AMRB-Benchmark, universelle Garantien, Test-Standards,
 > E2E-Assertions, Performance-Budget.
+>
+> **Normative Grundlage**: Alle Schwellwerte operationalisieren §0 — sie definieren
+> die untere Grenze dessen, was ein hybrider Toningenieur mit eingebettetem musikalischem
+> Urteilsvermögen bei jeder Importdatei erreichen muss. Metriken unterhalb dieser
+> Grenzen sind kein „ausreichendes Ergebnis" — sie zeigen an, dass das maximal
+> mögliche Ergebnis noch nicht erreicht wurde.
 
 ---
 
@@ -352,21 +358,35 @@ automatisch geprüft werden.
 **Absolutes Zeitlimit Stufe 1:** `MAX_ABSOLUTE_SECONDS = 5400.0` (90 Minuten).
 Nach Überschreitung: KMV Stufe 2 (`MLRefinementThread`) übernimmt automatisch.
 
-**FeedbackChain-Abbruch (Fix M, v9.10.100 — MOS-Metrik präzisiert):**
+**FeedbackChain-Abbruch (Fix M, v9.10.100 — MOS-Metrik präzisiert, harmonisiert v9.12.0):**
 
 ```python
 MAX_ITERATIONS = 5
 CONVERGENCE_DELTA = 0.02
-# Regression-Trigger: PQS-MOS (PerceptualQualityScorer.score().mos) zwischen
-# aufeinanderfolgenden Iterationen: |mos_iter_n - mos_iter_n_minus_1| > 0.05
-# → sofortiger Rollback auf best_result (höchster PQS-MOS bisher)
+REGRESSION_DELTA  = 0.05  # PQS-MOS-Schwelle für sofortigen Rollback
+
+# 3-Bedingungen-Kaskade (normativ, Single Source of Truth in diesem §8.5):
+#
+# Bedingung 1 — Konvergenz (kein Rollback):
+#   |mos_iter_n - mos_iter_n_minus_1| < CONVERGENCE_DELTA (0.02)
+#   → weitere Iteration würde Qualität nicht mehr messbar verbessern → frühzeitiger Exit
+#
+# Bedingung 2 — Regression (sofortiger Rollback):
+#   |mos_iter_n - mos_iter_n_minus_1| > REGRESSION_DELTA (0.05)
+#   → sofortiger Rollback auf best_result (höchster PQS-MOS bisher)
+#   → keine weiteren Iterationen
+#
+# Bedingung 3 — Forced Exit (Anti-Hänger):
+#   n >= MAX_ITERATIONS (5)
+#   → Pipeline-Timeout-Schutz; best_result exportieren
+#   → metadata["feedbackchain_forced_exit"] = True
 #
 # NICHT: Musical Goals Ø-Score (der wird separat über GoalPriorityProtocol überwacht)
 # NICHT: MERT-harmonicity-Proxy (zu niedrige Sampling-Frequenz für Iterations-Vergleich)
 # NICHT: Vergleich mit Baseline (nur Iteration-zu-Iteration, um Overshoot zu detektieren)
 #
-# Konvergenz-Abbruch (kein Rollback): |mos_iter_n - mos_iter_n_minus_1| < CONVERGENCE_DELTA
-# → weitere Iteration würde Qualität nicht verbessern → frühzeitiger Exit
+# Spec 02 verweist auf diesen §8.5 als normativ übergeordnet (§2.54 ist Steuerungslogik,
+# §8.5 enthält die kanonischen Schwellwerte — kein Widerspruch, unterschiedliche Ebenen).
 ```
 
 ### §9.1a [RELEASE_MUST] Stationäre vs. nicht-stationäre Defekt-Analyse (v9.10.73)

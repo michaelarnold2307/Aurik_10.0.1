@@ -146,12 +146,12 @@ class AdaptiveTonalBalanceRestorer:
         self.metrics = {}
 
     def log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
         logger.debug("[DSPContract AdaptiveTonalBalanceRestorer] %s", asdict(adaptive_tonal_balance_contract))
 
     def analyze_brightness(self, audio: np.ndarray, sr: int) -> dict[str, float]:
         """
-        Analyze spectral brightness of audio
+        Analysiert die spektrale Helligkeit des Audios.
 
         Returns:
             Dict with:
@@ -201,7 +201,7 @@ class AdaptiveTonalBalanceRestorer:
 
     def compute_correction_curve(self, current_brightness: float, sr: int, n_fft: int = 2048) -> np.ndarray:
         """
-        Compute adaptive EQ correction curve based on brightness deficit
+        Berechnet adaptive EQ correction curve based on brightness deficit.
 
         Args:
             current_brightness: Current brightness score (0-1)
@@ -259,7 +259,7 @@ class AdaptiveTonalBalanceRestorer:
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply adaptive tonal balance restoration
+        Wendet adaptive Tonbalance-Restaurierung an.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -425,7 +425,7 @@ class LowEndClarityEnhancer:
 
     def analyze_muddiness(self, audio: np.ndarray, sr: int) -> dict[str, float]:
         """
-        Analyze low-end muddiness
+        Analysiert Tiefton-Schwammigkeit.
 
         Returns:
             Dict with muddiness_score (0=clean, 1=muddy)
@@ -460,7 +460,7 @@ class LowEndClarityEnhancer:
 
     def compute_low_end_eq(self, muddiness: float, sr: int, n_fft: int = 4096) -> np.ndarray:
         """
-        Compute low-end EQ curve to reduce muddiness
+        Berechnet low-end EQ curve to reduce muddiness.
 
         Args:
             muddiness: Muddiness score (0-1)
@@ -508,7 +508,7 @@ class LowEndClarityEnhancer:
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply low-end clarity enhancement
+        Wendet an: low-end clarity enhancement.
 
         Args:
             audio: Input audio
@@ -666,7 +666,7 @@ class FrequencyDeMasker:
 
     def create_frequency_bands(self, sr: int) -> list[tuple[float, float]]:
         """
-        Create logarithmically-spaced frequency bands
+        Erstellt logarithmically-spaced frequency bands.
 
         Returns:
             List of (f_low, f_high) tuples
@@ -684,7 +684,7 @@ class FrequencyDeMasker:
 
     def analyze_masking(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
         """
-        Analyze frequency masking
+        Analysiert die Frequenzmaskierung.
 
         Returns:
             Dict with band energies and masking info
@@ -742,7 +742,7 @@ class FrequencyDeMasker:
         n_fft: int = 2048,
     ) -> np.ndarray:
         """
-        Compute de-masking EQ curve
+        Berechnet de-masking EQ curve.
 
         Args:
             band_energies_db: Energy per band
@@ -790,7 +790,7 @@ class FrequencyDeMasker:
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply frequency de-masking
+        Wendet an: frequency de-masking.
 
         Args:
             audio: Input audio
@@ -863,7 +863,7 @@ class FrequencyDeMasker:
 
 class TonalBalanceRestorer:
     """
-    Unified API for all three tonal balance restoration modules
+    Einheitliche API für alle drei Tonbalance-Restaurierungsmodule.
 
     Usage:
         restorer = TonalBalanceRestorer()
@@ -914,7 +914,7 @@ class TonalBalanceRestorer:
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply all enabled tonal balance restoration modules in sequence
+        Wendet alle aktivierten Tonbalance-Restaurierungsmodule der Reihe nach an.
 
         Processing order:
         1. Low-End Clarity (foundation)
@@ -957,7 +957,7 @@ class TonalBalanceRestorer:
 
     def get_metrics(self) -> dict[str, Any]:
         """
-        Get metrics from all modules
+        Gibt zurück: metrics from all modules.
 
         Returns:
             Combined metrics dict

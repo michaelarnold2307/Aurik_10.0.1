@@ -891,7 +891,7 @@ class WaveformPlausibilityGuard:
         material_type: str = "unknown",
         restorability_score: float = 50.0,
     ) -> tuple[np.ndarray, dict]:
-        """Detect and correct Pegelexplosion while preserving Musical Goals.
+        """Erkennt and correct Pegelexplosion while preserving Musical Goals.
 
         Args:
             original:           Pre-restoration reference audio (float32)
@@ -1103,7 +1103,7 @@ class WaveformPlausibilityGuard:
     # ------------------------------------------------------------------
 
     def _to_mono(self, audio: np.ndarray) -> np.ndarray:
-        """Convert to mono 1D float32. Handles (channels, samples) orientation."""
+        """Konvertiert to mono 1D float32. Handles (channels, samples) orientation."""
         a = np.asarray(audio, dtype=np.float32)
         if a.ndim == 2:
             # Canonical Aurik format: (channels, samples) — channels dim is always ≤ 2
@@ -1115,7 +1115,7 @@ class WaveformPlausibilityGuard:
         return a
 
     def _apply_gain(self, audio: np.ndarray, gain_db_interp: np.ndarray) -> np.ndarray:
-        """Apply sample-level gain (dB) and clip output to [-1, 1]."""
+        """Wendet an: sample-level gain (dB) and clip output to [-1, 1]."""
         gain_linear = (10.0 ** (gain_db_interp / 20.0)).astype(np.float32)
         out = np.asarray(audio, dtype=np.float32).copy()
         n = len(gain_linear)
@@ -1139,7 +1139,7 @@ class WaveformPlausibilityGuard:
         win: int,
         eps: float,
     ) -> tuple[float, float, float, float]:
-        """Compute Musical Goals proxy metrics (arc Pearson + DR).
+        """Berechnet Musical Goals proxy metrics (arc Pearson + DR).
 
         Returns:
             (arc_pearson_before, arc_pearson_after, dr_before_db, dr_after_db)

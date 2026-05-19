@@ -93,7 +93,7 @@ class SongGoalImportance:
     vocal_detected: bool = False
 
     def weight_of(self, goal: str) -> float:
-        """Return weight for a goal, 1.0 if unknown."""
+        """Gibt weight for a goal, 1.0 if unknown zurück."""
         return self.weights.get(goal, 1.0)
 
     def as_dict(self) -> dict[str, Any]:
@@ -481,7 +481,7 @@ class SongGoalFeedbackStore:
         return _os.path.normpath(base)
 
     def _load(self) -> None:
-        """Load persisted nudges from disk (idempotent)."""
+        """Lädt persisted nudges from disk (idempotent)."""
         if self._loaded:
             return
         try:
@@ -556,7 +556,7 @@ class SongGoalFeedbackStore:
             )
 
     def get_nudges(self) -> dict[str, float]:
-        """Return a copy of the current per-goal nudges (thread-safe)."""
+        """Gibt a copy of the current per-goal nudges (thread-safe) zurück."""
         with self._lock:
             self._load()
             return dict(self._nudges)
@@ -568,7 +568,7 @@ _feedback_store_lock = threading.Lock()
 
 
 def get_feedback_store() -> SongGoalFeedbackStore:
-    """Return the global SongGoalFeedbackStore singleton (thread-safe)."""
+    """Gibt the global SongGoalFeedbackStore singleton (thread-safe) zurück."""
     global _feedback_store
     if _feedback_store is None:
         with _feedback_store_lock:
@@ -611,7 +611,7 @@ def estimate_goal_importance(
     crest_factor_db: float | None = None,
     transient_density: float | None = None,
 ) -> SongGoalImportance:
-    """Compute per-song goal importance weights.
+    """Berechnet per-song goal importance weights.
 
     Two-stage approach:
       1. **Label stage** (genre + era + material) — coarse Pareto positioning
@@ -1347,7 +1347,7 @@ _lock = threading.Lock()
 
 
 def get_default_importance() -> SongGoalImportance:
-    """Return a neutral (uniform) importance — for use when no song context is available."""
+    """Gibt a neutral (uniform) importance — for use when no song context is available zurück."""
     global _instance
     if _instance is None:
         with _lock:

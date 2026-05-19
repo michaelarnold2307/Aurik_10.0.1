@@ -54,7 +54,7 @@ _lock = threading.Lock()
 
 
 def get_ml_inference_engine(model_path: str | None = None) -> MLParameterInferenceEngine:
-    """Get or create MLParameterInferenceEngine singleton.
+    """Gibt zurück: or create MLParameterInferenceEngine singleton.
 
     Args:
         model_path: Path to pre-trained model (only used on first call)

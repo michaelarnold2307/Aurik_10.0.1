@@ -198,7 +198,7 @@ def _pearson(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _safe_fft_size(length: int, target: int = 2048, minimum: int = 64) -> int:
-    """Return power-of-two FFT size capped by signal length."""
+    """Gibt power-of-two FFT size capped by signal length zurück."""
     if length <= minimum:
         return minimum
     capped = min(target, int(length))
@@ -283,11 +283,11 @@ class MushraProxyResult:
     calibration_stage: int = 1
 
     def passes_threshold(self, min_score: float = 80.0) -> bool:
-        """Check whether the proxy score meets a minimum requirement."""
+        """Prüft whether the proxy score meets a minimum requirement."""
         return self.proxy_score >= min_score
 
     def as_dict(self) -> dict:
-        """Serialization format for logging and persistence."""
+        """Serialisierungsformat für Logging und Persistenz."""
         return {
             "proxy_score": round(self.proxy_score, 1),
             "grade": self.grade,
@@ -444,7 +444,7 @@ class MertMushraProxy:
         ref: np.ndarray,
         sr: int,
     ) -> float:
-        """Estimate probability of vocal content [0, 1] via PANNs.
+        """Schätzt probability of vocal content [0, 1] via PANNs.
 
         Returns vocal probability if PANNs is already loaded (no lazy load),
         else uses a lightweight spectral heuristic (mid-band energy ratio).
@@ -494,7 +494,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> MushraProxyResult:
-        """Compute a proxy MUSHRA score for a reference/test pair.
+        """Berechnet a proxy MUSHRA score for a reference/test pair.
 
         Args:
             reference: Original audio (1-D or 2-D float, [-1, 1]).
@@ -801,7 +801,7 @@ class MertMushraProxy:
         mushra_scores: np.ndarray,
         alpha: float = 1.0,
     ) -> dict[str, float]:
-        """Calibrate weights via Ridge regression from MUSHRA panel data.
+        """Kalibriert weights via Ridge regression from MUSHRA panel data.
 
         Call this once you have real listener data (§8.4 Mini-MUSHRA, ≥ 48 pairs).
         Stores result in module-level _calibrated_weights for immediate use.
@@ -859,7 +859,7 @@ class MertMushraProxy:
 
     @staticmethod
     def _compute_visqol(ref: np.ndarray, test: np.ndarray, sr: int) -> float:
-        """Compute ViSQOL v3 Audio MOS [1.0, 5.0].
+        """Berechnet ViSQOL v3 Audio MOS [1.0, 5.0].
 
         Uses the existing ViSQOL DSP plugin (Bark-band NSIM, no external binary).
         Falls back to 3.0 (neutral MOS) on error.
@@ -884,7 +884,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Detect and quantify restoration artifacts.
+        """Erkennt and quantify restoration artifacts.
 
         Combines three sub-detectors:
         1. Musical noise: tonal islands in residual (spectral kurtosis > 6)
@@ -998,7 +998,7 @@ class MertMushraProxy:
         sr: int,
         segment_dur: float = 1.0,
     ) -> float:
-        """Measure quality consistency over time with primacy/recency attention.
+        """Misst quality consistency over time with primacy/recency attention.
 
         Computes NSIM-like metric per 1-second segment, then returns a
         weighted consistency score. Segments are weighted by a U-shaped
@@ -1107,14 +1107,16 @@ class MertMushraProxy:
 
     @staticmethod
     def _compute_clap_cosine(ref: np.ndarray, test: np.ndarray, sr: int) -> float:
-        """Compute CLAP-style semantic audio similarity.
+        """Berechnet CLAP-style semantic audio similarity.
 
         Uses the existing DSP embedding from clap_reference_matcher (32-dim vector
         of spectral centroid, MFCCs, harmonicity, dynamic range, noise floor,
         rolloff, ZCR, spectral contrast). L2-normalized → cosine similarity.
         """
         try:
-            from backend.core.clap_reference_matcher import compute_dsp_embedding  # pylint: disable=import-outside-toplevel
+            from backend.core.clap_reference_matcher import (
+                compute_dsp_embedding,  # pylint: disable=import-outside-toplevel
+            )
 
             emb_ref = compute_dsp_embedding(ref, sr)
             emb_test = compute_dsp_embedding(test, sr)
@@ -1210,7 +1212,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute cosine similarity between MERT embeddings.
+        """Berechnet cosine similarity between MERT embeddings.
 
         Uses get_loaded_mert_plugin() — does NOT trigger lazy-load.
         Returns NaN if MERT is not already loaded in process.
@@ -1240,7 +1242,7 @@ class MertMushraProxy:
         audio: np.ndarray,
         sr: int,
     ) -> np.ndarray | None:
-        """Extract a fixed-size embedding vector from a MERT plugin instance.
+        """Extrahiert a fixed-size embedding vector from a MERT plugin instance.
 
         For HF models: temporal mean of last hidden state → 768-dim vector.
         For ONNX models: mean of output tensor → N-dim vector.
@@ -1411,7 +1413,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute stereo imaging preservation score [0, 1].
+        """Berechnet stereo imaging preservation score [0, 1].
 
         Compares IACC (Inter-Aural Cross-Correlation) and stereo width between
         reference and test signals. Mono signals return 0.5 (neutral).
@@ -1427,7 +1429,9 @@ class MertMushraProxy:
             if ref_2d.shape[0] < 2 or test_2d.shape[0] < 2:
                 return 0.5  # Mono — neutral contribution
 
-            from backend.core.musical_goals.musical_goals_metrics import SpatialDepthMetric  # pylint: disable=import-outside-toplevel
+            from backend.core.musical_goals.musical_goals_metrics import (
+                SpatialDepthMetric,  # pylint: disable=import-outside-toplevel
+            )
 
             # Length-align stereo channels
             min_len = min(ref_2d.shape[1], test_2d.shape[1])
@@ -1472,7 +1476,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute transient shape preservation [0, 1].
+        """Berechnet transient shape preservation [0, 1].
 
         Uses existing ``AuthentizitaetMetric.compute_transient_preservation()``
         which detects transients in both signals, matches them within ±20 ms,
@@ -1498,7 +1502,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute Noise-to-Mask Ratio in dB (PEAQ core MOV).
+        """Berechnet Noise-to-Mask Ratio in dB (PEAQ core MOV).
 
         Uses the existing ``PsychoacousticMaskingModel`` to obtain masking thresholds
         on the reference, then computes the excitation pattern of the residual (test - ref)
@@ -1558,7 +1562,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute emotional arc preservation [0, 1].
+        """Berechnet emotional arc preservation [0, 1].
 
         Uses ``EmotionalArcPreservationMetric.measure()`` which divides audio into
         5 s segments and computes arousal (RMS+ZCR) and valence (spectral flatness)
@@ -1603,7 +1607,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute vocal formant preservation [0, 1].
+        """Berechnet vocal formant preservation [0, 1].
 
         Extracts F1–F4 formant trajectories from both reference and test audio
         using LPC Burg analysis, then computes Pearson correlation of median
@@ -1627,7 +1631,7 @@ class MertMushraProxy:
             test_seg = np.asarray(test[center : center + max_samples], dtype=np.float32)
 
             def _extract_formants(audio: np.ndarray) -> list[float]:
-                """Extract median F1-F4 via LPC root-finding on voiced frames."""
+                """Extrahiert median F1-F4 via LPC root-finding on voiced frames."""
                 frame_len = int(0.025 * sr)  # 25 ms
                 hop = int(0.010 * sr)  # 10 ms
                 order = min(16, frame_len - 2)
@@ -1706,7 +1710,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute vocal Harmonics-to-Noise Ratio preservation [0, 1].
+        """Berechnet vocal Harmonics-to-Noise Ratio preservation [0, 1].
 
         HNR is the fundamental voice quality measure — higher HNR means cleaner,
         more tonal voice; lower HNR means breathier/noisier. Uses FFT-based
@@ -1772,7 +1776,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute pitch/F0 contour accuracy incl. vibrato fidelity [0, 1].
+        """Berechnet pitch/F0 contour accuracy incl. vibrato fidelity [0, 1].
 
         F0 fidelity is the #1 quality dimension for singing (SingMOS, Tang 2024).
         Compares F0 contours via Pearson correlation on voiced frames, plus a
@@ -1815,7 +1819,7 @@ class MertMushraProxy:
                 return f0_values
 
             def _vibrato_fidelity(ref_f0_voiced: np.ndarray, test_f0_voiced: np.ndarray) -> float:
-                """Compute vibrato fidelity sub-metric [0, 1].
+                """Berechnet vibrato fidelity sub-metric [0, 1].
 
                 Vibrato rate (4–7 Hz) and depth (±50–100 cents) are critical
                 vocal expressiveness parameters. Compares the modulation spectrum
@@ -1940,7 +1944,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute vocal presence and CPPS preservation [0, 1].
+        """Berechnet vocal presence and CPPS preservation [0, 1].
 
         Combines:
         1. CPPS (Cepstral Peak Prominence Smoothed) — the strongest single
@@ -2067,7 +2071,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute amplitude modulation spectrum preservation [0, 1].
+        """Berechnet amplitude modulation spectrum preservation [0, 1].
 
         The human auditory system is exquisitely sensitive to amplitude modulation
         (AM) patterns — vibrato (4–7 Hz), tremolo, groove micro-timing, and
@@ -2215,7 +2219,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute harmonic partial structure preservation [0, 1].
+        """Berechnet harmonic partial structure preservation [0, 1].
 
         Compares the relative amplitudes of harmonics 1–16 between reference and
         test signals. This determines whether the timbre character of instruments
@@ -2244,7 +2248,7 @@ class MertMushraProxy:
 
             # F0 estimation via autocorrelation (robust, no ML dependency)
             def _estimate_f0(sig: np.ndarray, sr_hz: int) -> float:
-                """Estimate F0 via autocorrelation, returns Hz or 0.0."""
+                """Schätzt F0 via autocorrelation, returns Hz or 0.0."""
                 # Limit to 1 s for speed
                 seg = sig[: min(len(sig), sr_hz)]
                 n = len(seg)
@@ -2340,7 +2344,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute spectral flux correlation [0, 1].
+        """Berechnet spectral flux correlation [0, 1].
 
         Spectral flux measures the rate of spectral change over time. It captures
         whether note onsets, vibrato, timbral evolution, and dynamic transitions
@@ -2439,7 +2443,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute quality score of the worst 1 s segment [0, 1].
+        """Berechnet quality score of the worst 1 s segment [0, 1].
 
         Real listeners disproportionately penalize brief catastrophic artifacts.
         A single 1-second glitch in an otherwise perfect 3-minute piece can
@@ -2511,7 +2515,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute masking-weighted perceptual disturbance [0, 1].
+        """Berechnet masking-weighted perceptual disturbance [0, 1].
 
         Implements PEAQ-style perceptual analysis:
         1. Bark-band decomposition (24 critical bands, Zwicker & Fastl 1990)
@@ -2706,7 +2710,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute roughness profile preservation [0, 1].
+        """Berechnet roughness profile preservation [0, 1].
 
         Roughness = perception of fast amplitude modulation (15–150 Hz)
         on the basilar membrane. Restoration artifacts often create AM
@@ -2781,7 +2785,7 @@ class MertMushraProxy:
                     band_mask[b, sel] = 1.0 / cnt
 
             def _band_roughness(audio: np.ndarray) -> np.ndarray:
-                """Compute per-band roughness for one audio signal."""
+                """Berechnet per-band roughness for one audio signal."""
                 window = np.hanning(frame_len)
                 n_frm = max(1, (len(audio) - frame_len) // hop + 1)
                 starts = np.arange(n_frm) * hop
@@ -2860,7 +2864,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute specific loudness profile preservation [0, 1].
+        """Berechnet specific loudness profile preservation [0, 1].
 
         Specific Loudness (sone/Bark) is the perceived loudness per critical
         band, accounting for basilar membrane compression (power-law ≈0.23).
@@ -3021,7 +3025,7 @@ class MertMushraProxy:
         test: np.ndarray,
         sr: int,
     ) -> float:
-        """Compute fluctuation strength profile preservation [0, 1].
+        """Berechnet fluctuation strength profile preservation [0, 1].
 
         Fluctuation strength = perception of slow amplitude modulation
         (0.5–20 Hz, peak at ~4 Hz) on the basilar membrane. Tremolo,
@@ -3099,7 +3103,7 @@ class MertMushraProxy:
                     band_mask[b, sel] = 1.0 / cnt
 
             def _band_fluctuation(audio: np.ndarray) -> np.ndarray:
-                """Compute per-band fluctuation strength."""
+                """Berechnet per-band fluctuation strength."""
                 window = np.hanning(frame_len)
                 n_frm = max(1, (len(audio) - frame_len) // hop + 1)
                 starts = np.arange(n_frm) * hop
@@ -3172,7 +3176,7 @@ class MertMushraProxy:
 
 
 def _extract_hf_embedding(mert_plugin: object, audio: np.ndarray, sr: int) -> np.ndarray | None:
-    """Extract temporal-mean 768-dim embedding from HuggingFace MERT model."""
+    """Extrahiert temporal-mean 768-dim embedding from HuggingFace MERT model."""
     try:
         import torch  # pylint: disable=import-outside-toplevel
 
@@ -3195,7 +3199,7 @@ def _extract_hf_embedding(mert_plugin: object, audio: np.ndarray, sr: int) -> np
 
 
 def _extract_onnx_embedding(mert_plugin: object, audio: np.ndarray, sr: int) -> np.ndarray | None:
-    """Extract embedding from ONNX MERT session."""
+    """Extrahiert embedding from ONNX MERT session."""
     session = getattr(mert_plugin, "_model", None)
     if session is None:
         return None
@@ -3204,7 +3208,9 @@ def _extract_onnx_embedding(mert_plugin: object, audio: np.ndarray, sr: int) -> 
     # ONNX session mid-inference → crash / OOM.
     _plm = None
     try:
-        from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_mert  # pylint: disable=import-outside-toplevel
+        from backend.core.plugin_lifecycle_manager import (
+            get_plugin_lifecycle_manager as _get_plm_mert,  # pylint: disable=import-outside-toplevel
+        )
 
         _plm = _get_plm_mert()
         _plm.set_active("MERT", True)
@@ -3236,7 +3242,7 @@ def _extract_onnx_embedding(mert_plugin: object, audio: np.ndarray, sr: int) -> 
 
 
 def _extract_dsp_embedding(audio: np.ndarray, sr: int) -> np.ndarray:
-    """Compute a 512-dim DSP feature vector as MERT embedding proxy.
+    """Berechnet a 512-dim DSP feature vector as MERT embedding proxy.
 
     Combines MFCCs (13 × 20 stats), chroma (12 × 4 stats), spectral features
     (centroid, rolloff, flatness, contrast × 4 stats), and temporal features
@@ -3311,7 +3317,7 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _to_mono(audio: np.ndarray) -> np.ndarray:
-    """Convert to mono float32; NaN/Inf guard."""
+    """Konvertiert to mono float32; NaN/Inf guard."""
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
     if audio.ndim == 2:
         if audio.shape[0] <= 8:
@@ -3334,7 +3340,7 @@ def _grade(score: float) -> str:
 
 
 def _stft_magnitude(audio: np.ndarray, n_fft: int, hop_length: int) -> np.ndarray:
-    """Compute STFT magnitude spectrogram (numpy-only, no torch).
+    """Berechnet STFT magnitude spectrogram (numpy-only, no torch).
 
     Returns shape (n_fft//2+1, n_frames).
     """

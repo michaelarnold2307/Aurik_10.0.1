@@ -78,17 +78,17 @@ class ArtifactAnalysisResult:
     passes_aurik_standards: bool  # <3 audible per minute
 
     def get_by_type(self, artifact_type: ArtifactType) -> list[Artifact]:
-        """Get all artifacts of specific type."""
+        """Gibt zurück: all artifacts of specific type."""
         return [a for a in self.artifacts if a.artifact_type == artifact_type]
 
     def get_by_severity(self, min_severity: ArtifactSeverity) -> list[Artifact]:
-        """Get artifacts above minimum severity."""
+        """Gibt zurück: artifacts above minimum severity."""
         return [a for a in self.artifacts if a.severity.value >= min_severity.value]
 
 
 class RestorationArtifactDetector:
     """
-    Detect processing artifacts in audio.
+    Erkennt processing artifacts in audio.
 
     Usage:
         detector = RestorationArtifactDetector()
@@ -181,7 +181,7 @@ class RestorationArtifactDetector:
     # ============================================================
 
     def _detect_ringing(self, audio: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect pre-ringing and post-ringing artifacts."""
+        """Erkennt pre-ringing and post-ringing artifacts."""
         artifacts = []
 
         # Detect transients
@@ -240,7 +240,7 @@ class RestorationArtifactDetector:
         return artifacts
 
     def _detect_musical_noise(self, original: np.ndarray, restored: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect musical noise artifacts from aggressive denoising."""
+        """Erkennt musical noise artifacts from aggressive denoising."""
         artifacts = []
 
         # Compute spectrograms
@@ -291,7 +291,7 @@ class RestorationArtifactDetector:
         return artifacts
 
     def _detect_frequency_smearing(self, original: np.ndarray, restored: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect frequency smearing (loss of frequency resolution)."""
+        """Erkennt frequency smearing (loss of frequency resolution)."""
         artifacts = []
 
         # Compute spectrograms
@@ -332,7 +332,7 @@ class RestorationArtifactDetector:
         return artifacts
 
     def _detect_temporal_smearing(self, original: np.ndarray, restored: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect temporal smearing (loss of time resolution)."""
+        """Erkennt temporal smearing (loss of time resolution)."""
         artifacts = []
 
         # Temporal smearing = blurred transients
@@ -371,7 +371,7 @@ class RestorationArtifactDetector:
         return artifacts
 
     def _detect_clipping(self, audio: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect introduced clipping artifacts."""
+        """Erkennt introduced clipping artifacts."""
         artifacts = []
 
         # Find clipped samples (near ±1.0)
@@ -404,7 +404,7 @@ class RestorationArtifactDetector:
         return artifacts
 
     def _detect_phase_distortion(self, original: np.ndarray, restored: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect non-linear phase distortion."""
+        """Erkennt non-linear phase distortion."""
         artifacts = []
 
         # Compute instantaneous phase difference
@@ -443,7 +443,7 @@ class RestorationArtifactDetector:
         return artifacts
 
     def _detect_spectral_holes(self, original: np.ndarray, restored: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect spectral holes (missing frequency bands)."""
+        """Erkennt spectral holes (missing frequency bands)."""
         artifacts = []
 
         # Compute average spectrum
@@ -483,7 +483,7 @@ class RestorationArtifactDetector:
         return artifacts
 
     def _detect_pumping_breathing(self, audio: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect pumping/breathing artifacts (gain fluctuations)."""
+        """Erkennt pumping/breathing artifacts (gain fluctuations)."""
         artifacts = []
 
         # Compute RMS envelope
@@ -523,7 +523,7 @@ class RestorationArtifactDetector:
         return artifacts
 
     def _detect_aliasing(self, audio: np.ndarray, sr: int) -> list[Artifact]:
-        """Detect aliasing artifacts."""
+        """Erkennt aliasing artifacts."""
         artifacts = []
 
         # Compute spectrum
@@ -558,7 +558,7 @@ class RestorationArtifactDetector:
     # ============================================================
 
     def _find_transients(self, audio: np.ndarray, sr: int, threshold: float = 0.1) -> list[int]:
-        """Find transient locations in audio."""
+        """Findet Transient-Positionen im Audio."""
         # Compute onset strength
         onset_envelope = self._compute_onset_strength(audio, sr)
 
@@ -575,7 +575,7 @@ class RestorationArtifactDetector:
         return transients
 
     def _compute_onset_strength(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Compute onset strength envelope."""
+        """Berechnet onset strength envelope."""
         spec = self._compute_spectrogram(audio)
 
         # Onset = increase in spectral energy
@@ -588,7 +588,7 @@ class RestorationArtifactDetector:
         return onset_strength
 
     def _compute_spectrogram(self, audio: np.ndarray) -> np.ndarray:
-        """Compute magnitude spectrogram."""
+        """Berechnet magnitude spectrogram."""
         hop_length = self.hop_size
         n_fft = self.frame_size
 
@@ -614,7 +614,7 @@ class RestorationArtifactDetector:
         return spec
 
     def _compute_spectral_flatness(self, spec: np.ndarray) -> np.ndarray:
-        """Compute spectral flatness for each frame."""
+        """Berechnet spectral flatness for each frame."""
         # Spectral flatness = geometric mean / arithmetic mean
         # High flatness = noise-like, Low flatness = tonal
 
@@ -629,7 +629,7 @@ class RestorationArtifactDetector:
         return flatness
 
     def _hilbert_transform(self, audio: np.ndarray) -> np.ndarray:
-        """Compute analytic signal via Hilbert transform."""
+        """Berechnet analytic signal via Hilbert transform."""
         # Simple Hilbert transform via FFT
         fft = np.fft.fft(audio)
         n = len(audio)
@@ -696,7 +696,7 @@ def quick_artifact_check(original: np.ndarray, restored: np.ndarray, sr: int = 4
 
 
 def generate_artifact_report(result: ArtifactAnalysisResult, audio_duration: float) -> str:
-    """Generate human-readable artifact report."""
+    """Generiert human-readable artifact report."""
     lines = []
     lines.append("=" * 60)
     lines.append("AURIK Artifact Detection Report")

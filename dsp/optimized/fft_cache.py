@@ -44,7 +44,7 @@ class CachedFFT:
 
     def __init__(self, num_threads: int | None = None, enable_wisdom: bool = True, wisdom_file: str | None = None):
         """
-        Initialize FFT cache.
+        Initialisiert FFT cache.
 
         Args:
             num_threads:Number of threads for FFT computation
@@ -275,7 +275,7 @@ class CachedFFT:
         return audio
 
     def _load_wisdom(self, wisdom_file: str):
-        """Load FFTW wisdom from file."""
+        """Lädt FFTW wisdom from file."""
         wisdom_path = Path(wisdom_file)
 
         if wisdom_path.exists():
@@ -288,7 +288,7 @@ class CachedFFT:
                 logger.warning("Failed to load wisdom: %s", e)
 
     def save_wisdom(self, wisdom_file: str | None = None):
-        """Save FFTW wisdom to file."""
+        """Speichert FFTW wisdom to file."""
         if wisdom_file is None:
             wisdom_file = self.wisdom_file
 
@@ -307,7 +307,7 @@ class CachedFFT:
             logger.error("Failed to save wisdom: %s", e)
 
     def clear_cache(self):
-        """Clear FFT plan cache."""
+        """Löscht FFT plan cache."""
         self._rfft_plans.clear()
         self._irfft_plans.clear()
         self._fft_plans.clear()
@@ -317,7 +317,7 @@ class CachedFFT:
 
     def get_statistics(self) -> dict:
         """
-        Get FFT cache statistics.
+        Gibt zurück: FFT cache statistics.
 
         Returns:
             Dictionary with cache info
@@ -341,7 +341,7 @@ _global_fft = None
 
 
 def get_global_fft() -> CachedFFT:
-    """Get or create global FFT instance."""
+    """Gibt zurück: or create global FFT instance."""
     global _global_fft
     if _global_fft is None:
         _global_fft = CachedFFT()

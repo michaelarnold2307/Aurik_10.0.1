@@ -93,7 +93,7 @@ class TapePrintThroughRemover:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_print_through(self, audio: np.ndarray, sample_rate: int) -> dict:
         """Detect pre- and post-echo via bidirectional cross-correlation (±600 ms).
@@ -188,7 +188,7 @@ class TapePrintThroughRemover:
         }
 
     def remove_print_through(self, audio: np.ndarray, sample_rate: int, detection: dict) -> np.ndarray:
-        """Remove detected print-through echoes (bidirektional, LMS).
+        """Entfernt detected print-through echoes (bidirektional, LMS).
 
         Spec §DSP:
             audio_clean[t] = audio[t] − alpha_pre · audio[t + delay_pre]
@@ -278,7 +278,7 @@ class TapePrintThroughRemover:
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process audio to remove print-through.
+        Verarbeitet audio to remove print-through.
 
         Parameters
         ----------
@@ -378,7 +378,7 @@ class TapeAzimuthCorrector:
         preserve_stereo_width: bool = True,
     ):
         """
-        Initialize Azimuth Corrector.
+        Initialisiert Azimuth Corrector.
 
         Parameters
         ----------
@@ -399,11 +399,11 @@ class TapeAzimuthCorrector:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_phase_error(self, left: np.ndarray, right: np.ndarray, sample_rate: int) -> dict:
         """
-        Detect inter-channel phase error.
+        Erkennt inter-channel phase error.
 
         Parameters
         ----------
@@ -525,7 +525,7 @@ class TapeAzimuthCorrector:
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process stereo audio to correct azimuth.
+        Verarbeitet stereo audio to correct azimuth.
 
         Parameters
         ----------
@@ -584,7 +584,7 @@ class TapeAzimuthCorrector:
 
 class TapeSpecialist:
     """
-    Unified API for tape-specific defect removal.
+    Einheitliche API für bandspezifische Defektentfernung.
 
     Combines:
     - TapePrintThroughRemover (GAP #1)
@@ -607,7 +607,7 @@ class TapeSpecialist:
         phase_threshold_degrees: float = 10.0,
     ):
         """
-        Initialize Tape Specialist.
+        Initialisiert Tape Specialist.
 
         Parameters
         ----------
@@ -640,7 +640,7 @@ class TapeSpecialist:
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process audio with tape specialist modules.
+        Verarbeitet audio with tape specialist modules.
 
         Parameters
         ----------
@@ -670,7 +670,7 @@ class TapeSpecialist:
         return output
 
     def get_metrics(self) -> dict:
-        """Get metrics from all modules"""
+        """Gibt zurück: metrics from all modules."""
         metrics = {}
 
         if self.enable_azimuth_correction and hasattr(self, "azimuth_corrector"):

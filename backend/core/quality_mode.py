@@ -27,7 +27,7 @@ class QualityMode(Enum):
 
     @classmethod
     def from_string(cls, mode_str: str) -> "QualityMode":
-        """Convert string to QualityMode."""
+        """Konvertiert string to QualityMode."""
         mode_map = {
             "fast": cls.FAST,
             "balanced": cls.BALANCED,
@@ -49,19 +49,19 @@ class QualityModeConfig:
 
     @classmethod
     def set_mode(cls, mode: QualityMode) -> None:
-        """Set global quality mode."""
+        """Setzt global quality mode."""
         cls._current_mode = mode
         logger.info("Quality mode set to: %s", mode.value)
 
     @classmethod
     def get_mode(cls) -> QualityMode:
-        """Get current quality mode."""
+        """Gibt zurück: current quality mode."""
         return cls._current_mode
 
     @classmethod
     def should_use_ml(cls, phase_name: str, defect_severity: float = 0.5) -> bool:
         """
-        Determine if ML should be used for a specific phase.
+        Bestimmt if ML should be used for a specific phase.
 
         Args:
             phase_name: Name of the phase
@@ -81,7 +81,7 @@ class QualityModeConfig:
 
     @classmethod
     def get_expected_performance(cls) -> dict[str, Any]:
-        """Get expected performance metrics for current mode."""
+        """Gibt zurück: expected performance metrics for current mode."""
         performance = {
             QualityMode.FAST: {
                 "realtime_factor": 0.7,
@@ -110,7 +110,7 @@ ML_MODELS_AVAILABLE = {
 
 
 def check_ml_available(model_name: str) -> bool:
-    """Check if ML model is available."""
+    """Prüft if ML model is available."""
     return ML_MODELS_AVAILABLE.get(model_name, False)
 
 
@@ -168,12 +168,12 @@ PHASE_ML_CONFIG = {
 
 
 def get_phase_ml_config(phase_number: int) -> dict[str, Any] | None:
-    """Get ML configuration for a specific phase."""
+    """Gibt zurück: ML configuration for a specific phase."""
     return PHASE_ML_CONFIG.get(phase_number)
 
 
 def is_phase_ml_enabled(phase_number: int) -> bool:
-    """Check if ML is enabled for a phase based on current mode."""
+    """Prüft if ML is enabled for a phase based on current mode."""
     config = get_phase_ml_config(phase_number)
     if not config:
         return False
@@ -189,7 +189,7 @@ def is_phase_ml_enabled(phase_number: int) -> bool:
 
 # Logging helper
 def log_mode_decision(phase_name: str, use_ml: bool, reason: str) -> None:
-    """Log quality mode decision for debugging."""
+    """Protokolliert quality mode decision for debugging."""
     mode = QualityModeConfig.get_mode()
     ml_status = "ML" if use_ml else "DSP"
     logger.debug("Phase %s | Mode: %s | Using: %s | Reason: %s", phase_name, mode.value, ml_status, reason)

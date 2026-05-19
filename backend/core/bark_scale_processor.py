@@ -84,7 +84,7 @@ class BarkBand:
 
     @property
     def center_bark(self) -> float:
-        """Returns the Bark value of the center frequency."""
+        """Gibt the Bark value of the center frequency zurück."""
         return hz_to_bark(self.center_hz)
 
     def __repr__(self) -> str:
@@ -118,7 +118,7 @@ class BarkSpectrum:
 
     def get_energy_in_range(self, lower_hz: float, upper_hz: float) -> float:
         """
-        Get total normalized energy in frequency range.
+        Gibt zurück: total normalized energy in frequency range.
 
         Args:
             lower_hz: Lower frequency bound
@@ -136,7 +136,7 @@ class BarkSpectrum:
 
     def get_peak_band(self) -> tuple[BarkBand, float]:
         """
-        Get the bark band with maximum energy.
+        Gibt zurück: the bark band with maximum energy.
 
         Returns:
             (peak_band, peak_energy)
@@ -162,7 +162,7 @@ class BarkSpectrum:
 
 def hz_to_bark(freq_hz: float) -> float:
     """
-    Convert frequency in Hz to Bark scale.
+    Konvertiert frequency in Hz to Bark scale.
 
     Uses the Zwicker & Terhardt (1980) formula.
 
@@ -179,7 +179,7 @@ def hz_to_bark(freq_hz: float) -> float:
 
 def bark_to_hz(bark: float) -> float:
     """
-    Convert Bark scale to frequency in Hz.
+    Konvertiert Bark scale to frequency in Hz.
 
     Uses the Schroeder et al. (1979) approximation (inverse of Zwicker).
 
@@ -196,7 +196,7 @@ def bark_to_hz(bark: float) -> float:
 
 def get_bark_bands(num_bands: int = 24) -> list[BarkBand]:
     """
-    Get list of BarkBand objects.
+    Gibt zurück: list of BarkBand objects.
 
     Args:
         num_bands: Number of bands (default: 24)
@@ -225,7 +225,7 @@ def get_bark_bands(num_bands: int = 24) -> list[BarkBand]:
 
 class BarkScaleProcessor:
     """
-    Processes audio on a perceptual Bark scale.
+    Verarbeitet audio on a perceptual Bark scale.
 
     Features:
     - 24 Critical Bands analysis
@@ -241,7 +241,7 @@ class BarkScaleProcessor:
 
     def __init__(self, num_bands: int = 24):
         """
-        Initialize Bark Scale Processor.
+        Initialisiert Bark Scale Processor.
 
         Args:
             num_bands: Number of Bark bands (default: 24)
@@ -252,7 +252,7 @@ class BarkScaleProcessor:
 
     def analyze(self, audio: np.ndarray, sr: int, window: str = "hamming", normalize: bool = True) -> BarkSpectrum:
         """
-        Analyze audio and compute Bark spectrum.
+        Analysiert Audio und berechnet das Bark-Spektrum.
 
         Args:
             audio: Input audio (mono)
@@ -301,7 +301,7 @@ class BarkScaleProcessor:
 
     def filter_bark_band(self, audio: np.ndarray, sr: int, bark_index: int, order: int = 8) -> np.ndarray:
         """
-        Filter audio to isolate a specific Bark band.
+        Filtert audio to isolate a specific Bark band.
 
         Args:
             audio: Input audio
@@ -338,7 +338,7 @@ class BarkScaleProcessor:
         self, audio: np.ndarray, sr: int, lower_bark: int, upper_bark: int, order: int = 8
     ) -> np.ndarray:
         """
-        Filter audio to isolate a range of Bark bands.
+        Filtert audio to isolate a range of Bark bands.
 
         Args:
             audio: Input audio

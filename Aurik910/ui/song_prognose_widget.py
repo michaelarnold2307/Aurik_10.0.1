@@ -142,7 +142,7 @@ class _DefectPill(QLabel):
         self.setStyleSheet(self._BLURAY_ACTIVE_STYLE)
 
     def clear_active(self) -> None:
-        """Remove active highlight, restore severity-based style."""
+        """Entfernt active highlight, restore severity-based style."""
         self.setText(self._base_label)
         self.setStyleSheet(self._default_style)
 
@@ -158,7 +158,7 @@ class _DefectPill(QLabel):
         )
 
     def update_metric(self, new_label: str) -> None:
-        """Update displayed metric/count text (during correcting phase)."""
+        """Aktualisiert displayed metric/count text (during correcting phase)."""
         self._base_label = new_label
         self.setText(new_label)
 
@@ -262,7 +262,7 @@ _DEFECT_METRIC_SUFFIX: dict[str, Any] = {
 
 
 def _pill_label(key: str, val: float, n_events: int) -> str:
-    """Build pill display text: count suffix for event-defects, physical metric for continuous ones."""
+    """Erstellt pill display text: count suffix for event-defects, physical metric for continuous ones."""
     base = _defect_label(key)
     if n_events > 0:
         return f"{base}  \u00d7\u202f{n_events:,}"
@@ -589,7 +589,7 @@ class SongPrognoseWidget(QWidget):
         self._detected_locations: dict[str, list] = {}
 
     def update_material(self, material_key: str, confidence: float) -> None:
-        """Update material row. Call from GUI thread after MediumClassifier."""
+        """Aktualisiert material row. Call from GUI thread after MediumClassifier."""
         self._material = str(material_key or "unknown")
         name = _MATERIAL_NAMES.get(self._material, self._material)
         pct = int(round(confidence * 100))
@@ -600,7 +600,7 @@ class SongPrognoseWidget(QWidget):
         self._refresh_phase_prognosis()
 
     def update_era_genre(self, decade: int | None, genre: str | None) -> None:
-        """Update era/genre rows. Call from GUI thread after EraClassifier."""
+        """Aktualisiert era/genre rows. Call from GUI thread after EraClassifier."""
         self._decade = decade
         self._genre = str(genre or "")
         era_txt = f"{decade}er" if decade else "—"
@@ -609,7 +609,7 @@ class SongPrognoseWidget(QWidget):
 
     def update_restorability(self, result: Any) -> None:
         """
-        Update all score fields. Call from GUI thread after RestorabilityEstimator.
+        Aktualisiert all score fields. Call from GUI thread after RestorabilityEstimator.
         result: RestorabilityResult
         """
         self._result_obj = result
@@ -688,7 +688,7 @@ class SongPrognoseWidget(QWidget):
 
     def update_defects(self, defects: dict) -> None:
         """
-        Update defect pills from DefectScanner result (BatchProcessingThread).
+        Aktualisiert defect pills from DefectScanner result (BatchProcessingThread).
 
         status='detected'   → (re)build pills with counts / physical metrics.
         status='correcting' → update existing pills; mark resolved when phase fixed the defect.
@@ -837,7 +837,7 @@ class SongPrognoseWidget(QWidget):
                 )
 
     def set_preventive_actions(self, actions: list[str]) -> None:
-        """Display post-run preventive DSP actions in the analysis tab."""
+        """Zeigt an: post-run preventive DSP actions in the analysis tab."""
         if not actions:
             self._preventive_lbl.setText("")
             return
@@ -883,7 +883,7 @@ def _print_prognose_terminal(
     limiting_defects: list[str],
     recommendations: list[str],
 ) -> None:
-    """Print a colored prognosis report to the logger (INFO level)."""
+    """Gibt aus: a colored prognosis report to the logger (INFO level)."""
     grade_de = {
         "excellent": "Exzellent",
         "good": "Gut",

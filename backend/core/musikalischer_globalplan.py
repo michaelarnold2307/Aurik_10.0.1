@@ -401,7 +401,7 @@ class StilbewussterRestaurierungsplan:
 
 
 def _safe_mono(audio: np.ndarray) -> np.ndarray:
-    """Convert to mono without NaN propagation."""
+    """Konvertiert to mono without NaN propagation."""
     arr = np.nan_to_num(np.asarray(audio, dtype=np.float32))
     if arr.ndim == 2:
         return arr.mean(axis=0) if arr.shape[0] <= arr.shape[1] else arr.mean(axis=1)

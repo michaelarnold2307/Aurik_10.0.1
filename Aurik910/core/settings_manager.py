@@ -34,7 +34,7 @@ def get_settings_manager() -> SettingsManager:
 
 
 class SettingsManager:
-    """Wraps QSettings for all persistent Aurik preferences."""
+    """Kapselt QSettings for all persistent Aurik preferences."""
 
     def __init__(self) -> None:
         self._qs = QSettings("AURIK", "AURIK Professional")
@@ -123,7 +123,7 @@ class SettingsManager:
     # ── Theme ─────────────────────────────────────────────────────────────
 
     def theme(self) -> str:
-        """Return current theme name: 'dark' (default) or 'light'."""
+        """Gibt current theme name: 'dark' (default) or 'light' zurück."""
         return str(self._qs.value("app/theme", "dark"))
 
     def set_theme(self, theme: str) -> None:

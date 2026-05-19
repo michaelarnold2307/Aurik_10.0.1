@@ -15,7 +15,7 @@ _lock = threading.Lock()
 
 
 def get_adaptive_chain_router(templates: dict[str, list[str]] | None = None) -> AdaptiveChainRouter:
-    """Get or create AdaptiveChainRouter singleton.
+    """Gibt zurück: or create AdaptiveChainRouter singleton.
 
     Args:
         templates: Chain templates dict (only used on first call)

@@ -58,7 +58,7 @@ harmonic_exciter_contract = DSPContract(
 
 
 def _butter_sos(order: int, wn: float | list[float], btype: str) -> npt.NDArray[np.float64]:
-    """Return validated Butterworth coefficients as SOS float64 matrix."""
+    """Gibt validated Butterworth coefficients as SOS float64 matrix zurück."""
     sos = butter(order, wn, btype=btype, output="sos")
     return np.asarray(sos, dtype=np.float64)
 

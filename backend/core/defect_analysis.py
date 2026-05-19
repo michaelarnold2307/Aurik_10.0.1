@@ -79,7 +79,7 @@ class DefectAnalysis:
     overall_quality: float = 1.0  # 0-1 (1 = pristine)
 
     def is_clean(self) -> bool:
-        """Check if audio is relatively clean (minimal defects)."""
+        """Prüft if audio is relatively clean (minimal defects)."""
         return (
             self.clipping_percentage < 1.0
             and self.click_density < 0.5  # Less than 0.5 clicks/sec
@@ -89,15 +89,15 @@ class DefectAnalysis:
         )
 
     def needs_declipping(self) -> bool:
-        """Check if declipping is needed."""
+        """Prüft if declipping is needed."""
         return self.clipping_percentage >= 0.5  # >0.5% clipped samples
 
     def needs_click_removal(self) -> bool:
-        """Check if click removal is needed."""
+        """Prüft if click removal is needed."""
         return self.click_count > 0 or self.medium in [SourceMedium.VINYL, SourceMedium.SHELLAC]
 
     def needs_dropout_repair(self) -> bool:
-        """Check if dropout repair is needed."""
+        """Prüft if dropout repair is needed."""
         return self.dropout_count > 0 or self.medium in [
             SourceMedium.CASSETTE,
             SourceMedium.REEL_TAPE,
@@ -105,7 +105,7 @@ class DefectAnalysis:
         ]
 
     def needs_denoising(self) -> bool:
-        """Check if denoising is needed."""
+        """Prüft if denoising is needed."""
         return self.noise_floor_db > -50.0 or self.has_hiss or self.has_hum
 
     def __repr__(self) -> str:
@@ -119,14 +119,14 @@ class DefectAnalysis:
 
 
 class DefectAnalyzer:
-    """Analyze audio for defects."""
+    """Analysiert Audio auf Defekte."""
 
     def __init__(self):
-        """Initialize defect analyzer."""
+        """Initialisiert defect analyzer."""
 
     def analyze(self, audio: np.ndarray, sr: int) -> DefectAnalysis:
         """
-        Analyze audio for defects.
+        Analysiert Audio auf Defekte.
 
         Args:
             audio: Audio signal
@@ -166,7 +166,7 @@ class DefectAnalyzer:
         return analysis
 
     def _detect_clipping(self, audio: np.ndarray) -> tuple[float, float]:
-        """Detect clipping."""
+        """Erkennt clipping."""
         # Check samples near +/- 1.0
         threshold = 0.99
         clipped = np.abs(audio) >= threshold
@@ -182,7 +182,7 @@ class DefectAnalyzer:
         return clipping_percentage, severity
 
     def _detect_clicks(self, audio: np.ndarray, sr: int) -> int:
-        """Detect clicks/pops."""
+        """Erkennt clicks/pops."""
         if librosa is None:
             return 0
         # Use onset detection with high threshold
@@ -213,7 +213,7 @@ class DefectAnalyzer:
         return click_count
 
     def _detect_dropouts(self, audio: np.ndarray, sr: int) -> tuple[int, float]:
-        """Detect dropouts (sudden amplitude drops)."""
+        """Erkennt dropouts (sudden amplitude drops)."""
         # Compute RMS in short windows
         window_size = int(0.01 * sr)  # 10ms
         hop_size = window_size // 2
@@ -245,7 +245,7 @@ class DefectAnalyzer:
         return dropout_count, dropout_duration_total
 
     def _estimate_noise_floor(self, audio: np.ndarray) -> float:
-        """Estimate noise floor in dB."""
+        """Schätzt noise floor in dB."""
         # Use quietest 10% of audio
         rms_values = []
         window_size = len(audio) // 100
@@ -264,7 +264,7 @@ class DefectAnalyzer:
         return float(np.clip(noise_floor_db, -80, 0))
 
     def _detect_hiss(self, audio: np.ndarray, sr: int) -> bool:
-        """Detect tape hiss (high-frequency noise)."""
+        """Erkennt tape hiss (high-frequency noise)."""
         # High-pass filter above 4 kHz
         sos = signal.butter(4, 4000, "high", fs=sr, output="sos")
         filtered = signal.sosfilt(sos, audio)
@@ -280,7 +280,7 @@ class DefectAnalyzer:
         return False
 
     def _detect_hum(self, audio: np.ndarray, sr: int) -> bool:
-        """Detect electrical hum (50/60 Hz)."""
+        """Erkennt electrical hum (50/60 Hz)."""
         # FFT
         fft = np.fft.rfft(audio)
         freqs = np.fft.rfftfreq(len(audio), 1 / sr)
@@ -301,7 +301,7 @@ class DefectAnalyzer:
         return has_50hz or has_60hz
 
     def _detect_medium(self, analysis: DefectAnalysis) -> tuple[SourceMedium, float]:
-        """Detect source medium based on defect patterns."""
+        """Erkennt source medium based on defect patterns."""
         # Heuristic-based detection
 
         # Vinyl: clicks + hiss
@@ -330,7 +330,7 @@ class DefectAnalyzer:
         return SourceMedium.UNKNOWN, 0.0
 
     def _compute_overall_quality(self, analysis: DefectAnalysis) -> float:
-        """Compute overall quality score (0-1)."""
+        """Berechnet overall quality score (0-1)."""
         quality = 1.0
 
         # Penalize defects

@@ -51,7 +51,7 @@ class TimeAligner:
 
     def __init__(self, max_delay_ms: float = 100.0, correlation_threshold: float = 0.3):
         """
-        Initialize Time Aligner.
+        Initialisiert Time Aligner.
 
         Parameters
         ----------
@@ -69,11 +69,11 @@ class TimeAligner:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_delay(self, reference: np.ndarray, target: np.ndarray, sample_rate: int) -> tuple[int, float]:
         """
-        Detect time delay between reference and target using cross-correlation.
+        Erkennt time delay between reference and target using cross-correlation.
 
         Parameters
         ----------
@@ -169,7 +169,7 @@ class TimeAligner:
 
     def process(self, audio_stereo: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process stereo audio to align channels.
+        Verarbeitet stereo audio to align channels.
 
         Parameters
         ----------
@@ -258,7 +258,7 @@ class PhaseAligner:
 
     def __init__(self, phase_threshold_degrees: float = 90.0, correction_strength: float = 0.8):
         """
-        Initialize Phase Aligner.
+        Initialisiert Phase Aligner.
 
         Parameters
         ----------
@@ -276,11 +276,11 @@ class PhaseAligner:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_phase_difference(self, reference: np.ndarray, target: np.ndarray) -> float:
         """
-        Detect average phase difference between channels using FFT.
+        Erkennt average phase difference between channels using FFT.
 
         Parameters
         ----------
@@ -377,7 +377,7 @@ class PhaseAligner:
 
     def process(self, audio_stereo: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process stereo audio to align phase.
+        Verarbeitet stereo audio to align phase.
 
         Parameters
         ----------
@@ -433,7 +433,7 @@ class PhaseAligner:
 
 class PhaseCancellationCorrector:
     """
-    Detects and corrects phase cancellation in stereo mix.
+    Erkennt and corrects phase cancellation in stereo mix.
 
     Phase Cancellation:
     - When L and R channels are out of phase, they cancel in mono sum
@@ -453,7 +453,7 @@ class PhaseCancellationCorrector:
 
     def __init__(self, cancellation_threshold_db: float = -20.0, correction_strength: float = 0.8):
         """
-        Initialize Phase Cancellation Corrector.
+        Initialisiert Phase Cancellation Corrector.
 
         Parameters
         ----------
@@ -471,11 +471,11 @@ class PhaseCancellationCorrector:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_cancellation(self, left: np.ndarray, right: np.ndarray) -> tuple[bool, float]:
         """
-        Detect phase cancellation by analyzing M/S energy ratio.
+        Erkennt phase cancellation by analyzing M/S energy ratio.
 
         Parameters
         ----------
@@ -537,7 +537,7 @@ class PhaseCancellationCorrector:
 
     def process(self, audio_stereo: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process stereo audio to correct phase cancellation.
+        Verarbeitet stereo audio to correct phase cancellation.
 
         Parameters
         ----------
@@ -611,7 +611,7 @@ class StereoBalanceCorrector:
 
     def __init__(self, imbalance_threshold_db: float = 1.0, correction_strength: float = 0.8):
         """
-        Initialize Stereo Balance Corrector.
+        Initialisiert Stereo Balance Corrector.
 
         Parameters
         ----------
@@ -629,11 +629,11 @@ class StereoBalanceCorrector:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_imbalance(self, left: np.ndarray, right: np.ndarray) -> tuple[float, int]:
         """
-        Detect stereo imbalance.
+        Erkennt stereo imbalance.
 
         Parameters
         ----------
@@ -704,7 +704,7 @@ class StereoBalanceCorrector:
 
     def process(self, audio_stereo: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process stereo audio to correct balance.
+        Verarbeitet stereo audio to correct balance.
 
         Parameters
         ----------
@@ -782,7 +782,7 @@ class MidSideProcessor:
 
     def __init__(self, width_factor: float = 1.0, mid_gain_db: float = 0.0, side_gain_db: float = 0.0):
         """
-        Initialize Mid/Side Processor.
+        Initialisiert Mid/Side Processor.
 
         Parameters
         ----------
@@ -804,11 +804,11 @@ class MidSideProcessor:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def encode_ms(self, left: np.ndarray, right: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
-        Encode L/R to Mid/Side.
+        Kodiert L/R to Mid/Side.
 
         Parameters
         ----------
@@ -830,7 +830,7 @@ class MidSideProcessor:
 
     def decode_ms(self, mid: np.ndarray, side: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
-        Decode Mid/Side to L/R.
+        Dekodiert Mid/Side to L/R.
 
         Parameters
         ----------
@@ -852,7 +852,7 @@ class MidSideProcessor:
 
     def process(self, audio_stereo: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process stereo audio with M/S.
+        Verarbeitet stereo audio with M/S.
 
         Parameters
         ----------
@@ -929,7 +929,7 @@ class CombFilterRemover:
 
     def __init__(self, notch_threshold_db: float = -6.0, correction_strength: float = 0.7):
         """
-        Initialize Comb Filter Remover.
+        Initialisiert Comb Filter Remover.
 
         Parameters
         ----------
@@ -947,11 +947,11 @@ class CombFilterRemover:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_comb(self, audio: np.ndarray, sample_rate: int) -> list[float]:
         """
-        Detect comb filtering by analyzing frequency spectrum.
+        Erkennt comb filtering by analyzing frequency spectrum.
 
         Parameters
         ----------
@@ -1061,7 +1061,7 @@ class CombFilterRemover:
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process audio to remove comb filtering.
+        Verarbeitet audio to remove comb filtering.
 
         Parameters
         ----------
@@ -1127,7 +1127,7 @@ class CombFilterRemover:
 
 class MultiTrackSpecialist:
     """
-    Unified API for multi-track and stereo enhancement.
+    Einheitliche API für Mehrspuraufnahme- und Stereo-Verbesserung.
 
     Combines:
     - TimeAligner (GAP #19)
@@ -1175,7 +1175,7 @@ class MultiTrackSpecialist:
         comb_correction_strength: float = 0.7,
     ):
         """
-        Initialize Multi-Track Specialist.
+        Initialisiert Multi-Track Specialist.
 
         Parameters
         ----------
@@ -1287,7 +1287,7 @@ class MultiTrackSpecialist:
         logger.info("[AuditLog][MultiTrackSpecialist] Ergebnis: %s", result)
 
     def get_metrics(self) -> dict:
-        """Get metrics from all processors"""
+        """Gibt zurück: metrics from all processors."""
         metrics = {}
 
         if self.enable_time_alignment and hasattr(self, "time_aligner"):

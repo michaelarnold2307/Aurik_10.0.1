@@ -27,6 +27,9 @@ SEGMENT_HOP_S: float = 5.0
 # §2.54 Material-adaptive thresholds — lossy codecs show high spectral variance
 # across segments (bitrate-allocation fluctuations), so tighter thresholds cause
 # false-positive warnings without indicating real quality inconsistency.
+# §9.12.8 — vintage analog media (shellac, vinyl, tape) have intrinsic amplitude
+# dynamics (fade-ins, quiet verses, loud choruses) that cause per-segment SNR proxy
+# variation that is NOT a quality inconsistency. Wider thresholds prevent false failure.
 _MATERIAL_SPAN_THRESHOLD: dict[str, float] = {
     "mp3_low": 2.50,  # 128 kbps: aggressive bitrate allocation variance
     "mp3_mid": 1.80,  # 192 kbps
@@ -37,6 +40,14 @@ _MATERIAL_SPAN_THRESHOLD: dict[str, float] = {
     "ogg": 1.50,
     "aac": 1.50,
     "cassette": 1.20,  # Analog with flutter-induced variance
+    # §9.12.8 vintage additions
+    "shellac": 2.00,  # Shellac: high noise floor + significant amplitude variation
+    "wax_cylinder": 2.50,  # Wax cylinder: very high noise + narrow BW
+    "wire_recording": 2.00,
+    "vinyl": 1.00,  # Vinyl: moderate noise; better dynamic range than shellac
+    "vinyl_lp": 1.00,
+    "tape": 1.20,  # Open reel tape: wow/flutter + amplitude modulation
+    "reel_tape": 1.20,
     "default": 0.30,
 }
 _MATERIAL_SIGMA_THRESHOLD: dict[str, float] = {
@@ -49,6 +60,14 @@ _MATERIAL_SIGMA_THRESHOLD: dict[str, float] = {
     "ogg": 0.70,
     "aac": 0.70,
     "cassette": 0.60,
+    # §9.12.8 vintage additions
+    "shellac": 0.90,
+    "wax_cylinder": 1.10,
+    "wire_recording": 0.90,
+    "vinyl": 0.50,
+    "vinyl_lp": 0.50,
+    "tape": 0.60,
+    "reel_tape": 0.60,
     "default": 0.15,
 }
 
@@ -176,20 +195,27 @@ class TemporalQualityCoherenceMetric:
     # Interne Hilfsmethode: schnelle MOS-Schätzung via SNR-Proxy
     # ------------------------------------------------------------------
 
-    def _quick_mos(self, seg: np.ndarray, sr: int) -> float:
-        """Schnelle DSP-basierte MOS-Schätzung (kein ML); gibt float in [1,5] zurueck."""
+    def _quick_mos(self, seg: np.ndarray, sr: int) -> float:  # pylint: disable=unused-argument
+        """Schnelle DSP-basierte MOS-Schätzung (kein ML); gibt float in [1,5] zurueck.
+
+        §9.12.8: Lautstärke-normalisiert — misst SNR relativ zum Segment-eigenen RMS-Peak
+        (nicht absolut). Dadurch sind stille Intros und laute Choruse vergleichbar.
+        """
         if len(seg) == 0:
             return 4.0
         rms = float(np.sqrt(np.mean(seg**2)))
         if rms < 1e-8:
             return 4.0  # Stille → neutral
-        # Heuristik: SNR-Proxy aus Signal/Rauschboden
-        # Rauschboden = 5. Perzentil der Frame-Energie
+        # §9.12.8 Amplitude-Normalization: normalize segment to RMS=0.1 before computing
+        # SNR proxy. This ensures that a quiet verse and a loud chorus get the same MOS
+        # if their noise-to-signal ratio is identical — removes loudness-induced MOS span.
+        norm_seg = seg / (rms + 1e-10) * 0.1
+
         frame = 1024
-        if len(seg) < frame:
+        if len(norm_seg) < frame:
             return 4.0
-        n_frames = len(seg) // frame
-        frame_rms = np.array([np.sqrt(np.mean(seg[k * frame : (k + 1) * frame] ** 2)) for k in range(n_frames)])
+        n_frames = len(norm_seg) // frame
+        frame_rms = np.array([np.sqrt(np.mean(norm_seg[k * frame : (k + 1) * frame] ** 2)) for k in range(n_frames)])
         noise_floor = float(np.percentile(frame_rms, 5)) + 1e-10
         signal_level = float(np.percentile(frame_rms, 95))
         # Guard: signal_level muss > noise_floor sein (Dirac oder Stille-Artefakt)
@@ -215,7 +241,7 @@ _lock = threading.Lock()
 
 def get_temporal_coherence_metric() -> TemporalQualityCoherenceMetric:
     """Thread-sicherer Singleton (§3.2)."""
-    global _instance
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:

@@ -52,7 +52,7 @@ class GoalUpdate:
     violated: bool
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dict for JSON serialization."""
+        """Konvertiert to dict for JSON serialization."""
         return asdict(self)
 
 
@@ -78,7 +78,7 @@ class GoalsSnapshot:
     violations: list[str]
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dict for JSON serialization."""
+        """Konvertiert to dict for JSON serialization."""
         return asdict(self)
 
 
@@ -93,7 +93,7 @@ class ConnectionManager:
     """
 
     def __init__(self):
-        """Initialize connection manager."""
+        """Initialisiert connection manager."""
         self.active_connections: list[WebSocket] = []
         self.session_connections: dict[str, list[WebSocket]] = {}
 
@@ -117,7 +117,7 @@ class ConnectionManager:
 
     def disconnect(self, websocket: WebSocket, session_id: str | None = None):
         """
-        Remove WebSocket connection.
+        Entfernt WebSocket connection.
 
         Args:
             websocket: WebSocket connection
@@ -154,7 +154,7 @@ class ConnectionManager:
 
     async def send_to_session(self, session_id: str, message: dict[str, Any]):
         """
-        Send message to specific session.
+        Sendet message to specific session.
 
         Args:
             session_id: Session ID
@@ -197,7 +197,7 @@ class MusicalGoalsMonitorAPI:
 
     def __init__(self, history_storage_path: Path | None = None):
         """
-        Initialize API.
+        Initialisiert API.
 
         Args:
             history_storage_path: Path to store goals history
@@ -215,7 +215,7 @@ class MusicalGoalsMonitorAPI:
 
     def create_app(self) -> Any:  # Returns FastAPI app
         """
-        Create FastAPI application with all endpoints.
+        Erstellt FastAPI application with all endpoints.
 
         Returns:
             FastAPI app instance
@@ -246,7 +246,7 @@ class MusicalGoalsMonitorAPI:
             # REST endpoint: Get goals history
             @app.get("/api/goals/history/{session_id}")
             async def get_goals_history(session_id: str, limit: int = 100):
-                """Get goals history for session."""
+                """Gibt zurück: goals history for session."""
                 if session_id not in self.history:
                     return {"session_id": session_id, "history": []}
 
@@ -256,7 +256,7 @@ class MusicalGoalsMonitorAPI:
             # REST endpoint: Get current goals
             @app.get("/api/goals/current/{session_id}")
             async def get_current_goals(session_id: str):
-                """Get current goals for session."""
+                """Gibt zurück: current goals for session."""
                 if session_id not in self.history or not self.history[session_id]:
                     raise HTTPException(status_code=404, detail="Session not found")
 
@@ -266,7 +266,7 @@ class MusicalGoalsMonitorAPI:
             # REST endpoint: Update custom thresholds
             @app.post("/api/goals/thresholds/{session_id}")
             async def update_thresholds(session_id: str, thresholds: dict[str, float]):
-                """Update custom thresholds for session."""
+                """Aktualisiert custom thresholds for session."""
                 # Validate thresholds
                 for goal, threshold in thresholds.items():
                     if not (0.0 <= threshold <= 1.0):
@@ -284,7 +284,7 @@ class MusicalGoalsMonitorAPI:
             # REST endpoint: Get active sessions
             @app.get("/api/sessions")
             async def get_active_sessions():
-                """Get list of active sessions."""
+                """Gibt zurück: list of active sessions."""
                 return {
                     "sessions": list(self.history.keys()),
                     "active_connections": len(self.connection_manager.active_connections),
@@ -313,7 +313,7 @@ class MusicalGoalsMonitorAPI:
         self, session_id: str, step_name: str, goals: dict[str, float], thresholds: dict[str, float] | None = None
     ):
         """
-        Update goals for session and broadcast to connected clients.
+        Aktualisiert goals for session and broadcast to connected clients.
 
         Args:
             session_id: Session ID
@@ -368,7 +368,7 @@ class MusicalGoalsMonitorAPI:
 
     def save_history(self, session_id: str):
         """
-        Save session history to disk.
+        Speichert session history to disk.
 
         Args:
             session_id: Session ID
@@ -385,7 +385,7 @@ class MusicalGoalsMonitorAPI:
 
     def load_history(self, session_id: str) -> bool:
         """
-        Load session history from disk.
+        Lädt session history from disk.
 
         Args:
             session_id: Session ID
@@ -407,7 +407,7 @@ class MusicalGoalsMonitorAPI:
         return True
 
     def get_statistics(self) -> dict[str, Any]:
-        """Get API statistics."""
+        """Gibt zurück: API statistics."""
         return {
             "active_sessions": len(self.history),
             "active_connections": len(self.connection_manager.active_connections),

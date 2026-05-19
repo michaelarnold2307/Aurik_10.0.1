@@ -1571,7 +1571,7 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
 
 
 def get_material_initial_strength(material: str, phase_id: str) -> float:
-    """Returns the material-adaptive initial strength for a given phase.
+    """Gibt the material-adaptive initial strength for a given phase zurück.
 
     Used by PMGG to set the correct starting strength instead of always 1.0.
     Returns 1.0 (default / no override) when no entry is found.
@@ -1743,7 +1743,7 @@ _REVERSE_LOCK = threading.Lock()
 
 
 def _build_reverse_phase_map() -> dict[str, list[DefectType]]:
-    """Builds reverse mapping: phase_id → [DefectType] from _PHASE_MAP.
+    """Erstellt reverse mapping: phase_id → [DefectType] from _PHASE_MAP.
 
     Only primary_phases are mapped (these are the phases designed to FIX
     the defect). Secondary phases are support roles and should not be
@@ -1772,7 +1772,7 @@ def get_reverse_phase_map() -> dict[str, list[DefectType]]:
 
 
 def get_phase_defect_severity(phase_id: str, defect_scores: dict) -> float:
-    """Returns a severity factor ∈ [_MIN_SEVERITY_FLOOR, 1.0] for a given phase.
+    """Gibt a severity factor ∈ [_MIN_SEVERITY_FLOOR, 1.0] for a given phase zurück.
 
     For defect-repair phases (present in reverse map): the factor scales
     proportionally to the maximum measured severity among all DefectTypes
@@ -1819,7 +1819,7 @@ def get_phase_locality_factor(
     defect_scores: dict,  # pylint: disable=unused-argument
     defect_location_coverage_map: dict[str, float] | None,
 ) -> float:
-    """Returns locality factor ∈ [0.35, 1.0] for a given phase.
+    """Gibt locality factor ∈ [0.35, 1.0] for a given phase zurück.
 
     Locality reduces global Wet/Dry intensity for sparse, event-like defects,
     preserving timbre outside affected regions.

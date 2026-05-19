@@ -115,7 +115,7 @@ class TruePeakLimiter:
 
     def _compute_gain_reduction(self, audio_upsampled: np.ndarray, sr_up: int) -> np.ndarray:
         """
-        Compute gain reduction envelope with lookahead.
+        Berechnet gain reduction envelope with lookahead.
 
         Returns
         -------
@@ -191,7 +191,7 @@ class TruePeakLimiter:
 
     def measure_true_peak(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure True Peak level in dBTP (ITU-R BS.1770-4).
+        Misst True Peak level in dBTP (ITU-R BS.1770-4).
 
         Parameters
         ----------
@@ -218,7 +218,7 @@ class TruePeakLimiter:
 
     def process(self, audio: np.ndarray, sr: int, return_metrics: bool = False) -> tuple[np.ndarray, dict | None]:
         """
-        Apply true peak limiting to audio.
+        Wendet an: true peak limiting to audio.
 
         Parameters
         ----------

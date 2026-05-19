@@ -217,30 +217,69 @@ class DeEsserPhase(PhaseInterface):
     }
 
     # Material-adaptive Band-Gewichtungen (welche Bänder sind wichtig)
+    # low=4–6 kHz (sh/zh), mid=6–8 kHz (ch/jh, Kassetten-Kopf-Sättigungszone),
+    # high=8–12 kHz (scharfe s/ß-Laute). Vollständige Tabelle für alle MaterialTypes.
     BAND_WEIGHTS = {
-        MaterialType.SHELLAC: {"low": 0.8, "mid": 0.6, "high": 0.4},  # Wenig HF
-        MaterialType.VINYL: {"low": 0.6, "mid": 0.8, "high": 0.9},  # Voller Bereich
+        MaterialType.SHELLAC: {"low": 0.8, "mid": 0.5, "high": 0.2},  # BW ≤7 kHz → nur low-Band relevant
+        MaterialType.VINYL: {"low": 0.6, "mid": 0.9, "high": 0.9},  # Tonabnehmer-Sibilanz: mid+high stark
         MaterialType.TAPE: {"low": 0.7, "mid": 0.8, "high": 0.7},  # Balanced
-        MaterialType.CD_DIGITAL: {"low": 0.5, "mid": 0.7, "high": 1.0},  # HF-fokussiert
-        MaterialType.STREAMING: {"low": 0.6, "mid": 0.7, "high": 0.8},  # Standard
+        MaterialType.CASSETTE: {"low": 0.6, "mid": 0.90, "high": 0.75},  # Kopf-Sättigung: mid-Band Schwerpunkt
+        MaterialType.REEL_TAPE: {"low": 0.6, "mid": 0.75, "high": 0.70},  # Professionell, weniger als Kassette
+        MaterialType.DAT: {"low": 0.5, "mid": 0.60, "high": 0.70},  # Digital, wenig Sibilanz-Probleme
+        MaterialType.CD_DIGITAL: {"low": 0.5, "mid": 0.70, "high": 1.00},  # HF-fokussiert
+        MaterialType.MP3_LOW: {"low": 0.7, "mid": 0.85, "high": 0.80},  # Pre-Echo + HF-Smear → mid+high
+        MaterialType.MP3_HIGH: {"low": 0.6, "mid": 0.75, "high": 0.80},  # Moderate Codec-Artefakte
+        MaterialType.AAC: {"low": 0.6, "mid": 0.70, "high": 0.80},  # Ähnlich MP3-High
+        MaterialType.MINIDISC: {"low": 0.6, "mid": 0.75, "high": 0.80},  # ATRAC: charakteristische Sibilanz
+        MaterialType.STREAMING: {"low": 0.6, "mid": 0.70, "high": 0.80},  # Modern, Standard
+        MaterialType.WAX_CYLINDER: {"low": 0.9, "mid": 0.30, "high": 0.00},  # BW ≤5 kHz → nur low-Band
+        MaterialType.WIRE_RECORDING: {"low": 0.7, "mid": 0.60, "high": 0.30},  # Begrenzter HF-Bereich
+        MaterialType.LACQUER_DISC: {"low": 0.8, "mid": 0.50, "high": 0.30},  # Ähnlich Shellac
+        MaterialType.UNKNOWN: {"low": 0.6, "mid": 0.75, "high": 0.80},  # Fallback
     }
 
-    # De-Essing-Stärke (Max Reduction in dB) - Material-adaptiv
+    # De-Essing-Stärke (Max Reduction in dB) — Material-adaptiv.
+    # Hinweis: max(material_value, gender_max_depth_db) → sanfterer Wert gewinnt.
+    # Für Frauenstimmen überschreibt max_depth_db=-3.5 dB die meisten Material-Werte;
+    # die Material-Werte wirken dort, wo Gender-Erkennung fehlschlägt (AUTO-Fallback).
     MAX_REDUCTION_DB = {
-        MaterialType.SHELLAC: -4.0,  # Subtil (wenig HF vorhanden)
-        MaterialType.VINYL: -7.0,  # Moderat-Aggressiv
+        MaterialType.SHELLAC: -4.0,  # BW-begrenzt, subtil
+        MaterialType.VINYL: -7.0,  # Tonabnehmer-Sibilanz: stärkste Behandlung
         MaterialType.TAPE: -6.0,  # Moderat
+        MaterialType.CASSETTE: -6.0,  # Kopf-HF-Sättigung: wie TAPE
+        MaterialType.REEL_TAPE: -5.5,  # Professionell, etwas schonender als Kassette
+        MaterialType.DAT: -4.5,  # Digital: konservativ
         MaterialType.CD_DIGITAL: -5.0,  # Konservativ
+        MaterialType.MP3_LOW: -7.0,  # Codec-Sibilanz-Artefakte: aggressiv
+        MaterialType.MP3_HIGH: -5.5,  # Moderat
+        MaterialType.AAC: -5.0,  # Moderat
+        MaterialType.MINIDISC: -6.0,  # ATRAC-Sibilanz: wie TAPE
         MaterialType.STREAMING: -4.0,  # Minimal (bereits professionell)
+        MaterialType.WAX_CYLINDER: -3.0,  # Kaum Sibilantenbereich vorhanden
+        MaterialType.WIRE_RECORDING: -5.0,  # Moderat
+        MaterialType.LACQUER_DISC: -4.5,  # Moderat
+        MaterialType.UNKNOWN: -6.0,  # Fallback
     }
 
-    # Threshold für Sibilance-Detektion (Ratio: Sibilance-Band vs Gesamt-RMS)
+    # Threshold für Sibilance-Detektion (Ratio: Sibilance-Band-Energie vs Gesamt-RMS).
+    # Niedriger = sensitiver = mehr Frames werden de-essed.
     SIBILANCE_THRESHOLD_RATIO = {
-        MaterialType.SHELLAC: 2.5,  # Höherer Schwellwert (weniger sensitiv)
-        MaterialType.VINYL: 1.8,  # Standard
+        MaterialType.SHELLAC: 2.2,  # Leicht sensitiver als früher (wenn Sibilanten vorhanden, sind sie real)
+        MaterialType.VINYL: 1.6,  # Sensitiv: Tonabnehmer-Sibilanz typisch für Vinyl
         MaterialType.TAPE: 2.0,  # Moderat
+        MaterialType.CASSETTE: 1.9,  # Leicht sensitiver als TAPE (Kopf-HF-Sättigung)
+        MaterialType.REEL_TAPE: 2.0,  # Wie TAPE
+        MaterialType.DAT: 1.5,  # Digital: wenn getriggert, dann echte Sibilanz
         MaterialType.CD_DIGITAL: 1.5,  # Sensitiv
+        MaterialType.MP3_LOW: 1.6,  # HF-Smear erzeugt Sibilanz-ähnliche Artefakte
+        MaterialType.MP3_HIGH: 1.7,  # Moderat sensitiv
+        MaterialType.AAC: 1.8,  # Standard
+        MaterialType.MINIDISC: 1.9,  # ATRAC: moderat
         MaterialType.STREAMING: 1.8,  # Standard
+        MaterialType.WAX_CYLINDER: 3.5,  # Sehr unempfindlich (BW ≤5 kHz, kaum Sibilanten)
+        MaterialType.WIRE_RECORDING: 2.2,  # Wenig sensitiv (begrenzter HF)
+        MaterialType.LACQUER_DISC: 2.3,  # Wenig sensitiv (ähnlich Shellac)
+        MaterialType.UNKNOWN: 2.0,  # Fallback
     }
 
     # Look-ahead Buffer (ms) - für artefakt-freies Onset (Natürlichkeit-Ziel)
@@ -259,7 +298,7 @@ class DeEsserPhase(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive de-esser lookahead profile."""
+        """Berechnet adaptive de-esser lookahead profile."""
         _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
         _qm = str(quality_mode or "balanced").lower().replace("-", "_")
         _rest = float(np.clip(restorability_score, 0.0, 100.0))

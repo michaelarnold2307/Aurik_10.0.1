@@ -203,6 +203,66 @@ class LoudnessNormalizationPhase(PhaseInterface):
         if quality_mode in ("maximum", "studio2026"):
             target_lufs = -14.0
 
+        # §9.1c AMPLITUDE_DRIFT correction — time-varying gain to counteract carrier-induced
+        # gradual level rise/fall.  Only applied when UV3 explicitly requests it via kwargs
+        # (only when DefectType.AMPLITUDE_DRIFT is detected AND not artistic).
+        _drift_correction_applied = False
+        _drift_gain_range_db = 0.0
+        if kwargs.get("amplitude_drift_correction", False):
+            try:
+                _drift_slope = float(kwargs.get("drift_slope_db_per_minute", 0.0))
+                if abs(_drift_slope) >= 1.5:
+                    from scipy.signal import savgol_filter as _savgol  # pylint: disable=import-outside-toplevel
+
+                    _window_s = 10.0
+                    _hop = int(_window_s * sample_rate)
+                    _n = len(audio)
+                    _mono_ref = audio[:, 0] if audio.ndim == 2 else audio
+                    _gate_lin = 10 ** (-40.0 / 20.0)
+                    _n_windows = max(1, _n // _hop)
+                    # Build inverse trend: if slope > 0 (rising), apply attenuating gain
+                    # Hard cap: max ±6 dB total correction over entire track
+                    _total_correction_db = float(np.clip(-_drift_slope * (_n / sample_rate / 60.0), -6.0, 6.0))
+                    # Ramp from 0 to _total_correction_db across windows
+                    _gain_envelope_db = np.linspace(0.0, _total_correction_db, _n_windows, dtype=np.float32)
+                    # Smooth the gain envelope
+                    _sg_window = max(5, _n_windows // 5 | 1)  # odd window
+                    if _sg_window >= _n_windows:
+                        _sg_window = max(3, (_n_windows - 1) | 1)
+                    if _sg_window >= 3 and len(_gain_envelope_db) >= _sg_window:
+                        _gain_envelope_db = _savgol(_gain_envelope_db, _sg_window, 1).astype(np.float32)
+                    # Upsample envelope to sample-level
+                    _full_gain_db = np.interp(
+                        np.arange(_n),
+                        np.arange(_n_windows) * _hop + _hop // 2,
+                        _gain_envelope_db,
+                    ).astype(np.float32)
+                    _full_gain_lin = np.float32(10.0) ** (_full_gain_db / np.float32(20.0))
+                    # Musical gate: only apply to frames above -40 dBFS
+                    _rms_frame = int(0.1 * sample_rate)  # 100 ms frames
+                    _gate_mask = np.ones(_n, dtype=np.float32)
+                    for _gi in range(0, _n, _rms_frame):
+                        _chunk = _mono_ref[_gi : _gi + _rms_frame]
+                        if len(_chunk) > 0:
+                            _rms_g = float(np.sqrt(np.mean(_chunk**2)))
+                            if _rms_g < _gate_lin:
+                                _gate_mask[_gi : _gi + _rms_frame] = 0.0
+                    _full_gain_lin = np.where(_gate_mask > 0.5, _full_gain_lin, np.float32(1.0))
+                    if audio.ndim == 2:
+                        audio = audio * _full_gain_lin[np.newaxis, :]
+                    else:
+                        audio = audio * _full_gain_lin
+                    audio = np.clip(audio, -1.0, 1.0)
+                    _drift_correction_applied = True
+                    _drift_gain_range_db = float(_total_correction_db)
+                    logger.info(
+                        "Phase 40: AMPLITUDE_DRIFT correction applied: slope=%.2f dB/min, total_correction=%.1f dB",
+                        _drift_slope,
+                        _total_correction_db,
+                    )
+            except Exception as _drift_exc:
+                logger.warning("Phase 40: AMPLITUDE_DRIFT correction failed: %s", _drift_exc)
+
         # Measure current loudness (ITU-R BS.1770-4)
         integrated_lufs, lra, momentary_max, short_term_max = self._measure_loudness_full(audio, sample_rate)
 
@@ -319,6 +379,8 @@ class LoudnessNormalizationPhase(PhaseInterface):
                 "effective_strength": _effective_strength,
                 "rms_drop_db": 0.0,
                 "loudness_makeup_db": 0.0,
+                "amplitude_drift_correction_applied": _drift_correction_applied,
+                "amplitude_drift_gain_range_db": _drift_gain_range_db,
             },
             metrics={
                 "integrated_lufs_before": float(integrated_lufs),

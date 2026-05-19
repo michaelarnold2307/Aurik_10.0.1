@@ -1,7 +1,3 @@
-import logging
-
-logger = logging.getLogger(__name__)
-
 """
 Detects and reduces plosives (P, B, T, K sounds) that cause low-frequency transients.
 
@@ -20,13 +16,17 @@ Philosophie: Authentizität & Natürlichkeit > Technische Perfektion
 Week 10 Integration: P1 Speech Defect Treatment (NOT for music vocals!)
 """
 
+import logging
+
 import numpy as np
 from scipy import signal
+
+logger = logging.getLogger(__name__)
 
 
 class AutomaticPlosiveRemover:
     """
-    Detects and removes plosive artifacts in SPEECH recordings only.
+    Erkennt and removes plosive artifacts in SPEECH recordings only.
 
     🎭 MUSIK-RESTAURATION: NOT for singing vocals (plosives are authentic performance)
 
@@ -56,7 +56,7 @@ class AutomaticPlosiveRemover:
         highpass_cutoff: float = 80.0,
     ):
         """
-        Initialize plosive remover.
+        Initialisiert plosive remover.
 
         Args:
             sr: Sample rate
@@ -75,7 +75,7 @@ class AutomaticPlosiveRemover:
 
     def process(self, audio: np.ndarray) -> np.ndarray:
         """
-        Process audio to remove plosives.
+        Verarbeitet audio to remove plosives.
 
         Args:
             audio: Input audio (mono)
@@ -110,7 +110,7 @@ class AutomaticPlosiveRemover:
 
     def _detect_plosives(self, audio: np.ndarray) -> list[tuple[int, int]]:
         """
-        Detect plosive events in audio.
+        Erkennt plosive events in audio.
 
         Returns:
             List of (start_sample, end_sample) tuples
@@ -123,13 +123,13 @@ class AutomaticPlosiveRemover:
         window_size = int(0.005 * self.sr)  # 5ms windows
         hop_size = window_size // 2
 
-        envelope = []
+        _envelope_list: list[float] = []
         for i in range(0, len(audio_lf) - window_size, hop_size):
             window = audio_lf[i : i + window_size]
-            rms = np.sqrt(np.mean(window**2))
-            envelope.append(rms)
+            rms = float(np.sqrt(np.mean(window**2)))
+            _envelope_list.append(rms)
 
-        envelope = np.array(envelope)
+        envelope: np.ndarray = np.array(_envelope_list)
 
         # Convert to dB
         envelope_db = 20 * np.log10(envelope + 1e-10)
@@ -166,7 +166,7 @@ class AutomaticPlosiveRemover:
 
     def _process_plosive_region(self, audio: np.ndarray, start: int, end: int) -> np.ndarray:
         """
-        Process a single plosive region.
+        Verarbeitet a single plosive region.
 
         Strategy:
         1. Apply high-pass filter to remove low-frequency transient
@@ -235,7 +235,7 @@ class AutomaticPlosiveRemover:
 
     def detect_only(self, audio: np.ndarray) -> tuple[int, list[tuple[int, int]]]:
         """
-        Detect plosives without processing.
+        Erkennt plosives without processing.
 
         Args:
             audio: Input audio (mono)
@@ -255,27 +255,28 @@ if __name__ == "__main__":
 
     # Load test audio (speech/podcast with plosives)
     _res = load_audio_file("test_speech_plosives.wav")
-    audio, sr = np.asarray(_res["audio"], dtype=np.float32), int(_res["sr"])
+    assert _res is not None, "load_audio_file returned None"
+    _audio, _sr = np.asarray(_res["audio"], dtype=np.float32), int(_res["sr"])
 
     # Convert to mono if stereo
-    if audio.ndim > 1:
-        audio = np.mean(audio, axis=0)
+    if _audio.ndim > 1:
+        _audio = np.mean(_audio, axis=0)
 
     # Initialize remover
-    remover = AutomaticPlosiveRemover(sr=sr, reduction_db=15.0)
+    _remover = AutomaticPlosiveRemover(sr=_sr, reduction_db=15.0)
 
     # Detect plosives
-    count, regions = remover.detect_only(audio)
-    logger.info("Detected %d plosive events", count)
+    _count, _regions = _remover.detect_only(_audio)
+    logger.info("Detected %d plosive events", _count)
 
-    for i, (start, end) in enumerate(regions):
-        duration_ms = (end - start) / sr * 1000
-        time_s = start / sr
-        logger.info("  Plosive %d: %.2fs, duration: %.1fms", i + 1, time_s, duration_ms)
+    for _i, (_start, _end) in enumerate(_regions):
+        _duration_ms = (_end - _start) / _sr * 1000
+        _time_s = _start / _sr
+        logger.info("  Plosive %d: %.2fs, duration: %.1fms", _i + 1, _time_s, _duration_ms)
 
     # Process audio
-    audio_processed = remover.process(audio)
+    _audio_processed = _remover.process(_audio)
 
     # Save output
-    sf.write("test_speech_processed.wav", audio_processed, sr)
+    sf.write("test_speech_processed.wav", _audio_processed, _sr)
     logger.info("Processed audio saved")

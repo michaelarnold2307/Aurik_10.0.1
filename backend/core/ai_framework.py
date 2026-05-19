@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 
 def _analytic_envelope(signal_in: np.ndarray) -> np.ndarray:
-    """Return amplitude envelope via analytic signal (FFT Hilbert equivalent)."""
+    """Gibt amplitude envelope via analytic signal (FFT Hilbert equivalent) zurück."""
     x = np.asarray(signal_in, dtype=np.float64).reshape(-1)
     n = x.shape[0]
     if n == 0:
@@ -177,7 +177,7 @@ class EnhancementResult:
 
 class UnifiedDefectDetector:
     """
-    Unified Defect Detection System.
+    Einheitliches Defekterkennungs-System.
 
     Kombiniert:
     - Open Source Feature Extraction (librosa, scipy)
@@ -550,7 +550,7 @@ class UnifiedDefectDetector:
         return wow_conf, wow_sev, locations, flutter_conf, flutter_sev, locations
 
     def _detect_clipping(self, audio: np.ndarray, return_locs: bool) -> tuple[float, float, list]:
-        """Clipping detection (hard limiting)."""
+        """Clipping-Erkennung (hartes Begrenzen)."""
         # Count samples near ±1.0
         clipped = np.abs(audio) > 0.99
         clipping_ratio = np.sum(clipped) / len(audio)
@@ -571,7 +571,7 @@ class UnifiedDefectDetector:
 
     def _compute_quality_score(self, defects: dict[DefectType, float], severity: dict[DefectType, float]) -> float:
         """
-        Compute overall quality score (0-1, 1=perfect).
+        Berechnet overall quality score (0-1, 1=perfect).
 
         Weighted by defect impact on listening experience.
         """
@@ -657,7 +657,7 @@ class UnifiedDefectDetector:
 
 class UnifiedAudioRestorer:
     """
-    Unified Audio Restoration System.
+    Einheitliches Audio-Restaurierungs-System.
 
     Kombiniert:
     - Open Source Basistechniken (scipy, librosa)
@@ -883,7 +883,7 @@ class UnifiedAudioRestorer:
 
 class UnifiedAudioEnhancer:
     """
-    Unified Audio Enhancement System.
+    Einheitliches Audio-Verbesserungs-System.
 
     Eigenentwicklung:
     - Clarity enhancement via adaptive EQ
@@ -1147,7 +1147,7 @@ class Studio2026Processor:
     @staticmethod
     def _map_material_type(framework_material: _AiMediaType) -> "_PhaseMaterialType | None":
         """
-        Convert _AiMediaType from ai_framework to defect_scanner _AiMediaType (used by phases).
+        Konvertiert _AiMediaType from ai_framework to defect_scanner _AiMediaType (used by phases).
 
         Args:
             framework_material: _AiMediaType from ai_framework
@@ -1243,7 +1243,7 @@ class Studio2026Processor:
 
     def _apply_dynamics(self, audio: np.ndarray, material: _AiMediaType) -> tuple[np.ndarray, dict[str, Any]]:
         """
-        Apply dynamics processing (Phase 10: Compression + Phase 11: Limiting).
+        Wendet an: dynamics processing (Phase 10: Compression + Phase 11: Limiting).
 
         Args:
             audio: Input audio
@@ -1354,13 +1354,13 @@ class AurikAIFramework:
             logger.info("✅ Aurik AI Framework Initialized (Vocal AI not available)")
 
     def analyze(self, audio: np.ndarray) -> DefectDetectionResult:
-        """Analyze audio for defects."""
+        """Analysiert Audio auf Defekte."""
         return self.detector.detect(audio)
 
     def restore(
         self, audio: np.ndarray, mode: RestorationMode = RestorationMode.BALANCED
     ) -> FrameworkRestorationResult:
-        """Restore audio."""
+        """Restauriert audio."""
         return self.restorer.restore(audio, mode=mode)
 
     def enhance(self, audio: np.ndarray, **kwargs) -> EnhancementResult:

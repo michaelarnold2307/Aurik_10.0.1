@@ -40,7 +40,7 @@ def safe_to_mono(audio: np.ndarray) -> np.ndarray:
 
 
 def stereo_channel_view(audio: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Return stereo channels as 1D arrays for either (2, N) or (N, 2) layout."""
+    """Gibt stereo channels as 1D arrays for either (2, N) or (N, 2) layout zurück."""
     if audio.ndim != 2:
         raise ValueError(f"Stereo audio must be 2D, got shape {audio.shape}")
     if audio.shape[0] == 2 and audio.shape[1] > 2:
@@ -66,7 +66,7 @@ def stereo_like(left: np.ndarray, right: np.ndarray, template: np.ndarray) -> np
 
 
 def to_channels_last(audio: np.ndarray) -> tuple["np.ndarray", bool]:
-    """Normalize stereo audio to (N, 2) channels-last layout.
+    """Normalisiert stereo audio to (N, 2) channels-last layout.
 
     Returns (normalized_audio, was_transposed) so the caller can restore the
     original orientation with ``restore_layout``.
@@ -84,7 +84,7 @@ def restore_layout(audio: np.ndarray, was_transposed: bool) -> np.ndarray:
 
 
 def audio_sample_count(audio: np.ndarray) -> int:
-    """Return the time-axis sample count for mono or stereo audio."""
+    """Gibt the time-axis sample count for mono or stereo audio zurück."""
     if audio.ndim == 1:
         return int(audio.shape[0])
     if audio.ndim == 2:
@@ -95,7 +95,7 @@ def audio_sample_count(audio: np.ndarray) -> int:
 
 
 def compute_gated_rms_linear(sig: np.ndarray, gate_dbfs: float = -50.0) -> float:
-    """Compute frame-gated RMS in linear scale (stereo-safe via mono energy).
+    """Berechnet frame-gated RMS in linear scale (stereo-safe via mono energy).
 
     §2.45a v9.12.1: Adaptive gate (same as _rms_dbfs_gated in UV3).
     effective_gate = max(gate_dbfs, P5+10) — excludes vinyl/shellac surface-noise
@@ -139,7 +139,7 @@ def compute_gated_rms_linear(sig: np.ndarray, gate_dbfs: float = -50.0) -> float
 
 
 def compute_gated_rms_dbfs(sig: np.ndarray, gate_dbfs: float = -50.0) -> float:
-    """Compute frame-gated RMS in dBFS."""
+    """Berechnet frame-gated RMS in dBFS."""
     rms = compute_gated_rms_linear(sig, gate_dbfs=gate_dbfs)
     return float(20.0 * np.log10(rms + 1e-12))
 
@@ -287,7 +287,7 @@ def _quiet_edge_guard_profile(
     *,
     material_key: str | None = None,
 ) -> dict[str, float | int | bool] | None:
-    """Measure whether original intro/outro should be treated as quiet edges."""
+    """Misst whether original intro/outro should be treated as quiet edges."""
     ref_arr = np.asarray(reference_audio, dtype=np.float32)
     ref = safe_to_mono(ref_arr)
     n = len(ref)
@@ -429,7 +429,7 @@ def limit_quiet_edge_boost(
     material_key: str | None = None,
     max_edge_boost_db: float = 2.0,
 ) -> np.ndarray:
-    """Scale quiet intro/outro regions back toward the original edge level."""
+    """Skaliert quiet intro/outro regions back toward the original edge level."""
     profile = _quiet_edge_guard_profile(reference_audio, sr, material_key=material_key)
     if profile is None:
         return np.asarray(candidate_audio, dtype=np.float32)

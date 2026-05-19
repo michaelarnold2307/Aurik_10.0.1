@@ -18,13 +18,13 @@ class OutputGuardDecision:
 
 
 def rms(audio: np.ndarray) -> float:
-    """Return RMS for mono/stereo audio."""
+    """Gibt RMS for mono/stereo audio zurück."""
     x = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
     return float(np.sqrt(np.mean(x**2) + 1e-12))
 
 
 def side_rms(audio: np.ndarray) -> float:
-    """Return side-channel RMS for stereo audio (handles both (N,2) and (2,N))."""
+    """Gibt side-channel RMS for stereo audio (handles both (N,2) and (2,N)) zurück."""
     if audio.ndim != 2:
         return 0.0
     # (N, 2) samples-first
@@ -47,7 +47,7 @@ def evaluate_output_guard(
     stereo_side_ratio_min: float,
     stereo_side_ratio_max: float,
 ) -> OutputGuardDecision:
-    """Evaluate conservative output guard constraints for phase outputs."""
+    """Bewertet conservative output guard constraints for phase outputs."""
     rms_delta_db = float(20.0 * np.log10((rms(candidate) + 1e-12) / (rms(original) + 1e-12)))
     side_ratio = 1.0
     # Detect stereo for both (N, 2) samples-first and (2, N) channels-first layouts

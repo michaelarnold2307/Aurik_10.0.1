@@ -161,7 +161,7 @@ def apply(
     min_groove_echo_score: float = _MIN_GROOVE_ECHO_SCORE,
     spectral_subtraction_floor_db: float = _SPECTRAL_SUBTRACTION_FLOOR_DB,
 ) -> np.ndarray:
-    """Main entry point for Phase 61."""
+    """Haupt-entry point for Phase 61."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -324,10 +324,13 @@ class GrooveEchoCancellationPhase(PhaseInterface):
         # und dürfen nicht durch Groove-Echo-Subtraktion entfernt werden (§2.46f Kategorie 3).
         try:
             from backend.core.natural_performance_detector import get_natural_performance_detector
+
             _mono61 = audio.mean(axis=0) if audio.ndim == 2 else audio
-            _npa_mask61 = get_natural_performance_detector().detect(
-                _mono61, sample_rate
-            ).get_protected_mask(len(_mono61), sample_rate)
+            _npa_mask61 = (
+                get_natural_performance_detector()
+                .detect(_mono61, sample_rate)
+                .get_protected_mask(len(_mono61), sample_rate)
+            )
             if _npa_mask61 is not None and _npa_mask61.any():
                 if result_audio.ndim == 2:
                     result_audio[:, _npa_mask61] = audio[:, _npa_mask61]
@@ -340,9 +343,8 @@ class GrooveEchoCancellationPhase(PhaseInterface):
         # keine Komponenten die vom Musiksignal maskiert werden (G_floor ≥ 0.10).
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
-            result_audio = apply_psychoacoustic_masking_clamp(
-                audio, result_audio, sample_rate, mode="restoration"
-            )
+
+            result_audio = apply_psychoacoustic_masking_clamp(audio, result_audio, sample_rate, mode="restoration")
         except Exception as _pmask61_exc:
             logger.debug("§2.62 Phase61 Masking-Guard (non-blocking): %s", _pmask61_exc)
 

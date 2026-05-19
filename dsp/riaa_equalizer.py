@@ -45,7 +45,7 @@ _instance: RIAAEqualizer | None = None
 
 
 def _us_to_rad(tau_us: float) -> float:
-    """Convert time constant in microseconds to pole/zero angular frequency."""
+    """Konvertiert time constant in microseconds to pole/zero angular frequency."""
     return 1.0 / (tau_us * 1e-6)
 
 
@@ -128,7 +128,7 @@ class RIAAResult:
 
 
 def _build_sos(curve_key: str, sr: int, invert: bool) -> np.ndarray:
-    """Build second-order sections (SOS) for the given curve and sample rate.
+    """Erstellt second-order sections (SOS) for the given curve and sample rate.
 
     The filter is specified in the analogue domain (zeros/poles in rad/s) and
     converted to digital IIR coefficients via bilinear transformation (Tustin).
@@ -277,7 +277,7 @@ class RIAAEqualizer:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Apply RIAA equalisation and return corrected audio (np.ndarray float32).
+        """Wendet an: RIAA equalisation and return corrected audio (np.ndarray float32).
 
         For the full result dataclass (curve_used, auto_detected …) use
         :meth:`process_full`.
@@ -292,7 +292,7 @@ class RIAAEqualizer:
         return self.process_full(audio, sr).audio
 
     def process_full(self, audio: np.ndarray, sr: int) -> RIAAResult:
-        """Apply RIAA equalisation and return a :class:`RIAAResult` dataclass.
+        """Wendet an: RIAA equalisation and return a :class:`RIAAResult` dataclass.
 
         Args:
             audio: Input audio float32, shape (N,) mono or (N, C) multichannel.
@@ -349,7 +349,7 @@ class RIAAEqualizer:
 
 
 def get_riaa_equalizer(mode: str = "invert", curve: str = "auto") -> RIAAEqualizer:
-    """Return a RIAAEqualizer instance configured with the requested mode/curve.
+    """Gibt a RIAAEqualizer instance configured with the requested mode/curve zurück.
 
     Because different call sites may request different modes/curves the instance
     is not a global singleton but a lightweight stateless object — construction

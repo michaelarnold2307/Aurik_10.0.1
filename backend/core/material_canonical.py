@@ -41,7 +41,7 @@ _MATERIAL_LABELS_DE: dict[str, str] = {
 
 
 def canonical_material_key(material: Any) -> str:
-    """Return canonical, unambiguous material key used across modules."""
+    """Gibt canonical, unambiguous material key used across modules zurück."""
     if material is None:
         return "unknown"
 
@@ -54,6 +54,6 @@ def canonical_material_key(material: Any) -> str:
 
 
 def material_label_de(material: Any) -> str:
-    """Return stable German label for a material key or enum."""
+    """Gibt stable German label for a material key or enum zurück."""
     key = canonical_material_key(material)
     return _MATERIAL_LABELS_DE.get(key, key)

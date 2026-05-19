@@ -165,12 +165,12 @@ class EmergencyRestorationResult:
 
 class DamageAnalyzer:
     """
-    Analyze extent and type of audio damage.
+    Analysiert Ausmaß und Art des Audioschadens.
     """
 
     def __init__(self, n_bands: int = 8):
         """
-        Initialize DamageAnalyzer.
+        Initialisiert DamageAnalyzer.
 
         Args:
             n_bands: Number of frequency bands for analysis
@@ -230,7 +230,7 @@ class DamageAnalyzer:
 
     def _estimate_overall_corruption(self, audio: np.ndarray) -> float:
         """
-        Estimate overall corruption percentage.
+        Schätzt overall corruption percentage.
 
         Uses heuristics:
         - Clipping ratio
@@ -285,7 +285,7 @@ class DamageAnalyzer:
 
     def _analyze_frequency_bands(self, audio: np.ndarray, sample_rate: int) -> list[FrequencyBand]:
         """
-        Analyze damage per frequency band.
+        Analysiert Schäden pro Frequenzband.
 
         Divides spectrum into n_bands and assesses each.
         """
@@ -351,7 +351,7 @@ class DamageAnalyzer:
     def _generate_recommendations(
         self, corruption: float, severity: DamageSeverity, salvageable_bands: int, total_bands: int
     ) -> list[str]:
-        """Generate restoration recommendations."""
+        """Generiert restoration recommendations."""
         recommendations = []
 
         if severity == DamageSeverity.CRITICAL:
@@ -397,7 +397,7 @@ class EmergencyRestorationEngine:
     """
 
     def __init__(self) -> None:
-        """Initialize EmergencyRestorationEngine."""
+        """Initialisiert EmergencyRestorationEngine."""
         self.damage_analyzer = DamageAnalyzer(n_bands=8)
         logger.info("EmergencyRestorationEngine initialized")
 
@@ -502,7 +502,7 @@ class EmergencyRestorationEngine:
         self, audio: np.ndarray, sample_rate: int, bands: list[FrequencyBand]
     ) -> np.ndarray:
         """
-        Restore audio by filtering out destroyed bands.
+        Restauriert audio by filtering out destroyed bands.
 
         Strategy: Keep salvageable bands, attenuate/remove destroyed bands.
         """
@@ -589,7 +589,7 @@ class EmergencyRestorationEngine:
     def _generate_report(
         self, assessment: DamageAssessment, restored_audio: np.ndarray, sample_rate: int
     ) -> EmergencyReport:
-        """Generate emergency restoration report."""
+        """Generiert emergency restoration report."""
         salvaged_bands = []
         lost_bands = []
 

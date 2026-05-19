@@ -32,7 +32,7 @@ except ImportError:
 
 @dataclass
 class BreathEvent:
-    """Detected breath event."""
+    """Erkanntes Atemereignis."""
 
     start_sample: int
     end_sample: int
@@ -46,7 +46,7 @@ class BreathEvent:
 
 @dataclass
 class PlosiveEvent:
-    """Detected plosive event (P, B, T, D, K, G sounds)."""
+    """Erkanntes Plosiv-Ereignis (P, B, T, D, K, G Laute)."""
 
     start_sample: int
     peak_sample: int
@@ -61,7 +61,7 @@ class PlosiveEvent:
 
 @dataclass
 class TransientEvent:
-    """Detected transient (drum hit, percussive sound)."""
+    """Erkannter Transient (Schlagzeugschlag, perkussiver Klang)."""
 
     peak_sample: int
     attack_time_ms: float
@@ -102,7 +102,7 @@ class RoomToneAnalysis:
 
 
 class BreathDetector:
-    """Detect breath events in audio."""
+    """Erkennt breath events in audio."""
 
     def __init__(
         self,
@@ -112,7 +112,7 @@ class BreathDetector:
         energy_threshold_db: float = -40.0,
     ):
         """
-        Initialize breath detector.
+        Initialisiert breath detector.
 
         Args:
             min_duration_sec: Minimum breath duration
@@ -127,7 +127,7 @@ class BreathDetector:
 
     def detect(self, audio: np.ndarray, sr: int) -> list[BreathEvent]:
         """
-        Detect breath events in audio.
+        Erkennt breath events in audio.
 
         Breaths are characterized by:
         - Low energy broadband noise
@@ -216,13 +216,13 @@ class BreathDetector:
 
 
 class PlosiveDetector:
-    """Detect plosive events (P, B, T, D, K, G sounds)."""
+    """Erkennt plosive events (P, B, T, D, K, G sounds)."""
 
     def __init__(
         self, min_attack_time_ms: float = 1.0, max_attack_time_ms: float = 20.0, energy_threshold_db: float = -30.0
     ):
         """
-        Initialize plosive detector.
+        Initialisiert plosive detector.
 
         Args:
             min_attack_time_ms: Minimum attack time
@@ -235,7 +235,7 @@ class PlosiveDetector:
 
     def detect(self, audio: np.ndarray, sr: int) -> list[PlosiveEvent]:
         """
-        Detect plosive events in audio.
+        Erkennt plosive events in audio.
 
         Plosives are characterized by:
         - Rapid attack (1-20ms)
@@ -313,13 +313,13 @@ class PlosiveDetector:
 
 
 class TransientDetector:
-    """Detect transient events (drum hits, percussive sounds)."""
+    """Erkennt transient events (drum hits, percussive sounds)."""
 
     def __init__(
         self, min_attack_time_ms: float = 0.5, max_attack_time_ms: float = 10.0, energy_threshold_db: float = -20.0
     ):
         """
-        Initialize transient detector.
+        Initialisiert transient detector.
 
         Args:
             min_attack_time_ms: Minimum attack time
@@ -332,7 +332,7 @@ class TransientDetector:
 
     def detect(self, audio: np.ndarray, sr: int) -> list[TransientEvent]:
         """
-        Detect transient events in audio.
+        Erkennt transient events in audio.
 
         Transients are characterized by:
         - Very rapid attack (<10ms)
@@ -413,11 +413,11 @@ class TransientDetector:
 
 
 class SibilanceDetector:
-    """Detect and analyze sibilance characteristics in audio."""
+    """Erkennt and analyze sibilance characteristics in audio."""
 
     def __init__(self, sibilance_range: tuple[int, int] = (4000, 10000), analysis_window_ms: float = 50.0):
         """
-        Initialize sibilance detector.
+        Initialisiert sibilance detector.
 
         Args:
             sibilance_range: Frequency range for sibilance (Hz)
@@ -428,7 +428,7 @@ class SibilanceDetector:
 
     def analyze(self, audio: np.ndarray, sr: int) -> SibilanceAnalysis:
         """
-        Analyze sibilance characteristics in audio.
+        Analysiert Sibilanz-Eigenschaften im Audio.
 
         Sibilance (S, Z, SH sounds) are natural vocal elements that
         should be preserved at natural levels (not over-deessed).
@@ -494,11 +494,11 @@ class SibilanceDetector:
 
 
 class RoomToneDetector:
-    """Detect and analyze natural room tone/ambience."""
+    """Erkennt and analyze natural room tone/ambience."""
 
     def __init__(self, noise_floor_percentile: float = 10.0, reverb_detection_threshold_db: float = -40.0):
         """
-        Initialize room tone detector.
+        Initialisiert room tone detector.
 
         Args:
             noise_floor_percentile: Percentile for noise floor estimation
@@ -509,7 +509,7 @@ class RoomToneDetector:
 
     def analyze(self, audio: np.ndarray, sr: int) -> RoomToneAnalysis:
         """
-        Analyze room tone characteristics.
+        Analysiert Raumton-Eigenschaften.
 
         Room tone is the natural acoustic signature of the recording space.
         It should be preserved (not removed by aggressive denoising).
@@ -627,10 +627,10 @@ class RoomToneDetector:
 
 
 class AuthenticityMetrics:
-    """Compute authenticity metrics comparing original vs processed audio."""
+    """Berechnet authenticity metrics comparing original vs processed audio."""
 
     def __init__(self):
-        """Initialize authenticity metrics computer."""
+        """Initialisiert authenticity metrics computer."""
         self.breath_detector = BreathDetector()
         self.plosive_detector = PlosiveDetector()
         self.transient_detector = TransientDetector()
@@ -641,7 +641,7 @@ class AuthenticityMetrics:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[float, list[BreathEvent], list[BreathEvent]]:
         """
-        Compute breath retention rate.
+        Berechnet breath retention rate.
 
         Args:
             original: Original audio
@@ -681,7 +681,7 @@ class AuthenticityMetrics:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[float, list[PlosiveEvent], list[PlosiveEvent]]:
         """
-        Compute plosive retention rate.
+        Berechnet plosive retention rate.
 
         Args:
             original: Original audio
@@ -715,7 +715,7 @@ class AuthenticityMetrics:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[float, list[TransientEvent], list[TransientEvent]]:
         """
-        Compute transient preservation rate (sharpness retention).
+        Berechnet transient preservation rate (sharpness retention).
 
         Args:
             original: Original audio
@@ -764,7 +764,7 @@ class AuthenticityMetrics:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[float, SibilanceAnalysis, SibilanceAnalysis]:
         """
-        Compute sibilance retention rate.
+        Berechnet sibilance retention rate.
 
         Measures whether natural sibilance (S, Z, SH sounds) is preserved
         and not over-deessed.
@@ -797,7 +797,7 @@ class AuthenticityMetrics:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[float, RoomToneAnalysis, RoomToneAnalysis]:
         """
-        Compute room tone/ambience retention rate.
+        Berechnet room tone/ambience retention rate.
 
         Measures whether natural room acoustics are preserved
         and not removed by aggressive denoising.

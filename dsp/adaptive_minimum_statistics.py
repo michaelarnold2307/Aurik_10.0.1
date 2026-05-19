@@ -33,7 +33,7 @@ class AdaptiveMinimumStatistics:
         self.bias_factor = bias_factor  # compensate minimum underestimation
 
     def estimate_noise(self, power_spectrogram: np.ndarray) -> np.ndarray:
-        """Estimate noise PSD using smoothed minimum statistics.
+        """Schätzt noise PSD using smoothed minimum statistics.
 
         Unlike raw minimum tracking (which produces click-like artifacts),
         this applies recursive averaging on the minimum estimate to produce

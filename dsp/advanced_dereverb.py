@@ -1,7 +1,3 @@
-import logging
-
-logger = logging.getLogger(__name__)
-
 """
 Advanced De-Reverb (GAP #54) - AURIK v8
 
@@ -23,6 +19,7 @@ Author: AURIK Team
 Version: 1.0.0
 """
 
+import logging
 import warnings
 
 import numpy as np
@@ -30,6 +27,8 @@ from scipy.ndimage import uniform_filter1d
 from scipy.signal import butter, hilbert, istft, sosfilt, stft
 
 warnings.filterwarnings("ignore")
+
+logger = logging.getLogger(__name__)
 
 
 class WienerDereverb:
@@ -52,9 +51,9 @@ class WienerDereverb:
         self.reverb_time_estimate = reverb_time_estimate
         self.strength = np.clip(strength, 0.0, 1.0)
 
-    def _estimate_reverb_spectrum(self, stft_mag: np.ndarray, sr: int) -> np.ndarray:
+    def _estimate_reverb_spectrum(self, stft_mag: np.ndarray, _sr: int) -> np.ndarray:
         """
-        Estimate reverb spectral template from late frames.
+        Schätzt reverb spectral template from late frames.
 
         Assumption: Late frames are reverb-dominated.
         """
@@ -69,7 +68,7 @@ class WienerDereverb:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply Wiener filtering for reverb removal.
+        Wendet an: Wiener filtering for reverb removal.
 
         Parameters:
         -----------
@@ -168,7 +167,7 @@ class LateReflectionCanceller:
 
     def _detect_reflections(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Detect reflection patterns using autocorrelation.
+        Erkennt reflection patterns using autocorrelation.
 
         Returns:
         --------
@@ -270,7 +269,7 @@ class LateReflectionCanceller:
 
 class SpectralTemporalAnalyzer:
     """
-    Analyze spectral-temporal characteristics to separate
+    Analysiert spektral-zeitliche Eigenschaften zur Signaltrennung.
     direct sound from reverb.
 
     Direct sound: High energy, short duration, localized
@@ -288,7 +287,7 @@ class SpectralTemporalAnalyzer:
 
     def analyze(self, audio: np.ndarray, sr: int) -> dict:
         """
-        Analyze direct vs reverb content.
+        Analysiert Direkt- vs. Hall-Inhalt.
 
         Returns:
         --------
@@ -372,7 +371,7 @@ class MultibandDereverb:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply multi-band de-reverb.
+        Wendet an: multi-band de-reverb.
 
         Parameters:
         -----------
@@ -475,7 +474,7 @@ class AdvancedDereverb:
 
     def analyze(self, audio: np.ndarray, sr: int) -> dict:
         """
-        Analyze audio reverb characteristics.
+        Analysiert die Hall-Eigenschaften des Audios.
 
         Returns:
         --------
@@ -486,7 +485,7 @@ class AdvancedDereverb:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply complete de-reverb processing.
+        Wendet vollständige Hallentfernung an.
 
         Parameters:
         -----------
@@ -554,34 +553,35 @@ if __name__ == "__main__":
     from backend.file_import import load_audio_file
 
     _res = load_audio_file(args.input)
-    audio, sr = _res["audio"], int(_res["sr"])
-    logger.info("Input: %s (%s Hz, %s)", args.input, sr, "stereo" if audio.ndim == 2 else "mono")
+    assert _res is not None, "load_audio_file returned None"
+    _audio, _sr = _res["audio"], int(_res["sr"])
+    logger.info("Input: %s (%s Hz, %s)", args.input, _sr, "stereo" if _audio.ndim == 2 else "mono")
 
     # Create de-reverb system
     dereverb = AdvancedDereverb(mode=args.mode)
 
     # Analyze
     logger.info("\nAnalyzing...")
-    analysis = dereverb.analyze(audio, sr)
-    logger.info("  Reverb score: %.3f", analysis["reverb_score"])
-    logger.info("  Transient density: %s", format(analysis["transient_density"], ".2%"))
-    logger.info("  RT60 estimate: %.2fs", analysis["rt60_estimate"])
-    logger.info("  Significant reverb: %s", analysis["has_significant_reverb"])
+    _analysis = dereverb.analyze(_audio, _sr)
+    logger.info("  Reverb score: %.3f", _analysis["reverb_score"])
+    logger.info("  Transient density: %s", format(_analysis["transient_density"], ".2%"))
+    logger.info("  RT60 estimate: %.2fs", _analysis["rt60_estimate"])
+    logger.info("  Significant reverb: %s", _analysis["has_significant_reverb"])
 
     if not args.analyze_only:
         # Process
         logger.info("\nProcessing (mode: %s)...", args.mode)
-        audio_dereverbed, metrics = dereverb.process(audio, sr)
+        _audio_dereverbed, _metrics = dereverb.process(_audio, _sr)
 
-        if metrics["processed"]:
+        if _metrics["processed"]:
             logger.info("\n✓ De-reverb complete:")
-            logger.info("  Wiener reduction: %.1f dB", metrics["wiener"]["reverb_reduction_db"])
-            logger.info("  Reflection suppression: %.1f dB", metrics["late_reflection"]["suppression_db"])
-            logger.info("  Reflection regions: %.1f%%", metrics["late_reflection"]["reflection_percentage"])
+            logger.info("  Wiener reduction: %.1f dB", _metrics["wiener"]["reverb_reduction_db"])
+            logger.info("  Reflection suppression: %.1f dB", _metrics["late_reflection"]["suppression_db"])
+            logger.info("  Reflection regions: %.1f%%", _metrics["late_reflection"]["reflection_percentage"])
         else:
-            logger.info("\n○ %s", metrics["reason"])
+            logger.info("\n○ %s", _metrics["reason"])
 
         # Save output
         output_path = args.output or args.input.replace(".wav", "_dereverb.wav")
-        sf.write(output_path, audio_dereverbed, sr)
+        sf.write(output_path, _audio_dereverbed, _sr)
         logger.info("\n✓ Saved: %s", output_path)

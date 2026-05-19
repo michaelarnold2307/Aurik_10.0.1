@@ -18,6 +18,18 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+CANONICAL_VOCAL_NR_ROUTE = "sota_vocal_model_router.enhance_vocal"
+CANONICAL_INSTRUMENTAL_NR_ROUTE = "sota_vocal_model_router.enhance_instrumental"
+CANONICAL_SEPARATION_ROUTE = "sota_vocal_model_router.separate_vocal_instrumental"
+CANONICAL_REPAIR_ROUTE = "uv3.phase_repair_chain"
+CANONICAL_BW_EXTENSION_ROUTE = "phase_06_frequency_restoration"
+CANONICAL_INPAINTING_ROUTE = "phase_55_diffusion_inpainting"
+CANONICAL_VOCODER_ROUTE = "vocos"
+CANONICAL_TAGGING_ROUTE = "panns"
+CANONICAL_PITCH_ROUTE = "fcpe"
+CANONICAL_QUALITY_ROUTES = ["versa", "vqi"]
+
+
 class MLModelPolicyEngine:
     """
     Policy-Engine für automatische SOTA-Modellauswahl.
@@ -45,96 +57,18 @@ class MLModelPolicyEngine:
             goal: Restaurierungs-Ziel
 
         Returns:
-            Plugin-Name: 'resemble_enhance', 'deepfilternet', 'wpe', 'mp_senet', 'banquet'
+            Canonical route name, not a direct legacy plugin name.
 
-        Entscheidungslogik (🎯 Semantic-Aware):
-        1. Vinyl Medium → Banquet (vinyl-specialized, hat Vorrang vor Quality-Override)
-        2. Quality-Override / schlechte SNR → DeepFilterNet (erzwungen)
-        3. Vocals/Speech → Resemble Enhance (SOTA for voice)
-        4. Drums/Transient-Rich → MP-SENet (preserves transients)
-        5. Ambient/Sustained → DeepFilterNet (aggressive smoothing)
-        6. General → Resemble Enhance (balanced, high quality)
+        The legacy policy layer no longer names individual obsolete plugins.
+        It returns canonical Aurik 9 routes so execution is centralized in UV3,
+        SotaVocalModelRouter, ModelCapabilityGate, and phase-level guards.
         """
-        # === 🔬 SEMANTIC-AWARE MODEL SELECTION (Innovation #3) ===
-
-        # Priority 1: Medium-specific models (Vorrang vor Quality-Override)
-        detected_medium = context.get("detected_medium", "unknown")
-        if detected_medium == "vinyl":
-            self.logger.info("🎵 Vinyl erkannt → Banquet (vinyl-specialized)")
-            return "banquet"
-
-        # Priority 2: Quality-Override / schlechte SNR → DeepFilterNet erzwungen
-        snr = context.get("snr")
-        quality_level = goal.get("quality_level", "standard")
-        if (
-            quality_level == "maximal"
-            or detected_medium in ["mp3", "aac", "minidisc"]
-            or (snr is not None and snr < 15)
-        ):
-            self.logger.info("🔴 Schlechte Qualität erkannt → ML-Modell wird erzwungen (deepfilternet)")
-            return "deepfilternet"
-
-        # Priority 2: Vocal/Speech content (semantic detection, not F0 heuristic)
-        has_vocals = context.get("has_vocals", False)
-        if has_vocals:
-            self.logger.info("🎤 Vocals/Speech erkannt → Resemble Enhance (voice-optimized)")
-            return "resemble_enhance"
-
-        # Priority 3: Transient-rich content (drums, percussion)
-        # MP-SENet is the normative transient-preserving denoise/repair model.
-        has_drums = context.get("has_drums", False)
-        content_character = context.get("content_character", "BALANCED")
-
-        if has_drums or content_character in ["HIGHLY_TRANSIENT", "TRANSIENT"]:
-            self.logger.info(f"⚡ Transient-rich content ({content_character}) → MP-SENet (transient-preserving)")
-            return "mp_senet"
-
-        # Priority 4: Sustained/Ambient content
-        # DeepFilterNet provides aggressive smoothing without harming sustained tones
-        # BUT: Only for true ambient/drone content, not for sustained instruments (piano, strings)
-        has_ambient = context.get("has_ambient", False)
-        dominant_instrument = context.get("dominant_instrument", "unknown")
-
-        if has_ambient or (content_character == "HIGHLY_SUSTAINED" and dominant_instrument == "AMBIENT"):
-            self.logger.info(f"🌊 Ambient content ({content_character}) → DeepFilterNet (aggressive smoothing)")
-            return "deepfilternet"
-
-        # Priority 5: Processing strategy override
-        # If semantic analysis recommends specific strategy, honor it
-        processing_strategy = context.get("processing_strategy", "BALANCED_PROCESSING")
-
-        if processing_strategy == "PRESERVE_TRANSIENTS":
-            self.logger.info("🎯 Strategy: PRESERVE_TRANSIENTS → MP-SENet")
-            return "mp_senet"
-        elif processing_strategy == "AGGRESSIVE_SMOOTHING":
-            self.logger.info("🎯 Strategy: AGGRESSIVE_SMOOTHING → DeepFilterNet")
-            return "deepfilternet"
-
-        # Priority 6: Dominant instrument guidance
-        dominant_instrument = context.get("dominant_instrument", "unknown")
-
-        instrument_model_map = {
-            "DRUMS": "mp_senet",  # Preserve attack/transients
-            "PERCUSSION": "mp_senet",  # Preserve attack/transients
-            "VOCALS": "resemble_enhance",  # Voice optimization
-            "SPEECH": "resemble_enhance",  # Voice optimization
-            "GUITAR": "resemble_enhance",  # Balanced, preserves harmonics
-            "BASS": "deepfilternet",  # Low-freq optimization
-            "KEYS": "resemble_enhance",  # Balanced
-            "SYNTH": "deepfilternet",  # Broadband, synthetic
-            "AMBIENT": "deepfilternet",  # Aggressive smoothing OK
-            "STRINGS": "resemble_enhance",  # Balanced, preserve harmonics
-            "BRASS": "mp_senet",  # Preserve attack
-        }
-
-        if dominant_instrument in instrument_model_map:
-            selected = instrument_model_map[dominant_instrument]
-            self.logger.info(f"🎼 Dominant: {dominant_instrument} → {selected}")
-            return selected
-
-        # Fallback: Resemble Enhance (general-purpose SOTA)
-        self.logger.info("🎯 Balanced content → Resemble Enhance (general-purpose SOTA)")
-        return "resemble_enhance"
+        del goal
+        if context.get("has_vocals", False) or context.get("dominant_instrument") in {"VOCALS", "SPEECH"}:
+            self.logger.info("Vocal NR → SotaVocalModelRouter.enhance_vocal")
+            return CANONICAL_VOCAL_NR_ROUTE
+        self.logger.info("Instrumental/general NR → SotaVocalModelRouter.enhance_instrumental")
+        return CANONICAL_INSTRUMENTAL_NR_ROUTE
 
     def select_repair_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -150,8 +84,10 @@ class MLModelPolicyEngine:
         Entscheidungslogik:
         - Speech/Music → mp_senet (normatives SOTA-Modell, ersetzt DCCRN/FullSubNet+)
         """
-        self.logger.info("Repair/Declipping → MP-SENet (normativer Ersatz für DCCRN/FullSubNet+)")
-        return "mp_senet"
+        del context
+        del goal
+        self.logger.info("Repair/Declipping → UV3 phase repair chain")
+        return CANONICAL_REPAIR_ROUTE
 
     def select_stem_separation_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -162,7 +98,7 @@ class MLModelPolicyEngine:
             goal: Separation-Ziel (vocals, instruments, stems)
 
         Returns:
-            Plugin-Name: 'mdx23c', 'demucs', 'uvr_mdxnet', 'convtasnet'
+            Canonical route name for the central SOTA vocal separation router.
 
         Entscheidungslogik:
         - Vocals/Instrument Split → MDX23C (SOTA quality)
@@ -170,32 +106,10 @@ class MLModelPolicyEngine:
         - HQ Mastering → UVR MDX-Net HQ4 (best quality)
         - Speech Separation → Conv-TasNet (speech-optimized)
         """
-        num_stems = goal.get("num_stems", 2)
-        quality_level = goal.get("quality_level", "high")
-
-        # Speech Separation
-        if context.get("has_vocals", False) and num_stems == 2:
-            self.logger.info("Speech Separation → Conv-TasNet (speech-optimized)")
-            return "convtasnet"
-
-        # Fast processing
-        if quality_level == "fast":
-            self.logger.info("Fast stem separation → MDX23C (SOTA, schnell)")
-            return "mdx23c"
-
-        # Ultra-HQ Mastering
-        if quality_level == "ultra":
-            self.logger.info("Ultra-HQ mastering → UVR MDX-Net HQ4 (best quality)")
-            return "uvr_mdxnet"
-
-        # 6-Stem Separation
-        if num_stems >= 6:
-            self.logger.info("6-Stem separation → Demucs v4 (most stems)")
-            return "demucs"
-
-        # Default: MDX23C (SOTA)
-        self.logger.info("Standard separation → MDX23C (SOTA)")
-        return "mdx23c"
+        del goal
+        del context
+        self.logger.info("Stem separation → SotaVocalModelRouter.separate_vocal_instrumental")
+        return CANONICAL_SEPARATION_ROUTE
 
     def select_enhancement_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -206,7 +120,7 @@ class MLModelPolicyEngine:
             goal: Enhancement-Ziel
 
         Returns:
-            Plugin-Name: 'resemble_enhance', 'audiosr', 'wpe', 'gacela'
+            Canonical route name.
 
         Entscheidungslogik:
         - Speech → Resemble Enhance (voice clarity)
@@ -216,24 +130,24 @@ class MLModelPolicyEngine:
         """
         enhancement_type = goal.get("enhancement_type", "general")
 
-        # Speech Enhancement
+        # Vocal enhancement is routed through the same vocal-first model router.
         if context.get("has_vocals", False) or enhancement_type == "speech":
-            self.logger.info("Speech Enhancement → Resemble Enhance (voice clarity)")
-            return "resemble_enhance"
+            self.logger.info("Vocal enhancement → SotaVocalModelRouter.enhance_vocal")
+            return CANONICAL_VOCAL_NR_ROUTE
 
         # Super-Resolution (Upsampling)
         if enhancement_type == "super_resolution":
-            self.logger.info("Super-Resolution → AudioSR (16/24 kHz → 48 kHz)")
-            return "audiosr"
+            self.logger.info("Super-Resolution → phase_06_frequency_restoration")
+            return CANONICAL_BW_EXTENSION_ROUTE
 
         # Diffusion-based Enhancement
         if enhancement_type == "diffusion":
-            self.logger.info("Diffusion Enhancement → WPE Dereverberation (Nakatani 2010)")
-            return "wpe"
+            self.logger.info("Diffusion/inpainting enhancement → phase_55_diffusion_inpainting")
+            return CANONICAL_INPAINTING_ROUTE
 
         # General Enhancement
-        self.logger.info("General Enhancement → GACELA")
-        return "gacela"
+        self.logger.info("General enhancement → SotaVocalModelRouter.enhance_instrumental")
+        return CANONICAL_INSTRUMENTAL_NR_ROUTE
 
     def select_quality_assessment_model(self, context: dict[str, Any], goal: dict[str, Any]) -> list[str]:
         """
@@ -259,29 +173,10 @@ class MLModelPolicyEngine:
         - PESQ: Telefonband 300–3400 Hz, strukturell ungeeignet für Vollband-Musik
         - STOI: Sprachverständlichkeit, sinnlos für Instrumentalmusik
         """
-        has_reference = goal.get("has_reference", False)
         has_vocals = context.get("has_vocals", False)
-        assessment_type = goal.get("assessment_type", "full")
-
-        # Basis: VERSA 2024 (primäre musik-spezifische MOS ohne Referenz, §4.4)
-        models = ["versa"]
-
-        # Bei Gesang: UTMOS für MOS-Verifikation Vocals (§4.4)
-        if has_vocals:
-            models.append("utmos")
-
-        # Mit Referenz: ViSQOL v3 (--audio Mode zwingend per Spec)
-        if has_reference:
-            models.append("visqol")
-
-        # Vollständig: Erweiterte Metriken (nur für Reporting, kein Quality-Gate)
-        if assessment_type == "full" and has_reference:
-            base = ["versa"]
-            if has_vocals:
-                base.append("utmos")
-            models = [*base, "visqol", "peaq"]
-
-        self.logger.info(f"Quality Assessment (Musik-Metriken §4.4) → {models}")
+        del goal
+        models = list(CANONICAL_QUALITY_ROUTES if has_vocals else ["versa"])
+        self.logger.info("Quality assessment → %s", models)
         return models
 
     def select_vocoder_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
@@ -299,18 +194,10 @@ class MLModelPolicyEngine:
         - Fast/Real-time → HiFi-GAN (GAN-based, fast)
         - High-Quality → DiffWave (Diffusion-based, slower but better)
         """
-        quality_level = goal.get("quality_level", "high")
-
-        # Vocos ist Primär-Vocoder für alle Qualitätsstufen (§4.5 Spec):
-        # Vocos 0.1.0 ist 8× schneller als BigVGAN-v2 auf CPU und erzeugt höhere MOS.
-        # Fallback-Kaskade (im Plugin selbst): Vocos ONNX → PyPI → HiFi-GAN → PGHI-ISTFT
-        # DiffWave ist für Inpainting (Dropout-Lücken), kein Vocoder.
-        if quality_level == "fast":
-            self.logger.info("Fast Vocoding → Vocos (ConvNeXt-iSTFT, 8× schneller als BigVGAN-v2)")
-            return "vocos"
-        else:
-            self.logger.info("High-Quality Vocoding → Vocos 0.1.0 (Primär-Vocoder §4.5)")
-            return "vocos"
+        del context
+        del goal
+        self.logger.info("Vocoding → Vocos primary vocoder")
+        return CANONICAL_VOCODER_ROUTE
 
     def select_audio_tagging_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -323,8 +210,10 @@ class MLModelPolicyEngine:
         Returns:
             Plugin-Name: 'panns' (527 AudioSet classes)
         """
-        self.logger.info("Audio Tagging → PANNS (527 AudioSet classes)")
-        return "panns"
+        del context
+        del goal
+        self.logger.info("Audio Tagging → PANNS")
+        return CANONICAL_TAGGING_ROUTE
 
     def select_mastering_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -337,8 +226,10 @@ class MLModelPolicyEngine:
         Returns:
             Plugin-Name: 'matchering'
         """
-        self.logger.info("Automated Mastering → Matchering 2.0 (reference-based)")
-        return "matchering"
+        del context
+        del goal
+        self.logger.info("Mastering policy → UV3 phase planning, no standalone Matchering route")
+        return "uv3.phase_plan"
 
     def select_generative_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -355,14 +246,14 @@ class MLModelPolicyEngine:
         - Text-to-Audio → AudioLDM2 (text prompt)
         - Music Generation → flow_matching (generative inpainting, SOTA 2024)
         """
+        del context
         generation_type = goal.get("generation_type", "text_to_audio")
 
         if generation_type == "music":
-            self.logger.info("Music Generation → flow_matching (generative inpainting)")
-            return "flow_matching"
-        else:
-            self.logger.info("Text-to-Audio → AudioLDM2 (text prompt)")
-            return "audioldm2"
+            self.logger.info("Music inpainting → phase_55_diffusion_inpainting")
+            return CANONICAL_INPAINTING_ROUTE
+        self.logger.info("Text-to-audio is outside one-button restoration; route disabled")
+        return "unsupported.text_to_audio"
 
     def select_pitch_detection_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -375,9 +266,10 @@ class MLModelPolicyEngine:
         Returns:
             Plugin-Name: 'fcpe' (monophonic pitch tracking, primary)
         """
-        model_size = goal.get("model_size", "large")
-        self.logger.info(f"Pitch Detection → FCPE ({model_size} model, CREPE/RMVPE fallback)")
-        return "fcpe"
+        del context
+        del goal
+        self.logger.info("Pitch Detection → FCPE")
+        return CANONICAL_PITCH_ROUTE
 
     def select_medium_specific_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -391,13 +283,8 @@ class MLModelPolicyEngine:
             Plugin-Name: 'banquet' (vinyl-specialized)
         """
         detected_medium = context.get("detected_medium", "unknown")
-
-        if detected_medium == "vinyl":
-            self.logger.info("Vinyl Restoration → Banquet (vinyl-specialized)")
-            return "banquet"
-        else:
-            self.logger.info(f"No medium-specific model for {detected_medium}, using general denoise model")
-            return self.select_denoise_model(context, goal)
+        self.logger.info("Medium-specific routing for %s stays inside UV3/phase planning", detected_medium)
+        return self.select_denoise_model(context, goal)
 
     def select_all_models(self, context: dict[str, Any], tasks: list[str]) -> dict[str, Any]:
         """
@@ -436,7 +323,7 @@ class MLModelPolicyEngine:
             elif task == "medium_specific":
                 selected_models["medium_specific"] = self.select_medium_specific_model(context, {})
 
-        self.logger.info(f"Selected models for tasks {tasks}: {selected_models}")
+        self.logger.info("Selected models for tasks %s: %s", tasks, selected_models)
         return selected_models
 
     def select_separation_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
@@ -456,25 +343,10 @@ class MLModelPolicyEngine:
         - Fast 2-Stem → uvr_mdxnet (HQ4 für Qualität, HQ1 für Speed)
         """
         # Priorität 1: Maximal Quality explizit gewünscht
-        if goal.get("quality_level") == "maximal":
-            self.logger.info("Maximal Quality → MDX23C (SOTA)")
-            return "mdx23c"
-
-        # Priorität 2: Viele Stems benötigt
-        if context.get("stem_count", 2) >= 4 or goal.get("stems", 2) >= 4:
-            self.logger.info("4+ Stems benötigt → Demucs v4 (6-Stem)")
-            return "demucs"
-
-        # Priorität 3: Fast 2-Stem (vocals/accompaniment)
-        if context.get("stem_count", 2) == 2:
-            # HQ4 für Qualität, HQ1 für Speed
-            model = "HQ4" if goal.get("quality_level") in ["high", "maximal"] else "HQ1"
-            self.logger.info(f"2-Stem → UVR MDX-Net ({model})")
-            return "uvr_mdxnet"
-
-        # Standard: Demucs (vielseitig, gute Qualität)
-        self.logger.info("Standard → Demucs v4 (4-Stem)")
-        return "demucs"
+        del context
+        del goal
+        self.logger.info("Source separation → SotaVocalModelRouter.separate_vocal_instrumental")
+        return CANONICAL_SEPARATION_ROUTE
 
     def select_enhancement_model_alt(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -492,12 +364,7 @@ class MLModelPolicyEngine:
         - Classical → wpe (Dereverberation)
         - General → waveunet oder gacela
         """
-        if context.get("has_vocals", False):
-            return "resemble_enhance"
-        elif context.get("genre") in ["classical", "jazz"]:
-            return "wpe"
-        else:
-            return "gacela"  # oder 'waveunet'
+        return self.select_enhancement_model(context, goal)
 
     def select_super_resolution_model(self, context: dict[str, Any], goal: dict[str, Any]) -> str:
         """
@@ -506,8 +373,10 @@ class MLModelPolicyEngine:
         Returns:
             'audiosr' - Aktuell nur ein SOTA-Modell verfügbar
         """
-        self.logger.info("Super-Resolution → AudioSR (Diffusion-basiert, 48kHz)")
-        return "audiosr"
+        del context
+        del goal
+        self.logger.info("Super-Resolution → phase_06_frequency_restoration")
+        return CANONICAL_BW_EXTENSION_ROUTE
 
     def select_quality_metrics(self, context: dict[str, Any], goal: dict[str, Any]) -> list:
         """
@@ -609,20 +478,20 @@ def get_recommended_models(context: dict[str, Any]) -> dict[str, Any]:
 # Convenience-Funktionen für direkte Nutzung
 def get_optimal_denoise_plugin(context: dict[str, Any], goal: dict[str, Any]) -> str:
     """Shortcut: Gibt bestes Denoise-Plugin zurück."""
-    engine = MLModelPolicyEngine()
-    return engine.select_denoise_model(context, goal)
+    policy_engine = MLModelPolicyEngine()
+    return policy_engine.select_denoise_model(context, goal)
 
 
 def get_optimal_separation_plugin(context: dict[str, Any], goal: dict[str, Any]) -> str:
     """Shortcut: Gibt bestes Separation-Plugin zurück."""
-    engine = MLModelPolicyEngine()
-    return engine.select_stem_separation_model(context, goal)
+    policy_engine = MLModelPolicyEngine()
+    return policy_engine.select_stem_separation_model(context, goal)
 
 
 def get_optimal_repair_plugin(context: dict[str, Any], goal: dict[str, Any]) -> str:
     """Shortcut: Gibt bestes Repair-Plugin zurück."""
-    engine = MLModelPolicyEngine()
-    return engine.select_repair_model(context, goal)
+    policy_engine = MLModelPolicyEngine()
+    return policy_engine.select_repair_model(context, goal)
 
 
 if __name__ == "__main__":

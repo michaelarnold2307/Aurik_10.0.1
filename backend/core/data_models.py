@@ -42,7 +42,7 @@ class Genre(str, Enum):
 
 
 class MediaType(str, Enum):
-    """Detected source media types (Spec 3.1.2)"""
+    """Erkannte Quell-Medientypen (Spec 3.1.2)."""
 
     VINYL = "vinyl"
     TAPE = "tape"
@@ -54,7 +54,7 @@ class MediaType(str, Enum):
 
 
 class DefectType(str, Enum):
-    """Audio defect classifications (Spec 3.1.3)"""
+    """Audio defect classifications (Spec 3.1.3)."""
 
     BROADBAND_NOISE = "broadband_noise"
     CRACKLE_POPS = "crackle_pops"
@@ -111,7 +111,7 @@ class AudioFile(BaseModel):
 
 
 class FormatInfo(BaseModel):
-    """Format recognition and validation (Spec 3.1.1)"""
+    """Formatiert recognition and validation (Spec 3.1.1)."""
 
     container_format: str = Field(description="Container format (WAV, FLAC, etc.)")
     codec: str = Field(description="Audio codec")
@@ -228,7 +228,7 @@ class VocalAnalysis(BaseModel):
 
 
 class FeatureVectors(BaseModel):
-    """Extracted feature vectors (Spec 3.1.6)"""
+    """Extrahierte Feature-Vektoren (Spec 3.1.6)."""
 
     # Temporal features
     onset_times: list[float] = Field(default_factory=list, description="Onset times in seconds")
@@ -283,7 +283,7 @@ class AnalysisProfile(BaseModel):
     @field_validator("detected_defects")
     @classmethod
     def sort_defects_by_severity(cls, v: list[DefectDetection]) -> list[DefectDetection]:
-        """Sort defects by severity (highest first)"""
+        """Sortiert defects by severity (highest first)."""
         return sorted(v, key=lambda d: d.severity, reverse=True)
 
 
@@ -322,7 +322,7 @@ class GenreWeights(BaseModel):
         return v
 
     def validate_sum(self) -> bool:
-        """Check that all weights sum to 1.0 (±0.01 tolerance)"""
+        """Prüft that all weights sum to 1.0 (±0.01 tolerance)."""
         total = (
             self.brilliance
             + self.transparency
@@ -516,7 +516,7 @@ class ResturationJob(BaseModel):
         }
 
     def add_processing_step(self, step: ProcessingStep) -> None:
-        """Add a processing step to the chain"""
+        """Fügt hinzu: a processing step to the chain."""
         self.processing_chain.append(step)
         self.log_entries.append(f"Step {step.step_id}: {step.operation} ({step.model_name})")
 

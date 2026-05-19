@@ -4,6 +4,7 @@
 # Mit --import-mode=importlib (pytest) müssen Fallback-Klassen auf Modulebene
 # VOR dem try-Block deklariert werden, damit sie im Modul-Namensraum sichtbar sind.
 # ---------------------------------------------------------------------------
+# pylint: disable=wrong-import-position,import-outside-toplevel,too-many-positional-arguments
 
 import io
 import logging as _logging
@@ -22,20 +23,99 @@ _log = _logging.getLogger(__name__)
 logger = _log
 
 
+def _canonical_policy_audio_route(model_name: str, audio: np.ndarray, sr: int, context: dict) -> np.ndarray | None:
+    """Führt aus: canonical Aurik 9 policy routes; return None for non-canonical legacy names."""
+    try:
+        from policy.ml_policy_engine import (  # pylint: disable=import-outside-toplevel
+            CANONICAL_INSTRUMENTAL_NR_ROUTE,
+            CANONICAL_REPAIR_ROUTE,
+            CANONICAL_VOCAL_NR_ROUTE,
+        )
+    except Exception:
+        return None
+
+    if model_name == CANONICAL_REPAIR_ROUTE:
+        return np.asarray(audio, dtype=np.float32).copy()
+
+    if model_name not in {CANONICAL_VOCAL_NR_ROUTE, CANONICAL_INSTRUMENTAL_NR_ROUTE}:
+        return None
+
+    try:
+        from backend.core.dsp.sota_vocal_model_router import (  # pylint: disable=import-outside-toplevel
+            get_sota_vocal_model_router,
+        )
+
+        router = get_sota_vocal_model_router()
+        if model_name == CANONICAL_VOCAL_NR_ROUTE:
+            result = router.enhance_vocal(
+                np.asarray(audio, dtype=np.float32),
+                sr,
+                energy_bias_db=-6.0,
+                noise_snr_db=float(context.get("snr", context.get("snr_db", 0.0)) or 0.0),
+            )
+        else:
+            result = router.enhance_instrumental(
+                np.asarray(audio, dtype=np.float32),
+                sr,
+                energy_bias_db=-9.0,
+            )
+        if result.success:
+            return np.asarray(result.audio, dtype=np.float32)
+        return np.asarray(audio, dtype=np.float32).copy()
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug("Canonical policy route %s unavailable: %s", model_name, exc)
+        return np.asarray(audio, dtype=np.float32).copy()
+
+
+def _canonical_policy_separation_route(model_name: str, audio: np.ndarray, sr: int, context: dict) -> np.ndarray | None:
+    """Gibt routed vocal stem for canonical separation, or None for legacy names zurück."""
+    try:
+        from policy.ml_policy_engine import CANONICAL_SEPARATION_ROUTE  # pylint: disable=import-outside-toplevel
+    except Exception:
+        return None
+    if model_name != CANONICAL_SEPARATION_ROUTE:
+        return None
+    try:
+        from backend.core.dsp.sota_vocal_model_router import (  # pylint: disable=import-outside-toplevel
+            get_sota_vocal_model_router,
+        )
+
+        routed = get_sota_vocal_model_router().separate_vocal_instrumental(
+            np.asarray(audio, dtype=np.float32),
+            sr,
+            panns_singing=0.8 if context.get("has_vocals", False) else 0.0,
+            ctx={"legacy_adapter": "adaptive_pipeline"},
+        )
+        if routed.success:
+            return np.asarray(routed.vocal, dtype=np.float32)
+        return np.asarray(audio, dtype=np.float32).copy()
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug("Canonical separation route unavailable: %s", exc)
+        return np.asarray(audio, dtype=np.float32).copy()
+
+
 # Fallback-Stub auf Modulebene
 class _PluginStub:
     """Basis-Fallback-Stub für nicht ladbare Plugins."""
 
     def process(self, audio, sr):
+        """Gibt input audio unchanged for process-style plugin APIs zurück."""
+        del sr
         return audio
 
     def enhance(self, audio, sr):
+        """Gibt input audio unchanged for enhance-style plugin APIs zurück."""
+        del sr
         return audio
 
     def separate(self, audio, sr):
+        """Gibt a neutral two-stem fallback zurück."""
+        del sr
         return audio, audio
 
     def run(self, audio, sr):
+        """Gibt input audio unchanged for run-style plugin APIs zurück."""
+        del sr
         return audio
 
 
@@ -251,8 +331,10 @@ except ImportError as e:
 
 # Adaptive Processing Pipeline für Magic Button
 # ------------------------------------------------
-# Diese Pipeline steuert alle Bearbeitungsschritte (Restaurierung, Reparatur, Rekonstruktion, Remastering) adaptiv und nachvollziehbar.
-# Sie nutzt Kontextanalyse, Zieldefinition und modulare Verarbeitungsketten. Alle Entscheidungen, Parameter und Ergebnisse werden geloggt.
+# Diese Pipeline steuert alle Bearbeitungsschritte adaptiv und nachvollziehbar:
+# Restaurierung, Reparatur, Rekonstruktion und Remastering.
+# Sie nutzt Kontextanalyse, Zieldefinition und modulare Verarbeitungsketten.
+# Alle Entscheidungen, Parameter und Ergebnisse werden geloggt.
 
 # Ethics & Monitoring (Phase 4.5, v8.0)
 from backend.core.epistemic_gate.ethics_engine import EpistemicDecision, EthicsEngine
@@ -271,6 +353,8 @@ from .quality_control import QualityControl
 
 
 class AdaptiveProcessingPipeline:
+    """Legacy adaptive pipeline facade kept for compatibility with old callers."""
+
     def __init__(self, progress_callback=None):
         """
         Initialisiert die Adaptive Processing Pipeline.
@@ -298,7 +382,8 @@ class AdaptiveProcessingPipeline:
         self.audio_monitor = PermanentAudioMonitor()
 
         self.logger.info(
-            f"AdaptiveProcessingPipeline initialized: {self.dsp_policy_engine.count_total_modules()} DSP + 28 ML-Plugins + Ethics Engine + Monitor"
+            "AdaptiveProcessingPipeline initialized: %s DSP + 28 ML-Plugins + Ethics Engine + Monitor",
+            self.dsp_policy_engine.count_total_modules(),
         )
         # Plugin Availability Registry (für autarkes Fehler-Handling)
         self.available_plugins = set()
@@ -379,7 +464,8 @@ class AdaptiveProcessingPipeline:
         # (vereinfachte Policy-Logik, kann je nach Kontext angepasst werden)
         chosen = set()
         try:
-            # Beispiel: Denoise, Repair, Enhancement, Separation, Quality, Vocoder, Tagging, Mastering, Generation, Pitch
+            # Beispiel: Denoise, Repair, Enhancement, Separation, Quality,
+            # Vocoder, Tagging, Mastering, Generation, Pitch.
             context = getattr(self, "last_context", {}) if hasattr(self, "last_context") else {}
             goal = getattr(self, "last_goal", {}) if hasattr(self, "last_goal") else {}
             chosen.add(self.policy_engine.select_denoise_model(context, goal))
@@ -401,7 +487,8 @@ class AdaptiveProcessingPipeline:
             mark = "*" if name in chosen else " "
             self.logger.info("│%s ✓ %s │", mark, name.ljust(17))
         self.logger.info(
-            f"└─ Status: {len(all_plugins)}/47 ML-Plugins & Metriken importiert ───────────────────────┘\n"
+            "└─ Status: %s/47 ML-Plugins & Metriken importiert ───────────────────────┘\n",
+            len(all_plugins),
         )
         self._print_component_status()
 
@@ -487,12 +574,12 @@ class AdaptiveProcessingPipeline:
         """
         # Version from backend-internal constant — avoids forbidden UI import (§11 VERBOTEN).
         _aurik_version = "9.10.99"
-        self.logger.info("\n" + "═" * 80)
+        self.logger.info("\n%s", "═" * 80)
         logger.info("  AURIK %s — SYSTEM-KOMPONENTEN STATUS", _aurik_version)
-        self.logger.info("═" * 80 + "\n")
+        self.logger.info("%s\n", "═" * 80)
 
         # ML-Plugins Status
-        self.logger.info("┌─ ML-PLUGINS (Denoise/Repair/Enhancement) " + "─" * 35 + "┐")
+        self.logger.info("┌─ ML-PLUGINS (Denoise/Repair/Enhancement) %s┐", "─" * 35)
         plugin_info = [
             ("deepfilternet", "DeepFilterNet v3.0 (Speech/Broadband)"),
             ("resemble_enhance", "Resemble-Enhance ONNX (Universal)"),
@@ -514,14 +601,14 @@ class AdaptiveProcessingPipeline:
 
         available_count = len(self.available_plugins)
         self.logger.info(
-            f"└─ Status: {available_count}/11 ML-Plugins verfügbar "
-            + "─" * (80 - 40 - len(str(available_count)))
-            + "┘\n"
+            "└─ Status: %s/11 ML-Plugins verfügbar %s┘\n",
+            available_count,
+            "─" * (80 - 40 - len(str(available_count))),
         )
 
         # DSP-Module Status
         dsp_count = self.dsp_policy_engine.count_total_modules()
-        self.logger.info("┌─ DSP-MODULE (Policy-Engine) " + "─" * 48 + "┐")
+        self.logger.info("┌─ DSP-MODULE (Policy-Engine) %s┐", "─" * 48)
         self.logger.info("│  ✓ Spectral Processing     ✓ Dynamic Range Control  ✓ EQ Systems       │")
         self.logger.info("│  ✓ Artifact Detection      ✓ Transient Shaping      ✓ Stereo Tools     │")
         self.logger.info("│  ✓ Noise Gates             ✓ Compressors/Limiters   ✓ Phase Correction │")
@@ -532,7 +619,7 @@ class AdaptiveProcessingPipeline:
         )
 
         # Advanced Features Status
-        self.logger.info("┌─ ADVANCED FEATURES (v8.0+) " + "─" * 50 + "┐")
+        self.logger.info("┌─ ADVANCED FEATURES (v8.0+) %s┐", "─" * 50)
         vocal_status = "✓" if VOCAL_SEPARATION_V8_AVAILABLE else "⚠️"
         pitch_status = "✓" if PITCH_CORRECTION_V8_AVAILABLE else "⚠️"
         defect_status = "✓" if DEFECT_DETECTION_V8_AVAILABLE else "⚠️"
@@ -541,15 +628,15 @@ class AdaptiveProcessingPipeline:
         self.logger.info("│  %s Defect Detection v8.2    (11 Defect Types, iZotope-level)    │", defect_status)
         self.logger.info("│  ✓ Ethics Engine              (HIPS Compliance + Safety Wrappers)     │")
         self.logger.info("│  ✓ Audio Monitor              (Permanent Quality Tracking)            │")
-        self.logger.info("└" + "─" * 79 + "┘\n")
+        self.logger.info("└%s┘\n", "─" * 79)
 
         # Material Quality & Musical Goals
-        self.logger.info("┌─ ANALYSIS & METRICS " + "─" * 57 + "┐")
+        self.logger.info("┌─ ANALYSIS & METRICS %s┐", "─" * 57)
         self.logger.info("│  ✓ Material Quality Analyzer  (7-Level Classification + Adaptive)     │")
         self.logger.info("│  ✓ Musical Goals Validation   (7 Goals: Authenticity, Waerme, etc.)   │")
         self.logger.info("│  ✓ Adaptive Thresholds        (Generation-Count Weighted Scoring)     │")
         self.logger.info("│  ✓ LUFS/True-Peak Metering    (EBU R128 Compliant)                    │")
-        self.logger.info("└" + "─" * 79 + "┘\n")
+        self.logger.info("└%s┘\n", "─" * 79)
 
         # Gesamtstatus
         if available_count >= 8:
@@ -559,9 +646,9 @@ class AdaptiveProcessingPipeline:
         else:
             overall = "⚠️ LIMITIERTER MODUS - Nur wenige ML-Plugins verfügbar"
 
-        self.logger.info("═" * 80)
+        self.logger.info("%s", "═" * 80)
         logger.info("  %s", overall)
-        self.logger.info("═" * 80 + "\n")
+        self.logger.info("%s\n", "═" * 80)
 
     def separate_vocals_v8(self, audio: np.ndarray, sr: int, use_safety_wrapper: bool = True) -> dict[str, np.ndarray]:
         """
@@ -601,7 +688,9 @@ class AdaptiveProcessingPipeline:
         # Log metrics
         metrics = self.vocal_separator_v8.get_metrics()
         self.logger.info(
-            f"Vocal separation complete: {metrics['total_separations']} total, fusion={metrics['fusion_strategy']}"
+            "Vocal separation complete: %s total, fusion=%s",
+            metrics["total_separations"],
+            metrics["fusion_strategy"],
         )
 
         # Audio monitor tracking (if available)
@@ -674,9 +763,10 @@ class AdaptiveProcessingPipeline:
         # Log result
         if metadata.get("corrected", False):
             self.logger.info(
-                f"Pitch correction applied: {metadata['n_corrections']} regions, "
-                f"DCS={metadata['dcs']:.3f}, "
-                f"epistemic_conf={metadata['epistemic_confidence']:.2f}"
+                "Pitch correction applied: %s regions, DCS=%.3f, epistemic_conf=%.2f",
+                metadata["n_corrections"],
+                metadata["dcs"],
+                metadata["epistemic_confidence"],
             )
         else:
             self.logger.info("Pitch correction rejected: %s", metadata.get("reason", "unknown"))
@@ -755,12 +845,11 @@ class AdaptiveProcessingPipeline:
                     },
                     "analysis_time": 0.0,  # Quick scan is very fast
                 }
-            else:
-                # Full analysis
-                report = self.defect_detector_v8.analyze(audio, sr)
+            # Full analysis
+            report = self.defect_detector_v8.analyze(audio, sr)
 
-                # Convert to serializable dictionary
-                return report.to_dict()
+            # Convert to serializable dictionary
+            return report.to_dict()
 
         except Exception as e:
             logger.error("Defect analysis failed: %s", e, exc_info=True)
@@ -775,6 +864,8 @@ class AdaptiveProcessingPipeline:
             }
 
     def run(self, audio_bytes, features, user_profile=None, reference_audio=None, detected_medium=None):
+        """Führt aus: the legacy adaptive processing workflow for byte-based callers."""
+        del reference_audio
         # 0. Eingangsaudio dekodieren; Tonträgerkette kommt autoritativ aus MediumDetector/PreAnalysis.
         audio_np, sr_audio = sf.read(io.BytesIO(audio_bytes))
         features = dict(features) if features else {}
@@ -822,32 +913,36 @@ class AdaptiveProcessingPipeline:
 
         if media_chain:
             self.logger.info(
-                "\n🔎 Erkannte Medienkette: "
-                + " → ".join(f"{m['medium']} ({m['confidence'] * 100:.1f}%)" for m in media_chain)
+                "\n🔎 Erkannte Medienkette: %s",
+                " → ".join(f"{m['medium']} ({m['confidence'] * 100:.1f}%)" for m in media_chain),
             )
         else:
             self.logger.info("\n🔎 Medienkette: Kein autoritatives MediumDetector-Ergebnis im Kontext")
         self.log.append({"step": "media_chain_detection", "media_chain": media_chain})
 
         # --- Materialklassifikations-Konfliktregel nach copilot-instructions.md ---
-        def resolve_material_conflict(era_result, medium_result, defect_results, logger):
+        def resolve_material_conflict(era_result, medium_result, defect_results, conflict_logger):
             # 1. Höhere Konfidenz gewinnt
             era_type = _result_field(era_result, "material_type", "primary_material")
             era_conf = float(_result_field(era_result, "confidence", default=0.0) or 0.0)
             med_type = _result_field(medium_result, "material_type", "primary_material", "material")
             med_conf = float(_result_field(medium_result, "confidence", default=0.0) or 0.0)
             if era_type == med_type:
-                logger.info("Materialklassifikation eindeutig: %s", era_type)
+                conflict_logger.info("Materialklassifikation eindeutig: %s", era_type)
                 return {"type": era_type, "confidence": max(era_conf, med_conf)}
             if era_type and med_type and era_type != med_type:
-                logger.warning(
-                    f"Materialklassifikations-Konflikt: Era={era_type} ({era_conf:.2f}), Medium={med_type} ({med_conf:.2f})"
+                conflict_logger.warning(
+                    "Materialklassifikations-Konflikt: Era=%s (%.2f), Medium=%s (%.2f)",
+                    era_type,
+                    era_conf,
+                    med_type,
+                    med_conf,
                 )
                 if era_conf > med_conf:
-                    logger.info("Konfliktregel: EraClassifier gewinnt (höhere Konfidenz)")
+                    conflict_logger.info("Konfliktregel: EraClassifier gewinnt (höhere Konfidenz)")
                     return {"type": era_type, "confidence": era_conf}
-                elif med_conf > era_conf:
-                    logger.info("Konfliktregel: MediumClassifier gewinnt (höhere Konfidenz)")
+                if med_conf > era_conf:
+                    conflict_logger.info("Konfliktregel: MediumClassifier gewinnt (höhere Konfidenz)")
                     return {"type": med_type, "confidence": med_conf}
                 # 2. Bei Gleichstand: DefectScanner-Auswertung
                 if defect_results:
@@ -859,21 +954,25 @@ class AdaptiveProcessingPipeline:
                     era_score = get_max_score_for_material(era_type)
                     med_score = get_max_score_for_material(med_type)
                     if era_score > med_score:
-                        logger.info("Konfliktregel: DefectScanner-Score entscheidet für EraClassifier-Material")
+                        conflict_logger.info(
+                            "Konfliktregel: DefectScanner-Score entscheidet für EraClassifier-Material"
+                        )
                         return {"type": era_type, "confidence": era_conf}
-                    elif med_score > era_score:
-                        logger.info("Konfliktregel: DefectScanner-Score entscheidet für MediumClassifier-Material")
+                    if med_score > era_score:
+                        conflict_logger.info(
+                            "Konfliktregel: DefectScanner-Score entscheidet für MediumClassifier-Material"
+                        )
                         return {"type": med_type, "confidence": med_conf}
                 # 3. Konservativer Materialtyp (restaurierungsschonender)
                 conservative = era_type if era_type in ("shellac", "tape", "vinyl") else med_type
-                logger.info("Konfliktregel: Konservativer Materialtyp gewählt: %s", conservative)
+                conflict_logger.info("Konfliktregel: Konservativer Materialtyp gewählt: %s", conservative)
                 return {"type": conservative, "confidence": max(era_conf, med_conf)}
             # Fallback: nur einer vorhanden
             if era_type:
                 return {"type": era_type, "confidence": era_conf}
             if med_type:
                 return {"type": med_type, "confidence": med_conf}
-            logger.warning("Materialklassifikation nicht möglich — Default 'unknown'")
+            conflict_logger.warning("Materialklassifikation nicht möglich — Default 'unknown'")
             return {"type": "unknown", "confidence": 0.0}
 
         # Annahme: era_result, medium_result, defect_results werden im Kontext/Features bereitgestellt
@@ -1139,10 +1238,12 @@ class AdaptiveProcessingPipeline:
         return not context.get("transient_rich", True) or "Warnung" in str(goal)
 
     def _needs_reconstruction(self, context, goal):
+        del context
         # Beispiel: Referenzwarnung oder starke Abweichung
         return "reference_warning" in goal
 
     def _needs_remastering(self, context, goal):
+        del context
         # Beispiel: explizit gewünscht oder pro-User
         return goal.get("quality_level") == "maximal"
 
@@ -1190,18 +1291,25 @@ class AdaptiveProcessingPipeline:
         model_obj = self.model_manager.models.get(selected_model, {}).get("obj")
         if model_obj:
             model_obj.process(audio_original, context)
-        else:
+        elif not ("." in selected_model or selected_model.startswith("phase_") or selected_model.startswith("uv3.")):
             # Fallback: Multi-Stage Enhancement
             self.model_manager.multi_stage_enhancement(audio_original, context)
         logger.info("Policy-Kontext für Restoration: %s", context)
 
         # STAGE 1: ML-Denoise (Policy-selected Model)
         model_name = self.policy_engine.select_denoise_model(context, goal)
+        canonical_audio = _canonical_policy_audio_route(model_name, audio_original, sr, context)
+        if canonical_audio is not None:
+            audio_denoised = canonical_audio
+            plugin = None
+            logger.info("Policy-Selektion: %s über kanonischen Aurik-9-Router", model_name)
+        else:
+            plugin = getattr(self, model_name, None)
 
         # Strukturierte Stage-Ausgabe
-        self.logger.info("\n" + "╔" + "═" * 78 + "╗")
-        self.logger.info("║  RESTORATION STAGE 1: ML-DENOISE" + " " * 45 + "║")
-        self.logger.info("╚" + "═" * 78 + "╝\n")
+        self.logger.info("\n╔%s╗", "═" * 78)
+        self.logger.info("║  RESTORATION STAGE 1: ML-DENOISE%s║", " " * 45)
+        self.logger.info("╚%s╝\n", "═" * 78)
 
         # Policy-Entscheidung mit Begründung
         reason_map = {
@@ -1216,14 +1324,12 @@ class AdaptiveProcessingPipeline:
         logger.info("Policy-Selektion: %s", model_name)
         logger.info("  Begründung: %s", reason)
         self.logger.info(
-            f"  Medium: {context.get('detected_medium', 'unknown')}, "
-            f"Genre: {context.get('genre', 'unknown')}, "
-            f"Quality: {goal.get('quality_level', 'standard')}"
+            "  Medium: %s, Genre: %s, Quality: %s",
+            context.get("detected_medium", "unknown"),
+            context.get("genre", "unknown"),
+            goal.get("quality_level", "standard"),
         )
         self.logger.info("")
-
-        # Lade das ausgewählte Plugin
-        plugin = getattr(self, model_name, None)
 
         # ROBUSTES PLUGIN-HANDLING: Wenn ausgewähltes Plugin nicht verfügbar, nutze Fallback-Chain
         if plugin is None:
@@ -1264,13 +1370,11 @@ class AdaptiveProcessingPipeline:
             workspace_temp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "temp_ml_processing")
             os.makedirs(workspace_temp, exist_ok=True)
 
-            # Create temp files in workspace temp directory
-            tmp_in = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir=workspace_temp)
-            tmp_out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir=workspace_temp)
-            tmp_in_path = tmp_in.name
-            tmp_out_path = tmp_out.name
-            tmp_in.close()  # Close file handle
-            tmp_out.close()  # Close file handle
+            # Create temp files in workspace temp directory.
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir=workspace_temp) as tmp_in:
+                tmp_in_path = tmp_in.name
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir=workspace_temp) as tmp_out:
+                tmp_out_path = tmp_out.name
 
             try:
                 # Write input WAV file (now file handle is closed, so write will work correctly)
@@ -1282,6 +1386,8 @@ class AdaptiveProcessingPipeline:
                 # Read result — §VERBOTEN: sf.read(path) → load_audio_file
                 if _load_audio_file is not None:
                     _r = _load_audio_file(tmp_out_path)
+                    if not isinstance(_r, dict):
+                        raise RuntimeError("load_audio_file returned no audio mapping")
                     audio_denoised = _r["audio"]
                 else:
                     raise RuntimeError("load_audio_file unavailable for ML output decode")
@@ -1314,7 +1420,8 @@ class AdaptiveProcessingPipeline:
             )
 
             self.logger.info(
-                f"✓ Hybrid Refinement applied (spectral_dev={refine_metrics.get('spectral_deviation', 0):.3f})"
+                "✓ Hybrid Refinement applied (spectral_dev=%.3f)",
+                refine_metrics.get("spectral_deviation", 0),
             )
 
         except Exception as e:
@@ -1438,7 +1545,11 @@ class AdaptiveProcessingPipeline:
         self.log.append(
             {
                 "step": "restoration_enhanced",
-                "info": f"DSP Pre ({len(dsp_chain[:3])}) + {model_name} + Hybrid Refinement{vocal_stage} + HF Extension + Stereo + EQ + DSP Post ({len(post_chain)})",
+                "info": (
+                    f"DSP Pre ({len(dsp_chain[:3])}) + {model_name} + "
+                    f"Hybrid Refinement{vocal_stage} + HF Extension + Stereo + "
+                    f"EQ + DSP Post ({len(post_chain)})"
+                ),
                 "params": goal,
                 "dsp_chain": [name for name, _ in dsp_chain],
                 "stages": stages_applied,
@@ -1452,8 +1563,12 @@ class AdaptiveProcessingPipeline:
 
         return {"name": "restoration_enhanced", "audio": out_bytes, "params": goal}
 
+    def restoration(self, audio_bytes, features, goal, context=None):
+        """Public compatibility wrapper for legacy V2 delegation."""
+        return self._restoration(audio_bytes, features, goal, context)
+
     def _apply_dsp_chain(self, audio, sr, dsp_chain):
-        """Wrapper for apply_dsp_chain"""
+        """Wrapper für apply_dsp_chain."""
         return apply_dsp_chain(audio, sr, dsp_chain)
 
     def _repair(self, audio_bytes, features, goal, context):
@@ -1464,6 +1579,7 @@ class AdaptiveProcessingPipeline:
         1. ML-Repair (Policy-selected: FullSubNet+ or DCCRN)
         2. Hybrid Refinement (preserve transients)
         """
+        del features
         # Audio-Bytes in numpy-Array
         audio_original, sr = sf.read(io.BytesIO(audio_bytes), always_2d=False)
 
@@ -1472,10 +1588,17 @@ class AdaptiveProcessingPipeline:
 
         # STAGE 1: ML-Repair (Policy-selected Model)
         model_name = self.policy_engine.select_repair_model(context, goal)
+        canonical_audio = _canonical_policy_audio_route(model_name, audio_original, sr, context)
+        if canonical_audio is not None:
+            audio_repaired = canonical_audio
+            plugin = None
+            logger.info("Policy-Selektion: %s über UV3-Reparaturroute", model_name)
+        else:
+            plugin = getattr(self, model_name, None)
 
-        self.logger.info("\n" + "╔" + "═" * 78 + "╗")
-        self.logger.info("║  REPAIR STAGE 1: ML-REPAIR (Clipping/Artifacts)" + " " * 30 + "║")
-        self.logger.info("╚" + "═" * 78 + "╝\n")
+        self.logger.info("\n╔%s╗", "═" * 78)
+        self.logger.info("║  REPAIR STAGE 1: ML-REPAIR (Clipping/Artifacts)%s║", " " * 30)
+        self.logger.info("╚%s╝\n", "═" * 78)
 
         repair_type = (
             "FullSubNet+ (Speech Enhancement)" if "fullsubnet" in model_name else "DCCRN (Music/Reverb Repair)"
@@ -1484,9 +1607,6 @@ class AdaptiveProcessingPipeline:
         logger.info("  Typ: %s", repair_type)
         self.logger.info("  Vocals: %s", "Ja" if context.get("has_vocals", False) else "Nein")
         self.logger.info("")
-
-        # Lade das ausgewählte Plugin
-        plugin = getattr(self, model_name, None)
 
         # ROBUSTES PLUGIN-HANDLING für Repair
         if plugin is None:
@@ -1520,13 +1640,11 @@ class AdaptiveProcessingPipeline:
 
         # Nur wenn Plugin verfügbar, führe ML-Repair durch
         if plugin is not None:
-            # Create temporary files for ML plugin
-            tmp_in = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            tmp_out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            tmp_in_path = tmp_in.name
-            tmp_out_path = tmp_out.name
-            tmp_in.close()  # Close file handle before writing
-            tmp_out.close()  # Close file handle
+            # Create temporary files for ML plugin.
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_in:
+                tmp_in_path = tmp_in.name
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_out:
+                tmp_out_path = tmp_out.name
 
             try:
                 # Write input WAV file
@@ -1538,6 +1656,8 @@ class AdaptiveProcessingPipeline:
                 # Read result — §VERBOTEN: sf.read(path) → load_audio_file
                 if _load_audio_file is not None:
                     _r = _load_audio_file(tmp_out_path)
+                    if not isinstance(_r, dict):
+                        raise RuntimeError("load_audio_file returned no audio mapping")
                     audio_repaired = _r["audio"]
                 else:
                     raise RuntimeError("load_audio_file unavailable for ML output decode")
@@ -1593,6 +1713,7 @@ class AdaptiveProcessingPipeline:
 
     def _reconstruction(self, audio_bytes, features, goal, context):
         """SOTA-Maximum: Source-Separation mit Docker-basierten ML-Modellen (Policy-basierte Auswahl)"""
+        del features
         import glob
 
         # Audio-Bytes in numpy-Array
@@ -1600,11 +1721,26 @@ class AdaptiveProcessingPipeline:
 
         # NUTZE CONTEXT AUS PHASE 1
         self.logger.info(
-            f"Reconstruction Pipeline: detected_medium={context.get('detected_medium', 'unknown')}, stems={goal.get('stems', 4)}"
+            "Reconstruction Pipeline: detected_medium=%s, stems=%s",
+            context.get("detected_medium", "unknown"),
+            goal.get("stems", 4),
         )
 
         # Policy-Engine wählt optimales Model
         model_name = self.policy_engine.select_separation_model(context, goal)
+        canonical_separated = _canonical_policy_separation_route(model_name, audio, sr, context)
+        if canonical_separated is not None:
+            self.log.append(
+                {
+                    "step": "reconstruction",
+                    "info": f"{model_name} (canonical Aurik-9 router)",
+                    "params": goal,
+                }
+            )
+            with io.BytesIO() as buf:
+                sf.write(buf, canonical_separated, sr, format="WAV")
+                out_bytes = buf.getvalue()
+            return {"name": "reconstruction", "audio": out_bytes, "params": goal}
 
         self.logger.info("\n%s", "=" * 80)
         logger.info("🎶 SOURCE-SEPARATION AUSGEWÄHLT: %s", model_name.upper())
@@ -1641,6 +1777,8 @@ class AdaptiveProcessingPipeline:
                     # §VERBOTEN: sf.read(path) → load_audio_file
                     if _load_audio_file is not None:
                         _r = _load_audio_file(vocals_path)
+                        if not isinstance(_r, dict):
+                            raise RuntimeError("load_audio_file returned no audio mapping")
                         audio_separated = _r["audio"]
                     else:
                         raise RuntimeError("load_audio_file unavailable for stem decode")
@@ -1680,9 +1818,9 @@ class AdaptiveProcessingPipeline:
         from .mastering import mastering_chain
 
         try:
-            from plugins.matchering_plugin import MatcheringPlugin
+            from plugins.matchering_plugin import MatcheringPlugin as LocalMatcheringPlugin
         except ImportError:
-            MatcheringPlugin = None  # type: ignore[assignment,misc]
+            LocalMatcheringPlugin = None  # type: ignore[assignment,misc]
             _log.warning("MatcheringPlugin nicht verfügbar — Fallback auf mastering_chain")
 
         # NUTZE CONTEXT AUS PHASE 1
@@ -1702,13 +1840,13 @@ class AdaptiveProcessingPipeline:
         }
 
         try:
-            if MatcheringPlugin is None:
+            if LocalMatcheringPlugin is None:
                 raise ImportError("MatcheringPlugin nicht verfügbar")
 
             sr = int(features.get("sr", 44100))
             target_audio = features["audio"]
             reference_audio = features["reference_audio"]
-            client = MatcheringPlugin()
+            client = LocalMatcheringPlugin()
             remastered_audio = client.process(target_audio, reference_audio, sr)
 
             with io.BytesIO() as buf:
@@ -1762,7 +1900,8 @@ class AdaptiveProcessingPipeline:
                 }
             except Exception as fallback_e:
                 self.logger.error(
-                    f"Fallback-Remastering ebenfalls fehlgeschlagen: {fallback_e}",
+                    "Fallback-Remastering ebenfalls fehlgeschlagen: %s",
+                    fallback_e,
                     exc_info=True,
                 )
                 self.log.append(
@@ -1791,7 +1930,7 @@ class AdaptiveProcessingPipeline:
 
 class AdaptiveProcessingPipelineV2:
     """
-    Updated pipeline using formal ResturationJob data structures.
+    Aktualisierte Pipeline mit formalen RestaurationJob-Datenstrukturen.
 
     Key Features:
     - Creates formal ResturationJob with UUID tracking
@@ -2035,13 +2174,17 @@ class AdaptiveProcessingPipelineV2:
             logger.error("Failed to archive job %s: %s", job_id, e)
 
         self.logger.info(
-            f"Job {job_id} completed: CAS {initial_cas:.3f} → {final_cas:.3f} (Δ{final_cas - initial_cas:+.3f})"
+            "Job %s completed: CAS %.3f → %.3f (Δ%+.3f)",
+            job_id,
+            initial_cas,
+            final_cas,
+            final_cas - initial_cas,
         )
 
         return job
 
     def _process_step_with_tracking(self, job, audio, sr, operation, model_name, step_id, context, goal):
-        """Process a single step and create ProcessingStep tracking"""
+        """Verarbeitet a single step and create ProcessingStep tracking."""
         from datetime import datetime
 
         from backend.core.data_models import ProcessingStep
@@ -2052,8 +2195,6 @@ class AdaptiveProcessingPipelineV2:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_in:
             sf.write(tmp_in.name, audio, sr)
             input_hash = self.archive_manager.calculate_file_hash(tmp_in.name)
-            import os
-
             os.remove(tmp_in.name)
 
         # Calculate CAS before
@@ -2115,7 +2256,9 @@ class AdaptiveProcessingPipelineV2:
             cas_before=cas_before,
             cas_after=cas_after,
             cas_delta=cas_after - cas_before,
-            decision_reason=f"Context: {context.get('artefact_risk', False)}, Goal: {goal.get('quality_level', 'unknown')}",
+            decision_reason=(
+                f"Context: {context.get('artefact_risk', False)}, Goal: {goal.get('quality_level', 'unknown')}"
+            ),
             skipped=False,
             skip_reason=None,
             duration_seconds=duration,
@@ -2135,16 +2278,18 @@ class AdaptiveProcessingPipelineV2:
         return not context.get("transient_rich", True) or "Warnung" in str(goal)
 
     def _needs_reconstruction(self, context, goal):
+        del context
         return "reference_warning" in goal
 
     def _needs_remastering(self, context, goal):
+        del context
         return goal.get("quality_level") == "maximal"
 
     # Copy processing methods from AdaptiveProcessingPipeline (for backward compat)
     def _restoration(self, audio_bytes, features, goal):
         # Delegate to original pipeline
         pipeline = AdaptiveProcessingPipeline()
-        return pipeline._restoration(audio_bytes, features, goal)
+        return pipeline.restoration(audio_bytes, features, goal)
 
     # === VERALTET: Alte Stub-Methoden entfernt ===
     # Context wird jetzt korrekt aus Phase 1 durchgereicht

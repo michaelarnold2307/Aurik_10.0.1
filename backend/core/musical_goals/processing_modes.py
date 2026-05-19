@@ -51,7 +51,7 @@ class ProcessingModeConfig:
     quality_thresholds: dict[str, float]
 
     def get_prioritized_goals(self) -> list[tuple[str, float]]:
-        """Return goals sorted by weight (highest first)."""
+        """Gibt goals sorted by weight (highest first) zurück."""
         return sorted(self.goal_weights.items(), key=lambda x: x[1], reverse=True)
 
 
@@ -184,7 +184,7 @@ class ProcessingModeManager:
 
     def __init__(self, mode: ProcessingMode = ProcessingMode.RESTORATION):
         """
-        Initialize with a default processing mode.
+        Initialisiert with a default processing mode.
 
         Args:
             mode: Initial processing mode
@@ -200,17 +200,17 @@ class ProcessingModeManager:
         self.config = PROCESSING_MODE_CONFIGS[mode]
 
     def get_config(self, mode: ProcessingMode | None = None) -> ProcessingModeConfig:
-        """Get configuration for specified mode (or current if None)."""
+        """Gibt zurück: configuration for specified mode (or current if None)."""
         target_mode = mode if mode is not None else self.current_mode
         return PROCESSING_MODE_CONFIGS[target_mode]
 
     def get_musical_goals_for_mode(self, mode: ProcessingMode | None = None) -> dict[str, float]:
-        """Get target Musical Goals for specified mode."""
+        """Gibt zurück: target Musical Goals for specified mode."""
         config = self.get_config(mode)
         return config.musical_goals.copy()
 
     def get_processing_params_for_mode(self, mode: ProcessingMode | None = None) -> dict[str, Any]:
-        """Get processing parameters for specified mode."""
+        """Gibt zurück: processing parameters for specified mode."""
         config = self.get_config(mode)
         return config.processing_params.copy()
 
@@ -218,7 +218,7 @@ class ProcessingModeManager:
         self, achieved_goals: dict[str, float], mode: ProcessingMode | None = None
     ) -> dict[str, Any]:
         """
-        Validate achieved goal scores against mode thresholds.
+        Validiert achieved goal scores against mode thresholds.
 
         Args:
             achieved_goals: Measured Musical Goals scores
@@ -300,7 +300,7 @@ class ProcessingModeManager:
 
     @staticmethod
     def get_mode_summary() -> str:
-        """Return human-readable summary of all modes."""
+        """Gibt human-readable summary of all modes zurück."""
         lines = ["Available Processing Modes:\n"]
 
         for mode in ProcessingMode:
@@ -322,7 +322,7 @@ class ProcessingModeManager:
 
 def get_mode_from_string(mode_str: str) -> ProcessingMode:
     """
-    Convert string to ProcessingMode enum.
+    Konvertiert string to ProcessingMode enum.
 
     Args:
         mode_str: Mode name (case-insensitive)
@@ -375,7 +375,7 @@ def get_recommended_mode_for_medium(medium: str) -> ProcessingMode:
 
 def print_mode_comparison(achieved_goals: dict[str, float]) -> None:
     """
-    Print comparison of all modes against achieved goals.
+    Gibt aus: comparison of all modes against achieved goals.
 
     Args:
         achieved_goals: Measured Musical Goals scores

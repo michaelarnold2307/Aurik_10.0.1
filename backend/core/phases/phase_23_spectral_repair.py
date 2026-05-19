@@ -117,7 +117,7 @@ class SpectralRepair(PhaseInterface):
         quality_mode: str,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive runtime profile for ADMM spectral repair (§2.54)."""
+        """Berechnet adaptive runtime profile for ADMM spectral repair (§2.54)."""
         mat = str(material.value if isinstance(material, MaterialType) else material).lower().replace("-", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         rest = float(np.clip(restorability_score, 0.0, 100.0))
@@ -265,7 +265,7 @@ class SpectralRepair(PhaseInterface):
         self._pressure_relax_mrsa_attempts: int = 0
 
     def _has_sufficient_ml_headroom(self, audio: np.ndarray, sample_rate: int) -> bool:
-        """Return True when enough physical RAM is available for AudioSR stage.
+        """Gibt True when enough physical RAM is available for AudioSR stage zurück.
 
         Guard 1 — material check: AudioSR bandwidth extension is the wrong tool for
         lossy-codec artifacts (MP3/AAC ringing, pre-echo, masking throughout spectrum).
@@ -381,7 +381,7 @@ class SpectralRepair(PhaseInterface):
         return True
 
     def _can_relax_thrashing_guard(self, *, for_mrsa: bool) -> bool:
-        """Return True when pressure is elevated but still far from emergency.
+        """Gibt True when pressure is elevated but still far from emergency zurück.
 
         This enables a controlled attempt for robust paths in phase 23 instead of
         forcing immediate Single-STFT fallback on every transient pressure spike.
@@ -411,7 +411,7 @@ class SpectralRepair(PhaseInterface):
             return False
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_23_spectral_repair",
             name="Spectral Repair v3 IMCRA",
@@ -428,7 +428,7 @@ class SpectralRepair(PhaseInterface):
         )
 
     def _get_audiosr_plugin(self):
-        """Lazy load AudioSR plugin for ML-based repair."""
+        """Lädt beim ersten Zugriff: AudioSR plugin for ML-based repair."""
         if self._audiosr_plugin is None:
             try:
                 from plugins.audiosr_plugin import AudioSRPlugin
@@ -443,7 +443,7 @@ class SpectralRepair(PhaseInterface):
 
     @staticmethod
     def _is_system_thrashing() -> bool:
-        """Return True when swap/RAM pressure makes heavy phase-23 paths unsafe."""
+        """Gibt True when swap/RAM pressure makes heavy phase-23 paths unsafe zurück."""
         try:
             from backend.core.ml_memory_budget import is_system_thrashing
 
@@ -455,7 +455,7 @@ class SpectralRepair(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply spectral repair to audio.
+        Wendet an: spectral repair to audio.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -978,33 +978,42 @@ class SpectralRepair(PhaseInterface):
         # §2.46e Hallucination-Guard: Spektral-Inpainting/Reparatur darf kein Material
         # einbringen das nicht im Input physikalisch vorhanden war (Restoration-Modus).
         try:
-            from backend.core.hallucination_guard import apply_hallucination_guard
+            from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg23
+
             _mode23 = str(kwargs.get("mode", "restoration")).lower()
             if "studio" not in _mode23:
                 _mat23 = str(getattr(material, "name", material)).lower()
                 _bw_ceilings23 = {
-                    "shellac": 8000.0, "wax_cylinder": 5000.0,
-                    "vinyl": 16000.0, "reel_tape": 18000.0, "cassette": 15000.0,
+                    "shellac": 8000.0,
+                    "wax_cylinder": 5000.0,
+                    "vinyl": 16000.0,
+                    "reel_tape": 18000.0,
+                    "cassette": 15000.0,
                 }
                 _bw23 = _bw_ceilings23.get(_mat23, 22050.0)
                 _mono_orig23 = audio.mean(axis=-1) if audio.ndim == 2 else audio
                 _mono_rep23 = repaired_audio.mean(axis=-1) if repaired_audio.ndim == 2 else repaired_audio
                 _mono_orig23 = _mono_orig23 if _mono_orig23.ndim == 1 else _mono_orig23.ravel()
                 _mono_rep23 = _mono_rep23 if _mono_rep23.ndim == 1 else _mono_rep23.ravel()
-                _, _h_meta23 = apply_hallucination_guard(
-                    _mono_orig23, _mono_rep23, sample_rate, _bw23, _mode23
+                _hg_result23 = _check_hg23(
+                    _mono_orig23,
+                    _mono_rep23,
+                    sr=sample_rate,
+                    mode=_mode23,
+                    material_bw_ceiling_hz=_bw23,
                 )
-                _rollback23 = (
-                    _h_meta23.get("hallucination_decision") == "rollback"
-                    or bool(_h_meta23.get("rollback", False))
-                )
-                if _rollback23:
+                if _hg_result23.requires_rollback:
                     logger.debug(
-                        "§2.46e Phase23 Hallucination rollback: novelty=%.3f severity=%s",
-                        _h_meta23.get("novelty", 0.0),
-                        _h_meta23.get("hallucination_severity", "unknown"),
+                        "§2.46e Phase23 Hallucination rollback: spectral_novelty=%.3f",
+                        _hg_result23.spectral_novelty,
                     )
                     repaired_audio = audio.copy()
+                if _hg_result23.score_penalty > 0:
+                    logger.info(
+                        "§2.46e Phase23 score_penalty=%.1f (spectral_novelty=%.3f)",
+                        _hg_result23.score_penalty,
+                        _hg_result23.spectral_novelty,
+                    )
         except Exception as _hg23_exc:
             logger.debug("§2.46e Phase23 Hallucination-Guard (non-blocking): %s", _hg23_exc)
 
@@ -1305,7 +1314,7 @@ class SpectralRepair(PhaseInterface):
         progress_cb=None,
         phase_deadline: float = 0.0,
     ) -> np.ndarray:
-        """Repair a single audio channel using spectral inpainting."""
+        """Repariert a single audio channel using spectral inpainting."""
 
         def _report(pct: float, label: str) -> None:
             if callable(progress_cb):
@@ -1364,9 +1373,7 @@ class SpectralRepair(PhaseInterface):
         )
         if _in_pytest23 and not _allow_heavy_tests23:
             use_ml = False
-            logger.info(
-                "phase_23: ML disabled in default pytest run (crash-safety); use --run-heavy-tests for ML path"
-            )
+            logger.info("phase_23: ML disabled in default pytest run (crash-safety); use --run-heavy-tests for ML path")
         if use_ml and system_thrashing and not allow_ml_under_pressure:
             logger.warning("phase_23: ML repair skipped — system thrashing detected, forcing DSP fallback")
             use_ml = False
@@ -1455,7 +1462,7 @@ class SpectralRepair(PhaseInterface):
                     # OOM-Passthrough, Budget-Exceedance oder unerwartete Signalenergie umgangen
                     # wird. +3 dB Toleranz — nie über Pre-Phase-Level plus 3 dB.
                     _in_rms_ch = float(np.sqrt(np.mean(np.asarray(audio, dtype=np.float32) ** 2)) + 1e-12)
-                    _out_rms_ch = float(np.sqrt(np.mean(out ** 2)) + 1e-12)
+                    _out_rms_ch = float(np.sqrt(np.mean(out**2)) + 1e-12)
                     _gain_ch = 20.0 * float(np.log10(_out_rms_ch / _in_rms_ch))
                     if _gain_ch > 3.0:
                         _atten_ch = float(10.0 ** -((_gain_ch - 3.0) / 20.0))
@@ -1587,7 +1594,7 @@ class SpectralRepair(PhaseInterface):
         progress_cb=None,
         phase_deadline: float = 0.0,
     ) -> np.ndarray:
-        """Repair single audio channel using 5-zone MRSA (§DSP-Spezialregeln).
+        """Repariert single audio channel using 5-zone MRSA (§DSP-Spezialregeln).
 
         Applies spectral inpainting independently per frequency zone with
         zone-appropriate STFT resolution (win 65536→128). Reconstructs each zone
@@ -1766,7 +1773,7 @@ class SpectralRepair(PhaseInterface):
         audiosr: Any,
     ) -> np.ndarray:
         """
-        Repair audio using AudioSR ML model.
+        Repariert audio using AudioSR ML model.
 
         Strategy: DSP-Detection + ML-Repair
         1. DSP detects defect regions (already done - defect_mask)
@@ -1817,7 +1824,7 @@ class SpectralRepair(PhaseInterface):
                 _orig_len23 = len(channel_audio)
                 _use_pad23 = _asr23_ctx_n > 0 and _orig_len23 > _asr23_ctx_n * 4
                 if _use_pad23:
-                    _ch_padded23 = np.pad(channel_audio, (_asr23_ctx_n, _asr23_ctx_n), mode='reflect')
+                    _ch_padded23 = np.pad(channel_audio, (_asr23_ctx_n, _asr23_ctx_n), mode="reflect")
                     _raw_repaired = audiosr.process(_ch_padded23, sample_rate, target_sr)
                 else:
                     _raw_repaired = audiosr.process(channel_audio, sample_rate, target_sr)
@@ -1908,10 +1915,11 @@ class SpectralRepair(PhaseInterface):
                 "cassette": 15000.0,
             }
             _mat_asr23 = str(getattr(self, "_current_material", "unknown")).lower().replace(" ", "_").replace("-", "_")
-            _bw_asr23 = _BW_CAP_ASR23.get(_mat_asr23, None)
+            _bw_asr23 = _BW_CAP_ASR23.get(_mat_asr23)
             if _bw_asr23 is not None:
                 try:
-                    from scipy.signal import butter as _butter_asr23, sosfiltfilt as _sosfiltfilt_asr23
+                    from scipy.signal import butter as _butter_asr23
+                    from scipy.signal import sosfiltfilt as _sosfiltfilt_asr23
 
                     _nyq_asr23 = float(sample_rate) / 2.0
                     _ratio_asr23 = float(np.clip(_bw_asr23 / _nyq_asr23, 0.01, 0.99))
@@ -1924,14 +1932,15 @@ class SpectralRepair(PhaseInterface):
                             ).astype(np.float32)
                         else:
                             result_asr23 = np.stack(
-                                [_sosfiltfilt_asr23(_sos_asr23, result_asr23[:, c]) for c in range(result_asr23.shape[1])],
+                                [
+                                    _sosfiltfilt_asr23(_sos_asr23, result_asr23[:, c])
+                                    for c in range(result_asr23.shape[1])
+                                ],
                                 axis=1,
                             ).astype(np.float32)
                     else:
                         result_asr23 = _sosfiltfilt_asr23(_sos_asr23, result_asr23).astype(np.float32)
-                    logger.debug(
-                        "§6.2c phase_23 AudioSR BW-Ceiling: %s ≤ %.0f Hz", _mat_asr23, _bw_asr23
-                    )
+                    logger.debug("§6.2c phase_23 AudioSR BW-Ceiling: %s ≤ %.0f Hz", _mat_asr23, _bw_asr23)
                 except Exception as _bw_asr23_exc:
                     logger.debug("§6.2c phase_23 BW-Ceiling (non-blocking): %s", _bw_asr23_exc)
 

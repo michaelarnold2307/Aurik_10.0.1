@@ -78,12 +78,12 @@ class ProcessedFile:
     error_message: str | None = None
 
     def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization."""
+        """Konvertiert to dictionary for JSON serialization."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProcessedFile":
-        """Create from dictionary.
+        """Erstellt from dictionary.
 
         Handles legacy JSON formats written by earlier Aurik versions where
         ``_recent.json`` / ``_history.json`` entries were stored as plain
@@ -101,7 +101,7 @@ class ProcessedFile:
 @dataclass
 class Session:
     """
-    A processing session containing multiple processed files.
+    Verarbeitet session containing multiple processed files.
 
     Attributes:
         session_id: Unique session identifier
@@ -128,7 +128,7 @@ class Session:
     tags: list[str] = field(default_factory=list)
 
     def add_file(self, processed_file: ProcessedFile):
-        """Add a processed file to this session."""
+        """Fügt hinzu: a processed file to this session."""
         self.files.append(processed_file)
         self.last_modified = datetime.now().isoformat()
 
@@ -141,19 +141,19 @@ class Session:
             self.status = SessionStatus.FAILED
 
     def get_file_count(self) -> int:
-        """Get total number of files in session."""
+        """Gibt zurück: total number of files in session."""
         return len(self.files)
 
     def get_success_count(self) -> int:
-        """Get number of successfully processed files."""
+        """Gibt zurück: number of successfully processed files."""
         return sum(1 for f in self.files if f.success)
 
     def get_failed_count(self) -> int:
-        """Get number of failed files."""
+        """Gibt zurück: number of failed files."""
         return sum(1 for f in self.files if not f.success)
 
     def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization."""
+        """Konvertiert to dictionary for JSON serialization."""
         data = {
             "session_id": self.session_id,
             "session_name": self.session_name,
@@ -170,7 +170,7 @@ class Session:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Session":
-        """Create from dictionary."""
+        """Erstellt from dictionary."""
         # Convert files back to ProcessedFile objects
         files = [ProcessedFile.from_dict(f) for f in data.get("files", [])]
 
@@ -231,7 +231,7 @@ class SessionManager:
 
     def __init__(self, sessions_dir: Path | None = None, max_history: int = 100, max_recent: int = 10):
         """
-        Initialize SessionManager.
+        Initialisiert SessionManager.
 
         Args:
             sessions_dir: Directory for session storage (default: ./sessions)
@@ -259,7 +259,7 @@ class SessionManager:
 
     def create_session(self, session_name: str, description: str = "", default_settings: dict | None = None) -> Session:
         """
-        Create a new session.
+        Erstellt a new session.
 
         Args:
             session_name: User-friendly session name
@@ -286,7 +286,7 @@ class SessionManager:
 
     def add_to_session(self, processed_file: ProcessedFile):
         """
-        Add a processed file to the current session.
+        Fügt hinzu: a processed file to the current session.
 
         Args:
             processed_file: ProcessedFile object to add
@@ -305,7 +305,7 @@ class SessionManager:
 
     def save_session(self, session_name: str | None = None) -> Path:
         """
-        Save current session to JSON file.
+        Speichert current session to JSON file.
 
         Args:
             session_name: Optional custom session name (uses current if not provided)
@@ -341,7 +341,7 @@ class SessionManager:
 
     def load_session(self, session_name: str) -> Session:
         """
-        Load a session by name.
+        Lädt a session by name.
 
         Args:
             session_name: Name of session to load
@@ -368,7 +368,7 @@ class SessionManager:
 
     def get_recent_sessions(self, n: int | None = None) -> list[dict[str, str]]:
         """
-        Get list of recent sessions.
+        Gibt zurück: list of recent sessions.
 
         Args:
             n: Number of sessions to return (default: max_recent)
@@ -381,7 +381,7 @@ class SessionManager:
 
     def get_session_history(self, n: int | None = None) -> list[ProcessedFile]:
         """
-        Get global session history (last N processed files across all sessions).
+        Gibt zurück: global session history (last N processed files across all sessions).
 
         Args:
             n: Number of files to return (default: all, max max_history)
@@ -395,7 +395,7 @@ class SessionManager:
 
     def list_sessions(self) -> list[dict[str, Any]]:
         """
-        List all available sessions.
+        Listet auf: all available sessions.
 
         Returns:
             List of session info dicts
@@ -506,7 +506,7 @@ class SessionManager:
 
     def get_favorites(self) -> list[dict[str, Any]]:
         """
-        Get all favorited sessions.
+        Gibt zurück: all favorited sessions.
 
         Returns:
             List of favorite session info dicts
@@ -546,7 +546,7 @@ class SessionManager:
         return matches
 
     def _generate_session_id(self, session_name: str) -> str:
-        """Generate unique session ID from name."""
+        """Generiert unique session ID from name."""
         # Simple ID: lowercase, replace spaces with underscores
         session_id = session_name.lower().replace(" ", "_")
         # Remove special characters
@@ -554,7 +554,7 @@ class SessionManager:
         return session_id
 
     def _add_to_recent(self, session_name: str, session_path: Path):
-        """Add session to recent sessions list."""
+        """Fügt hinzu: session to recent sessions list."""
         # Remove if already present
         self._recent_sessions = [s for s in self._recent_sessions if s["name"] != session_name]
 
@@ -571,12 +571,12 @@ class SessionManager:
         self._save_recent_sessions()
 
     def _save_recent_sessions(self):
-        """Save recent sessions to file."""
+        """Speichert recent sessions to file."""
         recent_path = self.sessions_dir / "_recent.json"
         recent_path.write_text(json.dumps(self._recent_sessions, indent=2))
 
     def _load_recent_sessions(self):
-        """Load recent sessions from file."""
+        """Lädt recent sessions from file."""
         recent_path = self.sessions_dir / "_recent.json"
 
         if recent_path.exists():
@@ -596,13 +596,13 @@ class SessionManager:
             self._recent_sessions = []
 
     def _save_history(self):
-        """Save global history to file."""
+        """Speichert global history to file."""
         history_path = self.sessions_dir / "_history.json"
         history_data = [f.to_dict() for f in self._history]
         history_path.write_text(json.dumps(history_data, indent=2))
 
     def _load_history(self):
-        """Load global history from file."""
+        """Lädt global history from file."""
         history_path = self.sessions_dir / "_history.json"
 
         if history_path.exists():

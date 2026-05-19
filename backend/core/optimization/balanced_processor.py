@@ -1,5 +1,5 @@
 """
-optimization/balanced_processor.py — Balanced audio processor
+optimization/balanced_processor.py – Ausgeglichener Audio-Prozessor.
 =============================================================
 
 Integrates all 6 optimization priorities into a single processing chain.
@@ -52,7 +52,7 @@ class BalancedAudioProcessor:
     # ------------------------------------------------------------------
 
     def process(self, audio: np.ndarray, sr: int, genre: str = "rock") -> np.ndarray:
-        """Run the full 6-stage pipeline on *audio*.
+        """Führt aus: the full 6-stage pipeline on *audio*.
 
         Returns
         -------
@@ -93,7 +93,7 @@ class BalancedAudioProcessor:
         return np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
 
     def benchmark(self, audio: np.ndarray, sr: int, n_iterations: int = 1) -> dict[str, Any]:
-        """Measure real-time factor over *n_iterations*.
+        """Misst real-time factor over *n_iterations*.
 
         Returns
         -------

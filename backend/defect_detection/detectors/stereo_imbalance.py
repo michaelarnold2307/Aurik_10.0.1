@@ -12,7 +12,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class StereoImbalanceDetector(DefectDetector):
     """
-    Detects stereo channel imbalance.
+    Erkennt stereo channel imbalance.
 
     Identifies level differences between left and right channels
     that may indicate recording/playback issues.
@@ -23,7 +23,7 @@ class StereoImbalanceDetector(DefectDetector):
         self.threshold_db = threshold_db
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 1.0, **kwargs) -> list[DefectInstance]:
-        """Detect stereo imbalance, kontextbewusst."""
+        """Erkennt stereo imbalance, kontextbewusst."""
         if audio.ndim != 2 or audio.shape[1] != 2:
             return []
         left = audio[:, 0]

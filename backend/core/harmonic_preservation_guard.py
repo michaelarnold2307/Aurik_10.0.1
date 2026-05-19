@@ -341,7 +341,7 @@ class HarmonicPreservationGuard:
         noise_psd: np.ndarray | None = None,
     ) -> np.ndarray:
         """
-        Computes frame-wise local SNR per bin in dB.
+        Berechnet frame-wise local SNR per bin in dB.
 
         If noise_psd is None, estimates noise PSD via minimum statistics over a
         rolling window of _NOISE_STAT_WINDOW frames (Martin 2001 simplified):

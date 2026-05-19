@@ -37,7 +37,7 @@ def blend_targets_with_confidence(
     era_conf: float,
     genre_conf: float,
 ) -> dict[str, float]:
-    """Blend per-song targets with canonical floors based on confidence."""
+    """Mischt per-song targets with canonical floors based on confidence."""
     conf = float(np.clip(0.45 * medium_conf + 0.30 * era_conf + 0.25 * genre_conf, 0.0, 1.0))
     blended: dict[str, float] = {}
     for goal, floor in canonical.items():
@@ -130,7 +130,7 @@ def compute_goal_coverage_index(musical_goals_passed: dict[str, bool] | None) ->
 
 
 def compute_reference_confidence(target_confidence: float, tcci: float, carrier_chain_recovery_ratio: float) -> float:
-    """Calibrated reference confidence in [0, 1] from existing reliability signals."""
+    """Kalibrierte Referenz-Konfidenz in [0, 1] aus vorhandenen Zuverlässigkeitssignalen."""
     tc = float(np.clip(target_confidence, 0.0, 1.0))
     chain_stability = 1.0 - float(np.clip(tcci, 0.0, 1.0))
     # High carrier-recovery-ratio means stronger intentional divergence from degraded input.
@@ -163,8 +163,8 @@ CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {
     "tonal_center": 0.95,
     "tonalcenter": 0.95,
     "timbre_authentizitaet": 0.87,
-    "artikulation": 0.85,
-    "emotionalitaet": 0.82,
+    "artikulation": 0.88,  # §09.1 Spec P2 (v9.12.6: 0.85→0.88)
+    "emotionalitaet": 0.84,  # §09.1 Spec P3 (v9.12.6: 0.82→0.84)
     "mikrodynamik": 0.88,
     "micro_dynamics": 0.88,
     "groove": 0.83,
@@ -172,7 +172,7 @@ CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {
     "waerme": 0.75,
     "bass_kraft": 0.78,
     "basskraft": 0.78,
-    "separation_fidelity": 0.78,
+    "separation_fidelity": 0.80,  # §09.1 Spec P4 (v9.12.6: 0.78→0.80)
     "brillanz": 0.78,
     "raumtiefe": 0.70,
     "spatial_depth": 0.70,
@@ -184,8 +184,8 @@ CANONICAL_THRESHOLDS_STUDIO2026: dict[str, float] = {
     "tonal_center": 0.96,
     "tonalcenter": 0.96,
     "timbre_authentizitaet": 0.89,
-    "artikulation": 0.87,
-    "emotionalitaet": 0.84,
+    "artikulation": 0.90,  # §09.1 Spec P2 (v9.12.6: 0.87→0.90)
+    "emotionalitaet": 0.87,  # §09.1 Spec P3 (v9.12.6: 0.84→0.87)
     "mikrodynamik": 0.90,
     "micro_dynamics": 0.90,
     "groove": 0.85,
@@ -193,7 +193,7 @@ CANONICAL_THRESHOLDS_STUDIO2026: dict[str, float] = {
     "waerme": 0.78,
     "bass_kraft": 0.80,
     "basskraft": 0.80,
-    "separation_fidelity": 0.80,
+    "separation_fidelity": 0.83,  # §09.1 Spec P4 (v9.12.6: 0.80→0.83)
     "brillanz": 0.82,
     "raumtiefe": 0.74,
     "spatial_depth": 0.74,
@@ -211,23 +211,81 @@ _ERA_BIAS: dict[str, dict[str, float]] = {
         "waerme": +0.14,
         "authentizitaet": +0.10,
         "natuerlichkeit": +0.08,
+        # Acoustic recording technique (era, not medium): horn diffraction + no click track.
+        # These are independent of material degradation (even a perfect transfer still has these).
+        "groove": -0.12,  # Tempo instability from acoustic horn recording sessions
+        "micro_dynamics": -0.10,  # Horn funnel limits DR to ~30–35 dB (recording technique)
+        "emotionalitaet": -0.06,  # Limited tonal + dynamic bandwidth constrains arousal range
+        "artikulation": -0.06,  # Horn diffraction degrades onset precision (era technique)
     },
     "1950s": {
         "brillanz": -0.14,
         "transparenz": -0.08,
         "waerme": +0.10,
         "authentizitaet": +0.08,
+        # Early electronic recording technique: residual speed instability + compressed DR.
+        "groove": -0.04,  # Early tape/disc: residual wow/flutter beyond medium limits
+        "micro_dynamics": -0.04,  # Early electronic compressors: reduced dynamic headroom
+    },
+    "1960s": {
+        # Early stereo (1960–1969): 4→8-track, British Invasion, Motown, bossa nova.
+        # Warm analog tape, organic live performances — but stereo imaging still narrow.
+        "waerme": +0.06,  # Analog tape warmth at its cleanest (7.5/15 ips)
+        "authentizitaet": +0.04,  # Live studio sessions, minimal post-processing
+        "natuerlichkeit": +0.04,  # Natural room acoustics, pre-digital aesthetic
+        "spatial_depth": -0.04,  # Early narrow stereo: hard-panned L/C/R only, no automation
     },
     "1970s": {
+        # High-DR analog era (1970–1979): 16–24-track, funk/soul, prog rock, jazz-fusion.
+        # Natural dynamics peak, groove-oriented performance culture.
         "brillanz": +0.04,
         "transparenz": +0.04,
         "waerme": +0.02,
+        "groove": +0.06,  # Funk/soul: studio musicians, extremely tight rhythmic playing
+        "authentizitaet": +0.04,  # Organic, pre-digital recording culture
+        "natuerlichkeit": +0.04,  # Minimal electronic processing, natural acoustics
+    },
+    "1980s": {
+        # Digital effects era (1980–1989): Dolby NR, gated reverb, synth pop, hair metal.
+        # Bright mix aesthetic, heavy processing — technically clean but sonically artificial.
+        "brillanz": +0.08,  # Bright, HF-pushed mix aesthetic of the decade
+        "transparenz": +0.06,  # Clean tape/early digital — low noise floor
+        "waerme": -0.06,  # Cold digital/electronic aesthetic dominates
+        "natuerlichkeit": -0.06,  # Heavy processing: gated snare, digital reverb, synths
+        "spatial_depth": +0.06,  # Large reverbs → pronounced spatial impression
+        "groove": -0.04,  # Drum machines + gated reverb reduce organic groove feel
     },
     "1990s": {
+        # CD peak era (1990–1999): grunge, britpop, R&B, excellent dynamic range.
+        # Digital mixing standard — transparent, articulate, but slightly sterile warmth.
         "brillanz": +0.10,
         "transparenz": +0.10,
         "artikulation": +0.06,
         "waerme": -0.04,
+        "groove": +0.04,  # CD masters: faithful rhythmic reproduction, tight grid
+        "natuerlichkeit": +0.04,  # Relatively unprocessed vs. 1980s; grunge/live aesthetic
+    },
+    "2000s": {
+        # Loudness War peak (2000–2009): heavy limiting, DR 5–8 dB, MP3 distribution.
+        # Over-compressed masters — loudness at the cost of dynamics and naturalness.
+        "brillanz": +0.06,  # HF pushed in mastering for perceived loudness
+        "transparenz": -0.08,  # Heavy limiting destroys micro-detail transparency
+        "micro_dynamics": -0.14,  # Loudness War: DR often 5–8 dB (peak recording technique impact)
+        "natuerlichkeit": -0.08,  # Over-compressed, fatiguing, harsh
+        "emotionalitaet": -0.06,  # Compression reduces emotional arc and dynamic contrast
+        "groove": +0.04,  # Hip-hop/electronic: tight rhythmic grid despite limiting
+        "waerme": -0.06,  # Clinical, compressed, over-bright
+    },
+    "2010s": {
+        # Streaming era (2010–2026): −14 LUFS normalization, DR recovery, spatial audio.
+        # Partial reversal of Loudness War — more balanced dynamics, high-res digital.
+        "brillanz": +0.08,  # Modern bright productions, but more balanced than 2000s
+        "transparenz": +0.10,  # High-resolution digital: excellent spectral clarity
+        "micro_dynamics": +0.08,  # DR recovery vs. 2000s; −14 LUFS streaming normalization
+        "natuerlichkeit": +0.06,  # Less extreme Loudness War compression than 2000s
+        "artikulation": +0.10,  # Modern digital: excellent transient precision (24-bit/96 kHz)
+        "waerme": -0.02,  # Slightly clinical but less extreme than 1980s
+        "spatial_depth": +0.04,  # Spatial audio (Dolby Atmos, binaural) growing standard
     },
 }
 
@@ -252,7 +310,20 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         # P4 — spektral/strukturell limitiert
         "bass_kraft": -0.22,  # LF-Rolloff: Shellac ≤ 100 Hz praktisch, Wax ≤ 80 Hz (§0 §6.2c)
         "separation_fidelity": -0.24,  # Mono oder Mono-kompatibles Narrow-Stereo → keine Stem-Sep möglich
-        "raumtiefe": -0.15,  # Mono-Quelle: kein echtes Stereo-Feld → Raumtiefe inherent limitiert
+        # §Bug#fix v9.12.1: get_material_floor() nutzt "spatial_depth" (Metrik-Dict-Key), nicht
+        # "raumtiefe" (Legacy-Key). Legacy-Key bleibt für SGT-Alias-Propagation erhalten.
+        "raumtiefe": -0.15,  # Legacy-Key: SGT-Alias-Propagation (estimate_song_goal_targets)
+        "spatial_depth": -0.15,  # Canonical Key: get_material_floor("shellac", "spatial_depth")
+        # §09.2 Weitere physikalische Grenzen Shellac/Wax:
+        # artikulation: Crackle-Onsets + limited DR maskieren Transienten stark
+        # Formula: physical ceiling ~0.60 → bias = (0.60-0.85)/0.27 = -0.926 ≈ -0.93
+        "artikulation": -0.93,
+        # tonal_center: Wow/Flutter (1-2% WRMS) + keine RIAA-Standardisierung bis 1954
+        # Formula: physical ceiling ~0.72 → bias = (0.72-0.95)/0.27 = -0.852 ≈ -0.85
+        "tonal_center": -0.85,
+        # timbre_authentizitaet: Shellac-Resonanzen/Sättigung IST der authentische Klang → positive Richtung
+        # Formula: ceiling ~0.884 → bias = (0.884-0.87)/0.27 = +0.05
+        "timbre_authentizitaet": +0.05,
     },
     # Normal-analog Vinyl (LP, Vinyl)
     # Vinyl: Schneidebeschränkungen <80 Hz (bass_kraft), leichtes Wow/Flutter (groove)
@@ -267,6 +338,16 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         "groove": -0.04,  # Leichtes Wow/Flutter
         "bass_kraft": -0.06,  # Vinyl-Schneidebeschränkung LF
         "separation_fidelity": -0.06,  # Narrow-Stereo, Early-Stereo-Artefakte
+        # §09.2 Ergänzende Vinyl-Biases (v9.12.1):
+        # transparenz: Oberflächenrauschen reduziert Spektralklarheit; ceiling ~0.793
+        # Formula: (0.793-0.82)/0.27 = -0.10
+        "transparenz": -0.10,
+        # artikulation: Wow/Flutter (~0.10-0.15% WRMS) beeinträchtigt Transienten; ceiling ~0.828
+        # Formula: (0.828-0.85)/0.27 = -0.08
+        "artikulation": -0.08,
+        # micro_dynamics: Oberflächenrauschen maskiert feine Dynamik; ceiling ~0.858
+        # Formula: (0.858-0.88)/0.27 = -0.08
+        "micro_dynamics": -0.08,
     },
     # Tape (Reel-Tape, Kassette) — physikalisch stärker limitiert als Vinyl
     # §09.2 (v9.12.5): Separatklasse tape_analog, da Tape-spezifische Einschränkungen
@@ -288,6 +369,13 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         "artikulation": -0.15,  # Dropout+Hiss maskiert Transienten
         "timbre_authentizitaet": -0.04,
         "spatial_depth": -0.04,
+        # §09.2 Ergänzende Tape-Biases (v9.12.1):
+        # micro_dynamics: Tape-Hiss maskiert feine Dynamik auch nach NR; ceiling ~0.839
+        # Formula: (0.839-0.88)/0.27 = -0.15
+        "micro_dynamics": -0.15,
+        # tonal_center: Wow/Flutter (~0.3% WRMS) beeinträchtigt Tonstabilität; ceiling ~0.869
+        # Formula: (0.869-0.95)/0.27 = -0.30
+        "tonal_center": -0.30,
     },
     # Digital (CD, DAT, Streaming) — near-lossless; natuerlichkeit at full canonical floor 0.90
     "digital": {
@@ -300,9 +388,32 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
     # Formula: floor = canonical(0.90) + kappa_min(0.27) * bias → bias = (0.78-0.90)/0.27 = -0.444
     "lossy": {
         "natuerlichkeit": -0.44,
-        "transparenz": +0.04,
+        # §Bug#fix v9.12.1: war +0.04 (falsche Richtung!). mp3 Pre-Echo + HF-Rolloff (~16 kHz
+        # bei 128 kbps) begrenzen Transparenz; physikalisches Ceiling ~0.793.
+        # Formula: (0.793 - 0.82) / 0.27 = -0.10. CD/DAT ("digital") hat +0.08 ✓.
+        "transparenz": -0.10,
         "artikulation": +0.04,
         "brillanz": +0.04,
+        # §09.2 Lossy-SDR-Ceiling: Codec-Quantisierungsrauschen begrenzt Vocal-Stem-SDR auf ~10 dB
+        # (_MATERIAL_MAX_SDR["mp3_low"] = 10.0; musical_goals.instructions.md sep_fidelity).
+        # Im reference-free Modus → Harmonicity-Score floor ~0.70–0.75 (codec reduziert HF-Harmonicity).
+        # Formula: target_floor ≈ 0.75 → bias = (0.75 - 0.78) / 0.27 = -0.111 ≈ -0.10.
+        # Vergleich: vinyl analog = -0.06 (floor 0.764); tape_analog = -0.22 (floor 0.721).
+        # Lossy ist schlechter als Vinyl (Codec-Quantisierung) aber besser als Tape (Stereo erhalten).
+        "separation_fidelity": -0.10,
+        # §09.2 Ergänzende Lossy-Biases (v9.12.1):
+        # bass_kraft: Codec-Quantisierung beeinträchtigt Bass-Klarheit; ceiling ~0.758
+        # Formula: (0.758 - 0.78) / 0.27 = -0.08
+        "bass_kraft": -0.08,
+        # timbre_authentizitaet: Pre-Echo-Verschmierung verändert Timbre; ceiling ~0.843
+        # Formula: (0.843 - 0.87) / 0.27 = -0.10
+        "timbre_authentizitaet": -0.10,
+        # authentizitaet: Codec-Phasen-/Spektralartefakte; ceiling ~0.853
+        # Formula: (0.853 - 0.88) / 0.27 = -0.10
+        "authentizitaet": -0.10,
+        # micro_dynamics: Psychoakustisches Masking komprimiert Mikrodynamik; ceiling ~0.858
+        # Formula: (0.858 - 0.88) / 0.27 = -0.08
+        "micro_dynamics": -0.08,
     },
 }
 
@@ -373,20 +484,83 @@ _GENRE_BIAS: dict[str, dict[str, float]] = {
         "authentizitaet": +0.10,
         "waerme": +0.08,
     },
+    # Soul / R&B (Motown, Stax, Atlantic, Northern Soul)
+    # Tight rhythm section, emotional vocal performance, warm analog room acoustics.
+    # Groove and authenticity are definitional — sterilization is worse than noise.
+    "soul": {
+        "groove": +0.10,  # Rhythm section precision: Motown/Stax studio musicians
+        "authentizitaet": +0.12,  # Raw emotional performance is the product — preserve at all cost
+        "waerme": +0.08,  # Warm room acoustics, natural reverb, analog warmth
+        "micro_dynamics": +0.06,  # Vocal swells, breath control, expressive micro-dynamic
+        "bass_kraft": +0.06,  # Prominent bass lines (Jamerson, Duck Dunn style)
+    },
+    # R&B aliases — GenreClassifier may output any of these
+    "rnb": {"groove": +0.10, "authentizitaet": +0.12, "waerme": +0.08, "micro_dynamics": +0.06, "bass_kraft": +0.06},
+    "r&b": {"groove": +0.10, "authentizitaet": +0.12, "waerme": +0.08, "micro_dynamics": +0.06, "bass_kraft": +0.06},
+    # Blues (Delta, Chicago, Electric) — rawness IS the art form
+    "blues": {
+        "waerme": +0.12,  # Warm, dark, organic character
+        "authentizitaet": +0.12,  # Raw imperfections preserve blues authenticity — never sterilize
+        "groove": +0.08,  # Shuffle/swing feel defines genre
+        "brillanz": -0.06,  # Dark, warm recordings — not bright/shrill
+        "transparenz": -0.06,  # Deliberate analog warmth preferred over clinical transparency
+    },
+    # Hip-Hop / Rap — beat precision + sub-bass is the product
+    "hip_hop": {
+        "groove": +0.12,  # Beat is the dominant feature — rhythmic precision paramount
+        "bass_kraft": +0.14,  # Sub-bass defines genre identity (808s, sampled kicks)
+        "artikulation": +0.10,  # Lyrical intelligibility is primary vocal quality metric
+        "spatial_depth": +0.06,  # Stereo field deliberately used for immersive effect
+        "micro_dynamics": -0.08,  # Often intentionally side-chain compressed; respect the aesthetic
+        "natuerlichkeit": -0.06,  # Electronic/heavily processed by design — not a defect
+    },
+    # Hip-Hop aliases
+    "hip-hop": {
+        "groove": +0.12,
+        "bass_kraft": +0.14,
+        "artikulation": +0.10,
+        "spatial_depth": +0.06,
+        "micro_dynamics": -0.08,
+        "natuerlichkeit": -0.06,
+    },
+    "rap": {
+        "groove": +0.12,
+        "bass_kraft": +0.14,
+        "artikulation": +0.10,
+        "spatial_depth": +0.06,
+        "micro_dynamics": -0.08,
+        "natuerlichkeit": -0.06,
+    },
+    # Disco / Funk — dancefloor dynamics and bass groove
+    "disco": {
+        "groove": +0.12,  # Four-on-the-floor beat precision
+        "bass_kraft": +0.10,  # Prominent bass: bassline drives the track
+        "spatial_depth": +0.06,  # Wide stereo mix standard for disco
+        "micro_dynamics": -0.04,  # Light compression typical for dancefloor
+    },
+    "funk": {"groove": +0.12, "bass_kraft": +0.10, "spatial_depth": +0.04, "micro_dynamics": +0.04},
 }
 
 
 def _era_key(decade: int | None) -> str:
-    """Map decade to bias bucket."""
+    """Map decade to bias bucket (8 buckets, 1920s–2010s)."""
     if decade is None:
         return "1970s"
     if decade < 1950:
         return "1920s"
-    if decade < 1970:
+    if decade < 1960:
         return "1950s"
-    if decade < 1990:
+    if decade < 1970:
+        return "1960s"
+    if decade < 1980:
         return "1970s"
-    return "1990s"
+    if decade < 1990:
+        return "1980s"
+    if decade < 2000:
+        return "1990s"
+    if decade < 2010:
+        return "2000s"
+    return "2010s"
 
 
 def estimate_song_goal_targets(
@@ -398,8 +572,9 @@ def estimate_song_goal_targets(
     genre_label: str | None = None,
     material_type: str | None = None,
     transfer_chain: list[str] | None = None,
+    production_profile: object | None = None,
 ) -> dict[str, float]:
-    """Compute per-song goal targets as studio-day reconstruction targets.
+    """Berechnet per-song goal targets as studio-day reconstruction targets.
 
     Returns a dict mapping each goal name to its target value ∈ [0.30, 0.99].
     Targets are blended from canonical floors (§09.1), era-/material-/genre-biases
@@ -413,10 +588,13 @@ def estimate_song_goal_targets(
         is_studio_2026: Studio 2026 mode uses higher canonical floors.
         goal_weights:   Per-song goal importance from §2.56 (1.0 = default).
         restorability_score: 0–100 from RestorabilityEstimator.
-        era_decade:     Decade (e.g. 1970) from EraClassifier.
-        genre_label:    Genre string (e.g. "schlager") from GenreClassifier.
-        material_type:  Primary material (e.g. "vinyl") from MediumDetector.
-        transfer_chain: Full chain list (e.g. ["vinyl","tape","mp3_low"]).
+        era_decade:        Decade (e.g. 1970) from EraClassifier.
+        genre_label:        Genre string (e.g. "schlager") from GenreClassifier.
+        material_type:      Primary material (e.g. "vinyl") from MediumDetector.
+        transfer_chain:     Full chain list (e.g. ["vinyl","tape","mp3_low"]).
+        production_profile: Optional ProductionProfile from RecordingProductionKB.
+                            Its goal_adjustments are applied as 4th bias layer
+                            with kappa_provenance=0.30 (conservative).
 
     Returns:
         dict[str, float]: Per-goal targets, same keys as CANONICAL_THRESHOLDS.
@@ -431,7 +609,12 @@ def estimate_song_goal_targets(
     )
     mat_class = _MATERIAL_CLASS.get(primary_mat, "analog")
     era_bucket = _era_key(era_decade)
-    genre_key = str(genre_label or "").strip().lower()
+    # Normalize genre: lower + collapse spaces and hyphens to underscores
+    # e.g. "Hip Hop" → "hip_hop", "Hip-Hop" → "hip_hop", "R&B" → "r&b"
+    genre_key = str(genre_label or "").strip().lower().replace(" ", "_").replace("-", "_")
+    # "R B" / "R-B" → "r_b" after normalization; map back to the "r&b" dict key
+    if genre_key == "r_b":
+        genre_key = "r&b"
 
     # Accumulate biases
     bias: dict[str, float] = {}
@@ -442,6 +625,20 @@ def estimate_song_goal_targets(
     ]:
         for goal, delta in b_dict.items():
             bias[goal] = bias.get(goal, 0.0) + float(delta)
+
+    # §09.2 Transfer-chain compound bias: secondary links contribute partial material biases.
+    # Each subsequent medium adds further real degradation on top of the primary.
+    # Weights: link[1]=0.40, link[2+]=0.20 — diminishing returns per generation.
+    # Example: vinyl+tape+mp3_low → tape_analog at 0.40 + lossy at 0.20.
+    # Only applied when the secondary class differs from the primary (no double-counting).
+    if transfer_chain and len(transfer_chain) > 1:
+        for _ci, _cm in enumerate(transfer_chain[1:4], start=1):  # cap at 3 extra links
+            _cm_key = str(_cm).strip().lower()
+            _cm_class = _MATERIAL_CLASS.get(_cm_key, "")
+            if _cm_class and _cm_class != mat_class:
+                _link_w = 0.40 if _ci == 1 else 0.20
+                for _g, _d in _MATERIAL_BIAS.get(_cm_class, {}).items():
+                    bias[_g] = bias.get(_g, 0.0) + _link_w * float(_d)
 
     # §Bug#2 Alias-Propagation: bias tables use legacy keys (raumtiefe, mikrodynamik,
     # tonalcenter, basskraft). Canonical dicts carry both old and new keys.
@@ -464,13 +661,49 @@ def estimate_song_goal_targets(
     kappa_base = 0.65 if is_studio_2026 else 0.45
     kappa = kappa_base * (0.60 + 0.40 * rest_norm)  # range: [0.27, 0.65] Restoration
 
+    # Provenance bias (4th layer) — kappa_provenance is fixed at 0.30 (conservative).
+    # RecordingProductionKB adjustments are more specific but also more uncertain
+    # than era/genre/material biases, so they are applied with smaller weight.
+    _kappa_prov = 0.30
+    _prov_adj: dict[str, float] = {}
+    if production_profile is not None:
+        _raw_adj = getattr(production_profile, "goal_adjustments", {})
+        if isinstance(_raw_adj, dict):
+            for _g, _v in _raw_adj.items():
+                _prov_adj[str(_g)] = float(_v)
+
+    # §09.2 Goal-class-adaptive weight-shift scale.
+    # Vocal-sensitive P2/P3 goals respond more strongly to goal_weights
+    # (e.g. panns_singing → artikulation/emotionalitaet weight boost from §2.56 SGI).
+    # P5 goals are less weight-sensitive (material ceiling dominates there).
+    _WEIGHT_SHIFT_SCALE: dict[str, float] = {
+        "natuerlichkeit": 0.08,
+        "authentizitaet": 0.08,  # P1
+        "tonal_center": 0.10,
+        "tonalcenter": 0.10,
+        "timbre_authentizitaet": 0.10,
+        "artikulation": 0.10,  # P2 — vocal-sensitive
+        "emotionalitaet": 0.10,
+        "micro_dynamics": 0.09,
+        "mikrodynamik": 0.09,  # P3
+        "groove": 0.07,
+        "transparenz": 0.07,
+        "waerme": 0.06,  # P4
+        "bass_kraft": 0.06,
+        "basskraft": 0.06,
+        "separation_fidelity": 0.06,
+        "brillanz": 0.06,
+        "raumtiefe": 0.05,
+        "spatial_depth": 0.05,  # P5
+    }
+
     targets: dict[str, float] = {}
     for goal, floor in canonical.items():
-        b = bias.get(goal, 0.0)
+        b = bias.get(goal, 0.0) + _kappa_prov * _prov_adj.get(goal, 0.0)
         w = float(weights.get(goal, 1.0))
         # goal weight > 1.0 → song needs this goal → stay closer to or above floor
         # goal weight < 1.0 → goal less important for this song → can tolerate lower target
-        weight_shift = (w - 1.0) * 0.06  # ±0.06 max per unit weight deviation
+        weight_shift = (w - 1.0) * _WEIGHT_SHIFT_SCALE.get(goal, 0.06)
         target = floor + kappa * b + weight_shift
         # Hard bounds: never below 0.30, never above 0.99 (1.0 is unreachable)
         targets[goal] = float(np.clip(target, 0.30, 0.99))
@@ -498,6 +731,10 @@ _MATERIAL_QUALITY_CEILING: dict[str, float] = {
     "minidisc": 0.85,
     "mp3_low": 0.78,
     "mp3_high": 0.88,
+    # Aliases / additional lossy keys — same ceiling as parent class
+    "kassette": 0.80,  # Alias for cassette — German spelling; same physical medium
+    "aac": 0.88,  # AAC 256+ kbps ≥ MP3 320kbps perceptually (Fraunhofer IIS 2022)
+    "streaming": 0.88,  # Streaming quality (Spotify AAC 256 / Apple 256) ≈ mp3_high
 }
 
 
@@ -511,7 +748,7 @@ def get_material_floor(
     goal: str,
     is_studio_2026: bool = False,
 ) -> float:
-    """Return the minimum achievable goal floor for a given material type (§09.1).
+    """Gibt the minimum achievable goal floor for a given material type (§09.1) zurück.
 
     Unlike the canonical thresholds (CD-equivalent), this returns the
     material-adjusted minimum floor accounting for physical medium limits.
@@ -563,6 +800,50 @@ def get_material_floor(
 
 
 # ---------------------------------------------------------------------------
+# §09.12 [RELEASE_MUST] Restorability-adaptive Floor-Skalierung
+# ---------------------------------------------------------------------------
+
+# Minimaler Skalierungsfaktor (restorability=0 → Boden × 0.72)
+# Verhindert, dass hoffnungslose Tracks einen unerreichbaren Floor gesetzt bekommen.
+RESTORABILITY_SCALE_MIN: float = 0.72
+
+
+def get_effective_material_floor(
+    material_type: str,
+    goal_name: str,
+    restorability_score: float,
+    is_studio_2026: bool = False,
+) -> float:
+    """Gibt restorability-skalierten Floor für §GOAL_BASELINE_CHECK zurück.
+
+    Unterschied zu get_material_floor():
+    - get_material_floor() = normative Böden (PMGG, UI, Tests) — UNVERÄNDERLICH
+    - get_effective_material_floor() = adaptiver Floor für §GOAL_BASELINE_CHECK in UV3
+
+    Formel (§09.12):
+        floor_base = get_material_floor(material_type, goal_name, is_studio_2026)
+        scale = max(RESTORABILITY_SCALE_MIN, restorability_score / 100)
+        floor_eff = floor_base × scale
+
+    Sonderfälle:
+        restorability < 30 → metadata["degraded_restorability"] = True soll in UV3 gesetzt werden
+        (diese Funktion setzt das Flag nicht — UV3 trägt dafür die Verantwortung)
+
+    Args:
+        material_type:      e.g. "shellac", "vinyl", "mp3_low"
+        goal_name:          Kanonischer Goal-Schlüssel, e.g. "brillanz"
+        restorability_score: 0–100
+        is_studio_2026:     Modus-Flag
+
+    Returns:
+        float: Effektiver Floor ∈ [0.20, 0.99]
+    """
+    floor_base = get_material_floor(material_type, goal_name, is_studio_2026=is_studio_2026)
+    scale = max(RESTORABILITY_SCALE_MIN, float(np.clip(float(restorability_score) / 100.0, 0.0, 1.0)))
+    return float(np.clip(floor_base * scale, 0.20, 0.99))
+
+
+# ---------------------------------------------------------------------------
 # §09.9 Material-adaptive phase strength ranges — get_phase_strength_range
 # ---------------------------------------------------------------------------
 
@@ -602,6 +883,8 @@ _PHASE_STRENGTH_RANGES: dict[str, dict[str, tuple[float, float]]] = {
         "phase_26_dynamic_range_expansion": (0.00, 0.50),  # vinyl ≤ 70 dB
         "phase_29_tape_hiss_reduction": (0.15, 0.70),
         "phase_35_multiband_compression": (0.05, 0.40),
+        "phase_46_spatial_enhancement": (0.05, 0.40),  # Vinyl stereo (post-1954) — moderate OK
+        "phase_48_stereo_width_enhancer": (0.00, 0.30),  # Vinyl has natural stereo — cap at 0.30
         "phase_49_advanced_dereverb": (0.05, 0.35),
         "phase_55_diffusion_inpainting": (0.15, 0.65),
     },
@@ -611,18 +894,43 @@ _PHASE_STRENGTH_RANGES: dict[str, dict[str, tuple[float, float]]] = {
         "phase_03_denoise": (0.05, 0.55),
         "phase_06_frequency_restoration": (0.15, 0.70),  # HF reconstruction primary
         "phase_07_harmonic_restoration": (0.15, 0.65),
+        "phase_12_wow_flutter_fix": (0.00, 0.10),  # MP3/AAC: no wow/flutter — near-prohibit
         "phase_23_spectral_repair": (0.25, 0.90),  # Primary phase for lossy
+        "phase_29_tape_hiss_reduction": (0.00, 0.10),  # MP3/AAC: no tape hiss — near-prohibit
         "phase_35_multiband_compression": (0.05, 0.40),
         "phase_50_spectral_repair": (0.25, 0.85),
     },
+    "tape_analog": {
+        # Reel tape / cassette — tape hiss primary, dropout secondary, narrow/mono stereo.
+        # tape_analog biases differ significantly from vinyl (analog) — must NOT fall back
+        # to default (0.05, 1.0) which would allow unrestricted processing on fragile medium.
+        "phase_03_denoise": (0.15, 0.80),  # Tape hiss more severe than vinyl surface noise
+        "phase_06_frequency_restoration": (0.10, 0.55),  # BW ceiling: reel ≤14kHz, cassette ≤12kHz
+        "phase_07_harmonic_restoration": (0.10, 0.45),  # BW ceiling lower than vinyl
+        "phase_09_crackle_removal": (0.05, 0.40),  # Tape has dropouts, not click crackle → low
+        "phase_12_wow_flutter_fix": (0.15, 0.75),  # Tape W&F stronger than vinyl (IEC 0.2% WRMS)
+        "phase_20_reverb_reduction": (0.05, 0.35),
+        "phase_23_spectral_repair": (0.15, 0.70),  # Tape spectral gaps, dropouts
+        "phase_26_dynamic_range_expansion": (0.00, 0.45),  # Tape DR ≤ 55–60 dB
+        "phase_29_tape_hiss_reduction": (0.25, 0.85),  # Primary phase for tape — high priority
+        "phase_35_multiband_compression": (0.05, 0.40),
+        "phase_46_spatial_enhancement": (0.05, 0.25),  # Many tapes narrow stereo
+        "phase_48_stereo_width_enhancer": (0.00, 0.20),  # Narrow stereo — cap hard (not 0 like mono)
+        "phase_49_advanced_dereverb": (0.05, 0.35),
+        "phase_55_diffusion_inpainting": (0.20, 0.70),  # Tape dropouts more common than vinyl
+    },
     "digital": {
-        # cd_digital / dat — near-lossless, minimal intervention (§2.45b)
+        # cd_digital / dat — near-lossless, minimal intervention (§2.45b).
+        # Analog defect phases (crackle, tape hiss, wow/flutter) must be near-zero
+        # to prevent unnecessary processing and micro-artifact introduction.
         "phase_03_denoise": (0.05, 0.35),
         "phase_06_frequency_restoration": (0.05, 0.40),
         "phase_07_harmonic_restoration": (0.05, 0.35),
         "phase_09_crackle_removal": (0.05, 0.30),
+        "phase_12_wow_flutter_fix": (0.00, 0.10),  # CD/DAT: no wow/flutter — near-prohibit
         "phase_23_spectral_repair": (0.10, 0.55),
         "phase_26_dynamic_range_expansion": (0.00, 0.40),
+        "phase_29_tape_hiss_reduction": (0.00, 0.10),  # CD/DAT: no tape hiss — near-prohibit
         "phase_35_multiband_compression": (0.05, 0.30),
         "phase_49_advanced_dereverb": (0.05, 0.30),
     },
@@ -636,7 +944,7 @@ def get_phase_strength_range(
     material_type: str | None = None,
     restorability_score: float = 70.0,
 ) -> tuple[float, float]:
-    """Return (min_strength, max_strength) for a phase given material and restorability.
+    """Gibt (min_strength, max_strength) for a phase given material and restorability zurück.
 
     The max_strength caps over-processing on fragile material (§0a, §0h).
     The min_strength ensures the phase applies enough correction to be meaningful.
@@ -687,6 +995,232 @@ def predict_quality_score(
     return float(np.clip(score, 0.0, 0.99))
 
 
+# ---------------------------------------------------------------------------
+# §09.10 Goal-to-Recovery-Phases mapping — get_goal_recovery_phases [RELEASE_MUST]
+# ---------------------------------------------------------------------------
+# Maps each of the 14 Musical Goals to its primary recovery phase(s).
+# Used by UV3 §GOAL_BASELINE_CHECK to ensure recovery phases are in
+# selected_phases when a goal proxy is below its material floor BEFORE the
+# phase pipeline runs.
+#
+# RESTORATION list: corrective/subtractive phases only.
+#   - No §0a-forbidden phases (phase_21_exciter, phase_35_multiband_compression,
+#     phase_42_vocal_enhancement are NOT listed here).
+#   - Ordering: most effective/safest first (primary recovery phase is index 0).
+#
+# STUDIO_EXTRAS list: additional additive/enhancement phases for Studio 2026.
+#   - Only phases that §0a permits in Studio 2026 mode.
+#
+# Single Source of Truth for goal → phase mapping; CausalDefectReasoner
+# CAUSE_TO_PHASES covers defect-driven selection. This covers goal-driven
+# selection when no matching defect is detected (the "silent gap").
+
+_GOAL_TO_RECOVERY_PHASES_RESTORATION: dict[str, list[str]] = {
+    # Ordering principle — §2.46 Carrier-Chain hierarchy (normative, not phase-number order):
+    #   1. Subtraktive / corrective phases BEFORE additive / enhancement phases
+    #   2. Mechanical / physical-layer defects (Stufen 1–4) BEFORE digital processing
+    #   3. Broadest-impact intervention first within the same Stufe tier
+    # PRIMARY phase (index 0) = inserted by §GOAL_BASELINE_CHECK when goal < floor × 0.95.
+    # Only the primary is inserted (§2.45 minimal-intervention). Subsequent phases serve
+    # FeedbackChain iteration.
+    #
+    # P0 — Vocal timbre (carrier-level contributors; VQI-Gate handles vocal quality directly)
+    "timbre_authentizitaet": [
+        "phase_04_eq_correction",  # Stufe 2: RIAA / carrier transfer-function error — universal root
+        "phase_25_azimuth_correction",  # Stufe 2: tape azimuth error causes comb-filter timbral distortion;
+        # correct BEFORE EQ polish so EQ does not mask azimuth residual
+        "phase_16_final_eq",  # Stufe 6: perceptual spectral rebalancing post correction
+    ],
+    # P1 — Naturalness & authenticity
+    "natuerlichkeit": [
+        "phase_03_denoise",  # Stufe 4: broadband NR — universally the largest single
+        # contributor to perceived naturalness; all carrier types
+        "phase_29_tape_hiss_reduction",  # Stufe 4: carrier-specific tape / groove surface noise
+        "phase_02_hum_removal",  # Stufe 3: 50/60 Hz hum (electrical era, 1925–1960) —
+        # continuous tonal interference that destroys naturalness
+        "phase_59_modulation_noise_reduction",  # Stufe 4: signal-dependent modulation noise
+        # (analog tape) — distinct from stationary hiss
+    ],
+    "authentizitaet": [
+        "phase_09_crackle_removal",  # Stufe 3: systematic crackle / burst noise — most
+        # damaging to authenticity; not always defect-detected
+        "phase_24_dropout_repair",  # Stufe 3: tape dropouts create sudden silence — equal
+        # severity to crackle; missed by scanner when infrequent
+        "phase_29_tape_hiss_reduction",  # Stufe 4: continuous background noise degrades continuity
+        "phase_57_print_through_reduction",  # Stufe 3: tape print-through — ghost pre/post-echo
+        # from adjacent tape layer; very damaging to authenticity
+        "phase_01_click_removal",  # Stufe 3: click events — _NEVER_SKIP so always runs;
+        # listed here only for FeedbackChain completeness
+    ],
+    # P2 — Tonal / timbral / articulation
+    "tonal_center": [
+        "phase_12_wow_flutter_fix",  # Stufe 2: irregular mechanical rotation — MUST precede
+        # any digital pitch processing; a time-varying pitch
+        # deviation cannot be digitally stabilised if the
+        # physical mechanism is still active
+        "phase_25_azimuth_correction",  # Stufe 2: azimuth misalignment causes phase-dependent
+        # HF loss that shifts perceived tonal center; correct
+        # BEFORE digital pitch alignment
+        "phase_31_speed_pitch_correction",  # residual digital pitch alignment on now-stable signal
+    ],
+    "timbre": [
+        "phase_04_eq_correction",  # Stufe 2: carrier EQ correction (subtraktive, causal)
+        "phase_25_azimuth_correction",  # Stufe 2: tape azimuth comb-filter — before EQ polish
+        "phase_16_final_eq",  # Stufe 6: additive spectral rebalancing
+    ],
+    "artikulation": [
+        "phase_08_transient_preservation",  # transient attack / decay envelope is the primary
+        # carrier of consonant articulation clarity
+        "phase_23_spectral_repair",  # spectral masking (codec, dropout) as secondary
+    ],
+    # P3 — Emotional / dynamic / rhythmic
+    "emotionalitaet": [
+        "phase_26_dynamic_range_expansion",  # dynamic contrast is the principal carrier of emotion;
+        # over-compressed dynamics → flat emotional response
+        "phase_08_transient_preservation",  # transient sharpness intensifies emotional peaks
+    ],
+    "micro_dynamics": [
+        "phase_26_dynamic_range_expansion",  # over-compression is the primary cause of
+        # micro-dynamic loss across all mastering eras
+        "phase_08_transient_preservation",  # fine-grained attack / decay micro-structure
+    ],
+    "groove": [
+        "phase_12_wow_flutter_fix",  # Stufe 2: irregular motor speed is the direct physical
+        # cause of timing instability and groove loss
+        "phase_31_speed_pitch_correction",  # residual digital timing / pitch alignment
+        "phase_61_groove_echo_cancellation",  # vinyl inner-groove echo imprints rhythmic ghost beats
+        # that disrupt the temporal groove perception
+    ],
+    # P4 — Transparency / warmth / bass / separation
+    "transparenz": [
+        "phase_03_denoise",  # broadband noise masking — primary transparency barrier
+        "phase_29_tape_hiss_reduction",  # carrier-specific noise as secondary layer
+        "phase_02_hum_removal",  # 50/60 Hz hum masks fine spectral detail between harmonics
+        "phase_23_spectral_repair",  # codec pre-echo / ringing artifacts
+        "phase_61_groove_echo_cancellation",  # groove echo creates smeared micro-detail on vinyl
+    ],
+    "waerme": [
+        "phase_04_eq_correction",  # Stufe 2: tonal balance 200–600 Hz is the physical foundation
+        # of warmth — subtraktive EQ correction BEFORE additive saturation
+        "phase_22_tape_saturation",  # Stufe 5: harmonic enrichment ON TOP of corrected tonal base
+    ],
+    "bass_kraft": [
+        "phase_04_eq_correction",  # RIAA / EQ error in bass region — primary cause of
+        # low-frequency power deficiency across all carriers
+        "phase_26_dynamic_range_expansion",  # dynamic compression reduces bass transient authority;
+        # expansion restores perceptible bass impact
+    ],
+    "separation_fidelity": [
+        "phase_49_advanced_dereverb",  # reverb bleed between sources — most common cause;
+        # WPE dereverb is the most effective remedy
+        "phase_62_crosstalk_cancellation",  # Stufe 2: physical L/R channel bleed (tape heads,
+        # vinyl cutting) — mechanical origin, broad applicability
+        "phase_20_reverb_reduction",  # lighter reverb reduction for residual acoustic bleed
+    ],
+    # P5 — Brilliance / spatial
+    "brillanz": [
+        "phase_06_frequency_restoration",  # BW extension (AudioSR) — primary path for HF content
+        # lost across all analog carriers
+        "phase_07_harmonic_restoration",  # harmonic HF reconstruction for material where HF was
+        # never captured (era guards handle 1900–1925 exclusion)
+    ],
+    "spatial_depth": [
+        "phase_46_spatial_enhancement",  # low spatial_depth = INSUFFICIENT spatial cues;
+        # add inter-aural cues and stereo field width.
+        # NEVER phase_49 as primary: dereverb REMOVES reverb
+        # which REDUCES spatial depth — causal inversion!
+        "phase_06_frequency_restoration",  # HF > 8 kHz carries HRTF / air cues — the dominant
+        # perceptual carrier of perceived spatial depth
+    ],
+    # P0 — Formant fidelity (§0p Vocal-Supremacy; activated when formant_fidelity < floor × 0.95)
+    # Restoration uses EQ-based formant correction only — §0a FORBIDS phase_42 in Restoration.
+    "formant_fidelity": [
+        "phase_04_eq_correction",  # Stufe 2: spectral tilt correction shapes F1–F4 region (200–4000 Hz)
+        "phase_16_final_eq",  # Stufe 6: perceptual rebalancing of formant energy distribution
+    ],
+    # P0 — Vocal Quality (VQI-Gate §0p; activated when VQI < material_floor × 0.95)
+    # §0a: phase_42_vocal_enhancement VERBOTEN in Restoration.
+    # Phase_65 = DSP-Korrektiv (Stufen: Spektral-Tilt + HNR-Blend + Formant-Tilt).
+    "vocal_quality": [
+        "phase_65_vocal_naturalness_restoration",  # §7.10 DSP-Korrektiv, Restoration-only
+        "phase_03_denoise",  # wenn NR-Überstärkung Ursache ist
+    ],
+    # P2 — Transient-Energie (§1.4.6; Onset-Amplitude-Ratio nach subtraktiven Phasen)
+    # PHASE_GOAL_EXCLUSIONS: phase_18 + phase_26 für transient_energie
+    "transient_energie": [
+        "phase_26_dynamic_range_expansion",  # §1.4.6 primär: Onset-Energie via Dynamikbearbeitung
+        "phase_08_transient_preservation",  # sekundär: Transient-Erhalt als fallback
+    ],
+}
+
+_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS: dict[str, list[str]] = {
+    # Additional phases enabled in Studio 2026 (additive / enhancement).
+    # §0a: phase_21/35/42 are Studio 2026 only — and only where goal-appropriate.
+    # §2.36: phase_58_lyrics_guided_enhancement is Pflicht for vocal articulation.
+    "timbre_authentizitaet": [
+        "phase_42_vocal_enhancement",  # §0a Studio 2026 only: ML vocal timbre / formant correction
+    ],
+    "artikulation": [
+        "phase_42_vocal_enhancement",  # ML vocal enhancement improves consonant clarity
+        "phase_43_ml_deesser",  # removes sibilance that masks consonant articulation
+        "phase_58_lyrics_guided_enhancement",  # §2.36 Pflicht: phoneme-level guided enhancement
+    ],
+    "brillanz": [
+        "phase_07_harmonic_restoration",  # harmonic HF reconstruction (era guards apply)
+        "phase_39_air_band_enhancement",  # air band > 12 kHz — dominant perceptual carrier of
+        # brilliance in modern playback; Studio 2026 only
+    ],
+    "waerme": ["phase_37_bass_enhancement"],
+    "bass_kraft": ["phase_37_bass_enhancement"],
+    "spatial_depth": [
+        "phase_48_stereo_width_enhancer",  # stereo field widening
+        "phase_34_mid_side_processing",  # M/S matrix processing directly shapes spatial depth
+    ],
+    "emotionalitaet": ["phase_21_exciter"],
+    "micro_dynamics": ["phase_36_transient_shaper"],
+    # P0 — Formant fidelity Studio 2026: ML vocal enhancement corrects formant resonances
+    # §0a: phase_42 is permitted in Studio 2026 ONLY.
+    "formant_fidelity": ["phase_42_vocal_enhancement"],
+    # P0 — Vocal Quality Studio 2026: ML vocal enhancement erlaubt (§0a Studio 2026 only)
+    "vocal_quality": ["phase_42_vocal_enhancement"],
+}
+
+
+def get_goal_recovery_phases(goal: str, is_studio_2026: bool = False) -> list[str]:
+    """Gibt ordered list of recovery phase IDs for a failing Musical Goal zurück.
+
+    Used by UV3 §GOAL_BASELINE_CHECK (pre-pipeline) to add missing phases
+    when a goal proxy score is below its material floor.
+
+    Args:
+        goal: canonical goal name (e.g. "brillanz", "natuerlichkeit").
+              Aliases "raumtiefe", "mikrodynamik", "basskraft" are normalised.
+        is_studio_2026: if True, also include Studio 2026 enhancement extras.
+
+    Returns:
+        Deduplicated list of phase IDs, most effective first.
+        Empty list for unknown goals (non-blocking).
+
+    §0a guarantee: §0a-forbidden phases (phase_21, phase_35, phase_42) are
+    never returned when is_studio_2026=False.
+    """
+    # Normalise common aliases to canonical key
+    _alias_map: dict[str, str] = {
+        "raumtiefe": "spatial_depth",
+        "mikrodynamik": "micro_dynamics",
+        "basskraft": "bass_kraft",
+        "tonalcenter": "tonal_center",
+    }
+    goal_key = _alias_map.get(str(goal or "").strip().lower(), str(goal or "").strip().lower())
+
+    phases: list[str] = list(_GOAL_TO_RECOVERY_PHASES_RESTORATION.get(goal_key, []))
+    if is_studio_2026:
+        for _p in _GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS.get(goal_key, []):
+            if _p not in phases:
+                phases.append(_p)
+    return phases
+
+
 __all__ = [
     "blend_targets_with_confidence",
     "compute_cpb",
@@ -698,7 +1232,10 @@ __all__ = [
     "compute_retry_temperature",
     "compute_tcci",
     "estimate_song_goal_targets",
+    "get_effective_material_floor",
+    "get_goal_recovery_phases",
     "get_material_floor",
     "get_phase_strength_range",
     "predict_quality_score",
+    "RESTORABILITY_SCALE_MIN",
 ]

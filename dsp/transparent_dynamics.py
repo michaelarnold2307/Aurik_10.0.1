@@ -165,7 +165,7 @@ class TransparentDynamicsProcessor:
 
     def compute_envelope(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Compute RMS envelope with adaptive attack/release
+        Berechnet RMS envelope with adaptive attack/release.
 
         Args:
             audio: Input audio
@@ -217,7 +217,7 @@ class TransparentDynamicsProcessor:
 
     def compute_gain_reduction(self, envelope_db: np.ndarray) -> np.ndarray:
         """
-        Compute gain reduction based on soft-knee compression curve
+        Berechnet gain reduction based on soft-knee compression curve.
 
         Args:
             envelope_db: RMS envelope in dB
@@ -247,7 +247,7 @@ class TransparentDynamicsProcessor:
 
     def smooth_gain_reduction(self, gain_reduction_db: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply temporal smoothing to gain reduction (attack/release)
+        Wendet an: temporal smoothing to gain reduction (attack/release).
 
         Args:
             gain_reduction_db: Instantaneous gain reduction
@@ -318,7 +318,7 @@ class TransparentDynamicsProcessor:
 
     def analyze_dynamics(self, audio: np.ndarray) -> dict[str, float]:
         """
-        Analyze dynamic range characteristics
+        Analysiert Dynamikbereichseigenschaften.
 
         Returns:
             Dict with crest_factor, peak_db, rms_db, dynamic_range_db
@@ -356,7 +356,7 @@ class TransparentDynamicsProcessor:
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply transparent dynamics processing
+        Wendet an: transparent dynamics processing.
 
         Args:
             audio: Input audio
@@ -548,7 +548,7 @@ class MicroDynamicsEnhancer:
 
     def analyze_micro_dynamics(self, audio: np.ndarray, sr: int) -> dict[str, float]:
         """
-        Analyze micro-dynamics variability
+        Analysiert die Mikrodynamik-Variabilität.
 
         Returns:
             Dict with micro_dynamics_score (0=flat, 1=highly variable)
@@ -620,7 +620,7 @@ class MicroDynamicsEnhancer:
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply micro-dynamics enhancement
+        Wendet an: micro-dynamics enhancement.
 
         Args:
             audio: Input audio
@@ -710,7 +710,7 @@ class MicroDynamicsEnhancer:
 
 class DynamicsProcessor:
     """
-    Unified API for Transparent Dynamics + Micro-Dynamics Enhancement
+    Einheitliche API für transparente Dynamik- und Mikrodynamik-Verbesserung.
 
     Usage:
         processor = DynamicsProcessor()
@@ -748,7 +748,7 @@ class DynamicsProcessor:
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply all enabled dynamics processing modules in sequence
+        Wendet alle aktivierten Dynamikverarbeitungsmodule der Reihe nach an.
 
         Processing order:
         1. Transparent Dynamics (macro-level dynamics control)
@@ -785,7 +785,7 @@ class DynamicsProcessor:
 
     def get_metrics(self) -> dict[str, Any]:
         """
-        Get metrics from all modules
+        Gibt zurück: metrics from all modules.
 
         Returns:
             Combined metrics dict

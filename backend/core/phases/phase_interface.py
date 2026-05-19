@@ -63,7 +63,7 @@ class PhaseMetadata:
     musical_goals: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
-        """Serialize phase metadata to a plain dictionary."""
+        """Serialisiert phase metadata to a plain dictionary."""
         return {
             "phase_id": self.phase_id,
             "name": self.name,
@@ -116,7 +116,7 @@ class PhaseResult:
             self.metrics = self.metadata
 
     def as_dict(self) -> dict[str, Any]:
-        """Serialize the phase result payload to a plain dictionary."""
+        """Serialisiert the phase result payload to a plain dictionary."""
         return {
             "modifications": self.modifications,
             "warnings": self.warnings,

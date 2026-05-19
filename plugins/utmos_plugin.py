@@ -241,7 +241,7 @@ class UTMOSPlugin:
                     _orig_ssl_shape = _ssl_mod.get_ssl_output_shape
 
                     def _local_aware_ssl_shape(name: str) -> tuple[int, int]:
-                        """Extend get_ssl_output_shape to handle local directory paths."""
+                        """Erweitert get_ssl_output_shape to handle local directory paths."""
                         import pathlib as _pl
 
                         p = _pl.Path(name)
@@ -506,7 +506,7 @@ class UTMOSPlugin:
 
     @staticmethod
     def _compute_x2_melspecs(audio_16k: np.ndarray, cfg: object) -> torch.Tensor:
-        """Compute multi-scale mel-spectrogram tensor for UTMOSv2 spec branch.
+        """Berechnet multi-scale mel-spectrogram tensor for UTMOSv2 spec branch.
 
         SSLMultiSpecExtModelV2.forward expects x2 of shape
         (batch, num_frames * num_specs, 3, H, W) where num_frames=2, num_specs=4,

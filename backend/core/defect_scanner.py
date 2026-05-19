@@ -87,7 +87,7 @@ def _audio_scan_cache_key(audio: np.ndarray, sr: int, material: object | None) -
 
 
 class DefectType(Enum):
-    """32 Defekttypen für weltklasse Audio-Restauration.
+    """32 Defekttypen für weltklasse Audio-restoration.
 
     Kern-Defekte (alle analogen/digitalen Quellen):
       CLIPPING        — Amplituden-Übersteuerung (Hard/Soft Clipping)
@@ -169,6 +169,9 @@ class DefectType(Enum):
     MULTIBAND_WOW_FLUTTER = "multiband_wow_flutter"  # Frequenzabhängiger Wow/Flutter (Kopfspalt-Geometrie) → phase_12
     GENERATION_LOSS = "generation_loss"  # Kumulativer Generationsverlust durch Tape-Dubbing
     MOTOR_INTERFERENCE = "motor_interference"  # Plattenspieler-Motorinterferenz: 80–300 Hz → phase_02 + phase_05
+    # --- v9.12.x: Amplitude Drift (47. DefectType) ---
+    AMPLITUDE_DRIFT = "amplitude_drift"  # Gradueller Pegelanstieg/-abfall über den Song:
+    # Träger-AGC, Oxid-Drift → phase_40
 
 
 class MaterialType(Enum):
@@ -177,7 +180,8 @@ class MaterialType(Enum):
     SHELLAC = "shellac"
     VINYL = "vinyl"
     VINYL_STANDARD = "vinyl"  # alias → canonical key "vinyl" (material_canonical.py)
-    TAPE = "tape"  # Cassette Tape
+    TAPE = "tape"  # Cassette Tape (generic key for chain-normalization compatibility)
+    CASSETTE = "cassette"  # Compact Cassette Typ I/II/IV (explicit primary_material key v9.12.x)
     REEL_TAPE = "reel_tape"  # Professional reel-to-reel (Studio)
     DAT = "dat"  # Digital Audio Tape (Professional)
     CD_DIGITAL = "cd_digital"
@@ -231,6 +235,7 @@ class DefectAnalysisResult:
     #   noise_floor_p5_db   — 5. Perzentil PSD als Rauschboden [dBFS]
     #   effective_bandwidth_hz — HF-Rolloff bei −60 dBFS [Hz]
     #   material_detected   — auto-erkanntes Material (auch wenn Hint übergeben)
+    metadata: dict[str, object] = field(default_factory=dict)
 
     def get_top_defects(self, n: int = 5) -> list[DefectScore]:
         """Gibt die Top-N Defekte nach Severity zurück."""
@@ -302,6 +307,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 0.5,  # Mechanischer Antrieb: frequenzunabhängiger Wow/Flutter
             DefectType.GENERATION_LOSS: 0.6,  # Matrizen-Pressung: jede Generation verliert Detail
             DefectType.MOTOR_INTERFERENCE: 0.3,  # Grammophon-Motor: Federwerk/Elektro → harmonische Störungen
+            DefectType.AMPLITUDE_DRIFT: 0.45,  # Häufig: Grammophon-Federwerkmotor → AGC-ähnlicher Pegelabfall
         },
         MaterialType.VINYL: {
             DefectType.CLICKS: 0.4,
@@ -351,6 +357,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 0.6,  # Plattenspieler: frequenzunabhängig
             DefectType.GENERATION_LOSS: 0.7,  # Pressung: marginal (Master→Stamper)
             DefectType.MOTOR_INTERFERENCE: 0.3,  # Plattenspieler-Motor: Gleichstrom-/Synchron-Störungen 80–300 Hz
+            DefectType.AMPLITUDE_DRIFT: 0.60,  # Selten: Vinyl-Pressungs-Level-Drift unwahrscheinlich
         },
         MaterialType.TAPE: {
             DefectType.CLICKS: 0.7,
@@ -400,6 +407,59 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 0.2,  # HÄUFIG: Kopfspalt + Bandkontakt → frequenzabhängiges Flutter
             DefectType.GENERATION_LOSS: 0.2,  # HÄUFIG: Kassetten-Dubbing (Band→Band-Kopien häufig)
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: Kassettenmotor-Störung → über HUM/FLUTTER abgedeckt
+            DefectType.AMPLITUDE_DRIFT: 0.25,  # SEHR HÄUFIG: Dolby-B/C AGC-Drift, Oxid-Alterung → Pegelanstieg/-abfall
+        },
+        # §6.1b v9.12.x: CASSETTE = Compact Cassette Typ I/II/IV als expliziter primary_material-Schlüssel.
+        # Identische Sensitivity-Thresholds wie TAPE (Compact Cassette und "tape" sind physikalisch äquivalent).
+        # MaterialType.CASSETTE wird gesetzt wenn MediumDetector "cassette" als letzten Analog-Träger erkennt.
+        MaterialType.CASSETTE: {
+            DefectType.CLICKS: 0.7,
+            DefectType.CRACKLE: 0.8,
+            DefectType.HUM: 0.4,
+            DefectType.WOW: 0.30,
+            DefectType.FLUTTER: 0.25,
+            DefectType.STEREO_IMBALANCE: 0.5,
+            DefectType.DIGITAL_ARTIFACTS: 1.0,
+            DefectType.LOW_FREQ_RUMBLE: 0.6,
+            DefectType.HIGH_FREQ_NOISE: 0.5,
+            DefectType.COMPRESSION_ARTIFACTS: 1.0,
+            DefectType.PHASE_ISSUES: 0.6,
+            DefectType.DROPOUTS: 0.4,
+            DefectType.CLIPPING: 0.4,
+            DefectType.DC_OFFSET: 0.4,
+            DefectType.BANDWIDTH_LOSS: 0.3,
+            DefectType.PITCH_DRIFT: 0.2,
+            DefectType.REVERB_EXCESS: 0.4,
+            DefectType.PRINT_THROUGH: 0.2,
+            DefectType.QUANTIZATION_NOISE: 0.9,
+            DefectType.JITTER_ARTIFACTS: 1.0,
+            DefectType.DYNAMIC_COMPRESSION_EXCESS: 0.8,
+            DefectType.SOFT_SATURATION: 0.4,
+            DefectType.HEAD_WEAR: 0.6,
+            DefectType.PRE_ECHO: 1.0,
+            DefectType.TRANSIENT_SMEARING: 0.4,
+            DefectType.RIAA_CURVE_ERROR: 1.0,
+            DefectType.ALIASING: 0.4,
+            DefectType.BIAS_ERROR: 0.3,
+            DefectType.AZIMUTH_ERROR: 0.30,
+            DefectType.SIBILANCE: 0.5,
+            DefectType.TRANSPORT_BUMP: 0.3,
+            DefectType.VOCAL_HARSHNESS: 0.4,
+            DefectType.DOLBY_NR_MISMATCH: 0.25,
+            DefectType.TAPE_HEAD_LEVEL_DIP: 0.20,
+            DefectType.MODULATION_NOISE: 0.15,
+            DefectType.INNER_GROOVE_DISTORTION: 1.0,
+            DefectType.GROOVE_ECHO: 1.0,
+            DefectType.CROSSTALK: 0.4,
+            DefectType.INTERMODULATION_DISTORTION: 0.4,
+            DefectType.TAPE_SPLICE_ARTIFACT: 0.2,
+            DefectType.HF_REMANENCE_LOSS: 0.15,
+            DefectType.STYLUS_DAMAGE: 1.0,
+            DefectType.STICKY_SHED_RESIDUE: 0.2,
+            DefectType.MULTIBAND_WOW_FLUTTER: 0.2,
+            DefectType.GENERATION_LOSS: 0.2,
+            DefectType.MOTOR_INTERFERENCE: 1.0,
+            DefectType.AMPLITUDE_DRIFT: 0.25,  # SEHR HÄUFIG: Dolby-B/C AGC-Drift (identisch mit TAPE)
         },
         MaterialType.CD_DIGITAL: {
             DefectType.CLICKS: 0.8,
@@ -449,6 +509,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 1.0,  # N/A: CD Crystal-Clock
             DefectType.GENERATION_LOSS: 0.7,  # Selten: Mehrfach-Transcode in digitaler Kette
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: CD-Laufwerk digital
+            DefectType.AMPLITUDE_DRIFT: 0.85,  # Sehr selten: CD ist digital; Level-Drift nur aus Quellmaterial
         },
         MaterialType.REEL_TAPE: {
             DefectType.CLICKS: 0.8,
@@ -498,6 +559,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 0.2,  # Profi-Kopfspalt + Bandkontakt → frequenzabhängig
             DefectType.GENERATION_LOSS: 0.15,  # SEHR HÄUFIG: Studio-Dubbing (Mix → Master → Copy)
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: Profi-Tape-Motor → über WOW/FLUTTER abgedeckt
+            DefectType.AMPLITUDE_DRIFT: 0.30,  # Häufig: Profi-Spulenband AGC, Bias-Drift, Magnetspur-Alterung
         },
         MaterialType.DAT: {
             DefectType.CLICKS: 0.9,
@@ -547,6 +609,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 1.0,  # N/A: DAT Crystal-Clock
             DefectType.GENERATION_LOSS: 0.7,  # Selten: DAT-zu-DAT-Kopie möglich
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: DAT digital
+            DefectType.AMPLITUDE_DRIFT: 0.75,  # Selten: DAT digital — Drift nur aus analogem Quellmaterial
         },
         MaterialType.MP3_LOW: {
             DefectType.CLICKS: 0.9,
@@ -596,6 +659,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 1.0,  # N/A: MP3 digital
             DefectType.GENERATION_LOSS: 0.2,  # SEHR HÄUFIG: Mehrfach-Transkodierung (MP3→WAV→MP3)
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: MP3 digital
+            DefectType.AMPLITUDE_DRIFT: 0.70,  # Möglich: Quellmaterial-Drift in MP3-Low → Pegelgradient
         },
         MaterialType.MP3_HIGH: {
             DefectType.CLICKS: 0.9,
@@ -645,6 +709,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 1.0,  # N/A: MP3 digital
             DefectType.GENERATION_LOSS: 0.3,  # HÄUFIG: Mehrfach-Transkodierung (weniger aggressiv bei 192+ kbps)
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: MP3 digital
+            DefectType.AMPLITUDE_DRIFT: 0.70,  # Möglich: Quellmaterial-Drift in MP3-High → Pegelgradient
         },
         MaterialType.AAC: {
             DefectType.CLICKS: 0.9,
@@ -694,6 +759,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 1.0,  # N/A: AAC digital
             DefectType.GENERATION_LOSS: 0.3,  # Mehrfach-Transkodierung möglich
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: AAC digital
+            DefectType.AMPLITUDE_DRIFT: 0.70,  # Möglich: AAC-Quellmaterial-Drift
         },
         MaterialType.MINIDISC: {
             DefectType.CLICKS: 0.9,
@@ -743,6 +809,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 1.0,  # N/A: MiniDisc Crystal-Clock
             DefectType.GENERATION_LOSS: 0.3,  # ATRAC-Transkodierung möglich
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: MiniDisc digital
+            DefectType.AMPLITUDE_DRIFT: 0.75,  # Selten: MiniDisc digital — Drift aus Quellmaterial
         },
         MaterialType.STREAMING: {
             DefectType.CLICKS: 0.9,
@@ -792,6 +859,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 1.0,  # N/A: Streaming digital
             DefectType.GENERATION_LOSS: 0.2,  # SEHR HÄUFIG: Streaming-Transkodierung (YouTube, Spotify)
             DefectType.MOTOR_INTERFERENCE: 1.0,  # N/A: Streaming digital
+            DefectType.AMPLITUDE_DRIFT: 0.80,  # Selten: Streaming digital — Drift nur aus Quellmaterial
         },
         MaterialType.UNKNOWN: dict.fromkeys(DefectType, 0.6),
         MaterialType.WAX_CYLINDER: {
@@ -843,6 +911,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 0.4,  # Mechanischer Antrieb
             DefectType.GENERATION_LOSS: 0.5,  # Duplikat-Walzen: Qualitätsverlust durch Kopierverfahren
             DefectType.MOTOR_INTERFERENCE: 0.3,  # Federwerk/Elektromotor-Störungen
+            DefectType.AMPLITUDE_DRIFT: 0.40,  # Häufig: Federwerk-Motor → Drehzahlabfall → Pegelgradient
         },
         MaterialType.WIRE_RECORDING: {
             # Drahtbandaufnahme (1940–1955): Jitter, Frequenzgang-Einbrüche, Magnetisierungs-Dropout
@@ -893,10 +962,11 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 0.25,  # Primitive Drahtführung → fl-abhängig
             DefectType.GENERATION_LOSS: 0.3,  # Draht-Dubbing möglich
             DefectType.MOTOR_INTERFERENCE: 0.4,  # Primitive Motoren
+            DefectType.AMPLITUDE_DRIFT: 0.40,  # Häufig: Drahtband-Motor → AGC-ähnlicher Pegelanstieg/-abfall
         },
         MaterialType.LACQUER_DISC: {
             # Acetat-Lackfolien-Heimaufnahme (1930–1950): Risse, Substrat-Rauschen, Rille-Ermüdung
-            DefectType.CLICKS: 0.2,  # Rissbildung → sehr häufige Klicks
+            DefectType.CLICKS: 0.2,  # Rissbildung → sehr häufige Clicks
             DefectType.CRACKLE: 0.3,  # Rille-Ermüdung → Crackle
             DefectType.HUM: 0.5,
             DefectType.WOW: 0.30,  # Acetat-Verformung → Plattenteller-Gleichlauf < 0.5 Hz
@@ -910,7 +980,7 @@ class DefectScanner:
             DefectType.DROPOUTS: 0.4,  # Risse erzeugen schmale Dropout-Ereignisse
             DefectType.CLIPPING: 0.5,
             DefectType.DC_OFFSET: 0.4,
-            DefectType.BANDWIDTH_LOSS: 0.2,  # Schmalbandige Hausaufnahme-Technik
+            DefectType.BANDWIDTH_LOSS: 0.2,  # Schmalbandige Hausaufnahme-Technique
             DefectType.PITCH_DRIFT: 0.3,  # Heimplattenspieler mit Motorungenauigkeiten
             DefectType.REVERB_EXCESS: 0.5,
             DefectType.PRINT_THROUGH: 1.0,  # N/A: kein Magnetband
@@ -920,13 +990,13 @@ class DefectScanner:
             DefectType.SOFT_SATURATION: 0.3,  # Rillenverzerrung bei Heimaufnahmen möglich
             DefectType.HEAD_WEAR: 1.0,  # N/A: kein Magnetkopf
             DefectType.PRE_ECHO: 1.0,  # N/A: kein digitaler Codec
-            DefectType.TRANSIENT_SMEARING: 0.4,  # Limitierte Heimaufnahme-Technik
+            DefectType.TRANSIENT_SMEARING: 0.4,  # Limitierte Heimaufnahme-Technique
             DefectType.RIAA_CURVE_ERROR: 0.2,  # Heimaufnahmen: verschiedene EQ-Kurven (AES/NAB/FFRR) häufig falsch
             DefectType.ALIASING: 0.5,  # Heim-Digitalisierung variiert — AA-Filter fehlt oft
             DefectType.BIAS_ERROR: 1.0,  # N/A: Lackfolie ist kein Magnetband — kein Aufnahme-Bias
             DefectType.AZIMUTH_ERROR: 1.0,  # N/A: Lackfolie ist mechanisches Disc-Format — kein Magnetkopf
             DefectType.SIBILANCE: 0.4,  # Heimaufnahme-Nadel: Zischlaute bei HF-Überbetonung möglich
-            DefectType.TRANSPORT_BUMP: 0.5,  # Plattenteller-Holpern bei Heimaufnahme-Technik
+            DefectType.TRANSPORT_BUMP: 0.5,  # Plattenteller-Holpern bei Heimaufnahme-Technique
             DefectType.VOCAL_HARSHNESS: 0.5,  # Heimaufnahme: primitive Mikrofone → Vokal-Verzerrung häufig
             DefectType.DOLBY_NR_MISMATCH: 1.0,  # N/A: Lacquer Disc ist kein Magnetband — kein Dolby-Kompander
             DefectType.TAPE_HEAD_LEVEL_DIP: 1.0,  # N/A: Lacquer Disc hat kein Magnetband
@@ -943,6 +1013,7 @@ class DefectScanner:
             DefectType.MULTIBAND_WOW_FLUTTER: 0.4,  # Heim-Plattenspieler
             DefectType.GENERATION_LOSS: 0.5,  # Dubbing: Acetat → Pressmatrize
             DefectType.MOTOR_INTERFERENCE: 0.35,  # Heim-Plattenspieler Motor
+            DefectType.AMPLITUDE_DRIFT: 0.40,  # Häufig: Acetat-Heim-Plattenspieler Motor → Pegelgradient
         },
     }
 
@@ -1091,6 +1162,8 @@ class DefectScanner:
         # Invariante: Nur Schwellwerte, die auf dem primären Material wirksam gesperrt
         # sind (≥ 0.95), werden überschrieben — aktive Schwellwerte bleiben unverändert.
         _chain_threshold_overrides: set[DefectType] = set()
+        _chain_stage_materials: list[str] = []
+        _forensic_material_confidence: float | None = None
         if forensic_medium_result is not None:
             try:
                 # Kette als echte Liste lesen (kein String-Substring-Matching, das z. B.
@@ -1125,6 +1198,9 @@ class DefectScanner:
                         and _cand_mat in self.MATERIAL_SENSITIVITY
                     ):
                         _chain_stage_mats.append(_cand_mat)
+
+                _chain_stage_materials = [m.value for m in _chain_stage_mats]
+                _forensic_material_confidence = float(getattr(forensic_medium_result, "confidence", 0.0))
 
                 if _chain_stage_mats:
                     # Gate-Analyse: Defekttypen, die beim primären Material gesperrt sind (≥ 0.95)
@@ -1236,6 +1312,7 @@ class DefectScanner:
                 MaterialType.WIRE_RECORDING,
                 MaterialType.REEL_TAPE,
                 MaterialType.TAPE,
+                MaterialType.CASSETTE,
             }
         )
         if material_type in _DIGITAL_FAST_TAIL:
@@ -1262,7 +1339,7 @@ class DefectScanner:
         # Alle 28 Defekttypen sequentiell — nach jedem Schritt Fortschritt melden
         scores = {}
 
-        _prog(_lead_pct(5), "Klicks")
+        _prog(_lead_pct(5), "Clicks")
         scores[DefectType.CLICKS] = self._detect_clicks(audio_mono if not is_stereo else audio)
         _prog(_lead_pct(9), "Knistern")
         scores[DefectType.CRACKLE] = self._detect_crackle(audio_mono)
@@ -1278,7 +1355,10 @@ class DefectScanner:
         # and head-engagement speed irregularities that are non-stationary in the intro.
         # Scientific basis: IEC 60386:1972 §4.2.1 — short-term speed variations must
         # be measured at representative positions including start-of-tape.
-        if self.material_type in (MaterialType.TAPE, MaterialType.REEL_TAPE) and len(_audio_mono_full) > sr * 4:
+        if (
+            self.material_type in (MaterialType.TAPE, MaterialType.CASSETTE, MaterialType.REEL_TAPE)
+            and len(_audio_mono_full) > sr * 4
+        ):
             _tape_intro_n = min(int(20.0 * sr), len(_audio_mono_full))
             _tape_intro_audio = _audio_mono_full[:_tape_intro_n]
             _wow_intro = self._detect_wow(_tape_intro_audio)
@@ -1323,6 +1403,25 @@ class DefectScanner:
         _prog(_lead_pct(64), "Übersteuerung")
         # --- Weltklasse-Erweiterung: 4 neue Defekttypen ---
         scores[DefectType.CLIPPING] = self._detect_clipping(audio_mono)
+        if scores[DefectType.CLIPPING].severity >= 0.50 and scores[DefectType.CLICKS].severity > 0.0:
+            click_locations = scores[DefectType.CLICKS].locations
+            clip_locations = scores[DefectType.CLIPPING].locations
+            if click_locations and clip_locations:
+                clip_margin_s = 0.02
+                overlap_count = 0
+                for click_start, click_end in click_locations:
+                    if any(
+                        click_start <= clip_end + clip_margin_s and click_end >= clip_start - clip_margin_s
+                        for clip_start, clip_end in clip_locations
+                    ):
+                        overlap_count += 1
+                if overlap_count == len(click_locations):
+                    scores[DefectType.CLICKS].metadata["suppressed_by_clipping"] = True
+                    scores[DefectType.CLICKS].metadata["pre_suppression_severity"] = float(
+                        scores[DefectType.CLICKS].severity
+                    )
+                    scores[DefectType.CLICKS].severity = 0.0
+                    scores[DefectType.CLICKS].confidence = min(float(scores[DefectType.CLICKS].confidence), 0.35)
         _prog(_lead_pct(69), "DC-Versatz")
         scores[DefectType.DC_OFFSET] = self._detect_dc_offset(audio_mono)
         _prog(_lead_pct(74), "Bandbreitenverlust")
@@ -1422,6 +1521,7 @@ class DefectScanner:
         _TAPE_HEAD_DIP_MATERIALS: frozenset[MaterialType] = frozenset(
             {
                 MaterialType.TAPE,
+                MaterialType.CASSETTE,
                 MaterialType.REEL_TAPE,
                 MaterialType.WIRE_RECORDING,
             }
@@ -1438,6 +1538,12 @@ class DefectScanner:
         else:
             scores[DefectType.TAPE_HEAD_LEVEL_DIP] = DefectScore(DefectType.TAPE_HEAD_LEVEL_DIP, 0.0, 0.95)
         _tail_tick("Tape-Head-Level-Dip")
+
+        # §9.1c — AMPLITUDE_DRIFT: Gradual level rise/fall over entire song.
+        # Distinguishes artistic crescendo (preserve) from carrier drift (correct).
+        # Runs on full mono audio for reliable trend detection (requires full duration).
+        scores[DefectType.AMPLITUDE_DRIFT] = self._detect_amplitude_drift(_audio_mono_full)
+        _tail_tick("Amplitude-Drift")
 
         # ── Full-Audio Location Re-Detection ───────────────────────────────────
         # The center-crop analysis (60 s) produces locations ONLY in the middle
@@ -1633,6 +1739,7 @@ class DefectScanner:
             self.material_type
             in (
                 MaterialType.TAPE,
+                MaterialType.CASSETTE,
                 MaterialType.REEL_TAPE,
             )
             if self.material_type is not None
@@ -1905,8 +2012,8 @@ class DefectScanner:
         #
         # Physikalisches Modell: Defekte einer Kettenstufe (z. B. Wow/Flutter auf Tape)
         # werden beim Transfer durch jede nachfolgende verlustbehaftete Stufe gedämpft.
-        # Der Detektor misst das Residual auf dem Endsignal — ohne Kompensation wird die
-        # Severity systematisch zu niedrig ausgewiesen.
+        # Der Detektor misst das Residual auf dem Endsignal — ohne Compensation wird die
+        # Severity systematic zu niedrig ausgewiesen.
         #
         # Dämpfungsmodell (empirisch, Tsai & Välimäki 2003, Brixen 2007):
         #   Severity_korrigiert = Severity_gemessen / (Dämpfungsfaktor per Stufe ^ n_stufen_dahinter)
@@ -2038,6 +2145,15 @@ class DefectScanner:
             is_multi_generation=bool(getattr(_fmd_result, "is_multi_generation", False)),
             transfer_chain_str=str(getattr(_fmd_result, "transfer_chain", "") or getattr(_fmd_result, "chain", "")),
             spectral_fingerprint=_sf,  # §6.6.1 Pflicht-Fingerabdruck — 5 Messgrößen immer befüllt
+            metadata={
+                "material_confidence": _forensic_material_confidence,
+                "chain_stage_materials": list(_chain_stage_materials),
+                "chain_threshold_overrides": [
+                    dt.value for dt in sorted(_chain_threshold_overrides, key=lambda d: d.value)
+                ],
+                "chain_threshold_override_count": len(_chain_threshold_overrides),
+                "chain_threshold_override_applied": bool(_chain_threshold_overrides),
+            },
         )
 
         # §9.7.1 Cache-Write — Ergebnis für künftige identische Aufrufe sichern
@@ -2054,7 +2170,7 @@ class DefectScanner:
         material_type: MaterialType,
         used_center_crop: bool,
     ) -> None:
-        """Apply conservative confidence calibration and crop-locality annotations.
+        """Wendet konservative Konfidenz-Kalibrierung und Crop-Lokalitäts-Annotationen an.
 
         Calibration strategy:
         - Increase confidence slightly when measured severity clearly exceeds
@@ -2187,8 +2303,8 @@ class DefectScanner:
         tape_score += wow_flutter_score * 6.0  # Sehr typisch (Tape-Stretch)
         tape_score += rumble_energy * 2500.0  # Viel mehr Rumble - stark erhöht!
         tape_score -= high_freq_energy * 80.0  # Niedrigere HF als Vinyl (Hauptmerkmal!)
-        tape_score += crackle_score * 1.0  # Crackle schwach positiv (beide haben es)
-        tape_score += click_rate * 0.1  # Clicks schwach positiv
+        tape_score += crackle_score * 1.0  # Crackle schwach positive (beide haben es)
+        tape_score += click_rate * 0.1  # Clicks schwach positive
         tape_score += 10.0  # Baseline-Bonus erhöht
 
         logger.debug(
@@ -2397,7 +2513,7 @@ class DefectScanner:
 
     @staticmethod
     def _sample_locations_evenly(locations: list, max_n: int) -> list:
-        """Return evenly sampled locations, optionally uncapped.
+        """Gibt evenly sampled locations, optionally uncapped zurück.
 
         If max_n <= 0, return all locations (no cap).
         Otherwise, pick representatives at uniform stride so returned positions
@@ -2468,12 +2584,40 @@ class DefectScanner:
             if group_width <= max_click_width:
                 verified_groups.append(group)
 
+        strict_threshold = max(float(np.percentile(diff, 99.99)), local_median * 12.0, 0.35)
+        strict_indices = np.where(diff > strict_threshold)[0]
+        if len(strict_indices) > 0:
+            strict_groups: list[list[int]] = []
+            current_strict = [int(strict_indices[0])]
+            strict_gap = max(1, int(0.0002 * self.sample_rate))
+            for idx in strict_indices[1:]:
+                idx_int = int(idx)
+                if idx_int - current_strict[-1] <= strict_gap:
+                    current_strict.append(idx_int)
+                else:
+                    strict_groups.append(current_strict)
+                    current_strict = [idx_int]
+            strict_groups.append(current_strict)
+            for group in strict_groups:
+                group_width = group[-1] - group[0] + 1
+                if group_width <= max_click_width and not any(
+                    abs(group[0] - existing[0]) < group_window for existing in verified_groups
+                ):
+                    verified_groups.append(group)
+
+        verified_groups.sort(key=lambda group: group[0])
+
         if len(verified_groups) == 0:
             return DefectScore(
                 DefectType.CLICKS,
                 0.0,
                 0.95,
-                metadata={"click_rate": 0.0, "total_clicks": 0, "rejected_as_transients": len(click_groups)},
+                metadata={
+                    "click_rate": 0.0,
+                    "total_clicks": 0,
+                    "rejected_as_transients": len(click_groups),
+                    "strict_impulse_candidates": len(strict_indices),
+                },
             )
 
         # Convert to timestamps — sample evenly across full duration (not just first 50)
@@ -2507,6 +2651,7 @@ class DefectScanner:
                 "click_rate": click_rate,
                 "total_clicks": len(verified_groups),
                 "rejected_as_transients": len(click_groups) - len(verified_groups),
+                "strict_impulse_candidates": len(strict_indices),
             },
         )
 
@@ -2605,7 +2750,7 @@ class DefectScanner:
 
         severity_raw = float(np.sum(crackle_mask)) / len(audio)
 
-        # --- Anti-FP: kurtosis check on HP-filtered signal ---
+        # --- Anti-FP: kurtosis + sparsity checks on HP-filtered signal ---
         # Crackle is impulsive → high kurtosis (>> 3.0 for Gaussian).
         # Tonal HF (cymbals, synths, sibilants) has near-sinusoidal distribution
         # → kurtosis ≈ 1.5 (pure sine) to 3.0 (Gaussian noise).
@@ -2614,6 +2759,17 @@ class DefectScanner:
         if hp_std > 1e-8:
             hp_mean = float(np.mean(audio_hp))
             hp_kurtosis = float(np.mean(((audio_hp - hp_mean) / hp_std) ** 4))
+
+        peak_ratio = 0.0
+        sparse_impulse_rate = 0.0
+        if hp_std > 1e-8:
+            hp_abs = np.abs(audio_hp)
+            hp_p95 = float(np.percentile(hp_abs, 95)) + 1e-12
+            hp_p999 = float(np.percentile(hp_abs, 99.9))
+            peak_ratio = hp_p999 / hp_p95
+            sparse_impulse_rate = float(np.mean(hp_abs > max(hp_p95 * 6.0, hp_std * 6.0)))
+
+        tonal_or_dense_hf = bool(peak_ratio < 3.0 and sparse_impulse_rate < 0.0008)
 
         kurtosis_discount = 1.0
         if hp_kurtosis < 4.0:
@@ -2624,6 +2780,9 @@ class DefectScanner:
             # Borderline zone — scale linearly
             kurtosis_discount = max(0.1, (hp_kurtosis - 4.0) / 2.0)
         # Kurtosis > 6 → impulsive, keep full weight
+
+        if tonal_or_dense_hf:
+            kurtosis_discount = 0.0
 
         severity = min(1.0, severity_raw * 10 * kurtosis_discount)
 
@@ -2640,7 +2799,7 @@ class DefectScanner:
                 locations.append((start, end))
 
         confidence = 0.8
-        if hp_kurtosis < 4.0:
+        if hp_kurtosis < 4.0 or tonal_or_dense_hf:
             confidence = 0.3  # Very low confidence when HF is clearly tonal
 
         return DefectScore(
@@ -2651,7 +2810,10 @@ class DefectScanner:
             metadata={
                 "crackle_percentage": severity_raw * 100,
                 "hp_kurtosis": hp_kurtosis,
+                "hp_peak_ratio": peak_ratio,
+                "sparse_impulse_rate": sparse_impulse_rate,
                 "kurtosis_discount": kurtosis_discount,
+                "tonal_or_dense_hf_guard": tonal_or_dense_hf,
             },
         )
 
@@ -2800,7 +2962,7 @@ class DefectScanner:
         )
 
     def _detect_wow(self, audio: np.ndarray) -> DefectScore:
-        """Detect WOW: slow pitch modulation < 0.5 Hz (IEC 60386, Blum 1984).
+        """Erkennt WOW: slow pitch modulation < 0.5 Hz (IEC 60386, Blum 1984).
 
         Upgraded v9.10.77b: Dual-track detection using both RMS-envelope AND
         instantaneous-frequency (Hilbert analytic signal) for pitch-based WOW.
@@ -2907,7 +3069,7 @@ class DefectScanner:
         )
 
     def _detect_transport_bump(self, audio: np.ndarray) -> DefectScore:
-        """Detect TRANSPORT_BUMP: impulsive micro-speed jumps from tape transport shocks.
+        """Erkennt TRANSPORT_BUMP: impulsive micro-speed jumps from tape transport shocks.
 
         Multi-feature algorithm (v2) that distinguishes real transport bumps from
         normal musical transients by requiring co-occurrence of 5 features:
@@ -3174,7 +3336,7 @@ class DefectScanner:
         )
 
     def _detect_flutter(self, audio: np.ndarray) -> DefectScore:
-        """Detect FLUTTER: rapid pitch modulation 0.5–200 Hz (IEC 60386).
+        """Erkennt FLUTTER: rapid pitch modulation 0.5–200 Hz (IEC 60386).
 
         Upgraded v9.10.77b: Spectral-centroid modulation analysis replaces
         primitive ZCR. Flutter causes rapid spectral centroid oscillation
@@ -3285,7 +3447,7 @@ class DefectScanner:
         )
 
     def _detect_wow_flutter(self, audio: np.ndarray) -> DefectScore:
-        """Combined WOW+FLUTTER score — max of both sub-detectors.
+        """Kombinierter WOW+FLUTTER-Score – Maximum beider Sub-Detektoren.
 
         Convenience wrapper combining _detect_wow and _detect_flutter into a
         single DefectScore (worst-case severity) for legacy callers.
@@ -3301,7 +3463,7 @@ class DefectScanner:
         return flutter
 
     def _detect_azimuth_error(self, audio: np.ndarray) -> DefectScore:
-        """Detect AZIMUTH_ERROR: playback-head tilt causing HF L/R phase slope > 20°/kHz.
+        """Erkennt AZIMUTH_ERROR: playback-head tilt causing HF L/R phase slope > 20°/kHz.
 
         Azimuth errors occur when the recording head angle differs from the playback
         head angle, causing a phase difference between L and R that grows linearly
@@ -3596,8 +3758,8 @@ class DefectScanner:
         correlation = float(np.dot(_l_c, _r_c) / (np.linalg.norm(_l_c) * np.linalg.norm(_r_c) + 1e-10))
 
         # Severity
-        phase_score = max(0, side_ratio - 0.3)  # > 30% Side = problematisch
-        corr_score = max(0, 0.5 - correlation)  # Correlation < 0.5 = problematisch
+        phase_score = max(0, side_ratio - 0.3)  # > 30% Side = problematic
+        corr_score = max(0, 0.5 - correlation)  # Correlation < 0.5 = problematic
 
         severity = min(1.0, (phase_score + corr_score) * 2)
 
@@ -3616,7 +3778,7 @@ class DefectScanner:
         )
 
     def _detect_dropouts(self, audio_data: np.ndarray) -> DefectScore:
-        """Detect dropouts (short silence / level dip segments).
+        """Erkennt dropouts (short silence / level dip segments).
 
         Upgraded v9.10.77b: Multi-indicator dropout detection:
         1. RMS in 5 ms windows with vectorized computation
@@ -3643,6 +3805,7 @@ class DefectScanner:
         # Material-adaptive threshold
         _DROPOUT_ANALOG_MATERIALS = {
             MaterialType.TAPE,
+            MaterialType.CASSETTE,
             MaterialType.REEL_TAPE,
             MaterialType.VINYL,
             MaterialType.SHELLAC,
@@ -3746,7 +3909,7 @@ class DefectScanner:
     # ========== NEU: Weltklasse-Detektoren ==========
 
     def _detect_clipping(self, audio: np.ndarray) -> DefectScore:
-        """Detects Hard Clipping vs. SOFT_SATURATION via THD analysis (§6.3).
+        """Erkennt Hard Clipping vs. SOFT_SATURATION via THD analysis (§6.3).
 
         Uses classify_clipping() from clipping_detection module (THD-based) when
         available.  SOFT_SATURATION (even harmonics — tube/tape character) → zero
@@ -3766,8 +3929,12 @@ class DefectScanner:
         # §6.3 THD-based discrimination: CLIPPING → odd harmonics; SOFT_SATURATION → even harmonics
         if _CLIPPING_DETECTION_AVAILABLE:
             try:
+                audio_norm = audio / peak
+                hard_clip_mask = np.abs(audio) >= 0.999
+                hard_clip_ratio = float(np.sum(hard_clip_mask)) / len(audio)
                 _clip_type = _classify_clipping(audio, self.sample_rate)
-                if _clip_type == _ClippingType.SOFT_SATURATION:
+                hard_flat_top_override = hard_clip_ratio >= 0.001
+                if _clip_type == _ClippingType.SOFT_SATURATION and not hard_flat_top_override:
                     # Tube/tape character — preserve, do NOT repair
                     logger.debug("§6.3 _detect_clipping: SOFT_SATURATION erkannt (even-harmonic profile) — kein Repair")
                     return DefectScore(
@@ -3778,9 +3945,6 @@ class DefectScanner:
                         metadata={"clipping_type": "SOFT_SATURATION", "thd_discriminated": True},
                     )
                 # CLIPPING confirmed by THD analysis — compute severity from flat-tops
-                audio_norm = audio / peak
-                hard_clip_mask = np.abs(audio_norm) >= 0.999
-                hard_clip_ratio = float(np.sum(hard_clip_mask)) / len(audio)
                 threshold_factor = float(self.thresholds.get(DefectType.CLIPPING, 0.5))
                 severity = min(1.0, (hard_clip_ratio * 10) / max(threshold_factor, 1e-6))
                 clip_indices = np.where(hard_clip_mask)[0]
@@ -3807,6 +3971,7 @@ class DefectScanner:
                         "peak_dbfs": 20.0 * np.log10(peak) if peak > 0 else -120.0,
                         "thd_discriminated": True,
                         "clipping_type": "CLIPPING",
+                        "hard_flat_top_override": hard_flat_top_override,
                     },
                 )
             except Exception as _thd_exc:
@@ -3814,7 +3979,7 @@ class DefectScanner:
 
         # Amplitude-only fallback (wenn clipping_detection nicht verfügbar)
         audio_norm = audio / peak
-        hard_clip_mask = np.abs(audio_norm) >= 0.995
+        hard_clip_mask = np.abs(audio) >= 0.995
         hard_clip_ratio = float(np.sum(hard_clip_mask)) / len(audio)
         window_ms = int(0.001 * self.sample_rate)
         soft_clip_events = 0
@@ -4045,7 +4210,7 @@ class DefectScanner:
         )
 
     def _detect_pitch_drift(self, audio: np.ndarray) -> DefectScore:
-        """Detect constant pitch drift / speed error (≠ WOW/FLUTTER).
+        """Erkennt constant pitch drift / speed error (≠ WOW/FLUTTER).
 
         Upgraded v9.10.77b: Multi-segment trend analysis (8+ segments),
         linear regression with monotonicity check, trend significance
@@ -4201,37 +4366,63 @@ class DefectScanner:
         if seg_len > len(audio):
             seg_len = len(audio)
 
-        seg = audio[-seg_len:]  # Letztes Segment: enthält am meisten Nachhall
+        # Mehrere Segmente aus dem Mittelbereich des Tracks (nicht das Ende):
+        # Das letzte Segment misst oft den natürlichen Fade-Out als künstlichen RT60.
+        # → 3 Segmente bei 25 %, 50 %, 75 % der Tracklänge; letztes 15 % ausgeschlossen.
+        n_total = len(audio)
+        safe_end = int(n_total * 0.85)  # letztes 15 % nicht verwenden (Fade-Out-Zone)
+        safe_end = max(safe_end, seg_len)
+        positions_frac = [0.25, 0.50, 0.75]
+        candidate_segs = []
+        for frac in positions_frac:
+            start = int(frac * safe_end) - seg_len // 2
+            start = max(0, min(start, safe_end - seg_len))
+            end = start + seg_len
+            if end <= n_total:
+                candidate_segs.append(audio[start:end])
+        if not candidate_segs:
+            # Fallback: direkt Mitte
+            mid = max(0, n_total // 2 - seg_len // 2)
+            candidate_segs = [audio[mid : mid + seg_len]]
 
-        # Schritte 1–3: Energie-Abklingkurve (Schroeder-Rückwärtsintegration)
-        seg_sq = seg**2
-        # Rückwärts kumulatives Integral
-        decay_curve = np.cumsum(seg_sq[::-1])[::-1]
-        decay_curve = decay_curve / (decay_curve[0] + 1e-12)  # Normieren auf 1.0
-        decay_db = 10 * np.log10(decay_curve + 1e-12)
+        def _rt60_tdr_from_seg(seg: np.ndarray) -> tuple[float, float]:
+            """RT60 und TDR aus einem Segment (Schroeder-Rückwärtsintegration)."""
+            seg_sq = seg**2
+            seg_rms = float(np.sqrt(np.mean(seg_sq) + 1e-12))
+            if seg_rms < 1e-4:
+                return 0.0, 0.0
+            decay_curve = np.cumsum(seg_sq[::-1])[::-1]
+            decay_curve = decay_curve / (decay_curve[0] + 1e-12)
+            decay_db = 10 * np.log10(decay_curve + 1e-12)
+            try:
+                idx_5db = int(np.argmax(decay_db <= -5.0))
+                idx_35db = int(np.argmax(decay_db <= -35.0))
+                if idx_5db == 0 or idx_35db == 0 or idx_35db <= idx_5db:
+                    rt60_val = 0.0
+                else:
+                    rt60_val = 2.0 * (idx_35db - idx_5db) / self.sample_rate
+            except Exception:
+                rt60_val = 0.0
+            direct_energy = float(np.sum(seg[: int(0.1 * self.sample_rate)] ** 2)) + 1e-12
+            tail_start = int(0.3 * self.sample_rate)
+            tail_energy = (
+                float(np.sum(seg[tail_start : tail_start + int(0.5 * self.sample_rate)] ** 2))
+                if len(seg) > tail_start + int(0.5 * self.sample_rate)
+                else 0.0
+            )
+            tdr_val = tail_energy / direct_energy
+            return rt60_val, tdr_val
 
-        # RT60 schätzen: Zeit von -5 dB bis -35 dB (× 2 = T60)
-        # Verwende EDT (Early Decay Time) → robuster bei verhalletem Material
-        try:
-            idx_5db = np.argmax(decay_db <= -5.0)
-            idx_35db = np.argmax(decay_db <= -35.0)
-            if idx_5db == 0 or idx_35db == 0 or idx_35db <= idx_5db:
-                rt60 = 0.0
-            else:
-                # T30 × 2 = T60 Approximation
-                rt60 = 2.0 * (idx_35db - idx_5db) / self.sample_rate
-        except Exception:
-            rt60 = 0.0
+        rt60_values = []
+        tdr_values = []
+        for seg in candidate_segs:
+            r, t = _rt60_tdr_from_seg(seg)
+            rt60_values.append(r)
+            tdr_values.append(t)
 
-        # Tail-to-Direct-Ratio: Energie im Schwanz vs. erster 100ms
-        direct_energy = np.sum(audio[: int(0.1 * self.sample_rate)] ** 2) + 1e-12
-        tail_start = int(0.3 * self.sample_rate)  # Nach 300ms = Nachhall
-        tail_energy = (
-            np.sum(audio[tail_start : tail_start + int(0.5 * self.sample_rate)] ** 2)
-            if len(audio) > tail_start + int(0.5 * self.sample_rate)
-            else 0.0
-        )
-        tdr = tail_energy / direct_energy  # Hoch = viel Nachhall
+        # Median für Robustheit gegen vereinzelte Ausreißer (z. B. leise Passagen)
+        rt60 = float(np.median(rt60_values))
+        tdr = float(np.median(tdr_values))
 
         # Severity aus RT60 + TDR kombinieren
         # RT60 > 1.5s = severity 1.0; alles unter 0.4s = 0.0
@@ -4252,11 +4443,12 @@ class DefectScanner:
                 "tail_to_direct_ratio": tdr,
                 "rt60_severity": rt60_severity,
                 "tdr_severity": tdr_severity,
+                "n_segments_used": len(candidate_segs),
             },
         )
 
     def _detect_print_through(self, audio: np.ndarray) -> DefectScore:
-        """Detect bidirectional magnetic print-through (pre-echo and post-echo) on tape.
+        """Erkennt bidirectional magnetic print-through (pre-echo and post-echo) on tape.
 
         Print-Through arises from magnetic flux transfer between adjacent tape layers.
         It produces:
@@ -4386,7 +4578,7 @@ class DefectScanner:
     # ------------------------------------------------------------------
 
     def _detect_quantization_noise(self, audio: np.ndarray) -> DefectScore:
-        """Detect quantization noise via ENOB estimation + spectral flatness.
+        """Erkennt quantization noise via ENOB estimation + spectral flatness.
 
         Upgraded v9.10.77b: Effective Number of Bits (ENOB) estimation,
         step-size detection in quiet passages, spectral flatness of noise
@@ -4493,7 +4685,7 @@ class DefectScanner:
         )
 
     def _detect_jitter_artifacts(self, audio: np.ndarray) -> DefectScore:
-        """Detect jitter artifacts: D/A clock instability → FM sidebands + phase incoherence.
+        """Erkennt jitter artifacts: D/A clock instability → FM sidebands + phase incoherence.
 
         Upgraded v9.10.77b: Multi-indicator jitter detection:
         1. Zero-crossing regularity deviation (jitter disturbs sample timing)
@@ -4742,7 +4934,7 @@ class DefectScanner:
     # ------------------------------------------------------------------
 
     def _detect_soft_saturation(self, audio: np.ndarray) -> DefectScore:
-        """Detect SOFT_SATURATION: tube/tape even-harmonic distortion — preserve, do not repair.
+        """Erkennt SOFT_SATURATION: tube/tape even-harmonic distortion — preserve, do not repair.
 
         Per Spec §6.3: flat_tops < 0.1 % AND even harmonics (H2, H4) dominate odd (H3, H5).
         Returns severity > 0 only when soft-saturation profile is clearly present AND
@@ -4812,7 +5004,7 @@ class DefectScanner:
             return DefectScore(DefectType.SOFT_SATURATION, 0.0, 0.3)
 
     def _detect_sibilance(self, audio: np.ndarray) -> DefectScore:
-        """Detect SIBILANCE: excessive sibilant energy (harsh 's'/'sh' consonants).
+        """Erkennt SIBILANCE: excessive sibilant energy (harsh 's'/'sh' consonants).
 
         Upgraded v9.10.77b: Psychoacoustic sharpness model (Zwicker & Fastl),
         spectral centroid in sibilance band for gender-adaptive detection,
@@ -4948,7 +5140,7 @@ class DefectScanner:
             return DefectScore(DefectType.SIBILANCE, 0.0, 0.3)
 
     def _detect_vocal_harshness(self, audio: np.ndarray) -> DefectScore:
-        """Detect VOCAL_HARSHNESS: excessive energy, roughness, or distortion in 2–6 kHz vocal presence zone.
+        """Erkennt VOCAL_HARSHNESS: excessive energy, roughness, or distortion in 2–6 kHz vocal presence zone.
 
         Multi-indicator harshness detection combining:
         1. Crest factor analysis in harmonic band (low crest = compressed/distorted)
@@ -5109,7 +5301,7 @@ class DefectScanner:
             return DefectScore(DefectType.VOCAL_HARSHNESS, 0.0, 0.3)
 
     def _detect_bias_error(self, audio: np.ndarray, _bypass_material_gate: bool = False) -> DefectScore:
-        """Detect BIAS_ERROR: wrong AC-bias level on magnetic tape recording.
+        """Erkennt BIAS_ERROR: wrong AC-bias level on magnetic tape recording.
 
         Over-bias → HF rolloff earlier than expected (spectral slope too steep
         above the bias frequency, typically 8–12 kHz on 38 cm/s tape).
@@ -5218,7 +5410,7 @@ class DefectScanner:
             return DefectScore(DefectType.BIAS_ERROR, 0.0, 0.3)
 
     def _detect_dolby_nr_mismatch(self, audio: np.ndarray) -> DefectScore:
-        """Detect DOLBY_NR_MISMATCH: Dolby B/C/S encode played back without decoding.
+        """Erkennt DOLBY_NR_MISMATCH: Dolby B/C/S encode played back without decoding.
 
         Symptom: Dolby-encoded tape has a pre-emphasis of +6..+20 dB above 1 kHz
         (Dolby B: ~+6 dB at HF; Dolby C: ~+20 dB; Dolby S: ~+14 dB). When played
@@ -5321,7 +5513,7 @@ class DefectScanner:
             return DefectScore(DefectType.DOLBY_NR_MISMATCH, 0.0, 0.3)
 
     def _detect_tape_head_level_dips(self, audio: np.ndarray) -> DefectScore:
-        """Detect TAPE_HEAD_LEVEL_DIP: gradual envelope dips from head-contact pressure variation.
+        """Erkennt TAPE_HEAD_LEVEL_DIP: gradual envelope dips from head-contact pressure variation.
 
         Cassette / reel tape transports can exhibit periodic or irregular
         level dips caused by:
@@ -5483,7 +5675,7 @@ class DefectScanner:
 
     @staticmethod
     def _chain_contains_tape(fmd_result: object) -> bool:
-        """Return True if the transfer chain contains any tape-based medium.
+        """Gibt True if the transfer chain contains any tape-based medium zurück.
 
         Used for cross-chain BIAS_ERROR and ALIASING fallback: when the primary
         material is digital/vinyl but the chain includes a tape stage, tape-specific
@@ -5519,11 +5711,163 @@ class DefectScanner:
         """
         return float(score.severity) >= 0.20 and float(score.confidence) >= 0.40
 
-    def _detect_riaa_curve_error(self, audio: np.ndarray) -> DefectScore:
-        """Detect RIAA_CURVE_ERROR: wrong EQ curve applied during vinyl/disc digitization.
+    def _detect_amplitude_drift(self, audio: np.ndarray) -> "DefectScore":
+        """Erkennt graduellen Pegelanstieg/-abfall ueber den gesamten Song.
 
-        RIAA not applied → massive bass excess (bass/mid ratio >> 5).
-        Double-RIAA or wrong curve applied → extreme bass cut (ratio << 0.1).
+        Unterscheidet:
+        - Traeger-Drift (physikalischer Defekt): Pegel steigt/faellt unkorreliert mit
+          musikalischer Aktivitaet (Dolby-B/C AGC, Oxid-Drift) -> is_artistic=False
+        - Artistischer Crescendo/Decrescendo: Pegel korreliert mit Onset-Dichte
+          und musikalischer Energie -> is_artistic=True (Severity stark reduziert)
+
+        Algorithmus:
+            1. Gated RMS in 10s-Fenstern (Gate: -55 dBFS)
+            2. Lineare Regression in dB/Minute
+            3. Kreuzkorrelation mit Onset-Dichte (artistisch-Test)
+            4. Monotonie-Test: >75% monotone Uebergaenge -> Traeger-Drift
+
+        Literatur: Dolby B/C AGC-Drift; Cassette oxide level gradient (Nakajima 1992)
+        """
+        try:
+            sr = self.sample_rate
+            if audio.ndim == 2:
+                mono = np.mean(audio, axis=0)
+            else:
+                mono = audio.copy()
+
+            duration_s = len(mono) / sr
+            # Need at least 30s for meaningful trend detection
+            if duration_s < 30.0:
+                return DefectScore(
+                    DefectType.AMPLITUDE_DRIFT,
+                    0.0,
+                    0.5,
+                    metadata={"skipped": "too_short", "duration_s": round(duration_s, 1)},
+                )
+
+            window_s = 10.0
+            hop_samples = int(window_s * sr)
+            gate_linear = 10 ** (-55.0 / 20.0)
+
+            rms_values: list[float] = []
+            onset_density: list[float] = []
+            n_samples = len(mono)
+
+            pos = 0
+            while pos + hop_samples <= n_samples:
+                chunk = mono[pos : pos + hop_samples]
+                rms = float(np.sqrt(np.mean(chunk**2)))
+                if rms < gate_linear:
+                    # Skip near-silent windows (silence/fade)
+                    pos += hop_samples
+                    continue
+                rms_values.append(rms)
+
+                # Onset density: count energy-based transients in window
+                frame_size = 512
+                frames = len(chunk) // frame_size
+                if frames >= 2:
+                    energies = np.array(
+                        [float(np.sum(chunk[i * frame_size : (i + 1) * frame_size] ** 2)) for i in range(frames)]
+                    )
+                    energy_diff = np.diff(energies)
+                    n_onsets = int(np.sum(energy_diff > 0.1 * np.mean(energies[:-1] + 1e-12)))
+                    onset_density.append(float(n_onsets) / frames)
+                else:
+                    onset_density.append(0.0)
+
+                pos += hop_samples
+
+            if len(rms_values) < 3:
+                return DefectScore(
+                    DefectType.AMPLITUDE_DRIFT,
+                    0.0,
+                    0.4,
+                    metadata={"skipped": "too_few_windows", "n_windows": len(rms_values)},
+                )
+
+            rms_arr = np.array(rms_values, dtype=np.float64)
+            rms_db = 20.0 * np.log10(rms_arr + 1e-12)
+            n_windows = len(rms_arr)
+            x = np.arange(n_windows, dtype=np.float64)
+            x_min = float(x.mean())
+            x_std = float(x.std()) or 1.0
+
+            # Linear regression (dB vs. window index)
+            x_norm = (x - x_min) / x_std
+            slope_norm = float(np.polyfit(x_norm, rms_db, 1)[0])
+            # Convert to dB/minute
+            windows_per_minute = 60.0 / window_s
+            slope_db_per_minute = slope_norm * windows_per_minute / x_std
+
+            # No significant trend
+            if abs(slope_db_per_minute) < 1.5:
+                return DefectScore(
+                    DefectType.AMPLITUDE_DRIFT,
+                    0.0,
+                    0.6,
+                    metadata={
+                        "slope_db_per_minute": round(slope_db_per_minute, 3),
+                        "is_artistic": False,
+                        "n_windows": n_windows,
+                    },
+                )
+
+            # Artistic test: cross-correlate RMS envelope with onset density
+            onset_arr = np.array(onset_density, dtype=np.float64)
+            is_artistic = False
+            correlation_r = 0.0
+            if len(onset_arr) == len(rms_db) and onset_arr.std() > 1e-9:
+                rms_c = rms_db - rms_db.mean()
+                onset_c = onset_arr - onset_arr.mean()
+                denom = float(np.linalg.norm(rms_c) * np.linalg.norm(onset_c) + 1e-12)
+                correlation_r = float(np.dot(rms_c, onset_c) / denom)
+                if correlation_r > 0.65:
+                    is_artistic = True
+
+            # Monotonicity test: fraction of consecutive-window increases
+            diffs = np.diff(rms_db)
+            if slope_db_per_minute > 0:
+                monotone_frac = float(np.sum(diffs > 0)) / max(len(diffs), 1)
+            else:
+                monotone_frac = float(np.sum(diffs < 0)) / max(len(diffs), 1)
+
+            if monotone_frac >= 0.75 and correlation_r < 0.40:
+                # Clear carrier drift: highly monotone + not correlated with musical activity
+                is_artistic = False
+
+            # Severity: proportional to abs(slope), max at 6 dB/min -> severity 1.0
+            raw_severity = float(np.clip(abs(slope_db_per_minute) / 6.0, 0.0, 1.0))
+
+            # Artistic: drastically reduce severity (preserve, not correct)
+            if is_artistic:
+                severity = float(np.clip(raw_severity * 0.2, 0.0, 0.2))
+            else:
+                severity = raw_severity
+
+            confidence = float(np.clip(0.55 + 0.30 * min(1.0, raw_severity), 0.55, 0.85))
+
+            return DefectScore(
+                DefectType.AMPLITUDE_DRIFT,
+                severity,
+                confidence,
+                metadata={
+                    "slope_db_per_minute": round(slope_db_per_minute, 3),
+                    "is_artistic": bool(is_artistic),
+                    "correlation_r": round(correlation_r, 3),
+                    "monotone_frac": round(monotone_frac, 3),
+                    "n_windows": n_windows,
+                    "drift_db_per_minute": round(slope_db_per_minute, 3),
+                },
+            )
+        except Exception:
+            return DefectScore(DefectType.AMPLITUDE_DRIFT, 0.0, 0.3)
+
+    def _detect_riaa_curve_error(self, audio: np.ndarray) -> DefectScore:
+        """Erkennt RIAA_CURVE_ERROR: wrong EQ curve applied during vinyl/disc digitization.
+
+        RIAA not applied: massive bass excess (bass/mid ratio >> 5).
+        Double-RIAA or wrong curve applied: extreme bass cut (ratio << 0.1).
         """
         material_name = str(getattr(self.material_type, "value", self.material_type)).lower()
         riaa_materials = {"vinyl", "shellac", "lacquer_disc"}
@@ -5598,7 +5942,7 @@ class DefectScanner:
             return DefectScore(DefectType.RIAA_CURVE_ERROR, 0.0, 0.3)
 
     def _detect_head_wear(self, audio: np.ndarray) -> DefectScore:
-        """Detect HEAD_WEAR: magnetic head degradation causing progressive HF rolloff.
+        """Erkennt HEAD_WEAR: magnetic head degradation causing progressive HF rolloff.
 
         Worn head → progressive rolloff above the head-gap frequency (typically
         10–16 kHz for 1/4" tape at 38 cm/s).  Characteristic signature:
@@ -5691,7 +6035,7 @@ class DefectScanner:
             return DefectScore(DefectType.HEAD_WEAR, 0.0, 0.3)
 
     def _detect_transient_smearing(self, audio: np.ndarray) -> DefectScore:
-        """Detect TRANSIENT_SMEARING: broadened attack rise-times.
+        """Erkennt TRANSIENT_SMEARING: broadened attack rise-times.
 
         Upgraded v9.10.77b: Hilbert-envelope for smoother analysis,
         strongest-onset selection (by peak amplitude, not just first N),
@@ -5841,7 +6185,7 @@ class DefectScanner:
             return DefectScore(DefectType.TRANSIENT_SMEARING, 0.0, 0.3)
 
     def _detect_pre_echo(self, audio: np.ndarray) -> DefectScore:
-        """Detect PRE_ECHO: energy preceding a major transient.
+        """Erkennt PRE_ECHO: energy preceding a major transient.
 
         Upgraded v9.10.77b: Dual time-scale detection:
         1. Short pre-echo (5–35 ms): codec temporal masking artifacts
@@ -6000,7 +6344,7 @@ class DefectScanner:
             return DefectScore(DefectType.PRE_ECHO, 0.0, 0.3)
 
     def _detect_aliasing(self, audio: np.ndarray, _bypass_material_gate: bool = False) -> DefectScore:
-        """Detect ALIASING: spurious near-Nyquist energy without natural musical source.
+        """Erkennt ALIASING: spurious near-Nyquist energy without natural musical source.
 
         Anti-aliasing filter failure during digitization → elevated spectral floor
         in the 85–97 % Nyquist region that exceeds the expected HF rolloff.
@@ -6058,7 +6402,7 @@ class DefectScanner:
     # ========== v9.10.98: 12 neue SOTA-Detektoren ==========
 
     def _detect_modulation_noise(self, audio: np.ndarray) -> DefectScore:
-        """Detect signal-dependent modulation noise (tape recording artifact).
+        """Erkennt signal-dependent modulation noise (tape recording artifact).
 
         Modulation noise is noise whose level varies proportionally to the signal
         level — fundamentally different from stationary tape hiss.  Present in every
@@ -6139,7 +6483,7 @@ class DefectScanner:
             return DefectScore(DefectType.MODULATION_NOISE, 0.0, 0.3)
 
     def _detect_inner_groove_distortion(self, audio: np.ndarray) -> DefectScore:
-        """Detect Inner Groove Distortion (IGD) on vinyl/shellac recordings.
+        """Erkennt Inner Groove Distortion (IGD) on vinyl/shellac recordings.
 
         IGD increases towards the center of the disc due to decreasing linear
         velocity.  Algorithm:
@@ -6151,6 +6495,15 @@ class DefectScanner:
         Scientific basis: Vinyl stylus tracking geometry; Kates (1981) "A Model of
         Record Tracing Distortion".
         """
+        # N/A-Gate: Materialien ohne Rillengeometrie (Tape, Kassette, Digital etc.)
+        if self.thresholds.get(DefectType.INNER_GROOVE_DISTORTION, 0.5) >= 0.95:
+            return DefectScore(
+                DefectType.INNER_GROOVE_DISTORTION,
+                0.0,
+                1.0,
+                locations=[],
+                metadata={"skipped": "material_gate_NA"},
+            )
         n = len(audio)
         sr = self.sample_rate
         if n < sr * 8:
@@ -6198,7 +6551,7 @@ class DefectScanner:
             return DefectScore(DefectType.INNER_GROOVE_DISTORTION, 0.0, 0.3)
 
     def _detect_groove_echo(self, audio: np.ndarray) -> DefectScore:
-        """Detect groove echo (pre-echo from adjacent groove deformation on vinyl).
+        """Erkennt groove echo (pre-echo from adjacent groove deformation on vinyl).
 
         Groove echo occurs ~1.8 s before loud passages (one revolution at 33⅓ rpm).
         Algorithm:
@@ -6209,6 +6562,16 @@ class DefectScanner:
 
         DISTINCT from codec pre-echo (PRE_ECHO: 5–35 ms) — groove echo is 1.5–2.2 s.
         """
+        # N/A-Gate: Materialien ohne Rillengeometrie (Tape, Kassette, Digital etc.)
+        # haben physikalisch kein Groove-Echo — Detektor nicht anwenden.
+        if self.thresholds.get(DefectType.GROOVE_ECHO, 0.5) >= 0.95:
+            return DefectScore(
+                DefectType.GROOVE_ECHO,
+                0.0,
+                1.0,
+                locations=[],
+                metadata={"skipped": "material_gate_NA"},
+            )
         n = len(audio)
         sr = self.sample_rate
         if n < sr * 5:
@@ -6306,7 +6669,7 @@ class DefectScanner:
             return DefectScore(DefectType.GROOVE_ECHO, 0.0, 0.3)
 
     def _detect_crosstalk(self, audio: np.ndarray) -> DefectScore:
-        """Detect channel crosstalk in early stereo recordings.
+        """Erkennt channel crosstalk in early stereo recordings.
 
         Crosstalk appears as ghost images in the stereo field (channel separation < 20 dB).
         Algorithm (BSS-based):
@@ -6374,7 +6737,7 @@ class DefectScanner:
             return DefectScore(DefectType.CROSSTALK, 0.0, 0.3)
 
     def _detect_intermodulation_distortion(self, audio: np.ndarray) -> DefectScore:
-        """Detect intermodulation distortion (IMD) from nonlinear amplifier chains.
+        """Erkennt intermodulation distortion (IMD) from nonlinear amplifier chains.
 
         IMD creates sum/difference frequencies (NOT harmonics!) from nonlinear
         signal path.  Algorithm:
@@ -6464,7 +6827,7 @@ class DefectScanner:
             return DefectScore(DefectType.INTERMODULATION_DISTORTION, 0.0, 0.3)
 
     def _detect_tape_splice_artifact(self, audio: np.ndarray) -> DefectScore:
-        """Detect tape splice artifacts (click + level jump + phase discontinuity).
+        """Erkennt tape splice artifacts (click + level jump + phase discontinuity).
 
         Splice artifacts are distinct from normal clicks: they combine an impulsive
         transient with a simultaneous level change and often a phase jump.
@@ -6551,7 +6914,7 @@ class DefectScanner:
             return DefectScore(DefectType.TAPE_SPLICE_ARTIFACT, 0.0, 0.3)
 
     def _detect_hf_remanence_loss(self, audio: np.ndarray) -> DefectScore:
-        """Detect high-frequency remanence loss from magnetic tape aging.
+        """Erkennt high-frequency remanence loss from magnetic tape aging.
 
         Different from BANDWIDTH_LOSS: HF was originally recorded but has faded
         over decades due to magnetic particle demagnetization.  The spectral envelope
@@ -6620,7 +6983,7 @@ class DefectScanner:
             return DefectScore(DefectType.HF_REMANENCE_LOSS, 0.0, 0.3)
 
     def _detect_stylus_damage(self, audio: np.ndarray) -> DefectScore:
-        """Detect stylus damage / mistracking distortion on vinyl/shellac.
+        """Erkennt stylus damage / mistracking distortion on vinyl/shellac.
 
         Damaged/worn styli produce asymmetric distortion: odd harmonics dominate
         (unlike soft saturation which produces even harmonics).  Also: consistent
@@ -6797,7 +7160,7 @@ class DefectScanner:
             return DefectScore(DefectType.STICKY_SHED_RESIDUE, 0.0, 0.3)
 
     def _detect_multiband_wow_flutter(self, audio: np.ndarray) -> DefectScore:
-        """Detect frequency-dependent wow/flutter (head gap geometry artifact).
+        """Erkennt frequency-dependent wow/flutter (head gap geometry artifact).
 
         Uses STFT-based instantaneous frequency tracking (weighted spectral centroid)
         per octave band to discriminate head-gap multiband flutter (band-dependent
@@ -6922,7 +7285,7 @@ class DefectScanner:
             return DefectScore(DefectType.MULTIBAND_WOW_FLUTTER, 0.0, 0.3)
 
     def _detect_generation_loss(self, audio: np.ndarray) -> DefectScore:
-        """Detect cumulative generation loss from tape dubbing / transcoding.
+        """Erkennt cumulative generation loss from tape dubbing / transcoding.
 
         Each copy generation adds noise, bandwidth loss, and phase distortion with
         a specific cumulative signature different from individual defects.
@@ -6989,7 +7352,7 @@ class DefectScanner:
             return DefectScore(DefectType.GENERATION_LOSS, 0.0, 0.3)
 
     def _detect_motor_interference(self, audio: np.ndarray) -> DefectScore:
-        """Detect turntable/tape motor interference (harmonics 80–300 Hz).
+        """Erkennt turntable/tape motor interference (harmonics 80–300 Hz).
 
         Different from LOW_FREQ_RUMBLE (sub-bass <80 Hz) — motor interference
         produces harmonics in the 80–300 Hz range from DC and synchronous motors.
@@ -7109,7 +7472,7 @@ _defect_scanner_lock = threading.Lock()
 
 
 def get_defect_scanner(sample_rate: int = 48000) -> "DefectScanner":
-    """Return the module-level DefectScanner singleton (thread-safe, double-checked locking)."""
+    """Gibt the module-level DefectScanner singleton (thread-safe, double-checked locking) zurück."""
     global _defect_scanner_instance  # pylint: disable=global-statement
     if _defect_scanner_instance is None:
         with _defect_scanner_lock:

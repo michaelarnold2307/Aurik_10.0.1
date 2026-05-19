@@ -151,7 +151,7 @@ class GenderDetector:
 
     def detect(self, audio: np.ndarray) -> VoiceCharacteristics:
         """
-        Detect voice characteristics including gender.
+        Erkennt voice characteristics including gender.
 
         Args:
             audio: Audio signal (mono)
@@ -164,13 +164,13 @@ class GenderDetector:
             audio = np.mean(audio, axis=1)
 
         # Detect fundamental frequency (F0)
-        f0 = self._detect_f0(audio)
+        fundamental_freq = self._detect_f0(audio)
 
         # Detect formants
         formants = self._detect_formants(audio)
 
         # Classify gender based on F0 and formants
-        gender, confidence = self._classify_gender(f0, formants)
+        gender, confidence = self._classify_gender(fundamental_freq, formants)
 
         # Detect breathiness
         breathiness = self._detect_breathiness(audio)
@@ -182,25 +182,25 @@ class GenderDetector:
         emotional_intensity = self._detect_emotional_intensity(audio)
 
         # Detect sibilance severity
-        sibilance = self._detect_sibilance(audio)
+        sibilance_severity = self._detect_sibilance(audio)
 
         # Estimate age group
-        age_group = self._estimate_age_group(f0, formants, gender)
+        age_group = self._estimate_age_group(fundamental_freq, formants, gender)
 
         return VoiceCharacteristics(
             gender=gender,
             age_group=age_group,
-            fundamental_freq=f0,
+            fundamental_freq=fundamental_freq,
             formants=formants,
             breathiness=breathiness,
             vocal_effort=vocal_effort,
             emotional_intensity=emotional_intensity,
-            sibilance_severity=sibilance,
+            sibilance_severity=sibilance_severity,
             confidence=confidence,
         )
 
     def _detect_f0(self, audio: np.ndarray) -> float:
-        """Detect fundamental frequency using FFT-based autocorrelation.
+        """Erkennt fundamental frequency using FFT-based autocorrelation.
 
         Uses a maximum of 100ms of audio so the cost is O(N log N)
         for N ≤ sr*0.1, regardless of the actual audio length.
@@ -239,8 +239,8 @@ class GenderDetector:
                 # McLeod & Wyvill 2005 — "A Smarter Way to Find Pitch"
                 best_peak = peaks[np.argmax(autocorr_search[peaks])]
                 period = best_peak + min_period
-                f0 = self.sr / period
-                return float(f0)
+                detected_f0 = self.sr / period
+                return float(detected_f0)
 
         return 0.0  # No pitch detected
 
@@ -265,8 +265,8 @@ class GenderDetector:
 
         formant_tracks = []
 
-        for i in range(0, len(pre_emphasized) - frame_size, hop_size):
-            frame = pre_emphasized[i : i + frame_size]
+        for frame_start in range(0, len(pre_emphasized) - frame_size, hop_size):
+            frame = pre_emphasized[frame_start : frame_start + frame_size]
 
             # Windowing
             window = np.hamming(len(frame))
@@ -319,9 +319,7 @@ class GenderDetector:
                 if np.any(valid):
                     sp_valid = sp_mean[valid]
                     fq_valid = freqs_world[valid]
-                    from scipy.signal import find_peaks as _fp
-
-                    pks, _ = _fp(sp_valid, distance=int(300 * len(sp_valid) / 5000))
+                    pks, _ = signal.find_peaks(sp_valid, distance=int(300 * len(sp_valid) / 5000))
                     world_formants = [float(fq_valid[p]) for p in pks[:4]]
                     # Kreuzvalidierung: WORLD-Wert bevorzugt wenn Abweichung > 15 %
                     validated: list[float] = []
@@ -349,9 +347,9 @@ class GenderDetector:
 
         return lpc_formants
 
-    def _classify_gender(self, f0: float, formants: list[float]) -> tuple[VoiceGender, float]:
+    def _classify_gender(self, fundamental_freq: float, formants: list[float]) -> tuple[VoiceGender, float]:
         """Classify gender based on F0 and formants."""
-        if f0 == 0 or len(formants) == 0:
+        if fundamental_freq == 0 or len(formants) == 0:
             return VoiceGender.UNKNOWN, 0.0
 
         # Score each gender
@@ -362,20 +360,20 @@ class GenderDetector:
             count = 0
 
             # F0 score
-            if ranges["f0"][0] <= f0 <= ranges["f0"][1]:
+            if ranges["f0"][0] <= fundamental_freq <= ranges["f0"][1]:
                 score += 1.0
             else:
                 # Penalty based on distance
-                if f0 < ranges["f0"][0]:
-                    distance = (ranges["f0"][0] - f0) / ranges["f0"][0]
+                if fundamental_freq < ranges["f0"][0]:
+                    distance = (ranges["f0"][0] - fundamental_freq) / ranges["f0"][0]
                 else:
-                    distance = (f0 - ranges["f0"][1]) / ranges["f0"][1]
+                    distance = (fundamental_freq - ranges["f0"][1]) / ranges["f0"][1]
                 score += max(0, 1 - distance)
             count += 1
 
             # Formant scores
-            for i, formant in enumerate(formants[:3], 1):  # F1, F2, F3
-                formant_key = f"f{i}"
+            for formant_idx, formant in enumerate(formants[:3], 1):  # F1, F2, F3
+                formant_key = f"f{formant_idx}"
                 if formant_key in ranges:
                     if ranges[formant_key][0] <= formant <= ranges[formant_key][1]:
                         score += 1.0
@@ -404,14 +402,14 @@ class GenderDetector:
             and sorted_scores[0][0] == VoiceGender.CHILD
             and sorted_scores[1][0] == VoiceGender.FEMALE
             and (sorted_scores[0][1] - sorted_scores[1][1]) < 0.05
-            and f0 < 350.0
+            and fundamental_freq < 350.0
         ):
             best_gender = sorted_scores[1]  # prefer FEMALE
 
         return best_gender[0], best_gender[1]
 
     def _detect_breathiness(self, audio: np.ndarray) -> float:
-        """Detect breathiness via WORLD per-frame aperiodicity (primary) or HF energy ratio.
+        """Erkennt breathiness via WORLD per-frame aperiodicity (primary) or HF energy ratio.
 
         WORLD's d4c() provides per-bin aperiodicity AP[frame, bin] in [0, 1] where
         0 = perfectly harmonic and 1 = fully aperiodic/breathy.  The mean
@@ -430,10 +428,10 @@ class GenderDetector:
             try:
                 audio_f64 = np.asarray(audio.flatten(), dtype=np.float64)
                 sr_f64 = float(self.sr)
-                f0, timeaxis = _pw.harvest(audio_f64, sr_f64)
-                f0_sm = _pw.stonemask(audio_f64, f0, timeaxis, sr_f64)
-                ap = _pw.d4c(audio_f64, f0_sm, timeaxis, sr_f64)  # (n_frames, bins)
-                voiced = f0_sm > 30.0
+                world_f0, timeaxis = _pw.harvest(audio_f64, sr_f64)
+                world_f0_sm = _pw.stonemask(audio_f64, world_f0, timeaxis, sr_f64)
+                ap = _pw.d4c(audio_f64, world_f0_sm, timeaxis, sr_f64)  # (n_frames, bins)
+                voiced = world_f0_sm > 30.0
                 if np.any(voiced):
                     freq_axis = np.linspace(0.0, sr_f64 / 2.0, ap.shape[1])
                     band = (freq_axis >= 1000.0) & (freq_axis <= 4000.0)
@@ -445,15 +443,15 @@ class GenderDetector:
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
         # DSP fallback: HF energy ratio (breathy voices have more noise above 3 kHz)
-        sos = signal.butter(4, 3000, "high", fs=self.sr, output="sos")
-        hf_signal = signal.sosfilt(sos, audio)
+        hp_sos = signal.butter(4, 3000, "high", fs=self.sr, output="sos")
+        hf_signal = signal.sosfilt(hp_sos, audio)
         hf_energy = np.sum(hf_signal**2)
         total_energy = np.sum(audio**2)
         breathiness = hf_energy / (total_energy + 1e-10)
         return min(1.0, breathiness * 5)
 
     def _detect_vocal_effort(self, audio: np.ndarray) -> float:
-        """Detect vocal effort (whisper to shout)."""
+        """Erkennt vocal effort (whisper to shout)."""
         # RMS level as proxy
         rms = np.sqrt(np.mean(audio**2))
 
@@ -465,7 +463,7 @@ class GenderDetector:
 
     def _detect_emotional_intensity(self, audio: np.ndarray) -> float:
         """
-        Detect emotional intensity.
+        Erkennt emotional intensity.
 
         High emotion correlates with:
         - Higher pitch variation
@@ -487,14 +485,14 @@ class GenderDetector:
         return min(1.0, intensity)
 
     def _detect_sibilance(self, audio: np.ndarray) -> float:
-        """Detect sibilance severity via frame-based peak analysis (6-12 kHz).
+        """Erkennt sibilance severity via frame-based peak analysis (6-12 kHz).
 
         Uses the 95th-percentile frame energy ratio so that short, intense
         sibilant bursts are detected even when they occupy only a small fraction
         of the total audio duration.
         """
-        sos = signal.butter(4, [6000, 12000], "band", fs=self.sr, output="sos")
-        sibilant_signal = signal.sosfilt(sos, audio)
+        sib_sos = signal.butter(4, [6000, 12000], "band", fs=self.sr, output="sos")
+        sibilant_signal = signal.sosfilt(sib_sos, audio)
 
         # Frame-based analysis: 20 ms frames, 10 ms hop
         frame_size = int(0.02 * self.sr)
@@ -523,31 +521,33 @@ class GenderDetector:
         peak_ratio = float(np.percentile(ratios, 95))
         return float(min(1.0, peak_ratio * 8))
 
-    def _estimate_age_group(self, f0: float, formants: list[float], gender: VoiceGender) -> VoiceAgeGroup | None:
-        """Estimate age group based on voice characteristics."""
-        if f0 == 0:
+    def _estimate_age_group(
+        self, fundamental_freq: float, _formants: list[float], gender: VoiceGender
+    ) -> VoiceAgeGroup | None:
+        """Schätzt age group based on voice characteristics."""
+        if fundamental_freq == 0:
             return None
 
         # Child: Very high F0
-        if f0 > 250:
+        if fundamental_freq > 250:
             return VoiceAgeGroup.CHILD
 
         # Teenager: Transitional
-        if 200 < f0 < 250:
+        if 200 < fundamental_freq < 250:
             return VoiceAgeGroup.TEENAGER
 
         # Adult ranges depend on gender
         if gender == VoiceGender.MALE:
-            if 120 < f0 < 140:
+            if 120 < fundamental_freq < 140:
                 return VoiceAgeGroup.YOUNG_ADULT
-            elif 110 < f0 < 130:
+            elif 110 < fundamental_freq < 130:
                 return VoiceAgeGroup.ADULT
             else:
                 return VoiceAgeGroup.MATURE
         elif gender == VoiceGender.FEMALE:
-            if 200 < f0 < 220:
+            if 200 < fundamental_freq < 220:
                 return VoiceAgeGroup.YOUNG_ADULT
-            elif 190 < f0 < 210:
+            elif 190 < fundamental_freq < 210:
                 return VoiceAgeGroup.ADULT
             else:
                 return VoiceAgeGroup.MATURE
@@ -641,13 +641,13 @@ class GenderAwareDeEsser:
         return processed, reduction_db
 
     def _apply_deessing(self, audio: np.ndarray, params: dict) -> tuple[np.ndarray, float]:
-        """Apply frequency-specific compression for de-essing."""
+        """Wendet an: frequency-specific compression for de-essing."""
         # Extract sibilance band
         freq_low, freq_high = params["freq_range"]
-        sos = signal.butter(4, [freq_low, freq_high], "band", fs=self.sr, output="sos")
+        deess_sos = signal.butter(4, [freq_low, freq_high], "band", fs=self.sr, output="sos")
         # sosfiltfilt (zero-phase) required: sibilant_band is subtracted from audio in recombination;
         # causal sosfilt would introduce group delay → timing skew → Pegelexplosion (§2.51, V11)
-        sibilant_band = signal.sosfiltfilt(sos, audio)
+        sibilant_band = signal.sosfiltfilt(deess_sos, audio)
 
         # Detect sibilant regions (RMS in chunks)
         chunk_size = int(0.01 * self.sr)  # 10ms
@@ -656,8 +656,8 @@ class GenderAwareDeEsser:
         reduction_db_total = 0.0
         reduction_count = 0
 
-        for i in range(0, len(audio) - chunk_size, chunk_size):
-            chunk = sibilant_band[i : i + chunk_size]
+        for chunk_start in range(0, len(audio) - chunk_size, chunk_size):
+            chunk = sibilant_band[chunk_start : chunk_start + chunk_size]
             rms = np.sqrt(np.mean(chunk**2))
             db = 20 * np.log10(rms + 1e-10)
 
@@ -666,7 +666,7 @@ class GenderAwareDeEsser:
                 excess_db = db - params["threshold_db"]
                 reduction = excess_db * (1 - 1 / params["ratio"])
                 gain_linear = 10 ** (-reduction / 20)
-                gain[i : i + chunk_size] = gain_linear
+                gain[chunk_start : chunk_start + chunk_size] = gain_linear
 
                 reduction_db_total += reduction
                 reduction_count += 1
@@ -675,12 +675,12 @@ class GenderAwareDeEsser:
         sibilant_reduced = sibilant_band * gain
 
         # Subtract original and add reduced
-        result = audio - sibilant_band + sibilant_reduced
+        processed_audio = audio - sibilant_band + sibilant_reduced
 
         # Average reduction
         avg_reduction = reduction_db_total / reduction_count if reduction_count > 0 else 0.0
 
-        return result, avg_reduction
+        return processed_audio, avg_reduction
 
 
 # ============================================================
@@ -705,7 +705,7 @@ class BreathPreservingProcessor:
         self, audio: np.ndarray, characteristics: VoiceCharacteristics, preservation_ratio: float = 0.7
     ) -> tuple[np.ndarray, float]:
         """
-        Process breath with preservation.
+        Verarbeitet breath with preservation.
 
         Args:
             audio: Input audio
@@ -715,6 +715,8 @@ class BreathPreservingProcessor:
         Returns:
             (processed_audio, preservation_ratio_actual)
         """
+        preservation_ratio = float(np.clip(preservation_ratio, 0.0, 1.0))
+
         # Detect breath regions
         breath_mask = self._detect_breath_regions(audio, characteristics)
 
@@ -729,7 +731,7 @@ class BreathPreservingProcessor:
 
             if is_artistic:
                 # Keep artistic breaths (pre-phrase, emotional)
-                reduction_factor = 1.0 - (preservation_ratio * 0.2)  # Minimal reduction
+                reduction_factor = 1.0 - ((1.0 - preservation_ratio) * 0.2)  # Minimal reduction
             else:
                 # Reduce disturbing breaths more
                 reduction_factor = 1.0 - (1 - preservation_ratio) * 0.8
@@ -738,11 +740,15 @@ class BreathPreservingProcessor:
 
         return processed, preservation_ratio
 
-    def _detect_breath_regions(self, audio: np.ndarray, characteristics: VoiceCharacteristics) -> list[tuple[int, int]]:
-        """Detect breath regions."""
+    def _detect_breath_regions(
+        self,
+        audio: np.ndarray,
+        _characteristics: VoiceCharacteristics,
+    ) -> list[tuple[int, int]]:
+        """Erkennt breath regions."""
         # High-pass filter for breath (>1kHz)
-        sos = signal.butter(4, 1000, "high", fs=self.sr, output="sos")
-        breath_signal = signal.sosfilt(sos, audio)
+        breath_sos = signal.butter(4, 1000, "high", fs=self.sr, output="sos")
+        breath_signal = signal.sosfilt(breath_sos, audio)
 
         # Envelope
         analytic = signal.hilbert(breath_signal)
@@ -763,13 +769,13 @@ class BreathPreservingProcessor:
         in_breath = False
         start = 0
 
-        for i, breath in enumerate(is_breath):
-            if breath and not in_breath:
-                start = i
+        for sample_idx, breath_detected in enumerate(is_breath):
+            if breath_detected and not in_breath:
+                start = sample_idx
                 in_breath = True
-            elif not breath and in_breath:
-                if i - start > int(0.05 * self.sr):  # Min 50ms
-                    regions.append((start, i))
+            elif not breath_detected and in_breath:
+                if sample_idx - start > int(0.05 * self.sr):  # Min 50ms
+                    regions.append((start, sample_idx))
                 in_breath = False
 
         return regions
@@ -816,7 +822,7 @@ class BreathPreservingProcessor:
 
 class UnifiedVocalAIEnhancer:
     """
-    Unified Vocal Enhancement with full AI integration.
+    Einheitliche Vokal-Verbesserung mit vollständiger KI-Integration.
 
     Kombiniert:
     - Gender Detection (Eigenentwicklung)
@@ -928,9 +934,9 @@ class UnifiedVocalAIEnhancer:
         )
 
     def _compute_formant_preservation(
-        self, original: np.ndarray, processed: np.ndarray, characteristics: VoiceCharacteristics
+        self, _original: np.ndarray, processed: np.ndarray, characteristics: VoiceCharacteristics
     ) -> float:
-        """Compute how well formants are preserved."""
+        """Berechnet how well formants are preserved."""
         # Re-detect formants in processed audio
         processed_chars = self.gender_detector.detect(processed)
 
@@ -965,9 +971,9 @@ class UnifiedVocalAIEnhancer:
         return 1.0
 
     def _compute_emotion_preservation(
-        self, original: np.ndarray, processed: np.ndarray, characteristics: VoiceCharacteristics
+        self, _original: np.ndarray, processed: np.ndarray, characteristics: VoiceCharacteristics
     ) -> float:
-        """Compute emotion preservation score."""
+        """Berechnet emotion preservation score."""
         # Re-detect emotion in processed audio
         processed_chars = self.gender_detector.detect(processed)
 
@@ -982,12 +988,12 @@ class UnifiedVocalAIEnhancer:
         return max(0, preservation)
 
     def _compute_quality_improvement(self, original: np.ndarray, processed: np.ndarray) -> float:
-        """Estimate quality improvement."""
+        """Schätzt quality improvement."""
         # Simple metric: high-frequency clarity improvement
-        sos = signal.butter(4, [3000, 8000], "band", fs=self.sr, output="sos")
+        clarity_sos = signal.butter(4, [3000, 8000], "band", fs=self.sr, output="sos")
 
-        original_clarity = signal.sosfilt(sos, original.flatten() if original.ndim == 2 else original)
-        processed_clarity = signal.sosfilt(sos, processed.flatten() if processed.ndim == 2 else processed)
+        original_clarity = signal.sosfilt(clarity_sos, original.flatten() if original.ndim == 2 else original)
+        processed_clarity = signal.sosfilt(clarity_sos, processed.flatten() if processed.ndim == 2 else processed)
 
         original_clarity_rms = np.sqrt(np.mean(original_clarity**2))
         processed_clarity_rms = np.sqrt(np.mean(processed_clarity**2))
@@ -1001,8 +1007,9 @@ class UnifiedVocalAIEnhancer:
 # MAIN ENTRY POINT FOR TESTING
 # ============================================================
 
-if __name__ == "__main__":
-    """Test Vocal AI Enhancement."""
+
+def _demo() -> None:
+    """Führt aus: a local smoke demo for manual development."""
     logger.debug("Testing Aurik 9.0 Vocal AI Enhancement...")
     logger.debug("=" * 70)
 
@@ -1012,27 +1019,27 @@ if __name__ == "__main__":
     t = np.linspace(0, duration, int(sr * duration))
 
     # Simulate voice: fundamental + harmonics + formants
-    f0 = 220  # Female/child range
+    demo_f0 = 220  # Female/child range
     vocal = np.zeros_like(t)
 
     # Add harmonics
-    for i in range(1, 8):
-        vocal += (1 / i) * np.sin(2 * np.pi * f0 * i * t)
+    for harmonic_idx in range(1, 8):
+        vocal += (1 / harmonic_idx) * np.sin(2 * np.pi * demo_f0 * harmonic_idx * t)
 
     # Add sibilance (8 kHz burst)
-    sibilance = np.zeros_like(t)
-    sibilance[int(0.5 * sr) : int(0.52 * sr)] = 0.3 * np.random.randn(int(0.02 * sr))
-    sibilance[int(1.0 * sr) : int(1.02 * sr)] = 0.3 * np.random.randn(int(0.02 * sr))
+    demo_sibilance = np.zeros_like(t)
+    demo_sibilance[int(0.5 * sr) : int(0.52 * sr)] = 0.3 * np.random.randn(int(0.02 * sr))
+    demo_sibilance[int(1.0 * sr) : int(1.02 * sr)] = 0.3 * np.random.randn(int(0.02 * sr))
 
     # High-pass filter sibilance
-    sos = signal.butter(4, 6000, "high", fs=sr, output="sos")
-    sibilance = signal.sosfilt(sos, sibilance)
+    demo_sos = signal.butter(4, 6000, "high", fs=sr, output="sos")
+    demo_sibilance = signal.sosfiltfilt(demo_sos, demo_sibilance)
 
-    vocal = vocal * 0.3 + sibilance
+    vocal = vocal * 0.3 + demo_sibilance
 
     # Add breath (low-level noise between phrases)
-    breath = np.random.randn(len(t)) * 0.02
-    vocal += breath
+    demo_breath = np.random.randn(len(t)) * 0.02
+    vocal += demo_breath
 
     # Normalize
     _peak_p99 = float(np.percentile(np.abs(vocal), 99.9)) if vocal.size > 0 else 0.0
@@ -1044,29 +1051,33 @@ if __name__ == "__main__":
 
     # Test enhancement
     logger.debug("\nTesting Vocal Enhancement...")
-    result = enhancer.enhance(
+    demo_result = enhancer.enhance(
         vocal, emotion_mode=EmotionPreservationMode.BALANCED, breath_preservation=0.7, sibilance_reduction=True
     )
 
     logger.debug("\n%s", "=" * 70)
     logger.debug("RESULTS:")
     logger.debug("%s", "=" * 70)
-    logger.debug("Gender Detected: %s", result.characteristics.gender.value)
-    if result.characteristics.age_group:
-        logger.debug("Age Group: %s", result.characteristics.age_group.value)
-    logger.debug("F0: %.1f Hz", result.characteristics.fundamental_freq)
-    logger.debug("Formants: %s", [f"{f:.0f} Hz" for f in result.characteristics.formants])
-    logger.debug("Sibilance Reduced: %.1f dB", result.sibilance_reduced_db)
-    logger.debug("Breath Preserved: %.1f%%", result.breath_preserved_ratio)
-    logger.debug("Emotion Preservation: %.1f%%", result.emotion_preservation_score)
-    logger.debug("Formant Preservation: %.1f", result.formant_preservation_score)
-    logger.debug("Quality Improvement: %+.2f", result.quality_improvement)
+    logger.debug("Gender Detected: %s", demo_result.characteristics.gender.value)
+    if demo_result.characteristics.age_group:
+        logger.debug("Age Group: %s", demo_result.characteristics.age_group.value)
+    logger.debug("F0: %.1f Hz", demo_result.characteristics.fundamental_freq)
+    logger.debug("Formants: %s", [f"{f:.0f} Hz" for f in demo_result.characteristics.formants])
+    logger.debug("Sibilance Reduced: %.1f dB", demo_result.sibilance_reduced_db)
+    logger.debug("Breath Preserved: %.1f%%", demo_result.breath_preserved_ratio)
+    logger.debug("Emotion Preservation: %.1f%%", demo_result.emotion_preservation_score)
+    logger.debug("Formant Preservation: %.1f", demo_result.formant_preservation_score)
+    logger.debug("Quality Improvement: %+.2f", demo_result.quality_improvement)
     logger.debug("\nProcessing Applied:")
-    for proc in result.processing_applied:
+    for proc in demo_result.processing_applied:
         logger.debug("  ✓ %s", proc)
 
     logger.debug("\n%s", "=" * 70)
     logger.debug("✅ Vocal AI Enhancement Test Complete!")
+
+
+if __name__ == "__main__":
+    _demo()
 
 
 # ---------------------------------------------------------------------------

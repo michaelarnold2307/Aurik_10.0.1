@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 def _mean_std(values: object) -> tuple[float, float]:
-    """Return mean/std from arbitrary numeric iterables with explicit float typing."""
+    """Gibt mean/std from arbitrary numeric iterables with explicit float typing zurück."""
     if isinstance(values, dict):
         numeric_values = list(values.values())
     else:
@@ -97,7 +97,7 @@ class ForensicsTrainingPipeline:
 
     def __init__(self, config: TrainingConfig | None = None) -> None:
         """
-        Initialize training pipeline.
+        Initialisiert training pipeline.
 
         Args:
             config: Training configuration
@@ -383,7 +383,7 @@ class ForensicsTrainingPipeline:
         }
 
     def _generate_medium_dataset(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Generate synthetic medium detection dataset."""
+        """Generiert synthetic medium detection dataset."""
         # Use existing dataset generator
         from backend.core.forensics.ml_medium_detector import MLMediumDetector
 
@@ -409,7 +409,7 @@ class ForensicsTrainingPipeline:
         return X_train, y_train, X_test, y_test
 
     def _generate_era_dataset(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Generate synthetic era detection dataset."""
+        """Generiert synthetic era detection dataset."""
 
         samples_per_class = self.config.n_samples_per_class
         n_classes = 8  # 1950s-2020s
@@ -428,7 +428,7 @@ class ForensicsTrainingPipeline:
         return X_train, y_train, X_test, y_test
 
     def _generate_defect_dataset(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Generate synthetic defect detection dataset."""
+        """Generiert synthetic defect detection dataset."""
         samples_per_class = self.config.n_samples_per_class
         n_defect_types = 5  # Clicks, Hum, Distortion, Dropout, Noise Burst
         n_features = 20  # Defect-specific features
@@ -446,7 +446,7 @@ class ForensicsTrainingPipeline:
         return X_train, y_train, X_test, y_test
 
     def _generate_summary_report(self, total_time: float) -> None:
-        """Generate comprehensive training summary report."""
+        """Generiert comprehensive training summary report."""
         report_path = self.config.reports_dir / f"training_summary_{int(time.time())}.json"
 
         summary = {
@@ -486,7 +486,7 @@ class ForensicsTrainingPipeline:
 
 
 def main() -> None:
-    """Main training entry point."""
+    """Haupt-training entry point."""
     # Create training pipeline
     config = TrainingConfig(n_samples_per_class=200, audio_duration_sec=3.0, n_estimators=200, max_depth=20)
 

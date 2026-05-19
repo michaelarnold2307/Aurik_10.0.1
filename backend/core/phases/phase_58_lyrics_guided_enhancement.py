@@ -289,7 +289,7 @@ _PHASE_58_LOCK = threading.Lock()
 
 
 def get_phase_58_lge() -> Phase58LyricsGuidedEnhancement:
-    """Return the singleton Phase58LyricsGuidedEnhancement instance (thread-safe)."""
+    """Gibt the singleton Phase58LyricsGuidedEnhancement instance (thread-safe) zurück."""
     instance = _PHASE_58_SINGLETON["instance"]
     if instance is None:
         with _PHASE_58_LOCK:

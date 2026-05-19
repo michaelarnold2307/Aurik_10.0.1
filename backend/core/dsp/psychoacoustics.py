@@ -656,7 +656,7 @@ def compute_noise_texture_profile(
     *,
     max_duration_s: float = 5.0,
 ) -> np.ndarray:
-    """Compute 8-band Bark-aggregated noise-floor spectral shape.
+    """Berechnet 8-band Bark-aggregated noise-floor spectral shape.
 
     Measures the noise texture of a signal by analysing quiet frames
     (below -35 dBFS RMS).  Returns a normalised (0–1) shape vector
@@ -741,7 +741,7 @@ def compute_noise_texture_profile(
 
 
 def get_material_noise_texture(material_type: str) -> np.ndarray:
-    """Return canonical noise-texture reference for a material type.
+    """Gibt canonical noise-texture reference for a material type zurück.
 
     Args:
         material_type: Material key (e.g. 'vinyl', 'shellac', 'reel_tape').
@@ -1014,7 +1014,7 @@ def apply_psychoacoustic_masking_clamp(
     _min_energy_ratio: float = 0.20,  # reserved — future per-band floor tuning
     masking_result=None,
 ) -> np.ndarray:
-    """Apply psychoacoustic masking to protect inaudible modifications.
+    """Wendet an: psychoacoustic masking to protect inaudible modifications.
 
     This is the **standard integration point** for ALL phases that modify
     spectral content.  It ensures that:
@@ -1150,7 +1150,7 @@ def compute_erb_masking_threshold(
     masking_offset_db: float = 14.5,
     spreading_erbs: float = 2.0,
 ) -> np.ndarray:
-    """Compute ERB-weighted simultaneous masking threshold for a signal.
+    """Berechnet ERB-weighted simultaneous masking threshold for a signal.
 
     This is a frequency-domain masking threshold (used by AFG, spectral repair,
     EQ correction, etc.) based on the Equivalent Rectangular Bandwidth
@@ -1303,7 +1303,7 @@ def compute_masking_threshold_iso11172(
 
 
 def compute_versa_confidence(snr_estimate_db: float, material_type: str) -> float:
-    """Estimate how trustworthy a VERSA-style perceptual score is for the material.
+    """Schätzt how trustworthy a VERSA-style perceptual score is for the material.
 
     The confidence is intentionally conservative for low-restorability carrier media
     such as shellac and rises with cleaner, high-SNR digital sources.

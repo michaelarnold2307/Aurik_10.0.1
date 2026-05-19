@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 34: Mid/Side Processing v2.0 - Professional
+Phase 34: Mid/Side Processing v2.0 - Professional.
 Multi-band M/S dynamics processing with independent control over Mid and Side signals.
 
 Algorithm Overview:
@@ -264,7 +264,7 @@ class MidSideProcessing(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive M/S runtime profile (§2.56)."""
+        """Berechnet adaptive M/S runtime profile (§2.56)."""
         mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         if restorability_score is None:
@@ -299,7 +299,7 @@ class MidSideProcessing(PhaseInterface):
         return {"transient_preserve": transient_preserve}
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_34_mid_side_processing",
             name="Mid/Side Processing v2.0 Professional",
@@ -318,7 +318,7 @@ class MidSideProcessing(PhaseInterface):
     def process(
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.VINYL, **kwargs
     ) -> PhaseResult:
-        """Process audio with professional multi-band M/S dynamics."""
+        """Verarbeitet audio with professional multi-band M/S dynamics."""
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
@@ -556,11 +556,11 @@ class MidSideProcessing(PhaseInterface):
         return bands
 
     def _combine_bands(self, bands: list[np.ndarray]) -> np.ndarray:
-        """Combine frequency bands back together."""
+        """Kombiniert frequency bands back together."""
         return sum(bands)
 
     def _ms_decode(self, audio: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Decode L/R to Mid/Side."""
+        """Dekodiert L/R to Mid/Side."""
         if audio.ndim == 1:
             # Mono input
             return audio, np.zeros_like(audio)
@@ -571,13 +571,13 @@ class MidSideProcessing(PhaseInterface):
         return mid, side
 
     def _ms_encode(self, mid: np.ndarray, side: np.ndarray, template: np.ndarray) -> np.ndarray:
-        """Encode Mid/Side to L/R."""
+        """Kodiert Mid/Side to L/R."""
         left = mid + side
         right = mid - side
         return stereo_like(left, right, template)
 
     def _detect_transients(self, audio: np.ndarray) -> np.ndarray:
-        """Detect transients using fast envelope follower."""
+        """Erkennt transients using fast envelope follower."""
         # Use left channel for transient detection
         signal_mono = safe_to_mono(audio) if audio.ndim == 2 else audio
 
@@ -601,7 +601,7 @@ class MidSideProcessing(PhaseInterface):
         self, signal_in: np.ndarray, sr: int, params: list, transient_mask: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Apply dynamics (compression) to signal.
+        Wendet an: dynamics (compression) to signal.
 
         Args:
             signal_in: Input signal
@@ -655,7 +655,7 @@ class MidSideProcessing(PhaseInterface):
 
     def _check_mono_compatibility(self, audio: np.ndarray) -> float:
         """
-        Check mono compatibility by measuring energy ratio after mono fold-down.
+        Prüft mono compatibility by measuring energy ratio after mono fold-down.
 
         Returns:
             Compatibility ratio (0-1, higher is better mono compatibility)

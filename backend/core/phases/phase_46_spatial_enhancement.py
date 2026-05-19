@@ -66,7 +66,7 @@ _IACC_MIN = 0.97
 def _early_reflection_mix(
     L: np.ndarray, R: np.ndarray, sr: int, dry_wet: float = 0.18
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Add psychoacoustically distributed early reflections to extend perceived width."""
+    """Fügt hinzu: psychoacoustically distributed early reflections to extend perceived width."""
     L_out = L.copy()
     R_out = R.copy()
     for delay_ms, atten_db in _EARLY_REFLECTIONS:

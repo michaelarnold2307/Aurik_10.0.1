@@ -31,7 +31,7 @@ logger.setLevel(logging.INFO)
 
 class RFInterferenceRemover:
     """
-    Removes radio frequency (RF) interference from audio signals.
+    Entfernt radio frequency (RF) interference from audio signals.
 
     RF interference typically manifests as:
     - Continuous tones (carrier frequencies)
@@ -52,7 +52,7 @@ class RFInterferenceRemover:
         min_duration_sec: float = 0.1,
     ):
         """
-        Initialize RF Interference Remover.
+        Initialisiert RF Interference Remover.
 
         Args:
             detection_threshold_db: Threshold for detecting interference peaks (dB)
@@ -75,7 +75,7 @@ class RFInterferenceRemover:
         sr: int,
     ) -> list[float]:
         """
-        Detect RF interference frequencies in the audio signal.
+        Erkennt RF interference frequencies in the audio signal.
 
         Uses spectral analysis to find narrow-band peaks that are likely
         RFinterference rather than musical content.
@@ -186,7 +186,7 @@ class RFInterferenceRemover:
         interference_freqs: list[float] | None = None,
     ) -> np.ndarray:
         """
-        Remove RF interference from audio signal.
+        Entfernt RF interference from audio signal.
 
         Args:
             audio: Audio signal (mono or stereo)

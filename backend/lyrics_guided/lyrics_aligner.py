@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PhonemeAlignment:
-    """A single phoneme with timing."""
+    """single phoneme with timing."""
 
     phoneme: str
     """Phoneme symbol (IPA or ARPABET)."""
@@ -42,7 +42,7 @@ class PhonemeAlignment:
 
 @dataclass
 class WordAlignment:
-    """A single word with timing and phonemes."""
+    """single word with timing and phonemes."""
 
     word: str
     """Word text."""
@@ -132,7 +132,7 @@ class LyricsAligner:
         language: str | None = None,
     ):
         """
-        Initialize lyrics aligner.
+        Initialisiert lyrics aligner.
 
         Args:
             use_whisper: Whether to use Whisper for ASR
@@ -168,7 +168,7 @@ class LyricsAligner:
         self._initialize()
 
     def _initialize(self) -> None:
-        """Initialize ASR and alignment systems."""
+        """Initialisiert ASR and alignment systems."""
         if not self._legacy_enabled:
             return
 
@@ -179,12 +179,12 @@ class LyricsAligner:
             self._check_mfa_availability()
 
     def _check_whisper_availability(self) -> None:
-        """Disable Docker-based Whisper path for production policy compliance."""
+        """Deaktiviert Docker-based Whisper path for production policy compliance."""
         self._whisper_available = False
         logger.info("Lyrics Aligner: Docker-based Whisper path disabled by policy")
 
     def _check_mfa_availability(self) -> None:
-        """Check if MFA is available and which models are installed."""
+        """Prüft if MFA is available and which models are installed."""
         if not self._legacy_enabled:
             self._mfa_available = False
             logger.info("Lyrics Aligner: MFA path disabled by policy")
@@ -206,7 +206,7 @@ class LyricsAligner:
             logger.warning("MFA check failed: %s", e)
 
     def _check_mfa_models(self) -> None:
-        """Check which MFA acoustic models are installed."""
+        """Prüft which MFA acoustic models are installed."""
         try:
             import subprocess
 
@@ -341,7 +341,7 @@ class LyricsAligner:
     def _detect_vocal_segments(
         self, audio: npt.NDArray[np.float32], sr: int, word_segments: list[dict]
     ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-        """Detect vocal vs instrumental segments."""
+        """Erkennt vocal vs instrumental segments."""
         if len(word_segments) > 0:
             # Use word segments as vocal segments
             vocal_segs = [(seg["start"], seg["end"]) for seg in word_segments]
@@ -407,7 +407,7 @@ class LyricsAligner:
     def _mfa_alignment_process(
         self, audio: npt.NDArray[np.float32], sr: int, word_segments: list[dict], language: str = "en"
     ) -> list[WordAlignment]:
-        """Run Montreal Forced Aligner for phoneme-level timestamps."""
+        """Führt aus: Montreal Forced Aligner for phoneme-level timestamps."""
         import subprocess
         import tempfile
 
@@ -463,7 +463,7 @@ class LyricsAligner:
             return words
 
     def _parse_textgrid(self, textgrid_path: str, word_segments: list[dict]) -> list[WordAlignment]:
-        """Parse MFA TextGrid output to extract phoneme alignments."""
+        """Parst MFA-TextGrid-Ausgabe zur Extraktion von Phonem-Ausrichtungen."""
         try:
             textgrid_module = import_module("textgrid")
             tg = textgrid_module.TextGrid.fromFile(textgrid_path)
@@ -538,7 +538,7 @@ class LyricsAligner:
         return words
 
     def _parse_textgrid_simple(self, textgrid_path: str, word_segments: list[dict]) -> list[WordAlignment]:
-        """Simple TextGrid parser (fallback if textgrid library not available)."""
+        """Einfacher TextGrid-Parser (Fallback wenn textgrid-Bibliothek nicht verfügbar)."""
         # Parse manually
         with open(textgrid_path) as f:
             f.read()
@@ -551,7 +551,7 @@ class LyricsAligner:
         return self._word_level_only(word_segments)
 
     def _word_level_only(self, word_segments: list[dict]) -> list[WordAlignment]:
-        """Create WordAlignment without phoneme details."""
+        """Erstellt WordAlignment without phoneme details."""
         words = []
 
         for seg in word_segments:
@@ -570,7 +570,7 @@ class LyricsAligner:
         return words
 
     def _estimate_phonemes(self, word: str, start: float, end: float) -> list[PhonemeAlignment]:
-        """Estimate phonemes from word (very simple)."""
+        """Schätzt phonemes from word (very simple)."""
         # Simple: split word duration by letter count
         duration = end - start
         letters = len(word)
@@ -619,7 +619,7 @@ class LyricsAligner:
             return "consonant"
 
     def get_phoneme_type(self, phoneme: str) -> str:
-        """Get phoneme type (vowel, consonant, etc.)."""
+        """Gibt zurück: phoneme type (vowel, consonant, etc.)."""
         phoneme_upper = phoneme.upper()
 
         for ptype, phonemes in self.PHONEME_TYPES.items():

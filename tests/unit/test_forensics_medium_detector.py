@@ -610,3 +610,89 @@ class TestMediumDetector:
             "mp3_low",
             "mp3_high",
         }, f"Chain must end with MP3 codec, got: {result.transfer_chain}"
+
+    def test_36_detect_analog_chain_prefers_mp3_low_when_bw_is_limited(self, monkeypatch):
+        """Analog transfer chains with limited HF bandwidth must not end in mp3_high."""
+        detector = MediumDetector()
+        fp = SpectralFingerprint(
+            rolloff_95_hz=7800.0,
+            wow_flutter_index=0.060,
+            hf_energy_above_16k=0.0002,
+            noise_floor_db=-33.0,
+            effective_bandwidth_hz=15_500.0,
+            codec_artifact_score=0.32,
+            codec_type_code=2.0,
+            crackle_density=0.020,
+            rotation_strength=0.36,
+            infrasonic_rms=0.030,
+        )
+
+        monkeypatch.setattr(detector, "_compute_fingerprint", lambda _audio, _sr: fp)
+        monkeypatch.setattr(
+            detector,
+            "_bayesian_score",
+            lambda _fp, **_kw: {
+                "mp3_high": 0.45,
+                "mp3_low": 0.22,
+                "cd_digital": 0.18,
+                "vinyl": 0.10,
+                "cassette": 0.09,
+            },
+        )
+        monkeypatch.setattr(
+            detector,
+            "_infer_analog_source_from_fingerprint",
+            lambda _fp: [("vinyl", 0.72), ("cassette", 0.58)],
+        )
+        monkeypatch.setattr(detector, "_is_benign_codec_source", lambda _audio, _sr, _fp: False)
+
+        audio = np.random.randn(48000).astype(np.float32) * 0.1
+        result = detector.detect(audio, sr=48000, file_ext=".mp3")
+
+        assert result.transfer_chain[:2] == ["vinyl", "tape"]
+        assert result.transfer_chain[-1] == "mp3_low", (
+            f"Expected codec stage mp3_low for analog chain with limited bandwidth, got chain={result.transfer_chain}"
+        )
+
+    def test_37_detect_file_ext_without_dot_is_normalized(self, monkeypatch):
+        """file_ext="mp3" and file_ext=".mp3" must produce identical transfer chains."""
+        detector = MediumDetector()
+        fp = SpectralFingerprint(
+            rolloff_95_hz=7800.0,
+            wow_flutter_index=0.060,
+            hf_energy_above_16k=0.0002,
+            noise_floor_db=-33.0,
+            effective_bandwidth_hz=15_500.0,
+            codec_artifact_score=0.32,
+            codec_type_code=2.0,
+            crackle_density=0.020,
+            rotation_strength=0.36,
+            infrasonic_rms=0.030,
+        )
+
+        monkeypatch.setattr(detector, "_compute_fingerprint", lambda _audio, _sr: fp)
+        monkeypatch.setattr(
+            detector,
+            "_bayesian_score",
+            lambda _fp, **_kw: {
+                "mp3_high": 0.45,
+                "mp3_low": 0.22,
+                "cd_digital": 0.18,
+                "vinyl": 0.10,
+                "cassette": 0.09,
+            },
+        )
+        monkeypatch.setattr(
+            detector,
+            "_infer_analog_source_from_fingerprint",
+            lambda _fp: [("vinyl", 0.72), ("cassette", 0.58)],
+        )
+        monkeypatch.setattr(detector, "_is_benign_codec_source", lambda _audio, _sr, _fp: False)
+
+        audio = np.random.randn(48000).astype(np.float32) * 0.1
+        result_with_dot = detector.detect(audio, sr=48000, file_ext=".mp3")
+        result_without_dot = detector.detect(audio, sr=48000, file_ext="mp3")
+
+        assert result_with_dot.transfer_chain == result_without_dot.transfer_chain
+        assert result_without_dot.transfer_chain[:2] == ["vinyl", "tape"]
+        assert result_without_dot.transfer_chain[-1] == "mp3_low"

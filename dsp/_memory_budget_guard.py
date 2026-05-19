@@ -6,7 +6,7 @@ _logger = logging.getLogger(__name__)
 
 
 def check_budget(name: str, size_gb: float = 0.1) -> bool:
-    """Return True if allocation succeeds or budget module unavailable."""
+    """Gibt True if allocation succeeds or budget module unavailable zurück."""
     try:
         from backend.core.ml_memory_budget import try_allocate
 

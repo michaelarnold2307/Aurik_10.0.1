@@ -56,7 +56,7 @@ class LUFSNormalizer:
 
     def _k_weighting_filter(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Apply K-weighting filter (ITU BS.1770 pre-filter).
+        Wendet an: K-weighting filter (ITU BS.1770 pre-filter).
 
         Two stage:
         1. High-shelf at ~1500-2000 Hz (+4dB)
@@ -76,7 +76,7 @@ class LUFSNormalizer:
 
     def _compute_lufs(self, audio: np.ndarray, sr: int) -> float:
         """
-        Compute integrated LUFS (simplified ITU BS.1770).
+        Berechnet integrated LUFS (simplified ITU BS.1770).
 
         Returns:
         --------
@@ -111,7 +111,7 @@ class LUFSNormalizer:
 
     def _compute_true_peak(self, audio: np.ndarray, sr: int) -> float:
         """
-        Compute true peak (4x oversampled).
+        Berechnet true peak (4x oversampled).
 
         Returns:
         --------
@@ -131,7 +131,7 @@ class LUFSNormalizer:
 
     def normalize(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Normalize audio to target LUFS.
+        Normalisiert audio to target LUFS.
 
         Parameters:
         -----------
@@ -207,7 +207,7 @@ class IntelligentEQ:
         self.target_warmth = target_warmth
 
     def _analyze_spectrum(self, audio: np.ndarray, sr: int) -> dict:
-        """Analyze spectral characteristics"""
+        """Analysiert spectral characteristics."""
         # FFT
         audio_mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
 
@@ -243,7 +243,7 @@ class IntelligentEQ:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply intelligent EQ.
+        Wendet an: intelligent EQ.
 
         Parameters:
         -----------
@@ -325,7 +325,7 @@ class StereoEnhancer:
         self.min_correlation = min_correlation
 
     def _compute_stereo_correlation(self, audio: np.ndarray) -> float:
-        """Compute stereo correlation (phase coherence)"""
+        """Berechnet stereo correlation (phase coherence)."""
         if audio.ndim != 2:
             return 1.0  # Mono
 
@@ -427,7 +427,7 @@ class FinalMaximizer:
         self.look_ahead_ms = look_ahead_ms
 
     def _compute_envelope(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Compute amplitude envelope with look-ahead"""
+        """Berechnet amplitude envelope with look-ahead."""
         # Look-ahead samples
         look_ahead_samples = int(self.look_ahead_ms * sr / 1000.0)
 
@@ -451,7 +451,7 @@ class FinalMaximizer:
 
     def maximize(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply transparent limiting.
+        Wendet an: transparent limiting.
 
         Parameters:
         -----------
@@ -551,7 +551,7 @@ class IntelligentMasteringChain:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply complete mastering chain.
+        Wendet vollständige Mastering-Kette an.
 
         Parameters:
         -----------

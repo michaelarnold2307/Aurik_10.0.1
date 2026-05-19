@@ -32,7 +32,7 @@ AutoModelForAudioClassification = None  # type: ignore[assignment]
 
 
 def _load_torch_stack() -> bool:
-    """Load optional torch/transformers dependencies only when needed."""
+    """Lädt optional torch/transformers dependencies only when needed."""
     global torch, AutoFeatureExtractor, AutoModelForAudioClassification
 
     if torch is not None and AutoFeatureExtractor is not None and AutoModelForAudioClassification is not None:
@@ -480,7 +480,7 @@ class PerceptualValidator:
         return psychoacoustic_score, confidence
 
     def _prepare_ast_onnx_input(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Build [1, 1024, 128] log-mel tensor for AST ONNX model."""
+        """Erstellt [1, 1024, 128] log-mel tensor for AST ONNX model."""
         if librosa is None:
             raise RuntimeError("librosa not available for AST ONNX preprocessing")
         x = np.asarray(audio, dtype=np.float32)
@@ -760,7 +760,7 @@ class PerceptualValidator:
 
     def get_listening_test_queue(self, priority: str | None = None, limit: int = 10) -> list[ListeningTestRequest]:
         """
-        Get queue of pending listening test requests.
+        Gibt zurück: queue of pending listening test requests.
 
         Args:
             priority: Filter by priority ('high', 'medium', 'low')
@@ -820,7 +820,7 @@ class PerceptualValidator:
         logger.info("Listening test result submitted for session %s", session_id)
 
     def get_statistics(self) -> dict[str, Any]:
-        """Get validation statistics."""
+        """Gibt zurück: validation statistics."""
         return {
             "total_validations": self.validation_count,
             "listening_test_requests": len(self.listening_test_requests),

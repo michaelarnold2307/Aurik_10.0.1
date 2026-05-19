@@ -41,7 +41,7 @@ class DialogIntelligibilityEnhancer:
         mud_reduction_db: float = -2.0,
     ):
         """
-        Initialize Dialog Intelligibility Enhancer.
+        Initialisiert Dialog Intelligibility Enhancer.
 
         Args:
             presence_boost_db: Boost at 3-5 kHz (presence range)
@@ -58,7 +58,7 @@ class DialogIntelligibilityEnhancer:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict[str, Any]]:
         """
-        Apply dialog intelligibility enhancement.
+        Wendet Dialog-Verständlichkeitsverbesserung an.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -150,7 +150,7 @@ class DialogIntelligibilityEnhancer:
         self, signal: np.ndarray, sr: int, freq_range: tuple[float, float], gain_db: float
     ) -> np.ndarray:
         """
-        Apply gain to a specific frequency band.
+        Wendet an: gain to a specific frequency band.
 
         Process:
         1. Extract frequency band with bandpass filter
@@ -182,7 +182,7 @@ class DialogIntelligibilityEnhancer:
         self, signal: np.ndarray, sr: int, center_freq: float, q: float, gain_db: float
     ) -> np.ndarray:
         """
-        Apply notch filter (parametric EQ cut).
+        Wendet an: notch filter (parametric EQ cut).
 
         Args:
             signal: Input signal
@@ -208,7 +208,7 @@ class DialogIntelligibilityEnhancer:
 
     def _measure_clarity(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure speech clarity (energy in 2-6 kHz range).
+        Misst speech clarity (energy in 2-6 kHz range).
 
         Higher energy in this range = better intelligibility.
         """
@@ -234,7 +234,7 @@ def create_dialog_intelligibility_enhancer(
     sibilance_control_db: float = -2.0,
     mud_reduction_db: float = -2.0,
 ) -> DialogIntelligibilityEnhancer:
-    """Factory function to create DialogIntelligibilityEnhancer instance."""
+    """Factory-Funktion zum Erstellen einer DialogIntelligibilityEnhancer-Instanz."""
     return DialogIntelligibilityEnhancer(
         presence_boost_db=presence_boost_db,
         consonant_boost_db=consonant_boost_db,

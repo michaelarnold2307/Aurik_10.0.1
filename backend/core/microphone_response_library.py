@@ -12,11 +12,71 @@ Spec: 05_material_system.md §6.4a (v9.12.0)
 import json
 import logging
 import threading
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MicrophoneProfile:
+    """Historisches Mikrofon-Profil (§6.4a).
+
+    Attrs:
+        name:            Mikrofon-Name (z.B. "RCA 44-BX (1932)").
+        years_active:    Aktivitätszeitraum als (start, end) Tupel.
+        type:            Mikrofon-Typ: "ribbon", "condenser", "dynamic", "crystal".
+        freq_response_db: {Hz: dB} Frequenzgang — Referenz 1 kHz = 0 dB.
+        genres:          Typische Einsatzgebiete.
+        notes:           Freitext-Anmerkungen.
+        materials:       Kompatible Materialtypen (aus JSON).
+        pattern:         Richtcharakteristik (aus JSON, z.B. "bidirectional").
+        rolloff_hz:      -3 dB Rolloff-Frequenz in Hz.
+        profile_id:      Eindeutige ID (aus JSON).
+    """
+
+    name: str
+    years_active: tuple[int, int]
+    type: str
+    freq_response_db: dict[int, float]
+    genres: list[str]
+    notes: str = ""
+    # Erweiterte Felder aus JSON (nicht im Spec-Kern, aber für Scoring benötigt)
+    materials: list[str] = field(default_factory=list)
+    pattern: str = ""
+    rolloff_hz: float = 0.0
+    profile_id: str = ""
+
+
+def _dict_to_profile(d: dict) -> Optional["MicrophoneProfile"]:
+    """Wandelt ein JSON-Profil-Dict in ein MicrophoneProfile-Objekt."""
+    try:
+        era = d.get("era_decade", [1900, 1900])
+        years_active = (int(era[0]), int(era[1])) if len(era) >= 2 else (int(era[0]), int(era[0]))
+        freq_response_db: dict[int, float] = {}
+        for point in d.get("eq_curve", []):
+            hz = int(round(float(point["hz"])))
+            db = float(point["db"])
+            freq_response_db[hz] = db
+        return MicrophoneProfile(
+            name=str(d.get("name", "")),
+            years_active=years_active,
+            type=str(d.get("type", "dynamic")),
+            freq_response_db=freq_response_db,
+            genres=[str(g) for g in d.get("genres", [])],
+            notes=str(d.get("notes", "")),
+            materials=[str(m) for m in d.get("materials", [])],
+            pattern=str(d.get("pattern", "")),
+            rolloff_hz=float(d.get("rolloff_hz", 0.0)),
+            profile_id=str(d.get("id", "")),
+        )
+    except Exception as exc:
+        logger.warning("MicrophoneProfile: Konvertierung fehlgeschlagen (%s): %s", d.get("id", "?"), exc)
+        return None
+
 
 _instance: "MicrophoneResponseLibrary | None" = None
 _lock = threading.Lock()
@@ -38,14 +98,16 @@ class MicrophoneResponseLibrary:
     """Lädt und liefert historische Mikrofon-EQ-Profile (§6.4a)."""
 
     def __init__(self) -> None:
-        self._profiles: list[dict] = []
+        self._profiles: list[MicrophoneProfile] = []
         self._load_profiles()
 
     def _load_profiles(self) -> None:
         try:
             with open(_PROFILES_PATH, encoding="utf-8") as f:
                 data = json.load(f)
-            self._profiles = data.get("profiles", [])
+            raw_profiles = data.get("profiles", [])
+            converted = [_dict_to_profile(p) for p in raw_profiles]
+            self._profiles = [p for p in converted if p is not None]
             logger.info("MicrophoneResponseLibrary loaded %d profiles", len(self._profiles))
         except Exception as exc:
             logger.warning("MicrophoneResponseLibrary: profiles not loaded (%s)", exc)
@@ -60,7 +122,7 @@ class MicrophoneResponseLibrary:
         era_decade: int,
         genre_label: str,
         material_type: str,
-    ) -> dict | None:
+    ) -> "MicrophoneProfile | None":
         """Gibt das am besten passende Mikrofon-Profil zurück.
 
         Scoring:
@@ -74,29 +136,26 @@ class MicrophoneResponseLibrary:
             material_type: Material (z.B. "shellac", "vinyl", "reel_tape").
 
         Returns:
-            Bestes Profil-Dict oder None wenn keine Profile geladen.
+            Bestes MicrophoneProfile oder None wenn keine Profile geladen.
         """
         if not self._profiles:
             return None
 
-        best_profile = None
+        best_profile: MicrophoneProfile | None = None
         best_score = -1
 
         for profile in self._profiles:
             score = 0
 
-            era_range = profile.get("era_decade", [])
-            if era_range and len(era_range) >= 2:
-                era_min = min(era_range)
-                era_max = max(era_range)
-                if era_min <= era_decade <= era_max + 10:
-                    score += 3
+            era_min, era_max = profile.years_active
+            if era_min <= era_decade <= era_max + 10:
+                score += 3
 
-            genres = [g.lower() for g in profile.get("genres", [])]
+            genres = [g.lower() for g in profile.genres]
             if genre_label.lower() in genres:
                 score += 2
 
-            materials = [m.lower() for m in profile.get("materials", [])]
+            materials = [m.lower() for m in profile.materials]
             if material_type.lower() in materials:
                 score += 1
 
@@ -133,20 +192,18 @@ class MicrophoneResponseLibrary:
         if profile is None:
             return None
 
-        eq_curve = profile.get("eq_curve", [])
-        if not eq_curve:
+        freq_response_db = profile.freq_response_db
+        if not freq_response_db:
             return None
 
         nyq = target_sr / 2.0
         freqs = []
         db_values = []
 
-        for point in eq_curve:
-            hz = float(point["hz"])
-            db = float(point["db"])
-            if hz <= nyq:
-                freqs.append(hz)
-                db_values.append(db)
+        for hz, db in sorted(freq_response_db.items()):
+            if float(hz) <= nyq:
+                freqs.append(float(hz))
+                db_values.append(float(db))
 
         if len(freqs) < 2:
             return None

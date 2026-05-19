@@ -37,7 +37,7 @@ class AdaptiveMCRA:
         self.noise_floor = noise_floor
 
     def estimate_noise(self, power_spectrogram: np.ndarray) -> np.ndarray:
-        """Estimate noise PSD adaptively with MCRA (Cohen 2002).
+        """Schätzt noise PSD adaptively with MCRA (Cohen 2002).
 
         Uses smoothed power tracking + minimum statistics with SNR-adaptive
         beta parameter for more conservative tracking in noisy environments.

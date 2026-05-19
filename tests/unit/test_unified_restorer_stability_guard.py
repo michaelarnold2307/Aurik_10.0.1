@@ -103,6 +103,78 @@ def test_non_phase03_does_not_get_tdp_stem_aware_nr_injected():
     assert "tdp_stem_aware_nr" not in phase.last_kwargs
 
 
+def test_wow_flutter_fingerprint_boosts_time_pitch_not_dynamics_eq():
+    neutral = UnifiedRestorerV3._build_song_calibration_profile(
+        material_type=MaterialType.TAPE,
+        mode=QualityMode.BALANCED,
+        restorability_score=60.0,
+        input_snr_db=30.0,
+        max_defect_severity=0.40,
+        pipeline_confidence=0.80,
+        spectral_fingerprint={"wow_flutter_index": 0.0},
+    )
+    wow_heavy = UnifiedRestorerV3._build_song_calibration_profile(
+        material_type=MaterialType.TAPE,
+        mode=QualityMode.BALANCED,
+        restorability_score=60.0,
+        input_snr_db=30.0,
+        max_defect_severity=0.40,
+        pipeline_confidence=0.80,
+        spectral_fingerprint={"wow_flutter_index": 2.0},
+    )
+
+    neutral_fam = neutral["family_scalars"]
+    wow_fam = wow_heavy["family_scalars"]
+    assert float(wow_fam["time_pitch_transport"]) > float(neutral_fam["time_pitch_transport"])
+    assert float(wow_fam["dynamics_eq"]) == float(neutral_fam["dynamics_eq"])
+
+
+def test_phase12_and_phase31_use_time_pitch_family_scalar():
+    profile = {
+        "global_scalar": 1.0,
+        "family_scalars": {
+            "time_pitch_transport": 1.40,
+            "dynamics_eq": 0.60,
+            "general": 1.0,
+        },
+    }
+
+    assert UnifiedRestorerV3._get_phase_calibration_scalar("phase_12_wow_flutter_fix", profile) == 1.40
+    assert UnifiedRestorerV3._get_phase_calibration_scalar("phase_31_speed_pitch_correction", profile) == 1.40
+    assert UnifiedRestorerV3._get_phase_calibration_scalar("phase_04_eq_correction", profile) == 0.60
+    assert UnifiedRestorerV3._phase_family_from_phase_id("phase_12_wow_flutter_fix") == "time_pitch_transport"
+    assert UnifiedRestorerV3._phase_family_from_phase_id("phase_31_speed_pitch_correction") == "time_pitch_transport"
+
+
+def test_temporal_defect_autosetup_boosts_time_pitch_family():
+    profile = {
+        "global_scalar": 1.0,
+        "family_scalars": {
+            "denoise": 1.0,
+            "reverb": 1.0,
+            "reconstruction": 1.0,
+            "time_pitch_transport": 1.0,
+            "transient": 1.0,
+            "general": 1.0,
+        },
+        "material": "tape",
+        "restorability_tier": "fair",
+    }
+
+    out = UnifiedRestorerV3._apply_song_autosetup_policy(
+        profile,
+        defect_scores={"wow": 0.80, "flutter": 0.20},
+        transfer_chain=["tape"],
+        max_defect_severity=0.80,
+    )
+
+    fam = out["family_scalars"]
+    assert float(fam["time_pitch_transport"]) > 1.0
+    assert float(fam["transient"]) < 1.0
+    assert float(fam["reconstruction"]) < float(fam["time_pitch_transport"])
+    assert out["strict_conflict_policy"]["rollback_decay_per_family"]["time_pitch_transport"] == 0.93
+
+
 def test_phase_calibration_scalar_has_interior_pullback():
     profile_low = {"global_scalar": 0.10, "family_scalars": {"denoise": 0.10, "general": 0.10}}
     s_low = UnifiedRestorerV3._get_phase_calibration_scalar("phase_03_denoise", profile_low)
@@ -121,6 +193,7 @@ def test_mid_calibration_production_nachbesserung_deboosts_on_low_artifact_floor
             "reverb": 1.0,
             "reconstruction": 1.0,
             "dynamics_eq": 1.0,
+            "time_pitch_transport": 1.0,
             "transient": 1.0,
             "vocal": 1.0,
             "instrument": 1.0,
@@ -181,6 +254,7 @@ def test_continuous_joy_refinement_writes_events_and_adjusts():
     assert out is not None
     fam = out["family_scalars"]
     assert float(fam["reconstruction"]) < 1.0
+    assert float(fam["time_pitch_transport"]) < 1.0
     assert float(fam["transient"]) < 1.0
     events = out.get("_joy_closed_loop_events", [])
     assert isinstance(events, list)

@@ -868,7 +868,7 @@ def get_mert_plugin() -> MertPlugin:
 
 
 def get_loaded_mert_plugin() -> MertPlugin | None:
-    """Returns the already loaded singleton without triggering model/plugin initialization.
+    """Gibt the already loaded singleton without triggering model/plugin initialization zurück.
 
     This is used by optional hybrid metrics that may use MERT signals only if
     MERT is already active in the current process. It must not cause a lazy-load

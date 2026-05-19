@@ -137,7 +137,7 @@ class PestoPitchEstimator:
         self._n_fft_bins = n_fft_bins
 
     def _stft_magnitude(self, frame: np.ndarray) -> np.ndarray:
-        """Return FFT magnitude for one zero-padded frame."""
+        """Gibt FFT magnitude for one zero-padded frame zurück."""
         win = np.hanning(len(frame)).astype(np.float64)
         spec = np.abs(np.fft.rfft(frame * win, n=_WINDOW_SAMPLES))
         return spec.astype(np.float32)
@@ -201,7 +201,7 @@ class PestoPitchEstimator:
         *,
         voiced_threshold: float = 0.15,
     ) -> PestoResult:
-        """Estimate F0 trajectory via PESTO-inspired CQT salience.
+        """Schätzt F0 trajectory via PESTO-inspired CQT salience.
 
         Args:
             audio:            Mono float32/64 audio, any length ≥ 1 sample.
@@ -266,7 +266,7 @@ _lock = threading.Lock()
 
 
 def get_pesto_estimator() -> PestoPitchEstimator:
-    """Return shared PestoPitchEstimator instance (thread-safe lazy init)."""
+    """Gibt shared PestoPitchEstimator instance (thread-safe lazy init) zurück."""
     global _instance
     if _instance is None:
         with _lock:

@@ -207,7 +207,7 @@ class AutonomousRestorationEngine:
         audit: list[dict[str, Any]] = []
 
         def _p(pct: int, msg: str) -> None:
-            """Emit progress to the caller — pct is 0-100 within ARE's own scale."""
+            """Emittiert progress to the caller — pct is 0-100 within ARE's own scale."""
             if progress_callback is not None:
                 try:
                     progress_callback(pct, msg, time.perf_counter() - start_time)
@@ -758,7 +758,7 @@ class AutonomousRestorationEngine:
         progress_callback=None,
     ) -> tuple[np.ndarray, str, dict[str, float]]:
         """
-        Returns preprocessed audio for the downstream UV3 full pass.
+        Gibt preprocessed audio for the downstream UV3 full pass zurück.
 
         Since v9.10.57 the full UV3 pass is delegated to RestaurierDenker.
         Since v9.10.72 the variant evaluation on 10s excerpts is removed

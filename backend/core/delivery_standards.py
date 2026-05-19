@@ -150,7 +150,7 @@ class StandardConfig:
     """Dynamic Range Compression ratio (wenn enabled)."""
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
+        """Konvertiert to dictionary."""
         return asdict(self)
 
 
@@ -284,12 +284,12 @@ class LoudnessAnalyzer:
     """
 
     def __init__(self):
-        """Initialize LoudnessAnalyzer."""
+        """Initialisiert LoudnessAnalyzer."""
         self.block_size = 0.400  # 400ms blocks (ITU-R BS.1770-4)
 
     def analyze(self, audio: np.ndarray, sample_rate: int) -> LoudnessResult:
         """
-        Analyze loudness metrics per ITU-R BS.1770-4.
+        Analysiert Lautstärke-Metriken gemäß ITU-R BS.1770-4.
 
         Args:
             audio: Audio array (mono or stereo)
@@ -364,7 +364,7 @@ class LoudnessAnalyzer:
         self, audio: np.ndarray, sample_rate: int, block_size_sec: float = 3.0
     ) -> np.ndarray:
         """
-        Compute short-term loudness (3s blocks per ITU-R BS.1770-4).
+        Berechnet short-term loudness (3s blocks per ITU-R BS.1770-4).
 
         Args:
             audio: Audio array (N, channels)
@@ -412,7 +412,7 @@ class TruePeakLimiter:
 
     def __init__(self, threshold_dbtp: float = -1.0, lookahead_ms: float = 5.0, release_ms: float = 100.0):
         """
-        Initialize True Peak Limiter.
+        Initialisiert True Peak Limiter.
 
         Args:
             threshold_dbtp: Maximum True Peak in dBTP
@@ -426,7 +426,7 @@ class TruePeakLimiter:
 
     def limit(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Apply True Peak limiting.
+        Wendet an: True Peak limiting.
 
         Args:
             audio: Input audio
@@ -494,7 +494,7 @@ class BWFMetadataWriter:
         coding_history: str = "",
     ) -> bool:
         """
-        Write BWF metadata to WAV file.
+        Schreibt BWF metadata to WAV file.
 
         Args:
             audio_file_path: Path to WAV file
@@ -589,7 +589,7 @@ _delivery_manager_lock = threading.Lock()
 
 
 def get_delivery_manager() -> "DeliveryStandardsManager":
-    """Get or create DeliveryStandardsManager singleton.
+    """Gibt zurück: or create DeliveryStandardsManager singleton.
 
     Returns:
         DeliveryStandardsManager singleton instance
@@ -618,7 +618,7 @@ class DeliveryStandardsManager:
     """
 
     def __init__(self) -> None:
-        """Initialize DeliveryStandardsManager."""
+        """Initialisiert DeliveryStandardsManager."""
         self.loudness_analyzer = LoudnessAnalyzer()
         logger.info("DeliveryStandardsManager initialized")
 
@@ -748,7 +748,7 @@ class DeliveryStandardsManager:
         self, audio: np.ndarray, sample_rate: int, ratio: float = 2.0, threshold_lufs: float = -20.0
     ) -> np.ndarray:
         """
-        Apply Dynamic Range Compression.
+        Wendet an: Dynamic Range Compression.
 
         Simplified DRC for competitive loudness.
 
@@ -794,14 +794,14 @@ class DeliveryStandardsManager:
 
 
 def get_standard_config(standard: DeliveryStandard) -> StandardConfig:
-    """Get configuration for a delivery standard."""
+    """Gibt zurück: configuration for a delivery standard."""
     if standard not in STANDARD_CONFIGS:
         raise ValueError(f"Unknown standard: {standard}")
     return STANDARD_CONFIGS[standard]
 
 
 def list_available_standards() -> dict[str, str]:
-    """List all available delivery standards."""
+    """Listet auf: all available delivery standards."""
     return {standard.value: config.description for standard, config in STANDARD_CONFIGS.items()}
 
 

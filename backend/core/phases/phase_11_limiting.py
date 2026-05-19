@@ -130,7 +130,7 @@ class LimitingPhase(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive limiter lookahead profile."""
+        """Berechnet adaptive limiter lookahead profile."""
         _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
         _qm = str(quality_mode or "balanced").lower().replace("-", "_")
         _rest = float(np.clip(restorability_score, 0.0, 100.0))

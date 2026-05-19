@@ -108,7 +108,7 @@ def _omlsa_denoise(
     reduction_db: float = 18.0,
     lambda_d: float = 0.85,
 ) -> tuple[np.ndarray, float]:
-    """Apply OMLSA-style spectral noise reduction (Cohen 2003 / IMCRA).
+    """Wendet an: OMLSA-style spectral noise reduction (Cohen 2003 / IMCRA).
 
     Uses sliding-minimum noise estimation and a Wiener-like gain function.
 
@@ -171,7 +171,7 @@ def _omlsa_denoise(
 
 
 def _estimate_snr(audio: np.ndarray, n_fft: int = 512) -> float:
-    """Estimate SNR in dB via spectral flatness (Wiener entropy proxy)."""
+    """Schätzt SNR in dB via spectral flatness (Wiener entropy proxy)."""
     power = np.abs(np.fft.rfft(audio, n=n_fft)) ** 2 + 1e-12
     log_geo_mean = float(np.mean(np.log(power)))
     arith_mean = float(np.mean(power))

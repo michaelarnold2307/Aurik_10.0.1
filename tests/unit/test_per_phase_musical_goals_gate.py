@@ -2300,19 +2300,19 @@ class TestRestorativeBaselineCapping:
         assert _CANONICAL_THRESHOLDS_RESTORATION["authentizitaet"] == pytest.approx(0.88, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["tonal_center"] == pytest.approx(0.95, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["timbre_authentizitaet"] == pytest.approx(0.87, abs=1e-9)
-        assert _CANONICAL_THRESHOLDS_RESTORATION["artikulation"] == pytest.approx(0.85, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["artikulation"] == pytest.approx(0.88, abs=1e-9)
 
     def test_112_canonical_thresholds_match_spec_p3_p5_restoration(self):
         """P3–P5 restoration thresholds must match §9.10.77 Pareto-Differenzierung."""
         from backend.core.per_phase_musical_goals_gate import _CANONICAL_THRESHOLDS_RESTORATION
 
-        assert _CANONICAL_THRESHOLDS_RESTORATION["emotionalitaet"] == pytest.approx(0.82, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["emotionalitaet"] == pytest.approx(0.84, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["micro_dynamics"] == pytest.approx(0.88, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["groove"] == pytest.approx(0.83, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["transparenz"] == pytest.approx(0.82, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["waerme"] == pytest.approx(0.75, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["bass_kraft"] == pytest.approx(0.78, abs=1e-9)
-        assert _CANONICAL_THRESHOLDS_RESTORATION["separation_fidelity"] == pytest.approx(0.78, abs=1e-9)
+        assert _CANONICAL_THRESHOLDS_RESTORATION["separation_fidelity"] == pytest.approx(0.80, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["brillanz"] == pytest.approx(0.78, abs=1e-9)
         assert _CANONICAL_THRESHOLDS_RESTORATION["spatial_depth"] == pytest.approx(0.70, abs=1e-9)
 

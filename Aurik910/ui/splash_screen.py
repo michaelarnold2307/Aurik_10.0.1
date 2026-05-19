@@ -96,7 +96,7 @@ class AurikSplashScreen(QWidget):
     # ── Public API ────────────────────────────────────────────────────────────
 
     def set_status(self, text: str) -> None:
-        """Update the loading status line and repaint immediately."""
+        """Aktualisiert the loading status line and repaint immediately."""
         self._status = text
         self.repaint()
 

@@ -126,3 +126,125 @@ class TestParallelClass:
         from backend.core.phase_dag import get_parallel_class
 
         assert get_parallel_class("phase_99_unknown") is None
+
+
+class TestSortPhasesByDag:
+    """Tests für sort_phases_by_dag() — topologischer Sort nach HARD_BEFORE-Constraints."""
+
+    def test_import_ok(self):
+        from backend.core.phase_dag import sort_phases_by_dag
+
+        assert callable(sort_phases_by_dag)
+
+    def test_empty_list(self):
+        from backend.core.phase_dag import sort_phases_by_dag
+
+        assert sort_phases_by_dag([]) == []
+
+    def test_single_phase(self):
+        from backend.core.phase_dag import sort_phases_by_dag
+
+        result = sort_phases_by_dag(["phase_07_harmonic_restoration"])
+        assert result == ["phase_07_harmonic_restoration"]
+
+    def test_correct_order_preserved(self):
+        """Bereits korrekte Reihenfolge bleibt erhalten."""
+        from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order
+
+        phases = [
+            "phase_01_click_removal",
+            "phase_03_denoise",
+            "phase_06_frequency_restoration",
+            "phase_07_harmonic_restoration",
+        ]
+        result = sort_phases_by_dag(phases)
+        assert validate_phase_order(result) == [], f"Verletzungen nach Sort: {validate_phase_order(result)}"
+
+    def test_wrong_order_fixed(self):
+        """phase_07 vor phase_03 → Sort stellt wissenschaftliche Reihenfolge her."""
+        from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order
+
+        wrong_order = [
+            "phase_07_harmonic_restoration",
+            "phase_03_denoise",
+        ]
+        result = sort_phases_by_dag(wrong_order)
+        assert validate_phase_order(result) == [], f"Verletzungen nach Sort: {validate_phase_order(result)}"
+        # phase_03 muss vor phase_07 sein
+        idx_03 = next(i for i, p in enumerate(result) if "phase_03" in p)
+        idx_07 = next(i for i, p in enumerate(result) if "phase_07" in p)
+        assert idx_03 < idx_07, "phase_03 muss vor phase_07 kommen"
+
+    def test_phase_24_before_phase_06_hard_before(self):
+        """Kritische HARD_BEFORE-Verletzung: phase_24 muss VOR phase_06 laufen.
+        Numerischer Sort würde 06 vor 24 setzen — DAG-Sort korrigiert das.
+        """
+        from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order
+
+        # Numerischer Sort würde phase_06 (6) vor phase_24 (24) setzen — FALSCH
+        phases = [
+            "phase_06_frequency_restoration",
+            "phase_24_dropout_repair",
+        ]
+        result = sort_phases_by_dag(phases)
+        violations = validate_phase_order(result)
+        assert violations == [], f"HARD_BEFORE phase_24→phase_06 verletzt: {violations}"
+        idx_24 = next(i for i, p in enumerate(result) if "phase_24" in p)
+        idx_06 = next(i for i, p in enumerate(result) if "phase_06" in p)
+        assert idx_24 < idx_06, "phase_24_dropout_repair muss VOR phase_06 laufen (Dropout-Reparatur vor BW-Extension)"
+
+    def test_phase_12_before_phase_25_respected(self):
+        """phase_12 (Wow/Flutter) muss vor phase_25 (Azimuth) laufen."""
+        from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order
+
+        phases = ["phase_25_azimuth_correction", "phase_12_wow_flutter_fix"]
+        result = sort_phases_by_dag(phases)
+        assert validate_phase_order(result) == []
+        idx_12 = next(i for i, p in enumerate(result) if "phase_12" in p)
+        idx_25 = next(i for i, p in enumerate(result) if "phase_25" in p)
+        assert idx_12 < idx_25
+
+    def test_full_chain_complex(self):
+        """Komplexe Kette aus allen Stufen — muss alle HARD_BEFORE-Constraints erfüllen."""
+        from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order
+
+        # Absichtlich in falscher Reihenfolge übergeben
+        phases = [
+            "phase_07_harmonic_restoration",
+            "phase_29_tape_hiss_reduction",
+            "phase_12_wow_flutter_fix",
+            "phase_06_frequency_restoration",
+            "phase_24_dropout_repair",
+            "phase_09_crackle_removal",
+            "phase_03_denoise",
+            "phase_01_click_removal",
+            "phase_25_azimuth_correction",
+        ]
+        result = sort_phases_by_dag(phases)
+        violations = validate_phase_order(result)
+        assert violations == [], f"Verletzungen nach Sort: {violations}"
+
+    def test_preserves_all_phases(self):
+        """Kein Phase darf verloren gehen."""
+        from backend.core.phase_dag import sort_phases_by_dag
+
+        phases = [
+            "phase_07_harmonic_restoration",
+            "phase_03_denoise",
+            "phase_06_frequency_restoration",
+            "phase_29_tape_hiss_reduction",
+            "phase_01_click_removal",
+        ]
+        result = sort_phases_by_dag(phases)
+        assert set(result) == set(phases)
+        assert len(result) == len(phases)
+
+    def test_numeric_tiebreaker_without_constraints(self):
+        """Phasen ohne gegenseitige Constraints werden numerisch sortiert."""
+        from backend.core.phase_dag import sort_phases_by_dag
+
+        # phase_20, phase_16, phase_04 haben keine gegenseitigen HARD_BEFORE-Constraints
+        phases = ["phase_20_reverb_reduction", "phase_04_eq_correction", "phase_16_final_eq"]
+        result = sort_phases_by_dag(phases)
+        nums = [int(p.split("_")[1]) for p in result]
+        assert nums == sorted(nums), f"Numerischer Tiebreaker verletzt: {result}"

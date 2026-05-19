@@ -24,7 +24,7 @@ class IntegratedFeedback:
 
 
 class FeedbackIntegrator:
-    """Blends expert and community feedback aggregates.
+    """Mischt expert and community feedback aggregates.
 
     Parameters
     ----------
@@ -47,7 +47,7 @@ class FeedbackIntegrator:
         self.expert_weight = expert_weight
 
     def integrate(self) -> IntegratedFeedback:
-        """Return a weighted blend of expert and community aggregates."""
+        """Gibt a weighted blend of expert and community aggregates zurück."""
         expert_agg = self.expert_system.aggregate()
         community_agg = self.community_platform.aggregate()
 
@@ -73,7 +73,7 @@ def get_feedback_integrator(
     expert_system=None,
     community_platform=None,
 ) -> FeedbackIntegrator:
-    """Return the process-wide singleton ``FeedbackIntegrator`` instance."""
+    """Gibt the process-wide singleton ``FeedbackIntegrator`` instance zurück."""
     global _feedback_integrator_instance
     if _feedback_integrator_instance is None:
         with _feedback_integrator_lock:

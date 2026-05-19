@@ -149,7 +149,7 @@ _PTYPE_TO_CLASS: dict[str, str] = {
 
 @dataclass
 class PhonemeTimelineSegment:
-    """A single phoneme segment with timing, class, and confidence.
+    """single phoneme segment with timing, class, and confidence.
 
     Attributes:
         start_s:       Start time in seconds.
@@ -189,7 +189,7 @@ class PhonemeTimeline:
     # ── Query methods ─────────────────────────────────────────────────────
 
     def segments_in_range(self, start_s: float, end_s: float) -> list[PhonemeTimelineSegment]:
-        """Return all segments that overlap with [start_s, end_s].
+        """Gibt all segments that overlap with [start_s, end_s] zurück.
 
         Args:
             start_s: Window start in seconds.
@@ -203,7 +203,7 @@ class PhonemeTimeline:
         return [s for s in self.segments if s.end_s > start_s and s.start_s < end_s]
 
     def sibilant_segments(self) -> list[PhonemeTimelineSegment]:
-        """Return segments representing sibilant or fricative sounds.
+        """Gibt segments representing sibilant or fricative sounds zurück.
 
         Used by de-esser phases (19 + 43) for targeted processing.
 
@@ -215,7 +215,7 @@ class PhonemeTimeline:
         return [s for s in self.segments if s.phoneme_class in sibilant_classes]
 
     def stressed_vowel_segments(self) -> list[PhonemeTimelineSegment]:
-        """Return vowel segments with lexical stress.
+        """Gibt vowel segments with lexical stress zurück.
 
         Used by MDEM and phase_56 for formant-guided processing.
 
@@ -225,7 +225,7 @@ class PhonemeTimeline:
         return [s for s in self.segments if s.phoneme_class == "vowel_stressed"]
 
     def formant_target_for_range(self, start_s: float, end_s: float) -> tuple[float, float] | None:
-        """Return (F1_hz, F2_hz) for the dominant vowel phoneme in [start_s, end_s].
+        """Gibt (F1_hz, F2_hz) for the dominant vowel phoneme in [start_s, end_s] zurück.
 
         Looks up the language-specific formant reference table for the most
         confident vowel segment in the range.
@@ -265,7 +265,7 @@ class PhonemeTimeline:
         )
 
     def sibilant_band_hz(self) -> tuple[float, float]:
-        """Return (f_low_hz, f_high_hz) of expected sibilant energy for detected language.
+        """Gibt (f_low_hz, f_high_hz) of expected sibilant energy for detected language zurück.
 
         Returns:
             Frequency band tuple from _SIBILANT_BAND_MAP, defaulting to (4000, 8000).
@@ -276,7 +276,7 @@ class PhonemeTimeline:
 
     @classmethod
     def build_empty(cls, duration_s: float = 0.0) -> PhonemeTimeline:
-        """Create an empty PhonemeTimeline with safe defaults.
+        """Erstellt an empty PhonemeTimeline with safe defaults.
 
         Args:
             duration_s: Audio duration in seconds (NaN-safe: clamps to 0.0).
@@ -299,7 +299,7 @@ class PhonemeTimeline:
         result: object,  # LyricsTranscriptionResult
         language: str = "unknown",
     ) -> PhonemeTimeline:
-        """Build PhonemeTimeline from a LyricsTranscriptionResult.
+        """Erstellt PhonemeTimeline from a LyricsTranscriptionResult.
 
         Maps WordTimestamp.phoneme_type → PhonemeTimelineSegment.phoneme_class:
             fricative_stressed  → "fricative_stressed"
@@ -384,7 +384,7 @@ class PhonemeTimeline:
 
 
 def _detect_language(mono: np.ndarray, sr: int = 16_000) -> tuple[str, float]:
-    """Detect spoken language from audio via LPC formant analysis.
+    """Erkennt spoken language from audio via LPC formant analysis.
 
     Algorithm (DSP-only, SR-agnostic, no ML model):
         1. Limit to first 30 s of audio; no assert sr==48000 (analysis-agnostic).
@@ -520,7 +520,7 @@ class PhonemeTimelineBuilder:
     """
 
     def detect_language(self, mono: np.ndarray, sr: int = 16_000) -> tuple[str, float]:
-        """Detect language via LPC formant analysis (SR-agnostic).
+        """Erkennt language via LPC formant analysis (SR-agnostic).
 
         Delegates to module-level _detect_language().
 
@@ -534,11 +534,11 @@ class PhonemeTimelineBuilder:
         return _detect_language(mono, sr)
 
     def build_empty(self, duration_s: float = 0.0) -> PhonemeTimeline:
-        """Create empty PhonemeTimeline."""
+        """Erstellt empty PhonemeTimeline."""
         return PhonemeTimeline.build_empty(duration_s)
 
     def build_from_transcription(self, result: object, language: str = "unknown") -> PhonemeTimeline:
-        """Build PhonemeTimeline from LyricsTranscriptionResult."""
+        """Erstellt PhonemeTimeline from LyricsTranscriptionResult."""
         return PhonemeTimeline.build_from_transcription(result, language)
 
 
@@ -547,7 +547,7 @@ _builder_lock = threading.Lock()
 
 
 def get_phoneme_timeline_builder() -> PhonemeTimelineBuilder:
-    """Return thread-safe Singleton PhonemeTimelineBuilder (§3.2 DCL).
+    """Gibt thread-safe Singleton PhonemeTimelineBuilder (§3.2 DCL) zurück.
 
     Returns:
         Module-level PhonemeTimelineBuilder instance.

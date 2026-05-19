@@ -2,8 +2,8 @@
 VocalQualityIndex (VQI) — §2.35c [RELEASE_MUST]
 ================================================
 
-Gesangs-Gesamtqualitäts-Gate. Aggregiert 5 orthogonale Vokal-Metriken zu einem
-einzelnen Score [0, 1]. Aktivierung: PANNs Singing confidence >= 0.35.
+Vocal overall quality gate. Aggregates 5 orthogonal vocal metrics into a
+single score [0, 1]. Activated when PANNs singing confidence >= 0.35.
 
 Spec: 01_musical_goals.md §2.35c (v9.12.0)
 """
@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
-# Schwellwerte (§2.35c)
+# Thresholds (§2.35c)
 # ---------------------------------------------------------------------------
 VQI_WORLD_CLASS = 0.88
 VQI_PROFESSIONAL = 0.82
-VQI_THRESHOLD = 0.72  # Recovery-Kaskade Vinyl-Default (§0p)
+VQI_THRESHOLD = 0.72  # Recovery-cascade vinyl default (§0p)
 
 # Material-adaptive VQI recovery-cascade floors (§0p)
 # Shellac/Wax: 0.62 — physical BW/SNR limits; Vinyl: 0.72; Tape: 0.72; CD: 0.82
@@ -49,14 +49,14 @@ _VQI_MATERIAL_FLOOR: dict[str, float] = {
 
 
 def get_vqi_material_floor(material_type: str, is_studio_2026: bool = False) -> float:
-    """Return the material-adaptive VQI recovery-cascade threshold (§0p).
+    """Gibt the material-adaptive VQI recovery-cascade threshold (§0p) zurück.
 
     Args:
         material_type: e.g. "shellac", "vinyl", "cd_digital".
-        is_studio_2026: Studio-2026-Modus → festes Ziel 0.87 (§0p).
+        is_studio_2026: Studio-2026 mode → fixed target 0.87 (§0p).
 
     Returns:
-        float: Recovery-Schwellwert ∈ [0.62, 0.87].
+        float: Recovery threshold ∈ [0.62, 0.87].
     """
     if is_studio_2026:
         return 0.87  # §0p: Studio 2026 fixed recovery goal
@@ -64,16 +64,58 @@ def get_vqi_material_floor(material_type: str, is_studio_2026: bool = False) -> 
     return _VQI_MATERIAL_FLOOR.get(mat, VQI_THRESHOLD)  # default: vinyl 0.72
 
 
-# Gewichtungen (weighted sum aus §2.35c Spec)
+# Default weights (weighted sum aus §2.35c Spec) — sums to exactly 1.0
 _W_SINGER_ID = 0.30
 _W_FORMANT = 0.25
 _W_ARTICULATION = 0.20
 _W_PROXIMITY = 0.15
 _W_SIBILANCE = 0.10
 
+# Genre-specific VQI weight profiles (§0p + §2.35c).
+# Rationale: different vocal genres define "quality" differently.
+#   jazz/blues: identity IS the performance (rough texture intentional) → high singer_id
+#   opera:      formant precision is paramount (classical technique) → high formant
+#   pop/rock:   articulation + sibilance critical (modern clarity) → high articulation
+#   folk/country: natural voice character, less formant constraint → higher singer_id
+#   soul/gospel: warmth & proximity matter → proximity elevated
+# All rows sum to 1.0. Unknown genre → default weights.
+# fmt: off  # column layout: (singer_id, formant, articulation, proximity, sibilance)
+_VQI_GENRE_WEIGHTS: dict[str, tuple[float, float, float, float, float]] = {
+    "jazz": (0.40, 0.20, 0.15, 0.15, 0.10),
+    "blues": (0.40, 0.20, 0.15, 0.15, 0.10),
+    "jazz_vocal": (0.40, 0.20, 0.15, 0.15, 0.10),
+    "opera": (0.25, 0.40, 0.15, 0.15, 0.05),
+    "klassik": (0.25, 0.40, 0.15, 0.15, 0.05),
+    "classical": (0.25, 0.40, 0.15, 0.15, 0.05),
+    "oper": (0.25, 0.40, 0.15, 0.15, 0.05),
+    "pop": (0.25, 0.20, 0.25, 0.15, 0.15),
+    "rock": (0.25, 0.20, 0.25, 0.15, 0.15),
+    "pop_rock": (0.25, 0.20, 0.25, 0.15, 0.15),
+    "folk": (0.35, 0.20, 0.20, 0.15, 0.10),
+    "country": (0.35, 0.20, 0.20, 0.15, 0.10),
+    "singer_songwriter": (0.35, 0.20, 0.20, 0.15, 0.10),
+    "soul": (0.30, 0.20, 0.20, 0.25, 0.05),
+    "gospel": (0.30, 0.20, 0.20, 0.25, 0.05),
+    "r_b": (0.30, 0.20, 0.20, 0.25, 0.05),
+    "schlager": (0.30, 0.25, 0.20, 0.15, 0.10),
+}
+# fmt: on
+
+
+def _get_vqi_weights(genre: str | None) -> tuple[float, float, float, float, float]:
+    """Gibt (w_singer_id, w_formant, w_articulation, w_proximity, w_sibilance) for genre zurück.
+
+    Falls back to module-level defaults for unknown/None genre.
+    All returned tuples sum to 1.0 within float precision.
+    """
+    if not genre:
+        return (_W_SINGER_ID, _W_FORMANT, _W_ARTICULATION, _W_PROXIMITY, _W_SIBILANCE)
+    key = str(genre).strip().lower().replace(" ", "_").replace("-", "_").replace("&", "")
+    return _VQI_GENRE_WEIGHTS.get(key, (_W_SINGER_ID, _W_FORMANT, _W_ARTICULATION, _W_PROXIMITY, _W_SIBILANCE))
+
 
 # ---------------------------------------------------------------------------
-# Hilfsfunktionen
+# Helpers
 # ---------------------------------------------------------------------------
 
 
@@ -92,7 +134,7 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
 
 
 def _safe_cosine(a: np.ndarray, b: np.ndarray) -> float:
-    """NaN-safe cosine similarity."""
+    """NaN-safe cosine similarity between two vectors."""
     a = a.astype(np.float64)
     b = b.astype(np.float64)
     denom = np.linalg.norm(a) * np.linalg.norm(b) + 1e-12
@@ -100,7 +142,7 @@ def _safe_cosine(a: np.ndarray, b: np.ndarray) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Komponente 1 — Singer-Identity-Cosine (DSP-Proxy ohne Resemblyzer)
+# Component 1 — Singer Identity Cosine (DSP proxy without Resemblyzer)
 # ---------------------------------------------------------------------------
 
 
@@ -109,10 +151,10 @@ def _compute_singer_identity_dsp(
     vocal_post: np.ndarray,
     sr: int,
 ) -> float:
-    """DSP-Proxy für Singer-Identity: MFCC-Korrelation + Spectral-Centroid-Korrelation.
+    """DSP proxy for singer identity: MFCC correlation + spectral-centroid correlation.
 
-    Liefert approx. Cosinus-Ähnlichkeit [0, 1]. Wird verwendet wenn Resemblyzer
-    nicht verfügbar ist (§2.35c DSP-Fallback).
+    Returns approximate cosine similarity [0, 1]. Used when Resemblyzer is
+    not available (§2.35c DSP fallback).
     """
     try:
         import librosa  # pylint: disable=import-outside-toplevel
@@ -126,18 +168,18 @@ def _compute_singer_identity_dsp(
 
         min_frames = min(mfcc_pre.shape[1], mfcc_post.shape[1])
         if min_frames < 4:
-            return 0.80  # zu kurz — neutraler Wert
+            return 0.80  # too short — neutral value
 
-        # Mittlere MFCC über Zeit → kompakter Fingerabdruck
+        # Mean MFCC over time → compact fingerprint
         vec_pre = mfcc_pre[:, :min_frames].mean(axis=1)
         vec_post = mfcc_post[:, :min_frames].mean(axis=1)
         cosine = _safe_cosine(vec_pre, vec_post)
-        # Cosine aus MFCC liegt typ. [0.85, 1.0] für gleiche Stimme
-        # Normalisiere auf [0, 1] mit Bezugspunkt 0.85
+        # MFCC cosine typically [0.85, 1.0] for the same voice.
+        # Normalise to [0, 1] using 0.70 as baseline reference.
         return float(np.clip((cosine - 0.70) / 0.30, 0.0, 1.0))
     except Exception as exc:
         logger.debug("singer_identity_dsp failed: %s", exc)
-        return 0.80  # konservativ-neutral
+        return 0.80  # conservatively neutral
 
 
 def _compute_singer_identity(
@@ -145,28 +187,28 @@ def _compute_singer_identity(
     vocal_post: np.ndarray,
     sr: int,
 ) -> tuple[float, bool]:
-    """ResemblyzerPlugin (primär) oder DSP-Proxy (Fallback). Gibt (cosine, dsp_used) zurück."""
+    """ResemblyzerPlugin (primary) or DSP proxy (fallback). Returns (cosine, dsp_used)."""
     try:
         from plugins.resemblyzer_plugin import get_resemblyzer_plugin  # pylint: disable=import-outside-toplevel
 
         plugin = get_resemblyzer_plugin()
         if not plugin.available:
-            raise RuntimeError("ResemblyzerPlugin nicht verfügbar")
+            raise RuntimeError("ResemblyzerPlugin not available")
 
         emb_pre = plugin.embed(vocal_pre, sr)
         emb_post = plugin.embed(vocal_post, sr)
         if emb_pre is None or emb_post is None:
-            raise RuntimeError("embed() lieferte None")
+            raise RuntimeError("embed() returned None")
 
         cosine = plugin.cosine_similarity(emb_pre, emb_post)
         return float(np.clip(cosine, 0.0, 1.0)), False
     except Exception as exc:
-        logger.debug("Resemblyzer nicht verfügbar (%s) — DSP-Fallback", exc)
+        logger.debug("Resemblyzer not available (%s) — DSP fallback", exc)
         return _compute_singer_identity_dsp(vocal_pre, vocal_post, sr), True
 
 
 # ---------------------------------------------------------------------------
-# Komponente 2 — Formant-Stabilitäts-Score
+# Component 2 — Formant Stability Score
 # ---------------------------------------------------------------------------
 
 
@@ -175,14 +217,14 @@ def _compute_formant_stability(
     vocal_post: np.ndarray,
     sr: int,
 ) -> float:
-    """Schätzt F1-Drift via LPC (linear approximation). Score = max(0, 1 - drift/70Hz)."""
+    """Schätzt F1 drift via LPC (linear approximation). Score = max(0, 1 - drift/70Hz)."""
     try:
         import librosa  # pylint: disable=import-outside-toplevel
 
         frame_len = int(sr * 0.025)  # 25 ms frames
         hop = frame_len // 2
 
-        # LPC-Order: ~sr/1000 + 2 (Regel für Sprach-Formanten)
+        # LPC order: ~sr/1000 + 2 (rule of thumb for speech formants)
         lpc_order = max(8, sr // 1000 + 2)
 
         def _lpc_f1_frames(audio: np.ndarray) -> list[float]:
@@ -196,7 +238,7 @@ def _compute_formant_stability(
                     roots = roots[np.imag(roots) >= 0]
                     angles = np.angle(roots)
                     freqs = sorted(angles * (sr / (2 * np.pi)))
-                    # F1: erste Resonanz > 100 Hz
+                    # F1: first resonance > 100 Hz
                     valid = [f for f in freqs if f > 100]
                     if valid:
                         f1_list.append(valid[0])
@@ -208,11 +250,11 @@ def _compute_formant_stability(
         f1_post = _lpc_f1_frames(vocal_post)
 
         if not f1_pre or not f1_post:
-            return 0.85  # kann nicht messen → konservativ
+            return 0.85  # cannot measure → conservative
 
         min_len = min(len(f1_pre), len(f1_post))
         drift = float(np.mean(np.abs(np.array(f1_pre[:min_len]) - np.array(f1_post[:min_len]))))
-        # 35 Hz = Schwellwert (§2.35c): bei 0 Hz Drift → 1.0; bei 70 Hz Drift → 0.5
+        # 35 Hz = threshold (§2.35c): 0 Hz drift → 1.0; 70 Hz drift → 0.5
         score = float(np.clip(1.0 - drift / 70.0, 0.0, 1.0))
         return score
     except Exception as exc:
@@ -221,7 +263,7 @@ def _compute_formant_stability(
 
 
 # ---------------------------------------------------------------------------
-# Komponente 3 — Artikulations-Score (aus §2.35, via proximity-konsonant-ratio)
+# Component 3 — Articulation Score (§2.35, via proximity-consonant ratio)
 # ---------------------------------------------------------------------------
 
 
@@ -230,11 +272,11 @@ def _compute_articulation_score(
     vocal_post: np.ndarray,
     sr: int,
 ) -> float:
-    """Plosiv/Frikativ-Onset-Präzision. Nutzt Transient-Energie-Ratio aus §2.35."""
+    """Plosive/fricative onset precision. Uses transient energy ratio from §2.35."""
     try:
         import librosa  # pylint: disable=import-outside-toplevel
 
-        # Breitband-Transient-Erkennung via spectral_flux
+        # Broadband transient detection via spectral flux
         hop = 512
         onset_strength_pre = librosa.onset.onset_strength(y=vocal_pre, sr=sr, hop_length=hop)
         onset_strength_post = librosa.onset.onset_strength(y=vocal_post, sr=sr, hop_length=hop)
@@ -243,7 +285,7 @@ def _compute_articulation_score(
         if min_len < 4:
             return 0.85
 
-        # Korrelation der Onset-Stärke-Kurven
+        # Correlation of onset-strength curves
         pre_norm = onset_strength_pre[:min_len]
         post_norm = onset_strength_post[:min_len]
         # Guarded dot-product (NaN-safe, as required by VERBOTEN V01)
@@ -255,7 +297,7 @@ def _compute_articulation_score(
                 np.dot(pre_norm - pre_norm.mean(), post_norm - post_norm.mean()) / (len(pre_norm) * _pn_std + 1e-12)
             )
         corr = float(np.clip(corr, -1.0, 1.0))
-        # Korrelation [0,1] → Score (nahe 1 = Onsets erhalten)
+        # Correlation [0,1] → score (near 1 = onsets preserved)
         return float(np.clip((corr + 1.0) / 2.0, 0.0, 1.0))
     except Exception as exc:
         logger.debug("articulation_score failed: %s", exc)
@@ -263,7 +305,7 @@ def _compute_articulation_score(
 
 
 # ---------------------------------------------------------------------------
-# Komponente 5 — Sibilance-Naturalness (5–10 kHz)
+# Component 5 — Sibilance Naturalness (5–10 kHz)
 # ---------------------------------------------------------------------------
 
 
@@ -272,7 +314,7 @@ def _compute_sibilance_naturalness(
     vocal_post: np.ndarray,
     sr: int,
 ) -> float:
-    """Energieabweichung im 5–10 kHz Frikativen-Band. score = max(0, 1 - |abw_db|/6)."""
+    """Energy deviation in the 5–10 kHz fricative band. score = max(0, 1 - |dev_db|/6)."""
     try:
         from scipy.signal import butter, sosfiltfilt  # pylint: disable=import-outside-toplevel
 
@@ -290,7 +332,7 @@ def _compute_sibilance_naturalness(
         rms_post = float(np.sqrt(np.mean(post_band**2)) + 1e-12)
 
         abw_db = abs(20.0 * np.log10(rms_post / rms_pre))
-        # 6 dB = Schwellwert (§2.35c): 0 dB Abweichung → 1.0
+        # 6 dB = threshold (§2.35c): 0 dB deviation → 1.0
         score = float(np.clip(1.0 - abw_db / 6.0, 0.0, 1.0))
         return score
     except Exception as exc:
@@ -303,32 +345,50 @@ def _compute_sibilance_naturalness(
 # ---------------------------------------------------------------------------
 
 
-def compute_vqi(
+def compute_vqi(  # pylint: disable=too-many-positional-arguments
     audio_orig: np.ndarray,
     audio_restored: np.ndarray,
     sr: int,
     vocal_segments: list[tuple[float, float]] | None = None,
     skip_singer_identity: bool = False,
+    reference_audio: np.ndarray | None = None,
+    genre: str | None = None,
+    reference_singer_id: str | None = None,
 ) -> dict[str, float]:
-    """Berechnet den VocalQualityIndex (§2.35c).
+    """Berechnet the VocalQualityIndex (§2.35c).
 
     Args:
-        audio_orig:     Original (degradiert) vor Pipeline, float32 [-1,1].
-        audio_restored: Nach Pipeline restauriertes Audio, float32 [-1,1].
-        sr:             Sample-Rate in Hz (Pflicht: 48000 in Pipeline-Phasen).
-        vocal_segments: Optionale Liste (start_sec, end_sec) Vokal-Zeitfenster.
-                        None → gesamtes Signal wird genutzt.
+        audio_orig:       Original (degraded) before pipeline, float32 [-1,1].
+        audio_restored:   Pipeline-restored audio, float32 [-1,1].
+        sr:               Sample rate in Hz (required: 48000 in pipeline phases).
+        vocal_segments:   Optional list of (start_sec, end_sec) vocal time windows.
+                          None → entire signal is used.
+        skip_singer_identity: Skips singer identity for duets/choirs.
+        genre:            Genre label for adaptive weight selection (§0p).
+                          None → default weights. Supported: jazz, blues, opera,
+                          klassik, pop, rock, folk, country, soul, gospel, schlager.
+        reference_audio:  §P1 Artist-Voice-Reference — clean reference recording
+                          of the same artist (min. 0.5 s). When provided, used as
+                          anchor for _compute_singer_identity() instead of the
+                          degraded audio_orig. Enables precise identity comparison
+                          independent of carrier noise.
+        reference_singer_id: §SRL-1 voice-class ID from SingerReferenceLibrary
+                          (e.g. "voice_jazz_alto"). When provided and
+                          reference_audio=None, a voice-class fingerprint cosine
+                          is used for singer_identity_cosine — more precise than
+                          comparing against degraded input.
 
     Returns:
-        Dict mit:
-            vqi              — Gesamt-Score [0, 1]
+        Dict with:
+            vqi                   — overall score [0, 1]
             singer_identity_cosine
             formant_stability_score
             articulation_score
-            proximity_score  — aus §2.35b (falls verfügbar, sonst 0.85)
+            proximity_score       — from §2.35b (if available, else 0.85)
             sibilance_naturalness
-            singer_id_dsp_fallback — bool: True wenn Resemblyzer nicht genutzt
-            vqi_tier         — "world_class" | "professional" | "acceptable" | "below_threshold"
+            singer_id_dsp_fallback — bool: True when Resemblyzer not used
+            vqi_tier              — "world_class" | "professional" | "acceptable" | "below_threshold"
+            reference_audio_used  — bool: True when reference_audio used as anchor (§P1)
     """
     orig_m = _to_mono(audio_orig)
     rest_m = _to_mono(audio_restored)
@@ -353,7 +413,7 @@ def compute_vqi(
     orig_m = orig_m[:min_len]
     rest_m = rest_m[:min_len]
 
-    # Vokal-Segment-Maske anwenden
+    # Apply vocal segment mask
     if vocal_segments:
         mask = np.zeros(min_len, dtype=bool)
         for s, e in vocal_segments:
@@ -367,17 +427,76 @@ def compute_vqi(
     orig_m = np.nan_to_num(orig_m, nan=0.0, posinf=0.0, neginf=0.0)
     rest_m = np.nan_to_num(rest_m, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # Komponente 1: Singer-Identity (§MultiSinger: überspringen bei Duett/Chor)
+    # Component 1: Singer Identity (§MultiSinger: skip for duet/choir)
+    _reference_audio_used = False
+    _srl_singer_identity_done = False  # §SRL-1: True wenn Fingerprint-Pfad aktiv
+    dsp_fallback: bool = False  # initialisiert; wird unten überschrieben
     if skip_singer_identity:
-        singer_cosine, dsp_fallback = 0.85, True  # neutral fallback — kein Rollback-Trigger
-        logger.debug("§MultiSinger: singer_identity_cosine-Gate übersprungen (Duett/Chor)")
+        singer_cosine, dsp_fallback = 0.85, True  # neutral fallback — no rollback trigger
+        logger.debug("§MultiSinger: singer_identity_cosine gate skipped (duet/choir)")
     else:
-        singer_cosine, dsp_fallback = _compute_singer_identity(orig_m, rest_m, sr)
+        # §P1 Artist-Voice-Reference: clean artist recording as a more precise identity anchor
+        _id_anchor = orig_m
+        if reference_audio is not None:
+            try:
+                _ref = _to_mono(np.asarray(reference_audio, dtype=np.float32))
+                if len(_ref) >= sr // 2:  # mind. 0.5 s
+                    _ref = np.nan_to_num(_ref, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Auf Länge des restaurierten Signals anpassen
+                    if len(_ref) >= len(rest_m):
+                        _id_anchor = _ref[: len(rest_m)]
+                    else:
+                        _id_anchor = np.pad(_ref, (0, len(rest_m) - len(_ref)))
+                    _reference_audio_used = True
+                    logger.debug(
+                        "VQI: reference_audio as singer-identity anchor (§P1 Artist-Voice-Reference, len=%d)",
+                        len(_ref),
+                    )
+            except Exception as _ref_exc:
+                logger.debug(
+                    "VQI: reference_audio conversion failed — falling back to degraded input: %s",
+                    _ref_exc,
+                )
+        elif reference_singer_id is not None:
+            # §SRL-1: Use voice-class fingerprint as identity anchor.
+            # Since no real reference audio is available, we use the cosine
+            # distance between the restored audio fingerprint and the
+            # voice-class prototype as a singer_identity_cosine proxy.
+            try:
+                from backend.core.singer_reference_library import (  # pylint: disable=import-outside-toplevel
+                    _STIMMKLASSE_PROTOTYPEN,
+                    compute_vocal_fingerprint,
+                )
 
-    # Komponente 2: Formant-Stabilität
+                _ref_fp = _STIMMKLASSE_PROTOTYPEN.get(reference_singer_id)
+                if _ref_fp is not None:
+                    _rest_fp = compute_vocal_fingerprint(audio_restored, sr)
+                    _ref_norm = np.linalg.norm(_ref_fp) + 1e-12
+                    _rest_norm = np.linalg.norm(_rest_fp) + 1e-12
+                    _srl_cosine = float(np.dot(_ref_fp, _rest_fp) / (_ref_norm * _rest_norm))
+                    # Cosine [-1,1] → fingerprint-based singer_identity_cosine.
+                    # Mapping: [0.5, 1.0] → [0.85, 1.0] (softer mapping since fingerprints
+                    # are less precise than Resemblyzer embeddings)
+                    _srl_mapped = float(np.clip(0.85 + (_srl_cosine - 0.5) * 0.30, 0.80, 1.0))
+                    singer_cosine = _srl_mapped
+                    dsp_fallback = True  # DSP-basiert, kein ML
+                    _srl_singer_identity_done = True
+                    _reference_audio_used = True  # Signal: nicht degraded-Input-Anker
+                    logger.debug(
+                        "VQI §SRL-1: class=%s fingerprint_cosine=%.3f → singer_identity_cosine=%.3f",
+                        reference_singer_id,
+                        _srl_cosine,
+                        singer_cosine,
+                    )
+            except Exception as _srl_exc:
+                logger.debug("VQI §SRL-1 non-blocking: %s", _srl_exc)
+        if not _srl_singer_identity_done:
+            singer_cosine, dsp_fallback = _compute_singer_identity(_id_anchor, rest_m, sr)
+
+    # Component 2: Formant Stability
     formant_score = _compute_formant_stability(orig_m, rest_m, sr)
 
-    # Komponente 3: Artikulation
+    # Component 3: Articulation
     articulation = _compute_articulation_score(orig_m, rest_m, sr)
 
     # §SOTA-Matrix: SingMOS als primärer Naturalness-Proxy für Gesangsmaterial (§0p + copilot-instructions)
@@ -385,7 +504,7 @@ def compute_vqi(
     # Normiert auf [0,1]: SingMOS MOS ∈ [1,5] → (mos - 1) / 4.
     singmos_score: float | None = None
     try:
-        from plugins.versa_plugin import get_versa_plugin  # type: ignore[import]
+        from plugins.versa_plugin import get_versa_plugin  # pylint: disable=import-outside-toplevel  # noqa: I001  # type: ignore[import]
 
         _versa = get_versa_plugin()
         if _versa is not None:
@@ -399,11 +518,11 @@ def compute_vqi(
     except Exception as _sm_exc:
         logger.debug("VQI: SingMOS (VERSA) nicht verfügbar (non-blocking): %s", _sm_exc)
 
-    # Komponente 4: Vocal Proximity (aus §2.35b) — oder SingMOS als Ersatz
+    # Component 4: Vocal Proximity (§2.35b) — or SingMOS as substitute
     proximity = 0.85  # default
     if singmos_score is not None:
-        proximity = singmos_score  # SingMOS primär (§SOTA-Matrix Mai 2026)
-        logger.debug("VQI: SingMOS ersetzt Proximity-Komponente (primärer Naturalness-Proxy)")
+        proximity = singmos_score  # SingMOS primary (§SOTA-Matrix May 2026)
+        logger.debug("VQI: SingMOS replaces proximity component (primary naturalness proxy)")
     else:
         try:
             from backend.core.musical_goals.ki_hearing_model import compute_vocal_proximity_score  # pylint: disable=import-outside-toplevel  # noqa: I001
@@ -413,21 +532,32 @@ def compute_vqi(
         except Exception as exc:
             logger.debug("vocal_proximity import failed: %s", exc)
 
-    # Komponente 5: Sibilance
+    # Component 5: Sibilance
     sibilance = _compute_sibilance_naturalness(orig_m, rest_m, sr)
 
-    # Gewichtete Summe (§2.35c)
+    # Genre-adaptive weights (§0p): different vocal genres define quality differently.
+    # Falls back to default weights for unknown/None genre.
+    (
+        singer_identity_weight,
+        formant_weight,
+        articulation_weight,
+        proximity_weight,
+        sibilance_weight,
+    ) = _get_vqi_weights(genre)
+    _genre_used = str(genre or "").strip().lower() or None
+
+    # Weighted sum (§2.35c) with genre-adaptive weights
     vqi = (
-        _W_SINGER_ID * singer_cosine
-        + _W_FORMANT * formant_score
-        + _W_ARTICULATION * articulation
-        + _W_PROXIMITY * proximity
-        + _W_SIBILANCE * sibilance
+        singer_identity_weight * singer_cosine
+        + formant_weight * formant_score
+        + articulation_weight * articulation
+        + proximity_weight * proximity
+        + sibilance_weight * sibilance
     )
     vqi = float(np.clip(vqi, 0.0, 1.0))
     vqi = float(np.nan_to_num(vqi, nan=0.90))  # 0.90 > all floors incl. Studio 2026 (0.87)
 
-    # Tier bestimmen
+    # Determine quality tier
     if vqi >= VQI_WORLD_CLASS:
         tier = "world_class"
     elif vqi >= VQI_PROFESSIONAL:
@@ -446,4 +576,6 @@ def compute_vqi(
         "sibilance_naturalness": float(np.clip(sibilance, 0.0, 1.0)),
         "singer_id_dsp_fallback": dsp_fallback,
         "vqi_tier": tier,
+        "reference_audio_used": _reference_audio_used,  # §P1 Artist-Voice-Reference anchor used
+        "genre_weights_used": _genre_used,  # None = default weights
     }

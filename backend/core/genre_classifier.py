@@ -408,7 +408,7 @@ class GermanSchlagerClassifier:
     # ---- Tier-2: Akkordeon-Reed-Beating-Fingerprint ----
 
     def _is_music_like(self, mono: np.ndarray) -> bool:
-        """Check via spectral flatness (Wiener entropy) whether the signal is music-like.
+        """Prüft via spectral flatness (Wiener entropy) whether the signal is music-like.
 
         White noise yields periodogram flatness ≈ 0.56 (empirical, Blackman window,
         2048 samples — NOT 1.0 as the theoretical ideal; chi-squared(2) periodogram
@@ -1279,7 +1279,7 @@ class GermanSchlagerClassifier:
         dr_db: float,
         bpm: float,
     ) -> float:
-        """Country genre score: simple diatonic harmony + bright twang + wide dynamics."""
+        """Country-Genre-Score: einfache diatonische Harmonie + helles Twang + weite Dynamik."""
         score = 0.0
         # Simple diatonic harmony (I-IV-V progressions; similar to Schlager but higher centroid)
         if 0.62 <= hsi <= 0.88:
@@ -1651,7 +1651,7 @@ class GermanSchlagerClassifier:
         }
 
     def _compute_panns_genre_prior(self, audio: np.ndarray, sr: int) -> dict[str, float]:
-        """Compute conservative genre priors from PANNs tags.
+        """Berechnet conservative genre priors from PANNs tags.
 
         Literature: Kong et al. (2020) PANNs (IEEE TASLP) and Won et al. (2020)
         show robust cross-dataset music-tag priors. We use them as a weak prior

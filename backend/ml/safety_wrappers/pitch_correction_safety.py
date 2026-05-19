@@ -58,7 +58,7 @@ class PitchCorrectionSafetyWrapper:
 
     def __init__(self, corrector, audit_log_path: Path | None = None, strict_mode: bool = False):
         """
-        Initialize safety wrapper
+        Initialisiert safety wrapper.
 
         Args:
             corrector: ConservativePitchCorrector instance
@@ -324,7 +324,7 @@ class PitchCorrectionSafetyWrapper:
         return {"status": status, "checks": checks, "issues": issues}
 
     def _log_violation(self, correction_id: str, check_result: dict, **metadata):
-        """Log HIPS violation"""
+        """Protokolliert HIPS violation."""
         self.violations_count += 1
 
         log_entry = {
@@ -343,7 +343,7 @@ class PitchCorrectionSafetyWrapper:
         )
 
     def _log_failure(self, correction_id: str, error_msg: str, **metadata):
-        """Log correction failure"""
+        """Protokolliert correction failure."""
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "correction_id": correction_id,
@@ -355,7 +355,7 @@ class PitchCorrectionSafetyWrapper:
         self._append_audit_log(log_entry)
 
     def _log_rejection(self, correction_id: str, correction_metadata: dict, **metadata):
-        """Log correction rejection (epistemic/conduct gate)"""
+        """Protokolliert correction rejection (epistemic/conduct gate)."""
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "correction_id": correction_id,
@@ -371,7 +371,7 @@ class PitchCorrectionSafetyWrapper:
     def _log_success(
         self, correction_id: str, pre_check: dict, post_check: dict, correction_metadata: dict, **metadata
     ):
-        """Log successful correction"""
+        """Protokolliert successful correction."""
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "correction_id": correction_id,
@@ -395,7 +395,7 @@ class PitchCorrectionSafetyWrapper:
             logger.error("Failed to write audit log: %s", e)
 
     def get_statistics(self) -> dict:
-        """Get safety wrapper statistics"""
+        """Gibt zurück: safety wrapper statistics."""
         return {
             "total_corrections": self.correction_count,
             "violations": self.violations_count,

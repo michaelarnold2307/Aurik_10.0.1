@@ -68,7 +68,7 @@ def _resample_to_analysis_sr(audio: np.ndarray, sr: int) -> tuple[np.ndarray, in
 
 
 def _safe_stft(audio: np.ndarray) -> np.ndarray:
-    """Return magnitude spectrogram (frames × bins)."""
+    """Gibt magnitude spectrogram (frames × bins) zurück."""
     n_fft = min(_FRAME_LEN, len(audio))
     hop = min(_HOP_LEN, max(1, n_fft // 4))
     num_frames = max(1, (len(audio) - n_fft) // hop + 1)
@@ -77,7 +77,7 @@ def _safe_stft(audio: np.ndarray) -> np.ndarray:
 
 
 def _estimate_snr_db(audio: np.ndarray) -> float:
-    """Estimate SNR in dB from signal + noise-floor percentile."""
+    """Schätzt SNR in dB from signal + noise-floor percentile."""
     if len(audio) < 64:
         return 0.0
     rms_signal = float(np.sqrt(np.mean(audio**2) + 1e-12))
@@ -140,7 +140,7 @@ def _hnr_approx(audio: np.ndarray, sr: int) -> float:
 
 def _f0_stability(audio: np.ndarray, sr: int = 22050) -> float:  # sr reserved for future pyin fallback
     """
-    Estimate F0 stability (0–1): high = stable pitch / low = unstable / noisy.
+    Schätzt F0 stability (0–1): high = stable pitch / low = unstable / noisy.
 
     Uses zero-crossing-rate-based periodicity as a proxy.
     """
@@ -163,7 +163,7 @@ def _f0_stability(audio: np.ndarray, sr: int = 22050) -> float:  # sr reserved f
 
 def _formant_clarity(audio: np.ndarray, sr: int) -> float:
     """
-    Estimate formant clarity in the F1–F3 band (500–3000 Hz).
+    Schätzt formant clarity in the F1–F3 band (500–3000 Hz).
 
     High clarity → prominent energy bumps in LPC spectrum → natural vowels.
     Proxy: spectral contrast in 300–3500 Hz band.
@@ -192,7 +192,7 @@ def _formant_clarity(audio: np.ndarray, sr: int) -> float:
 
 class DNSMOSPredictor:
     """
-    Lightweight DNSMOS P.835 proxy without ONNX model.
+    Leichtgewichtiges DNSMOS P.835 proxy without ONNX model.
 
     Returns dict with keys "sig", "bak", "ovr" — each in [1, 5].
     """
@@ -259,7 +259,7 @@ class DNSMOSPredictor:
 
 class SingMOSPredictor:
     """
-    Lightweight SingMOS proxy for singing quality estimation.
+    Leichtgewichtiges SingMOS proxy for singing quality estimation.
 
     Focuses on vocal-specific features: HNR, F0 stability, formant clarity,
     and breathiness (low HNR in low energy regions).
@@ -332,7 +332,7 @@ _singmos_lock = threading.Lock()
 
 
 def get_dnsmos_predictor() -> DNSMOSPredictor:
-    """Return the DNSMOSPredictor singleton (thread-safe)."""
+    """Gibt the DNSMOSPredictor singleton (thread-safe) zurück."""
     global _dnsmos_instance  # pylint: disable=global-statement
     if _dnsmos_instance is None:
         with _dnsmos_lock:
@@ -342,7 +342,7 @@ def get_dnsmos_predictor() -> DNSMOSPredictor:
 
 
 def get_singmos_predictor() -> SingMOSPredictor:
-    """Return the SingMOSPredictor singleton (thread-safe)."""
+    """Gibt the SingMOSPredictor singleton (thread-safe) zurück."""
     global _singmos_instance  # pylint: disable=global-statement
     if _singmos_instance is None:
         with _singmos_lock:

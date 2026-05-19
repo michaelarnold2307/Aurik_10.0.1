@@ -115,7 +115,7 @@ class ImprovementPrediction:
 @dataclass
 class QualityValidation:
     """
-    Validation of predicted vs actual quality.
+    Validierung von vorhergesagter vs. tatsächlicher Qualität.
     """
 
     # Prediction accuracy
@@ -134,7 +134,7 @@ class QualityValidation:
 
 class QualityAnalyzer:
     """
-    Analyze audio quality.
+    Analysiert die Audioqualität.
 
     Features:
     - SNR estimation
@@ -148,7 +148,7 @@ class QualityAnalyzer:
         self, audio: np.ndarray, sample_rate: int, reference: np.ndarray | None = None
     ) -> QualityEstimate:
         """
-        Analyze audio quality.
+        Analysiert die Audioqualität.
 
         Args:
             audio: Audio signal
@@ -212,7 +212,7 @@ class QualityAnalyzer:
 
     def _estimate_snr(self, audio: np.ndarray) -> float:
         """
-        Estimate Signal-to-Noise Ratio.
+        Schätzt Signal-to-Noise Ratio.
 
         Uses signal power vs noise floor estimation.
         Improved: Uses bottom 5% of amplitude envelope as noise floor.
@@ -240,7 +240,7 @@ class QualityAnalyzer:
 
     def _measure_dynamic_range(self, audio: np.ndarray) -> float:
         """
-        Measure dynamic range (peak to noise floor).
+        Misst dynamic range (peak to noise floor).
         """
         peak = np.max(np.abs(audio))
         noise_floor = np.percentile(np.abs(audio), 10)
@@ -251,7 +251,7 @@ class QualityAnalyzer:
 
     def _estimate_thd(self, audio: np.ndarray, sr: int) -> float:
         """
-        Estimate Total Harmonic Distortion.
+        Schätzt Total Harmonic Distortion.
 
         Simplified: ratio of high-frequency energy to mid-frequency.
         """
@@ -277,7 +277,7 @@ class QualityAnalyzer:
 
     def _measure_clarity(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure perceptual clarity (high-frequency energy balance).
+        Misst perceptual clarity (high-frequency energy balance).
         """
         # FFT
         fft = np.fft.rfft(audio)
@@ -313,7 +313,7 @@ class QualityAnalyzer:
 
     def _measure_warmth(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure tonal warmth (low-frequency richness).
+        Misst tonal warmth (low-frequency richness).
         """
         # Probe-runs and ultra-low-energy snippets should not fail warmth gates.
         # They do not contain enough spectral evidence for a meaningful warmth score.
@@ -345,7 +345,7 @@ class QualityAnalyzer:
 
     def _measure_brightness(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure brightness (high-frequency presence).
+        Misst brightness (high-frequency presence).
         """
         fft = np.fft.rfft(audio)
         freqs = np.fft.rfftfreq(len(audio), 1 / sr)
@@ -367,7 +367,7 @@ class QualityAnalyzer:
 
     def _measure_naturalness(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure naturalness via spectral smoothness.
+        Misst naturalness via spectral smoothness.
 
         Natural audio has a smooth spectral envelope (no sharp notches or peaks
         from overprocessing).  The old formula measured "spectral flatness" which
@@ -438,7 +438,7 @@ class QualityAnalyzer:
 
     def _measure_authenticity(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure period authenticity (analog characteristics).
+        Misst period authenticity (analog characteristics).
         """
         # Analog has:
         # - Slight noise floor
@@ -460,7 +460,7 @@ class QualityAnalyzer:
 
     def _measure_bandwidth(self, audio: np.ndarray, sr: int) -> tuple[float, float]:
         """
-        Measure effective bandwidth (low, high).
+        Misst effective bandwidth (low, high).
         """
         fft = np.fft.rfft(audio)
         freqs = np.fft.rfftfreq(len(audio), 1 / sr)
@@ -480,7 +480,7 @@ class QualityAnalyzer:
 
     def _detect_artifacts(self, audio: np.ndarray, sr: int) -> tuple[bool, list[str]]:
         """
-        Detect audio artifacts.
+        Erkennt audio artifacts.
         """
         artifacts = []
 
@@ -543,7 +543,7 @@ class QualityAnalyzer:
         return float(score * 100)
 
     def _determine_quality_level(self, score: float) -> QualityLevel:
-        """Determine quality level from score."""
+        """Bestimmt quality level from score."""
         if score >= 95:
             return QualityLevel.PRISTINE
         elif score >= 80:
@@ -592,7 +592,7 @@ class QualityPredictor:
     """
 
     def __init__(self, quality_analyzer: QualityAnalyzer | None = None):
-        """Initialize quality predictor."""
+        """Initialisiert quality predictor."""
         self.analyzer = quality_analyzer or QualityAnalyzer()
 
         # Module improvement factors (heuristic, ML-ready)
@@ -767,7 +767,7 @@ class QualityPredictionSystem:
     VERSION = "2.0.0"
 
     def __init__(self):
-        """Initialize quality prediction system."""
+        """Initialisiert quality prediction system."""
         self.analyzer = QualityAnalyzer()
         self.predictor = QualityPredictor(self.analyzer)
 
@@ -775,7 +775,7 @@ class QualityPredictionSystem:
 
     def estimate_quality(self, audio: np.ndarray, sample_rate: int) -> QualityEstimate:
         """
-        Estimate audio quality before processing.
+        Schätzt audio quality before processing.
 
         Args:
             audio: Input audio
@@ -823,7 +823,7 @@ class QualityPredictionSystem:
         self, predicted: ImprovementPrediction, actual_audio: np.ndarray, sample_rate: int
     ) -> QualityValidation:
         """
-        Validate prediction against actual result.
+        Validiert prediction against actual result.
 
         Args:
             predicted: Predicted improvement
@@ -880,7 +880,7 @@ class QualityPredictionSystem:
 
     def check_quality_gate(self, current_quality: QualityEstimate, target_gates: dict[str, float]) -> tuple[bool, str]:
         """
-        Check if quality gates are met (early stopping).
+        Prüft if quality gates are met (early stopping).
 
         Args:
             current_quality: Current audio quality
@@ -913,5 +913,5 @@ class QualityPredictionSystem:
 
 
 def create_quality_prediction_system() -> QualityPredictionSystem:
-    """Create a quality prediction system with default settings."""
+    """Erstellt a quality prediction system with default settings."""
     return QualityPredictionSystem()

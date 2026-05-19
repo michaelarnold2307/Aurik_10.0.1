@@ -184,7 +184,7 @@ CUSTOM_WRAPPERS = {
 
 class SafetyWrapperFactory:
     """
-    Factory for creating and managing HIPS safety wrappers.
+    Factory für Erstellung und Verwaltung von HIPS-Sicherheits-Wrappern.
 
     Automatically:
     - Classifies DSP modules by type
@@ -195,7 +195,7 @@ class SafetyWrapperFactory:
 
     def __init__(self, processing_mode: ProcessingMode = ProcessingMode.RESTORATION, dsp_module_path: str = "dsp"):
         """
-        Initialize factory.
+        Initialisiert factory.
 
         Args:
             processing_mode: Default processing mode for Musical Goals
@@ -253,7 +253,7 @@ class SafetyWrapperFactory:
         self, module_name: str, processor_func: Callable | None = None, module_version: str = "1.0.0"
     ) -> Any:
         """
-        Create appropriate safety wrapper for DSP module.
+        Erstellt appropriate safety wrapper for DSP module.
 
         Args:
             module_name: Name of DSP module
@@ -337,7 +337,7 @@ class SafetyWrapperFactory:
 
     def wrap_all_modules(self, module_list: list | None = None) -> dict[str, Any]:
         """
-        Wrap all DSP modules with safety wrappers.
+        Kapselt all DSP modules with safety wrappers.
 
         Args:
             module_list: List of module names to wrap (if None, wrap all classified)
@@ -365,7 +365,7 @@ class SafetyWrapperFactory:
         return wrapped
 
     def get_statistics(self) -> dict[str, Any]:
-        """Get wrapper deployment statistics."""
+        """Gibt zurück: wrapper deployment statistics."""
         return {
             "total_wrapped": sum(self.wrapper_stats.values()),
             "by_type": self.wrapper_stats.copy(),
@@ -380,7 +380,7 @@ class SafetyWrapperFactory:
         }
 
     def print_report(self):
-        """Print deployment report."""
+        """Gibt aus: deployment report."""
         stats = self.get_statistics()
 
         logger.info(str("=" * 70))

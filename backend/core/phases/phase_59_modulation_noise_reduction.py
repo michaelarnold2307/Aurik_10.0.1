@@ -61,7 +61,7 @@ def apply(
     min_modulation_noise_score: float = _MIN_MODULATION_NOISE_SCORE,
     g_floor: float = _G_FLOOR,
 ) -> np.ndarray:
-    """Main entry point for Phase 59.
+    """Haupt-entry point for Phase 59.
 
     Args:
         audio:        Input audio float32, mono or stereo
@@ -132,12 +132,12 @@ def apply(
     # §2.62 Psychoakustischer Masking-Guard (ISO 11172-3) — per-Band Floor (non-blocking)
     try:
         from backend.core.dsp.psychoacoustics import compute_masking_threshold_iso11172 as _cmask_p59
+
         _mask_ratio_p59 = _cmask_p59(x, sample_rate, n_fft=n_fft, hop_length=hop)
         _mfloor_p59 = np.mean(_mask_ratio_p59, axis=1).astype(np.float32)  # (n_freq,)
         _mfreqs_p59 = np.linspace(0.0, sample_rate / 2.0, _mask_ratio_p59.shape[0], dtype=np.float32)
         _mfloor_interp59 = np.interp(
-            np.linspace(0.0, sample_rate / 2.0, gain.shape[0], dtype=np.float32),
-            _mfreqs_p59, _mfloor_p59
+            np.linspace(0.0, sample_rate / 2.0, gain.shape[0], dtype=np.float32), _mfreqs_p59, _mfloor_p59
         ).astype(np.float32)
         gain = np.maximum(gain, _mfloor_interp59[:, np.newaxis])
     except Exception:

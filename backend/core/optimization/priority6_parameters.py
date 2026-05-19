@@ -1,5 +1,5 @@
 """
-optimization/priority6_parameters.py — Genre-optimised parameters and presets
+optimization/priority6_parameters.py – Genreoptimierte Parameter und Presets.
 ==============================================================================
 """
 
@@ -58,12 +58,12 @@ class GenreOptimizedParameters:
 
     @classmethod
     def list_genres(cls) -> list[str]:
-        """Return the list of supported genre identifiers."""
+        """Gibt the list of supported genre identifiers zurück."""
         return list(cls._PARAMS.keys())
 
     @classmethod
     def get_parameters(cls, genre: str) -> dict[str, Any]:
-        """Return processing parameters for *genre*.
+        """Gibt processing parameters for *genre* zurück.
 
         Falls back to ``"rock"`` defaults for unknown genres.
         """
@@ -96,10 +96,10 @@ class OptimizedPresets:
 
     @classmethod
     def list_presets(cls) -> list[str]:
-        """Return the list of supported preset names."""
+        """Gibt the list of supported preset names zurück."""
         return list(cls._PRESETS.keys())
 
     @classmethod
     def get_preset(cls, name: str) -> dict[str, Any]:
-        """Return the parameter dict for *name*."""
+        """Gibt the parameter dict for *name* zurück."""
         return dict(cls._PRESETS.get(name, cls._PRESETS["balanced"]))

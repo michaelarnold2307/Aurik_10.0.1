@@ -392,6 +392,74 @@ if self._mas_fully_achieved and phase_id not in _NEVER_SKIP:
     continue  # _NEVER_SKIP-Phasen laufen trotz MAS immer durch
 ```
 
+## §GOAL_BASELINE_CHECK [RELEASE_MUST] (v9.12.7) — Garantierter Goal-Recovery-Pfad
+
+**Problem (CAUSE_TO_PHASES-Lücke)**: Wenn DefectScanner keinen Defekt-Cause für ein Musical Goal findet, trägt `CAUSE_TO_PHASES` keine Recovery-Phasen für dieses Goal ein. Der HolisticPerceptualGate-Blend kann Goals nur durch Rollback in Richtung Original bewegen — er kann ein Goal **nicht über das Original-Niveau heben**. Das bedeutet: Goals, die strukturell unter dem materialadaptiven Floor liegen, aber kein erkennbares Defekt-Signal erzeugen, würden nie erreicht.
+
+**Lösung**: §GOAL_BASELINE_CHECK läuft im UV3 `restore()`-Pfad **nach** GPOptimizer (`selected_phases` ist fertig) und **vor** `_execute_pipeline()`. Er misst alle 14 Goal-Proxies auf dem Eingangssignal via `_fast_goal_snapshot()` (DSP-only, ≤200 ms) und fügt für jedes Goal, das unter `material_floor × 0.95` liegt, die primäre Recovery-Phase in `selected_phases` ein.
+
+```python
+# KANONISCH — UV3 restore(), nach SLR, vor _execute_pipeline():
+try:
+    from backend.core.calibration_matrix import (
+        get_goal_recovery_phases, get_material_floor
+    )
+    _gbc_mat_str = str(material_type.value if material_type else "unknown").lower()
+    _gbc_is_studio = self.is_studio_mode()
+    _gbc_snapshot = UnifiedRestorerV3._fast_goal_snapshot(audio, sample_rate, _gbc_mat_str)
+    if _gbc_snapshot and _applicable_goals:
+        _selected_set: set[str] = set(selected_phases)
+        for goal, proxy_score in _gbc_snapshot.items():
+            if goal not in _applicable_goals:
+                continue
+            floor = get_material_floor(_gbc_mat_str, goal, is_studio_2026=_gbc_is_studio)
+            if proxy_score < floor * 0.95:
+                for phase_id in get_goal_recovery_phases(goal, is_studio_2026=_gbc_is_studio):
+                    if phase_id not in _selected_set:
+                        selected_phases.append(phase_id)
+                        _selected_set.add(phase_id)
+                        break  # §2.45: nur primäre Recovery-Phase
+except Exception as _gbc_exc:
+    logger.debug("§GOAL_BASELINE non-blocking: %s", _gbc_exc)
+```
+
+**Invarianten** (alle bindend, kein Override):
+
+- **§0a**: `get_goal_recovery_phases(is_studio_2026=False)` gibt niemals `phase_21_exciter`, `phase_35_multiband_compression` oder `phase_42_vocal_enhancement` zurück.
+- **§2.45**: Nur die **erste** (primäre) Recovery-Phase wird pro Goal eingefügt — kein Massen-Adding.
+- **5 %-Margin**: Auslöse-Schwelle `floor × 0.95`, nicht `floor` — vermeidet False-Positives bei physikalisch limitiertem Material.
+- **`_applicable_goals`-Filter**: Nur Goals, die für den aktuellen Kontext gelten (GoalApplicabilityFilter-Ergebnis), werden geprüft.
+- **Non-blocking**: `try/except` — jeder Fehler lässt `selected_phases` unverändert.
+- **Metadata**: Hinzugefügte Phasen werden in `metadata["goal_baseline_recovery"]` dokumentiert.
+- **VERBOTEN**: `_fast_goal_snapshot()` auf restauriertem Audio ausführen — nur auf dem Eingangssignal vor der Pipeline.
+- **Reihenfolge** [NORMATIV]: Die Phasen-Liste in `_GOAL_TO_RECOVERY_PHASES_RESTORATION` MUSS §2.46-Carrier-Chain-Hierarchie einhalten — subtraktive/physikalische Korrekturen (Stufen 1–4) stehen VOR additiven Eingriffen (Stufen 5–6). Mechanische Ursachen (Wow/Flutter, EQ-Fehler) MÜSSEN VOR digitalen Korrekturen stehen. **Verboten**: Phasen nach Nummernreihenfolge sortieren.
+- **Kausal-Richtung** [NORMATIV]: Primärphase MUSS den Defizit-Vektor invertieren. Für `spatial_depth`-Defizit → Phase muss Raumcues **hinzufügen** (`phase_46_spatial_enhancement`), nie entfernen (`phase_49` ist Kausal-Inversion und verboten als Primärphase für `spatial_depth`). Gleiches Prinzip für alle Goals: niedriger Score = zu wenig dieser Qualität → Enhancement; hoher Score = zu viel → Reduktion.
+- **Disk-Validierung** [CI-GUARD]: Alle Phase-IDs in `_GOAL_TO_RECOVERY_PHASES_RESTORATION` und `_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS` MÜSSEN gegen existierende `backend/core/phases/phase_*.py`-Dateien validiert sein — Test: `test_get_goal_recovery_phases_all_phase_ids_exist_on_disk()` in `tests/unit/test_calibration_matrix.py`.
+
+**Recovery-Phase-Tabelle** (Quelle: `calibration_matrix.get_goal_recovery_phases()`):
+
+Reihenfolge nach §2.46-Carrier-Chain: subtraktiv vor additiv, mechanisch vor digital, breiteste Wirkung zuerst.
+
+| Goal | Primäre Restoration-Recovery-Phase | Wissenschaftliche Begründung |
+|---|---|---|
+| timbre_authentizitaet | phase_04_eq_correction | Stufe 2: RIAA/Carrier-EQ-Fehler — physikalische Primärursache |
+| natuerlichkeit | phase_03_denoise | Breitband-NR: universell größter Einzelbeitrag zur Natuerlichkeit |
+| authentizitaet | phase_09_crackle_removal | Crackle (systematisch) zerstört Authentizität stärker als Einzelklicks |
+| tonal_center | phase_12_wow_flutter_fix | Stufe 2: mechanische Rotation **vor** digitalem Pitch — physikalische Ursache zuerst |
+| timbre | phase_04_eq_correction | Stufe 2: Carrier-EQ-Korrektur (subtraktiv, kausal) |
+| artikulation | phase_08_transient_preservation | Transienten-Hüllkurve ist primärer Träger der Artikulationsklarheit |
+| emotionalitaet | phase_26_dynamic_range_expansion | Dynamikkontrast ist der primäre Emotionsträger |
+| micro_dynamics | phase_26_dynamic_range_expansion | Überkompression ist Primärursache für Mikrodynamikverlust |
+| groove | phase_12_wow_flutter_fix | Unregelemäßige Motorrotation = direkte physikalische Ursache für Timing-Instabilität |
+| transparenz | phase_03_denoise | Breitbandrauschen maskiert Details am stärksten |
+| waerme | phase_04_eq_correction | 200–600 Hz Tonalbalance (EQ zuerst) ist physikalisches Fundament der Wärme |
+| bass_kraft | phase_04_eq_correction | RIAA/EQ-Fehler im Bassbereich als Primärursache |
+| separation_fidelity | phase_49_advanced_dereverb | Hall-Bleed zwischen Quellen — WPE am effektivsten |
+| brillanz | phase_06_frequency_restoration | BW-Erweiterung (AudioSR): primärer Pfad für verlorenen HF-Inhalt |
+| spatial_depth | phase_46_spatial_enhancement | Niedrige Raumtiefe = fehlende Cues → Enhancement; **VERBOTEN phase_49** (entfernt Raumtiefe!) |
+
+> Kanonische Quelle: `backend/core/calibration_matrix.py` → `get_goal_recovery_phases()` + `_GOAL_TO_RECOVERY_PHASES_RESTORATION`. Studio-2026-Extras in `_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS`. Tests: `tests/unit/test_calibration_matrix.py` (§09.10-Tests, 8 Testfunktionen).
+
 ## §6.2a Material-Pflicht-Phasen
 
 | Material | Pflicht-Phasen (unabhängig von DefectScanner-Score) |

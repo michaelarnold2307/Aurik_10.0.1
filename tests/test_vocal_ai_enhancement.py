@@ -303,6 +303,29 @@ class TestBreathPreservingProcessor:
             processed, actual_ratio = processor.process(voice_with_breath, characteristics, preservation_ratio=ratio)
             assert processed.shape == voice_with_breath.shape
 
+    def test_artistic_breath_preservation_ratio_one_keeps_breath(self, monkeypatch):
+        """Artistic breath must not be reduced when preservation_ratio=1."""
+        processor = BreathPreservingProcessor(sample_rate=48000)
+        audio = np.ones(4800, dtype=np.float32) * 0.25
+        breath_region = (1000, 2000)
+        characteristics = VoiceCharacteristics(gender=VoiceGender.FEMALE, emotional_intensity=0.9)
+
+        monkeypatch.setattr(processor, "_detect_breath_regions", lambda *_args, **_kwargs: [breath_region])
+        monkeypatch.setattr(
+            processor,
+            "_classify_breath_artistic",
+            lambda *_args, **_kwargs: {breath_region: True},
+        )
+
+        preserved, actual_ratio = processor.process(audio, characteristics, preservation_ratio=1.0)
+        reduced, _ = processor.process(audio, characteristics, preservation_ratio=0.0)
+
+        assert actual_ratio == pytest.approx(1.0)
+        assert np.allclose(preserved[breath_region[0] : breath_region[1]], audio[breath_region[0] : breath_region[1]])
+        assert np.mean(np.abs(reduced[breath_region[0] : breath_region[1]])) < np.mean(
+            np.abs(preserved[breath_region[0] : breath_region[1]])
+        )
+
 
 # ============================================================
 # UNIFIED VOCAL ENHANCER TESTS

@@ -156,6 +156,7 @@ class TapeHissReductionPhase(PhaseInterface):
         MaterialType.SHELLAC: -3,  # Extra conservative for vocal transparency
         MaterialType.VINYL: -8,
         MaterialType.TAPE: -10,  # More aggressive
+        MaterialType.CASSETTE: -8,  # §SibilantProtect: konservativer als TAPE; Sibilantenbereich schonen
         MaterialType.CD_DIGITAL: -999,  # Disabled
         MaterialType.STREAMING: -999,
     }
@@ -174,6 +175,7 @@ class TapeHissReductionPhase(PhaseInterface):
         MaterialType.SHELLAC: (7500, 12000),
         MaterialType.VINYL: (8000, 15000),
         MaterialType.TAPE: (8000, 18000),  # Tape hiss dominates 8-18 kHz
+        MaterialType.CASSETTE: (9000, 16000),  # §SibilantProtect: hf_low=9 kHz schützt Sibilantenzone (4-9 kHz)
         MaterialType.CD_DIGITAL: (0, 0),
         MaterialType.STREAMING: (0, 0),
     }
@@ -200,6 +202,10 @@ class TapeHissReductionPhase(PhaseInterface):
         super().__init__()
         self.sample_rate = sample_rate
         self._deepfilternet_plugin = None
+        self._era_nr_g_floor: float = 0.10  # §EraTarget: era-adaptive NR G_floor (initialized in process())
+        self._restoration_context_p29: dict = {}  # §0j: injected from UV3, read in _refine_hf_with_ml
+        self._omlsa_panns_singing: float = 0.0  # §SibilantProtect: set in process() before channel calls
+        self._preserve_mask_p29: np.ndarray | None = None  # gesetzt in process()
         self._omlsa_runtime_profile_current = {
             "imcra_b_min": 1.66,
             "imcra_alpha_g": 0.85,
@@ -213,7 +219,7 @@ class TapeHissReductionPhase(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive OMLSA/IMCRA runtime profile (§2.54)."""
+        """Berechnet adaptive OMLSA/IMCRA runtime profile (§2.54)."""
         mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         if restorability_score is None:
@@ -258,7 +264,7 @@ class TapeHissReductionPhase(PhaseInterface):
 
     @staticmethod
     def _goal_hint_strength_scalar(kwargs: dict[str, object]) -> float:
-        """Compute bounded advisory strength scalar from song goal weights (§2.56a)."""
+        """Berechnet bounded advisory strength scalar from song goal weights (§2.56a)."""
         goal_weights = kwargs.get("song_goal_weights")
         if not isinstance(goal_weights, dict):
             return 1.0
@@ -285,7 +291,7 @@ class TapeHissReductionPhase(PhaseInterface):
 
     def _get_deepfilternet_plugin(self):
         """
-        Lazy load DeepFilterNet v3 II Plugin.
+        Lädt DeepFilterNet v3 II Plugin beim ersten Zugriff.
 
         Returns:
             DeepFilterNet plugin or None if unavailable
@@ -305,7 +311,7 @@ class TapeHissReductionPhase(PhaseInterface):
             return None
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_29_tape_hiss_reduction",
             name="Tape Hiss Reduction v3 OMLSA/IMCRA",
@@ -330,7 +336,7 @@ class TapeHissReductionPhase(PhaseInterface):
         **kwargs,
     ) -> PhaseResult:
         """
-        Process audio to reduce tape hiss with ML-Hybrid support.
+        Verarbeitet audio to reduce tape hiss with ML-Hybrid support.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -347,6 +353,22 @@ class TapeHissReductionPhase(PhaseInterface):
         self.sample_rate = sample_rate
         self.validate_input(audio)
         audio, _p29_transposed = to_channels_last(audio)
+
+        # §EraTarget: Read era-adaptive G_floor from restoration context (v9.12.1).
+        # Stored on self for access in _process_channel_omlsa_mrsa without signature change.
+        _era_ctx_p29 = kwargs.get("_restoration_context", {}).get("era_carrier_target", {})
+        self._era_nr_g_floor = float(np.clip(_era_ctx_p29.get("nr_g_floor", 0.10), 0.10, 0.50))
+        # §4.8a-ii preserve_mask: Stored on self for _process_channel_omlsa_mrsa.
+        # NR-Gain in PRESERVE-Bins wird auf G_PRESERVE_FLOOR=0.90 gefloort.
+        _ctx_pm_p29 = dict(kwargs.get("_restoration_context", {}) or {})
+        _pm_raw_p29 = _ctx_pm_p29.get("preserve_mask")
+        self._preserve_mask_p29 = (
+            np.asarray(_pm_raw_p29, dtype=np.float32)
+            if isinstance(_pm_raw_p29, np.ndarray) and _pm_raw_p29.size > 0
+            else None
+        )
+        # §0j: Store full restoration context on self for sub-methods (_refine_hf_with_ml)
+        self._restoration_context_p29 = dict(kwargs.get("_restoration_context", {}) or {})
 
         # §2.46f Natural-Performance-Artifacts-Guard — detect protected zones before tape hiss reduction
         _npa_result_29 = None
@@ -572,6 +594,11 @@ class TapeHissReductionPhase(PhaseInterface):
             "lag_output_corrected_samples": 0,
         }
 
+        # §SibilantProtect [RELEASE_MUST] (v9.12.x): PANNs-Score vor OMLSA-Aufruf auf self
+        # speichern, damit _process_channel_omlsa_mrsa das Sibilantenband (Presence-Zone)
+        # transient-aware glätten kann (schneller Onset-Anstieg bei Gesang).
+        self._omlsa_panns_singing = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)))
+
         if is_stereo:
             # §2.51 Linked-Sidechain OMLSA: Gain-Maske aus Mid-Kanal berechnen,
             # identisch auf L und R anwenden. Verhindert stereo-inkohärente HF-Dämpfung
@@ -636,6 +663,7 @@ class TapeHissReductionPhase(PhaseInterface):
             "REEL_TAPE": 10.5,
             "VINYL": 9.5,
             "SHELLAC": 8.5,
+            "CASSETTE": 9.5,  # §SibilantProtect: Kassette = wie Vinyl (HF-Schutz Sibilanten)
         }.get(_mat_name, 10.0)
         if hf_reduction_db > _hf_ceiling_db and _effective_strength > 0.0:
             _excess_db = float(hf_reduction_db - _hf_ceiling_db)
@@ -760,6 +788,68 @@ class TapeHissReductionPhase(PhaseInterface):
                     audio_processed = audio.copy()
             except Exception as _vqi_exc_p29:
                 logger.debug("VQI per-phase phase29 (non-blocking): %s", _vqi_exc_p29)
+
+        # §G5 Formant ±2 dB Guard (§0p RELEASE_MUST): F1–F4 via LPC post-Tape-NR.
+        # Tape-NR (OMLSA) kann bei starker Glättung Formant-Regionen beschädigen;
+        # Spektralenergie-Shift an F1–F4 direkt messen.
+        if _p29_panns >= 0.25:
+            try:
+                from backend.core.dsp.lpc_formant_tracker import check_formant_shift_db as _cfs_p29  # pylint: disable=import-outside-toplevel  # noqa: I001
+
+                _fg_rollback_p29, _fg_shift_p29 = _cfs_p29(audio, audio_processed, sample_rate, threshold_db=2.0)
+                if _fg_rollback_p29:
+                    audio_processed = audio.copy()
+                    logger.warning(
+                        "§G5 FormantGuard phase_29: max F-shift %.2f dB > 2.0 dB → Rollback",
+                        _fg_shift_p29,
+                    )
+                else:
+                    logger.debug("§G5 FormantGuard phase_29: max F-shift %.2f dB — OK", _fg_shift_p29)
+            except Exception as _fg_p29_exc:
+                logger.debug("§G5 FormantGuard phase_29 non-blocking: %s", _fg_p29_exc)
+
+        # §G2 Breath-Segment Protection (§2.46f): EMOTIONAL_TENSION Atemgeräusche
+        # mit Original zurückblenden — Tape-NR glättet sonst Natur-Artefakte weg.
+        _breath_segs_p29 = list(kwargs.get("breath_segments", []) or []) if hasattr(kwargs, "get") else []
+        if _breath_segs_p29:
+            try:
+                _n_out_p29 = audio_processed.shape[-1] if audio_processed.ndim == 2 else len(audio_processed)
+                _n_in_p29 = audio.shape[-1] if audio.ndim == 2 else len(audio)
+                _n_blend_p29 = min(_n_out_p29, _n_in_p29)
+                _result_blend_p29 = np.array(audio_processed, copy=True)
+                _blended_any_p29 = False
+                for _bs_p29 in _breath_segs_p29:
+                    _cat_p29 = getattr(_bs_p29, "category", None)
+                    _cat_str_p29 = str(getattr(_cat_p29, "value", _cat_p29 or "")).lower()
+                    if "tension" not in _cat_str_p29 and "emotional" not in _cat_str_p29:
+                        continue
+                    _bs_start_p29 = float(getattr(_bs_p29, "start_s", 0.0))
+                    _bs_end_p29 = float(getattr(_bs_p29, "end_s", 0.0))
+                    _g_fl_p29 = float(np.clip(getattr(_bs_p29, "recommended_g_floor", 0.50), 0.0, 1.0))
+                    _dry_p29 = float(np.clip(_g_fl_p29, 0.05, 0.95))
+                    if _bs_end_p29 <= _bs_start_p29:
+                        continue
+                    _si_p29 = int(round(_bs_start_p29 * sample_rate))
+                    _ei_p29 = int(round(_bs_end_p29 * sample_rate))
+                    _si_p29 = max(0, min(_si_p29, _n_blend_p29))
+                    _ei_p29 = max(0, min(_ei_p29, _n_blend_p29))
+                    if _si_p29 >= _ei_p29:
+                        continue
+                    if _result_blend_p29.ndim == 2 and audio.ndim == 2:
+                        _result_blend_p29[:, _si_p29:_ei_p29] = (
+                            _dry_p29 * audio[:, _si_p29:_ei_p29]
+                            + (1.0 - _dry_p29) * audio_processed[:, _si_p29:_ei_p29]
+                        )
+                    elif _result_blend_p29.ndim == 1 and audio.ndim == 1:
+                        _result_blend_p29[_si_p29:_ei_p29] = (
+                            _dry_p29 * audio[_si_p29:_ei_p29] + (1.0 - _dry_p29) * audio_processed[_si_p29:_ei_p29]
+                        )
+                    _blended_any_p29 = True
+                if _blended_any_p29:
+                    audio_processed = np.clip(np.nan_to_num(_result_blend_p29, nan=0.0), -1.0, 1.0).astype(np.float32)
+                    logger.debug("§G2 BreathProtect phase_29: %d tension-segs geschützt", len(_breath_segs_p29))
+            except Exception as _g2_p29_exc:
+                logger.debug("§G2 BreathProtect phase_29 non-blocking: %s", _g2_p29_exc)
 
         # §Gap3 PhraseBoundaryGuard — taper artifacts at phrase transitions (§0p Vocal-Supremacy)
         try:
@@ -906,7 +996,7 @@ class TapeHissReductionPhase(PhaseInterface):
 
     @staticmethod
     def _estimate_stereo_lag_samples(stereo_audio: np.ndarray, max_lag_samples: int = 960) -> int:
-        """Estimate inter-channel lag (R relative to L) for channels-last stereo."""
+        """Schätzt inter-channel lag (R relative to L) for channels-last stereo."""
         if stereo_audio.ndim != 2 or stereo_audio.shape[1] != 2:
             return 0
         left = np.asarray(stereo_audio[:, 0], dtype=np.float64)
@@ -933,7 +1023,7 @@ class TapeHissReductionPhase(PhaseInterface):
 
     @staticmethod
     def _shift_channel_no_wrap(channel: np.ndarray, shift_samples: int) -> np.ndarray:
-        """Shift channel with edge fill, never wrap samples."""
+        """Verschiebt channel with edge fill, never wrap samples."""
         x = np.asarray(channel, dtype=np.float32)
         n = len(x)
         if n == 0 or shift_samples == 0:
@@ -1171,6 +1261,9 @@ class TapeHissReductionPhase(PhaseInterface):
         G_floor = G_floor_map.get(mat_name, 0.10)
         intensity_scale = float(np.clip(intensity_scale, 0.0, 1.0))
         G_floor = float(np.clip(1.0 - intensity_scale * (1.0 - G_floor), 0.10, 1.0))  # hard min §2.62
+        # §EraTarget: era-adaptive G_floor lift (v9.12.1) — preserves authentic carrier noise texture.
+        # E.g. 1935 shellac → _era_nr_g_floor=0.35 ensures vintage ambience survives OMLSA.
+        G_floor = float(max(G_floor, getattr(self, "_era_nr_g_floor", 0.10)))
         runtime_profile = getattr(self, "_omlsa_runtime_profile_current", {})
         q = float(np.clip(runtime_profile.get("omlsa_q", 0.5), 0.35, 0.65))
         b_min = float(np.clip(runtime_profile.get("imcra_b_min", 1.66), 1.40, 1.90))
@@ -1202,9 +1295,10 @@ class TapeHissReductionPhase(PhaseInterface):
             from backend.core.dsp.psychoacoustics import compute_masking_threshold_iso11172 as _cmask_p29
 
             _mask_ratio_p29 = _cmask_p29(channel, sample_rate, n_fft=2048, hop_length=512)
-            _masking_floor_p29 = np.mean(_mask_ratio_p29, axis=1).astype(np.float32)  # (n_freq_2048,)
-            _masking_freqs_p29 = np.linspace(0.0, sample_rate / 2.0, _mask_ratio_p29.shape[0], dtype=np.float32)
-            logger.debug("§2.62 phase_29 Masking-Guard: mean_floor=%.3f", float(np.mean(_masking_floor_p29)))
+            _mask_arr_p29 = np.asarray(_mask_ratio_p29, dtype=np.float32)
+            _masking_floor_p29 = _mask_arr_p29.mean(axis=1)  # (n_freq_2048,)
+            _masking_freqs_p29 = np.linspace(0.0, sample_rate / 2.0, _mask_arr_p29.shape[0], dtype=np.float32)
+            logger.debug("§2.62 phase_29 Masking-Guard: mean_floor=%.3f", float(_masking_floor_p29.mean()))
         except Exception as _msk_exc_p29:
             logger.debug("§2.62 phase_29 Masking-Guard nicht verfügbar (non-blocking): %s", _msk_exc_p29)
 
@@ -1262,6 +1356,44 @@ class TapeHissReductionPhase(PhaseInterface):
                 G_z = np.exp(np.clip(log_G_z, np.log(G_floor + eps), 0.0))
                 G_z = np.clip(np.nan_to_num(G_z, nan=G_floor), G_floor, 1.0)
 
+                # §4.8a-ii PRESERVE-Mask: G_eff = mask * G_PRESERVE_FLOOR + (1 - mask) * G_z
+                # Floort OMLSA/MMSE-LSA-Gain in PRESERVE-Bins (Shellac H2/H4, Tape Bias etc.) auf 0.90.
+                _pm_p29 = getattr(self, "_preserve_mask_p29", None)
+                if _pm_p29 is not None and _pm_p29.size > 0:
+                    _G_PRES_P29 = 0.90
+                    _n_bins_z = G_z.shape[0]
+                    if len(_pm_p29) != _n_bins_z:
+                        _pm_interp_z = np.interp(
+                            np.arange(_n_bins_z),
+                            np.linspace(0, _n_bins_z - 1, len(_pm_p29)),
+                            _pm_p29.astype(np.float64),
+                        ).astype(np.float64)
+                    else:
+                        _pm_interp_z = _pm_p29.astype(np.float64)
+                    _pm_col_z = _pm_interp_z[:, np.newaxis]  # (n_bins, 1)
+                    G_z = _pm_col_z * _G_PRES_P29 + (1.0 - _pm_col_z) * G_z
+                    G_z = np.clip(np.nan_to_num(G_z, nan=G_floor), G_floor, 1.0)
+
+                # §Gap5 EmotionalArc FrissonZone Schutz — §0p v9.12.8
+                # ArcPlan aus _restoration_context: geschützte Zonen bekommen weniger NR.
+                _arc_plan_p29 = getattr(self, "_arc_plan_p29", None)
+                if _arc_plan_p29 is None:
+                    _arc_plan_p29 = getattr(self, "_restoration_context_p29", {}).get("arc_protection_weights")
+                if _arc_plan_p29 is not None and hasattr(_arc_plan_p29, "weight_at"):
+                    try:
+                        _n_frames_z = G_z.shape[1]
+                        _hop_s_z = zone_hop / max(1, sample_rate)
+                        _frame_times_z = np.arange(_n_frames_z, dtype=np.float64) * _hop_s_z
+                        _arc_w_z = np.array(
+                            [_arc_plan_p29.weight_at(float(t), float(t + _hop_s_z)) for t in _frame_times_z],
+                            dtype=np.float64,
+                        )
+                        _protect_z = np.clip((_arc_w_z - 1.0) * 0.5, 0.0, 0.50)
+                        G_z = G_z + _protect_z[np.newaxis, :] * (1.0 - G_z)
+                        G_z = np.clip(G_z, G_floor, 1.0)
+                    except Exception as _arc_z_exc:
+                        logger.debug("§Gap5 Arc-Schutz phase_29 non-blocking: %s", _arc_z_exc)
+
                 # §2.62: Per-Frequenz-Masking-Floor — Signal-konditioniert (non-blocking).
                 # Schützt signalpräsente Bins vor Überunterdrückung (§2.62).
                 # Signal-konditioniert: Floor nur auf Bins mit G_z > _P29_SIGNAL_GATE anwenden.
@@ -1300,6 +1432,20 @@ class TapeHissReductionPhase(PhaseInterface):
                 # Cappé temporal smoothing via fast IIR
                 G_z_sm = _lfilter_p29([1.0 - alpha_g], [1.0, -alpha_g], G_z, axis=1)
                 G_z_sm = np.clip(np.nan_to_num(G_z_sm, nan=G_floor), G_floor, 1.0)
+
+                # §SibilantProtect [RELEASE_MUST] (v9.12.x): Transient-aware Gain für
+                # Presence-Zone bei Gesangsmaterial. Symmetrische Cappé-Glättung
+                # (tau≈32 ms) verschluckt Sibilanten-Onsets (50-150 ms) → progressive
+                # Sibilantenunterdrückung in dichten Vokalpassagen. Fix: paralleler
+                # Fast-IIR (alpha_fast=alpha_g-0.30, tau≈8 ms) → Max beider Glättungen
+                # → schneller Anstieg bei Sibilantenonset, sicherer Abfall danach.
+                _panns_s_p29 = float(getattr(self, "_omlsa_panns_singing", 0.0))
+                if zone_name == "presence" and _panns_s_p29 >= 0.25:
+                    _alpha_fast_p29 = float(np.clip(alpha_g - 0.30, 0.20, 0.70))
+                    _G_z_fast_p29 = _lfilter_p29([1.0 - _alpha_fast_p29], [1.0, -_alpha_fast_p29], G_z, axis=1)
+                    _G_z_fast_p29 = np.clip(np.nan_to_num(_G_z_fast_p29, nan=G_floor), G_floor, 1.0)
+                    G_z_sm = np.maximum(G_z_sm, _G_z_fast_p29)
+                    G_z_sm = np.clip(G_z_sm, G_floor, 1.0)
 
                 # Extract zone frequency range
                 zm_z = (f_z >= float(f_low)) & (f_z <= float(f_high))
@@ -1581,7 +1727,7 @@ class TapeHissReductionPhase(PhaseInterface):
             )
 
             # §0j vocal_energy_bias_db from VFA context — override local estimate
-            _ctx_energy_bias_29 = float(kwargs.get("_restoration_context", {}).get("vocal_energy_bias_db", 0.0))
+            _ctx_energy_bias_29 = float(self._restoration_context_p29.get("vocal_energy_bias_db", 0.0))
             if _ctx_energy_bias_29 < -6.0 and _is_vocal_content_p29:
                 _energy_bias_equiv_db = _ctx_energy_bias_29
                 logger.debug("§0j phase_29 energy_bias from context=%.1f dB", _ctx_energy_bias_29)
@@ -1659,7 +1805,7 @@ class TapeHissReductionPhase(PhaseInterface):
         self, band_signal: np.ndarray, noise_floor_db: float, threshold_db: float, reduction_db: float, sample_rate: int
     ) -> np.ndarray:
         """
-        Apply adaptive expander gate to band signal.
+        Wendet adaptives Expander-Gate auf das Bandsignal an.
 
         Gate formula:
             gain = 1.0 if level > threshold
@@ -1695,7 +1841,7 @@ class TapeHissReductionPhase(PhaseInterface):
         self, signal_in: np.ndarray, sample_rate: int, attack_ms: float = 5.0, release_ms: float = 50.0
     ) -> np.ndarray:
         """
-        Compute envelope with attack/release smoothing.
+        Berechnet envelope with attack/release smoothing.
         """
         # Rectify
         rectified = np.abs(signal_in)
@@ -1720,7 +1866,7 @@ class TapeHissReductionPhase(PhaseInterface):
 
     def _smooth_gains(self, gains: np.ndarray, sample_rate: int, smooth_ms: float = 10.0) -> np.ndarray:
         """
-        Smooth gain curve to prevent artifacts.
+        Glättet gain curve to prevent artifacts.
         """
         # Lowpass filter gains
         cutoff = 1000.0 / smooth_ms  # Lower cutoff for longer smooth_ms

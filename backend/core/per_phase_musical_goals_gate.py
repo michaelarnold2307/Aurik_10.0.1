@@ -6,7 +6,7 @@ Verhindert kumulative Degradation über 56 Phasen.
 
 PROBLEM:
 --------
-Jede Phase kann Musical Goals minimal verslechtern (z.B. Δ-0.01).
+Jede Phase kann Musical Goals minimal verschlechtern (z.B. Δ-0.01).
 Über 20+ aktive Phasen kumuliert das zu -0.20 → ein Ziel fällt unter
 den Pflicht-Schwellwert. Der End-Check kann das nicht mehr korrigieren.
 
@@ -61,6 +61,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+
+from backend.core.calibration_matrix import (
+    CANONICAL_THRESHOLDS_RESTORATION as _CM_REST,
+)
+from backend.core.calibration_matrix import (
+    CANONICAL_THRESHOLDS_STUDIO2026 as _CM_STU,
+)
+
+# §09.1 [RELEASE_MUST] Single Source of Truth: backend/core/calibration_matrix.py
+# Werte hier NICHT bearbeiten — Änderungen ausschließlich in calibration_matrix.py.
+# Per-Song-adaptive Schwellwerte werden via estimate_song_goal_targets() (§09.2) berechnet.
 
 logger = logging.getLogger(__name__)
 
@@ -1164,66 +1175,36 @@ _RESTORATIVE_PHASES: frozenset[str] = frozenset(
     }  # pylint: enable=line-too-long
 )
 
-# Normative Mindest-Schwellwerte (§14 Musical Goals, §9.10.77 Pareto-Differenzierung).
-# Werden als Baseline-Deckel für restorative Phasen genutzt.
-# Scores_before über diesem Wert werden auf diesen Wert gedeckelt,
-# da höhere Werte nur durch Defekt-Inflation entstehen können.
-#
-# P1/P2: Studio 2026 strenger (höhere Böden) — mehr Enhancement = stärkerer
-#         Natürlichkeits-/Authentizitäts-Guard gegen Over-Processing.
-# P3–P5: Restoration + Studio 2026 verwenden materialuniversale Böden aus Spec 09.
-#         Song-spezifische Ziele oberhalb der Böden: adaptive Schicht §2.31+§09.2+§2.56.
-# Single Source of Truth: backend/core/calibration_matrix.py
-_CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {
-    # P1
-    "natuerlichkeit": 0.90,
-    "authentizitaet": 0.88,
-    # P2
-    "tonal_center": 0.95,
-    "timbre_authentizitaet": 0.87,
-    "artikulation": 0.85,
-    # P3
-    "emotionalitaet": 0.82,
-    "micro_dynamics": 0.88,
-    "groove": 0.83,
-    # P4
-    "transparenz": 0.82,
-    "waerme": 0.75,
-    "bass_kraft": 0.78,
-    "separation_fidelity": 0.78,
-    # P5
-    "brillanz": 0.78,
-    "spatial_depth": 0.70,
-}
+_CANONICAL_14_KEYS: frozenset[str] = frozenset(
+    {
+        "natuerlichkeit",
+        "authentizitaet",
+        "tonal_center",
+        "timbre_authentizitaet",
+        "artikulation",
+        "emotionalitaet",
+        "micro_dynamics",
+        "groove",
+        "transparenz",
+        "waerme",
+        "bass_kraft",
+        "separation_fidelity",
+        "brillanz",
+        "spatial_depth",
+    }
+)
 
-_CANONICAL_THRESHOLDS_STUDIO2026: dict[str, float] = {
-    # P1 — stricter in Studio 2026 (more enhancement → stronger naturalness guard)
-    "natuerlichkeit": 0.92,
-    "authentizitaet": 0.90,
-    # P2 — stricter in Studio 2026
-    "tonal_center": 0.96,
-    "timbre_authentizitaet": 0.89,
-    "artikulation": 0.87,
-    # P3 — material-universal floor (Spec 09 / calibration_matrix.py)
-    "emotionalitaet": 0.84,
-    "micro_dynamics": 0.90,
-    "groove": 0.85,
-    # P4 — material-universal floor (Spec 09 / calibration_matrix.py)
-    "transparenz": 0.85,
-    "waerme": 0.78,
-    "bass_kraft": 0.80,
-    "separation_fidelity": 0.80,
-    # P5 — material-universal floor (Spec 09 / calibration_matrix.py)
-    "brillanz": 0.82,
-    "spatial_depth": 0.74,
-}
+# Abgeleitete Threshold-Dicts (nur die 14 kanonischen Short-Form-Keys)
+_CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {k: v for k, v in _CM_REST.items() if k in _CANONICAL_14_KEYS}
+
+_CANONICAL_THRESHOLDS_STUDIO2026: dict[str, float] = {k: v for k, v in _CM_STU.items() if k in _CANONICAL_14_KEYS}
 
 # Default alias for backward compatibility (Restoration-Modus)
 _CANONICAL_THRESHOLDS: dict[str, float] = _CANONICAL_THRESHOLDS_RESTORATION
 
 
 def _get_canonical_thresholds(is_studio_2026: bool = False) -> dict[str, float]:
-    """Return mode-appropriate canonical thresholds (Spec 09 / §09.1 calibration_matrix.py).
+    """Gibt mode-appropriate canonical thresholds (Spec 09 / §09.1 calibration_matrix.py) zurück.
 
     P1/P2 are stricter in Studio 2026 — more aggressive enhancement requires a
     stronger guard against loss of naturalness and authenticity.
@@ -1252,7 +1233,7 @@ _RETRY_STRENGTHS: list[float] = [
 # Processing effect at this strength remains marginally audible but introduced
 # artifacts are below the simultaneous-masking threshold at typical playback levels.
 
-# §2.29a ML-deterministische Phasen: Inference-Output ist bei gleichem Input
+# §2.29a ML-deterministic Phasen: Inference-Output ist bei gleichem Input
 # identisch, unabhängig vom strength-Parameter.  Bei PMGG-Retries wird nur
 # Wet/Dry-Reblending variiert — keine Re-Inferenz.
 # Phase-ID-Prefixes (startswith-Match) für robustes Matching.
@@ -1264,7 +1245,7 @@ _ML_DETERMINISTIC_PHASES: frozenset[str] = frozenset(
         "phase_12",  # FCPE/CREPE/pYIN (f₀-Schätzung) — Timing-Phase, kein Wet/Dry
         "phase_18",  # Silero VAD (Binary-Mask)
         "phase_19",  # De-Esser+VocalStack: process() ignoriert strength → Wet/Dry reicht
-        "phase_20",  # SGMSE+ (Reverb-Separation) — nur ML-deterministisch wenn SGMSE+ geladen
+        "phase_20",  # SGMSE+ (Reverb-Separation) — nur ML-deterministic wenn SGMSE+ geladen
         # WPE-Fallback ist strength-abhängiger DSP → _phase20_is_ml_active() prüft zur Laufzeit
         "phase_23",  # AudioSR Inpainting (Spektral-Lückenfüllung)
         "phase_29",  # DeepFilterNet v3 II (HF-Denoising)
@@ -1275,7 +1256,7 @@ _ML_DETERMINISTIC_PHASES: frozenset[str] = frozenset(
 
 
 def _material_key_from_phase_kwargs(phase_kwargs: dict[str, Any] | None) -> str:
-    """Return normalized material key from phase kwargs."""
+    """Gibt normalized material key from phase kwargs zurück."""
     if not isinstance(phase_kwargs, dict):
         return "unknown"
     _raw = phase_kwargs.get("material_type", phase_kwargs.get("material", "unknown"))
@@ -1392,7 +1373,7 @@ def _phase_safe_strength_cap(phase_id: str, phase_kwargs: dict[str, Any] | None)
 
 
 def _resolve_team_context_policy(phase_id: str, phase_kwargs: dict[str, Any] | None) -> dict[str, Any]:
-    """Return PMGG team-coordination policy derived from prior phase context.
+    """Gibt PMGG team-coordination policy derived from prior phase context zurück.
 
     The policy is advisory and only affects PMGG retry/goal-check behavior.
     It does not disable final export gates and does not bypass safety guards.
@@ -1492,7 +1473,7 @@ def _allow_emergency_retries(
     catastrophic_threshold: float,
     team_policy: dict[str, Any] | None,
 ) -> bool:
-    """Return whether PMGG emergency retries should run for this phase.
+    """Gibt whether PMGG emergency retries should run for this phase zurück.
 
     Team-policy can disable emergency retries when a measured regression is likely
     a proxy artifact caused by intentional prior restoration steps.
@@ -1512,7 +1493,7 @@ def _allow_emergency_retries(
 
 
 def _phase20_is_ml_active() -> bool:
-    """Return True when SGMSE+ is currently loaded in the ML budget (§2.29a).
+    """Gibt True when SGMSE+ is currently loaded in the ML budget (§2.29a) zurück.
 
     phase_20 is ML-deterministic only when the SGMSE+ model is actually resident
     in memory.  When SGMSE+ was blocked by ml_memory_budget (OOM pressure) and
@@ -1801,7 +1782,7 @@ def _measure_vocal_guard_features(
     sr: int,
     reference: np.ndarray | None = None,
 ) -> dict[str, float]:
-    """Estimate lightweight vocal-preservation features for PMGG quick scoring."""
+    """Schätzt lightweight vocal-preservation features for PMGG quick scoring."""
 
     if audio.ndim == 2:
         mono = audio.mean(axis=0) if audio.shape[0] <= 2 else audio.mean(axis=1)
@@ -2112,7 +2093,7 @@ def _measure_quick(
     #   bei 3–5 (Bass/untere Mitten dominieren). Die alte Konstante 1.5 führte dazu, dass der
     #   Proxy immer saturiert auf 1.0 war (ratio >> 1.5 → clip). WaermeMetric._measure_absolute()
     #   nutzt ISO 226:2003 Equal-Loudness-Gewichtung, die 800–3000 Hz stärker gewichtet →
-    #   reale Werte 0.70–0.90. Mit 4.0 ist der Proxy sensitiv für Änderungen und erkennt
+    #   reale Werte 0.70–0.90. Mit 4.0 ist der Proxy sensitive für Änderungen und erkennt
     #   Warmth-Regressions durch Denoise/Dereverb-Phasen (Δ-Erkennung statt Sattigung).
     try:
         # §9.7.14 ISO-226 perceptual weighting — MUST match WaermeMetric._measure_absolute()
@@ -2263,7 +2244,7 @@ def _measure_quick(
     _ks_min_n /= _ks_min_n.std() + 1e-12
 
     def _ks_key(signal_mono: np.ndarray, n_fft: int = 4096, sr_inner: int = 48000) -> int:
-        """Return dominant key label 0–23 (0–11 major, 12–23 minor, root = C).
+        """Gibt dominant key label 0–23 (0–11 major, 12–23 minor, root = C) zurück.
 
         Uses multi-segment averaging (8 windows) for stability across
         the entire signal, rather than a single center window which is
@@ -2916,7 +2897,7 @@ def _content_integrity_penalty(
     skip_corr_check: bool = False,
     skip_drop_check: bool = False,
 ) -> tuple[float, dict[str, float]]:
-    """Detect catastrophic content loss independently from Musical-Goal proxies.
+    """Erkennt catastrophic content loss independently from Musical-Goal proxies.
 
     The guard is intentionally conservative and only reacts to severe failures:
     large broadband energy collapse and/or very low waveform correlation.
@@ -3011,7 +2992,7 @@ def _content_integrity_penalty(
 
 
 def _targeted_defect_keys_for_phase(phase_id: str) -> tuple[str, ...]:
-    """Return defect-location keys used for sparse-defect sample targeting."""
+    """Gibt defect-location keys used for sparse-defect sample targeting zurück."""
     _phase_defect_keys = {
         "phase_24": ("DROPOUTS", "DROPOUT", "dropouts"),
         "phase_27": ("DROPOUTS", "DROPOUT", "dropouts"),
@@ -3032,7 +3013,7 @@ def _get_sample_window_bounds(
     defect_locations: dict[str, list[tuple[float, float]]] | None = None,
     phase_id: str = "",
 ) -> tuple[int, int]:
-    """Return the PMGG sample-window bounds for the given phase."""
+    """Gibt the PMGG sample-window bounds for the given phase zurück."""
     sample_len = min(int(duration_s * sr), audio_len)
     if audio_len <= sample_len:
         return 0, audio_len
@@ -3069,7 +3050,7 @@ def _estimate_targeted_defect_coverage_ratio(
     defect_locations: dict[str, list[tuple[float, float]]] | None,
     phase_id: str,
 ) -> float | None:
-    """Estimate targeted-defect coverage inside the PMGG sample window."""
+    """Schätzt targeted-defect coverage inside the PMGG sample window."""
     if not defect_locations:
         return None
 
@@ -3195,7 +3176,7 @@ class PerPhaseMusicalGoalsGate:
     """
 
     def __init__(self) -> None:
-        """Initialize PMGG with zeroed rollback counters."""
+        """Initialisiert PMGG with zeroed rollback counters."""
         self._rollback_count: int = 0  # Pro Restaurierungsaufruf
         self._user_warned: bool = False  # Nutzer-Warnung einmalig
         self._last_retry_budget_policy: dict[str, Any] = {}
@@ -3213,7 +3194,7 @@ class PerPhaseMusicalGoalsGate:
         max_retries: int,
         retry_budget_s: float,
     ) -> tuple[int, float, dict[str, Any]]:
-        """Return capped retry policy when UV3 signals wall-budget pressure."""
+        """Gibt capped retry policy when UV3 signals wall-budget pressure zurück."""
         hint = (phase_kwargs or {}).get("retry_budget_hint")
         if not isinstance(hint, dict) or not hint:
             return max_retries, retry_budget_s, {}
@@ -3784,13 +3765,13 @@ class PerPhaseMusicalGoalsGate:
                             _cap_upper,
                         )
 
-        # §2.29a ML-Inference-Caching: ML-deterministische Phasen werden nur
+        # §2.29a ML-Inference-Caching: ML-deterministic Phasen werden nur
         # einmal mit strength=1.0 ausgeführt.  Retries variieren Wet/Dry-Blending.
         # Strength-abhängige DSP-Phasen müssen bei jedem Retry neu ausgeführt
         # werden, da strength dort Algorithmus-Parameter steuert (z.B. Filterfrequenz,
         # Kompressionsratio), nicht nur das Mischverhältnis.
         _is_ml_deterministic = phase_id.startswith(tuple(_ML_DETERMINISTIC_PHASES))
-        # §2.29a Sonderfall phase_20: SGMSE+ (ML) ist deterministisch, aber WPE-DSP-Fallback
+        # §2.29a Sonderfall phase_20: SGMSE+ (ML) ist deterministic, aber WPE-DSP-Fallback
         # verwendet strength*0.90 als algorithmus-internen Prädiktor-Parameter → must re-run.
         # Zur Laufzeit: nur wenn SGMSE+ im ML-Budget alloziert ist, ML-Pfad verwenden.
         if _is_ml_deterministic and phase_id.startswith("phase_20"):

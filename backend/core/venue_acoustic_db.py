@@ -672,7 +672,7 @@ def get_dereverb_wet_cap(
     *,
     default: float = 0.35,
 ) -> float:
-    """Return the maximum safe Dereverb wet_mix for a venue.
+    """Gibt the maximum safe Dereverb wet_mix for a venue zurück.
 
     Lower values protect more of the authentic room sound.
 
@@ -694,7 +694,7 @@ def get_rt60_profile(
     venue_hint: str,
     era_decade: int | None = None,
 ) -> dict[str, float] | None:
-    """Return RT60 values at three frequency bands.
+    """Gibt RT60 values at three frequency bands zurück.
 
     Returns:
         dict with keys "low_s", "mid_s", "high_s" or None.
@@ -736,7 +736,7 @@ def estimate_room_type(
 
 
 def list_venue_keys() -> list[str]:
-    """Return all canonical venue keys."""
+    """Gibt all canonical venue keys zurück."""
     return sorted(_VENUE_DB.keys())
 
 

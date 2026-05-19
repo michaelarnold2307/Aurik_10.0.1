@@ -29,7 +29,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 class CodecArtifactRemover:
     """
-    Removes codec-specific artifacts from compressed audio.
+    Entfernt codec-specific artifacts from compressed audio.
 
     Codec Artifacts:
     - MP3: Pre-echo (MDCT time-smearing before transients)
@@ -54,7 +54,7 @@ class CodecArtifactRemover:
         smoothing_strength: float = 0.6,
     ):
         """
-        Initialize Codec Artifact Remover.
+        Initialisiert Codec Artifact Remover.
 
         Parameters
         ----------
@@ -75,11 +75,11 @@ class CodecArtifactRemover:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_pre_echo(self, audio: np.ndarray, sample_rate: int) -> list[int]:
         """
-        Detect MP3 pre-echo artifacts (signal before transients).
+        Erkennt MP3 pre-echo artifacts (signal before transients).
 
         Parameters
         ----------
@@ -114,7 +114,7 @@ class CodecArtifactRemover:
 
     def remove_pre_echo(self, audio: np.ndarray, transient_indices: list[int], sample_rate: int) -> np.ndarray:
         """
-        Remove pre-echo artifacts before transients.
+        Entfernt pre-echo artifacts before transients.
 
         Parameters
         ----------
@@ -154,7 +154,7 @@ class CodecArtifactRemover:
 
     def detect_spectral_holes(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Detect AAC spectral holes (quantization artifacts).
+        Erkennt AAC spectral holes (quantization artifacts).
 
         Parameters
         ----------
@@ -243,7 +243,7 @@ class CodecArtifactRemover:
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process audio to remove codec artifacts.
+        Verarbeitet audio to remove codec artifacts.
 
         Parameters
         ----------
@@ -331,7 +331,7 @@ class PacketLossConcealer:
 
     def __init__(self, gap_threshold_ms: float = 5.0, interpolation_method: str = "cubic"):
         """
-        Initialize Packet Loss Concealer.
+        Initialisiert Packet Loss Concealer.
 
         Parameters
         ----------
@@ -349,11 +349,11 @@ class PacketLossConcealer:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_gaps(self, audio: np.ndarray, sample_rate: int) -> list[tuple[int, int]]:
         """
-        Detect packet loss gaps (zero regions, discontinuities).
+        Erkennt packet loss gaps (zero regions, discontinuities).
 
         Parameters
         ----------
@@ -451,7 +451,7 @@ class PacketLossConcealer:
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process audio to conceal packet loss.
+        Verarbeitet audio to conceal packet loss.
 
         Parameters
         ----------
@@ -543,7 +543,7 @@ class JitterCorrector:
 
     def __init__(self, jitter_threshold_ppm: float = 100.0, correction_strength: float = 0.7):
         """
-        Initialize Jitter Corrector.
+        Initialisiert Jitter Corrector.
 
         Parameters
         ----------
@@ -561,11 +561,11 @@ class JitterCorrector:
         self._log_contract()
 
     def _log_contract(self):
-        """Log DSPContract for auditability"""
+        """Protokolliert DSPContract for auditability."""
 
     def detect_jitter(self, audio: np.ndarray, sample_rate: int) -> float:
         """
-        Detect jitter level via spectral analysis.
+        Erkennt jitter level via spectral analysis.
 
         Parameters
         ----------
@@ -639,7 +639,7 @@ class JitterCorrector:
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process audio to correct jitter.
+        Verarbeitet audio to correct jitter.
 
         Parameters
         ----------
@@ -698,7 +698,7 @@ class JitterCorrector:
 
 class DigitalRestorationSpecialist:
     """
-    Unified API for digital-specific defect removal.
+    Einheitliche API für digitalspezifische Defektentfernung.
 
     Combines:
     - CodecArtifactRemover (GAP #3)
@@ -728,7 +728,7 @@ class DigitalRestorationSpecialist:
         jitter_correction_strength: float = 0.7,
     ):
         """
-        Initialize Digital Restoration Specialist.
+        Initialisiert Digital Restoration Specialist.
 
         Parameters
         ----------
@@ -764,7 +764,7 @@ class DigitalRestorationSpecialist:
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Process audio with digital restoration modules.
+        Verarbeitet audio with digital restoration modules.
 
         Parameters
         ----------
@@ -799,7 +799,7 @@ class DigitalRestorationSpecialist:
         return output
 
     def get_metrics(self) -> dict:
-        """Get metrics from all modules"""
+        """Gibt zurück: metrics from all modules."""
         metrics = {}
 
         if self.enable_packet_loss_concealment and hasattr(self, "packet_loss_concealer"):

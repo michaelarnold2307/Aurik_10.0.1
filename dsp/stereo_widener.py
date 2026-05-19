@@ -102,7 +102,7 @@ class AdaptiveStereoWidener:
 
     def _frequency_dependent_widening(self, side: np.ndarray, sr: int, width: float) -> np.ndarray:
         """
-        Apply frequency-dependent widening to side signal.
+        Wendet an: frequency-dependent widening to side signal.
 
         Bands:
         - 0-200Hz: 0.5x width (Bass mono)
@@ -198,7 +198,7 @@ class AdaptiveStereoWidener:
 
     def check_mono_compatibility(self, audio_stereo: np.ndarray) -> tuple[bool, float]:
         """
-        Check if widened stereo is mono-compatible.
+        Prüft if widened stereo is mono-compatible.
 
         Returns:
             (is_compatible, correlation)

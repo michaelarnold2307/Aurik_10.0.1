@@ -56,7 +56,7 @@ _N_FFT: int = 2048
 
 @dataclass
 class BlindReferenceSegment:
-    """A single candidate 'cleanest' segment."""
+    """single candidate 'cleanest' segment."""
 
     start_s: float
     end_s: float
@@ -65,6 +65,7 @@ class BlindReferenceSegment:
     spectral_clarity: float
 
     def to_dict(self) -> dict:
+        """Serialisiert this segment as a dictionary for UV3 context injection."""
         return {
             "start_s": float(self.start_s),
             "end_s": float(self.end_s),
@@ -88,6 +89,7 @@ class BlindReferenceResult:
     """Score of the single best segment [0, 1]."""
 
     def to_dict(self) -> dict:
+        """Serialisiert the reference result as a dictionary for UV3 context injection."""
         return {
             "segments": [s.to_dict() for s in self.segments],
             "global_snr_proxy_db": float(self.global_snr_proxy_db),
@@ -101,10 +103,10 @@ class BlindReferenceResult:
 
 
 class BlindInternalReference:
-    """Finds the cleanest segments within a song for use as internal reference."""
+    """Findet die saubersten Segmente eines Songs als interne Referenz."""
 
     def find(self, audio: np.ndarray, sr: int, top_n: int = _TOP_N) -> BlindReferenceResult:
-        """Analyze a song and return the top-N cleanest segments.
+        """Analysiert einen Song und gibt die N saubersten Segmente zurück.
 
         Args:
             audio:  Input audio (mono or stereo, any length).
@@ -175,8 +177,8 @@ class BlindInternalReference:
         return result
 
     @staticmethod
-    def _score_segment(seg: np.ndarray, sr: int) -> tuple[float, float, float]:
-        """Compute quality score, SNR proxy (dB), and spectral clarity for a segment.
+    def _score_segment(seg: np.ndarray, _sr: int) -> tuple[float, float, float]:
+        """Berechnet quality score, SNR proxy (dB), and spectral clarity for a segment.
 
         Returns:
             (combined_score [0,1], snr_proxy_db, spectral_clarity [0,1])

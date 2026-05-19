@@ -75,7 +75,7 @@ class GenericDynamicsSafety(BaseSafetyWrapper):
         self.musical_goals = MusicalGoalsChecker()
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for dynamics processing."""
+        """Validiert pre-conditions for dynamics processing."""
         is_valid, errors = validate_audio_basic(audio)
 
         if not is_valid:
@@ -124,7 +124,7 @@ class GenericDynamicsSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions for dynamics processing."""
+        """Validiert post-conditions for dynamics processing."""
         issues = []
         side_effects = []
         metrics = {}
@@ -194,13 +194,13 @@ class GenericDynamicsSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute quality score for dynamics processing."""
+        """Berechnet quality score for dynamics processing."""
         return self._compute_dynamics_quality(post_check.metrics)
 
     # Helper methods
 
     def _measure_dynamic_range(self, audio: np.ndarray) -> float:
-        """Measure dynamic range in dB."""
+        """Misst dynamic range in dB."""
         # RMS of loudest 5% vs quietest 5%
         sorted_abs = np.sort(np.abs(audio))
         n = len(sorted_abs)
@@ -218,7 +218,7 @@ class GenericDynamicsSafety(BaseSafetyWrapper):
         return float(dr_db)
 
     def _measure_crest_factor(self, audio: np.ndarray) -> float:
-        """Measure crest factor (peak/RMS ratio) in dB."""
+        """Misst crest factor (peak/RMS ratio) in dB."""
         peak = np.max(np.abs(audio))
         rms = np.sqrt(np.mean(audio**2))
 
@@ -229,7 +229,7 @@ class GenericDynamicsSafety(BaseSafetyWrapper):
         return float(crest_db)
 
     def _detect_pumping(self, audio: np.ndarray, sr: int) -> float:
-        """Detect pumping artifacts (gain modulation at ~2-10 Hz)."""
+        """Erkennt pumping artifacts (gain modulation at ~2-10 Hz)."""
         # Compute envelope
         from scipy.signal import hilbert
 
@@ -260,7 +260,7 @@ class GenericDynamicsSafety(BaseSafetyWrapper):
         return float(np.clip(pumping_score, 0.0, 1.0))
 
     def _estimate_thd(self, audio: np.ndarray, sr: int) -> float:
-        """Estimate Total Harmonic Distortion."""
+        """Schätzt Total Harmonic Distortion."""
         # Simplified THD: ratio of HF energy to total energy
         sos_lp = signal.butter(2, 1000, "low", fs=sr, output="sos")
         sos_hp = signal.butter(2, 1000, "high", fs=sr, output="sos")
@@ -278,7 +278,7 @@ class GenericDynamicsSafety(BaseSafetyWrapper):
         return float(np.clip(thd, 0.0, 1.0))
 
     def _check_transient_ratio(self, original: np.ndarray, processed: np.ndarray, sr: int) -> float:
-        """Measure how transient levels changed."""
+        """Misst how transient levels changed."""
         from scipy.ndimage import maximum_filter1d
 
         orig_mono = original if original.ndim == 1 else np.mean(original, axis=0)
@@ -303,7 +303,7 @@ class GenericDynamicsSafety(BaseSafetyWrapper):
         return float(ratio)
 
     def _compute_dynamics_quality(self, metrics: dict[str, Any]) -> float:
-        """Compute quality score for dynamics processing."""
+        """Berechnet quality score for dynamics processing."""
         dr_change = metrics.get("dynamic_range_change_db", 10.0)
         pumping = metrics.get("pumping_score", 0.1)
         thd_increase = metrics.get("thd_increase", 0.01)
@@ -364,7 +364,7 @@ class GenericSpectralSafety(BaseSafetyWrapper):
         self.musical_goals = MusicalGoalsChecker()
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for spectral processing."""
+        """Validiert pre-conditions for spectral processing."""
         is_valid, errors = validate_audio_basic(audio)
 
         if not is_valid:
@@ -410,7 +410,7 @@ class GenericSpectralSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions for spectral processing."""
+        """Validiert post-conditions for spectral processing."""
         issues = []
         side_effects = []
         metrics = {}
@@ -475,13 +475,13 @@ class GenericSpectralSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute quality score for spectral processing."""
+        """Berechnet quality score for spectral processing."""
         return self._compute_spectral_quality(post_check.metrics)
 
     # Helper methods
 
     def _measure_spectral_flatness(self, audio: np.ndarray) -> float:
-        """Measure spectral flatness (Wiener entropy)."""
+        """Misst spectral flatness (Wiener entropy)."""
         spectrum = np.abs(np.fft.rfft(audio))
         spectrum = spectrum + 1e-10  # Avoid log(0)
 
@@ -492,7 +492,7 @@ class GenericSpectralSafety(BaseSafetyWrapper):
         return float(flatness)
 
     def _detect_harshness(self, audio: np.ndarray, sr: int) -> float:
-        """Detect harsh high-frequency resonances."""
+        """Erkennt harsh high-frequency resonances."""
         # Filter to harsh frequency range (3-7.5 kHz to avoid Nyquist)
         max_freq = min(7500, sr / 2 - 100)
         sos = signal.butter(4, [3000, max_freq], "bp", fs=sr, output="sos")
@@ -520,7 +520,7 @@ class GenericSpectralSafety(BaseSafetyWrapper):
         return float(np.clip(harshness, 0.0, 1.0))
 
     def _measure_phase_coherence(self, stereo_audio: np.ndarray) -> float:
-        """Measure phase coherence between stereo channels."""
+        """Misst phase coherence between stereo channels."""
         if stereo_audio.shape[0] != 2:
             return 1.0
 
@@ -547,7 +547,7 @@ class GenericSpectralSafety(BaseSafetyWrapper):
         return float(coherence)
 
     def _compute_spectral_quality(self, metrics: dict[str, Any]) -> float:
-        """Compute quality score for spectral processing."""
+        """Berechnet quality score for spectral processing."""
         centroid_change = metrics.get("centroid_change_pct", 0.1)
         harshness = metrics.get("harshness_score", 0.2)
         coherence_loss = metrics.get("phase_coherence_loss", 0.0)
@@ -605,7 +605,7 @@ class GenericSpatialSafety(BaseSafetyWrapper):
         self.musical_goals = MusicalGoalsChecker()
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for spatial processing."""
+        """Validiert pre-conditions for spatial processing."""
         is_valid, errors = validate_audio_basic(audio)
 
         if not is_valid:
@@ -650,7 +650,7 @@ class GenericSpatialSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions for spatial processing."""
+        """Validiert post-conditions for spatial processing."""
         issues = []
         side_effects = []
         metrics = {}
@@ -709,13 +709,13 @@ class GenericSpatialSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute quality score for spatial processing."""
+        """Berechnet quality score for spatial processing."""
         return self._compute_spatial_quality(post_check.metrics)
 
     # Helper methods
 
     def _measure_stereo_width(self, stereo_audio: np.ndarray) -> float:
-        """Measure stereo width (0 = mono, 1 = maximum width)."""
+        """Misst stereo width (0 = mono, 1 = maximum width)."""
         left = stereo_audio[0]
         right = stereo_audio[1]
 
@@ -739,7 +739,7 @@ class GenericSpatialSafety(BaseSafetyWrapper):
         return float(np.clip(width, 0.0, 1.0))
 
     def _check_mono_compatibility(self, original: np.ndarray, processed: np.ndarray) -> float:
-        """Check mono compatibility (sum to mono without phase cancellation)."""
+        """Prüft mono compatibility (sum to mono without phase cancellation)."""
         # Sum to mono
         orig_mono = np.sum(original, axis=0)
         proc_mono = np.sum(processed, axis=0)
@@ -762,7 +762,7 @@ class GenericSpatialSafety(BaseSafetyWrapper):
         return float(np.clip(compatibility, 0.0, 1.0))
 
     def _check_center_preservation(self, original: np.ndarray, processed: np.ndarray) -> float:
-        """Check if center image (common L+R content) is preserved."""
+        """Prüft if center image (common L+R content) is preserved."""
         # Mid channel
         orig_mid = (original[0] + original[1]) / 2.0
         proc_mid = (processed[0] + processed[1]) / 2.0
@@ -773,7 +773,7 @@ class GenericSpatialSafety(BaseSafetyWrapper):
         return float(np.clip(correlation, 0.0, 1.0))
 
     def _compute_spatial_quality(self, metrics: dict[str, Any]) -> float:
-        """Compute quality score for spatial processing."""
+        """Berechnet quality score for spatial processing."""
         proc_width = metrics.get("processed_width", 0.5)
         mono_compat = metrics.get("mono_compatibility", 0.9)
         center_pres = metrics.get("center_preservation", 0.9)

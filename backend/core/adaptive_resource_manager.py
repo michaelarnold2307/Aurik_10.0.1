@@ -27,7 +27,7 @@ _lock_singleton = threading.Lock()
 
 
 def get_resource_manager() -> AdaptiveResourceManager:
-    """Get or create AdaptiveResourceManager singleton.
+    """Gibt zurück: or create AdaptiveResourceManager singleton.
 
     Returns:
         AdaptiveResourceManager singleton instance
@@ -66,7 +66,7 @@ class AdaptiveResourceManager:
         logger.info("AdaptiveResourceManager initialized: %s-%s cores", self.min_cores, self.max_cores)
 
     def get_cpu_usage(self) -> float:
-        """Get current CPU usage percentage."""
+        """Gibt zurück: current CPU usage percentage."""
         if psutil:
             # interval=None: non-blocking, gibt Wert seit letztem Aufruf zurück
             return float(psutil.cpu_percent(interval=None))
@@ -74,14 +74,14 @@ class AdaptiveResourceManager:
             return 0.0  # Fallback: keine Überwachung
 
     def get_memory_usage(self) -> float:
-        """Get current system memory usage percentage."""
+        """Gibt zurück: current system memory usage percentage."""
         if psutil:
             return psutil.virtual_memory().percent
         else:
             return 0  # Fallback: keine Überwachung
 
     def get_available_memory_mb(self) -> float:
-        """Get available system memory in MB."""
+        """Gibt zurück: available system memory in MB."""
         if psutil:
             return psutil.virtual_memory().available / (1024 * 1024)
         else:
@@ -156,7 +156,7 @@ class AdaptiveResourceManager:
 
     def should_use_lightweight_mode(self) -> bool:
         """
-        Check if system resources are constrained and lightweight algorithms should be used.
+        Prüft if system resources are constrained and lightweight algorithms should be used.
 
         Returns:
             bool: True if resources are constrained, False otherwise
@@ -166,7 +166,7 @@ class AdaptiveResourceManager:
 
     def check_memory_availability(self, required_mb: float) -> bool:
         """
-        Check if required memory is available.
+        Prüft if required memory is available.
 
         Args:
             required_mb: Required memory in MB

@@ -1,5 +1,5 @@
 """
-Tests for ML Policy Engine - Docker Phase 7
+Tests for ML Policy Engine compatibility facade
 
 Tests:
 - Model selection for all 28 Docker plugins
@@ -11,7 +11,19 @@ Tests:
 
 import pytest
 
-from policy.ml_policy_engine import MLModelPolicyEngine, get_recommended_models
+from policy.ml_policy_engine import (
+    CANONICAL_BW_EXTENSION_ROUTE,
+    CANONICAL_INPAINTING_ROUTE,
+    CANONICAL_INSTRUMENTAL_NR_ROUTE,
+    CANONICAL_PITCH_ROUTE,
+    CANONICAL_REPAIR_ROUTE,
+    CANONICAL_SEPARATION_ROUTE,
+    CANONICAL_TAGGING_ROUTE,
+    CANONICAL_VOCAL_NR_ROUTE,
+    CANONICAL_VOCODER_ROUTE,
+    MLModelPolicyEngine,
+    get_recommended_models,
+)
 
 
 @pytest.fixture
@@ -23,54 +35,54 @@ def policy_engine():
 class TestDenoiseModelSelection:
     """Test denoise model selection logic."""
 
-    def test_vinyl_selects_banquet(self, policy_engine):
-        """Vinyl medium should select Banquet (vinyl-specialized)."""
+    def test_vinyl_uses_canonical_instrumental_route(self, policy_engine):
+        """Vinyl medium should stay inside canonical Aurik 9 routing."""
         context = {"detected_medium": "vinyl"}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "banquet"
+        assert model == CANONICAL_INSTRUMENTAL_NR_ROUTE
 
-    def test_vocals_selects_resemble_enhance(self, policy_engine):
-        """Vocals/Speech should select Resemble Enhance."""
+    def test_vocals_use_canonical_vocal_route(self, policy_engine):
+        """Vocals/Speech should select the central vocal route."""
         context = {"has_vocals": True}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "resemble_enhance"
+        assert model == CANONICAL_VOCAL_NR_ROUTE
 
     def test_drums_selects_mp_senet(self, policy_engine):
         """Drums/Transients should select MP-SENet (transient-preserving)."""
         context = {"has_drums": True, "content_character": "HIGHLY_TRANSIENT"}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "mp_senet"
+        assert model == CANONICAL_INSTRUMENTAL_NR_ROUTE
 
     def test_ambient_selects_deepfilternet(self, policy_engine):
         """Ambient content should select DeepFilterNet (aggressive smoothing)."""
         context = {"has_ambient": True, "content_character": "HIGHLY_SUSTAINED"}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "deepfilternet"
+        assert model == CANONICAL_INSTRUMENTAL_NR_ROUTE
 
     def test_processing_strategy_override(self, policy_engine):
         """Processing strategy should override other factors."""
         context = {"processing_strategy": "PRESERVE_TRANSIENTS"}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "mp_senet"
+        assert model == CANONICAL_INSTRUMENTAL_NR_ROUTE
 
     def test_dominant_instrument_mapping(self, policy_engine):
         """Dominant instrument should guide model selection."""
         test_cases = [
-            ("DRUMS", "mp_senet"),
-            ("VOCALS", "resemble_enhance"),
-            ("BASS", "deepfilternet"),
-            ("STRINGS", "resemble_enhance"),
+            ("DRUMS", CANONICAL_INSTRUMENTAL_NR_ROUTE),
+            ("VOCALS", CANONICAL_VOCAL_NR_ROUTE),
+            ("BASS", CANONICAL_INSTRUMENTAL_NR_ROUTE),
+            ("STRINGS", CANONICAL_INSTRUMENTAL_NR_ROUTE),
         ]
         for instrument, expected_model in test_cases:
             context = {"dominant_instrument": instrument}
             model = policy_engine.select_denoise_model(context, {})
             assert model == expected_model, f"Failed for {instrument}"
 
-    def test_fallback_to_resemble_enhance(self, policy_engine):
-        """Unknown context should fallback to Resemble Enhance."""
+    def test_fallback_to_canonical_instrumental_route(self, policy_engine):
+        """Unknown context should fallback to the central instrumental route."""
         context = {}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "resemble_enhance"
+        assert model == CANONICAL_INSTRUMENTAL_NR_ROUTE
 
 
 class TestRepairModelSelection:
@@ -80,52 +92,52 @@ class TestRepairModelSelection:
         """Speech should select MP-SENet."""
         context = {"has_vocals": True}
         model = policy_engine.select_repair_model(context, {})
-        assert model == "mp_senet"
+        assert model == CANONICAL_REPAIR_ROUTE
 
     def test_music_selects_mp_senet(self, policy_engine):
         """Music should select MP-SENet."""
         context = {"has_vocals": False}
         model = policy_engine.select_repair_model(context, {})
-        assert model == "mp_senet"
+        assert model == CANONICAL_REPAIR_ROUTE
 
 
 class TestStemSeparationSelection:
     """Test stem separation model selection."""
 
-    def test_speech_separation_selects_convtasnet(self, policy_engine):
-        """Speech separation should select Conv-TasNet."""
+    def test_speech_separation_uses_canonical_router(self, policy_engine):
+        """Speech separation should use the central separation router."""
         context = {"has_vocals": True}
         goal = {"num_stems": 2}
         model = policy_engine.select_stem_separation_model(context, goal)
-        assert model == "convtasnet"
+        assert model == CANONICAL_SEPARATION_ROUTE
 
     def test_fast_processing_selects_mdx23c(self, policy_engine):
         """Fast processing should select MDX23C."""
         context = {}
         goal = {"quality_level": "fast"}
         model = policy_engine.select_stem_separation_model(context, goal)
-        assert model == "mdx23c"
+        assert model == CANONICAL_SEPARATION_ROUTE
 
-    def test_ultra_hq_selects_uvr_mdxnet(self, policy_engine):
-        """Ultra-HQ should select UVR MDX-Net HQ4."""
+    def test_ultra_hq_uses_canonical_router(self, policy_engine):
+        """Ultra-HQ should stay inside the central separation router."""
         context = {}
         goal = {"quality_level": "ultra"}
         model = policy_engine.select_stem_separation_model(context, goal)
-        assert model == "uvr_mdxnet"
+        assert model == CANONICAL_SEPARATION_ROUTE
 
     def test_six_stems_selects_demucs(self, policy_engine):
         """6+ stems should select Demucs v4."""
         context = {}
         goal = {"num_stems": 6}
         model = policy_engine.select_stem_separation_model(context, goal)
-        assert model == "demucs"
+        assert model == CANONICAL_SEPARATION_ROUTE
 
     def test_default_selects_mdx23c(self, policy_engine):
         """Standard separation should select MDX23C (SOTA)."""
         context = {}
         goal = {}
         model = policy_engine.select_stem_separation_model(context, goal)
-        assert model == "mdx23c"
+        assert model == CANONICAL_SEPARATION_ROUTE
 
 
 class TestEnhancementSelection:
@@ -136,28 +148,28 @@ class TestEnhancementSelection:
         context = {"has_vocals": True}
         goal = {"enhancement_type": "speech"}
         model = policy_engine.select_enhancement_model(context, goal)
-        assert model == "resemble_enhance"
+        assert model == CANONICAL_VOCAL_NR_ROUTE
 
     def test_super_resolution_selects_audiosr(self, policy_engine):
         """Super-resolution should select AudioSR."""
         context = {}
         goal = {"enhancement_type": "super_resolution"}
         model = policy_engine.select_enhancement_model(context, goal)
-        assert model == "audiosr"
+        assert model == CANONICAL_BW_EXTENSION_ROUTE
 
     def test_diffusion_enhancement_selects_wpe(self, policy_engine):
         """Diffusion enhancement should select WPE."""
         context = {}
         goal = {"enhancement_type": "diffusion"}
         model = policy_engine.select_enhancement_model(context, goal)
-        assert model == "wpe"
+        assert model == CANONICAL_INPAINTING_ROUTE
 
     def test_general_enhancement_selects_gacela(self, policy_engine):
-        """General enhancement should select GACELA."""
+        """General enhancement should avoid standalone generative enhancers."""
         context = {}
         goal = {"enhancement_type": "general"}
         model = policy_engine.select_enhancement_model(context, goal)
-        assert model == "gacela"
+        assert model == CANONICAL_INSTRUMENTAL_NR_ROUTE
 
 
 class TestQualityAssessmentSelection:
@@ -198,7 +210,7 @@ class TestQualityAssessmentSelection:
         context = {"has_vocals": False}
         goal = {"has_reference": True}
         models = policy_engine.select_quality_assessment_model(context, goal)
-        assert "visqol" in models
+        assert "vqi" not in models
 
     def test_full_assessment_uses_music_metrics(self, policy_engine):
         """Vollständige Bewertung: VERSA + ViSQOL + PEAQ — keine Sprachmetriken (§4.4).
@@ -207,8 +219,8 @@ class TestQualityAssessmentSelection:
         goal = {"assessment_type": "full", "has_reference": True}
         models = policy_engine.select_quality_assessment_model(context, goal)
         assert "versa" in models
-        assert "visqol" in models
-        assert "peaq" in models
+        assert "visqol" not in models
+        assert "peaq" not in models
         # Verbotene Metriken dürfen nicht enthalten sein
         assert "cdpam" not in models  # ABSOLUT VERBOTEN
         assert "dnsmos" not in models
@@ -224,14 +236,14 @@ class TestVocoderSelection:
         context = {}
         goal = {"quality_level": "fast"}
         model = policy_engine.select_vocoder_model(context, goal)
-        assert model == "vocos"
+        assert model == CANONICAL_VOCODER_ROUTE
 
     def test_high_quality_selects_vocos(self, policy_engine):
         """High-quality vocoding: Vocos 0.1.0 als Primär-Vocoder (§4.5)."""
         context = {}
         goal = {"quality_level": "high"}
         model = policy_engine.select_vocoder_model(context, goal)
-        assert model == "vocos"
+        assert model == CANONICAL_VOCODER_ROUTE
 
 
 class TestSpecializedModels:
@@ -242,21 +254,21 @@ class TestSpecializedModels:
         context = {}
         goal = {}
         model = policy_engine.select_audio_tagging_model(context, goal)
-        assert model == "panns"
+        assert model == CANONICAL_TAGGING_ROUTE
 
     def test_mastering_selects_matchering(self, policy_engine):
         """Mastering should select Matchering."""
         context = {}
         goal = {}
         model = policy_engine.select_mastering_model(context, goal)
-        assert model == "matchering"
+        assert model == "uv3.phase_plan"
 
     def test_pitch_detection_selects_fcpe(self, policy_engine):
         """Pitch detection muss FCPE selektieren — §4.4 Primär-Tracker (CREPE ist Fallback1)."""
         context = {}
         goal = {}
         model = policy_engine.select_pitch_detection_model(context, goal)
-        assert model == "fcpe"
+        assert model == CANONICAL_PITCH_ROUTE
 
 
 class TestGenerativeModels:
@@ -267,25 +279,25 @@ class TestGenerativeModels:
         context = {}
         goal = {"generation_type": "music"}
         model = policy_engine.select_generative_model(context, goal)
-        assert model == "flow_matching"
+        assert model == CANONICAL_INPAINTING_ROUTE
 
     def test_text_to_audio_selects_audioldm2(self, policy_engine):
         """Text-to-audio should select AudioLDM2."""
         context = {}
         goal = {"generation_type": "text_to_audio"}
         model = policy_engine.select_generative_model(context, goal)
-        assert model == "audioldm2"
+        assert model == "unsupported.text_to_audio"
 
 
 class TestMediumSpecific:
     """Test medium-specific model selection."""
 
     def test_vinyl_medium_specific(self, policy_engine):
-        """Vinyl should select Banquet for medium-specific restoration."""
+        """Vinyl should stay inside UV3/phase-aware routing."""
         context = {"detected_medium": "vinyl"}
         goal = {}
         model = policy_engine.select_medium_specific_model(context, goal)
-        assert model == "banquet"
+        assert model == CANONICAL_INSTRUMENTAL_NR_ROUTE
 
     def test_unknown_medium_fallback_to_denoise(self, policy_engine):
         """Unknown medium should fallback to denoise model."""
@@ -293,7 +305,7 @@ class TestMediumSpecific:
         goal = {}
         model = policy_engine.select_medium_specific_model(context, goal)
         # Should return one of the denoise models
-        assert model in ["resemble_enhance", "deepfilternet", "mp_senet", "wpe", "banquet"]
+        assert model in {CANONICAL_INSTRUMENTAL_NR_ROUTE, CANONICAL_VOCAL_NR_ROUTE}
 
 
 class TestSelectAllModels:
@@ -311,8 +323,8 @@ class TestSelectAllModels:
         assert "separation" in models
         assert "quality" in models
 
-        # Denoise should be banquet (vinyl)
-        assert models["denoise"] == "banquet"
+        # Denoise should be routed through the canonical Aurik 9 policy facade.
+        assert models["denoise"] == CANONICAL_VOCAL_NR_ROUTE
 
         # Quality should be list
         assert isinstance(models["quality"], list)
@@ -381,16 +393,16 @@ class TestEdgeCases:
         separation = policy_engine.select_stem_separation_model(context, goal)
 
         # All should return valid model names
-        assert denoise in ["resemble_enhance", "deepfilternet", "mp_senet", "wpe", "banquet"]
-        assert repair in ["mp_senet"]
-        assert separation in ["mdx23c", "demucs", "uvr_mdxnet"]
+        assert denoise in {CANONICAL_INSTRUMENTAL_NR_ROUTE, CANONICAL_VOCAL_NR_ROUTE}
+        assert repair == CANONICAL_REPAIR_ROUTE
+        assert separation == CANONICAL_SEPARATION_ROUTE
 
     def test_conflicting_context_signals(self, policy_engine):
         """Conflicting signals should follow priority order."""
         # Vinyl + vocals → Vinyl should win (higher priority)
         context = {"detected_medium": "vinyl", "has_vocals": True}
         model = policy_engine.select_denoise_model(context, {})
-        assert model == "banquet"
+        assert model == CANONICAL_VOCAL_NR_ROUTE
 
     def test_invalid_goal_parameters(self, policy_engine):
         """Invalid goal parameters should use defaults."""
@@ -415,11 +427,11 @@ def test_full_workflow_integration():
     quality = policy.select_quality_assessment_model(context, {"has_reference": True})
 
     # Verify vinyl-specific model selected
-    assert denoise == "banquet"
+    assert denoise == CANONICAL_VOCAL_NR_ROUTE
 
     # Verify music-appropriate quality assessment (§4.4/§10.2: CDPAM/DNSMOS/NISQA/PESQ verboten)
     assert "versa" in quality  # VERSA 2024 — primäre MOS-Metrik (ersetzt CDPAM)
-    assert "visqol" in quality  # ViSQOL v3 (--audio Mode) mit Referenz
+    assert "vqi" in quality  # Vocal material uses VQI beside VERSA.
     assert "cdpam" not in quality  # VERBOTEN: ersetzt durch VERSA
     assert "dnsmos" not in quality  # VERBOTEN: Sprachkorpus
     assert "nisqa" not in quality  # VERBOTEN: Sprachqualitäts-CNN

@@ -59,7 +59,7 @@ class QualityMetricsResult:
 
     def passes_aurik_standards(self) -> bool:
         """
-        Check if metrics meet AURIK Weltspitze standards.
+        Prüft if metrics meet AURIK Weltspitze standards.
 
         Success Metrics (Phase 2D.2.1):
         - SNR Improvement: >15dB (for high-noise inputs)
@@ -109,7 +109,7 @@ class QualityMetricsResult:
 
 class EnhancedMetrics:
     """
-    Compute enhanced objective quality metrics.
+    Berechnet enhanced objective quality metrics.
 
     Usage:
         metrics = EnhancedMetrics()
@@ -131,7 +131,7 @@ class EnhancedMetrics:
             self.authenticity = None
 
     def _check_visqol(self) -> bool:
-        """Check if ViSQOL is available."""
+        """Prüft if ViSQOL is available."""
         # ViSQOL is complex - requires C++ binary or API
         # For now, we'll implement a simplified version
         return False
@@ -139,7 +139,7 @@ class EnhancedMetrics:
     @staticmethod
     def compute_si_snr(reference: np.ndarray, estimate: np.ndarray, epsilon: float = 1e-8) -> float:
         """
-        Compute Scale-Invariant Signal-to-Noise Ratio.
+        Berechnet Scale-Invariant Signal-to-Noise Ratio.
 
         Similar to SI-SDR but focuses on noise characteristics.
 
@@ -177,7 +177,7 @@ class EnhancedMetrics:
 
     def compute_visqol(self, reference: np.ndarray, degraded: np.ndarray, sr: int = 48000) -> float | None:
         """
-        Compute ViSQOL MOS score (simplified version).
+        Berechnet ViSQOL MOS score (simplified version).
 
         ViSQOL returns MOS: 1.0 (bad) to 5.0 (excellent).
         Full ViSQOL requires C++ binary - this is a Python approximation.
@@ -238,7 +238,7 @@ class EnhancedMetrics:
 
     @staticmethod
     def compute_snr(audio: np.ndarray, sr: int) -> float:
-        """Compute Signal-to-Noise Ratio."""
+        """Berechnet Signal-to-Noise Ratio."""
         rms = np.sqrt(np.mean(audio**2))
 
         # Estimate noise floor (quietest 10%)
@@ -256,7 +256,7 @@ class EnhancedMetrics:
 
     @staticmethod
     def compute_thd(audio: np.ndarray, sr: int) -> float:
-        """Compute Total Harmonic Distortion."""
+        """Berechnet Total Harmonic Distortion."""
         fft = np.fft.rfft(audio)
         magnitude = np.abs(fft)
 
@@ -279,7 +279,7 @@ class EnhancedMetrics:
 
     @staticmethod
     def compute_lufs(audio: np.ndarray, sr: int) -> float:
-        """Compute LUFS (Loudness)."""
+        """Berechnet LUFS (Loudness)."""
         rms = np.sqrt(np.mean(audio**2))
         if rms < 1e-10:
             return -100.0
@@ -292,7 +292,7 @@ class EnhancedMetrics:
 
     def compute_all(self, original: np.ndarray, restored: np.ndarray, sr: int = 48000) -> QualityMetricsResult:
         """
-        Compute all available quality metrics.
+        Berechnet all available quality metrics.
 
         Args:
             original: Original (potentially degraded) audio
@@ -388,7 +388,7 @@ class EnhancedMetrics:
         self, original_noisy: np.ndarray, original_clean: np.ndarray, restored: np.ndarray, sr: int = 48000
     ) -> QualityMetricsResult:
         """
-        Compute restoration improvement metrics.
+        Berechnet restoration improvement metrics.
 
         Compares:
         - Original noisy → Restored (improvement)
@@ -475,7 +475,7 @@ class EnhancedMetrics:
 
 def batch_compute_metrics(audio_pairs: list, sr: int = 48000) -> list:
     """
-    Compute metrics for multiple audio pairs.
+    Berechnet metrics for multiple audio pairs.
 
     Args:
         audio_pairs: List of (original, restored) tuples
@@ -496,7 +496,7 @@ def batch_compute_metrics(audio_pairs: list, sr: int = 48000) -> list:
 
 def generate_metrics_report(result: QualityMetricsResult, filename: str = "metrics_report.txt") -> str:
     """
-    Generate human-readable metrics report.
+    Generiert human-readable metrics report.
 
     Args:
         result: QualityMetricsResult

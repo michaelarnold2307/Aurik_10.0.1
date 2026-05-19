@@ -1,4 +1,4 @@
-"""Lightweight fallback execution guard for fault-injection validation."""
+"""Leichtgewichtiges fallback execution guard for fault-injection validation."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def execute_with_fallback(
     primary: Callable[[], object],
     fallback: Callable[[], object],
 ) -> FallbackExecutionResult:
-    """Run primary path and switch to fallback on deterministic failures.
+    """Führt aus: primary path and switch to fallback on deterministic failures.
 
     release_mode:
         - "primary" when primary succeeds

@@ -85,7 +85,7 @@ class SgmseResult:
     snr_improvement_db: float = 0.0
 
     def __post_init__(self) -> None:
-        """Clamp audio to [-1, 1] and replace NaN/Inf."""
+        """Begrenzt audio to [-1, 1] and replace NaN/Inf."""
         self.audio = np.nan_to_num(self.audio, nan=0.0, posinf=0.0, neginf=0.0)
         self.audio = np.clip(self.audio, -1.0, 1.0)
 
@@ -105,7 +105,7 @@ class SGMSEPlusPlugin:
     FORWARD_TIMEOUT_S: float = 12.0
 
     def __init__(self) -> None:
-        """Initialize SGMSE+ plugin and attempt model load."""
+        """Initialisiert SGMSE+ plugin and attempt model load."""
         self._session: Any = None
         self._ts_model: Any = None
         self._eager_model: Any = None
@@ -121,22 +121,24 @@ class SGMSEPlusPlugin:
         self._try_load()
 
     def _load_model_geometry(self) -> None:
-        """Load STFT geometry from bundled SGMSE checkpoint metadata.
+        """Lädt STFT geometry from bundled SGMSE checkpoint metadata.
 
         The exported TorchScript backbone is traced on tensors with 256 frequency
         bins. If the plugin uses a different frontend, the U-Net skip-connections
         inside NCSNPP fail deterministically with tensor-size mismatches.
         """
         try:
-            import sys
+            import sys  # pylint: disable=import-outside-toplevel
 
-            import torch
+            import torch  # pylint: disable=import-outside-toplevel
 
             sys.path.insert(0, str((_ROOT / "models" / "sgmse_plus").resolve()))
             for ckpt_path in _CKPT_CANDIDATES:
                 if not ckpt_path.exists():
                     continue
-                ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)  # nosec B614 — trusted local model bundle (fairseq checkpoint contains custom objects)
+                ckpt = torch.load(  # nosec B614 — trusted local model bundle
+                    ckpt_path, map_location="cpu", weights_only=False
+                )  # fairseq checkpoint contains custom objects
                 hyper = ckpt.get("hyper_parameters")
                 if not isinstance(hyper, dict):
                     continue
@@ -163,21 +165,25 @@ class SGMSEPlusPlugin:
     def _try_load(self) -> None:
         """Lädt SGMSE+ TorchScript; sonst WPE-Fallback."""
         try:
-            from backend.core.ml_memory_budget import try_allocate as _try_alloc
+            from backend.core.ml_memory_budget import (  # pylint: disable=import-outside-toplevel
+                try_allocate as _try_alloc,
+            )
         except Exception:
             _try_alloc = None
 
         if _TS_PATH.exists():
             try:
-                import os as _os
+                import os as _os  # pylint: disable=import-outside-toplevel
 
-                import torch
+                import torch  # pylint: disable=import-outside-toplevel
 
                 torch.set_num_threads(_os.cpu_count() or 4)  # §2.37 CPU-Thread-Budget
                 _budget_ok = _try_alloc is None or _try_alloc("SGMSE+", size_gb=0.12)
                 if not _budget_ok:
                     try:
-                        from backend.core.ml_memory_budget import release as _rel2
+                        from backend.core.ml_memory_budget import (  # pylint: disable=import-outside-toplevel
+                            release as _rel2,
+                        )
 
                         _rel2("SGMSE+")
                     except Exception:
@@ -187,7 +193,9 @@ class SGMSEPlusPlugin:
                     logger.warning("SGMSE+: ML-Budget erschöpft — WPE-DSP-Fallback.")
                 else:
                     try:
-                        from backend.core.ml_device_manager import get_torch_device as _get_dev
+                        from backend.core.ml_device_manager import (  # pylint: disable=import-outside-toplevel
+                            get_torch_device as _get_dev,
+                        )
 
                         _dev = _get_dev("SGMSE")
                     except Exception:
@@ -208,11 +216,13 @@ class SGMSEPlusPlugin:
                     self._model_loaded = True
                     logger.info("✅ SGMSE+ TorchScript geladen (%s, device=%s)", _TS_PATH.name, self._device)
                     try:
-                        from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
+                        from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                            register_plugin as _reg_plm,
+                        )
 
                         def _unload_sgmse(s: SGMSEPlusPlugin = self) -> None:
-                            s._ts_model = None
-                            s._model_loaded = False
+                            s._ts_model = None  # pylint: disable=protected-access
+                            s._model_loaded = False  # pylint: disable=protected-access
 
                         _reg_plm("SGMSE+", size_gb=0.12, unload_fn=_unload_sgmse)
                     except Exception as _exc:
@@ -221,7 +231,7 @@ class SGMSEPlusPlugin:
             except Exception as exc:
                 logger.warning("SGMSE+ TorchScript nicht ladbar: %s — WPE-DSP-Fallback aktiv.", exc)
                 try:
-                    from backend.core.ml_memory_budget import release as _rel
+                    from backend.core.ml_memory_budget import release as _rel  # pylint: disable=import-outside-toplevel
 
                     _rel("SGMSE+")
                 except Exception as _exc:
@@ -238,19 +248,21 @@ class SGMSEPlusPlugin:
         )
 
     def _try_load_from_checkpoint(self) -> bool:
-        """Load SGMSE backbone directly from checkpoint as ML recovery path."""
+        """Lädt SGMSE backbone directly from checkpoint as ML recovery path."""
         try:
-            import sys
+            import sys  # pylint: disable=import-outside-toplevel
 
-            import torch
+            import torch  # pylint: disable=import-outside-toplevel
 
             sys.path.insert(0, str((_ROOT / "models" / "sgmse_plus").resolve()))
-            from sgmse.backbones import BackboneRegistry  # type: ignore
+            from sgmse.backbones import BackboneRegistry  # type: ignore  # pylint: disable=import-outside-toplevel
 
             for ckpt_path in _CKPT_CANDIDATES:
                 if not ckpt_path.exists():
                     continue
-                ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)  # nosec B614 — trusted local model bundle (contains custom Lightning/fairseq objects)
+                ckpt = torch.load(  # nosec B614 — trusted local model bundle
+                    ckpt_path, map_location="cpu", weights_only=False
+                )  # contains custom Lightning/fairseq objects
                 hyper = ckpt.get("hyper_parameters")
                 state = ckpt.get("state_dict")
                 if not isinstance(hyper, dict) or not isinstance(state, dict):
@@ -266,7 +278,9 @@ class SGMSEPlusPlugin:
                 dnn.load_state_dict(dnn_state, strict=False)
                 dnn.eval()
                 try:
-                    from backend.core.ml_device_manager import get_torch_device as _get_dev
+                    from backend.core.ml_device_manager import (  # pylint: disable=import-outside-toplevel
+                        get_torch_device as _get_dev,
+                    )
 
                     _dev = _get_dev("SGMSE")
                 except Exception:
@@ -304,9 +318,9 @@ class SGMSEPlusPlugin:
     _OVERLAP_SAMPLES: int = int(0.01 * _SR)
 
     def _get_available_ram_gb(self) -> float:
-        """Return available RAM in GB, or inf if psutil unavailable."""
+        """Gibt available RAM in GB, or inf if psutil unavailable zurück."""
         try:
-            import psutil
+            import psutil  # pylint: disable=import-outside-toplevel
 
             return float(psutil.virtual_memory().available / (1024**3))
         except Exception:
@@ -318,6 +332,7 @@ class SGMSEPlusPlugin:
         sr: int,
         sigma: float = 0.5,
         max_runtime_s: float | None = None,
+        panns_singing: float = 0.0,  # §0p v9.12.9: Vokal-Mode — konservativeres sigma bei Gesang
     ) -> SgmseResult:
         """Kombinierte Rausch-/Hallunterdrückung via SGMSE+ oder WPE-Fallback.
 
@@ -330,16 +345,29 @@ class SGMSEPlusPlugin:
         Chunked processing (10–30 s adaptive) to prevent OOM on long files.
         RAM guard: falls < 3 GB verfügbar → WPE-DSP-Fallback sofort.
 
+        §0p Vokal-Mode: panns_singing ≥ 0.35 → sigma auf max. 0.35 begrenzt
+        (konservativere Diffusion schützt Formanten und Vibrato-Modulation).
+
         Args:
-            audio: float32, 48000 Hz, mono oder stereo
-            sr:    Sample-Rate (muss 48000 sein)
-            sigma: Rauschpegel-Schätzung ∈ [0.01, 1.0]. Standard 0.5 (adaptiv).
+            audio:         float32, 48000 Hz, mono oder stereo
+            sr:            Sample-Rate (muss 48000 sein)
+            sigma:         Rauschpegel-Schätzung ∈ [0.01, 1.0]. Standard 0.5 (adaptiv).
+            panns_singing: PANNs Gesangs-Konfidenz. ≥ 0.35 → Vokal-Mode.
 
         Returns:
             SgmseResult mit bereinigtem Audio.
         """
         assert sr == 48_000, f"SR muss 48000 Hz sein, erhalten: {sr}"
         audio = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+
+        # §0p Vokal-Mode: konservativeres sigma schützt Formanten und Vibrato-Zonen.
+        # panns_singing ≥ 0.35 → sigma_max=0.35; 0.25–0.35 → sigma_max=0.45 (weich).
+        if float(panns_singing) >= 0.35:
+            sigma = float(min(sigma, 0.35))
+            logger.debug("§0p SGMSE+ Vokal-Mode: panns_singing=%.2f → sigma cap 0.35", panns_singing)
+        elif float(panns_singing) >= 0.25:
+            sigma = float(min(sigma, 0.45))
+
         # UV3 passes (2, N) channels-first; normalize to (N, 2) for uniform processing.
         _was_channels_first = audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2
         if _was_channels_first:
@@ -362,7 +390,9 @@ class SGMSEPlusPlugin:
         def process_channel(ch: np.ndarray) -> np.ndarray:
             if _use_ml:
                 try:
-                    from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm
+                    from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                        get_plugin_lifecycle_manager as _get_plm,
+                    )
 
                     _plm = _get_plm()
                     _plm.set_active("SGMSE+", True)
@@ -409,14 +439,14 @@ class SGMSEPlusPlugin:
     # ------------------------------------------------------------------
 
     def _enhance_chunked(self, mono: np.ndarray, sigma: float, max_runtime_s: float | None = None) -> np.ndarray:
-        """Process mono audio in adaptive chunks (10–30 s) with Hanning crossfade.
+        """Verarbeitet mono audio in adaptive chunks (10–30 s) with Hanning crossfade.
 
         Adapts chunk size to available RAM:
         - ≥ 6 GB free → 30 s chunks (~1 GB peak per chunk)
         - < 6 GB free → 10 s chunks (~300 MB peak per chunk)
         Falls back to WPE if RAM drops below 2 GB between chunks.
         """
-        import gc
+        import gc  # pylint: disable=import-outside-toplevel
 
         n_total = len(mono)
 
@@ -497,7 +527,7 @@ class SGMSEPlusPlugin:
             # give psutil an accurate picture of truly available RAM.
             gc.collect()
             try:
-                import ctypes as _ct_pre
+                import ctypes as _ct_pre  # pylint: disable=import-outside-toplevel
 
                 _ct_pre.CDLL("libc.so.6").malloc_trim(0)
             except Exception as _exc:
@@ -549,7 +579,7 @@ class SGMSEPlusPlugin:
             gc.collect()
             # malloc_trim: return freed heap pages to OS immediately
             try:
-                import ctypes as _ct
+                import ctypes as _ct  # pylint: disable=import-outside-toplevel
 
                 _ct.CDLL("libc.so.6").malloc_trim(0)
             except Exception as _exc:
@@ -591,7 +621,7 @@ class SGMSEPlusPlugin:
 
     def _stft(self, mono: np.ndarray) -> tuple[np.ndarray, int]:
         """STFT → Complex Spectrogram."""
-        from scipy.signal import stft as scipy_stft
+        from scipy.signal import stft as scipy_stft  # pylint: disable=import-outside-toplevel
 
         n_orig = len(mono)
         # §2.57: Clamp noverlap so it is always < min(nperseg, signal_length).
@@ -609,7 +639,7 @@ class SGMSEPlusPlugin:
 
     def _istft(self, Z: np.ndarray, n_orig: int) -> np.ndarray:
         """Inverse STFT."""
-        from scipy.signal import istft as scipy_istft
+        from scipy.signal import istft as scipy_istft  # pylint: disable=import-outside-toplevel
 
         _noverlap = max(0, min(self._win - self._hop, n_orig - 1))
         _, x = scipy_istft(
@@ -693,9 +723,9 @@ class SGMSEPlusPlugin:
             logger.debug("SGMSE+: Segment zu kurz (%d < %d samples) → WPE-Fallback", len(mono), _MIN_MONO_SAMPLES)
             return self._wpe_fallback(mono, _SR)
         try:
-            import gc
+            import gc  # pylint: disable=import-outside-toplevel
 
-            import torch
+            import torch  # pylint: disable=import-outside-toplevel
 
             Z, n_orig = self._stft(mono)
             # Build [1, 2, F, T] tensor directly — no .copy() for y (same input)
@@ -727,12 +757,19 @@ class SGMSEPlusPlugin:
 
             with torch.no_grad():
                 t_t = torch.tensor([float(sigma)], dtype=torch.float32).to(self._device)
+
+                def _identity_pin(x):
+                    return x
+
+                _pin_fn = _identity_pin
                 try:
-                    from backend.core.ml_device_manager import get_ml_device_manager as _get_mdm
+                    from backend.core.ml_device_manager import (  # pylint: disable=import-outside-toplevel
+                        get_ml_device_manager as _get_mdm,
+                    )
 
                     _pin_fn = _get_mdm().pin_tensor_rocm
                 except Exception:
-                    _pin_fn = lambda x: x
+                    pass
                 for s in starts:
                     e = min(s + target_frames, T_orig)
                     seg = x_t[:, :, :, s:e]
@@ -798,7 +835,7 @@ class SGMSEPlusPlugin:
             # Aggressive cleanup: GC + malloc_trim to return memory to OS
             gc.collect()
             try:
-                import ctypes as _ct
+                import ctypes as _ct  # pylint: disable=import-outside-toplevel
 
                 _ct.CDLL("libc.so.6").malloc_trim(0)
             except Exception as _exc:
@@ -825,7 +862,8 @@ class SGMSEPlusPlugin:
                             _m.cpu()
                     self._device = "cpu"
                     try:
-                        from backend.core.ml_device_manager import get_ml_device_manager as _mgr
+                        # pylint: disable-next=import-outside-toplevel
+                        from backend.core.ml_device_manager import get_ml_device_manager as _mgr  # isort: skip
 
                         _mgr().report_gpu_error("SGMSE", exc)
                     except Exception:
@@ -838,7 +876,7 @@ class SGMSEPlusPlugin:
             return self._wpe_fallback(mono, _SR)
 
     def _run_with_timeout(self, fn: Any, timeout_s: float) -> Any:
-        """Run callable with hard wall-clock timeout in a daemon thread."""
+        """Führt aus: callable with hard wall-clock timeout in a daemon thread."""
         box: dict[str, Any] = {}
         err: dict[str, Exception] = {}
 
@@ -864,7 +902,9 @@ class SGMSEPlusPlugin:
     def _wpe_fallback(self, mono: np.ndarray, sr: int) -> np.ndarray:
         """WPE-Dereverberation als Fallback (wpe_plugin, §4.4)."""
         try:
-            from plugins.wpe_plugin import get_wpe_plugin
+            from plugins.wpe_plugin import (  # pylint: disable=import-outside-toplevel,redefined-outer-name,reimported
+                get_wpe_plugin,
+            )
 
             plugin = get_wpe_plugin()
             result = plugin.enhance(mono, sr)
@@ -885,7 +925,7 @@ class SGMSEPlusPlugin:
 
 def get_sgmse_plus_plugin() -> SGMSEPlusPlugin:
     """Thread-sicherer Singleton-Accessor für SGMSE+."""
-    global _instance_plus
+    global _instance_plus  # pylint: disable=global-statement
     if _instance_plus is None:
         with _lock_plus:
             if _instance_plus is None:
@@ -901,7 +941,7 @@ def enhance_sgmse(audio: np.ndarray, sr: int, sigma: float = 0.5) -> SgmseResult
 # ---------------------------------------------------------------------------
 # Backward-Kompatibilität: WPE-Exporte aus wpe_plugin re-exportieren
 # ---------------------------------------------------------------------------
-from plugins.wpe_plugin import (
+from plugins.wpe_plugin import (  # pylint: disable=wrong-import-position
     SGMSEPlugin,
     SgmsePlugin,
     WpePlugin,

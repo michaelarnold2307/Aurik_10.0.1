@@ -19,6 +19,9 @@ applyTo: "backend/core/phases/phase_*.py"
    → ΔF1–F4 > ±2 dB: sofortiger Rollback auf Phase-Input — keine Ausnahme
 10. Vibrato-Zonen (4–7 Hz F0): strength = min(strength, 0.20) (§0p)
     → detect_performance_artifacts() VOR der Phase ausführen
+11. Alle Instanzattribute MÜSSEN in __init__ deklariert werden (W0201)
+    → Attribute die erst in process() gesetzt werden: in __init__ mit Sentinel initialisieren
+    → Beispiel: self._omlsa_panns_singing: float = 0.0  # gesetzt in process()
 ```
 
 ## §2.46 Carrier-Chain-Inversion — Stufenreihenfolge (HARD)
@@ -34,6 +37,11 @@ Stufe 2: Playback          → phase_04 (RIAA), phase_25 (Azimuth), phase_12 (Wo
            VERBOTEN: Näherungen ohne alle 3 Zeitkonstanten
 Stufe 3: Alterungsschäden  → phase_09 (Knistern), phase_24 (Dropout)
 Stufe 4: Carrier subtraktiv→ phase_29 (Bandrauschen), phase_03 (Surface Noise)
+Stufe 4.5: Pegelkorrektur  → phase_40 (AMPLITUDE_DRIFT, nur wenn amplitude_drift_correction=True)
+           REIHENFOLGE HARD: nach Stufe 4 (NR darf Gain-Detektion nicht verfälschen)
+                             vor Stufe 5 (BW-Obertöne nicht durch Envelope-Verzerrung verzerren)
+           Bedingung: DefectScanner.AMPLITUDE_DRIFT severity ≥ 0.30 UND Drift-Slope ≥ 1.5 dB/min
+           VERBOTEN: phase_40 in Standard-Lautstärke-Normierung ohne amplitude_drift_correction=True
 Stufe 5: Carrier additiv   → phase_06/23 (BW-Erweiterung), phase_07 (Harmonik)
                               ↑ IMMER nach Stufe 4 — sonst werden rekonstruierte
                                 Obertöne sofort entrauscht

@@ -64,7 +64,7 @@ def _run_inference_with_timeout(
     timeout: float = PHASE_INFERENCE_TIMEOUT_S,
     **kwargs: Any,
 ) -> Any:
-    """Run *fn* in a daemon thread with a wall-clock *timeout*.
+    """Führt aus: *fn* in a daemon thread with a wall-clock *timeout*.
 
     On timeout: logs error and raises InferenceTimeoutError.
     On any other exception: propagates as-is.
@@ -145,7 +145,7 @@ def phase_output_guard(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _guard_result(result: Any, fn: Callable[..., Any]) -> Any:
-    """Apply §3.9.3 invariants to *result*; return sanitised value."""
+    """Wendet §3.9.3-Invarianten auf *result* an und gibt bereinigten Wert zurück."""
     if isinstance(result, np.ndarray):
         return _sanitise_audio(result, fn)
 

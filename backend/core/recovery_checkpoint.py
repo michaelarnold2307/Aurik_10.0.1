@@ -44,7 +44,7 @@ _MAX_CHECKPOINT_AGE_S: float = 7 * 24 * 3600.0  # 7 days
 
 
 def _get_aurik_version() -> str:
-    """Read Aurik version dynamically at checkpoint creation time.
+    """Liest Aurik version dynamically at checkpoint creation time.
 
     Priority:
     1. importlib.metadata (works when installed as editable package via pip install -e .)
@@ -151,7 +151,7 @@ def save_checkpoint(
     quality_estimate: float = 0.0,
     musical_goals: dict[str, float] | None = None,
 ) -> str | None:
-    """Save OOM recovery checkpoint to disk.
+    """Speichert OOM recovery checkpoint to disk.
 
     Returns the JSON checkpoint path on success, None on failure.
     Designed to work under extreme memory pressure — minimal allocations.
@@ -245,7 +245,7 @@ def save_checkpoint(
 
 
 def find_pending_checkpoints() -> list[RecoveryCheckpoint]:
-    """Find all valid OOM checkpoints in the sessions directory.
+    """Findet alle gültigen OOM-Checkpoints im Sessions-Verzeichnis.
 
     Filters out expired (> 7 days) and orphaned (missing audio WAV) checkpoints.
     """
@@ -286,7 +286,7 @@ def find_pending_checkpoints() -> list[RecoveryCheckpoint]:
 
 
 def load_checkpoint_audio(checkpoint: RecoveryCheckpoint) -> np.ndarray | None:
-    """Load resume source audio with §2.39 priority rules.
+    """Lädt resume source audio with §2.39 priority rules.
 
     Priority:
       1) Original input audio (full-quality resume path)
@@ -408,7 +408,7 @@ def delete_checkpoint(input_path: str) -> None:
 
 
 def cleanup_expired_checkpoints() -> int:
-    """Remove all expired checkpoints. Called at startup."""
+    """Entfernt all expired checkpoints. Called at startup."""
     if not _SESSIONS_DIR.exists():
         return 0
     removed = 0
@@ -434,7 +434,7 @@ def cleanup_expired_checkpoints() -> int:
 
 
 def _cleanup_checkpoint_files(json_path: Path) -> None:
-    """Remove checkpoint JSON and associated audio WAV."""
+    """Entfernt checkpoint JSON and associated audio WAV."""
     try:
         # Derive audio path from JSON path
         audio_path = str(json_path).replace("_oom_checkpoint.json", "_oom_audio.wav")

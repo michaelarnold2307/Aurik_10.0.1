@@ -47,7 +47,7 @@ class CrowdNoiseIsolator:
 
     def __init__(self, sensitivity: float = 0.7, preserve_applause: bool = True):
         """
-        Initialize CrowdNoiseIsolator.
+        Initialisiert CrowdNoiseIsolator.
 
         Parameters:
         -----------
@@ -61,7 +61,7 @@ class CrowdNoiseIsolator:
 
     def detect_crowd_noise(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
         """
-        Detect crowd noise presence and characteristics.
+        Erkennt crowd noise presence and characteristics.
 
         Returns:
         --------
@@ -112,7 +112,7 @@ class CrowdNoiseIsolator:
 
     def remove_crowd_noise(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Remove/reduce crowd noise from audio.
+        Entfernt/Reduziert Publikumsgeräusche aus Audio.
 
         Uses spectral gating with adaptive threshold.
         """
@@ -182,7 +182,7 @@ class RoomDeverberator:
 
     def __init__(self, target_rt60: float = 0.4, strength: float = 0.7):
         """
-        Initialize RoomDeverberator.
+        Initialisiert RoomDeverberator.
 
         Parameters:
         -----------
@@ -196,7 +196,7 @@ class RoomDeverberator:
 
     def estimate_rt60(self, audio: np.ndarray, sr: int) -> float:
         """
-        Estimate RT60 (reverberation time) of audio.
+        Schätzt RT60 (reverberation time) of audio.
 
         RT60 = time for reverb to decay by 60dB
         """
@@ -303,7 +303,7 @@ class StageBleedReducer:
 
     def __init__(self, sensitivity: float = 0.6):
         """
-        Initialize StageBleedReducer.
+        Initialisiert StageBleedReducer.
 
         Parameters:
         -----------
@@ -370,7 +370,7 @@ class StageBleedReducer:
 
 class FeedbackCanceller:
     """
-    Detect and remove feedback howls from live recordings.
+    Erkennt and remove feedback howls from live recordings.
 
     Feedback occurs when microphone picks up speaker output, creating
     a resonant howl at specific frequencies (typically 200-4000 Hz).
@@ -385,7 +385,7 @@ class FeedbackCanceller:
 
     def __init__(self, sensitivity: float = 0.8):
         """
-        Initialize FeedbackCanceller.
+        Initialisiert FeedbackCanceller.
 
         Parameters:
         -----------
@@ -396,7 +396,7 @@ class FeedbackCanceller:
 
     def detect_feedback(self, audio: np.ndarray, sr: int) -> list[float]:
         """
-        Detect feedback howl frequencies.
+        Erkennt feedback howl frequencies.
 
         Returns:
         --------
@@ -430,7 +430,7 @@ class FeedbackCanceller:
 
     def remove_feedback(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Remove detected feedback howls using notch filters.
+        Entfernt detected feedback howls using notch filters.
         """
         # Detect feedback frequencies
         feedback_freqs = self.detect_feedback(audio, sr)
@@ -458,7 +458,7 @@ class FeedbackCanceller:
 
 class PAResonanceRemover:
     """
-    Remove PA system resonances from live recordings.
+    Entfernt PA system resonances from live recordings.
 
     PA systems can introduce resonances at specific frequencies due to
     speaker/room interactions, creating tonal coloration.
@@ -473,7 +473,7 @@ class PAResonanceRemover:
 
     def __init__(self, sensitivity: float = 0.7):
         """
-        Initialize PAResonanceRemover.
+        Initialisiert PAResonanceRemover.
 
         Parameters:
         -----------
@@ -484,7 +484,7 @@ class PAResonanceRemover:
 
     def detect_resonances(self, audio: np.ndarray, sr: int) -> list[tuple[float, float]]:
         """
-        Detect PA resonance frequencies and their magnitudes.
+        Erkennt PA resonance frequencies and their magnitudes.
 
         Returns:
         --------
@@ -515,7 +515,7 @@ class PAResonanceRemover:
 
     def remove_resonances(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Remove PA resonances using parametric EQ.
+        Entfernt PA resonances using parametric EQ.
         """
         # Detect resonances
         resonances = self.detect_resonances(audio, sr)
@@ -557,7 +557,7 @@ class PAResonanceRemover:
 
 class HandlingNoiseDetector:
     """
-    Detect microphone handling noise in live recordings.
+    Erkennt microphone handling noise in live recordings.
 
     Handling noise occurs when performer moves/bumps the microphone,
     creating low-frequency thumps and rumbles (typically 20-200 Hz).
@@ -572,7 +572,7 @@ class HandlingNoiseDetector:
 
     def __init__(self, sensitivity: float = 0.7):
         """
-        Initialize HandlingNoiseDetector.
+        Initialisiert HandlingNoiseDetector.
 
         Parameters:
         -----------
@@ -583,7 +583,7 @@ class HandlingNoiseDetector:
 
     def detect(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
         """
-        Detect microphone handling noise events.
+        Erkennt microphone handling noise events.
 
         Returns:
         --------
@@ -627,7 +627,7 @@ class HandlingNoiseDetector:
 
 class DeWindTool:
     """
-    Remove wind noise from outdoor live recordings.
+    Entfernt wind noise from outdoor live recordings.
 
     Wind noise is broadband, low-frequency rumble (20-300 Hz) caused by
     wind hitting the microphone. Unlike music, it's non-harmonic and chaotic.
@@ -642,7 +642,7 @@ class DeWindTool:
 
     def __init__(self, sensitivity: float = 0.7):
         """
-        Initialize DeWindTool.
+        Initialisiert DeWindTool.
 
         Parameters:
         -----------
@@ -653,7 +653,7 @@ class DeWindTool:
 
     def detect_wind_noise(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
         """
-        Detect wind noise presence.
+        Erkennt wind noise presence.
 
         Returns:
         --------
@@ -697,7 +697,7 @@ class DeWindTool:
 
     def remove_wind_noise(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Remove wind noise using adaptive highpass filter.
+        Entfernt wind noise using adaptive highpass filter.
         """
         # Detect wind noise
         wind_info = self.detect_wind_noise(audio, sr)
@@ -736,7 +736,7 @@ class RoomModeCorrector:
 
     def __init__(self, sensitivity: float = 0.7):
         """
-        Initialize RoomModeCorrector.
+        Initialisiert RoomModeCorrector.
 
         Parameters:
         -----------
@@ -747,7 +747,7 @@ class RoomModeCorrector:
 
     def detect_room_modes(self, audio: np.ndarray, sr: int) -> list[tuple[float, float]]:
         """
-        Detect room modal frequencies.
+        Erkennt room modal frequencies.
 
         Returns:
         --------
@@ -826,14 +826,14 @@ class RoomModeCorrector:
 
 class LiveRecordingSpecialist:
     """
-    Unified interface for all live recording tools.
+    Einheitliches Interface für alle Live-Aufnahme-Werkzeuge.
 
     Provides a high-level API to analyze and process live concert recordings
     with all 8 specialized tools.
     """
 
     def __init__(self):
-        """Initialize all live recording tools with default parameters."""
+        """Initialisiert all live recording tools with default parameters."""
         self.crowd_isolator = CrowdNoiseIsolator()
         self.deverberator = RoomDeverberator()
         self.bleed_reducer = StageBleedReducer()
@@ -845,7 +845,7 @@ class LiveRecordingSpecialist:
 
     def analyze(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
         """
-        Analyze live recording for all potential issues.
+        Analysiert Live-Aufnahmen auf alle potenziellen Probleme.
 
         Returns:
         --------
@@ -923,7 +923,7 @@ class LiveRecordingSpecialist:
         correct_room_modes: bool = True,
     ) -> np.ndarray:
         """
-        Process live recording with selected tools.
+        Verarbeitet live recording with selected tools.
 
         Parameters:
         -----------

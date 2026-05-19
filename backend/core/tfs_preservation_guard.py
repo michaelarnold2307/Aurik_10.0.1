@@ -58,7 +58,7 @@ def _erb_centre_frequencies(
     f_high: float = 1500.0,
     n_bands: int = 12,
 ) -> np.ndarray:
-    """Return *n_bands* centre frequencies uniformly spaced on the ERB-rate scale.
+    """Gibt *n_bands* centre frequencies uniformly spaced on the ERB-rate scale zurück.
 
     ERB-rate N(f) = 21.4 * log10(0.00437*f + 1)  (Glasberg & Moore 1990)
     """
@@ -101,7 +101,7 @@ class TFSResult:
 
 
 class TFSPreservationGuard:
-    """Measures temporal fine structure fidelity between original and processed audio.
+    """Misst temporal fine structure fidelity between original and processed audio.
 
     Algorithm:
     1.  For each ERB-spaced centre frequency f_c in [100 Hz, 1500 Hz]:
@@ -130,7 +130,7 @@ class TFSPreservationGuard:
         sr: int,
         threshold: float = DEFAULT_THRESHOLD,
     ) -> TFSResult:
-        """Measure TFS coherence between *original* and *restored* audio.
+        """Misst TFS coherence between *original* and *restored* audio.
 
         Parameters
         ----------
@@ -280,7 +280,7 @@ class TFSPreservationGuard:
 
     @staticmethod
     def _to_mono_f64(audio: np.ndarray) -> np.ndarray:
-        """Convert to mono float64 with NaN/Inf guard."""
+        """Konvertiert to mono float64 with NaN/Inf guard."""
         arr = np.asarray(audio, dtype=np.float64)
         if arr.ndim == 2:
             arr = arr.mean(axis=0) if arr.shape[0] > arr.shape[1] else arr.mean(axis=1)
@@ -296,7 +296,7 @@ _lock = threading.Lock()
 
 
 def get_tfs_preservation_guard() -> TFSPreservationGuard:
-    """Return thread-safe singleton TFSPreservationGuard."""
+    """Gibt thread-safe singleton TFSPreservationGuard zurück."""
     global _instance
     if _instance is None:
         with _lock:

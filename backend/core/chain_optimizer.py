@@ -21,7 +21,7 @@ _lock = threading.Lock()
 
 
 def get_chain_optimizer(compute_budget: float = 1.0) -> ChainOptimizer:
-    """Get or create ChainOptimizer singleton.
+    """Gibt zurück: or create ChainOptimizer singleton.
 
     Args:
         compute_budget: Maximum compute budget (only used on first call)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 43: Vocal Enhancement v2.0 - Professional
+Phase 43: Vocal Enhancement v2.0 - Professional.
 Comprehensive vocal processing chain for clarity, presence, and polish.
 
 Algorithm Overview:
@@ -276,7 +276,7 @@ class VocalEnhancement(PhaseInterface):
                 logger.debug("FormantSystem-Init fehlgeschlagen: %s", _e)
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_42_vocal_enhancement",
             name="Vocal Enhancement v2 Professional",
@@ -546,10 +546,61 @@ class VocalEnhancement(PhaseInterface):
             except Exception as _lsa_exc:
                 logger.debug("Phase42 lyrics-saliency non-blocking: %s", _lsa_exc)
 
+        # §P2 Style-Intent-Guard: intentionale Pitch-Abweichungen in style_intent_zones schützen.
+        # In Stil-Zonen (Blue Notes, Microtonal Bends, Culture-Specific Tuning) wird
+        # formant_gain_db auf 30 % reduziert — keine falschen Korrekturen intentionaler Stilmerkmale.
+        _style_intent_zones = []
+        _vfa_result = kwargs.get("vfa_result") or kwargs.get("_restoration_context", {}).get("vfa_result", {})
+        if isinstance(_vfa_result, dict):
+            _style_intent_zones = list(_vfa_result.get("style_intent_zones", []))
+        elif hasattr(_vfa_result, "style_intent_zones"):
+            _style_intent_zones = list(_vfa_result.style_intent_zones)
+        if _style_intent_zones:
+            _audio_duration_s = audio.shape[-1] / max(sample_rate, 1)
+            _total_style_s = sum((e - s) for s, e in _style_intent_zones if 0 <= s < e)
+            _style_coverage = float(np.clip(_total_style_s / max(_audio_duration_s, 1.0), 0.0, 1.0))
+            if _style_coverage > 0.1:  # mind. 10 % Abdeckung für globale Reduktion
+                _style_formant_scale = 1.0 - 0.70 * _style_coverage  # bis -70 %
+                config["formant_gain_db"] = float(config["formant_gain_db"] * max(_style_formant_scale, 0.30))
+                logger.info(
+                    "Phase42 §P2 style-intent-guard: %d Zonen, coverage=%.1f%% → formant_gain×%.2f",
+                    len(_style_intent_zones),
+                    _style_coverage * 100,
+                    max(_style_formant_scale, 0.30),
+                )
+
         # Detect if audio contains vocals (simple heuristic)
         has_vocals = self._detect_vocals(audio, sample_rate)
 
-        # Psychoakustische Basislinie: Intimität vor Bearbeitung messen.
+        # §0p Passaggio-Schutz [RELEASE_MUST]: Registerübergangszonen (Brust→Kopf→Falsett)
+        # erfordern reduzierte Eingriffsstärken — Formant- und Presence-Bearbeitung
+        # kann in Übergangszonen Timbre-Knicke erzeugen.
+        # §0p: energy_bias in Passaggio = −3 dB (Mittelwert Brust/Kopf) → Gain-Parameter ×0.40.
+        _passaggio_zones_p42 = list(kwargs.get("passaggio_zones") or [])
+        if not _passaggio_zones_p42 and hasattr(_vfa_result, "passaggio_zones"):
+            _passaggio_zones_p42 = list(_vfa_result.passaggio_zones)
+        elif not _passaggio_zones_p42 and isinstance(_vfa_result, dict):
+            _passaggio_zones_p42 = list(_vfa_result.get("passaggio_zones", []))
+        if _passaggio_zones_p42:
+            _audio_dur_p42 = audio.shape[-1] / max(sample_rate, 1)
+            _passaggio_coverage = float(
+                np.clip(
+                    sum((e - s) for s, e in _passaggio_zones_p42 if 0 <= s < e) / max(_audio_dur_p42, 1.0),
+                    0.0,
+                    1.0,
+                )
+            )
+            if _passaggio_coverage > 0.03:  # ≥ 3 % Anteil → Schutz aktivieren
+                _p42_passaggio_scale = max(0.40, 1.0 - 0.60 * _passaggio_coverage)
+                config["formant_gain_db"] = float(config["formant_gain_db"] * _p42_passaggio_scale)
+                config["presence_gain_db"] = float(config["presence_gain_db"] * _p42_passaggio_scale)
+                logger.info(
+                    "Phase42 §0p passaggio-guard: %d Zonen, coverage=%.1f%% → formant/presence×%.2f",
+                    len(_passaggio_zones_p42),
+                    _passaggio_coverage * 100,
+                    _p42_passaggio_scale,
+                )
+
         # Bei Stereo wird auf Mono-Projektion gemessen, um einen robusten
         # kanalunabhängigen Vergleichswert zu erhalten.
         _intimacy_pre = self._measure_vocal_intimacy(audio, sample_rate)
@@ -833,10 +884,34 @@ class VocalEnhancement(PhaseInterface):
         enhanced_audio = np.nan_to_num(enhanced_audio, nan=0.0, posinf=0.0, neginf=0.0)
         enhanced_audio = np.clip(enhanced_audio, -1.0, 1.0)
 
+        # §0p panns_singing — wird von Formant-Gate und VQI-Gate geteilt
+        _p42_panns = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)))
+
+        # §0p [RELEASE_MUST] Formant-Gate v9.12.9 — F1–F4 dürfen max. ±2 dB verschoben werden.
+        # `check_formant_shift_db()` misst Spektral-Energie an F1–F4-Formantfrequenzen pre/post.
+        # max_shift > 2 dB → sofortiger Rollback (§0p Vocal-Invarianten).
+        if _p42_panns >= 0.35:
+            try:
+                from backend.core.dsp.lpc_formant_tracker import (  # pylint: disable=import-outside-toplevel
+                    check_formant_shift_db as _check_formant_p42,
+                )
+
+                _fg_rollback, _fg_max_shift_db = _check_formant_p42(audio, enhanced_audio, sample_rate)
+                if _fg_rollback:
+                    logger.warning(
+                        "§0p phase_42 Formant-Gate: max_shift=%.1f dB > 2 dB → Rollback (panns=%.2f)",
+                        _fg_max_shift_db,
+                        _p42_panns,
+                    )
+                    enhanced_audio = audio.copy()
+                else:
+                    logger.debug("§0p phase_42 Formant-Gate OK: max_shift=%.2f dB", _fg_max_shift_db)
+            except Exception as _fg_exc:
+                logger.debug("§0p Formant-Gate phase_42 (non-blocking): %s", _fg_exc)
+
         # §0p [RELEASE_MUST] VQI per-Phase Gate — phase_42 ist die aggressivste Vokal-Phase
         # (Formant-Enhancement, Harshness-Reduction, Stem-Separation). VQI < 0.95 → Rollback
         # damit Überprozessierung nicht die Stimmidentität zerstört.
-        _p42_panns = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)))
         if _p42_panns >= 0.35:
             try:
                 from backend.core.musical_goals.vocal_quality_index import (  # pylint: disable=import-outside-toplevel
@@ -893,7 +968,7 @@ class VocalEnhancement(PhaseInterface):
         )
 
     def _measure_vocal_intimacy(self, audio: np.ndarray, sample_rate: int) -> float:
-        """Estimate vocal intimacy from fricative presence and plosive transients.
+        """Schätzt vocal intimacy from fricative presence and plosive transients.
 
         Returns a normalized score in [0, 1]. The metric is intentionally
         lightweight and deterministic so it can be used as an in-phase safety gate.
@@ -938,7 +1013,7 @@ class VocalEnhancement(PhaseInterface):
         voc_mono: np.ndarray,
         sr: int,
     ) -> "tuple[np.ndarray, np.ndarray]":
-        """Apply Wiener-style soft masking to preserve stereo field (§9.10.118).
+        """Wendet an: Wiener-style soft masking to preserve stereo field (§9.10.118).
 
         Instead of duplicating mono stems to L/R (destroying interaural phase
         differences → stereo collapse), compute a time-frequency mask from the
@@ -1267,7 +1342,7 @@ class VocalEnhancement(PhaseInterface):
         return None
 
     def _detect_vocals(self, audio: np.ndarray, sample_rate: int) -> bool:
-        """Simple vocal detection based on formant energy."""
+        """Einfache Vokalerkennung auf Basis von Formant-Energie."""
         if audio.ndim == 2:
             # Channel-format-aware: (2, N) channels-first → audio[:, 0] = shape (2,) — wrong.
             if audio.shape[0] == 2 and audio.shape[1] > 2:
@@ -1688,7 +1763,7 @@ class VocalEnhancement(PhaseInterface):
         return result
 
     def _apply_deessing(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Apply de-essing to sibilance band."""
+        """Wendet De-Essing auf das Sibilanz-Band an."""
         # Extract sibilance band
         # §2.51 Anti-Zeitversatz: sosfiltfilt — Band wird mit (sibilance_reduced - sibilance)
         # auf Original aufaddiert; sosfilt erzeugt Zeitversatz → Kammfilter-Artefakt.
@@ -1892,7 +1967,7 @@ class VocalEnhancement(PhaseInterface):
         return enhanced.astype(audio.dtype)
 
     def _boost_presence(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Boost presence region with ISO 226 loudness compensation.
+        """Verstärkt presence region with ISO 226 loudness compensation.
 
         Improvements (§8.3 Psychoacoustics):
         - Loudness-adaptive gain: quieter signals get more boost (ISO 226 equal-loudness)
@@ -2090,7 +2165,7 @@ class VocalEnhancement(PhaseInterface):
         return controlled
 
     def _apply_compression(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Apply psychoacoustically-optimized vocal micro-compression.
+        """Wendet an: psychoacoustically-optimized vocal micro-compression.
 
         Improvements over naive RMS compression (§8.3 Micro-Dynamics):
         - Separate attack (3 ms) and release (120 ms) for vocal syllabic preservation
@@ -2172,7 +2247,7 @@ class VocalEnhancement(PhaseInterface):
         original_vocals: np.ndarray,
         sample_rate: int,
     ) -> np.ndarray:
-        """Apply MDEM (Micro-Dynamics Envelope Morphing) on the VOCAL STEM.
+        """Wendet an: MDEM (Micro-Dynamics Envelope Morphing) on the VOCAL STEM.
 
         §8.3 Psychoacoustic fix: MDEM in UV3 operates on full mix where
         instrumental energy dominates the LUFS profile.  By applying MDEM

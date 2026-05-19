@@ -81,7 +81,7 @@ class BatchProgress:
 
     @property
     def completion_percentage(self) -> float:
-        """Get completion percentage."""
+        """Gibt zurück: completion percentage."""
         if self.total_files == 0:
             return 0.0
         return (self.completed + self.failed) / self.total_files * 100
@@ -115,7 +115,7 @@ class BatchParallelProcessor:
 
     def __init__(self, n_jobs: int = -1, enable_parallel: bool = True, show_progress: bool = True):
         """
-        Initialize batch parallel processor.
+        Initialisiert batch parallel processor.
 
         Args:
             n_jobs: Number of parallel workers (-1 = all cores)
@@ -145,7 +145,7 @@ class BatchParallelProcessor:
         progress_callback: Callable[[BatchProgress], None] | None = None,
     ) -> list[FileResult]:
         """
-        Process multiple files in parallel.
+        Verarbeitet multiple files in parallel.
 
         Args:
             tasks: List of file tasks to process
@@ -262,7 +262,7 @@ class BatchParallelProcessor:
 
     def _process_single_file(self, task: FileTask, process_func: Callable[[Path, Path], None]) -> FileResult:
         """
-        Process a single file (used in sequential mode).
+        Verarbeitet a single file (used in sequential mode).
 
         Args:
             task: File task
@@ -276,7 +276,7 @@ class BatchParallelProcessor:
     def _create_progress(
         self, total: int, completed: int, failed: int, processing: int, start_time: float
     ) -> BatchProgress:
-        """Create batch progress object."""
+        """Erstellt batch progress object."""
         elapsed = time.time() - start_time
         done = completed + failed
         pending = total - done - processing
@@ -300,7 +300,7 @@ class BatchParallelProcessor:
 
     def get_average_speedup(self) -> float:
         """
-        Get average parallel speedup across all batches.
+        Gibt zurück: average parallel speedup across all batches.
 
         Returns:
             Average speedup factor (expected 7-8× with 8 cores)
@@ -312,7 +312,7 @@ class BatchParallelProcessor:
 
     def get_stats(self) -> dict[str, Any]:
         """
-        Get processing statistics.
+        Gibt zurück: processing statistics.
 
         Returns:
             Dictionary with batch processing stats
@@ -329,7 +329,7 @@ class BatchParallelProcessor:
         }
 
     def reset_stats(self):
-        """Reset processing statistics."""
+        """Setzt zurück: processing statistics."""
         self._processing_stats = {
             "total_batches": 0,
             "total_files": 0,
@@ -397,7 +397,7 @@ def _process_file_worker(task: FileTask, process_func: Callable[[Path, Path], No
 
 class BatchProcessingBuilder:
     """
-    Helper class to build batch processing tasks.
+    Hilfsfunktion: class to build batch processing tasks.
 
     Simplifies the creation of file tasks from directories or file lists.
 
@@ -408,7 +408,7 @@ class BatchProcessingBuilder:
 
     def __init__(self, input_dir: Path | None = None, output_dir: Path | None = None, pattern: str = "*.wav"):
         """
-        Initialize batch processing builder.
+        Initialisiert batch processing builder.
 
         Args:
             input_dir: Input directory
@@ -424,7 +424,7 @@ class BatchProcessingBuilder:
         self, input_path: Path, output_path: Path | None = None, metadata: dict[str, Any] | None = None
     ) -> "BatchProcessingBuilder":
         """
-        Add a single file to the batch.
+        Fügt hinzu: a single file to the batch.
 
         Args:
             input_path: Input file path
@@ -448,7 +448,7 @@ class BatchProcessingBuilder:
 
     def add_directory(self, skip_existing: bool = False) -> "BatchProcessingBuilder":
         """
-        Add all files from input directory.
+        Fügt hinzu: all files from input directory.
 
         Args:
             skip_existing: Skip files where output already exists
@@ -478,7 +478,7 @@ class BatchProcessingBuilder:
 
     def build(self) -> list[FileTask]:
         """
-        Build the task list.
+        Erstellt the task list.
 
         Returns:
             List of file tasks
@@ -486,5 +486,5 @@ class BatchProcessingBuilder:
         return self._tasks.copy()
 
     def clear(self):
-        """Clear all tasks."""
+        """Löscht all tasks."""
         self._tasks = []

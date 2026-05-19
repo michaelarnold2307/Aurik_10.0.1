@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 def _evaluate_export_quality_gate(
     quality_gate: dict | None,
 ) -> tuple[bool | None, str | None, str | None, list[dict[str, str]]]:
-    """Evaluate quality gate payload.
+    """Bewertet quality gate payload.
 
     Expected schema:
         {
@@ -165,7 +165,7 @@ SUPPORTED_FORMATS = {
 
 
 def _resolve_export_strategy(quality_gate: dict | None, gate_passed: bool | None) -> str:
-    """Resolve export strategy with mandatory recovery contract.
+    """Löst auf: export strategy with mandatory recovery contract.
 
     Rules:
     - passed=True  -> "success"
@@ -334,7 +334,7 @@ def export_multi_version(
 
 def _write_metadata_sidecar(audio_path: str, metadata: ExportMetadata):
     """
-    Write metadata as JSON sidecar file (GAP #42: Basic Metadata Preservation).
+    Schreibt metadata as JSON sidecar file (GAP #42: Basic Metadata Preservation).
 
     For formats that don't support embedded tags (or as backup).
     Creates a .json file alongside the audio file.

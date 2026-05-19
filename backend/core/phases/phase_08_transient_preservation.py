@@ -183,7 +183,7 @@ class TransientPreservationPhase(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, int]:
-        """Compute adaptive onset-analysis profile for transient processing."""
+        """Berechnet adaptive onset-analysis profile for transient processing."""
         _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
         _qm = str(quality_mode or "balanced").lower().replace("-", "_")
         _rest = float(np.clip(restorability_score, 0.0, 100.0))
@@ -681,7 +681,7 @@ class TransientPreservationPhase(PhaseInterface):
 
     def _measure_peak_energy(self, audio: np.ndarray) -> float:
         """
-        Measure average peak energy (top 1% of samples).
+        Misst average peak energy (top 1% of samples).
         """
         if audio.ndim == 2:
             audio = np.mean(audio, axis=1)

@@ -808,9 +808,205 @@ class ReconstructionContext:
     reconstruction_quality: float # Qualität der Rekonstruktion [0, 1]
 ```
 
+```python
+@dataclass
+class ReconstructionContext:
+    gaps_found: int               # Anzahl erkannter Lücken
+    gaps_repaired: int            # Anzahl erfolgreich gefüllter Lücken
+    total_repaired_ms: float      # Gesamte reparierte Zeitdauer
+    bandwidth_limited: bool       # True wenn BANDWIDTH_LOSS erkannt
+    estimated_original_bandwidth_hz: float  # Geschätzte Original-Bandbreite
+    reconstruction_quality: float # Qualität der Rekonstruktion [0, 1]
+```
+
 **Invarianten**:
 
 - RekonstruktionsDenker MUSS `defect_result` akzeptieren (optional, für DROPOUT-Severity)
 - RekonstruktionsDenker MUSS `ReconstructionContext` zurückgeben
 - RestaurierDenker MUSS `reconstruction_context` akzeptieren und an UV3 weitergeben
 - AurikDenker._run_rest() MUSS den Kontext zwischen den Stufen durchreichen
+
+---
+
+## §2.44 [RELEASE_MUST] IntentionalArtifactClassifier (v9.12.0)
+
+> **Konzeptuelle Kernlücke geschlossen**: Ohne diese Klassifikation behandelt Aurik
+> authentischen Epochen-Klangcharakter als Defekt — und repariert ihn weg. Das ist der
+> häufigste Fehler automatisierter Restaurierung. §6.5 (Spec 05) ist die normative Daten-Quelle.
+
+**Datei**: `backend/core/intentional_artifact_classifier.py`  
+**Singleton**: `get_intentional_artifact_classifier()`
+
+```python
+class IntentionalArtifactClassifier:
+    """
+    Klassifiziert Signal-Merkmale als authentischen Charakter (PRESERVE)
+    oder echter Defekt (REPAIR). Entscheidet VOR CAUSE_TO_PHASES-Auswahl.
+
+    Läuft nach MediumDetector + EraClassifier, vor DefectScanner.
+    Injiziert classification_map in _restoration_context["artifact_classifications"].
+    """
+
+    def classify(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        material_type: str,
+        era_decade: int,
+    ) -> Dict[str, str]:
+        """
+        Returns:
+            classification_map: {defect_label: "PRESERVE" | "REPAIR" | "AMBIGUOUS"}
+        """
+        ...
+
+    def get_preserve_mask(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        classification_map: Dict[str, str],
+    ) -> np.ndarray:
+        """
+        Zeit-Frequenz-Maske: 1.0 = PRESERVE-Zone (kein Eingriff),
+        0.0 = REPAIR-Zone. Wird in phase_29 (NR) und phase_03 (ML-NR) injiziert.
+        """
+        ...
+```
+
+**Pflicht-Aufruf in UV3 (vor Phase-Auswahl)**:
+
+```python
+# Nach EraClassifier + MediumDetector, VOR DefectScanner:
+_iac = get_intentional_artifact_classifier()
+_artifact_map = _iac.classify(audio, sr, material_type, era_decade)
+_restoration_context["artifact_classifications"] = _artifact_map
+_restoration_context["preserve_mask"] = _iac.get_preserve_mask(audio, sr, _artifact_map)
+
+# Gate: Phase darf PRESERVE-Zonen nicht mit Strength > 0.10 bearbeiten.
+# UV3 injiziert preserve_mask in alle NR/EQ-Phasen via kwargs["preserve_mask"].
+```
+
+**Invarianten**:
+
+- PRESERVE-Klassifikation schlägt DefectScanner-Score. Keine Phase kann PRESERVE
+  überschreiben, außer artifact_freedom < 0.90 (dann max. Strength 0.20 + HNR-Blend).
+- Laufzeit: ≤ 2 s/min Audio (DSP-only, kein ML).
+- Normative Daten-Quelle: `AUTHENTIC_CHARACTER` dict in Spec 05 §6.5a.
+- `phase_03_denoise`, `phase_29_tape_hiss_reduction` MÜSSEN `preserve_mask` respektieren
+  (nur REPAIR-Zonen bearbeiten). VERBOTEN: Masken-agnostische Verarbeitung.
+
+---
+
+## §2.45 [RELEASE_MUST] PhraseStructureAnalyzer (v9.12.0)
+
+> **Konzeptuelle Kernlücke geschlossen**: Restaurierung ohne Phrasengrenzen-Awareness
+> behandelt Musik als zufälliges Signal. Phrase-Ende ist der natürlichste Punkt für
+> DSP-Übergänge — Eingriffe während einer Phrase klingen abrupt. Weltweit führende
+> Systeme (Izotope RX 11 Machine Learning) nutzen musikalische Struktur.
+
+**Datei**: `backend/core/phrase_structure_analyzer.py`  
+**Singleton**: `get_phrase_structure_analyzer()`
+
+```python
+class PhraseStructureAnalyzer:
+    """
+    Erkennt musikalische Phrasengrenzen für strukturbewusste Verarbeitung.
+
+    Methoden:
+    - Chroma-Flux-Peaks (Harmoniewechsel) als Phrasenenden
+    - Energie-Minima als Phrasenenden (natürliche Atempausen)
+    - Beat-Synchronisierung via BEATS/madmom
+    - Lyrics-Phonem-Alignment wenn LGE verfügbar (§2.36)
+
+    Ausgabe injiziert in _restoration_context["phrase_boundaries"] für:
+    - phase_03 (NR): Crossfade nur an Phrasengrenzen
+    - phase_12 (Wow/Flutter): Pitch-Lock zwischen Phrasenenden
+    - phase_29 (Tape-NR): Hiss-Profil per Phrase schätzen
+    - phase_40 (Lautheit): LUFS-Messung pro Phrase (kein Song-Level-Mittelwert)
+    - phase_55 (Inpainting): Phrase-Kontext für AR-Prior nutzen
+    """
+
+    def analyze(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        *,
+        method: str = "hybrid",  # "chroma_flux" | "energy_minima" | "hybrid"
+    ) -> List[Tuple[float, float]]:
+        """
+        Returns: Liste von (start_s, end_s) Phrasen-Segmenten.
+        Mindest-Phrasenlänge: 1.0 s. Maximum: 30 s.
+        """
+        ...
+
+    def get_phrase_at_time(self, t_s: float) -> Optional[Tuple[float, float]]:
+        """Welche Phrase enthält Zeitpunkt t_s?"""
+        ...
+```
+
+**UV3-Integration**:
+
+```python
+# Nach VocalFocusAnalyzer, vor GoalApplicabilityFilter:
+_psa = get_phrase_structure_analyzer()
+_phrases = _psa.analyze(audio, sr)
+_restoration_context["phrase_boundaries"] = _phrases
+_restoration_context["phrase_count"] = len(_phrases)
+# Laufzeit-Budget: ≤ 3 s/min Audio
+```
+
+**Invarianten**:
+
+- Phrase-Grenzen sind NUR Hinweise, keine harten Grenzen. Kein Phase-Fehler bei Abweichung.
+- DSP-Crossfade an Phrasengrenzen: 20 ms Hanning (konsistent mit §2.63 Reflect-Padding).
+- Mono-Kompatibilität: Analyse immer auf Mono-Downmix, selbst bei Stereo.
+- Non-blocking: Exception → leere Boundaries-Liste → Phasen laufen ohne Phrasen-Kontext.
+
+---
+
+## §2.46 [RELEASE_MUST] TemporalConsistencyGuard (v9.12.0)
+
+> **Konzeptuelle Kernlücke**: Aurik optimiert lokal pro Segment, nicht temporal über den
+> gesamten Titel. Das führt zu hörbaren Qualitätssprüngen in langen Titeln (> 5 min),
+> die kein einzelner Gate erkennt. Weltklasse erfordert gleichmäßige Qualität von Intro bis Outro.
+
+**Datei**: `backend/core/temporal_consistency_guard.py`
+
+```python
+class TemporalConsistencyGuard:
+    """
+    Prüft nach der Pipeline, ob die Qualität über den Titel temporal konsistent ist.
+    Segmentiert den Output in 30-s-Blöcke, misst OQS pro Block.
+    Wenn Max-Min-Differenz > 0.08 → Recovery-Warnung + Metadata-Flag.
+
+    Ziel: Kein Qualitätssprung > 8 OQS-Punkte zwischen beliebigen 30-s-Blöcken.
+    """
+    MAX_ALLOWED_OQS_VARIANCE = 0.08  # 8 Punkte auf 0–1 Skala
+
+    def check(self, audio_out: np.ndarray, sr: int) -> Dict:
+        """
+        Returns:
+          {
+            "temporal_consistent": bool,
+            "oqs_per_segment": List[float],
+            "max_variance": float,
+            "inconsistent_segments": List[int],  # Segment-Indizes mit Ausreißern
+          }
+        """
+        ...
+```
+
+**Pipeline-Position**: Nach `HolisticPerceptualGate`, vor Export.
+
+```python
+_tcg_result = get_temporal_consistency_guard().check(_best_sig, sr)
+metadata["temporal_consistency"] = _tcg_result
+if not _tcg_result["temporal_consistent"]:
+    logger.warning(
+        "temporal_consistency_guard: max_variance=%.3f > %.3f — inconsistent segments: %s",
+        _tcg_result["max_variance"],
+        TemporalConsistencyGuard.MAX_ALLOWED_OQS_VARIANCE,
+        _tcg_result["inconsistent_segments"],
+    )
+    # Non-blocking: Kein Export-Veto. Aber metadata["quality_variance_warning"] = True.
+```

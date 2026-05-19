@@ -208,9 +208,10 @@ class ReverbReduction(PhaseInterface):
         # avoid retrying the same expensive ML path on subsequent PMGG retries.
         self._force_dsp_only_due_ml_error: bool = False
         self._ml_disable_reason: str = ""
+        self._preserve_mask_p20: np.ndarray | None = None  # gesetzt in process()
 
     def _adaptive_clarity_limits(self, kwargs: dict[str, object]) -> tuple[float, float, float, float]:
-        """Compute song-adaptive C80/D50 guard limits.
+        """Berechnet song-adaptive C80/D50 guard limits.
 
         Uses §2.56 per-song goal weights as a modulation signal while keeping
         §4.5c base guard semantics intact.
@@ -268,7 +269,7 @@ class ReverbReduction(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.VINYL, **kwargs
     ) -> PhaseResult:
         """
-        Apply reverb reduction.
+        Wendet an: reverb reduction.
 
         Args:
             audio: Audio samples (mono or stereo)
@@ -377,6 +378,13 @@ class ReverbReduction(PhaseInterface):
 
         # §0j vocal_energy_bias_db from VFA context — §0j: energy_bias from UV3 VocalFocusAnalyzer
         _ctx_energy_bias_20 = float(kwargs.get("_restoration_context", {}).get("vocal_energy_bias_db", -6.0))
+        # §4.8a-ii + §Gap8: preserve_mask injiziert von UV3, gesetzt auf self für _run_omlsa_mrsa.
+        _pm_raw_p20 = kwargs.get("_restoration_context", {}).get("preserve_mask")
+        self._preserve_mask_p20: np.ndarray | None = (
+            np.asarray(_pm_raw_p20, dtype=np.float32)
+            if isinstance(_pm_raw_p20, np.ndarray) and _pm_raw_p20.size > 0
+            else None
+        )
         if _ctx_energy_bias_20 < -6.0 and _vocal_detected_20:
             # Convert energy_bias_db to additional strength reduction (more negative = less aggressive)
             _eb_scale_20 = float(10.0 ** (_ctx_energy_bias_20 / 20.0))  # e.g. -9 dB → 0.355
@@ -979,6 +987,48 @@ class ReverbReduction(PhaseInterface):
             except Exception as _vqi_exc_p20:
                 logger.debug("VQI per-phase phase_20 (non-blocking): %s", _vqi_exc_p20)
 
+        # §G2 Breath-Segment Protection (§2.46f): EMOTIONAL_TENSION Atemgeräusche
+        # mit Original zurückblenden — Dereverb glättet sonst natürliche Atemräume.
+        _breath_segs_p20 = list(kwargs.get("breath_segments", []) or [])
+        if _breath_segs_p20:
+            try:
+                _n_out_p20 = reduced.shape[-1] if reduced.ndim == 2 else len(reduced)
+                _n_in_p20 = audio.shape[-1] if audio.ndim == 2 else len(audio)
+                _n_blend_p20 = min(_n_out_p20, _n_in_p20)
+                _result_blend_p20 = np.array(reduced, copy=True)
+                _blended_any_p20 = False
+                for _bs_p20 in _breath_segs_p20:
+                    _cat_p20 = getattr(_bs_p20, "category", None)
+                    _cat_str_p20 = str(getattr(_cat_p20, "value", _cat_p20 or "")).lower()
+                    if "tension" not in _cat_str_p20 and "emotional" not in _cat_str_p20:
+                        continue
+                    _bs_start_p20 = float(getattr(_bs_p20, "start_s", 0.0))
+                    _bs_end_p20 = float(getattr(_bs_p20, "end_s", 0.0))
+                    _g_fl_p20 = float(np.clip(getattr(_bs_p20, "recommended_g_floor", 0.50), 0.0, 1.0))
+                    _dry_p20 = float(np.clip(_g_fl_p20, 0.05, 0.95))
+                    if _bs_end_p20 <= _bs_start_p20:
+                        continue
+                    _si_p20 = int(round(_bs_start_p20 * sample_rate))
+                    _ei_p20 = int(round(_bs_end_p20 * sample_rate))
+                    _si_p20 = max(0, min(_si_p20, _n_blend_p20))
+                    _ei_p20 = max(0, min(_ei_p20, _n_blend_p20))
+                    if _si_p20 >= _ei_p20:
+                        continue
+                    if _result_blend_p20.ndim == 2 and audio.ndim == 2:
+                        _result_blend_p20[:, _si_p20:_ei_p20] = (
+                            _dry_p20 * audio[:, _si_p20:_ei_p20] + (1.0 - _dry_p20) * reduced[:, _si_p20:_ei_p20]
+                        )
+                    elif _result_blend_p20.ndim == 1 and audio.ndim == 1:
+                        _result_blend_p20[_si_p20:_ei_p20] = (
+                            _dry_p20 * audio[_si_p20:_ei_p20] + (1.0 - _dry_p20) * reduced[_si_p20:_ei_p20]
+                        )
+                    _blended_any_p20 = True
+                if _blended_any_p20:
+                    reduced = np.clip(np.nan_to_num(_result_blend_p20, nan=0.0), -1.0, 1.0).astype(np.float32)
+                    logger.debug("§G2 BreathProtect phase_20: %d tension-segs geschützt", len(_breath_segs_p20))
+            except Exception as _g2_p20_exc:
+                logger.debug("§G2 BreathProtect phase_20 non-blocking: %s", _g2_p20_exc)
+
         return PhaseResult(
             success=True,
             audio=reduced,
@@ -1030,7 +1080,7 @@ class ReverbReduction(PhaseInterface):
         return float(20.0 * np.log10(_rms + 1e-10))
 
     def _musical_gain_envelope(self, audio: np.ndarray, gain: float, sr: int) -> np.ndarray:
-        """Apply gain only on musical frames (§2.45a-II), keep silence untouched."""
+        """Wendet an: gain only on musical frames (§2.45a-II), keep silence untouched."""
         _x = np.asarray(audio, dtype=np.float32)
         _mono = np.mean(_x, axis=1) if _x.ndim == 2 else _x
         _frame = max(1, int(0.010 * sr))
@@ -1282,6 +1332,26 @@ class ReverbReduction(PhaseInterface):
                     except Exception:
                         pass
 
+                # §4.8a-ii preserve_mask (§Gap8 v9.12.8): G_eff = mask*0.90 + (1-mask)*G_z
+                # Bewahrt Shellac-H2/H4-Wärme und Vinyl-Charakter während Nachhall-Reduktion.
+                _pm_p20 = getattr(self, "_preserve_mask_p20", None)
+                if _pm_p20 is not None and _pm_p20.size > 0:
+                    try:
+                        _n_bins_z20 = G_z.shape[0]
+                        if len(_pm_p20) != _n_bins_z20:
+                            _pm_z20 = np.interp(
+                                np.arange(_n_bins_z20),
+                                np.linspace(0, _n_bins_z20 - 1, len(_pm_p20)),
+                                _pm_p20.astype(np.float64),
+                            ).astype(np.float64)
+                        else:
+                            _pm_z20 = _pm_p20.astype(np.float64)
+                        _pm_col_z20 = _pm_z20[:, np.newaxis]
+                        G_z = _pm_col_z20 * 0.90 + (1.0 - _pm_col_z20) * G_z
+                        G_z = np.clip(G_z, G_floor, 1.0)
+                    except Exception as _pm_exc:
+                        logger.debug("§Gap8 preserve_mask phase_20 non-blocking: %s", _pm_exc)
+
                 # Cappé temporal smoothing via fast IIR lfilter (no Python loop)
                 G_z_sm = _lfilter_p20([1.0 - alpha_g], [1.0, -alpha_g], G_z, axis=1)
                 G_z_sm = np.clip(np.nan_to_num(G_z_sm, nan=G_floor), G_floor, 1.0)
@@ -1446,7 +1516,7 @@ class ReverbReduction(PhaseInterface):
 
     def _detect_transients(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:  # pylint: disable=redefined-outer-name
         """
-        Detect transients using energy envelope.
+        Erkennt transients using energy envelope.
 
         Returns:
             Binary mask (1 = transient, 0 = sustain/decay)

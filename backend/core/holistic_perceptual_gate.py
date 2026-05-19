@@ -39,7 +39,7 @@ _lock = threading.Lock()
 
 def get_holistic_gate() -> HolisticPerceptualGate:
     """Thread-safe Singleton accessor."""
-    global _instance
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:
@@ -97,6 +97,8 @@ class HolisticPerceptualGate:
         genre: str = "DEFAULT",
         material: str = "digital",
         era_bin: str = "post-1990",
+        vqi: float = 1.0,
+        panns_singing: float = 0.0,
     ) -> HPIResult:
         """Evaluate HPI for Restoration mode.
 
@@ -148,6 +150,14 @@ class HolisticPerceptualGate:
 
         hpi = mert_sim * timbral * artifact_freedom * emotional_arc_score
 
+        # §2.44/§0p [RELEASE_MUST] VQI-Faktor bei Vokal-Material (panns_singing ≥ 0.35).
+        # HPI(Vokal) = MERT_similarity × timbral_fidelity × VQI × artifact_freedom × emotional_arc_preservation
+        # VQI < 0.95 → HPI-Reduktion; artifact_freedom bleibt primärer Veto-Faktor.
+        if panns_singing >= 0.35:
+            _vqi_clamped = float(np.clip(vqi, 0.0, 1.0))
+            hpi = hpi * _vqi_clamped
+            logger.debug("§2.44 VQI-Faktor angewendet: vqi=%.3f panns_singing=%.2f", _vqi_clamped, panns_singing)
+
         # §B3 NORESQA integration: Non-intrusive MOS proxy modulates HPI weakly
         # (Manocha & Kumar 2022, INTERSPEECH). Acts as a soft quality sanity check.
         # Weight 0.15 keeps it advisory: noresqa_ensemble ∈ [0.85, 1.00]
@@ -197,7 +207,8 @@ class HolisticPerceptualGate:
 
         logger.info(
             "§2.44 HPI(Restoration)=%.4f passed=%s "
-            "(mert=%.3f timbral=%.3f[in=%.3f ref=%.3f w=%.1f/%.1f] artifact=%.3f emotional=%.3f restorability=%.1f)",
+            "(mert=%.3f timbral=%.3f[in=%.3f ref=%.3f w=%.1f/%.1f] artifact=%.3f"
+            " emotional=%.3f restorability=%.1f vqi=%.3f singing=%.2f)",
             hpi,
             passed,
             mert_sim,
@@ -209,12 +220,14 @@ class HolisticPerceptualGate:
             artifact_freedom,
             emotional_arc_score,
             restorability_score,
+            float(np.clip(vqi, 0.0, 1.0)) if panns_singing >= 0.35 else 1.0,
+            panns_singing,
         )
 
         # §1.4a FailReason for failed gate
         _fr = None
         if not passed:
-            from backend.core.pipeline_health_state import make_fail_reason
+            from backend.core.pipeline_health_state import make_fail_reason  # pylint: disable=import-outside-toplevel
 
             if artifact_freedom < 0.95:
                 _fr = make_fail_reason(
@@ -362,7 +375,7 @@ class HolisticPerceptualGate:
         return None
 
     def _compute_embedding(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Compute spectral embedding (mel-energy vector) as MERT-proxy."""
+        """Berechnet spectral embedding (mel-energy vector) as MERT-proxy."""
         mono = audio if audio.ndim == 1 else np.mean(audio, axis=0)
         n_samples = len(mono)
         if n_samples < 2048:
@@ -419,10 +432,13 @@ class HolisticPerceptualGate:
         pqs_improvement: float = 0.0,
         artifact_freedom: float = 1.0,
         emotional_arc_score: float = 1.0,
+        vqi: float = 1.0,
+        panns_singing: float = 0.0,
     ) -> HPIResult:
-        """Evaluate HPI for Studio 2026 mode.
+        """Bewertet HPI for Studio 2026 mode.
 
         HPI = studio_quality_gain × PQS_improvement × artifact_freedom × emotional_arc_preservation
+        HPI(Vokal, Studio) = studio_quality_gain × PQS_improvement × VQI × artifact_freedom × emotional_arc_preservation
         """
         studio_gain = self._compute_studio_quality_gain(original, restored, sr)
         # §2.44 [FIX] pqs_improvement als Vorzeichenträger — kein positives Clipping (max 0.0
@@ -432,22 +448,32 @@ class HolisticPerceptualGate:
 
         hpi = studio_gain * pqs_signed * artifact_freedom * emotional_arc_score
 
+        # §2.44/§0p [RELEASE_MUST] VQI-Faktor bei Vokal-Material (panns_singing ≥ 0.35).
+        # HPI(Studio, Vokal) multiplies VQI as a gating factor.
+        if panns_singing >= 0.35:
+            _vqi_studio = float(np.clip(vqi, 0.0, 1.0))
+            hpi = hpi * _vqi_studio
+            logger.debug("§2.44 Studio VQI-Faktor: vqi=%.3f panns=%.2f", _vqi_studio, panns_singing)
+
         passed = hpi > 0.0 and artifact_freedom >= 0.95
 
         logger.info(
-            "§2.44 HPI(Studio2026)=%.4f passed=%s (studio_gain=%.3f pqs_signed=%.3f artifact=%.3f emotional=%.3f)",
+            "§2.44 HPI(Studio2026)=%.4f passed=%s "
+            "(studio_gain=%.3f pqs_signed=%.3f artifact=%.3f emotional=%.3f vqi=%.3f singing=%.2f)",
             hpi,
             passed,
             studio_gain,
             pqs_signed,
             artifact_freedom,
             emotional_arc_score,
+            float(np.clip(vqi, 0.0, 1.0)) if panns_singing >= 0.35 else 1.0,
+            panns_singing,
         )
 
         # §1.4a FailReason for failed Studio gate
         _fr_s = None
         if not passed:
-            from backend.core.pipeline_health_state import make_fail_reason
+            from backend.core.pipeline_health_state import make_fail_reason  # pylint: disable=import-outside-toplevel
 
             if artifact_freedom < 0.95:
                 _fr_s = make_fail_reason(
@@ -506,7 +532,7 @@ class HolisticPerceptualGate:
         # VERSA MOS (1–5) → normalisiert [0,1] via (mos-1)/4.
         # Referenzfrei → kein Referenz-Paradoxon, kein Input-Similarity-Bias.
         try:
-            from plugins.versa_plugin import get_versa_plugin as _get_versa
+            from plugins.versa_plugin import get_versa_plugin as _get_versa  # pylint: disable=import-outside-toplevel
 
             _versa = _get_versa()
             _versa_result = _versa.score(rest_clean, sr)
@@ -533,7 +559,7 @@ class HolisticPerceptualGate:
         if not self._mert_path_disabled:
             try:
                 # Imported lazily to avoid mandatory ML initialization on module import.
-                from plugins.mert_plugin import get_loaded_mert_plugin, get_mert_plugin
+                from plugins.mert_plugin import get_loaded_mert_plugin, get_mert_plugin  # pylint: disable=import-outside-toplevel  # noqa: I001
 
                 plugin = get_loaded_mert_plugin()
                 if plugin is None:
@@ -581,7 +607,7 @@ class HolisticPerceptualGate:
         self,
         original: np.ndarray,
         restored: np.ndarray,
-        sr: int,
+        sr: int,  # pylint: disable=unused-argument
     ) -> float:
         """Spectral proxy for musical similarity when MERT plugin is unavailable."""
         orig_mono = original if original.ndim == 1 else np.mean(original, axis=0)
@@ -741,7 +767,7 @@ class HolisticPerceptualGate:
         Returns a score in [0, 1] (1.0 = highest quality). Non-blocking.
         """
         try:
-            from plugins.noresqa_plugin import get_noresqa_plugin  # type: ignore  # pylint: disable=no-name-in-module
+            from plugins.noresqa_plugin import get_noresqa_plugin  # type: ignore  # pylint: disable=no-name-in-module,import-outside-toplevel  # noqa: I001
 
             _plg = get_noresqa_plugin()
             if _plg is not None:
@@ -797,7 +823,7 @@ class HolisticPerceptualGate:
                 ]
                 best_seg = int(np.argmax(energies_seg)) * (win_len // 2)
                 segment = mono[best_seg : best_seg + win_len]
-                from backend.core.core_utils import fft_autocorr
+                from backend.core.core_utils import fft_autocorr  # pylint: disable=import-outside-toplevel
 
                 ac = fft_autocorr(segment)
                 ac = ac / (ac[0] + 1e-12)

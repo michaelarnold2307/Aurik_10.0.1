@@ -13,7 +13,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class HFRolloffDetector(DefectDetector):
     """
-    Detects high-frequency roll-off.
+    Erkennt high-frequency roll-off.
 
     Identifies premature attenuation of high frequencies,
     common in MP3 compression, cassette tape, or old recordings.
@@ -24,7 +24,7 @@ class HFRolloffDetector(DefectDetector):
         self.expected_rolloff = expected_rolloff
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.15, **kwargs) -> list[DefectInstance]:
-        """Detect high-frequency roll-off, kontextbewusst."""
+        """Erkennt high-frequency roll-off, kontextbewusst."""
         if audio.ndim == 2:
             audio = audio[:, 0]
         freqs, psd = welch(audio, sr, nperseg=min(4096, len(audio) // 4))

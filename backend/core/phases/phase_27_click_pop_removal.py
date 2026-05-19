@@ -129,7 +129,7 @@ class ClickPopRemoval(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive click repair profile (§2.54)."""
+        """Berechnet adaptive click repair profile (§2.54)."""
         mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         if restorability_score is None:
@@ -195,7 +195,7 @@ class ClickPopRemoval(PhaseInterface):
         return float(np.clip(strength, 0.0, 1.0))
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_27_click_pop_removal",
             name="Click/Pop Removal v3 AR-Residual",
@@ -218,7 +218,7 @@ class ClickPopRemoval(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Detect and remove clicks/pops from audio.
+        Erkennt and remove clicks/pops from audio.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -357,7 +357,7 @@ class ClickPopRemoval(PhaseInterface):
         )
 
     def _process_channel(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> tuple[np.ndarray, int]:
-        """Process a single channel for click/pop removal."""
+        """Verarbeitet a single channel for click/pop removal."""
         # Step 1: Detect clicks via AR-Residual + Z-Score (Godsill & Rayner 1998)
         click_locations = self._detect_clicks_multiband(audio, config)
 
@@ -486,7 +486,7 @@ class ClickPopRemoval(PhaseInterface):
     def _repair_clicks(
         self, audio: np.ndarray, classified_clicks: list[dict[str, Any]], config: dict[str, Any]
     ) -> np.ndarray:
-        """Repair detected clicks using adaptive strategies."""
+        """Repariert detected clicks using adaptive strategies."""
         repaired = audio.copy()
         repair_strength = config["repair_strength"]
 

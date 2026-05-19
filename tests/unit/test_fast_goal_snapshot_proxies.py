@@ -196,17 +196,19 @@ class TestSnapshotCompleteness:
             "natuerlichkeit",
             "authentizitaet",
             "timbre_authentizitaet",
+            "timbre",  # §2.64 v9.12.8: Alias für timbre_authentizitaet
             "tonal_center",
             "artikulation",
             "emotionalitaet",
-            "mikrodynamik",
+            "micro_dynamics",  # kanonischer Key (nicht "mikrodynamik")
             "groove",
             "transparenz",
             "waerme",
-            "basskraft",
-            "sep_fidelity",
+            "bass_kraft",  # kanonischer Key (nicht "basskraft")
+            "separation_fidelity",  # kanonischer Key (nicht "sep_fidelity")
             "brillanz",
             "raumtiefe",
+            "spatial_depth",  # Alias für raumtiefe (§2.64 v9.12.1)
         }
         missing = required_keys - set(s.keys())
         assert not missing, f"Fehlende Goal-Schlüssel: {missing}"

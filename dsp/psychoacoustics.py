@@ -143,7 +143,7 @@ _SPREAD_SLOPE_DN_DB_BARK: float = 40.0
 
 
 def _apply_excitation_spread(corrected_spl: list[float]) -> list[float]:
-    """Apply simplified ISO 532-1 excitation spreading across Bark bands.
+    """Wendet an: simplified ISO 532-1 excitation spreading across Bark bands.
 
     Computes effective excitation level at each band by taking the maximum
     of the direct band level and contributions propagated from louder bands
@@ -220,14 +220,14 @@ _FILTER_CACHE: dict[int, list[np.ndarray]] = {}
 
 
 def _get_filters(sr: int) -> list[np.ndarray]:
-    """Get cached Bark-band filters for the given sample rate."""
+    """Gibt zurück: cached Bark-band filters for the given sample rate."""
     if sr not in _FILTER_CACHE:
         _FILTER_CACHE[sr] = _band_filters(sr)
     return _FILTER_CACHE[sr]
 
 
 def compute_specific_loudness_zwicker(audio: np.ndarray, sr: int) -> float:
-    """Compute total loudness N in sone (ISO 532-1 stationary method).
+    """Berechnet total loudness N in sone (ISO 532-1 stationary method).
 
     §4.1b [RELEASE_MUST]: Psychoacoustic loudness measurement after
     broadband subtraktive phases (rumble, multiband, dereverb).
@@ -324,7 +324,7 @@ def compute_specific_loudness_zwicker(audio: np.ndarray, sr: int) -> float:
 def compute_loudness_delta_sone(
     audio_before: np.ndarray, audio_after: np.ndarray, sr: int
 ) -> tuple[float, float, float]:
-    """Compute loudness change ΔN in sone between two audio signals.
+    """Berechnet loudness change ΔN in sone between two audio signals.
 
     §4.1b ΔN decision table:
         ≤ 0.5 sone:  OK (loudness-neutral)

@@ -261,7 +261,7 @@ CONFLICT_REGISTRY: dict[str, frozenset[str]] = {
 
 
 def get_conflict_phases(completed_phase_id: str) -> frozenset[str]:
-    """Return phase IDs that should behave conservatively after completed_phase_id ran.
+    """Gibt phase IDs that should behave conservatively after completed_phase_id ran zurück.
 
     Uses prefix matching — robust against suffix variants (e.g. 'phase_09_crackle').
     Returns empty frozenset when no conflict is registered.

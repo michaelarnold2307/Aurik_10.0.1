@@ -103,7 +103,7 @@ class KickDrumEnhancer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Extract kick range (20-80 Hz)
         sos_kick = butter(4, [20, 80], btype="band", fs=sr, output="sos")
         kick_band = sosfilt(sos_kick, audio)
@@ -162,7 +162,7 @@ class KickDrumEnhancer:
 
     def _detect_kick_events(self, kick_band: np.ndarray, sr: int) -> list[int]:
         """
-        Detect kick drum events using envelope.
+        Erkennt kick drum events using envelope.
 
         Returns list of sample indices where kicks occur.
         """
@@ -246,7 +246,7 @@ class SnareCrackEnhancer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Extract snare body (200-400 Hz)
         sos_body = butter(4, [200, 400], btype="band", fs=sr, output="sos")
         snare_body = sosfilt(sos_body, audio)
@@ -323,7 +323,7 @@ class SnareCrackEnhancer:
         return result, report
 
     def _detect_snare_events(self, detect_band: np.ndarray, sr: int) -> list[int]:
-        """Detect snare drum events."""
+        """Erkennt snare drum events."""
         envelope = np.abs(np.asarray(hilbert(detect_band), dtype=np.complex128))
 
         # Smooth
@@ -400,7 +400,7 @@ class HiHatClarifier:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Extract hi-hat range (8-12 kHz)
         nyquist = sr / 2
         hihat_low = min(8000, nyquist * 0.85)
@@ -540,7 +540,7 @@ class CymbalShimmerEnhancer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Extract cymbal range (12-20 kHz)
         nyquist = sr / 2
         cymbal_low = min(12000, nyquist * 0.75)
@@ -618,7 +618,7 @@ class CymbalShimmerEnhancer:
 
 class DrumsEnhancementSystem:
     """
-    Unified API for Drums/Percussion Enhancement.
+    Einheitliche API für Schlagzeug-/Percussion-Verbesserung.
 
     Combines all drum processing components into a single pipeline:
     1. Kick Drum Enhancement (20-80 Hz)

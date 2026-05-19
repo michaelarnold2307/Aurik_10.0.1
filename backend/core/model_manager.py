@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import logging
 import threading
 from dataclasses import dataclass
@@ -13,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ModelStatusResult:
-    """Return type of ModelManager.get_model_status()."""
+    """Gibt type of ModelManager.get_model_status() zurück."""
 
     status: str  # "not_found" | "available" | "unavailable"
     meta: dict[str, Any] | None = None
@@ -21,7 +24,7 @@ class ModelStatusResult:
 
 @dataclass
 class ModelReloadResult:
-    """Return type of ModelManager.reload_model_api()."""
+    """Gibt type of ModelManager.reload_model_api() zurück."""
 
     status: str  # "reloaded"
     name: str
@@ -32,12 +35,12 @@ _lock = threading.Lock()
 
 
 def get_model_manager() -> ModelManager:
-    """Get or create ModelManager singleton.
+    """Gibt zurück: or create ModelManager singleton.
 
     Returns:
         ModelManager singleton instance
     """
-    global _instance
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:
@@ -46,15 +49,19 @@ def get_model_manager() -> ModelManager:
 
 
 class ModelManager:
+    """Dynamische, kontextbewusste Modellverwaltung für Aurik (ML-Auswahl, Voice-Profil, Audit)."""
+
     def register_adaptive_plugins(
         self, sibilantnet: Any, breathnet: Any, voicehealthnet: Any, languagenet: Any
     ) -> None:
+        """Registriert adaptive Plugins (Sibilant, Atem, VoiceHealth, Sprache)."""
         self.register_model("sibilantnet", sibilantnet, {"type": "sibilant", "adaptive": True})
         self.register_model("breathnet", breathnet, {"type": "breath", "adaptive": True})
         self.voicehealthnet = voicehealthnet
         self.languagenet = languagenet
 
     def select_sibilant_model(self, context: dict[str, Any]) -> Any:
+        """Wählt Sibilanten-Modell kontextbewusst nach Stimmtyp, Sprache und Userwunsch."""
         # Kontextbewusste Auswahl: Stimmtyp, Sprache, Userwunsch
         if context.get("voice_type") == "child":
             return self.models.get("sibilantnet")
@@ -64,11 +71,13 @@ class ModelManager:
         return self.models.get("sibilantnet")
 
     def analyze_voice_health(self, audio: Any, context: dict[str, Any]) -> dict[str, Any]:
+        """Analysiert Stimmgesundheit (Erschöpfung, Heiserkeit) via VoiceHealthNet."""
         if self.voicehealthnet is not None:
             return self.voicehealthnet.analyze(audio, context)
         return {"fatigue": False, "hoarseness": False, "recommendation": "unknown"}
 
     def detect_language(self, audio: Any, context: dict[str, Any]) -> dict[str, str]:
+        """Erkennt Sprache und Dialekt des Audiomaterials via LanguageNet."""
         if self.languagenet is not None:
             return self.languagenet.detect(audio, context)
         return {"language": "unknown", "dialect": "unknown"}
@@ -107,14 +116,9 @@ class ModelManager:
         Audit-Log aller Modellentscheidungen und Fallbacks.
         Optional: als JSON oder CSV exportieren.
         """
-        import csv
-        import json
-
         if as_json:
             return json.dumps(self.audit_log, ensure_ascii=False, indent=2, default=str)
         if as_csv:
-            import io
-
             if not self.audit_log:
                 return ""
             output = io.StringIO()
@@ -143,19 +147,20 @@ class ModelManager:
     def register_model(self, name: str, model_obj: Any, metadata: dict[str, Any]) -> None:
         """Registriert ein Modell mit Metadaten und loggt die Aktion."""
         self.models[name] = {"obj": model_obj, "meta": metadata}
-        logging.info(f"Model registered: {name}, meta: {metadata}")
+        logging.info("Model registered: %s, meta: %s", name, metadata)
 
     def set_voice_profile(self, profile: dict[str, Any]) -> None:
         """Setzt das Voice-Profil und loggt die Aktion."""
         self.voice_profile = profile
-        logging.info(f"Voice profile set: {profile}")
+        logging.info("Voice profile set: %s", profile)
 
     def add_user_feedback(self, feedback: dict[str, Any]) -> None:
         """Fügt User-Feedback hinzu und loggt die Aktion."""
         self.user_feedback.append(feedback)
-        logging.info(f"User feedback added: {feedback}")
+        logging.info("User feedback added: %s", feedback)
 
     def select_model(self, context: dict[str, Any]) -> Any:
+        """Wählt kontextbewusst das beste Modell; Fallback-Kette wenn kein Kandidat verfügbar."""
         candidates = [m for m in self.models.values() if self._matches_context(m, context)]
         best = self._choose_best(candidates, context)
         if best and best["obj"]:
@@ -174,10 +179,12 @@ class ModelManager:
         return None
 
     def reload_model(self, name: str, new_model_obj: Any, new_metadata: dict[str, Any]):
+        """Ersetzt ein Modell-Objekt und dessen Metadaten in-place."""
         self.models[name] = {"obj": new_model_obj, "meta": new_metadata}
         self._log_model_selection(self.models[name], {"reload": True})
 
     def multi_stage_enhancement(self, input_audio: Any, context: dict[str, Any]) -> Any:
+        """Führt mehrstufige Enhancement-Pipeline (Denoising → Sibilanten → Authentizität) aus."""
         stages = self._get_enhancement_stages(context)
         output = input_audio
         for stage in stages:
@@ -195,7 +202,7 @@ class ModelManager:
           - Peak < 0.9999 (kein hartes Clipping)
         """
         try:
-            import numpy as np
+            import numpy as np  # pylint: disable=import-outside-toplevel
 
             audio = output_audio
             if not isinstance(audio, np.ndarray) or audio.size == 0:
@@ -217,21 +224,21 @@ class ModelManager:
             ari_mean = float(np.mean(mag_sq))
             flatness = geo_mean / (ari_mean + 1e-12)
             if flatness > 0.95:
-                logging.warning(f"[ModelManager] authenticity_check: Spektrale Glattheit zu hoch ({flatness:.3f}).")
+                logging.warning("[ModelManager] authenticity_check: Spektrale Glattheit zu hoch (%.3f).", flatness)
                 return False
             return True
         except Exception:
             return True  # Im Zweifel akzeptieren
 
-    def _matches_context(self, model: dict[str, Any], context: dict[str, Any]) -> bool:
+    def _matches_context(self, _model: dict[str, Any], _context: dict[str, Any]) -> bool:
         # Prüft, ob Modell zu Kontext passt (z. B. Geschlecht, Alter, Feedback)
         return True
 
-    def _choose_best(self, candidates: list[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any] | None:
+    def _choose_best(self, candidates: list[dict[str, Any]], _context: dict[str, Any]) -> dict[str, Any] | None:
         # Wählt bestes Modell nach Qualitätsmetriken, Feedback, Voice-Profile
         return candidates[0] if candidates else None
 
-    def _get_enhancement_stages(self, context: dict[str, Any]) -> list[str]:
+    def _get_enhancement_stages(self, _context: dict[str, Any]) -> list[str]:
         # Dynamische Reihenfolge: Denoising → Sibilanten → Authentizität
         return ["denoiser", "sibilant", "authenticity"]
 
@@ -243,9 +250,10 @@ class ModelManager:
             "event": "selection",
         }
         self.audit_log.append(entry)
-        logging.info(f"Model selection logged: {entry}")
+        logging.info("Model selection logged: %s", entry)
 
     def fallback(self):
+        """Aktiviert Fallback-Kette (ML → Alternativ-ML → DSP) wenn kein Primärmodell verfügbar."""
         # Fallback-Kette: ML → Alternativ-ML → DSP
         for alt in self._get_fallback_chain():
             if self._is_available(alt):
@@ -270,16 +278,16 @@ class ModelManager:
             return int(meta.get("priority", 0))
 
         sorted_models = sorted(all_models, key=_priority, reverse=True)
-        return [m.get("obj") or m for m in sorted_models if m.get("obj") is not None or True]
+        return [m.get("obj") or m for m in sorted_models]
 
-    def _is_available(self, model: Any) -> bool:
+    def _is_available(self, _model: Any) -> bool:
         return True
 
     def _log_fallback(self, model: Any) -> None:
         """Loggt Fallback-Entscheidung im Audit-Log."""
         entry: dict[str, Any] = {"fallback": model, "event": "fallback"}
         self.audit_log.append(entry)
-        logging.info(f"Fallback logged: {entry}")
+        logging.info("Fallback logged: %s", entry)
 
     def _use_dsp_fallback(self):
         logging.info("DSP fallback used")

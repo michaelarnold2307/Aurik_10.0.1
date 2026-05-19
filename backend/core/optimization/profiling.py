@@ -1,5 +1,5 @@
 """
-optimization/profiling.py — Performance profiler and quality validator
+optimization/profiling.py – Performance-Profiler und Qualitätsvalidator.
 ======================================================================
 """
 
@@ -28,7 +28,7 @@ class PerformanceProfiler:
         self.processor = processor
 
     def profile_pipeline(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
-        """Run the processor and record per-component timings.
+        """Führt aus: the processor and record per-component timings.
 
         Returns
         -------
@@ -79,7 +79,7 @@ class PerformanceProfiler:
 
 
 class QualityValidator:
-    """Measures subjective quality improvement after optimization.
+    """Misst subjective quality improvement after optimization.
 
     Parameters
     ----------
@@ -99,7 +99,7 @@ class QualityValidator:
         sr: int,
         reference: np.ndarray | None = None,
     ) -> dict[str, float]:
-        """Compute quality scores before and after processing.
+        """Berechnet quality scores before and after processing.
 
         Returns
         -------

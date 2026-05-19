@@ -210,7 +210,7 @@ class PluginLifecycleManager:
             return self._pipeline_active
 
     def pipeline_active_count(self) -> int:
-        """Return current pipeline-active refcount thread-safely."""
+        """Gibt current pipeline-active refcount thread-safely zurück."""
         with self._lock:
             return self._pipeline_active
 
@@ -441,7 +441,7 @@ class PluginLifecycleManager:
 
     @staticmethod
     def _swap_percent() -> float:
-        """Return swap usage in percent (0–100). 0 if psutil unavailable or no swap."""
+        """Gibt swap usage in percent (0–100). 0 if psutil unavailable or no swap zurück."""
         if _psutil is not None:
             try:
                 return float(_psutil.swap_memory().percent)
@@ -454,7 +454,7 @@ class PluginLifecycleManager:
     # ------------------------------------------------------------------
 
     def status(self) -> dict:
-        """Return a lightweight snapshot of current RAM pressure and registered plugins."""
+        """Gibt a lightweight snapshot of current RAM pressure and registered plugins zurück."""
         with self._lock:
             return {
                 "ram_pct": round(self._ram_percent(), 1),

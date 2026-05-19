@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_aurik_mode(aurik_mode: str | None) -> str:
-    """Normalize external mode aliases to canonical values.
+    """Normalisiert external mode aliases to canonical values.
 
     Returns:
         "restoration" or "studio2026" (legacy aliases remain accepted).
@@ -47,7 +47,7 @@ def _normalize_aurik_mode(aurik_mode: str | None) -> str:
 
 
 class InstrumentType(Enum):
-    """Detected instrument types."""
+    """Erkannte Instrumententypen."""
 
     VOCALS = "vocals"  # Singing voice
     SPEECH = "speech"  # Spoken word
@@ -149,14 +149,14 @@ class SemanticProfile:
         return self.recommended_strategy
 
     def get_instrument_by_type(self, instrument: InstrumentType) -> InstrumentPresence | None:
-        """Get instrument presence by type."""
+        """Gibt zurück: instrument presence by type."""
         for inst in self.detected_instruments:
             if inst.instrument == instrument:
                 return inst
         return None
 
     def has_instrument(self, instrument: InstrumentType, min_confidence: float = 0.3) -> bool:
-        """Check if instrument is present with minimum confidence."""
+        """Prüft if instrument is present with minimum confidence."""
         inst = self.get_instrument_by_type(instrument)
         return inst is not None and inst.confidence >= min_confidence
 
@@ -178,14 +178,14 @@ class SemanticProfile:
 
 class SemanticAudioAnalyzer:
     """
-    Analyze audio semantically without genre classification.
+    Analysiert Audio semantisch ohne Genreklassifizierung.
 
     Detects instruments and content characteristics using
     intrinsic audio features only.
     """
 
     def __init__(self):
-        """Initialize semantic analyzer."""
+        """Initialisiert semantic analyzer."""
         logger.info("SemanticAudioAnalyzer initialized")
 
     def analyze(
@@ -195,7 +195,7 @@ class SemanticAudioAnalyzer:
         aurik_mode: str = "restoration",
     ) -> SemanticProfile:
         """
-        Perform semantic audio analysis.
+        Führt durch: semantic audio analysis.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -273,7 +273,7 @@ class SemanticAudioAnalyzer:
         sr: int,
     ) -> list[InstrumentPresence]:
         """
-        Detect instruments using spectral and temporal features.
+        Erkennt instruments using spectral and temporal features.
 
         This is a heuristic approach. Production version would use
         trained ML models (e.g., Demucs v4, MDX23C, or custom models).
@@ -383,7 +383,7 @@ class SemanticAudioAnalyzer:
         power: np.ndarray,
         f: np.ndarray,
     ) -> float:
-        """Detect vocal presence (formants + harmonic structure)."""
+        """Erkennt vocal presence (formants + harmonic structure)."""
         # Vocal formants typically in 300-3000 Hz range
         vocal_range_mask = (f >= 300) & (f <= 3000)
         vocal_energy = np.mean(power[vocal_range_mask, :])
@@ -404,7 +404,7 @@ class SemanticAudioAnalyzer:
         return float(confidence)
 
     def _detect_drums(self, audio: np.ndarray, sr: int) -> float:
-        """Detect drum presence (transient detection + rhythm)."""
+        """Erkennt drum presence (transient detection + rhythm)."""
         # Compute onset strength
         onset_env = self._compute_onset_envelope(audio, sr)
 
@@ -421,7 +421,7 @@ class SemanticAudioAnalyzer:
         return float(drum_confidence)
 
     def _detect_bass(self, power: np.ndarray, f: np.ndarray) -> float:
-        """Detect bass presence (low-frequency melodic content)."""
+        """Erkennt bass presence (low-frequency melodic content)."""
         # Bass range: 40-250 Hz
         bass_mask = (f >= 40) & (f <= 250)
         bass_energy = np.mean(power[bass_mask, :])
@@ -438,7 +438,7 @@ class SemanticAudioAnalyzer:
         return float(confidence)
 
     def _detect_guitar(self, power: np.ndarray, f: np.ndarray) -> float:
-        """Detect guitar presence (mid-range harmonic content)."""
+        """Erkennt guitar presence (mid-range harmonic content)."""
         # Guitar fundamental range: ~80-1000 Hz
         guitar_mask = (f >= 80) & (f <= 1000)
         guitar_energy = np.mean(power[guitar_mask, :])
@@ -455,7 +455,7 @@ class SemanticAudioAnalyzer:
         return float(confidence)
 
     def _detect_keys(self, power: np.ndarray, f: np.ndarray) -> float:
-        """Detect keyboard/synth presence."""
+        """Erkennt keyboard/synth presence."""
         # Keys/synth have energy across wide frequency range
         wide_range_mask = (f >= 50) & (f <= 8000)
         keys_energy = np.mean(power[wide_range_mask, :])
@@ -472,7 +472,7 @@ class SemanticAudioAnalyzer:
         return float(confidence)
 
     def _detect_ambient(self, audio: np.ndarray, sr: int) -> float:
-        """Detect ambient/atmospheric content."""
+        """Erkennt ambient/atmospheric content."""
         # Ambient = low transient density + sustained energy
         transients = self._detect_transients(audio, sr)
         transient_density = len(transients) / (len(audio) / sr)
@@ -491,7 +491,7 @@ class SemanticAudioAnalyzer:
         self,
         instruments: list[InstrumentPresence],
     ) -> InstrumentType:
-        """Determine dominant instrument."""
+        """Bestimmt dominant instrument."""
         if len(instruments) == 0:
             return InstrumentType.UNKNOWN
 
@@ -508,7 +508,7 @@ class SemanticAudioAnalyzer:
         audio: np.ndarray,
         sr: int,
     ) -> ContentCharacter:
-        """Analyze content character (transient vs. sustained)."""
+        """Analysiert content character (transient vs. sustained)."""
         transient_density = self._compute_transient_density(audio, sr)
 
         # Classify based on transient density
@@ -524,7 +524,7 @@ class SemanticAudioAnalyzer:
             return ContentCharacter.HIGHLY_SUSTAINED
 
     def _compute_transient_density(self, audio: np.ndarray, sr: int) -> float:
-        """Compute transients per second."""
+        """Berechnet transients per second."""
         transients = self._detect_transients(audio, sr)
         duration = len(audio) / sr
 
@@ -534,7 +534,7 @@ class SemanticAudioAnalyzer:
         return len(transients) / duration
 
     def _detect_transients(self, audio: np.ndarray, sr: int) -> list[int]:
-        """Detect transient positions."""
+        """Erkennt transient positions."""
         # Compute onset envelope
         onset_env = self._compute_onset_envelope(audio, sr)
 
@@ -545,7 +545,7 @@ class SemanticAudioAnalyzer:
         return peaks.tolist()
 
     def _compute_onset_envelope(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Compute onset strength envelope."""
+        """Berechnet onset strength envelope."""
         # Compute STFT
         _f, _t, Zxx = signal.stft(audio, sr, nperseg=2048, noverlap=1536, boundary="even")
 
@@ -559,7 +559,7 @@ class SemanticAudioAnalyzer:
         return onset_env
 
     def _compute_sustained_percentage(self, audio: np.ndarray, sr: int) -> float:
-        """Compute percentage of audio that is sustained."""
+        """Berechnet percentage of audio that is sustained."""
         # Sustained content has consistent energy
 
         # Segment audio into frames
@@ -587,7 +587,7 @@ class SemanticAudioAnalyzer:
         return sustained_frames / total_frames
 
     def _compute_harmonicity(self, audio: np.ndarray, sr: int) -> float:
-        """Compute harmonicity (0=noise, 1=harmonic)."""
+        """Berechnet harmonicity (0=noise, 1=harmonic)."""
         # Autocorrelation-based pitch detection
 
         # Segment and average
@@ -627,7 +627,7 @@ class SemanticAudioAnalyzer:
         audio: np.ndarray,
         sr: int,
     ) -> tuple[float, float, float]:
-        """Analyze energy in bass/mid/high bands."""
+        """Analysiert energy in bass/mid/high bands."""
         # Compute power spectrum
         audio_arr = np.asarray(audio, dtype=np.float64)
         freqs = np.fft.fftfreq(len(audio_arr), 1 / sr)
@@ -697,7 +697,7 @@ class SemanticAudioAnalyzer:
         content_char: ContentCharacter,
         instruments: list[InstrumentPresence],
     ) -> bool:
-        """Determine if transients should be preserved."""
+        """Bestimmt if transients should be preserved."""
         # Preserve for drums/percussion
         for inst in instruments:
             if inst.instrument in [InstrumentType.DRUMS, InstrumentType.PERCUSSION]:
@@ -712,7 +712,7 @@ class SemanticAudioAnalyzer:
         dominant: InstrumentType,
         instruments: list[InstrumentPresence],
     ) -> bool:
-        """Determine if clarity enhancement is beneficial."""
+        """Bestimmt if clarity enhancement is beneficial."""
         # Enhance clarity for vocals
         if dominant in [InstrumentType.VOCALS, InstrumentType.SPEECH]:
             return True
@@ -728,7 +728,7 @@ class SemanticAudioAnalyzer:
         high_energy: float,
         dominant: InstrumentType,
     ) -> bool:
-        """Determine if harshness reduction is beneficial."""
+        """Bestimmt if harshness reduction is beneficial."""
         # Reduce harshness if high-frequency energy is excessive
         if high_energy > 0.4:
             return True
@@ -746,7 +746,7 @@ class SemanticAudioAnalyzer:
         content_char: ContentCharacter,
         instruments: list[InstrumentPresence],
     ) -> str:
-        """Generate restoration mode notes."""
+        """Generiert restoration mode notes."""
         inst_str = ", ".join([i.instrument.value for i in instruments[:3]])
 
         if dominant == InstrumentType.VOCALS:
@@ -780,7 +780,7 @@ class SemanticAudioAnalyzer:
         content_char: ContentCharacter,
         instruments: list[InstrumentPresence],
     ) -> str:
-        """Generate studio mode notes."""
+        """Generiert studio mode notes."""
         inst_str = ", ".join([i.instrument.value for i in instruments[:3]])
 
         if dominant == InstrumentType.VOCALS:

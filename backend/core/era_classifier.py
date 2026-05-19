@@ -492,7 +492,7 @@ def _dsp_hf_rolloff(audio_mono: np.ndarray, sr: int) -> float:
 
 
 def _detect_stereo_properties(audio: np.ndarray, sr: int) -> tuple[bool, float]:
-    """Detects stereo presence and width via frame-wise inter-channel correlation.
+    """Erkennt stereo presence and width via frame-wise inter-channel correlation.
 
     Stereo became commercially available ~1958. Narrow hard-pan stereo is
     characteristic of the 1960s (< 0.15 width), while multi-track wide stereo
@@ -543,7 +543,7 @@ def _detect_stereo_properties(audio: np.ndarray, sr: int) -> tuple[bool, float]:
 
 
 def _estimate_spectral_tilt(audio_mono: np.ndarray, sr: int) -> float:
-    """Estimates spectral tilt via linear regression on log-power spectrum.
+    """Schätzt spectral tilt via linear regression on log-power spectrum.
 
     Spectral tilt (dB/octave) captures the overall frequency-response shape:
         1940s–1960s: -5 … -7 (mid-forward, strong HF roll-off)
@@ -586,7 +586,7 @@ def _estimate_spectral_tilt(audio_mono: np.ndarray, sr: int) -> float:
 
 
 def _estimate_dynamic_range(audio_mono: np.ndarray, sr: int) -> float:
-    """Estimates dynamic range as P95-P5 frame-energy spread in dB.
+    """Schätzt dynamic range as P95-P5 frame-energy spread in dB.
 
     Higher values → wider dynamics (less compression, more modern or
     higher-quality recording).  Typical ranges:
@@ -615,7 +615,7 @@ def _estimate_dynamic_range(audio_mono: np.ndarray, sr: int) -> float:
 
 
 def _estimate_noise_modulation(audio_mono: np.ndarray, sr: int) -> float:
-    """Estimates temporal amplitude modulation of the noise/background floor.
+    """Schätzt temporal amplitude modulation of the noise/background floor.
 
     Vintage recordings contain transport-related amplitude modulation in the
     noise floor: wow & flutter on reel/cassette tape (mechanical variability)
@@ -734,7 +734,7 @@ def _transition_1970_score(
     stereo_width: float,
     noise_modulation: float,
 ) -> float:
-    """Combined evidence score for 1960/1970 transition decisions.
+    """Kombinierter Evidenz-Score für 1960/1970-Übergangs-Entscheidungen.
 
     Returns a calibrated score in [0, 1] where higher values indicate stronger
     evidence for 1970s-style production chains.

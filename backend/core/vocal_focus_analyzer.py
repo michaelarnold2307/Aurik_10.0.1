@@ -50,6 +50,11 @@ try:
 except Exception:
     _librosa = None  # type: ignore[assignment]
 
+try:
+    from backend.core.dsp.style_intent_detector import get_style_intent_detector as _get_style_intent_detector_fn
+except Exception:
+    _get_style_intent_detector_fn = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -114,6 +119,45 @@ class VFAResult:
     vqi_gate_active: bool = False
     """True wenn panns_singing ≥ 0.35 → VQI-Gate in HolisticPerceptualGate aktiv."""
 
+    style_intent_zones: list[tuple[float, float]] = field(default_factory=list)
+    """§P2 Style-Intent-Zonen (start_s, end_s): intentionale Pitch-Abweichungen (Blue Notes,
+    Microtonal Bends etc.). Phase_31 + Phase_42 reduzieren dort ihre Stärke."""
+
+    style_confidence: float = 0.0
+    """§P2 Style-Intent-Konfidenz [0, 1]: Anteil intentionaler Voicing-Events / Gesamt-Voiced."""
+
+    singer_school: str = "unknown"
+    """Gesangsschule — klassifiziert aus F1/F2-Formanten, Vibrato, Register, Style-Konfidenz.
+    Werte:
+    - "classical"   Bel Canto/Oper: stabile Formanten, gleichmäßiges Vibrato, F1 < 600 Hz
+    - "jazz"        Jazz-Standard: variable Formanten, Blue Notes (style_confidence > 0.15)
+    - "soul_rnb"    Soul/R&B/Gospel: breite Vibrato-Kurve, Chest-Dominant, style_confidence > 0.20
+    - "schlager"    Schlager/Chanson: stabile Formanten, enge Vokal-Räume, kein Style-Intent
+    - "folk_country" Folk/Country: nasale Resonanz (hohes F1), geringe Vibrato-Dichte
+    - "pop"         Pop/Crossover: minimales Vibrato, breitere Formant-Varianz
+    - "unknown"     Nicht klassifizierbar (kein Gesang oder Formanten nicht messbar)
+    """
+
+    phoneme_protection_level: str = "standard"
+    """Phonem-Schutz-Stufe (aus singer_school abgeleitet):
+    - "strict"   Klassik/Oper: Formant-Rollback-Toleranz ±1 dB, alle Atemgeräusche
+                 als Naturalness-Marker, kein aggressives De-Essing.
+    - "standard" Jazz/Schlager/Soul: Spec-Standard ±2 dB (§0p).
+    - "relaxed"  Pop/Rock: ±3 dB, weniger Vibrato-Schutz, normales De-Essing.
+    """
+
+    intonation_events: list = field(default_factory=list)
+    """§Lücke1 IntonationEvents: Klassifizierte F0-Abweichungen (INTENTIONAL/DEGRADATION/AMBIGUOUS).
+    Liste von `IntonationEvent`-Objekten aus `backend.core.dsp.intonation_classifier`.
+    Pitch-Korrektur-geschützte Zonen: `[e for e in intonation_events if not e.pitch_correction_allowed]`.
+    """
+
+    breath_segments: list = field(default_factory=list)
+    """§Lücke-F BreathEmotionClassifier: Klassifizierte Atemgeräusche.
+    Liste von `BreathSegment`-Objekten aus `backend.core.dsp.breath_emotion_classifier`.
+    EMOTIONAL_TENSION-Segmente sind Frisson-Vorboten → G_floor 0.85 in NR-Phasen.
+    """
+
     analysis_duration_s: float = 0.0
     """Tatsächlich analysierte Segmentlänge (s)."""
 
@@ -135,6 +179,10 @@ class VFAResult:
             "whisper_zones": list(self.whisper_zones),
             "climax_type": self.climax_type,
             "vqi_gate_active": self.vqi_gate_active,
+            "style_intent_zones": list(self.style_intent_zones),
+            "style_confidence": self.style_confidence,
+            "singer_school": self.singer_school,
+            "phoneme_protection_level": self.phoneme_protection_level,
             "analysis_duration_s": self.analysis_duration_s,
         }
 
@@ -230,11 +278,60 @@ class VocalFocusAnalyzer:
         # 9. Klimax-Typ (beeinflusst MDEM + Frisson-Schutz, §Gap1)
         result.climax_type = self._detect_climax_type(result.frisson_zones, result.tension_zones, mono_seg, sr)
 
+        # 10. Style-Intent-Zonen (§P2: intentionale Pitch-Abweichungen schützen)
+        result.style_intent_zones, result.style_confidence = self._detect_style_intent(mono_seg, sr)
+
+        # 11. Singer-School-Klassifikation (aus Formant/Vibrato/Register/Style, non-blocking)
+        result.singer_school, result.phoneme_protection_level = self._classify_singer_school(result)
+
+        # 12. §Lücke1 Intonations-Intentionality: F0-Kontur klassifizieren
+        # Ergebnis in result.intonation_events → UV3 nutzt pitch_correction_allowed-Flag
+        if result.vocal_present:
+            try:
+                from backend.core.dsp.intonation_classifier import (  # pylint: disable=import-outside-toplevel
+                    classify_intonation_events,
+                )
+
+                _f0_contour = getattr(result, "_f0_contour_internal", None)
+                if _f0_contour is not None and len(_f0_contour) >= 4:
+                    result.intonation_events = classify_intonation_events(
+                        f0_hz=_f0_contour,
+                        sr=sr,
+                        hop=512,
+                    )
+                    logger.debug(
+                        "VFA step 12: %d intonation_events (%d protected zones)",
+                        len(result.intonation_events),
+                        sum(1 for e in result.intonation_events if not e.pitch_correction_allowed),
+                    )
+            except Exception as _ie_exc:
+                logger.debug("VFA step 12 IntonationClassifier: non-blocking fallback — %s", _ie_exc)
+
+        # 13. §Lücke-F Breath Emotion Classification: Atemgeräusche kategorisieren
+        # Emotionale Atemgeräusche (EMOTIONAL_TENSION) sind Frisson-Vorboten → G_floor 0.85
+        try:
+            from backend.core.dsp.breath_emotion_classifier import (  # pylint: disable=import-outside-toplevel
+                classify_breath_emotions,
+            )
+
+            _breath_segs = classify_breath_emotions(audio, sr)
+            result.breath_segments = _breath_segs
+            if _breath_segs:
+                _n_tension = sum(1 for s in _breath_segs if s.category.value == "emotional_tension")
+                logger.debug(
+                    "VFA step 13: %d breath segments (%d emotional_tension)",
+                    len(_breath_segs),
+                    _n_tension,
+                )
+        except Exception as _bec_exc:
+            logger.debug("VFA step 13 BreathEmotionClassifier: non-blocking fallback — %s", _bec_exc)
+
         elapsed = time.perf_counter() - _t0
         logger.info(
             "VocalFocusAnalyzer: panns_singing=%.2f register=%s energy_bias=%.1fdB "
             "frisson=%d formant_f1=%.0fHz stable=%s passaggio=%d vibrato=%d "
-            "tension=%d release=%d whisper=%d climax=%s zones in %.2fs",
+            "tension=%d release=%d whisper=%d climax=%s style_zones=%d style_conf=%.2f "
+            "singer_school=%s phoneme_prot=%s in %.2fs",
             panns_singing,
             result.dominant_register,
             result.energy_bias_db,
@@ -247,6 +344,10 @@ class VocalFocusAnalyzer:
             len(result.release_zones),
             len(result.whisper_zones),
             result.climax_type,
+            len(result.style_intent_zones),
+            result.style_confidence,
+            result.singer_school,
+            result.phoneme_protection_level,
             elapsed,
         )
         return result
@@ -588,9 +689,9 @@ class VocalFocusAnalyzer:
     @staticmethod
     def _detect_climax_type(
         frisson_zones: list[tuple[float, float]],
-        tension_zones: list[tuple[float, float]],
-        mono: np.ndarray,
-        sr: int,
+        _tension_zones: list[tuple[float, float]],
+        _mono: np.ndarray,
+        _sr: int,
     ) -> str:
         """Klassifiziert den Klimax-Charakter für MDEM-Stärke-Entscheidung.
 
@@ -620,6 +721,101 @@ class VocalFocusAnalyzer:
         except Exception as exc:
             logger.debug("VFA._detect_climax_type fallback: %s", exc)
             return "none"
+
+    @staticmethod
+    def _classify_singer_school(vfa: VFAResult) -> tuple[str, str]:
+        """Klassifiziert die Gesangsschule aus vorhandenen VFA-Messwerten.
+
+        Entscheidungslogik (hierarchisch, erster Match gewinnt):
+            1. Kein Gesang / keine Formanten → "unknown" / "standard"
+            2. Classical:  formant_stable=True, F1 < 600 Hz, F2 > 1100 Hz,
+                           Vibrato vorhanden, style_confidence < 0.12
+            3. Soul/R&B:   Chest-Dominant, style_confidence > 0.20,
+                           F1 > 650 Hz, breite Vibrato-Zonen
+            4. Jazz:       style_confidence > 0.12, variable Formanten,
+                           Vibrato vorhanden
+            5. Folk/Country: F1 > 700 Hz, style_confidence < 0.08,
+                             wenig Vibrato, instabile Formanten
+            6. Schlager:   formant_stable=True, F1 450–680 Hz, kein Style-Intent
+            7. Pop:        Default-Fallback
+
+        Returns:
+            (singer_school_str, phoneme_protection_level_str)
+
+        Non-blocking: jede Exception → ("unknown", "standard").
+        """
+        _STRICT = "strict"
+        _STANDARD = "standard"
+        _RELAXED = "relaxed"
+        try:
+            if not vfa.vocal_present:
+                return "unknown", _STANDARD
+
+            f1 = vfa.formant_f1_mean
+            f2 = vfa.formant_f2_mean
+            stable = vfa.formant_stable
+            style_conf = vfa.style_confidence
+            register = vfa.dominant_register
+            n_vibrato = len(vfa.vibrato_zones)
+            vibrato_coverage = sum(e - s for s, e in vfa.vibrato_zones) if vfa.vibrato_zones else 0.0
+
+            # Formanten nicht messbar → Pop-Fallback
+            if f1 < 50.0:
+                return "pop", _RELAXED
+
+            # 1. Classical / Bel Canto
+            #    Merkmale: gleichmäßiges Vibrato, enge Vokalformanträume (F1 < 600),
+            #    hohe Formant-Stabilität, kein Blue-Note-Style
+            if stable and f1 < 600.0 and f2 > 1100.0 and n_vibrato >= 1 and style_conf < 0.12:
+                return "classical", _STRICT
+
+            # 2. Soul / R&B / Gospel
+            #    Merkmale: Chest-Dominant, hoher Style-Intent (Melisma, Bends),
+            #    breite Formant-Varianz, viel Vibrato
+            if register in {"chest", "head"} and style_conf > 0.20 and f1 > 600.0:
+                return "soul_rnb", _STANDARD
+
+            # 3. Jazz Standard
+            #    Merkmale: Blue Notes (style_confidence > 0.12), Vibrato vorhanden,
+            #    instabilere Formanten als Klassik
+            if style_conf > 0.12 and (n_vibrato >= 1 or vibrato_coverage > 1.0):
+                return "jazz", _STANDARD
+
+            # 4. Folk / Country
+            #    Merkmale: nasale Resonanz (F1 > 700, F2 < 1500), wenig Style-Intent,
+            #    geringe Vibrato-Dichte, instabile Formanten
+            if f1 > 700.0 and style_conf < 0.08 and not stable and n_vibrato < 2:
+                return "folk_country", _STANDARD
+
+            # 5. Schlager / Chanson
+            #    Merkmale: stabile Formanten, enge Vokal-Räume (F1 450–680),
+            #    kein Blue-Note-Style, typische Gesangsschule "Belting/Chanson"
+            if stable and 450.0 < f1 < 680.0 and style_conf < 0.10:
+                return "schlager", _STANDARD
+
+            # 6. Pop (Default)
+            return "pop", _RELAXED
+
+        except Exception as exc:
+            logger.debug("VFA._classify_singer_school fallback: %s", exc)
+            return "unknown", _STANDARD
+
+    @staticmethod
+    def _detect_style_intent(mono: np.ndarray, sr: int) -> tuple[list[tuple[float, float]], float]:
+        """§P2 Style-Intent-Detektion — intentionale Pitch-Abweichungen (Blue Notes etc.).
+
+        Returns:
+            (style_intent_zones, style_confidence)
+        """
+        try:
+            if _get_style_intent_detector_fn is None:
+                return [], 0.0
+            detector = _get_style_intent_detector_fn()
+            sid_result = detector.analyze(mono, sr)
+            return list(sid_result.style_intent_zones), float(sid_result.style_confidence)
+        except Exception as exc:
+            logger.debug("VFA._detect_style_intent fallback: %s", exc)
+            return [], 0.0
 
 
 # ---------------------------------------------------------------------------

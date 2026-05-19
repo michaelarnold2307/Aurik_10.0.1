@@ -84,7 +84,7 @@ class Language(Enum):
 @dataclass
 class PhonemeSegment:
     """
-    A detected phoneme segment with timing and confidence.
+    Erkanntes Phonem-Segment mit Timing und Konfidenz.
 
     Attributes:
         phoneme: IPA phoneme symbol (e.g., 'ɛ', 's', 'ʃ')
@@ -133,7 +133,7 @@ class DetectionConfig:
     cache_dir: Path | None = None
 
     def __post_init__(self):
-        """Validate configuration."""
+        """Validiert configuration."""
         if not 0.0 <= self.min_confidence <= 1.0:
             raise ValueError(f"min_confidence must be in [0, 1], got {self.min_confidence}")
         if self.target_sample_rate <= 0:
@@ -142,7 +142,7 @@ class DetectionConfig:
 
 class PhonemeDetector:
     """
-    Detect phonemes in audio using Wav2Vec2.
+    Erkennt phonemes in audio using Wav2Vec2.
 
     This class provides automatic phoneme detection from audio signals using
     Meta's Wav2Vec2 model trained on Common Voice dataset with eSpeak-ng
@@ -168,7 +168,7 @@ class PhonemeDetector:
 
     def __init__(self, config: DetectionConfig | None = None):
         """
-        Initialize phoneme detector.
+        Initialisiert phoneme detector.
 
         Args:
             config: Detection configuration (uses defaults if None)
@@ -188,14 +188,14 @@ class PhonemeDetector:
         logger.info("PhonemeDetector initialized with model: %s", self.config.model_name)
 
     def _resolved_model_name(self) -> str:
-        """Resolve model source with local-first fallback for offline runtime."""
+        """Löst auf: model source with local-first fallback for offline runtime."""
         if _WAV2VEC2_LOCAL_DIR.exists():
             return str(_WAV2VEC2_LOCAL_DIR)
         return self.config.model_name
 
     @property
     def device(self) -> Any:
-        """Get PyTorch device (always cpu, §9.5 CPU-only policy)."""
+        """Gibt zurück: PyTorch device (always cpu, §9.5 CPU-only policy)."""
         assert torch is not None
         if self._device is None:
             self._device = torch.device("cpu")
@@ -204,7 +204,7 @@ class PhonemeDetector:
 
     @property
     def model(self) -> _Wav2Vec2ForCTC:
-        """Lazy load Wav2Vec2 model."""
+        """Lädt beim ersten Zugriff: Wav2Vec2 model."""
         if self._model is None:
             model_name = self._resolved_model_name()
             logger.info("Loading model: %s", model_name)
@@ -219,7 +219,7 @@ class PhonemeDetector:
 
     @property
     def processor(self) -> _Wav2Vec2Processor:
-        """Lazy load Wav2Vec2 processor."""
+        """Lädt beim ersten Zugriff: Wav2Vec2 processor."""
         if self._processor is None:
             model_name = self._resolved_model_name()
             logger.info("Loading processor: %s", model_name)
@@ -263,7 +263,7 @@ class PhonemeDetector:
 
     def _decode_predictions(self, logits: Any, audio_length: int) -> list[tuple[str, int, float]]:
         """
-        Decode CTC predictions to phonemes.
+        Dekodiert CTC predictions to phonemes.
 
         Uses CTC (Connectionist Temporal Classification) decoding to
         convert model logits to phoneme sequences with frame indices
@@ -316,7 +316,7 @@ class PhonemeDetector:
 
     def _frames_to_time(self, frame_idx: int, total_frames: int, audio_duration: float) -> float:
         """
-        Convert frame index to time in seconds.
+        Konvertiert frame index to time in seconds.
 
         Args:
             frame_idx: Frame index from model
@@ -332,7 +332,7 @@ class PhonemeDetector:
         self, audio: np.ndarray, sr: int, language: Language | None = None, min_confidence: float | None = None
     ) -> list[PhonemeSegment]:
         """
-        Detect phonemes in audio.
+        Erkennt phonemes in audio.
 
         Args:
             audio: Audio signal (mono or stereo)
@@ -421,7 +421,7 @@ class PhonemeDetector:
         frame_duration: float = 0.01,  # 10ms frames
     ) -> np.ndarray:
         """
-        Convert phoneme segments to frame-level timeline.
+        Konvertiert phoneme segments to frame-level timeline.
 
         Creates a dense timeline where each frame is labeled with the
         active phoneme at that time. Useful for synchronizing phoneme
@@ -463,7 +463,7 @@ class PhonemeDetector:
 
     def get_statistics(self, segments: list[PhonemeSegment]) -> dict[str, Any]:
         """
-        Compute statistics about detected phonemes.
+        Berechnet statistics about detected phonemes.
 
         Args:
             segments: List of phoneme segments

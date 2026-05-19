@@ -1,5 +1,5 @@
 """
-Logging configuration for phoneme-aware processing module.
+Logging-Konfiguration für das phonem-bewusste Verarbeitungsmodul.
 
 Provides structured logging for:
 - Phoneme detection
@@ -15,7 +15,7 @@ from pathlib import Path
 
 def setup_logger(name: str, level: int = logging.INFO, log_file: Path | None = None) -> logging.Logger:
     """
-    Set up a logger for phoneme-aware processing.
+    Setzt up a logger for phoneme-aware processing.
 
     Args:
         name: Logger name (typically module name)

@@ -1,7 +1,3 @@
-import logging
-
-logger = logging.getLogger(__name__)
-
 """
 Stereo Imaging Analyzer & Fixer Module
 
@@ -24,13 +20,17 @@ Date: 9. Februar 2026
 Version: 1.0.0
 """
 
+import logging
+
 import numpy as np
 import scipy.signal as signal
+
+logger = logging.getLogger(__name__)
 
 
 class StereoImagingAnalyzer:
     """
-    Analyzes stereo imaging characteristics of audio signals.
+    Analysiert Stereoabbildungs-Eigenschaften von Audiosignalen.
 
     Computes metrics like:
     - Phase correlation (mono compatibility)
@@ -41,7 +41,7 @@ class StereoImagingAnalyzer:
 
     def __init__(self, frame_length_sec: float = 0.1):
         """
-        Initialize Stereo Imaging Analyzer.
+        Initialisiert Stereo Imaging Analyzer.
 
         Args:
             frame_length_sec: Duration of analysis frames (seconds)
@@ -55,7 +55,7 @@ class StereoImagingAnalyzer:
         sr: int,
     ) -> dict[str, float]:
         """
-                Analyze phase correlation between left and right channels.
+                Analysiert die Phasenkorrelation zwischen linkem und rechtem Kanal.
 
                 Phase correlation ranges from -1 to +1:
                 - +1: Perfect correlation (mono signal)
@@ -120,7 +120,7 @@ class StereoImagingAnalyzer:
         right: np.ndarray,
     ) -> float:
         """
-        Compute effective stereo width.
+        Berechnet effective stereo width.
 
         Width is computed based on the ratio of side (L-R) to mid (L+R) energy.
 
@@ -149,7 +149,7 @@ class StereoImagingAnalyzer:
         right: np.ndarray,
     ) -> dict[str, float]:
         """
-        Compute left/right balance.
+        Berechnet left/right balance.
 
         Args:
             left: Left channel
@@ -239,7 +239,7 @@ class StereoImagingFixer:
         balance_tolerance_db: float = 1.0,
     ):
         """
-        Initialize Stereo Imaging Fixer.
+        Initialisiert Stereo Imaging Fixer.
 
         Args:
             target_width: Target stereo width (1.0 = normal, <1.0 = narrower, >1.0 = wider)
@@ -256,7 +256,7 @@ class StereoImagingFixer:
         right: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Encode stereo signal to Mid/Side format.
+        Kodiert stereo signal to Mid/Side format.
 
         Args:
             left: Left channel
@@ -275,7 +275,7 @@ class StereoImagingFixer:
         side: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Decode Mid/Side signal to stereo.
+        Dekodiert Mid/Side signal to stereo.
 
         Args:
             mid: Mid signal

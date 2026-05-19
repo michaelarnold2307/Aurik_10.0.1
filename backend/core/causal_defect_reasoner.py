@@ -109,6 +109,13 @@ CAUSES = [
     "multiband_wow_flutter",  # Frequency-dependent speed fluctuations (head gap)
     "generation_loss",  # Cumulative degradation from tape dubbing/transcoding
     "motor_interference",  # Motor harmonics 80–300 Hz from DC/sync motors
+    # ── v9.12.1: Pegelveränderung ────────────────────────────────────────────
+    "amplitude_drift",  # Gradual level rise/fall over song duration (AGC, oxide drift, motor temp)
+    # ── v9.12.2: DefectType→CAUSE-Lücken geschlossen ─────────────────────────
+    "clicks",  # DefectType.CLICKS → phase_01 (impulsartige Einzelstörungen)
+    "dolby_nr_mismatch",  # DefectType.DOLBY_NR_MISMATCH → phase_04 HF-Shelf-Korrektur
+    # (Dolby B/C/S encode ohne Dekodierung)
+    "tape_head_level_dip",  # DefectType.TAPE_HEAD_LEVEL_DIP → phase_12/phase_24 (Bandkopf-Kontaktdruckvariation)
 ]
 
 # Material-Typen — Priors für alle 34 Kausal-Ursachen (v9.10.77b)
@@ -888,6 +895,101 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
 for _priors in MATERIAL_PRIORS.values():
     _priors.setdefault("vocal_harshness", 0.01)
 
+# v9.12.1: amplitude_drift — per-material priors (AGC/oxide/motor-temperature drift)
+_AMPLITUDE_DRIFT_MATERIAL_PRIORS: dict[str, float] = {
+    "tape": 0.20,
+    "cassette": 0.18,
+    "reel_tape": 0.15,
+    "wire_recording": 0.15,
+    "wax_cylinder": 0.15,
+    "shellac": 0.08,
+    "lacquer_disc": 0.08,
+    "vinyl": 0.06,
+    "dat": 0.03,
+    "minidisc": 0.02,
+    "cd_digital": 0.01,
+    "mp3_low": 0.01,
+    "mp3_high": 0.01,
+    "aac": 0.01,
+    "streaming": 0.005,
+    "digital": 0.01,
+    "unknown": 0.07,
+}
+for _mat, _ad_prior in _AMPLITUDE_DRIFT_MATERIAL_PRIORS.items():
+    if _mat in MATERIAL_PRIORS:
+        MATERIAL_PRIORS[_mat].setdefault("amplitude_drift", _ad_prior)
+for _priors in MATERIAL_PRIORS.values():
+    _priors.setdefault("amplitude_drift", 0.03)
+
+# v9.12.2: clicks, dolby_nr_mismatch, tape_head_level_dip — per-material priors
+_CLICKS_MATERIAL_PRIORS: dict[str, float] = {
+    "shellac": 0.25,
+    "vinyl": 0.20,
+    "lacquer_disc": 0.15,
+    "wax_cylinder": 0.18,
+    "tape": 0.12,
+    "cassette": 0.12,
+    "reel_tape": 0.08,
+    "wire_recording": 0.14,
+    "dat": 0.05,
+    "minidisc": 0.04,
+    "cd_digital": 0.05,
+    "mp3_low": 0.04,
+    "mp3_high": 0.03,
+    "aac": 0.03,
+    "streaming": 0.02,
+    "digital": 0.03,
+    "unknown": 0.10,
+}
+_DOLBY_NR_MISMATCH_MATERIAL_PRIORS: dict[str, float] = {
+    "cassette": 0.18,  # Dolby B/C/S — häufigster Consumer-Fall (1975–2000)
+    "reel_tape": 0.12,  # Dolby A/SR — Broadcast-Dekoder fehlt oft
+    "tape": 0.08,  # Open-reel-Consumer mit Dolby B
+    "wire_recording": 0.001,
+    "wax_cylinder": 0.001,
+    "lacquer_disc": 0.001,
+    "shellac": 0.001,  # vor Dolby NR (Erfindung 1966)
+    "vinyl": 0.001,
+    "cd_digital": 0.001,
+    "dat": 0.001,
+    "minidisc": 0.001,
+    "mp3_low": 0.001,
+    "mp3_high": 0.001,
+    "aac": 0.001,
+    "streaming": 0.001,
+    "digital": 0.001,
+    "unknown": 0.04,
+}
+_TAPE_HEAD_LEVEL_DIP_MATERIAL_PRIORS: dict[str, float] = {
+    "cassette": 0.18,  # Capstan/Andruckrolle — häufig
+    "tape": 0.16,  # Bandkopf-Kontaktdruckvariation
+    "reel_tape": 0.14,  # Studio-Reel-Tape — Kopfverschleiß
+    "wire_recording": 0.12,  # Drahtband-Kopf instabil
+    "shellac": 0.001,
+    "vinyl": 0.001,
+    "lacquer_disc": 0.001,
+    "wax_cylinder": 0.001,
+    "cd_digital": 0.001,
+    "dat": 0.001,
+    "minidisc": 0.001,
+    "mp3_low": 0.001,
+    "mp3_high": 0.001,
+    "aac": 0.001,
+    "streaming": 0.001,
+    "digital": 0.001,
+    "unknown": 0.05,
+}
+for _new_cause, _new_priors in [
+    ("clicks", _CLICKS_MATERIAL_PRIORS),
+    ("dolby_nr_mismatch", _DOLBY_NR_MISMATCH_MATERIAL_PRIORS),
+    ("tape_head_level_dip", _TAPE_HEAD_LEVEL_DIP_MATERIAL_PRIORS),
+]:
+    for _mat, _prior in _new_priors.items():
+        if _mat in MATERIAL_PRIORS:
+            MATERIAL_PRIORS[_mat].setdefault(_new_cause, _prior)
+    for _priors in MATERIAL_PRIORS.values():
+        _priors.setdefault(_new_cause, 0.01)
+
 # Phase-Empfehlungen pro Ursache (kanonische phase_id = Dateiname ohne .py)
 CAUSE_TO_PHASES: dict[str, list[str]] = {
     # ── Magnetband ────────────────────────────────────────────────────────────
@@ -1129,6 +1231,47 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_29_tape_hiss_reduction",  # §7.2 Spec 06 — HF-Anteile der Motor-Interferenz
         "phase_04_eq_correction",  # Residual spectral correction
     ],
+    # ── v9.12.1: Pegelveränderung ────────────────────────────────────────────
+    "amplitude_drift": [
+        "phase_40_loudness_normalization",  # Primary: time-varying inverse gain envelope
+        # (amplitude_drift_correction=True)
+        "phase_17_dynamics_processing",  # Secondary: dynamic range stabilization
+    ],
+    # ── v9.12.2: DefectType→CAUSE-Lücken ─────────────────────────────────────
+    "clicks": [
+        "phase_01_click_removal",  # Primary: Bayesian click/impulse detection
+        "phase_09_crackle_removal",  # Secondary: handles dense click fields
+    ],
+    "dolby_nr_mismatch": [
+        "phase_04_eq_correction",  # Primary: high-shelf EQ inversion (Dolby B/C/S expand) ≈ −6 to −20 dB HF
+        "phase_29_tape_hiss_reduction",  # Secondary: Dolby NR typically also encodes tape hiss
+        "phase_03_denoise",  # Tertiary: residual noise after HF correction
+    ],
+    "tape_head_level_dip": [
+        "phase_12_wow_flutter_fix",  # Primary: Tape Level Stabilizer (Step 6c) handles level dips
+        "phase_24_dropout_repair",  # Deep dips cross dropout threshold
+        "phase_40_loudness_normalization",  # Slow level drift correction
+    ],
+}
+
+# §6.2b/c Era-Verarbeitungsrichtlinien: Materialspezifische Phasen-Ausschlüsse.
+# Phasen die für ein bestimmtes Material VERBOTEN sind — unabhängig von der Defect-Ursache.
+# Spec copilot-instructions.md §ERA-Tabelle:
+#   1900–1925 (wax_cylinder): VERBOTEN phase_07 (keine Harmonik-Ergänzung, BW ≤ 3 kHz)
+#   wire_recording: kein Harmonik-Enhancement (keine verlässliche f0-Basis)
+_MATERIAL_PHASE_EXCLUSIONS: dict[str, frozenset] = {
+    # Akustische Ära (Trichteraufnahmen): Harmonik-Ergänzung verfälscht das Material — §ERA 1900-1925
+    "wax_cylinder": frozenset(
+        {
+            "phase_07_harmonic_restoration",  # VERBOTEN per spec: keine Harmonik für Trichteraufnahmen
+        }
+    ),
+    # Drahtaufnahmen: keine verlässliche harmonische Basis für additive Synthese
+    "wire_recording": frozenset(
+        {
+            "phase_07_harmonic_restoration",
+        }
+    ),
 }
 
 # Empfohlene Parameter pro Ursache
@@ -1300,6 +1443,40 @@ CAUSE_PARAMS: dict[str, dict[str, Any]] = {
         "harmonic_removal_strength": 0.65,
         "motor_freq_range_hz": [80, 300],
         "sideband_removal": True,
+    },
+    # v9.12.1: Parameter für tape-transport-spezifische Ursachen
+    "tape_start_instability": {
+        "wow_flutter_filter_hz": 3.0,  # motor spin-up wow rate
+        "pitch_correction_semitones": 0.5,
+        "azimuth_correction_deg": 0.0,  # auto-optimiert
+        "start_segment_s": 20.0,  # Korrektur auf erste 20 Sekunden begrenzen
+    },
+    "tape_head_contact_instability": {
+        "dip_detection_threshold_db": 6.0,  # Tiefe Dips: 10–25 dB onset
+        "dip_onset_ms": 80.0,  # typische Onset-Zeit (Camras 1988)
+        "dip_duration_ms": 250.0,  # typische Gesamtdauer
+        "level_smoothing_ms": 120.0,
+        "noise_reduction_strength": 0.40,
+    },
+    # ── v9.12.2: DefectType→CAUSE-Lücken ─────────────────────────────────────
+    "clicks": {
+        "ar_order": 64,  # AR-Prädiktionsordnung für Janssen-Interpolation
+        "click_threshold": 0.10,  # Relativ zum Signal-Peak
+        "ola_crossfade_ms": 4.0,
+        "noise_reduction_strength": 0.30,
+    },
+    "dolby_nr_mismatch": {
+        "eq_correction_strength": 0.70,
+        "hf_shelf_hz": 1000.0,  # Dolby B Eckfrequenz ≈ 1 kHz
+        "hf_shelf_db": -8.0,  # Typische Dolby-B-Decode-Rücknahme
+        "era_filter": "cassette_1975_2000",  # Nur bei passender Ära aktiv
+    },
+    "tape_head_level_dip": {
+        "dip_detection_threshold_db": 4.0,  # flachere Schwelle als tape_head_contact_instability
+        "dip_onset_ms": 100.0,
+        "dip_duration_ms": 500.0,
+        "level_smoothing_ms": 200.0,
+        "noise_reduction_strength": 0.25,
     },
 }
 
@@ -1567,10 +1744,15 @@ def _likelihood_tape_hiss(sf: SpectralFeatures, defect_scores: dict[str, float])
 
 def _likelihood_vinyl_crackle(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     p = 0.0
-    p += _sigmoid_score(sf.click_density, k=1.0, x0=2.0) * 0.45
-    p += _sigmoid_score(defect_scores.get("click_severity", 0.0), k=8, x0=0.35) * 0.35
-    p += (1.0 - abs(sf.dc_offset)) * 0.10
-    p += (1.0 - sf.clip_fraction) * 0.10
+    crackle_sev = float(defect_scores.get("crackle", 0.0))
+    click_sev = float(defect_scores.get("click_severity", 0.0))
+    direct_surface_evidence = max(crackle_sev, click_sev)
+    p += _sigmoid_score(crackle_sev, k=8, x0=0.30) * 0.35
+    p += _sigmoid_score(click_sev, k=8, x0=0.35) * 0.25
+    p += _sigmoid_score(sf.click_density, k=1.0, x0=2.0) * 0.25
+    if direct_surface_evidence > 0.0 or sf.click_density >= 2.0:
+        p += (1.0 - abs(sf.dc_offset)) * 0.08
+        p += (1.0 - sf.clip_fraction) * 0.07
     return float(np.clip(p, 0.0, 1.0))
 
 
@@ -2145,6 +2327,63 @@ def _likelihood_motor_interference(sf: SpectralFeatures, defect_scores: dict[str
     return float(np.clip(p, 0.0, 1.0))
 
 
+def _likelihood_amplitude_drift(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | amplitude_drift) — gradual level rise/fall (AGC, oxide, motor-temp). v9.12.1"""
+    p = 0.0
+    # Primary: DefectScanner severity is the strongest signal
+    drift_sev = float(defect_scores.get("amplitude_drift", 0.0))
+    p += _sigmoid_score(drift_sev, k=10, x0=0.30) * 0.75
+    # Secondary: high crest_factor variance (loudness War-free signals show stable CF)
+    p += _gaussian_score(sf.crest_factor_db, mu=12.0, sigma=8.0) * 0.15
+    # Tertiary: low RMS (drifting signals often start quiet) as weak tie-breaker
+    p += _gaussian_score(sf.rms, mu=0.10, sigma=0.12) * 0.10
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_clicks(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | clicks) — impulsartige Einzelstörungen (Vinyl/Shellac/Band). v9.12.2"""
+    p = 0.0
+    # Primary: direct DefectScanner score (DefectType.CLICKS)
+    click_sev = float(defect_scores.get("clicks", 0.0))
+    p += _sigmoid_score(click_sev, k=10, x0=0.25) * 0.70
+    # Secondary: SpectralFeatures click_density (Clicks pro Sekunde)
+    p += _sigmoid_score(sf.click_density, k=8, x0=0.30) * 0.20
+    # Tertiary: high crest_factor indicates transient spikes
+    p += _sigmoid_score(sf.crest_factor_db, k=3, x0=20.0) * 0.10
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_dolby_nr_mismatch(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | dolby_nr_mismatch) — Dolby B/C/S encode ohne Dekodierung → +6..20 dB HF. v9.12.2
+
+    Signature: excessive high-frequency energy (spectral_rolloff very high, hf_energy_ratio elevated)
+    combined with a DefectScanner DOLBY_NR_MISMATCH score.
+    """
+    p = 0.0
+    # Primary: direct DefectScanner score
+    dolby_sev = float(defect_scores.get("dolby_nr_mismatch", 0.0))
+    p += _sigmoid_score(dolby_sev, k=10, x0=0.30) * 0.60
+    # Secondary: elevated HF energy ratio (Dolby encoded → too much treble)
+    # Dolby B pushes HF up by 6–10 dB; above 8 kHz HF ratio typically > 0.35
+    p += _sigmoid_score(sf.hf_energy_ratio, k=15, x0=0.35) * 0.25
+    # Tertiary: high spectral rolloff (HF-heavy signal)
+    p += _sigmoid_score(sf.spectral_rolloff_hz, k=0.0003, x0=14000.0) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
+def _likelihood_tape_head_level_dip(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(features | tape_head_level_dip) — graduelle Pegeleinbrüche durch Bandkopf-Kontaktdruckvariation. v9.12.2"""
+    p = 0.0
+    # Primary: direct DefectScanner score (DefectType.TAPE_HEAD_LEVEL_DIP)
+    dip_sev = float(defect_scores.get("tape_head_level_dip", 0.0))
+    p += _sigmoid_score(dip_sev, k=10, x0=0.25) * 0.65
+    # Secondary: dropout density (head-tape contact loss manifests as dropout-like dips)
+    p += _sigmoid_score(sf.dropout_density, k=8, x0=0.20) * 0.20
+    # Tertiary: low average RMS (sustained dips lower mean energy)
+    p += _gaussian_score(sf.rms, mu=0.06, sigma=0.08) * 0.15
+    return float(np.clip(p, 0.0, 1.0))
+
+
 LIKELIHOOD_FNS = {
     # ── Original 12 ──────────────────────────────────────────────────────────
     "tape_dropout": _likelihood_tape_dropout,
@@ -2198,6 +2437,12 @@ LIKELIHOOD_FNS = {
     "multiband_wow_flutter": _likelihood_multiband_wow_flutter,
     "generation_loss": _likelihood_generation_loss,
     "motor_interference": _likelihood_motor_interference,
+    # ── v9.12.1 ──────────────────────────────────────────────────────────────
+    "amplitude_drift": _likelihood_amplitude_drift,
+    # ── v9.12.2: DefectType→CAUSE-Lücken geschlossen ─────────────────────────
+    "clicks": _likelihood_clicks,
+    "dolby_nr_mismatch": _likelihood_dolby_nr_mismatch,
+    "tape_head_level_dip": _likelihood_tape_head_level_dip,
 }
 
 
@@ -2212,7 +2457,7 @@ def _sigmoid_score(x: float, k: float = 5.0, x0: float = 0.5) -> float:
 
 
 def _normalize_defect_scores(defect_scores: dict[str, float]) -> dict[str, float]:
-    """Normalize/alias defect score keys and sanitize values.
+    """Normalisiert/aliasiert Defektbewertungs-Schlüssel und bereinigt Werte.
 
     Handles naming drift between legacy reasoner keys (e.g. click_severity)
     and current DefectScanner keys (e.g. clicks). Values are clamped to [0, 1]
@@ -2385,25 +2630,36 @@ class CausalDefectReasoner:
                 if param not in merged_params:
                     merged_params[param] = val
 
+        # §6.2b/c Material-Phase-Exclusion-Filter: Era-spezifische Verbote durchsetzen.
+        # Entfernt materialspezifisch verbotene Phasen aus dem Restaurierungsplan
+        # (z.B. wax_cylinder: phase_07 VERBOTEN per spec §ERA 1900-1925).
+        _mat_exclusions = _MATERIAL_PHASE_EXCLUSIONS.get(material, frozenset())
+        if _mat_exclusions:
+            _excluded = [_p for _p in ordered_phases if _p in _mat_exclusions]
+            if _excluded:
+                ordered_phases = [_p for _p in ordered_phases if _p not in _mat_exclusions]
+                logger.info(
+                    "§6.2b Material-Phase-Exclusion: material=%s hat %d Phase(n) blockiert: %s",
+                    material,
+                    len(_excluded),
+                    _excluded,
+                )
+
         # §7.2a Severity-Weighted Phase-Reorder (spec Y1):
         # When ≥3 defects have severity ≥ 0.70, reorder phases so that phases
         # belonging to the highest-posterior causes are processed first.
         _high_sev_defects = [k for k, v in defect_scores.items() if v >= 0.70]
         if len(_high_sev_defects) >= 3:
-            import re as _re  # pylint: disable=import-outside-toplevel
-
             _phase_priority: dict[str, float] = {}
             for _cause_k, _cause_prob in ranked[:10]:
                 for _phase_k in CAUSE_TO_PHASES.get(_cause_k, []):
                     _phase_priority[_phase_k] = max(_phase_priority.get(_phase_k, 0.0), _cause_prob)
 
-            def _phase_num(_p: str) -> int:
-                _m = _re.search(r"phase_(\d+)", _p)
-                return int(_m.group(1)) if _m else 99
+            _original_order = {_phase_id: _idx for _idx, _phase_id in enumerate(ordered_phases)}
 
             ordered_phases = sorted(
                 ordered_phases,
-                key=lambda _p: (_phase_priority.get(_p, 0.0), -_phase_num(_p)),
+                key=lambda _p: (_phase_priority.get(_p, 0.0), -_original_order.get(_p, 999)),
                 reverse=True,
             )
             logger.info(

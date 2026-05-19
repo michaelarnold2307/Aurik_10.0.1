@@ -64,7 +64,7 @@ class ProblemType(Enum):
 
 @dataclass
 class RecoveryAction:
-    """A single recovery action."""
+    """single recovery action."""
 
     strategy: RecoveryStrategy
     description: str
@@ -154,7 +154,7 @@ class QualityRecoverySystem:
     VERSION = "1.0.0"
 
     def __init__(self):
-        """Initialize Quality Recovery System."""
+        """Initialisiert Quality Recovery System."""
         self.mqa = MusicalQualityAssurance()
         self.analyzer = self.mqa.analyzer  # Use MQA's analyzer
 
@@ -334,7 +334,7 @@ class QualityRecoverySystem:
         processing_mode: ProcessingMode,
     ) -> RecoveryResult:
         """
-        Execute recovery plan to fix quality.
+        Führt aus: recovery plan to fix quality.
 
         Args:
             original_audio: Original input audio
@@ -509,7 +509,7 @@ class QualityRecoverySystem:
         medium_type: MediumType,
         processing_mode: ProcessingMode,
     ) -> list[RecoveryAction]:
-        """Generate recovery actions for specific problem."""
+        """Generiert recovery actions for specific problem."""
         # Get template actions
         actions = self._strategy_templates.get(problem_type, []).copy()
 
@@ -536,7 +536,7 @@ class QualityRecoverySystem:
         return actions
 
     def _describe_problem(self, problem_type: ProblemType, quality_report: MusicalQualityReport) -> str:
-        """Generate human-readable problem description."""
+        """Generiert human-readable problem description."""
         descriptions = {
             ProblemType.LOW_SNR: f"SNR too low ({quality_report.output_quality.snr_db:.1f} dB)",
             ProblemType.OVERBRIGHTENING: f"Over-brightened (brightness {quality_report.output_quality.brightness:.2f})",
@@ -738,7 +738,7 @@ class QualityRecoverySystem:
     def _incremental_processing(
         self, original: np.ndarray, target: np.ndarray, parameters: dict[str, Any]
     ) -> np.ndarray:
-        """Process incrementally towards target with quality checks."""
+        """Verarbeitet incrementally towards target with quality checks."""
         step_size = parameters.get("step_size", 0.25)
 
         # Move 25% towards target
@@ -951,7 +951,7 @@ class QualityRecoverySystem:
 
 
 def create_quality_recovery_system() -> QualityRecoverySystem:
-    """Factory function to create quality recovery system."""
+    """Factory-Funktion zum Erstellen des Qualitäts-Recovery-Systems."""
     return QualityRecoverySystem()
 
 

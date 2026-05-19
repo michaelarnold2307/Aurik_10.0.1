@@ -140,7 +140,7 @@ def detect_dolby_encoding(
     material_type: str = "tape",
     era_decade: int | None = None,
 ) -> DolbyDetectionResult:
-    """Analyse audio to determine if Dolby / DBX NR was applied without decoding.
+    """Analysiert Audio, um zu prüfen ob Dolby/DBX NR ohne Dekodierung angewendet wurde.
 
     Parameters
     ----------
@@ -363,7 +363,7 @@ def _make_biquad_sos(btype: str, fc: float, gain_db: float, q: float, sr: int) -
 
 
 def build_inverse_filter_sos(nr_type: DolbyType, sr: int = 48000) -> np.ndarray | None:
-    """Build a multi-stage IIR SOS cascade for approximate NR inversion.
+    """Erstellt a multi-stage IIR SOS cascade for approximate NR inversion.
 
     Returns combined SOS array (N_stages, 6) or None if nr_type == "none".
     """
@@ -380,7 +380,7 @@ def apply_inverse_filter(
     sr: int = 48000,
     confidence: float = 1.0,
 ) -> np.ndarray:
-    """Apply approximate Dolby / DBX inverse to audio.
+    """Wendet approximative Dolby/DBX-Umkehrung auf Audio an.
 
     Parameters
     ----------
@@ -460,7 +460,7 @@ class DolbyNRDetector:
 
 
 def get_dolby_nr_detector() -> DolbyNRDetector:
-    """Return thread-safe singleton."""
+    """Gibt thread-safe singleton zurück."""
     global _instance
     if _instance is None:
         with _lock:

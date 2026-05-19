@@ -1,5 +1,5 @@
 """
-optimization/priority5_bass.py — Phase-coherent bass processing
+optimization/priority5_bass.py – Phasenkohärente Bass-Verarbeitung.
 ===============================================================
 
 Applies linear-phase low-end enhancement while preserving resonance
@@ -13,7 +13,7 @@ from scipy.signal import butter, sosfiltfilt
 
 
 class ResonancePreserver:
-    """Detects dominant resonance peaks in the low-frequency range.
+    """Erkennt dominant resonance peaks in the low-frequency range.
 
     Parameters
     ----------
@@ -31,7 +31,7 @@ class ResonancePreserver:
         n_top: int = 10,
         freq_range: tuple[float, float] = (20.0, 500.0),
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Detect resonant frequencies in *audio*.
+        """Erkennt resonant frequencies in *audio*.
 
         Parameters
         ----------
@@ -95,7 +95,7 @@ class PhaseCoherentBassProcessor:
         self._preserver = ResonancePreserver(sr=sr)
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Apply linear-phase low-end enhancement.
+        """Wendet an: linear-phase low-end enhancement.
 
         Returns an ndarray within ±1 s of the input length.
         """

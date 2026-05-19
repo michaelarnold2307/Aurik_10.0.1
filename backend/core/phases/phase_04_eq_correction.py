@@ -1,5 +1,5 @@
 """
-Phase 4: Professional EQ Correction - Aurik 9.0
+Phase 4: Professional EQ Correction - Aurik 9.0.
 ===============================================
 
 Professional-grade adaptive equalization competing with FabFilter Pro-Q and iZotope Ozone EQ.
@@ -73,6 +73,7 @@ Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """
 
+import logging
 import os
 import sys
 import time
@@ -94,9 +95,7 @@ if __name__ == "__main__":
 else:
     from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 
-import logging
-
-from backend.core.audio_utils import to_channels_last
+from backend.core.audio_utils import to_channels_last  # pylint: disable=wrong-import-position
 
 logger = logging.getLogger(__name__)
 
@@ -486,7 +485,7 @@ class EQCorrectionPhase(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, int]:
-        """Compute lightweight analysis profile for EQ correction planning.
+        """Berechnet lightweight analysis profile for EQ correction planning.
 
         The FFT size is material- and quality-adaptive, bounded to [1024, 8192],
         and always a power-of-two.
@@ -526,7 +525,7 @@ class EQCorrectionPhase(PhaseInterface):
 
         return {"analysis_fft_size": int(_fft)}
 
-    def process(
+    def process(  # pylint: disable=arguments-renamed
         self, audio: np.ndarray, material_type: str = "unknown", auto_analyze: bool = True, **kwargs
     ) -> PhaseResult:
         """
@@ -636,6 +635,34 @@ class EQCorrectionPhase(PhaseInterface):
         else:
             adjusted_curve = params["eq_curve"]
 
+        # §Lücke-E MicrophoneSignature Protection-EQ: Authentischen Mic-Charakter schützen.
+        # mic_signature ist via _restoration_context in kwargs → verhindert EQ-Überkorrektur
+        # am charakteristischen Präsenz-Peak und Nahbesprechungseffekt.
+        _mic_sig_p04 = kwargs.get("mic_signature")
+        if _mic_sig_p04 is not None and hasattr(_mic_sig_p04, "detected_mic"):
+            try:
+                _prot_center_p04 = float(getattr(_mic_sig_p04, "presence_peak_hz", 0) or 0)
+                _prot_priority_p04 = getattr(_mic_sig_p04, "protection_priority", "relaxed")
+                _max_cut_p04 = -0.5 if _prot_priority_p04 == "strict" else -1.5
+                if _prot_center_p04 > 100.0 and abs(float(getattr(_mic_sig_p04, "presence_peak_db", 0) or 0)) > 0.5:
+                    for _freq_p04 in list(adjusted_curve.keys()):
+                        if _prot_center_p04 / 2.5 <= _freq_p04 <= _prot_center_p04 * 2.5:
+                            if adjusted_curve[_freq_p04] < _max_cut_p04:
+                                adjusted_curve[_freq_p04] = _max_cut_p04
+                _should_prot_bass = getattr(_mic_sig_p04, "should_protect_bass", None)
+                if callable(_should_prot_bass) and _should_prot_bass():
+                    _prox_hz_p04 = float(getattr(_mic_sig_p04, "protect_proximity_below_hz", 200) or 200)
+                    for _freq_p04 in list(adjusted_curve.keys()):
+                        if _freq_p04 <= _prox_hz_p04 and adjusted_curve[_freq_p04] < -0.5:
+                            adjusted_curve[_freq_p04] = -0.5
+                logger.debug(
+                    "§Lücke-E MicChar: %s Schutz aktiv, priority=%s",
+                    getattr(_mic_sig_p04, "detected_mic", "?"),
+                    _prot_priority_p04,
+                )
+            except Exception as _mic_exc_p04:
+                logger.debug("MicChar Protection-EQ non-blocking: %s", _mic_exc_p04)
+
         # Step 2: Apply Multi-Band Parametric EQ
         eq_audio = self._apply_parametric_eq_professional(audio, adjusted_curve, params)
 
@@ -663,9 +690,13 @@ class EQCorrectionPhase(PhaseInterface):
         dolby_nr_applied = False
         if dolby_nr_type and dolby_nr_type != "none":
             try:
-                from backend.core.dolby_nr_detector import apply_inverse_filter as _dolby_inv
+                from backend.core.dolby_nr_detector import (
+                    apply_inverse_filter as _dolby_inv,  # pylint: disable=import-outside-toplevel
+                )
 
-                result_audio = _dolby_inv(result_audio, dolby_nr_type, sr=sample_rate, confidence=dolby_nr_conf)  # type: ignore[arg-type]
+                result_audio = _dolby_inv(  # type: ignore[arg-type]
+                    result_audio, dolby_nr_type, sr=sample_rate, confidence=dolby_nr_conf
+                )
                 dolby_nr_applied = True
                 logger.info("phase_04: Dolby/DBX NR inverse applied type=%s conf=%.2f", dolby_nr_type, dolby_nr_conf)
             except Exception as exc:
@@ -689,7 +720,9 @@ class EQCorrectionPhase(PhaseInterface):
 
         # §4.5 Psychoacoustic Masking Compensation — fulfill the docstring promise (L27-46)
         try:
-            from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+            from backend.core.dsp.psychoacoustics import (
+                apply_psychoacoustic_masking_clamp,  # pylint: disable=import-outside-toplevel
+            )
 
             result_audio = apply_psychoacoustic_masking_clamp(
                 audio,
@@ -763,7 +796,7 @@ class EQCorrectionPhase(PhaseInterface):
         audio: np.ndarray,
         sample_rate: int,
         material_type: str,
-        era: str,
+        _era: str,
         strength: float,
     ) -> np.ndarray:
         """§C7 Spectral Optimal Transport — 1D Wasserstein spectral alignment.
@@ -799,7 +832,7 @@ class EQCorrectionPhase(PhaseInterface):
             "cd_digital": {"bass": 0.0, "low_mid": 0.0, "mid": 0.0, "high_mid": 0.0, "high": 0.0},
             "mp3_low": {"bass": -0.5, "low_mid": +0.5, "mid": +0.5, "high_mid": -1.0, "high": -4.0},
         }
-        _mat_key = str(material_type).split("_")[0].lower() if material_type else "cd_digital"
+        _mat_key = str(material_type).split("_", maxsplit=1)[0].lower() if material_type else "cd_digital"
         if _mat_key not in _ERA_OT_PROFILES:
             for _k in _ERA_OT_PROFILES:
                 if _mat_key.startswith(_k[:4]):
@@ -842,7 +875,7 @@ class EQCorrectionPhase(PhaseInterface):
         # Apply corrections as smooth Butterworth shelving/peaking filters
         result = np.asarray(audio, dtype=np.float64)
         try:
-            from scipy.signal import butter, sosfiltfilt
+            from scipy.signal import butter, sosfiltfilt  # pylint: disable=import-outside-toplevel
 
             for band_name, gain_db in eq_corrections.items():
                 if abs(gain_db) < 0.3:
@@ -877,7 +910,7 @@ class EQCorrectionPhase(PhaseInterface):
         tau_treble_us: int,
         freq_hz: float,
     ) -> float:
-        """Compute playback EQ correction (dB) for a pre-RIAA curve at ``freq_hz``.
+        """Berechnet playback EQ correction (dB) for a pre-RIAA curve at ``freq_hz``.
 
         Derives the inverse of the recording characteristic from the τ triplet:
 
@@ -903,7 +936,6 @@ class EQCorrectionPhase(PhaseInterface):
         """
         if freq_hz <= 0.0:
             return 0.0
-        2.0 * np.pi * freq_hz
         # Each τ in seconds
         t1 = tau_bass_us * 1e-6
         t2 = tau_mid_us * 1e-6
@@ -923,7 +955,7 @@ class EQCorrectionPhase(PhaseInterface):
 
     def _auto_detect_riaa_variant(self, audio: np.ndarray, sr: int, decade: int) -> str:
         """
-        Selects the most likely pre-RIAA recording standard for a given decade.
+        Wählt aus: the most likely pre-RIAA recording standard for a given decade.
 
         Strategy (two-pass):
           Pass 1 — decade heuristic: narrows candidates to 1–3 labels active in that era.
@@ -1022,7 +1054,7 @@ class EQCorrectionPhase(PhaseInterface):
 
     def _analyze_spectrum(self, audio: np.ndarray, params: dict[str, Any]) -> dict[float, float]:
         """
-        Analyze spectrum and compute deviation from target.
+        Analysiert das Spektrum und berechnet die Zielabweichung.
 
         Returns:
             Dict of {frequency: deviation_db}
@@ -1086,7 +1118,7 @@ class EQCorrectionPhase(PhaseInterface):
         return adjusted
 
     def _apply_head_bump_compensation(self, audio: np.ndarray, speed_ips: float) -> np.ndarray:
-        """Apply parametric dip to compensate the tape head-bump resonance.
+        """Wendet an: parametric dip to compensate the tape head-bump resonance.
 
         The head-bump is a LF resonance caused by the acoustic resonance of the
         tape-head gap becoming λ/2 at a specific frequency inversely proportional
@@ -1106,20 +1138,20 @@ class EQCorrectionPhase(PhaseInterface):
             return audio
 
         f_hz, cut_db, q = self.HEAD_BUMP_PROFILES[nearest]
-        return self._apply_peaking_filter(audio, freq=f_hz, Q=q, gain_db=-cut_db, phase_mode="minimum")
+        return self._apply_peaking_filter(audio, freq=f_hz, Q=q, gain_db=-cut_db, _phase_mode="minimum")
 
     def _apply_parametric_eq_professional(
         self, audio: np.ndarray, eq_curve: dict[float, float], params: dict[str, Any]
     ) -> np.ndarray:
         """
-        Apply professional parametric EQ with proper peaking filters.
+        Wendet an: professional parametric EQ with proper peaking filters.
         """
         # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
         # sosfiltfilt requires len(audio) > padlen (typically 9–100 samples depending on sos)
         # For very short audio, return passthrough
         MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
         if len(audio) < MIN_AUDIO_SAMPLES:
-            logger.debug(f"phase_04: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}), skipping EQ")
+            logger.debug("phase_04: audio too short (%d < %d), skipping EQ", len(audio), MIN_AUDIO_SAMPLES)
             return np.asarray(audio, dtype=np.float32).copy()
 
         result = audio.copy()
@@ -1146,10 +1178,10 @@ class EQCorrectionPhase(PhaseInterface):
         return result
 
     def _apply_peaking_filter(
-        self, audio: np.ndarray, freq: float, Q: float, gain_db: float, phase_mode: str
+        self, audio: np.ndarray, freq: float, Q: float, gain_db: float, _phase_mode: str
     ) -> np.ndarray:
         """
-        Apply peaking filter (boost/cut at specific frequency).
+        Wendet an: peaking filter (boost/cut at specific frequency).
 
         Uses proper biquad design for peaking/shelving filters.
         """
@@ -1197,22 +1229,22 @@ class EQCorrectionPhase(PhaseInterface):
         """
         return (1 - blend) * dry + blend * wet
 
-    def supports_material(self, material_type: str) -> bool:
+    def supports_material(self, _material_type: str) -> bool:
         """All materials supported."""
         return True
 
 
 if __name__ == "__main__":
-    """Test Professional EQ Correction Phase."""
+    # Test Professional EQ Correction Phase.
 
     logger.debug("=" * 80)
     logger.debug("Professional EQ Correction Phase v2.0 - Test")
     logger.debug("=" * 80)
 
     # Generate test audio
-    sr = 44100
+    _sr = 44100
     duration = 3
-    t = np.linspace(0, duration, sr * duration)
+    t = np.linspace(0, duration, _sr * duration)
 
     # Pink noise (1/f spectrum)
     white = np.random.randn(len(t))
@@ -1221,9 +1253,9 @@ if __name__ == "__main__":
     pink = pink / np.percentile(np.abs(pink), 99.9) * 0.3
 
     # Make stereo
-    audio = np.column_stack([pink, pink * 0.95])
+    _audio = np.column_stack([pink, pink * 0.95])
 
-    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, sr)
+    logger.debug("\nTest Audio: %ss @ %s Hz (stereo)", duration, _sr)
     logger.debug("Content: Pink noise (flat power spectrum)")
 
     # Test with different materials
@@ -1234,31 +1266,30 @@ if __name__ == "__main__":
         logger.debug("Testing with material: %s", material.upper())
         logger.debug("%s", "-" * 80)
 
-        phase = EQCorrectionPhase(sample_rate=sr)
-        result = phase.process(audio.copy(), material_type=material)
+        phase = EQCorrectionPhase(sample_rate=_sr)
+        _result = phase.process(_audio.copy(), material_type=material)
 
-        if result.success and result.modifications.get("eq_applied"):
+        if _result.success and _result.modifications.get("eq_applied"):
             logger.debug("✅ Processing Complete!")
-            logger.debug(
-                f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
-            )
-            logger.debug("   Bands: %s", result.modifications["num_bands"])
-            logger.debug("   Total Correction: %.1f dB", result.modifications["total_correction_db"])
-            logger.debug("   Max Boost: %.1f dB", result.modifications["max_boost_db"])
-            logger.debug("   Max Cut: %.1f dB", result.modifications["max_cut_db"])
-            logger.debug("   Blend: %.2f", result.modifications["blend_ratio"])
-            logger.debug("   Phase Mode: %s", result.modifications["phase_mode"])
-            logger.debug("   RIAA Standard: %s", result.metadata.get("riaa_standard", False))
-            logger.debug("   NAB Standard: %s", result.metadata.get("nab_standard", False))
-            logger.debug("   Warnings: %s", result.warnings if result.warnings else "None")
+            _exec_s = _result.metadata["execution_time_seconds"]
+            logger.debug("   Execution Time: %.3fs (%.2f\u00d7 realtime)", _exec_s, _exec_s / duration)
+            logger.debug("   Bands: %s", _result.modifications["num_bands"])
+            logger.debug("   Total Correction: %.1f dB", _result.modifications["total_correction_db"])
+            logger.debug("   Max Boost: %.1f dB", _result.modifications["max_boost_db"])
+            logger.debug("   Max Cut: %.1f dB", _result.modifications["max_cut_db"])
+            logger.debug("   Blend: %.2f", _result.modifications["blend_ratio"])
+            logger.debug("   Phase Mode: %s", _result.modifications["phase_mode"])
+            logger.debug("   RIAA Standard: %s", _result.metadata.get("riaa_standard", False))
+            logger.debug("   NAB Standard: %s", _result.metadata.get("nab_standard", False))
+            logger.debug("   Warnings: %s", _result.warnings if _result.warnings else "None")
         else:
-            logger.debug("⏭️  EQ Skipped")
-            logger.debug("   Reason: %s", result.modifications.get("reason", "unknown"))
+            logger.debug("\u23ed\ufe0f  EQ Skipped")
+            logger.debug("   Reason: %s", _result.modifications.get("reason", "unknown"))
 
     logger.debug("\n%s", "=" * 80)
     logger.debug("✅ Professional EQ Correction v2.0 Test Complete!")
     logger.debug("%s", "=" * 80)
-    logger.debug("Algorithm: %s", result.metadata.get("algorithm", "N/A"))
-    logger.debug("Scientific Reference: %s", result.metadata.get("scientific_ref", "N/A"))
-    logger.debug("Benchmark: %s", result.metadata.get("benchmark", "N/A"))
+    logger.debug("Algorithm: %s", _result.metadata.get("algorithm", "N/A"))
+    logger.debug("Scientific Reference: %s", _result.metadata.get("scientific_ref", "N/A"))
+    logger.debug("Benchmark: %s", _result.metadata.get("benchmark", "N/A"))
     logger.debug("Quality Impact: 0.96 (Professional-Grade)")

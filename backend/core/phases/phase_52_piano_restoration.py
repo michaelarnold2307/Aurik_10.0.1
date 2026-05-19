@@ -180,7 +180,7 @@ class PianoRestorationV1(PhaseInterface):
 
     def __init__(self, sample_rate: int = 48000, **kwargs):
         """
-        Initialize Piano Restoration Phase.
+        Initialisiert Piano Restoration Phase.
 
         Args:
             sample_rate: Audio sample rate (Hz)
@@ -249,7 +249,7 @@ class PianoRestorationV1(PhaseInterface):
         **kwargs,
     ) -> PhaseResult:
         """
-        Restore piano recordings with material-adaptive processing.
+        Restauriert piano recordings with material-adaptive processing.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -643,7 +643,9 @@ class PianoRestorationV1(PhaseInterface):
 
         # Envelope detection
         envelope = np.abs(pedal_band)
-        envelope = signal.sosfilt(signal.butter(2, 20 / nyquist, output="sos"), envelope)  # 20 Hz lowpass — analysis only
+        envelope = signal.sosfilt(
+            signal.butter(2, 20 / nyquist, output="sos"), envelope
+        )  # 20 Hz lowpass — analysis only
 
         # Convert threshold to linear
         threshold_linear = 10 ** (threshold_db / 20) * np.max(envelope)
@@ -665,7 +667,7 @@ class PianoRestorationV1(PhaseInterface):
 
     def _restore_dynamics(self, audio: np.ndarray, expansion_ratio: float) -> np.ndarray:
         """
-        Restore dynamic range (upward expansion for over-compressed recordings).
+        Restauriert dynamic range (upward expansion for over-compressed recordings).
 
         Algorithm:
         1. RMS envelope detection
@@ -718,7 +720,7 @@ class PianoRestorationV1(PhaseInterface):
         return audio_expanded
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_52_piano_restoration",
             name="Piano Restoration System v1.0",
@@ -735,7 +737,7 @@ class PianoRestorationV1(PhaseInterface):
         )
 
     def supports_material(self, material_type: MaterialType) -> bool:
-        """Check if material type is supported."""
+        """Prüft if material type is supported."""
         return material_type in self.RESTORATION_CONFIG or material_type in [
             MaterialType.REEL_TAPE,
             MaterialType.DAT,
@@ -745,7 +747,7 @@ class PianoRestorationV1(PhaseInterface):
         ]
 
     def estimate_time(self, audio_duration_seconds: float) -> float:
-        """Estimate processing time."""
+        """Schätzt processing time."""
         return audio_duration_seconds * 0.20  # 0.20× realtime
 
 

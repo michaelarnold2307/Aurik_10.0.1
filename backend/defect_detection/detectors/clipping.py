@@ -1,5 +1,5 @@
 """
-Clipping Detector
+Clipping-Detektor.
 =================
 
 Detects audio clipping (hard and soft).
@@ -12,7 +12,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class ClippingDetector(DefectDetector):
     """
-    Detects clipping in audio.
+    Erkennt clipping in audio.
 
     Clipping occurs when signal amplitude exceeds the maximum representable value,
     causing waveform distortion (flat tops/bottoms).
@@ -24,7 +24,7 @@ class ClippingDetector(DefectDetector):
         self.soft_threshold = soft_threshold
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.0001, **kwargs) -> list[DefectInstance]:
-        """Detect clipping in audio, kontextbewusst."""
+        """Erkennt clipping in audio, kontextbewusst."""
         # Handle stereo
         if audio.ndim == 2:
             return self._detect_multichannel(audio, sr, tolerance)
@@ -32,7 +32,7 @@ class ClippingDetector(DefectDetector):
         return self._detect_mono(audio, sr, tolerance)
 
     def _detect_mono(self, audio: np.ndarray, sr: int, tolerance: float) -> list[DefectInstance]:
-        """Detect clipping in mono audio."""
+        """Erkennt clipping in mono audio."""
         audio_abs = np.abs(audio)
 
         # Hard clipping: samples at or above threshold
@@ -90,7 +90,7 @@ class ClippingDetector(DefectDetector):
         ]
 
     def _detect_multichannel(self, audio: np.ndarray, sr: int, tolerance: float) -> list[DefectInstance]:
-        """Detect clipping in multi-channel audio."""
+        """Erkennt clipping in multi-channel audio."""
         defects = []
 
         for ch_idx in range(audio.shape[1]):

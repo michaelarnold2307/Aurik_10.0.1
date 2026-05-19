@@ -203,7 +203,7 @@ class IntrinsicAudioQualityScorer:
         self.set_mode(mode)
 
     def set_mode(self, mode: str | None) -> None:
-        """Select weight profile based on processing mode."""
+        """Wählt aus: weight profile based on processing mode."""
         if mode and "studio" in str(mode).lower():
             self._active_weights = self._WEIGHTS_STUDIO_2026
         elif mode and "restoration" in str(mode).lower():

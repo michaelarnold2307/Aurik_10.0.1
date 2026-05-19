@@ -111,7 +111,7 @@ class ZoneEngine:
     }
 
     def __init__(self):
-        """Initialize Zone Engine."""
+        """Initialisiert Zone Engine."""
         self.stats = {
             "zone_a_count": 0,
             "zone_b_count": 0,
@@ -158,7 +158,7 @@ class ZoneEngine:
 
     def get_musical_goals_for_zone(self, zone: Zone, medium: str | None = None) -> dict[str, float]:
         """
-        Get zone-specific and medium-specific musical goals thresholds.
+        Gibt zurück: zone-specific and medium-specific musical goals thresholds.
 
         Args:
             zone: Zone (A/B/C)
@@ -198,7 +198,7 @@ class ZoneEngine:
         self, zone: Zone, base_cas: float = 0.025, base_dcs: float = 0.15
     ) -> tuple[float, float]:
         """
-        Get zone-specific CAS and DCS thresholds.
+        Gibt zurück: zone-specific CAS and DCS thresholds.
 
         Args:
             zone: Zone (A/B/C)
@@ -223,7 +223,7 @@ class ZoneEngine:
 
     def get_statistics(self) -> dict[str, int]:
         """
-        Get zone classification statistics.
+        Gibt zurück: zone classification statistics.
 
         Returns:
             Dict with zone counts
@@ -231,7 +231,7 @@ class ZoneEngine:
         return self.stats.copy()
 
     def reset_statistics(self):
-        """Reset zone classification statistics."""
+        """Setzt zurück: zone classification statistics."""
         self.stats = {
             "zone_a_count": 0,
             "zone_b_count": 0,
@@ -241,14 +241,14 @@ class ZoneEngine:
 
 class ZoneAwareContextAnalyzer:
     """
-    Extended ContextAnalyzer that integrates Zone Engine.
+    Erweiterter ContextAnalyzer mit Zone-Engine-Integration.
 
     Combines confidence-based zoning with medium detection
     for comprehensive context analysis.
     """
 
     def __init__(self):
-        """Initialize with Zone Engine and existing ContextAnalyzer."""
+        """Initialisiert with Zone Engine and existing ContextAnalyzer."""
         from .context_analysis import ContextAnalyzer
 
         self.zone_engine = ZoneEngine()
@@ -263,7 +263,7 @@ class ZoneAwareContextAnalyzer:
         detected_medium: dict | None = None,
     ) -> dict:
         """
-        Analyze context with zone classification.
+        Analysiert den Kontext mit Zonenklassifizierung.
 
         Args:
             features: Audio features

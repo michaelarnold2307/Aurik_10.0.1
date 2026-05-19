@@ -1,5 +1,5 @@
 """
-Logging configuration for vocal separation module
+Logging-Konfiguration für das Vokal-Separationsmodul.
 """
 
 import logging
@@ -7,7 +7,7 @@ import sys
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get configured logger"""
+    """Gibt zurück: configured logger."""
     logger = logging.getLogger(name)
 
     if not logger.handlers:

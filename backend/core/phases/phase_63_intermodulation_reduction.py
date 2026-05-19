@@ -66,7 +66,7 @@ def _build_imd_notch_mask(
     strength: float,
     notch_width_hz: float,
 ) -> np.ndarray:
-    """Compute frequency-domain gain mask for IMD notch filtering.
+    """Berechnet frequency-domain gain mask for IMD notch filtering.
 
     Uses bispectrum-coherence to confirm whether energy at predicted IMD
     product locations is causally related to the identified fundamentals.
@@ -180,7 +180,7 @@ def _apply_stft_mask(
     gain_mask: np.ndarray,
     sample_rate: int,
 ) -> np.ndarray:
-    """Apply a frequency-domain gain mask using STFT overlap-add — vectorised."""
+    """Wendet eine Frequenzbereichs-Gain-Maske via STFT-Overlap-Add an (vektorisiert)."""
     n = len(x)
     n_fft = _PROC_NFFT
     hop = n_fft // 4
@@ -220,7 +220,7 @@ def apply(
     min_imd_score: float = _MIN_IMD_SCORE,
     notch_width_hz: float = _NOTCH_WIDTH_HZ,
 ) -> np.ndarray:
-    """Main entry point for Phase 63 — §2.51 M/S-compliant."""
+    """Haupt-entry point for Phase 63 — §2.51 M/S-compliant."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -459,6 +459,7 @@ class IntermodulationReductionPhase(PhaseInterface):
                     result_audio[_npa_m63] = audio[_npa_m63]
         except Exception as _npa63_exc:
             import logging as _log63n
+
             _log63n.getLogger(__name__).debug("§2.46f phase_63 NPA-Guard (non-blocking): %s", _npa63_exc)
 
         _rms_out_db = _rms_dbfs_gated(result_audio)

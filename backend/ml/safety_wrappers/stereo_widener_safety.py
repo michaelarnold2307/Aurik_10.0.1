@@ -36,7 +36,7 @@ from .safety_wrapper_template import (
 
 def check_mono_compatibility(audio: np.ndarray) -> tuple[float, float]:
     """
-    Check mono compatibility (phase cancellation test).
+    Prüft mono compatibility (phase cancellation test).
 
     When summed to mono, well-produced stereo retains >90% energy.
     Poor phase relationships cause cancellation.
@@ -79,7 +79,7 @@ def check_mono_compatibility(audio: np.ndarray) -> tuple[float, float]:
 
 def measure_stereo_width(audio: np.ndarray) -> float:
     """
-    Measure stereo width.
+    Misst stereo width.
 
     0.0 = Mono (L == R)
     1.0 = Normal stereo
@@ -115,7 +115,7 @@ def measure_stereo_width(audio: np.ndarray) -> float:
 
 def detect_center_content(audio: np.ndarray, sr: int) -> dict[str, float]:
     """
-    Detect important center content (vocals, bass, kick).
+    Erkennt important center content (vocals, bass, kick).
 
     These should remain in center for mix integrity.
 
@@ -165,7 +165,7 @@ def detect_center_content(audio: np.ndarray, sr: int) -> dict[str, float]:
 
 def measure_phase_correlation(audio: np.ndarray) -> float:
     """
-    Measure phase correlation between L and R.
+    Misst phase correlation between L and R.
 
     +1.0 = Mono (perfect correlation)
     0.0 = Decorrelated (wide stereo)
@@ -195,7 +195,7 @@ def measure_phase_correlation(audio: np.ndarray) -> float:
 
 def detect_hollow_artifacts(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     """
-    Detect "hollow" or "phasey" artifacts from excessive widening.
+    Erkennt "hollow" or "phasey" artifacts from excessive widening.
 
     Characteristics:
     - Mid-frequency scooping
@@ -244,7 +244,7 @@ def detect_hollow_artifacts(audio: np.ndarray, sr: int) -> tuple[bool, float]:
 
 def measure_spatial_balance(audio: np.ndarray) -> float:
     """
-    Measure left-right balance.
+    Misst left-right balance.
 
     0.5 = Perfect balance
     <0.5 = Left-biased
@@ -298,7 +298,7 @@ class StereoWidenerSafety(BaseSafetyWrapper):
         max_width_increase: float = 0.5,
     ):
         """
-        Initialize Stereo Widener Safety Wrapper.
+        Initialisiert Stereo Widener Safety Wrapper.
 
         Args:
             processor_func: Widener function (audio, sr, width_amount) -> audio
@@ -321,7 +321,7 @@ class StereoWidenerSafety(BaseSafetyWrapper):
         self.max_width_increase = max_width_increase
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for stereo widening."""
+        """Validiert pre-conditions for stereo widening."""
         # Basic audio validation
         is_valid, errors = validate_audio_basic(audio)
 
@@ -407,7 +407,7 @@ class StereoWidenerSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions after stereo widening."""
+        """Validiert post-conditions after stereo widening."""
         issues = []
         side_effects = []
         metrics = {}
@@ -511,7 +511,7 @@ class StereoWidenerSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute overall quality score."""
+        """Berechnet overall quality score."""
         scores = []
 
         # Mono compatibility

@@ -350,7 +350,7 @@ class _SpectralFingerprinter:
         return artifact_score, code
 
     def _rotation_periodicity(self, mono: np.ndarray, sr: int) -> tuple[float, float]:
-        """Detect turntable rotation frequency via RMS envelope modulation.
+        """Erkennt turntable rotation frequency via RMS envelope modulation.
 
         Physical principle: A rotating platter introduces amplitude modulation of
         the groove-to-stylus chain at the platter rotation frequency.  Dust,

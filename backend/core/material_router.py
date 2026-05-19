@@ -27,7 +27,7 @@ _lock = threading.Lock()
 
 
 def get_material_router() -> MaterialRouter:
-    """Get or create MaterialRouter singleton.
+    """Gibt zurück: or create MaterialRouter singleton.
 
     Returns:
         MaterialRouter singleton instance
@@ -88,7 +88,7 @@ class MaterialRouter:
     """
 
     def __init__(self) -> None:
-        """Initialize MaterialRouter."""
+        """Initialisiert MaterialRouter."""
         logger.info("MaterialRouter initialized")
 
     def detect_material(

@@ -120,7 +120,7 @@ class SpectrumProfile:
 
 class EdgeCaseHandler:
     """
-    Handles edge cases where Musical Goals might be unreachable or conflicting.
+    Verarbeitet edge cases where Musical Goals might be unreachable or conflicting.
 
     This handler detects various problematic scenarios and provides:
     1. Feasibility assessments (can goals be reached?)
@@ -140,7 +140,7 @@ class EdgeCaseHandler:
 
     def __init__(self, musical_goals_checker: MusicalGoalsChecker | None = None) -> None:
         """
-        Initialize edge case handler.
+        Initialisiert edge case handler.
 
         Args:
             musical_goals_checker: Optional MusicalGoalsChecker instance
@@ -282,7 +282,7 @@ class EdgeCaseHandler:
 
     def _detect_extreme_degradation(self, audio: np.ndarray, sr: int) -> dict:
         """
-        Detect extreme degradation where goals are unreachable.
+        Erkennt extreme degradation where goals are unreachable.
 
         Checks:
         - SNR < 30 dB
@@ -332,7 +332,7 @@ class EdgeCaseHandler:
 
     def _estimate_snr(self, audio: np.ndarray, sr: int) -> float:
         """
-        Estimate Signal-to-Noise Ratio.
+        Schätzt Signal-to-Noise Ratio.
 
         Uses spectral minimum statistics to estimate noise floor.
         """
@@ -385,7 +385,7 @@ class EdgeCaseHandler:
 
     def _estimate_defect_coverage(self, audio: np.ndarray, sr: int) -> float:
         """
-        Estimate percentage of audio affected by defects.
+        Schätzt percentage of audio affected by defects.
 
         Detects clicks, pops, crackles using high-pass filtered energy spikes.
         """
@@ -409,7 +409,7 @@ class EdgeCaseHandler:
         return min(1.0, coverage)
 
     def _measure_dynamic_range(self, audio: np.ndarray) -> float:
-        """Measure dynamic range in dB."""
+        """Misst dynamic range in dB."""
         peak = np.max(np.abs(audio))
         rms = np.sqrt(np.mean(audio**2))
 
@@ -420,7 +420,7 @@ class EdgeCaseHandler:
         return max(0.0, dynamic_range)
 
     def _detect_clipping(self, audio: np.ndarray) -> float:
-        """Detect clipping ratio (fraction of samples near ±1.0)."""
+        """Erkennt clipping ratio (fraction of samples near ±1.0)."""
         clipping_threshold = 0.99
         clipped_samples = np.sum(np.abs(audio) > clipping_threshold)
         return clipped_samples / len(audio)
@@ -428,7 +428,7 @@ class EdgeCaseHandler:
     def _get_degradation_reason(
         self, snr: float, defect_coverage: float, dynamic_range: float, clipping_ratio: float
     ) -> str:
-        """Get human-readable reason for extreme degradation."""
+        """Gibt zurück: human-readable reason for extreme degradation."""
         reasons = []
 
         if snr < 30:
@@ -448,7 +448,7 @@ class EdgeCaseHandler:
 
     def _detect_unknown_defect(self, audio: np.ndarray, sr: int) -> dict:
         """
-        Detect defects that don't match known medium types.
+        Erkennt defects that don't match known medium types.
 
         Uses heuristics to identify defect patterns that are neither:
         - Vinyl (rumble, surface noise, wow/flutter)
@@ -497,7 +497,7 @@ class EdgeCaseHandler:
         }
 
     def _detect_rumble(self, audio: np.ndarray, sr: int) -> bool:
-        """Detect low-frequency rumble (< 50 Hz)."""
+        """Erkennt low-frequency rumble (< 50 Hz)."""
         from scipy.signal import butter, filtfilt
 
         nyquist = sr / 2
@@ -511,7 +511,7 @@ class EdgeCaseHandler:
         return (rumble_energy / (total_energy + 1e-10)) > 0.15
 
     def _detect_hiss(self, audio: np.ndarray, sr: int) -> bool:
-        """Detect high-frequency hiss (> 6 kHz)."""
+        """Erkennt high-frequency hiss (> 6 kHz)."""
         from scipy.signal import butter, filtfilt
 
         nyquist = sr / 2
@@ -526,7 +526,7 @@ class EdgeCaseHandler:
         return (hiss_energy / (total_energy + 1e-10)) > 0.05
 
     def _detect_crackles(self, audio: np.ndarray, sr: int) -> bool:
-        """Detect crackles (rapid impulses)."""
+        """Erkennt crackles (rapid impulses)."""
         # Detect rapid zero-crossings in high-pass filtered signal
         from scipy.signal import butter, filtfilt
 
@@ -541,7 +541,7 @@ class EdgeCaseHandler:
         return mean_zcr > 0.15
 
     def _detect_dropouts(self, audio: np.ndarray, sr: int) -> bool:
-        """Detect dropouts (sudden energy drops)."""
+        """Erkennt dropouts (sudden energy drops)."""
         # Compute frame-wise energy
         frame_length = int(sr * 0.02)  # 20ms frames
         hop_length = frame_length // 2
@@ -555,7 +555,7 @@ class EdgeCaseHandler:
         return large_drops > 5  # More than 5 large drops
 
     def _detect_quantization_noise(self, audio: np.ndarray, sr: int) -> bool:
-        """Detect quantization noise patterns."""
+        """Erkennt quantization noise patterns."""
         # Bug-Fix §10a: np.correlate(N, N, mode="same") is O(N²) → O(10.8M²) ≈ 8 hours
         # on 225 s audio.  Only lags 10–50 are inspected, so 4096 samples are sufficient.
         _seg = audio[: min(4096, len(audio))]
@@ -585,7 +585,7 @@ class EdgeCaseHandler:
         return side_lobe_energy > 0.3
 
     def _is_unusual_defect_combination(self, patterns: dict[str, bool]) -> bool:
-        """Check if defect combination is unusual."""
+        """Prüft if defect combination is unusual."""
         active = [k for k, v in patterns.items() if v]
 
         # Known good combinations
@@ -611,7 +611,7 @@ class EdgeCaseHandler:
 
     def _detect_medium_mix(self, audio: np.ndarray, sr: int) -> dict:
         """
-        Detect mixed medium scenarios (vinyl+tape, digital+analog).
+        Erkennt mixed medium scenarios (vinyl+tape, digital+analog).
 
         Returns prioritization logic for conflicting goals.
         """
@@ -655,7 +655,7 @@ class EdgeCaseHandler:
 
     def _detect_spectrum_conflict(self, audio: np.ndarray, sr: int, mode_config) -> dict:
         """
-        Detect conflicts between audio spectrum and musical goals.
+        Erkennt conflicts between audio spectrum and musical goals.
 
         Examples:
         - Only bass present but brillanz (HF) required
@@ -713,7 +713,7 @@ class EdgeCaseHandler:
 
     def _analyze_spectrum_profile(self, audio: np.ndarray, sr: int) -> SpectrumProfile:
         """
-        Analyze frequency content of audio.
+        Analysiert den Frequenzinhalt des Audios.
 
         Determines which frequency bands have significant energy.
         """
@@ -791,7 +791,7 @@ class EdgeCaseHandler:
     def _determine_severity(
         self, extreme_deg: dict, unknown_defect: dict, medium_mix: dict, spectrum_conflict: dict
     ) -> DegradationSeverity:
-        """Determine overall degradation severity."""
+        """Bestimmt overall degradation severity."""
         if extreme_deg["is_extreme"]:
             # Check specific metrics
             if extreme_deg["snr"] < 20 or extreme_deg["defect_coverage"] > 0.9:
@@ -814,7 +814,7 @@ class EdgeCaseHandler:
     def _determine_goal_reachability(
         self, audio: np.ndarray, sr: int, mode_config, extreme_deg: dict, spectrum_conflict: dict
     ) -> tuple[list[str], list[str]]:
-        """Determine which goals are reachable vs. unreachable."""
+        """Bestimmt which goals are reachable vs. unreachable."""
         all_goals = list(mode_config.musical_goals.keys())
         unreachable = []
 
@@ -906,7 +906,7 @@ class EdgeCaseHandler:
     def _determine_fallback_strategy(
         self, edge_case_type: EdgeCaseType, severity: DegradationSeverity, unreachable_goals: list[str]
     ) -> str:
-        """Determine fallback strategy if processing fails."""
+        """Bestimmt fallback strategy if processing fails."""
         if severity == DegradationSeverity.CATASTROPHIC:
             return "Return original audio - degradation too severe for restoration"
 

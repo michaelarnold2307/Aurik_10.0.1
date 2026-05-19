@@ -102,7 +102,7 @@ class LUFSMeter:
 
     def measure(self, audio: np.ndarray, sr: int, gating: bool = True) -> dict[str, float]:
         """
-        Measure integrated loudness (LUFS)
+        Misst integrated loudness (LUFS).
 
         Args:
             audio: Mono or stereo audio (channels, samples) or (samples,)
@@ -149,7 +149,7 @@ class LUFSMeter:
         return {"integrated_lufs": float(lufs), "sample_rate": sr, "channels": audio.shape[0]}
 
     def _apply_gating(self, filtered: np.ndarray, channel_weights: np.ndarray) -> float:
-        """Apply absolute and relative gating per ITU-R BS.1770-4"""
+        """Wendet absolutes und relatives Gating gemäß ITU-R BS.1770-4 an."""
         # Block size: 400ms (overlap 75%)
         block_samples = int(0.4 * self.sr)
         hop_samples = int(0.1 * self.sr)  # 100ms hop
@@ -278,7 +278,7 @@ class TruePeakDetector:
 
     def measure(self, audio: np.ndarray, sr: int) -> dict[str, float]:
         """
-        Measure true peak level
+        Misst true peak level.
 
         Args:
             audio: Mono or stereo audio
@@ -334,7 +334,7 @@ class PhaseCorrelationMeter:
 
     def measure(self, audio: np.ndarray, sr: int) -> dict[str, float]:
         """
-        Measure phase correlation
+        Misst phase correlation.
 
         Args:
             audio: Stereo audio (2, samples)
@@ -384,7 +384,7 @@ class SpectrumAnalyzer:
 
     def analyze(self, audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:
         """
-        Compute frequency spectrum
+        Berechnet frequency spectrum.
 
         Args:
             audio: Mono or stereo audio
@@ -509,7 +509,7 @@ class MeterV9:
         return result
 
     def _print_report(self, result: MeteringResult) -> None:
-        """Log metering analysis report via standard logging."""
+        """Protokolliert metering analysis report via standard logging."""
         _logger.info("\n" + "=" * 60)
         _logger.info("PROFESSIONAL AUDIO METERING REPORT")
         _logger.info("=" * 60)

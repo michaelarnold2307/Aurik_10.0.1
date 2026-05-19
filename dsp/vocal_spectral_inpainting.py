@@ -24,7 +24,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 class HarmonicDetector:
     """
-    Detects harmonic structure for harmonic-aware inpainting.
+    Erkennt harmonic structure for harmonic-aware inpainting.
     """
 
     def __init__(self, f0_range: tuple[float, float] = (80.0, 500.0)):
@@ -38,7 +38,7 @@ class HarmonicDetector:
 
     def detect_harmonics(self, audio: np.ndarray, sr: int) -> dict:
         """
-        Detect harmonic structure.
+        Erkennt harmonic structure.
 
         Parameters
         ----------
@@ -74,7 +74,7 @@ class HarmonicDetector:
 
     def _detect_f0(self, audio: np.ndarray, sr: int) -> float:
         """
-        Detect fundamental frequency using FFT-based autocorrelation.
+        Erkennt fundamental frequency using FFT-based autocorrelation.
 
         Limits input to 200 ms to prevent O(N²) hang on full-length audio
         (§VERBOTEN: np.correlate mode=full on long signals).
@@ -111,7 +111,7 @@ class HarmonicDetector:
 
     def _measure_harmonic_strength(self, audio: np.ndarray, sr: int, freq: float, bandwidth: float = 50.0) -> float:
         """
-        Measure energy at specific frequency.
+        Misst energy at specific frequency.
         """
         # Short FFT
         n_fft = 4096
@@ -147,7 +147,7 @@ class SpectralGapFiller:
 
     def detect_gaps(self, audio: np.ndarray, sr: int) -> list[tuple[float, float]]:
         """
-        Detect spectral gaps (missing frequency bands).
+        Erkennt spectral gaps (missing frequency bands).
 
         Parameters
         ----------
@@ -317,7 +317,7 @@ class SpectralGapFiller:
 
 class VocalSpectralInpainting:
     """
-    Unified API for vocal spectral inpainting.
+    Einheitliche API für vokales spektrales Inpainting.
     """
 
     def __init__(

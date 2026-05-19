@@ -31,17 +31,17 @@ class RealtimeFeedbackBus:
         self._lock = threading.Lock()
 
     def subscribe(self, listener: Callable[[str, Any], None]) -> None:
-        """Register *listener* for all events."""
+        """Registriert *listener* for all events."""
         with self._lock:
             self._listeners.append(listener)
 
     def unsubscribe(self, listener: Callable[[str, Any], None]) -> None:
-        """Remove *listener*."""
+        """Entfernt *listener*."""
         with self._lock, contextlib.suppress(ValueError):
             self._listeners.remove(listener)
 
     def notify(self, event: str, data: Any) -> None:
-        """Notify all listeners with *event* and *data*.
+        """Benachrichtigt all listeners with *event* and *data*.
 
         Prints a German warning when a listener call exceeds 10 ms.
         """
@@ -60,7 +60,7 @@ class RealtimeFeedbackBus:
                 )
 
     def clear(self) -> None:
-        """Remove all listeners."""
+        """Entfernt all listeners."""
         with self._lock:
             self._listeners.clear()
 
@@ -73,7 +73,7 @@ _realtime_feedback_bus_lock = threading.Lock()
 
 
 def get_realtime_feedback_bus() -> RealtimeFeedbackBus:
-    """Return the process-wide singleton ``RealtimeFeedbackBus`` instance."""
+    """Gibt the process-wide singleton ``RealtimeFeedbackBus`` instance zurück."""
     global _realtime_feedback_bus_instance
     if _realtime_feedback_bus_instance is None:
         with _realtime_feedback_bus_lock:

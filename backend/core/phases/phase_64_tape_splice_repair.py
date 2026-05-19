@@ -51,7 +51,7 @@ _CROSSFADE_MS: float = 15.0  # Crossfade duration at splice boundary
 
 
 def _detect_splice_points(x: np.ndarray, sample_rate: int, crossfade_samples: int) -> list[int]:
-    """Detect splice points on a mono signal.
+    """Erkennt splice points on a mono signal.
 
     Extracted so that stereo processing can run detection on the mono mix
     (§2.51 Linked Stereo — splice boundaries must be synchronised across channels).
@@ -105,7 +105,7 @@ def _detect_splice_points(x: np.ndarray, sample_rate: int, crossfade_samples: in
 def _apply_splice_repair(
     out: np.ndarray, original: np.ndarray, splice_points: list[int], crossfade_samples: int, strength: float
 ) -> np.ndarray:
-    """Apply click removal and level crossfade at each splice point.
+    """Wendet Click-Entfernung und Pegel-Überblendung an jedem Schnittunkt an.
 
     Args:
         out:             Working copy of the signal (modified in place).
@@ -151,7 +151,7 @@ def apply(
     min_splice_score: float = _MIN_SPLICE_SCORE,
     crossfade_ms: float = _CROSSFADE_MS,
 ) -> np.ndarray:
-    """Main entry point for Phase 64."""
+    """Haupt-entry point for Phase 64."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 

@@ -39,7 +39,7 @@ class MDXNetSeparator:
 
     def __init__(self, model_path: str | None = None, sample_rate: int = 44100, device: str | None = None):
         """
-        Initialize MDX-Net separator
+        Initialisiert MDX-Net separator.
 
         Args:
             model_path: Path to pretrained MDX-Net model (ONNX or PyTorch)
@@ -63,7 +63,7 @@ class MDXNetSeparator:
         self.nebenwirkungen_log: list[dict] = []
 
     def _get_default_model_path(self) -> Path:
-        """Get default MDX-Net model path"""
+        """Gibt zurück: default MDX-Net model path."""
         base_path = Path(__file__).parent.parent.parent.parent.parent
         model_dir = base_path / "models" / "mdx_net"
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -79,7 +79,7 @@ class MDXNetSeparator:
 
     def _load_model(self):
         """
-        Load MDX-Net model
+        Lädt MDX-Net model.
 
         Note: This is a placeholder. Actual implementation requires:
         1. Download pretrained MDX-Net model

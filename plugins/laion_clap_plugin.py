@@ -496,7 +496,7 @@ class LAIONCLAPPlugin:
     # ------------------------------------------------------------------
 
     def embed_audio(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Return a 512-dim L2-normalised audio embedding for downstream NN search.
+        """Gibt a 512-dim L2-normalised audio embedding for downstream NN search zurück.
 
         Used by EraClassifier Tier-1 for cosine-similarity based decade detection.
 

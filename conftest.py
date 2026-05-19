@@ -1,15 +1,3 @@
-# ── Legacy-Testdateien ausschließen ────────────────────────────────────────
-# Diese Dateien sind Script-Style-Tests oder testen Module, die nicht mehr
-# existieren. Sie werden aus der pytest-Collection ausgeschlossen um
-# Collection-Errors zu vermeiden. Neue Unit-Tests gehören nach tests/unit/.
-collect_ignore = [
-    # Script-style Dateien (kein pytest-konformes Test-Layout, Modul-Level-Code):
-    # ONNX-Tests benötigen torch (OSError: libcupti.so.12 in dieser venv):
-    "tests/onnx/test_onnx_advanced.py",
-    "tests/onnx/test_onnx_runtime.py",
-]
-
-
 """
 Root-Level conftest.py — wird von pytest VOR allen Sub-Verzeichnis-conftest.py-Dateien
 geladen. Setzt BLAS-Thread-Limits bevor numpy importiert wird, um unter pytest-xdist
@@ -142,7 +130,7 @@ _HEAVY_PLUGIN_MODULES: tuple = (
     "plugins.cqtdiff_plus_plugin",
 )
 
-_VSCODE_SAFE_TEST_LIMIT: int = 1_500
+_VSCODE_SAFE_TEST_LIMIT: int = int(os.environ.get("AURIK_VSCODE_TEST_LIMIT", "250"))
 
 
 def _release_heavy_singletons() -> None:
@@ -174,7 +162,7 @@ def pytest_collection_finish(session) -> None:
         _warnings.warn(
             f"\n\nAURIK WARNUNG: {n_tests:,} Tests im VS Code Test Explorer.\n"
             f"Bei > {_VSCODE_SAFE_TEST_LIMIT:,} Tests droht VS Code-Absturz (Pipe-Flood).\n"
-            f"Loesung: Test Explorer auf tests/unit/ beschraenken (settings.json)\n"
+            f"Aurik kappt VS-Code-Laeufe deshalb automatisch auf diese Grenze.\n"
             f"Vollsuite: Terminal → Strg+Shift+B → 'Vollsuite parallel'\n",
             stacklevel=1,
             category=UserWarning,
@@ -205,6 +193,17 @@ def pytest_runtest_teardown(item, nextitem) -> None:
     if _VSCODE_FULL_GC_INTERVAL > 0 and _VSCODE_TEST_COUNTER % _VSCODE_FULL_GC_INTERVAL == 0:
         _gc.collect()
 
+
+# ── Legacy-Testdateien ausschließen ────────────────────────────────────────
+# Diese Dateien sind Script-Style-Tests oder testen Module, die nicht mehr
+# existieren. Sie werden aus der pytest-Collection ausgeschlossen um
+# Collection-Errors zu vermeiden. Neue Unit-Tests gehören nach tests/unit/.
+collect_ignore: list[str] = [
+    # Script-style Dateien (kein pytest-konformes Test-Layout, Modul-Level-Code):
+    # ONNX-Tests benötigen torch (OSError: libcupti.so.12 in dieser venv):
+    "tests/onnx/test_onnx_advanced.py",
+    "tests/onnx/test_onnx_runtime.py",
+]
 
 collect_ignore.extend(
     [
@@ -310,6 +309,7 @@ def pytest_collection_modifyitems(config, items) -> None:
     run_gui = bool(config.getoption("--run-gui-tests"))
     deselected: list = []
     kept: list = []
+    vscode_run = _is_vscode_run()
 
     for item in items:
         # GUI tests are opt-in; default runs stay deterministic in headless CI.
@@ -333,6 +333,12 @@ def pytest_collection_modifyitems(config, items) -> None:
     if deselected:
         config.hook.pytest_deselected(items=deselected)
         items[:] = kept
+
+    if vscode_run and len(items) > _VSCODE_SAFE_TEST_LIMIT:
+        vscode_kept = list(items[:_VSCODE_SAFE_TEST_LIMIT])
+        vscode_deselected = list(items[_VSCODE_SAFE_TEST_LIMIT:])
+        config.hook.pytest_deselected(items=vscode_deselected)
+        items[:] = vscode_kept
 
 
 def pytest_ignore_collect(collection_path, config):

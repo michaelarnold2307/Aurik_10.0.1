@@ -48,16 +48,26 @@ except ImportError:
     _LIBROSA_AVAILABLE = False
 import numpy as np
 
+# §09.1 [RELEASE_MUST] Single Source of Truth: backend/core/calibration_matrix.py
+# Werte hier NICHT bearbeiten — Änderungen ausschließlich in calibration_matrix.py.
+# Per-Song-adaptive Schwellwerte werden via estimate_song_goal_targets() (§09.2) berechnet.
+from backend.core.calibration_matrix import (
+    CANONICAL_THRESHOLDS_RESTORATION as _CM_REST,
+)
+from backend.core.calibration_matrix import (
+    CANONICAL_THRESHOLDS_STUDIO2026 as _CM_STU,
+)
+
 logger = logging.getLogger(__name__)
 
 
 def _is_pytest_context() -> bool:
-    """Return True when running under pytest (incl. fixture setup phases)."""
+    """Gibt True when running under pytest (incl. fixture setup phases) zurück."""
     return ("PYTEST_CURRENT_TEST" in os.environ) or ("pytest" in sys.modules)
 
 
 def _safe_fft_size(length: int, target: int = 2048, minimum: int = 64) -> int:
-    """Return power-of-two FFT size capped by signal length."""
+    """Gibt power-of-two FFT size capped by signal length zurück."""
     if length <= minimum:
         return minimum
     capped = min(target, int(length))
@@ -257,7 +267,7 @@ def _iso226_weights(freqs: np.ndarray) -> np.ndarray:
 
 
 def _safe_centre_crop(audio: np.ndarray, max_samples: int) -> np.ndarray:
-    """Return a centre crop of *audio* capped at *max_samples* samples.
+    """Gibt a centre crop of *audio* capped at *max_samples* samples zurück.
 
     Falls back to the beginning of the track when the geometrical centre is
     silent (RMS < 1e-6), which can happen if a pipeline bug produces zeros in
@@ -292,7 +302,7 @@ class BassKraftMetric:
 
     def measure(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure bass kraft score (0.0 - 1.0).
+        Misst bass kraft score (0.0 - 1.0).
 
         Args:
             audio: Audio signal
@@ -422,7 +432,7 @@ class BassKraftMetric:
 
     @staticmethod
     def _virtual_pitch_score(magnitude: np.ndarray, freqs: np.ndarray) -> float:
-        """Estimates Virtual Pitch strength via overtone series in 120–500 Hz.
+        """Schätzt Virtual Pitch strength via overtone series in 120–500 Hz.
 
         The 'missing fundamental' effect: even when F0 (20–120 Hz) is weak or absent,
         the brain synthesises the bass pitch from preserved harmonics 2F0, 3F0, …, 6F0
@@ -487,7 +497,7 @@ class BassKraftMetric:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[bool, float, dict[str, float]]:
         """
-        Check if bass preservation is acceptable.
+        Prüft if bass preservation is acceptable.
 
         Args:
             original: Original audio
@@ -529,7 +539,12 @@ class BrillanzMetric:
         self.threshold = threshold
 
     def measure(  # pylint: disable=unused-argument
-        self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None, material_type: str = "unknown"
+        self,
+        audio: np.ndarray,
+        sr: int,
+        reference: np.ndarray | None = None,
+        material_type: str = "unknown",
+        panns_singing: float = 0.0,
     ) -> float:
         """Measure brillanz score (0.0 - 1.0).
 
@@ -540,11 +555,14 @@ class BrillanzMetric:
         score is used directly.  The reference parameter is accepted for API
         compatibility but ignored.
         material_type: §9.12.7 material-adaptive secondary formula calibration.
+        panns_singing: accepted for API-Kompatibilität (measure_all übergibt
+            diesen Kwarg an brillanz + natuerlichkeit); BrillanzMetric ist
+            rein spektral und benötigt ihn nicht.
         """
         return self._measure_absolute(audio, sr, material_type=material_type)
 
     def _measure_absolute(self, audio: np.ndarray, sr: int, material_type: str = "unknown") -> float:
-        """Core absolute brillanz measurement.
+        """Kern-absolute brillanz measurement.
 
         §9.7.12 HF Spectral Crest Factor (2-16 kHz):
             score = clip((p95 / p50 - 1.5) / 13.5, 0.0, 1.0)
@@ -698,7 +716,7 @@ class WaermeMetric:
         return float(np.clip(score, 0.0, 1.0))
 
     def _measure_absolute(self, audio: np.ndarray, sr: int, material_type: str = "unknown") -> float:
-        """Core absolute waerme measurement.
+        """Kern-absolute waerme measurement.
 
         §9.7.14 Warmth Ratio E(200-800 Hz) / E(800-3000 Hz) — reverb-invariant.
         Reverb adds diffuse energy proportionally in both bands -> ratio stable
@@ -1065,6 +1083,27 @@ class NatuerlichkeitMetric:
             logger.debug("Operation failed (non-critical): %s", _exc)
 
         # Final score — always same 5-component formula, same weights (FIXED v9.11 stateless)
+        # §9.12.8 [BUG-FIX] Monophonic material-adaptive contrast floor: mirrors polyphonic
+        # branch. MP3/vintage material has inherently lower contrast. Without floor, shellac
+        # with mean_contrast=3 dB gives contrast_score=0 → collapse of naturalness score.
+        _NAT_CONTRAST_FLOORS_MONO: dict[str, float] = {
+            "shellac": 1.0,
+            "wax_cylinder": 1.0,
+            "wire_recording": 1.0,
+            "tape": 2.0,
+            "reel_tape": 2.0,
+            "cassette": 2.0,
+            "vinyl": 3.5,
+            "vinyl_lp": 3.5,
+            "mp3_low": 3.5,
+            "mp3": 4.0,
+            "mp3_high": 4.5,
+        }
+        _mono_contrast_floor = _NAT_CONTRAST_FLOORS_MONO.get(str(material_type or "").lower().strip(), 5.0)
+        if _mono_contrast_floor < 5.0:
+            # Re-compute contrast_score with material-adaptive floor
+            contrast_score = min(1.0, max(0.0, (mean_contrast - _mono_contrast_floor) / 25.0))
+
         score = (
             w_flat * flatness_score
             + w_zcr * zcr_score
@@ -1510,7 +1549,9 @@ class TransparenzMetric:
     def __init__(self, threshold: float = 0.89) -> None:
         self.threshold = threshold
 
-    def measure(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> float:  # pylint: disable=unused-argument
+    def measure(  # pylint: disable=unused-argument
+        self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None, material_type: str = "unknown"
+    ) -> float:
         """Measure transparenz score (0.0 - 1.0).
 
         §9.7.13 Multi-Band Spectral Crest Factor (5 Oktavbaender 250 Hz-8 kHz).
@@ -1520,10 +1561,13 @@ class TransparenzMetric:
         Calibration (§9.10.120): divisor 7.0 (was 8.8); crest 5 → 0.54, crest 8 → 0.97.
 
         Args:
-            audio:     Processed audio signal.
-            sr:        Sample rate.
-            reference: Accepted for API compatibility (unused; crest-factor is
-                       reference-free by design — symmetric before/after).
+            audio:         Processed audio signal.
+            sr:            Sample rate.
+            reference:     Accepted for API compatibility (unused; crest-factor is
+                           reference-free by design — symmetric before/after).
+            material_type: Materialtyp für BW-adaptive Band-Selektion. Wird bereits
+                           intern über HF/LF-Ratio erkannt; expliziter material_type
+                           kann Fallback-Logik steuern (API-Erweiterung v9.12.8).
         """
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
@@ -1829,7 +1873,7 @@ class GrooveMetric:
 
     @staticmethod
     def _onset_env_similarity(original: np.ndarray, processed: np.ndarray, sr: int) -> float:
-        """Compute normalized onset-envelope similarity in [0, 1].
+        """Berechnet normalized onset-envelope similarity in [0, 1].
 
         Used as a reliability-aware proxy when DTW onset alignment is unreliable
         (sparse onsets, noise-dominated material). Returns 0.5 on failure.
@@ -1933,7 +1977,7 @@ class SpatialDepthMetric:
 
     @staticmethod
     def _compute_iacc(left: np.ndarray, right: np.ndarray, max_lag_ms: float = 1.0, sr: int = 48000) -> float:
-        """Compute Interaural Cross-Correlation (IACC) per Blauert (1997).
+        """Berechnet Interaural Cross-Correlation (IACC) per Blauert (1997).
 
         IACC = max |φ_LR(τ)| / sqrt(φ_LL(0) · φ_RR(0))
         where φ_LR(τ) is the cross-correlation and τ is limited to ±1 ms
@@ -2024,7 +2068,7 @@ class SpatialDepthMetric:
         return float(np.clip(score, 0.0, 1.0))
 
     def _spatial_features(self, audio: np.ndarray, sr: int) -> dict[str, float] | None:
-        """Extract raw spatial features (IACC, L/R correlation, S/M ratio).
+        """Extrahiert raw spatial features (IACC, L/R correlation, S/M ratio).
 
         Returns None for mono signals.
         """
@@ -2473,7 +2517,7 @@ class TonalCenterMetric:
 
     @staticmethod
     def _dominant_chroma_class(chroma: np.ndarray) -> int:
-        """Returns the pitch class (0-11) with the highest mean energy across frames."""
+        """Gibt the pitch class (0-11) with the highest mean energy across frames zurück."""
         return int(np.argmax(np.mean(chroma, axis=1)))
 
     @staticmethod
@@ -2828,13 +2872,17 @@ class SeparationFidelityMetric:
         audio: np.ndarray,
         sr: int,
         reference: np.ndarray | None = None,
+        material_type: str = "unknown",
     ) -> float:
         """Berechnet Separation-Fidelity-Score.
 
         Args:
-            audio:     Restauriertes Audio-Signal.
-            sr:        Sample-Rate in Hz.
-            reference: Original-Audio vor Restaurierung (empfohlen).
+            audio:         Restauriertes Audio-Signal.
+            sr:            Sample-Rate in Hz.
+            reference:     Original-Audio vor Restaurierung (empfohlen).
+            material_type: Materialtyp (z.B. "mp3_low", "vinyl"). Wird an
+                           _reference_free() weitergegeben für material-adaptive
+                           Harmonicity-Floor-Skalierung (§musical_goals.instructions.md).
 
         Returns:
             Score ∈ [0, 1]. 1.0 = perfekte Trenntreue.
@@ -2852,7 +2900,7 @@ class SeparationFidelityMetric:
             ref_mono = ref.astype(np.float32)
             return self._reference_based(audio_mono, ref_mono, sr)
 
-        return self._reference_free(audio_mono, sr)
+        return self._reference_free(audio_mono, sr, material_type=material_type)
 
     def _reference_based(self, restored: np.ndarray, reference: np.ndarray, sr: int) -> float:
         """Referenzbasierter Modus: SDR-Proxy + Spektrale Kohärenz."""
@@ -2977,8 +3025,19 @@ class SeparationFidelityMetric:
 
         return float(np.clip(score, 0.0, 1.0))
 
-    def _reference_free(self, audio: np.ndarray, sr: int) -> float:
-        """Referenzfreier Modus: Harmonizitäts- und Flatness-basierter Proxy."""
+    def _reference_free(self, audio: np.ndarray, sr: int, material_type: str = "unknown") -> float:
+        """Referenzfreier Modus: Harmonizitäts- und Flatness-basierter Proxy.
+
+        material_type: §musical_goals.instructions.md — material-adaptive Harmonicity-Floor.
+            Codec-Materialien (mp3_low, aac) haben durch Quantisierungsrauschen reduzierte
+            HF-Harmonicity → niedrigerer Floor als CD/Vinyl. Böden (≥-Floor):
+            - ultra_analog (Shellac): 0.62 — sehr begrenzte Trennbarkeit
+            - tape_analog: 0.66 — Narrow/Mono + Tape-Hiss
+            - analog (Vinyl): 0.70 — Standard (bisheriger Wert)
+            - lossy (mp3_low): 0.68 — Codec-Quantisierung, aber Stereo erhalten
+            - digital (CD): 0.75 — volle SDR-Kapazität
+            - unknown: 0.70 (konservativer Fallback)
+        """
         if len(audio) < self.N_FFT:
             return 1.0
 
@@ -3011,10 +3070,32 @@ class SeparationFidelityMetric:
 
         if not harmonicity_scores:
             return 1.0
-        # Floor 0.70: Ohne Referenz kann Separation-Fidelity nicht sinnvoll
-        # gegen absoluten Schwellwert geprüft werden — sauberes Material wird
-        # nicht bestraft (kein Fehler des Restaurierungs-Systems).
-        score = float(np.clip(np.mean(harmonicity_scores) * 1.5, 0.70, 1.0))
+        # §musical_goals.instructions.md material-adaptive Harmonicity-Floor:
+        # Ohne Referenz kann Separation-Fidelity nicht gegen einen universellen Schwellwert
+        # geprüft werden. Material-spezifische Floors spiegeln physikalische SDR-Ceilings wider.
+        _mat_key_sep = str(material_type or "").lower().strip()
+        _sep_floors: dict[str, float] = {
+            "shellac": 0.62,
+            "wax_cylinder": 0.62,
+            "lacquer_disc": 0.62,
+            "wire_recording": 0.62,
+            "tape": 0.66,
+            "reel_tape": 0.66,
+            "cassette": 0.66,
+            "kassette": 0.66,
+            "vinyl": 0.70,
+            "lp": 0.70,
+            "mp3_low": 0.68,
+            "aac": 0.68,
+            "minidisc": 0.68,
+            "mp3_high": 0.70,
+            "streaming": 0.70,
+            "cd_digital": 0.75,
+            "cd": 0.75,
+            "dat": 0.75,
+        }
+        _sep_floor = _sep_floors.get(_mat_key_sep, 0.70)
+        score = float(np.clip(np.mean(harmonicity_scores) * 1.5, _sep_floor, 1.0))
         return score
 
 
@@ -3248,7 +3329,7 @@ class ArticulationMetric:
 
     @staticmethod
     def _quick_mfcc(audio: np.ndarray, sr: int, n_fft: int = 2048) -> np.ndarray | None:
-        """Lightweight 13-coefficient MFCC for a single segment (no librosa dependency)."""
+        """Leichtgewichtiges 13-coefficient MFCC for a single segment (no librosa dependency)."""
         if len(audio) < 64:
             return None
         n_fft = min(n_fft, len(audio))
@@ -3335,67 +3416,32 @@ class ArticulationMetric:
         return score
 
 
-# ---------------------------------------------------------------------------
-# §1.2 v9.10.77: Mode-differenzierte Musical-Goal-Schwellwerte
-# ---------------------------------------------------------------------------
-# Restoration: P1/P2 identisch (Preservation-Pflicht), P3–P5 physikalisch
-#   erreichbar — reduziert PMGG-Retries und Cross-Goal-Damage.
-# Studio 2026: Ambitionierte Schwellwerte (Highend-Studio-Anspruch).
-#
-# Begründung (Pareto-Analyse, v9.10.77):
-#   - Bass-Kraft ↔ Transparenz [Konflikt 0.7]: Restoration 0.78/0.82 vs Studio 0.85/0.89
-#   - Brillanz ↔ Wärme [Konflikt 0.6]: Restoration 0.78/0.75 vs Studio 0.85/0.80
-#   - Brillanz ↔ Natürlichkeit [Konflikt 0.5]: Restoration senkt nur Brillanz (P5)
-#   - Groove ↔ NR-Phasen [systematisch]: Restoration 0.83 toleriert NR-Phase-Jitter
-# ---------------------------------------------------------------------------
+_CANONICAL_14_KEYS: frozenset[str] = frozenset(
+    {
+        "natuerlichkeit",
+        "authentizitaet",
+        "tonal_center",
+        "timbre_authentizitaet",
+        "artikulation",
+        "emotionalitaet",
+        "micro_dynamics",
+        "groove",
+        "transparenz",
+        "waerme",
+        "bass_kraft",
+        "separation_fidelity",
+        "brillanz",
+        "spatial_depth",
+    }
+)
 
-_THRESHOLDS_RESTORATION: dict[str, float] = {
-    # P1 — Preservation-Pflicht (unveränderlich)
-    "natuerlichkeit": 0.90,
-    "authentizitaet": 0.88,
-    # P2 — Tonale/Timbre-Integrität (unveränderlich)
-    "tonal_center": 0.95,
-    "timbre_authentizitaet": 0.87,
-    "artikulation": 0.85,
-    # P3 — Best-Effort, erreichbar (gesenkt)
-    "emotionalitaet": 0.82,
-    "micro_dynamics": 0.88,
-    "groove": 0.83,
-    # P4 — Best-Effort, materialabhängig (gesenkt)
-    "transparenz": 0.82,
-    "waerme": 0.75,
-    "bass_kraft": 0.78,
-    "separation_fidelity": 0.78,
-    # P5 — Best-Effort, oft durch Material-Ceiling limitiert (gesenkt)
-    "brillanz": 0.78,
-    "spatial_depth": 0.70,
-}
+_THRESHOLDS_RESTORATION: dict[str, float] = {k: v for k, v in _CM_REST.items() if k in _CANONICAL_14_KEYS}
 
-_THRESHOLDS_STUDIO_2026: dict[str, float] = {
-    # P1 — §2.55 normiert: identisch zu calibration_matrix.CANONICAL_THRESHOLDS_STUDIO2026
-    "natuerlichkeit": 0.92,
-    "authentizitaet": 0.90,
-    # P2
-    "tonal_center": 0.96,
-    "timbre_authentizitaet": 0.89,
-    "artikulation": 0.87,
-    # P3
-    "emotionalitaet": 0.84,
-    "micro_dynamics": 0.90,
-    "groove": 0.85,
-    # P4
-    "transparenz": 0.85,
-    "waerme": 0.78,
-    "bass_kraft": 0.80,
-    "separation_fidelity": 0.80,
-    # P5
-    "brillanz": 0.82,
-    "spatial_depth": 0.74,
-}
+_THRESHOLDS_STUDIO_2026: dict[str, float] = {k: v for k, v in _CM_STU.items() if k in _CANONICAL_14_KEYS}
 
 
 def get_mode_thresholds(mode: str = "restoration") -> dict[str, float]:
-    """Return Musical Goal thresholds for the given processing mode.
+    """Gibt Musical Goal thresholds for the given processing mode zurück.
 
     Args:
         mode: "restoration" (default) or "studio_2026" / "studio2026" / "maximum".
@@ -3548,11 +3594,31 @@ class MusicalGoalsChecker:
                         "spatial_depth",
                         # §0d: reference = carrier_checkpoint → chroma-correlation vs. carrier-corrected audio
                         "tonal_center",
-                        "separation_fidelity",
                     )
                     and reference is not None
                 ):
                     scores[goal_name] = metric.measure(audio, sr, reference=reference)  # type: ignore[call-arg]  # pylint: disable=unexpected-keyword-arg
+                elif goal_name == "separation_fidelity":
+                    # §9.12.8/§musical_goals.instructions: material_type für material-adaptive
+                    # Harmonicity-Floor in _reference_free() + SDR-Ceiling-Skalierung.
+                    if reference is not None:
+                        scores[goal_name] = metric.measure(  # type: ignore[call-arg]  # pylint: disable=unexpected-keyword-arg
+                            audio, sr, reference=reference, material_type=material_type
+                        )
+                    else:
+                        scores[goal_name] = metric.measure(  # type: ignore[call-arg]  # pylint: disable=unexpected-keyword-arg
+                            audio, sr, material_type=material_type
+                        )
+                elif goal_name == "transparenz":
+                    # §9.12.8: material_type für BW-adaptive Band-Selektion in TransparenzMetric.
+                    if reference is not None:
+                        scores[goal_name] = metric.measure(  # type: ignore[call-arg]  # pylint: disable=unexpected-keyword-arg
+                            audio, sr, reference=reference, material_type=material_type
+                        )
+                    else:
+                        scores[goal_name] = metric.measure(  # type: ignore[call-arg]  # pylint: disable=unexpected-keyword-arg
+                            audio, sr, material_type=material_type
+                        )
                 else:
                     scores[goal_name] = metric.measure(audio, sr)
             except Exception as _metric_exc:
@@ -3567,6 +3633,33 @@ class MusicalGoalsChecker:
             "measure_all: 14 goals completed in %.1f s",
             _time.perf_counter() - _t_all_start,
         )
+
+        # §1.4.6 [RELEASE_MUST] Transient-Energie (15. Goal) — nur wenn reference vorhanden
+        # PHASE_GOAL_EXCLUSIONS: phase_18 + phase_26 sind ausgenommen (see transient_energy_metric.py)
+        if reference is not None:
+            try:
+                from backend.core.musical_goals.transient_energy_metric import (  # pylint: disable=import-outside-toplevel
+                    get_transient_energy_metric as _get_tem,
+                )
+
+                _tem_result = _get_tem().measure_transient_energy(
+                    audio_input=reference,
+                    audio_restored=audio,
+                    sr=sr,
+                    material_type=material_type,
+                )
+                scores["transient_energie"] = float(_tem_result.get("transient_energy_score", 1.0))
+                logger.debug(
+                    "measure_all §1.4.6 transient_energie=%.3f (n_onsets=%d, valid=%s)",
+                    scores["transient_energie"],
+                    _tem_result.get("n_onsets_detected", 0),
+                    _tem_result.get("is_valid", False),
+                )
+            except Exception as _tem_exc:
+                logger.debug("measure_all transient_energie non-blocking: %s", _tem_exc)
+                scores.setdefault("transient_energie", 1.0)
+        else:
+            scores.setdefault("transient_energie", 1.0)
 
         # Key ist "artikulation" (konsistent mit goal_priority_protocol, goal_applicability_filter)
         return scores
@@ -3692,7 +3785,7 @@ class MusicalGoalsChecker:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[bool, dict[str, float]]:
         """
-        Checks if all goals are preserved (pre/post comparison).
+        Prüft if all goals are preserved (pre/post comparison).
 
         Args:
             original: Original audio
@@ -3759,7 +3852,7 @@ class MusicalGoalsChecker:
 
     def measure_single(self, goal_name: str, audio: np.ndarray, sr: int) -> GoalMeasurement:
         """
-        Measure single goal with detailed result.
+        Misst single goal with detailed result.
 
         Args:
             goal_name: Name of goal to measure

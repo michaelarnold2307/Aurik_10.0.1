@@ -38,7 +38,7 @@ class MCDropoutModel(nn.Module):
 
     def __init__(self, base_model: nn.Module, dropout_rate: float = 0.2, n_samples: int = 20):
         """
-        Initialize MC Dropout model.
+        Initialisiert MC Dropout model.
 
         Args:
             base_model: Base neural network
@@ -139,7 +139,7 @@ class BayesianLinear(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        """Initialize parameters."""
+        """Initialisiert parameters."""
         nn.init.kaiming_normal_(self.weight_mu)
         nn.init.constant_(self.weight_logvar, -5)  # Small initial variance
         nn.init.zeros_(self.bias_mu)
@@ -248,14 +248,14 @@ class BayesianNN(nn.Module):
 
 class EnsembleUncertainty:
     """
-    Estimate uncertainty using model ensemble.
+    Schätzt uncertainty using model ensemble.
 
     Combines predictions from multiple models to quantify epistemic uncertainty.
     """
 
     def __init__(self, models: list[nn.Module], device: str = "cpu"):
         """
-        Initialize ensemble uncertainty estimator.
+        Initialisiert ensemble uncertainty estimator.
 
         Args:
             models: List of trained models
@@ -338,7 +338,7 @@ class TemperatureScaling(nn.Module):
         self.temperature = nn.Parameter(torch.ones(1))
 
     def forward(self, logits: torch.Tensor) -> torch.Tensor:
-        """Scale logits by temperature."""
+        """Skaliert logits by temperature."""
         return logits / self.temperature
 
     def calibrate(
@@ -402,7 +402,7 @@ class UncertaintyMetrics:
 
 class UncertaintyQuantifier:
     """
-    Unified interface for uncertainty quantification.
+    Einheitliches Interface für Unsicherheitsquantifizierung.
 
     Supports multiple methods: MC Dropout, Bayesian NN, Ensemble.
     """
@@ -415,7 +415,7 @@ class UncertaintyQuantifier:
         device: str = "cpu",  # CPU-only Policy (Section 9.5) — kein CUDA
     ):
         """
-        Initialize uncertainty quantifier.
+        Initialisiert uncertainty quantifier.
 
         Args:
             model: Base model or list of models (for ensemble)
@@ -511,7 +511,7 @@ class UncertaintyQuantifier:
 
     def is_confident(self, metrics: UncertaintyMetrics, threshold: float = 0.8) -> torch.Tensor:
         """
-        Check if prediction is confident based on threshold.
+        Prüft if prediction is confident based on threshold.
 
         Args:
             metrics: Uncertainty metrics

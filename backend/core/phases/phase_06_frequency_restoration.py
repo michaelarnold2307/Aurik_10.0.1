@@ -1,5 +1,5 @@
 """
-Phase 6: Professional Frequency Restoration - Aurik 9.0
+Phase 6: Professional Frequency Restoration - Aurik 9.0.
 ========================================================
 
 Professional bandwidth extension with Spectral Band Replication (SBR) competing with iZotope RX.
@@ -276,7 +276,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         audio_duration_s: float,
         default_min_duration_s: float,
     ) -> dict[str, float]:
-        """Compute adaptive AudioSR runtime/eligibility guard profile (§2.54-style).
+        """Berechnet adaptive AudioSR runtime/eligibility guard profile (§2.54-style).
 
         Returns bounded timing parameters and a mode/material/restorability-adaptive
         minimum duration threshold for entering the ML-hybrid path.
@@ -657,7 +657,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         # Gilt auch für den AudioSR-ML-Pfad — ML-Output ist nicht ceiling-aware.
         _BW_CEILING_HZ: dict[str, float] = {
             "shellac": 8000.0,
-            "wax_cylinder": 5000.0,
+            "wax_cylinder": 3000.0,  # §ERA 1900-1925: max 3 kHz (v9.12.9)
             "vinyl": 16000.0,
             "reel_tape": 18000.0,
             "cassette": 15000.0,
@@ -696,25 +696,67 @@ class FrequencyRestorationPhase(PhaseInterface):
 
         # §2.46e Hallucination-Guard: verhindert HF-Halluzination ueber BW-Ceiling
         _hg_mode_06 = str(kwargs.get("mode", kwargs.get("processing_mode", "restoration"))).lower()
-        if _bw_cap_hz is not None:
-            try:
-                from backend.core.hallucination_guard import apply_hallucination_guard as _apply_hg06  # pylint: disable=import-outside-toplevel  # noqa: I001
+        try:
+            from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg06  # pylint: disable=import-outside-toplevel  # noqa: I001
 
-                restored, _hg_meta06 = _apply_hg06(
-                    audio,
-                    restored,
-                    sr=sample_rate,
-                    material_bw_ceiling_hz=_bw_cap_hz,
-                    mode=_hg_mode_06,
+            _audio_mono_06 = (
+                audio.mean(axis=0)
+                if (audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2)
+                else (audio.mean(axis=1) if audio.ndim == 2 else audio)
+            )
+            _restored_mono_06 = (
+                restored.mean(axis=0)
+                if (restored.ndim == 2 and restored.shape[0] == 2 and restored.shape[1] > 2)
+                else (restored.mean(axis=1) if restored.ndim == 2 else restored)
+            )
+            _hg_result06 = _check_hg06(
+                _audio_mono_06.astype(np.float32),
+                _restored_mono_06.astype(np.float32),
+                sr=sample_rate,
+                material_bw_ceiling_hz=_bw_cap_hz,
+                mode=_hg_mode_06,
+            )
+            if _hg_result06.requires_rollback:
+                logger.warning(
+                    "§2.46e Phase-06 Hallucination-Rollback: spectral_novelty=%.3f ceiling=%s Hz",
+                    _hg_result06.spectral_novelty,
+                    f"{_bw_cap_hz:.0f}" if _bw_cap_hz is not None else "n/a",
                 )
-                if _hg_meta06.get("hallucination_decision") == "rollback":
-                    logger.warning(
-                        "§2.46e Phase-06 Hallucination-Rollback: %s ceiling=%.0f Hz",
-                        _hg_meta06.get("hallucination_severity", "?"),
-                        _bw_cap_hz,
-                    )
-            except Exception as _hg_exc:
-                logger.debug("Phase 06 HallucinationGuard (non-blocking): %s", _hg_exc)
+                # §Gap10 v9.12.8: NVSR-Fallback vor Rollback auf Original.
+                # NVSR ist deterministisch (kein Halluzinationsrisiko) und liefert
+                # bessere BW-Erweiterung als reines Passthrough.
+                _nvsr_applied = False
+                try:
+                    if NVSR_AVAILABLE and _get_nvsr_plugin is not None:
+                        _nvsr_p06 = _get_nvsr_plugin()
+                        if _nvsr_p06 is not None:
+                            _nvsr_result_06 = _nvsr_p06.enhance(audio.copy(), sr=sample_rate)
+                            if _nvsr_result_06 is not None and np.isfinite(_nvsr_result_06).all():
+                                _nvsr_f32_06 = np.clip(np.asarray(_nvsr_result_06, dtype=np.float32), -1.0, 1.0)
+                                # Nochmal Hallucination-Guard auf NVSR-Ergebnis (nur score, kein rollback)
+                                _hg_nvsr = _check_hg06(
+                                    _audio_mono_06,
+                                    (_nvsr_f32_06.mean(axis=0) if _nvsr_f32_06.ndim == 2 else _nvsr_f32_06),
+                                    sr=sample_rate,
+                                    material_bw_ceiling_hz=_bw_cap_hz,
+                                    mode=_hg_mode_06,
+                                )
+                                if not _hg_nvsr.requires_rollback:
+                                    restored = _nvsr_f32_06
+                                    _nvsr_applied = True
+                                    logger.info("§Gap10 Phase-06: NVSR-Fallback erfolgreich nach AudioSR-Hallucination")
+                except Exception as _nvsr_exc:
+                    logger.debug("§Gap10 Phase-06 NVSR-Fallback non-blocking: %s", _nvsr_exc)
+                if not _nvsr_applied:
+                    restored = audio.copy()
+            if _hg_result06.score_penalty > 0:
+                logger.info(
+                    "§2.46e Phase-06 score_penalty=%.1f (spectral_novelty=%.3f)",
+                    _hg_result06.score_penalty,
+                    _hg_result06.spectral_novelty,
+                )
+        except Exception as _hg_exc:
+            logger.debug("Phase 06 HallucinationGuard (non-blocking): %s", _hg_exc)
 
         # §TonalReference: era/genre/material recording-chain ceiling + target steering
         try:
@@ -938,13 +980,24 @@ class FrequencyRestorationPhase(PhaseInterface):
           rolloff < 7 kHz  → AudioSR (Diffusion, für Shellac/Wax — starker BW-Verlust)
           rolloff ≥ 7 kHz  → NVSR-SBR (deterministisch, für Vinyl/MP3-128kbps — 8–16kHz Gap)
 
+        Carrier-type override (§4 SOTA-Matrix Mai 2026): tape-like carriers
+        (reel_tape, cassette, wire_recording) route to AudioSR regardless of rolloff
+        because AudioSR's diffusion-based spectral upsampling matches the organic
+        tape spectral envelope better than NVSR's deterministic SBR.
+
         The blend is intentionally HF-limited to preserve low/mid authenticity and
         avoid broad tonal shifts while still improving perceived openness.
         """
         dsp_restored = self._restore_highs_professional(audio, params, enable_sbr)
 
         _rolloff_hz_routing = float(params.get("rolloff_hz", float(self.sample_rate) * 0.90))
-        _use_nvsr = _rolloff_hz_routing >= 7_000.0  # §SOTA: NVSR für 8–16kHz Gap
+        # Carrier-type correction: tape carriers benefit from AudioSR's diffusive
+        # spectral upsampling over NVSR's deterministic SBR, even when rolloff ≥ 7 kHz.
+        # NVSR is optimal for vinyl/mp3 (clean gap, deterministic); AudioSR for tape
+        # (organic spectral envelope matches AudioSR's learned diffusion manifold).
+        _TAPE_LIKE_MATERIALS_06 = frozenset({"tape", "reel_tape", "cassette", "wire_recording"})
+        _mat_normed_06ml = str(material_type).lower().replace("-", "_").replace(" ", "_")
+        _use_nvsr = _rolloff_hz_routing >= 7_000.0 and _mat_normed_06ml not in _TAPE_LIKE_MATERIALS_06
 
         # ── NVSR-Pfad (8–16 kHz Gap: Vinyl/MP3-128kbps) ─────────────────────
         if _use_nvsr and NVSR_AVAILABLE and _get_nvsr_plugin is not None:
@@ -1523,7 +1576,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         self, channel: np.ndarray, params: dict[str, Any], enable_sbr: bool, hop_length: int, n_fft: int
     ) -> np.ndarray:
         """
-        Restore single channel with SBR + harmonic extension.
+        Restauriert single channel with SBR + harmonic extension.
         """
         # STFT
         f, _t, Zxx = signal.stft(
@@ -1778,7 +1831,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         Scientific basis:
             Laroche & Dolson (1999). "Improved Phase Vocoder Time-Scale
             Modification of Audio." IEEE Trans. Speech Audio Process. 7(3),
-            323\u2013332.
+            323–332.
             Dietz et al. (2002). "Spectral Band Replication, a Novel
             Approach in Audio Coding." Proc. AES 112th Conv.
 
@@ -1875,7 +1928,7 @@ class FrequencyRestorationPhase(PhaseInterface):
 
     def _measure_hf_energy(self, audio: np.ndarray, freq_threshold: float) -> float:
         """
-        Measure RMS energy above frequency threshold.
+        Misst RMS energy above frequency threshold.
         """
         # Convert to mono
         mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio

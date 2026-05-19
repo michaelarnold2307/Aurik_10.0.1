@@ -13,7 +13,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class HumDetector(DefectDetector):
     """
-    Detects electrical hum (mains frequency and harmonics).
+    Erkennt electrical hum (mains frequency and harmonics).
 
     Checks for 50 Hz and 60 Hz fundamental + harmonics up to 500 Hz.
     """
@@ -24,7 +24,7 @@ class HumDetector(DefectDetector):
         self.max_harmonics = 8
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.5, **kwargs) -> list[DefectInstance]:
-        """Detect electrical hum, kontextbewusst."""
+        """Erkennt electrical hum, kontextbewusst."""
         if audio.ndim == 2:
             audio = audio[:, 0]
         freqs, psd = welch(audio, sr, nperseg=min(16384, len(audio) // 2))
@@ -46,7 +46,7 @@ class HumDetector(DefectDetector):
         ]
 
     def _detect_hum_frequency(self, freqs: np.ndarray, psd: np.ndarray, hum_freq: float) -> dict:
-        """Detect hum at specific frequency and harmonics."""
+        """Erkennt hum at specific frequency and harmonics."""
 
         # Finde Grundfrequenz (stärkstes Signal über 100 Hz)
         high_freq_mask = freqs > 100

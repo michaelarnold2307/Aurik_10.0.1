@@ -37,7 +37,7 @@ class ExoticMediaHandler:
         logger.info("ExoticMediaHandler initialized")
 
     def get_chain_for_media(self, media_type: str) -> list[str]:
-        """Get processing chain for exotic media type.
+        """Gibt zurück: processing chain for exotic media type.
 
         Args:
             media_type: Media type name
@@ -48,7 +48,7 @@ class ExoticMediaHandler:
         return self.templates.get(media_type.upper(), [])
 
     def detect_exotic_defects(self, analysis: dict[str, Any]) -> list[str]:
-        """Detect exotic defects from analysis.
+        """Erkennt exotic defects from analysis.
 
         Args:
             analysis: Defect analysis dict

@@ -60,7 +60,7 @@ class ReferenceTrack:
     timestamp: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> dict:
-        """Serialize to dict"""
+        """Serialisiert to dict."""
         return {
             "audio_path": self.audio_path,
             "analyzed_goals": self.analyzed_goals,
@@ -101,21 +101,21 @@ class ABTestResult:
     context: dict[str, Any] = field(default_factory=dict)
 
     def get_preferred_goals(self) -> dict[str, float]:
-        """Get goals of preferred variant"""
+        """Gibt zurück: goals of preferred variant."""
         if self.user_choice == "A":
             return self.variant_a_goals
         else:
             return self.variant_b_goals
 
     def get_rejected_goals(self) -> dict[str, float]:
-        """Get goals of rejected variant"""
+        """Gibt zurück: goals of rejected variant."""
         if self.user_choice == "A":
             return self.variant_b_goals
         else:
             return self.variant_a_goals
 
     def to_dict(self) -> dict:
-        """Serialize to dict"""
+        """Serialisiert to dict."""
         return {
             "variant_a_goals": self.variant_a_goals,
             "variant_b_goals": self.variant_b_goals,
@@ -163,7 +163,7 @@ class UserPreferenceProfile:
 
     def get_weighted_goals(self) -> dict[str, float]:
         """
-        Get goals weighted by importance.
+        Gibt zurück: goals weighted by importance.
 
         Returns goals scaled by their learned importance weights.
         """
@@ -179,7 +179,7 @@ class UserPreferenceProfile:
 
     def is_reliable(self, min_samples: int = 5, min_confidence: float = 0.60) -> bool:
         """
-        Check if profile is reliable enough to use.
+        Prüft if profile is reliable enough to use.
 
         Args:
             min_samples: Minimum number of samples (references + AB tests)
@@ -192,7 +192,7 @@ class UserPreferenceProfile:
         return total_samples >= min_samples and self.confidence >= min_confidence
 
     def to_dict(self) -> dict:
-        """Serialize to dict"""
+        """Serialisiert to dict."""
         return {
             "user_id": self.user_id,
             "learned_goals": self.learned_goals,
@@ -255,7 +255,7 @@ class ReferenceLearner:
         profile_path: str | None = None,
     ) -> None:
         """
-        Initialize reference learner.
+        Initialisiert reference learner.
 
         Args:
             user_id: User identifier
@@ -312,7 +312,7 @@ class ReferenceLearner:
         )
 
     def get_learning_rate(self) -> float:
-        """Get learning rate for current strategy"""
+        """Gibt zurück: learning rate for current strategy."""
         return self.learning_rates[self.strategy]
 
     def analyze_reference_track(
@@ -324,7 +324,7 @@ class ReferenceLearner:
         analysis_confidence: float = 1.0,
     ) -> ReferenceTrack:
         """
-        Analyze reference track to extract Musical Goals.
+        Analysiert die Referenzspur zur Extraktion der Musical Goals.
 
         Args:
             audio: Audio data
@@ -354,7 +354,7 @@ class ReferenceLearner:
         return reference
 
     def _update_from_reference(self, reference: ReferenceTrack) -> None:
-        """Update preference profile from reference track"""
+        """Aktualisiert preference profile from reference track."""
         learning_rate = self.get_learning_rate()
 
         # Weight learning rate by analysis confidence
@@ -503,12 +503,12 @@ class ReferenceLearner:
         return adapted
 
     def get_confidence(self) -> float:
-        """Get confidence in learned preferences"""
+        """Gibt zurück: confidence in learned preferences."""
         return self.profile.confidence
 
     def get_goal_importances(self) -> dict[str, float]:
         """
-        Get learned importance of each goal.
+        Gibt zurück: learned importance of each goal.
 
         Returns goal weights normalized to 0-1 range.
         """
@@ -527,7 +527,7 @@ class ReferenceLearner:
         return normalized
 
     def reset_profile(self):
-        """Reset profile to base goals (start learning fresh)"""
+        """Setzt zurück: profile to base goals (start learning fresh)."""
         self.profile = UserPreferenceProfile(
             user_id=self.user_id,
             learned_goals=self.base_goals.copy(),
@@ -540,7 +540,7 @@ class ReferenceLearner:
         logger.info("Reset profile for %s", self.user_id)
 
     def _save_profile(self, path: str):
-        """Save profile to file"""
+        """Speichert profile to file."""
         try:
             with open(path, "w") as f:
                 json.dump(self.profile.to_dict(), f, indent=2)
@@ -549,7 +549,7 @@ class ReferenceLearner:
             logger.error("Failed to save profile: %s", e)
 
     def _load_profile(self, path: str) -> UserPreferenceProfile:
-        """Load profile from file"""
+        """Lädt profile from file."""
         try:
             with open(path) as f:
                 data = json.load(f)
@@ -611,7 +611,7 @@ def compare_variants(variant_a: dict[str, float], variant_b: dict[str, float]) -
 
 def get_learning_summary(profile: UserPreferenceProfile) -> str:
     """
-    Get human-readable summary of learning progress.
+    Gibt zurück: human-readable summary of learning progress.
 
     Args:
         profile: User preference profile

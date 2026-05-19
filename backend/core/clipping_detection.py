@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Clipping Detection — §6.3 Spec: CLIPPING vs. SOFT_SATURATION Discrimination.
+Clipping-Erkennung — §6.3 Spec: CLIPPING vs. SOFT_SATURATION Diskriminierung.
 
 Critical distinction (copilot-instructions.md §6.3):
     SOFT_SATURATION = Tube/Tape character → PRESERVE
@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
+
+from backend.core.core_utils import fft_autocorr
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ class ClippingAnalysisResult:
 
 
 def _to_mono(audio: np.ndarray) -> np.ndarray:
-    """Convert (N,) or (N, C) audio to 1-D mono float32."""
+    """Konvertiert (N,) or (N, C) audio to 1-D mono float32."""
     audio = np.asarray(audio, dtype=np.float32)
     if audio.ndim == 2:
         audio = audio.mean(axis=1)
@@ -92,7 +94,7 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
 
 def _flat_tops_pct(mono: np.ndarray, boundary: float = FLAT_TOPS_CLIP_BOUNDARY) -> float:
     """
-    Return the percentage of samples sitting at or above the clip boundary.
+    Gibt the percentage of samples sitting at or above the clip boundary zurück.
 
     A sample is considered 'at the ceiling' when |x| >= boundary.
     For hard digital clipping this can exceed several percent.
@@ -106,7 +108,7 @@ def _flat_tops_pct(mono: np.ndarray, boundary: float = FLAT_TOPS_CLIP_BOUNDARY) 
 
 def _find_dominant_fundamental_hz(mono: np.ndarray, sr: int) -> float | None:
     """
-    Estimate dominant fundamental frequency via normalised autocorrelation (AMDF).
+    Schätzt dominant fundamental frequency via normalised autocorrelation (AMDF).
 
     Returns None when no clear fundamental within [FUNDAMENTAL_MIN_HZ, FUNDAMENTAL_MAX_HZ]
     is detectable (polyphonic / noise-dominated material).
@@ -117,8 +119,6 @@ def _find_dominant_fundamental_hz(mono: np.ndarray, sr: int) -> float | None:
 
     segment = mono[:n].astype(np.float64)
     # Normalised autocorrelation — FFT-based O(N log N)
-    from backend.core.core_utils import fft_autocorr
-
     corr = fft_autocorr(segment)
     if np.max(np.abs(corr)) < 1e-8:
         return None
@@ -228,7 +228,7 @@ def _polyphonic_odd_even_estimate(mono: np.ndarray, sr: int) -> tuple[float, flo
 
 def _compute_thd(mono: np.ndarray, sr: int) -> tuple[float, float]:
     """
-    Compute (thd_odd, thd_even) for the audio signal.
+    Berechnet (thd_odd, thd_even) for the audio signal.
 
     Strategy:
     1. Try single stable fundamental via autocorrelation (works for voice/single-instrument).
@@ -367,7 +367,7 @@ class ClippingClassifier:
         return classify_clipping(audio, sr)
 
     def analyse(self, audio: np.ndarray, sr: int) -> ClippingAnalysisResult:
-        """Return full analysis result including intermediate metrics."""
+        """Gibt full analysis result including intermediate metrics zurück."""
         return analyse_clipping(audio, sr)
 
 
@@ -376,8 +376,8 @@ _lock = threading.Lock()
 
 
 def get_clipping_classifier() -> ClippingClassifier:
-    """Return the singleton ClippingClassifier instance (thread-safe)."""
-    global _instance
+    """Gibt the singleton ClippingClassifier instance (thread-safe) zurück."""
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:

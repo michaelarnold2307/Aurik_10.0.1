@@ -28,7 +28,7 @@ except ImportError:
 
 
 def get_noise_reducer() -> DeepFilterNetV3Plugin | None:
-    """Return the DeepFilterNet v3.II singleton, or None if unavailable."""
+    """Gibt the DeepFilterNet v3.II singleton, or None if unavailable zurück."""
     if not _AVAILABLE:
         return None
     return _get_dfn()

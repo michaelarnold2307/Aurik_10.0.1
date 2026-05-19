@@ -160,7 +160,7 @@ class RumbleFilterPhase(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float | int]:
-        """Compute adaptive rumble-guard profile for diagnostics/planning.
+        """Berechnet adaptive rumble-guard profile for diagnostics/planning.
 
         Returns material/quality dependent limits used by tests and tuning tools.
         """
@@ -605,7 +605,7 @@ class RumbleFilterPhase(PhaseInterface):
 
     def _detect_transients_professional(self, audio: np.ndarray, sensitivity: float) -> np.ndarray:
         """
-        Detect transients (attack onsets) via spectral flux.
+        Erkennt transients (attack onsets) via spectral flux.
 
         Returns:
             Boolean mask of transient locations
@@ -703,7 +703,7 @@ class RumbleFilterPhase(PhaseInterface):
         self, audio: np.ndarray, cutoff_hz: float, order: int, transient_mask: np.ndarray
     ) -> np.ndarray:
         """
-        Apply IIR high-pass with transient bypass.
+        Wendet an: IIR high-pass with transient bypass.
 
         During transients, filter is bypassed to preserve attacks.
         Dens-Coverage-Guard: if transient_mask covers > 55 % of audio, bypass is
@@ -773,7 +773,7 @@ class RumbleFilterPhase(PhaseInterface):
 
     def _apply_fir_highpass(self, audio: np.ndarray, cutoff_hz: float, order: int) -> np.ndarray:
         """
-        Apply FIR high-pass (linear phase, zero phase distortion).
+        Wendet an: FIR high-pass (linear phase, zero phase distortion).
 
         Higher latency but perfect phase response.
         """

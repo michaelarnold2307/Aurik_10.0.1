@@ -14,7 +14,7 @@ from typing import Any
 
 
 class ModuleCommunicationBus:
-    """Lightweight publish/subscribe message bus.
+    """Leichtgewichtiges publish/subscribe message bus.
 
     Subscribers receive (topic, message) callbacks on publish.
     All calls are synchronous (single-threaded).
@@ -26,12 +26,12 @@ class ModuleCommunicationBus:
         self._lock = threading.Lock()
 
     def subscribe(self, topic: str, callback: Callable[..., None]) -> None:
-        """Register *callback* for *topic*."""
+        """Registriert *callback* for *topic*."""
         with self._lock:
             self._subscribers_by_topic.setdefault(topic, []).append(callback)
 
     def unsubscribe(self, topic: str, callback: Callable[..., None]) -> None:
-        """Remove *callback* from the subscription list for *topic*."""
+        """Entfernt *callback* from the subscription list for *topic*."""
         with self._lock:
             callbacks = self._subscribers_by_topic.get(topic)
             if not callbacks:
@@ -58,7 +58,7 @@ class ModuleCommunicationBus:
                     cb(topic, message)
 
     def get_history(self) -> list[dict]:
-        """Return list of all published messages as {'topic': …, 'message': …} dicts."""
+        """Gibt list of all published messages as {'topic': …, 'message': …} dicts zurück."""
         with self._lock:
             return list(self._history)
 
@@ -67,7 +67,7 @@ class ModuleCommunicationBus:
         return self.get_history()
 
     def clear(self) -> None:
-        """Remove all subscribers and history."""
+        """Entfernt all subscribers and history."""
         with self._lock:
             self._subscribers_by_topic.clear()
             self._history.clear()
@@ -80,7 +80,7 @@ _module_communication_bus_lock = _threading.Lock()
 
 
 def get_module_communication_bus() -> ModuleCommunicationBus:
-    """Return the process-wide singleton ``ModuleCommunicationBus`` instance."""
+    """Gibt the process-wide singleton ``ModuleCommunicationBus`` instance zurück."""
     global _module_communication_bus_instance
     if _module_communication_bus_instance is None:
         with _module_communication_bus_lock:

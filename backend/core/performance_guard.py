@@ -264,7 +264,7 @@ class PerformanceGuard:
         )
 
     def add_analytics_overhead(self, seconds: float) -> None:
-        """Register time spent on quality analytics (goal checks, PMGG, FeedbackChain
+        """Registriert time spent on quality analytics (goal checks, PMGG, FeedbackChain.
         measurements) so it is excluded from the RT-factor calculation.
 
         Must be called by any caller that invokes ``measure_all()`` or similar

@@ -43,7 +43,7 @@ _BEAT_SNAP_TOL_S: float = 0.50  # ±500 ms
 
 
 def compute_chunk_size_s(max_severity: float, is_silence: bool = False) -> float:
-    """Return adaptive chunk size in seconds per §7.6.
+    """Gibt adaptive chunk size in seconds per §7.6 zurück.
 
     Args:
         max_severity: Highest defect severity relevant for the current phase (0.0–1.0).
@@ -62,7 +62,7 @@ def compute_chunk_size_s(max_severity: float, is_silence: bool = False) -> float
 
 
 def _is_near_silence(audio: np.ndarray, threshold_db: float = -55.0) -> bool:
-    """Check whether *audio* is near-silent (RMS below threshold)."""
+    """Prüft whether *audio* is near-silent (RMS below threshold)."""
     mono = audio.mean(axis=0) if audio.ndim == 2 else audio
     rms = float(np.sqrt(np.mean(mono.astype(np.float64) ** 2) + 1e-15))
     db = 20.0 * np.log10(rms + 1e-15)
@@ -146,7 +146,7 @@ def _find_safe_boundary(
     shift_ms: float = 25.0,
     onset_threshold: float = 0.35,
 ) -> int:
-    """Shift chunk boundary away from transients (§7.6a, spec Y3).
+    """Verschiebt chunk boundary away from transients (§7.6a, spec Y3).
 
     If onset_strength > *onset_threshold* within ±*tol_ms* ms of *pos_samples*,
     the boundary is shifted +*shift_ms* ms forward to avoid cutting mid-transient.
@@ -385,7 +385,7 @@ _lock = threading.Lock()
 
 
 class AdaptiveChunkProcessor:
-    """Singleton wrapper for adaptive chunk processing."""
+    """Singleton-Wrapper für adaptive Chunk-Verarbeitung."""
 
     def compute_chunk_size(self, max_severity: float, is_silence: bool = False) -> float:
         return compute_chunk_size_s(max_severity, is_silence=is_silence)

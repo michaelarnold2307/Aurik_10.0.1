@@ -43,6 +43,38 @@ def test_scan_uses_cached_forensic_medium_without_second_detect_call() -> None:
     assert "vinyl" in str(result.transfer_chain_str)
 
 
+def test_scan_publishes_chain_override_metadata_for_cacheable_forensic_medium() -> None:
+    """Chain-adaptive threshold hints must be exposed on the scan result metadata."""
+    scanner = DefectScanner()
+
+    @dataclass
+    class _ShellacTapeForensicMedium:
+        transfer_chain: list[str] = field(default_factory=lambda: ["shellac", "tape"])
+        primary_material: str = "shellac"
+        confidence: float = 0.93
+
+    cached_medium = _ShellacTapeForensicMedium()
+
+    with patch(
+        "backend.core.forensics.medium_detector.MediumDetector",
+        side_effect=AssertionError("MediumDetector must not be instantiated when cached forensic result is provided"),
+    ):
+        result = scanner.scan(
+            _silence(),
+            48_000,
+            material_type=MaterialType.SHELLAC,
+            file_ext=".wav",
+            forensic_medium_result=cached_medium,
+        )
+
+    assert result.transfer_chain_raw is cached_medium
+    assert result.metadata["chain_stage_materials"] == ["tape"]
+    assert result.metadata["material_confidence"] == 0.93
+    assert result.metadata["chain_threshold_override_applied"] is True
+    assert result.metadata["chain_threshold_override_count"] >= 1
+    assert result.metadata["chain_threshold_overrides"]
+
+
 def test_scan_calls_medium_detector_once_when_no_cached_forensic_result() -> None:
     """Without cached forensic medium, exactly one MediumDetector.detect() call is expected."""
     scanner = DefectScanner()

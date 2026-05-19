@@ -174,6 +174,23 @@ class TestFeatureExtractor:
 
         assert isinstance(features, dict)
 
+    def test_extract_with_stereo_reference_aligns_quality_metrics(self):
+        """SNR/SI-SDR use mono-aligned audio and reference shapes."""
+        fe = FeatureExtractor()
+
+        sr = 48000
+        duration = 0.5
+        mono = np.random.randn(int(sr * duration)).astype(np.float32) * 0.5
+        audio = np.column_stack([mono, mono])
+        reference = np.vstack([mono[:-32], mono[:-32]])
+
+        features = fe.extract(audio, sr, reference=reference, policy_manager=PolicyManager({}))
+
+        assert "snr" in features
+        assert "si_sdr" in features
+        assert np.isfinite(features["snr"])
+        assert np.isfinite(features["si_sdr"])
+
     def test_extract_stereo(self):
         """Test feature extraction with stereo audio"""
         fe = FeatureExtractor()
@@ -189,6 +206,50 @@ class TestFeatureExtractor:
         features = fe.extract(audio, sr, reference=None, policy_manager=policy_manager)
 
         assert isinstance(features, dict)
+
+    def test_extract_channels_last_stereo(self):
+        """Test feature extraction with channels-last stereo audio."""
+        fe = FeatureExtractor()
+
+        sr = 48000
+        duration = 0.5
+        mono = np.random.randn(int(sr * duration)) * 0.5
+        audio = np.column_stack([mono, mono])
+
+        policy_manager = PolicyManager({})
+        features = fe.extract(audio, sr, reference=None, policy_manager=policy_manager)
+
+        assert isinstance(features, dict)
+        assert features["beat_count"] != -1 or features["rms"] >= 0.0
+        assert "_quality_log" in policy_manager.policy
+
+    def test_extract_silent_audio_spectral_features_are_finite(self):
+        """Silent audio should not break rolloff or spectral summary features."""
+        fe = FeatureExtractor()
+
+        sr = 48000
+        audio = np.zeros(sr // 2, dtype=np.float32)
+        features = fe.extract(audio, sr, reference=None, policy_manager=PolicyManager({}))
+
+        assert features["spectral_centroid"] == 0.0
+        assert features["spectral_rolloff"] == 0.0
+        assert features["spectral_flatness"] == 0.0
+        assert len(features["spectral_contrast"]) == 6
+        assert all(np.isfinite(v) for v in features["spectral_contrast"])
+
+    def test_quality_log_callback_records_gates(self):
+        """FeatureExtractor records quality gate snapshots in the policy manager."""
+        fe = FeatureExtractor()
+
+        sr = 48000
+        audio = np.random.randn(sr // 2) * 0.5
+        reference = audio.copy()
+        policy_manager = PolicyManager({})
+
+        fe.extract(audio, sr, reference=reference, policy_manager=policy_manager)
+
+        assert policy_manager.policy["_quality_log"][-1]["event"] == "quality_gates"
+        assert "gates" in policy_manager.policy["_quality_log"][-1]
 
 
 if __name__ == "__main__":

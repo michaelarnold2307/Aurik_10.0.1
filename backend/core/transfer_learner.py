@@ -111,7 +111,7 @@ def get_transfer_learner(
     source_domain: str = "source",
     target_domain: str = "target",
 ) -> TransferLearner:
-    """Return the process-wide singleton ``TransferLearner`` instance."""
+    """Gibt the process-wide singleton ``TransferLearner`` instance zurück."""
     global _transfer_learner_instance
     if _transfer_learner_instance is None:
         with _transfer_learner_lock:

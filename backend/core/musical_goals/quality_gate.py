@@ -139,7 +139,7 @@ class MusicalGoalsQualityGate:
         conduct_enforcer: ConductEnforcer | None = None,
     ) -> None:
         """
-        Initialize Quality Gate.
+        Initialisiert Quality Gate.
 
         Args:
             strict_mode: If True, any violation triggers rollback
@@ -165,7 +165,7 @@ class MusicalGoalsQualityGate:
         )
 
     def _make_score_cache_key(self, audio: np.ndarray, sr: int) -> tuple[Any, ...]:
-        """Build a stable lightweight fingerprint for score-cache lookup."""
+        """Erstellt a stable lightweight fingerprint for score-cache lookup."""
         arr = np.asarray(audio, dtype=np.float32)
         flat = arr.reshape(-1)
         n = int(flat.size)
@@ -184,7 +184,7 @@ class MusicalGoalsQualityGate:
         return (int(sr), tuple(arr.shape), str(arr.dtype), h.hexdigest())
 
     def _measure_scores(self, audio: np.ndarray, sr: int) -> dict[str, float]:
-        """Measure goals with bounded cache to avoid redundant expensive calls."""
+        """Misst goals with bounded cache to avoid redundant expensive calls."""
         key = self._make_score_cache_key(audio, sr)
         cached = self._score_cache.get(key)
         if cached is not None:
@@ -595,7 +595,7 @@ class MusicalGoalsQualityGate:
         self, audio: np.ndarray, sr: int, baseline: dict[str, float], context: dict[str, Any]
     ) -> list[str]:
         """
-        Detect edge cases that may impact Musical Goals achievability.
+        Erkennt edge cases that may impact Musical Goals achievability.
 
         Edge Cases:
         - Extreme degradation (SNR < 30 dB, >80% defects)
@@ -623,13 +623,13 @@ class MusicalGoalsQualityGate:
         return edge_cases
 
     def _is_extremely_degraded(self, audio: np.ndarray, sr: int, baseline: dict[str, float]) -> bool:
-        """Check if audio is extremely degraded (SNR < 30 dB or Goals < 50%)."""
+        """Prüft if audio is extremely degraded (SNR < 30 dB or Goals < 50%)."""
         # Simple heuristic: If multiple goals are < 0.50, likely extreme degradation
         low_goals = sum(1 for score in baseline.values() if score < 0.50)
         return low_goals >= 3  # 3+ goals < 50%
 
     def _has_spectrum_conflict(self, audio: np.ndarray, sr: int, baseline: dict[str, float]) -> bool:
-        """Check for spectrum-goals conflicts (e.g., no HF but brillanz required)."""
+        """Prüft for spectrum-goals conflicts (e.g., no HF but brillanz required)."""
         # Check if bass-kraft is low but required
         if baseline.get("bass-kraft", 0) < 0.30 and baseline.get("bass-kraft", 0) < 1.0:
             return True
@@ -641,7 +641,7 @@ class MusicalGoalsQualityGate:
         self, audio: np.ndarray, sr: int, baseline: dict[str, float], mode: ProcessingMode
     ) -> list[str]:
         """
-        Detect spectrum-goals conflicts and generate warnings.
+        Erkennt spectrum-goals conflicts and generate warnings.
 
         Examples:
         - No HF content but mode requires brillanz=0.95
@@ -728,11 +728,11 @@ class MusicalGoalsQualityGate:
         logger.info("Report exported to %s", output_path)
 
     def get_recent_reports(self, n: int = 10) -> list[QualityGateReport]:
-        """Get n most recent reports."""
+        """Gibt zurück: n most recent reports."""
         return self.reports[-n:]
 
     def clear_reports(self) -> None:
-        """Clear report history."""
+        """Löscht report history."""
         self.reports.clear()
         logger.info("Report history cleared")
 
@@ -833,7 +833,7 @@ class EnhancedQualityGate:
         conduct_enforcer: ConductEnforcer | None = None,
     ) -> None:
         """
-        Initialize Enhanced Quality Gate.
+        Initialisiert Enhanced Quality Gate.
 
         Args:
             strict_mode: If True, any violation triggers rollback
@@ -902,7 +902,7 @@ class EnhancedQualityGate:
         return None  # §10.2: DNSMOS verboten für Musik-Qualitätsbewertung
 
     def _get_visqol_plugin(self):
-        """Lazy load ViSQOL plugin."""
+        """Lädt beim ersten Zugriff: ViSQOL plugin."""
         if self._visqol_plugin is None:
             try:
                 from plugins.visqol_plugin import ViSQOLPlugin
@@ -914,7 +914,7 @@ class EnhancedQualityGate:
         return self._visqol_plugin
 
     def _get_versa_plugin(self):
-        """Lazy load VERSA plugin (§4.4 CDPAM-Nachfolger)."""
+        """Lädt beim ersten Zugriff: VERSA plugin (§4.4 CDPAM-Nachfolger)."""
         if self._versa_plugin is None:
             try:
                 from plugins.versa_plugin import get_versa_plugin
@@ -926,7 +926,7 @@ class EnhancedQualityGate:
         return self._versa_plugin
 
     def _get_reprocessing_engine(self):
-        """Lazy load auto-reprocessing engine."""
+        """Lädt beim ersten Zugriff: auto-reprocessing engine."""
         if self._reprocessing_engine is None:
             from .auto_reprocessing import AutoReprocessingEngine
 
@@ -940,7 +940,7 @@ class EnhancedQualityGate:
         self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None
     ) -> PerceptualMetrics | None:
         """
-        Measure perceptual quality metrics (ViSQOL, VERSA §4.4).
+        Misst perceptual quality metrics (ViSQOL, VERSA §4.4).
 
         Args:
             audio: Audio to measure
@@ -1317,7 +1317,7 @@ class EnhancedQualityGate:
 
             # Define quality validator for reprocessing engine
             def quality_validator(orig, proc, sample_rate):
-                """Validator for AutoReprocessingEngine."""
+                """Validator für die AutoReprocessingEngine."""
                 post = self.enhanced_post_check(
                     orig,
                     proc,

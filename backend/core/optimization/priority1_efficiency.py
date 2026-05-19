@@ -1,5 +1,5 @@
 """
-optimization/priority1_efficiency.py — Algorithmic efficiency optimization
+optimization/priority1_efficiency.py – Algorithmische Effizienzoptimierung.
 ===========================================================================
 
 Provides vectorised multi-core FFT processing and benchmark utilities.
@@ -27,18 +27,18 @@ class OptimizedFFT:
         self.n_fft = 4096  # 4 K FFT — required invariant from test
 
     def get_frequency_resolution(self) -> float:
-        """Return frequency bin size in Hz.
+        """Gibt frequency bin size in Hz zurück.
 
         Resolution = sr / n_fft.  For sr=48000, n_fft=4096 → ~11.7 Hz.
         """
         return self.sr / self.n_fft
 
     def fft(self, frame: np.ndarray) -> np.ndarray:
-        """Compute real-valued FFT of *frame*."""
+        """Berechnet real-valued FFT of *frame*."""
         return np.fft.rfft(frame, n=self.n_fft)
 
     def ifft(self, spectrum: np.ndarray) -> np.ndarray:
-        """Compute inverse FFT back to time domain."""
+        """Berechnet inverse FFT back to time domain."""
         return np.fft.irfft(spectrum, n=self.n_fft)
 
 
@@ -68,7 +68,7 @@ class AlgorithmicEfficiencyOptimizer:
         sr: int,
         use_multicore: bool = False,
     ) -> np.ndarray:
-        """Apply spectral gain normalisation frame by frame.
+        """Wendet an: spectral gain normalisation frame by frame.
 
         Returns an ndarray of the same length and dtype float32.
         """
@@ -121,7 +121,7 @@ class AlgorithmicEfficiencyOptimizer:
     # ------------------------------------------------------------------
 
     def benchmark(self, audio: np.ndarray, sr: int, n_iterations: int = 2) -> dict[str, object]:
-        """Measure single-core vs. multi-core throughput.
+        """Misst single-core vs. multi-core throughput.
 
         Returns
         -------

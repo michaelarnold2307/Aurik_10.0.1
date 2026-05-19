@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_test_count(test_file) -> int:
-    """Count tests in a file."""
+    """Zählt tests in a file."""
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pytest", test_file, "--collect-only", "-q"],

@@ -65,7 +65,7 @@ class ImcraNoisEstimator:
         hop_length: int = _DEFAULT_HOP,
         q: float = _DEFAULT_Q,
     ) -> np.ndarray:
-        """Run IMCRA noise estimation.
+        """Führt aus: IMCRA noise estimation.
 
         Args:
             audio:       Mono float32 signal (1D).

@@ -52,11 +52,11 @@ class ProcessingChain:
     description: str  # Human-readable description
 
     def get_ordered_modules(self) -> list[ProcessingModule]:
-        """Get modules sorted by priority."""
+        """Gibt zurück: modules sorted by priority."""
         return sorted([m for m in self.modules if m.enabled], key=lambda x: x.priority)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
+        """Konvertiert to dictionary."""
         return {
             "modules": [
                 {
@@ -147,14 +147,14 @@ class AdaptiveChainBuilder:
     }
 
     def __init__(self) -> None:
-        """Initialize chain builder."""
+        """Initialisiert chain builder."""
         self.last_chain: ProcessingChain | None = None
 
     def build_chain(
         self, forensic_analysis: UnifiedForensicAnalysis, aggressive: bool = False, verbose: bool = True
     ) -> ProcessingChain:
         """
-        Build adaptive processing chain from forensic analysis.
+        Erstellt adaptive processing chain from forensic analysis.
 
         Args:
             forensic_analysis: Unified forensic analysis result
@@ -273,7 +273,7 @@ class AdaptiveChainBuilder:
         reason: str = "",
     ) -> ProcessingModule:
         """
-        Create and configure processing module.
+        Erstellt and configure processing module.
 
         Parameters are inferred from forensic analysis.
         """
@@ -381,7 +381,7 @@ class AdaptiveChainBuilder:
         self, modules: list[ProcessingModule], forensic_analysis: UnifiedForensicAnalysis, aggressive: bool
     ) -> list[ProcessingModule]:
         """
-        Optimize processing chain.
+        Optimiert processing chain.
 
         - Remove redundant modules
         - Adjust parameters based on confidence
@@ -413,7 +413,7 @@ class AdaptiveChainBuilder:
     def _generate_description(
         self, material_type: str, forensic_analysis: UnifiedForensicAnalysis, defects_addressed: list[str]
     ) -> str:
-        """Generate human-readable chain description."""
+        """Generiert human-readable chain description."""
         parts = [f"Processing chain for {material_type}"]
 
         if forensic_analysis.era != "UNKNOWN":
@@ -426,7 +426,7 @@ class AdaptiveChainBuilder:
 
     def visualize_chain(self, chain: ProcessingChain | None = None) -> str:
         """
-        Generate ASCII visualization of processing chain.
+        Generiert ASCII visualization of processing chain.
 
         Args:
             chain: Chain to visualize (uses last_chain if None)
@@ -487,7 +487,7 @@ class AdaptiveChainBuilder:
 
     def load_chain(self, filepath: str) -> ProcessingChain:
         """
-        Load chain from JSON file.
+        Lädt chain from JSON file.
 
         Args:
             filepath: Input file path

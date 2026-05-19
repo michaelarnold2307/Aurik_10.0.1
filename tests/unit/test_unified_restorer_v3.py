@@ -121,6 +121,16 @@ class TestRestorationConfig:
         cfg = RestorationConfig()
         assert cfg.deployment_mode == DeploymentMode.PRODUCT
 
+    def test_10_maximum_mode_does_not_force_studio_flag(self):
+        cfg = RestorationConfig(mode=QualityMode.MAXIMUM, studio_2026=False)
+        assert cfg.mode == QualityMode.MAXIMUM
+        assert cfg.studio_2026 is False
+
+    def test_11_studio_flag_forces_maximum_mode(self):
+        cfg = RestorationConfig(mode=QualityMode.QUALITY, studio_2026=True)
+        assert cfg.mode == QualityMode.MAXIMUM
+        assert cfg.studio_2026 is True
+
 
 # ---------------------------------------------------------------------------
 # Klasse 2: RestorationResult
@@ -140,6 +150,85 @@ class TestRestorationResult:
 
 
 class TestPreventFirstQuietEdges:
+    def test_40dz_goal_recovery_candidate_ranking_prefers_lower_weighted_gap(self):
+        thresholds = {"natuerlichkeit": 0.85, "timbre_authentizitaet": 0.85}
+        applicable = set(thresholds)
+        current = {"natuerlichkeit": 0.80, "timbre_authentizitaet": 0.84}
+        candidate = {"natuerlichkeit": 0.86, "timbre_authentizitaet": 0.845}
+
+        current_rank = _uv3_mod._rank_goal_recovery_candidate(
+            scores=current,
+            baseline_scores=current,
+            thresholds=thresholds,
+            applicable_goals=applicable,
+        )
+        candidate_rank = _uv3_mod._rank_goal_recovery_candidate(
+            scores=candidate,
+            baseline_scores=current,
+            thresholds=thresholds,
+            applicable_goals=applicable,
+            preservation_penalty=0.001,
+        )
+
+        assert candidate_rank < current_rank
+
+    def test_40dza_goal_recovery_candidate_ranking_protects_critical_goals(self):
+        thresholds = {
+            "transparenz": 0.50,
+            "waerme": 0.60,
+            "brillanz": 0.40,
+            "spatial_depth": 0.46,
+            "natuerlichkeit": 0.85,
+        }
+        applicable = set(thresholds)
+        baseline = {
+            "transparenz": 0.84,
+            "waerme": 0.96,
+            "brillanz": 0.56,
+            "spatial_depth": 0.95,
+            "natuerlichkeit": 0.90,
+        }
+        # Candidate A improves one non-critical goal but collapses transparency and warmth.
+        candidate_a = {
+            "transparenz": 0.20,
+            "waerme": 0.55,
+            "brillanz": 0.43,
+            "spatial_depth": 0.60,
+            "natuerlichkeit": 1.00,
+        }
+        # Candidate B keeps critical goals near baseline and should be preferred.
+        candidate_b = {
+            "transparenz": 0.81,
+            "waerme": 0.92,
+            "brillanz": 0.54,
+            "spatial_depth": 0.93,
+            "natuerlichkeit": 0.92,
+        }
+
+        rank_a = _uv3_mod._rank_goal_recovery_candidate(
+            scores=candidate_a,
+            baseline_scores=baseline,
+            thresholds=thresholds,
+            applicable_goals=applicable,
+        )
+        rank_b = _uv3_mod._rank_goal_recovery_candidate(
+            scores=candidate_b,
+            baseline_scores=baseline,
+            thresholds=thresholds,
+            applicable_goals=applicable,
+        )
+
+        assert rank_b < rank_a
+
+    def test_40dzb_goal_candidate_blend_alphas_expand_original_audio_search(self):
+        original_alphas = _uv3_mod._goal_candidate_blend_alphas("original_audio")
+        carrier_alphas = _uv3_mod._goal_candidate_blend_alphas("best_carrier_checkpoint")
+        default_alphas = _uv3_mod._goal_candidate_blend_alphas("hpi_best_checkpoint")
+
+        assert original_alphas == (0.90, 0.82, 0.74, 0.64, 0.56, 0.48)
+        assert carrier_alphas == (0.90, 0.82, 0.74, 0.66)
+        assert default_alphas == (0.90, 0.82, 0.74)
+
     def test_40d_extract_transfer_chain_accepts_direct_string_and_list_inputs(self):
         assert UnifiedRestorerV3._extract_transfer_chain_from_forensics("vinyl -> tape -> mp3_low") == [
             "vinyl",
@@ -337,6 +426,40 @@ class TestPreventFirstQuietEdges:
         )
 
         assert float(profile["frisson_sensitivity"]) >= 0.60
+
+    def test_40j2_vocal_presence_uses_vocals_tag_for_schlager_guard(self):
+        confidence = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {"Singing voice": 0.0, "Vocals": 0.17, "Music": 0.88},
+            is_schlager=True,
+            genre_label="Schlager",
+        )
+
+        assert confidence >= 0.35
+
+    def test_40j3_vocal_presence_does_not_floor_low_non_vocal_material(self):
+        # §0p: Schlager-Genre-Floor greift nur wenn confidence >= 0.10.
+        # Vocals=0.08 liegt auf dem Noise-Floor (Schwelle > 0.08 nicht erfüllt)
+        # → keine Confidence-Elevation → kein Floor → confidence bleibt niedrig.
+        confidence = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {"Singing voice": 0.0, "Vocals": 0.08, "Music": 0.88},
+            is_schlager=True,
+            genre_label="Schlager",
+        )
+
+        assert confidence < 0.25
+
+    def test_40j4_vocal_presence_music_vocal_heuristic_reaches_vqi_threshold(self):
+        # §0p v9.12.9: PANNs Vocals=0.17, Music=0.60, no genre detected
+        # → Music+Vocal heuristic should directly reach VQI-gate threshold (0.35)
+        confidence = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {"Vocals": 0.17, "Music": 0.60},
+            panns_vocals_confidence=0.0,
+            is_schlager=False,
+            genre_label="",
+        )
+        assert confidence >= 0.35, (
+            f"§0p: Music+Vocal heuristic must reach VQI threshold (0.35) for Vocals=0.17: {confidence:.3f}"
+        )
 
     def test_40k_autosetup_policy_caps_flattening_phases_for_frisson_sensitive_material(self):
         profile = {
@@ -603,6 +726,16 @@ class TestUnifiedRestorerV3Init:
         restorer = UnifiedRestorerV3()
         assert isinstance(restorer.phase_metadata, dict)
 
+    def test_23a_quality_mode_maximum_keeps_restoration_mode(self):
+        restorer = UnifiedRestorerV3(quality_mode="maximum")
+        assert restorer.config.mode == QualityMode.MAXIMUM
+        assert restorer.is_studio_mode() is False
+
+    def test_23b_quality_mode_studio_2026_enables_studio_mode(self):
+        restorer = UnifiedRestorerV3(quality_mode="studio_2026")
+        assert restorer.config.mode == QualityMode.MAXIMUM
+        assert restorer.is_studio_mode() is True
+
 
 # ---------------------------------------------------------------------------
 # Klasse 4: get_restorer() — Singleton
@@ -676,6 +809,67 @@ class TestSelectPhases:
         phases = restorer._select_phases(mock_defect)
         for p in phases:
             assert isinstance(p, str)
+
+    def test_33a_selects_azimuth_for_cassette_chain_even_with_vinyl_primary(self):
+        restorer = UnifiedRestorerV3()
+        mock_defect = _make_mock_defect_result()
+        mock_defect.material_type = MaterialType.VINYL
+        mock_defect.scores = {
+            DefectType.AZIMUTH_ERROR: types.SimpleNamespace(severity=0.20),
+        }
+
+        phases = restorer._select_phases(
+            mock_defect,
+            chain_info={"chain": ["vinyl", "cassette", "mp3_low"]},
+        )
+
+        assert "phase_25_azimuth_correction" in phases
+
+    def test_33b_selects_azimuth_for_tape_chain_with_high_transport_bump(self):
+        restorer = UnifiedRestorerV3()
+        mock_defect = _make_mock_defect_result()
+        mock_defect.material_type = MaterialType.VINYL
+        mock_defect.scores = {
+            DefectType.TRANSPORT_BUMP: types.SimpleNamespace(severity=0.25),
+        }
+
+        phases = restorer._select_phases(
+            mock_defect,
+            chain_info={"chain": ["vinyl", "cassette", "mp3_low"]},
+        )
+
+        assert "phase_25_azimuth_correction" in phases
+
+    def test_33c_selects_azimuth_for_tape_chain_with_high_bias_error(self):
+        restorer = UnifiedRestorerV3()
+        mock_defect = _make_mock_defect_result()
+        mock_defect.material_type = MaterialType.VINYL
+        mock_defect.scores = {
+            DefectType.BIAS_ERROR: types.SimpleNamespace(severity=0.25),
+        }
+
+        phases = restorer._select_phases(
+            mock_defect,
+            chain_info={"chain": ["vinyl", "cassette", "mp3_low"]},
+        )
+
+        assert "phase_25_azimuth_correction" in phases
+
+    @pytest.mark.parametrize("tape_stage", ["tape", "reel_tape"])
+    def test_33d_selects_azimuth_for_all_tape_chain_labels(self, tape_stage: str):
+        restorer = UnifiedRestorerV3()
+        mock_defect = _make_mock_defect_result()
+        mock_defect.material_type = MaterialType.VINYL
+        mock_defect.scores = {
+            DefectType.TRANSPORT_BUMP: types.SimpleNamespace(severity=0.25),
+        }
+
+        phases = restorer._select_phases(
+            mock_defect,
+            chain_info={"chain": ["vinyl", tape_stage, "mp3_low"]},
+        )
+
+        assert "phase_25_azimuth_correction" in phases
 
 
 class TestPhaseInteractionGuards:
@@ -1380,6 +1574,7 @@ class TestSongCalibrationProfile:
             "reverb",
             "reconstruction",
             "dynamics_eq",
+            "time_pitch_transport",
             "transient",
             "vocal",
             "instrument",
@@ -1572,6 +1767,7 @@ class TestMidPipelineCalibrationStep:
                 "reverb": 1.0,
                 "reconstruction": 1.0,
                 "dynamics_eq": 1.0,
+                "time_pitch_transport": 1.0,
                 "transient": 1.0,
                 "vocal": 1.0,
                 "instrument": 1.0,
@@ -1632,11 +1828,13 @@ class TestMidPipelineCalibrationStep:
         result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
         assert result is not None
         assert result["family_scalars"]["reconstruction"] > 1.0
+        assert result["family_scalars"]["time_pitch_transport"] > 1.0
 
     def test_79_low_groove_boosts_dynamics_eq_and_transient(self):
         scores = {"groove": 0.60}
         result = self._FN(scores, self._base_profile(), "33pct", 5, 15)
         assert result is not None
+        assert result["family_scalars"]["time_pitch_transport"] > 1.0
         assert result["family_scalars"]["dynamics_eq"] > 1.0
         assert result["family_scalars"]["transient"] > 1.0
 
@@ -1847,6 +2045,80 @@ class TestReferenceAnchorArbitration:
 
         assert captured.get("era_decade") == 1980
 
+    def test_globalplan_decade_is_authoritative_even_when_chunk_conf_is_higher(self, monkeypatch: pytest.MonkeyPatch):
+        restorer = UnifiedRestorerV3()
+        audio = np.zeros(9600, dtype=np.float32)
+
+        created_decades: list[int] = []
+
+        class _FakeEraResult(types.SimpleNamespace):
+            def __init__(
+                self,
+                decade,
+                era_label,
+                confidence,
+                material_prior,
+                noise_profile,
+                tier_used,
+                hf_rolloff_hz,
+            ):
+                created_decades.append(int(decade))
+                super().__init__(
+                    decade=int(decade),
+                    era_label=str(era_label),
+                    confidence=float(confidence),
+                    material_prior=str(material_prior),
+                    noise_profile=noise_profile,
+                    tier_used=int(tier_used),
+                    hf_rolloff_hz=float(hf_rolloff_hz),
+                )
+
+        monkeypatch.setattr("backend.core.era_classifier.EraResult", _FakeEraResult)
+
+        def _stop_after_anchor(*args, **kwargs):
+            raise RuntimeError("stop_after_anchor")
+
+        restorer.defect_scanner.scan = _stop_after_anchor  # type: ignore[method-assign]
+
+        cached_medium = types.SimpleNamespace(
+            material=MaterialType.VINYL,
+            material_type=MaterialType.VINYL,
+            confidence=0.95,
+            classifier_source="unit",
+        )
+        cached_era = types.SimpleNamespace(
+            decade=2025,
+            confidence=0.95,
+            tier_used=1,
+            material_prior="streaming",
+            noise_profile=np.zeros(24, dtype=np.float32),
+            hf_rolloff_hz=20000.0,
+        )
+        cached_genre = types.SimpleNamespace(
+            is_schlager=False,
+            confidence=0.0,
+            genre_label="unknown",
+            bpm=0.0,
+            subgenre="unknown",
+        )
+        cached_rest = types.SimpleNamespace(restorability_score=70.0, grade="FAIR", predicted_mos=(3.5, 4.1))
+        gp = types.SimpleNamespace(portrait=types.SimpleNamespace(decade=1970, era_confidence=0.20, material="vinyl"))
+
+        with pytest.raises(RuntimeError, match="stop_after_anchor"):
+            restorer.restore(
+                audio,
+                48000,
+                global_plan=gp,
+                cached_medium_result=cached_medium,
+                cached_era_result=cached_era,
+                cached_genre_result=cached_genre,
+                cached_restorability_result=cached_rest,
+                file_path="/tmp/globalplan_era_authoritative.wav",
+            )
+
+        assert created_decades, "Expected GlobalPlan-era override to instantiate EraResult"
+        assert created_decades[-1] == 1970
+
 
 class TestStereoSafetyGuardBranching:
     """Targeted branch tests for §2.51a stereo safety guard."""
@@ -1985,9 +2257,9 @@ class TestSingleGainAuthorityEndToEnd:
         """After HPF (phase_05), authority stays locked for non-unlock subsequent phases.
 
         phase_05 resets cumulative reference to post-HPF audio and locks authority.
-        phase_35 (multiband compression, NOT in unlock set) further attenuates,
-        causing the cumulative guard to fire. Because authority is locked, the guard
-        MUST NOT apply positive makeup — verifying §2.45a-VII Single-Gain-Authority.
+        phase_17 (mastering polish, NOT in unlock set, NOT §0a-forbidden) further
+        attenuates, causing the cumulative guard to fire. Because authority is locked,
+        the guard MUST NOT apply positive makeup — verifying §2.45a-VII Single-Gain-Authority.
         """
         restorer = self._build_restorer()
 
@@ -2016,12 +2288,12 @@ class TestSingleGainAuthorityEndToEnd:
             sample_rate=SR,
             material_type=MaterialType.VINYL,
             defect_result=types.SimpleNamespace(scores={}),
-            selected_phases=["phase_05_rumble_filter", "phase_35_multiband_compression"],
+            selected_phases=["phase_05_rumble_filter", "phase_17_mastering_polish"],
         )
 
         rms_after = float(np.sqrt(np.mean(out**2)))
 
-        # Without authority policy: guard fires after phase_35, boosts back toward -4.5 dB
+        # Without authority policy: guard fires after phase_17, boosts back toward -4.5 dB
         # from post-HPF reference → rms_after could exceed rms_before (massive overshot).
         # WITH §2.45a-VII authority: no positive makeup → rms_after ≈ rms_in * 0.5 * 0.1
         # (cumulative ~-26 dB from input) — well below the +3 dB assertion threshold.
@@ -2033,7 +2305,7 @@ class TestSingleGainAuthorityEndToEnd:
             "No positive makeup allowed while authority is locked by phase_05_rumble_filter."
         )
         assert "phase_05_rumble_filter" in executed
-        assert "phase_35_multiband_compression" in executed
+        assert "phase_17_mastering_polish" in executed
 
     def test_99_authority_re_enables_after_broadband_phase_following_hpf(self):
         """After HPF locks authority, a broadband-subtractive phase re-enables it.
@@ -2184,4 +2456,150 @@ class TestCIGRollbackNoMakeupGain:
             f"rms_in={rms_in:.6f}, rms_out={rms_out:.6f}. "
             "CIG-Rollback must block both _allow_positive_makeup_gain unlock "
             "and cumulative guard makeup application."
+        )
+
+
+# ---------------------------------------------------------------------------
+# V13 Regression — _MATERIAL_PRIORITY_PHASES duplicate-key guard (§F601)
+# ---------------------------------------------------------------------------
+
+
+class TestMaterialPriorityPhasesNoDuplicateKeys:
+    """Regression-Test für V13: Kein Duplikat-Schlüssel in _MATERIAL_PRIORITY_PHASES.
+
+    F601 — Python überschreibt doppelte Dict-Schlüssel stillschweigend.
+    Ein Duplikat führt dazu, dass die falsche Phasenliste aktiv ist.
+    Der Test parst die UV3-Quelle via AST und prüft alle Assignments zu
+    _MATERIAL_PRIORITY_PHASES auf Eindeutigkeit der String-Schlüssel.
+    """
+
+    def test_material_priority_phases_no_duplicate_keys(self):
+        """V13: _MATERIAL_PRIORITY_PHASES-Dict darf keine Duplikat-Schlüssel haben."""
+        import ast
+        import pathlib
+
+        src_path = pathlib.Path(__file__).parents[2] / "backend" / "core" / "unified_restorer_v3.py"
+        source = src_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        duplicate_keys: list[tuple[str, int]] = []  # (key, lineno)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            # Look for local assignments: _MATERIAL_PRIORITY_PHASES = { ... }
+            target_names = [
+                t.id for t in node.targets if isinstance(t, ast.Name) and t.id == "_MATERIAL_PRIORITY_PHASES"
+            ]
+            if not target_names:
+                continue
+            if not isinstance(node.value, ast.Dict):
+                continue
+            seen: set[str] = set()
+            for key_node in node.value.keys:
+                if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                    continue
+                key = key_node.value
+                if key in seen:
+                    duplicate_keys.append((key, key_node.lineno))
+                seen.add(key)
+
+        assert not duplicate_keys, (
+            f"V13: _MATERIAL_PRIORITY_PHASES has duplicate keys (silent F601 overwrite): "
+            f"{duplicate_keys}. Remove the duplicate entry — "
+            "the second definition silently overwrites the first, activating the wrong phase set."
+        )
+
+
+class TestVocalGenreKeysChoir:
+    """§M1 (v9.12.9) Choir-Vinyl Gap — _VOCAL_GENRE_KEYS muss Chor-Genres enthalten.
+
+    Regressions-Guard: Wenn 'choir', 'choral' oder 'chormusik' fehlen, aktiviert
+    _compute_vocal_presence_confidence() den 0.35-PANNs-Floor für Chor-Vinyl-Material
+    NICHT → VQI-Gate bleibt stumm → Vocal-Naturalness-Wiederherstellung wird nie ausgelöst.
+    """
+
+    def test_choir_terms_in_vocal_genre_keys(self) -> None:
+        """_VOCAL_GENRE_KEYS enthält alle Chor-Genrebezeichnungen (§M1 v9.12.9)."""
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        keys = UnifiedRestorerV3._VOCAL_GENRE_KEYS
+        required = {"choir", "choral", "chormusik", "chor", "kantate", "oratorium"}
+        missing = required - keys
+        assert not missing, (
+            f"§M1: _VOCAL_GENRE_KEYS fehlen Chor-Genrebezeichnungen: {missing}. "
+            "Ohne diese greift der 0.35-PANNs-Floor für Chor-Vinyl/Shellac-Material nicht."
+        )
+
+    def test_choir_genre_label_activates_confidence_floor(self) -> None:
+        """genre_label='choir' → _compute_vocal_presence_confidence() ≥ 0.35 (§M1 floor)."""
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        conf = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {"Choir": 0.12, "Music": 0.65},
+            panns_vocals_confidence=0.12,
+            genre_label="choir",
+        )
+        assert conf >= 0.35, f"§M1: 'choir' genre_label muss PANNs-Floor 0.35 aktivieren, bekommen: {conf:.3f}"
+
+    def test_choral_music_genre_label_activates_confidence_floor(self) -> None:
+        """genre_label='choral music' → _compute_vocal_presence_confidence() ≥ 0.35."""
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        conf = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {"Music": 0.70},
+            panns_vocals_confidence=0.10,
+            genre_label="choral music",
+        )
+        assert conf >= 0.35, f"§M1: 'choral music' label muss Floor 0.35 aktivieren, bekommen: {conf:.3f}"
+
+    def test_schlager_floor_unchanged_after_m1_patch(self) -> None:
+        """Schlager-Floor bleibt 0.35 — §M1-Patch hat das nicht beeinträchtigt."""
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        conf = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {"Singing": 0.10},
+            panns_vocals_confidence=0.17,
+            is_schlager=True,
+        )
+        assert conf >= 0.35, f"Schlager-Floor fehlt nach §M1-Patch: {conf:.3f}"
+
+
+class TestPhase65VqiRecoveryTrigger:
+    """§H4 (v9.12.9) Phase_65 VQI-Recovery-Trigger in UV3.
+
+    Regressions-Guard: Phase_65 (HNR-Blend + Spektral-Tilt + Formant-Tilt) MUSS
+    in UV3 als DSP-Korrektiv für VQI < 0.74 + panns ≥ 0.25 + Restoration verfügbar sein.
+    Vor v9.12.9 war Phase_65 in calibration_matrix referenziert, aber nie in UV3 aufgerufen.
+    """
+
+    def test_phase_65_module_importable(self) -> None:
+        """Phase_65-Modul ist importierbar (Pflicht für VQI-Recovery-Trigger)."""
+        import importlib
+
+        mod = importlib.util.find_spec("backend.core.phases.phase_65_vocal_naturalness_restoration")
+        assert mod is not None, (
+            "§H4: phase_65_vocal_naturalness_restoration nicht gefunden — "
+            "VQI-Recovery-Trigger in UV3 kann Phase_65 nicht laden."
+        )
+
+    def test_phase_65_get_phase_callable(self) -> None:
+        """get_phase_65() existiert und gibt ein Objekt mit .process() zurück."""
+        from backend.core.phases.phase_65_vocal_naturalness_restoration import get_phase_65
+
+        p65 = get_phase_65()
+        assert hasattr(p65, "process"), "§H4: Phase_65 hat keine process()-Methode"
+
+    def test_uv3_source_contains_phase_65_vqi_recovery(self) -> None:
+        """UV3-Quellcode enthält Phase_65-VQI-Recovery-Block (§H4 v9.12.9 Regression-Guard)."""
+        import pathlib
+
+        src = (pathlib.Path(__file__).parents[2] / "backend" / "core" / "unified_restorer_v3.py").read_text()
+        assert "get_phase_65" in src, (
+            "§H4: UV3-Quellcode enthält get_phase_65 nicht — "
+            "Phase_65 VQI-Recovery-Trigger fehlt (Regression §0a/§7.10)."
+        )
+        assert "_vqi_score < 0.74" in src, (
+            "§H4: UV3 prüft VQI < 0.74 Schwelle nicht — "
+            "VERBOTEN-Regel 'VQI-Abfall nach NR ohne DSP-Korrektiv-Recovery' verletzt."
         )

@@ -42,7 +42,7 @@ class PreValidationResult:
 
 @dataclass
 class MonitoringCheckpoint:
-    """Checkpoint during processing."""
+    """Checkpoint während der Verarbeitung."""
 
     step_name: str
     timestamp: datetime
@@ -64,7 +64,7 @@ class MonitoringReport:
 
 class MusicalGoalsMonitor:
     """
-    Monitor musical goals throughout processing pipeline.
+    Überwacht musical goals throughout processing pipeline.
 
     Key capabilities:
     1. Pre-validate: Predict goals before processing runs
@@ -101,7 +101,7 @@ class MusicalGoalsMonitor:
     """
 
     def __init__(self) -> None:
-        """Initialize monitor."""
+        """Initialisiert monitor."""
         # Import Musical Goals Checker
         try:
             from backend.core.musical_goals import MusicalGoalsChecker
@@ -191,7 +191,7 @@ class MusicalGoalsMonitor:
 
     def add_checkpoint(self, step_name: str, audio: np.ndarray, sr: int, confidence: float = 0.80) -> None:
         """
-        Add monitoring checkpoint during processing.
+        Fügt hinzu: monitoring checkpoint during processing.
 
         Args:
             step_name: Name of processing step
@@ -280,7 +280,7 @@ class MusicalGoalsMonitor:
         return report
 
     def reset(self) -> None:
-        """Reset monitoring state for new processing run."""
+        """Setzt zurück: monitoring state for new processing run."""
         self.pre_validation_result = None
         self.checkpoints = []
         self.thresholds = None
@@ -342,7 +342,7 @@ class MusicalGoalsMonitor:
 
     def _estimate_uncertainty(self, current_goals: dict[str, float], processing_config: dict[str, Any]) -> float:
         """
-        Estimate epistemic uncertainty in prediction.
+        Schätzt epistemic uncertainty in prediction.
 
         Args:
             current_goals: Current measured goals

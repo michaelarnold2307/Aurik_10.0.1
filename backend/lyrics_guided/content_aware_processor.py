@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_aurik_mode(aurik_mode: str | None) -> str:
-    """Normalize external mode aliases to canonical values."""
+    """Normalisiert external mode aliases to canonical values."""
     _m = str(aurik_mode or "restoration").strip().lower().replace("_", "").replace(" ", "")
     if _m in {"studio2026", "studio", "highendstudio", "maximum"}:
         return "studio2026"
@@ -119,7 +119,7 @@ class LyricsGuidedTimeline:
     studio_strategy: str
 
     def get_processing_at_time(self, timestamp: float) -> ProcessingIntent:
-        """Get processing intent at a specific timestamp."""
+        """Gibt zurück: processing intent at a specific timestamp."""
         for segment in self.segments:
             if segment.start_time <= timestamp < segment.end_time:
                 return segment.processing_intent
@@ -144,7 +144,7 @@ class LyricsAligner:
 
     def __init__(self, use_phoneme_classifier: bool = True):
         """
-        Initialize lyrics aligner.
+        Initialisiert lyrics aligner.
 
         Args:
             use_phoneme_classifier: Use Week 7-9 phoneme classifier
@@ -315,7 +315,7 @@ class LyricsAligner:
         audio: np.ndarray,
         sr: int,
     ) -> list[LyricsSegment]:
-        """Add phoneme information from Week 7-9 classifier."""
+        """Fügt hinzu: phoneme information from Week 7-9 classifier."""
         if self.phoneme_classifier is None:
             logger.debug("PhonemeClassifier not available — skipping phoneme annotation")
             return segments
@@ -348,14 +348,14 @@ class LyricsAligner:
 
 class ContentAwareProcessor:
     """
-    Process audio based on lyrics-guided content analysis.
+    Verarbeitet audio based on lyrics-guided content analysis.
 
     Determines what to do with each audio segment based on content type.
     Respects AURIK operating modes.
     """
 
     def __init__(self):
-        """Initialize content-aware processor."""
+        """Initialisiert content-aware processor."""
         self.lyrics_aligner = LyricsAligner()
         logger.info("ContentAwareProcessor initialized")
 
@@ -367,7 +367,7 @@ class ContentAwareProcessor:
         language: str = "en",
     ) -> LyricsGuidedTimeline:
         """
-        Create lyrics-guided processing timeline.
+        Erstellt lyrics-guided processing timeline.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -419,7 +419,7 @@ class ContentAwareProcessor:
         sr: int,
         lyrics_segments: list[LyricsSegment],
     ) -> list[ContentSegment]:
-        """Analyze audio to determine content types."""
+        """Analysiert Audio zur Bestimmung von Inhaltstypen."""
         content_segments = []
 
         # Create timeline covering full audio
@@ -535,7 +535,7 @@ class ContentAwareProcessor:
         segments: list[ContentSegment],
         vocal_percentage: float,
     ) -> str:
-        """Generate restoration mode strategy."""
+        """Generiert restoration mode strategy."""
         vocal_count = sum(1 for s in segments if s.content_type == ContentType.VOCAL)
 
         if vocal_percentage > 0.7:
@@ -561,7 +561,7 @@ class ContentAwareProcessor:
         segments: list[ContentSegment],
         vocal_percentage: float,
     ) -> str:
-        """Generate studio mode strategy."""
+        """Generiert studio mode strategy."""
         vocal_count = sum(1 for s in segments if s.content_type == ContentType.VOCAL)
 
         if vocal_percentage > 0.7:

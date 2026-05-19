@@ -266,7 +266,7 @@ class MpSenetPlugin:
         return x
 
     def _validate_and_pad_shapes(self, amp: np.ndarray, pha: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Validate core STFT frequency dimensions before ONNX inference."""
+        """Validiert core STFT frequency dimensions before ONNX inference."""
         _N_BINS = 201
         if amp.shape[0] != _N_BINS or pha.shape[0] != _N_BINS:
             raise ValueError(
@@ -275,7 +275,7 @@ class MpSenetPlugin:
         return amp, pha
 
     def _run_onnx_segment(self, amp_seg: np.ndarray, pha_seg: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Run one fixed-length ONNX segment and return denoised amp/phase.
+        """Führt aus: one fixed-length ONNX segment and return denoised amp/phase.
 
         Primary layout is [B, F, T]. If the exported graph expects [B, T, F]
         (seen as Reshape_4 runtime errors), retry once with transposed inputs.
@@ -321,7 +321,7 @@ class MpSenetPlugin:
         return _normalize_out(ort_out[0]), _normalize_out(ort_out[1])
 
     def _run_onnx_fixed_time(self, amp_in: np.ndarray, pha_in: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Execute ONNX with fixed T=404 using padded chunks to avoid Reshape errors."""
+        """Führt aus: ONNX with fixed T=404 using padded chunks to avoid Reshape errors."""
         n_frames = int(amp_in.shape[1])
         if n_frames <= 0:
             return amp_in.copy(), pha_in.copy()

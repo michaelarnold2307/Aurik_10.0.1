@@ -39,7 +39,7 @@ class AugmentationOp:
 
 class AudioAugmentations:
     """
-    Collection of audio augmentation operations.
+    Sammlung von Audio-Augmentierungsoperationen.
 
     Includes time-domain, frequency-domain, and material-specific augmentations.
     """
@@ -80,19 +80,19 @@ class AudioAugmentations:
 
     @staticmethod
     def add_noise(audio: torch.Tensor, noise_level: float) -> torch.Tensor:
-        """Add Gaussian noise."""
+        """Fügt hinzu: Gaussian noise."""
         noise = torch.randn_like(audio) * noise_level
         return audio + noise
 
     @staticmethod
     def gain(audio: torch.Tensor, db: float) -> torch.Tensor:
-        """Apply gain in dB."""
+        """Wendet an: gain in dB."""
         gain_linear = 10 ** (db / 20.0)
         return audio * gain_linear
 
     @staticmethod
     def eq_filter(audio: torch.Tensor, cutoff_freq: float, gain_db: float, sr: int = 48000) -> torch.Tensor:
-        """Simple EQ filter (highpass/lowpass)."""
+        """Einfaches EQ filter (highpass/lowpass)."""
         # Simplified implementation using spectral filtering
         # In practice, use proper filter design
 
@@ -135,7 +135,7 @@ class AudioAugmentations:
 
     @staticmethod
     def add_vinyl_noise(audio: torch.Tensor, intensity: float) -> torch.Tensor:
-        """Add vinyl-specific noise (clicks, pops, surface noise)."""
+        """Fügt hinzu: vinyl-specific noise (clicks, pops, surface noise)."""
         # Surface noise (pink noise)
         pink_noise = torch.randn_like(audio)
         # Approximate pink noise with lowpass filter
@@ -156,7 +156,7 @@ class AudioAugmentations:
 
     @staticmethod
     def add_tape_noise(audio: torch.Tensor, intensity: float) -> torch.Tensor:
-        """Add tape-specific noise (hiss, wow, flutter)."""
+        """Fügt hinzu: tape-specific noise (hiss, wow, flutter)."""
         # Tape hiss (high-frequency noise)
         hiss = torch.randn_like(audio) * intensity * 0.05
 
@@ -202,7 +202,7 @@ class AudioAugmentations:
 
     @staticmethod
     def dynamic_range_compression(audio: torch.Tensor, threshold: float, ratio: float) -> torch.Tensor:
-        """Apply dynamic range compression."""
+        """Wendet an: dynamic range compression."""
         # Compute envelope
         envelope = torch.abs(audio)
 
@@ -222,7 +222,7 @@ class AugmentationPolicy:
 
     def __init__(self, operations: list[tuple[str, float]], material_type: str | None = None):
         """
-        Initialize augmentation policy.
+        Initialisiert augmentation policy.
 
         Args:
             operations: List of (operation_name, magnitude) tuples
@@ -247,7 +247,7 @@ class AugmentationPolicy:
         }
 
     def apply(self, audio: torch.Tensor) -> torch.Tensor:
-        """Apply augmentation policy to audio."""
+        """Wendet Augmentierungsrichtlinie auf Audio an."""
         augmented = audio
 
         for op_name, magnitude in self.operations:
@@ -269,7 +269,7 @@ class RandAugment:
 
     def __init__(self, n_ops: int = 2, magnitude: float = 0.5, material_type: str | None = None) -> None:
         """
-        Initialize RandAugment.
+        Initialisiert RandAugment.
 
         Args:
             n_ops: Number of operations to apply
@@ -294,7 +294,7 @@ class RandAugment:
         logger.info("RandAugment initialized: n_ops=%s, magnitude=%s, material=%s", n_ops, magnitude, material_type)
 
     def __call__(self, audio: torch.Tensor) -> torch.Tensor:
-        """Apply random augmentations."""
+        """Wendet an: random augmentations."""
         # Select random operations
         selected_ops = random.sample(self.operations, min(self.n_ops, len(self.operations)))
 
@@ -314,7 +314,7 @@ class AutoAugment:
 
     def __init__(self, n_policies: int = 5, n_ops_per_policy: int = 2, material_type: str | None = None) -> None:
         """
-        Initialize AutoAugment.
+        Initialisiert AutoAugment.
 
         Args:
             n_policies: Number of augmentation policies
@@ -331,7 +331,7 @@ class AutoAugment:
         logger.info("AutoAugment initialized: %s policies, %s ops per policy", n_policies, n_ops_per_policy)
 
     def _initialize_policies(self) -> list[AugmentationPolicy]:
-        """Initialize random policies."""
+        """Initialisiert random policies."""
         operations = ["time_stretch", "pitch_shift", "add_noise", "gain", "eq_filter", "time_mask"]
 
         # Add material-specific operations
@@ -356,7 +356,7 @@ class AutoAugment:
         return policies
 
     def __call__(self, audio: torch.Tensor) -> torch.Tensor:
-        """Apply random policy."""
+        """Wendet an: random policy."""
         policy = random.choice(self.policies)
         return policy.apply(audio)
 
@@ -426,7 +426,7 @@ class AutoAugment:
         logger.info("Policy search completed! Best val loss: %.4f", best_val_loss)
 
     def save_policies(self, path: Path) -> None:
-        """Save learned policies."""
+        """Speichert learned policies."""
         policies_data = []
 
         for policy in self.policies:
@@ -438,7 +438,7 @@ class AutoAugment:
         logger.info("Policies saved to %s", path)
 
     def load_policies(self, path: Path) -> None:
-        """Load policies from file."""
+        """Lädt policies from file."""
         with open(path) as f:
             policies_data = json.load(f)
 
@@ -458,7 +458,7 @@ class ConsistencyTraining:
         self, model: nn.Module, augmentation: Callable, consistency_weight: float = 1.0, device: str = "cpu"
     ) -> None:  # §9.5 CPU-only
         """
-        Initialize consistency training.
+        Initialisiert consistency training.
 
         Args:
             model: Model to train

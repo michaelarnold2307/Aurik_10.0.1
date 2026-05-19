@@ -156,7 +156,7 @@ class MultibandCompressor:
     def _butter_ba(
         order: int, wn: float | list[float], btype: str
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        """Return validated Butterworth (b, a) coefficients with stable typing."""
+        """Gibt validated Butterworth (b, a) coefficients with stable typing zurück."""
         coeffs = butter(order, wn, btype=btype, output="ba")
         if not isinstance(coeffs, tuple) or len(coeffs) != 2:
             raise RuntimeError("scipy.signal.butter returned unexpected coefficient format")

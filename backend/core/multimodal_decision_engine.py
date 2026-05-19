@@ -132,7 +132,7 @@ _PROMPT_RULES: list[tuple[list[str], str, dict[str, Any]]] = [
 
 
 class MultimodalDecisionEngine:
-    """Combines image, text and audio signals to produce a processing chain.
+    """Kombiniert image, text and audio signals to produce a processing chain.
 
     Implements a comprehensive rule-based engine with an extensive genre/era
     knowledge base. Optionally uses BEATs audio tagging (if loaded) for
@@ -151,7 +151,7 @@ class MultimodalDecisionEngine:
         prompt: str,
         audio_meta: dict[str, Any],
     ) -> dict[str, Any]:
-        """Return a processing chain and metadata dict.
+        """Gibt a processing chain and metadata dict zurück.
 
         Args:
             image_path: Path to cover image (or placeholder).
@@ -256,7 +256,7 @@ class MultimodalDecisionEngine:
         image_path: str,
         audio_meta: dict[str, Any],
     ) -> tuple[list[str], dict[str, Any]]:
-        """Analyze cover image using DSP embedding + CLAP similarity.
+        """Analysiert das Cover-Bild mittels DSP-Einbettung und CLAP-Ähnlichkeit.
 
         Falls back gracefully if no image analysis is available.
         Returns (chain_additions, meta_additions).
@@ -331,7 +331,7 @@ _multimodal_decision_engine_lock = _threading.Lock()
 
 
 def get_multimodal_decision_engine() -> MultimodalDecisionEngine:
-    """Return the process-wide singleton MultimodalDecisionEngine instance."""
+    """Gibt the process-wide singleton MultimodalDecisionEngine instance zurück."""
     global _multimodal_decision_engine_instance
     if _multimodal_decision_engine_instance is None:
         with _multimodal_decision_engine_lock:

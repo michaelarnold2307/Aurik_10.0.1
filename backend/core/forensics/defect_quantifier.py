@@ -27,18 +27,18 @@ logger = logging.getLogger(__name__)
 
 
 def _as_real_array(audio: np.ndarray) -> np.ndarray:
-    """Return a contiguous real-valued ndarray for signal processing calls."""
+    """Gibt a contiguous real-valued ndarray for signal processing calls zurück."""
     return np.asarray(audio, dtype=np.float64).reshape(-1)
 
 
 def _analytic_envelope(audio: np.ndarray) -> np.ndarray:
-    """Return absolute Hilbert envelope as ndarray with explicit typing."""
+    """Gibt absolute Hilbert envelope as ndarray with explicit typing zurück."""
     analytic = np.asarray(signal.hilbert(_as_real_array(audio)), dtype=np.complex128)
     return np.abs(analytic)
 
 
 def _sosfilt_array(sos: np.ndarray, audio: np.ndarray) -> np.ndarray:
-    """Return only filtered audio ndarray from scipy.signal.sosfilt."""
+    """Gibt only filtered audio ndarray from scipy.signal.sosfilt zurück."""
     filtered = signal.sosfilt(sos, _as_real_array(audio))
     if isinstance(filtered, tuple):
         return np.asarray(filtered[0], dtype=np.float64)
@@ -46,7 +46,7 @@ def _sosfilt_array(sos: np.ndarray, audio: np.ndarray) -> np.ndarray:
 
 
 def _rfft_magnitude(audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:
-    """Return typed rFFT magnitudes and frequencies."""
+    """Gibt typed rFFT magnitudes and frequencies zurück."""
     audio_array = _as_real_array(audio)
     fft_vals = np.asarray(np.fft.rfft(audio_array), dtype=np.complex128)
     freqs = np.asarray(np.fft.rfftfreq(len(audio_array), 1.0 / float(sample_rate)), dtype=np.float64)
@@ -215,7 +215,7 @@ class DefectQuantifier:
 
     def __init__(self, sample_rate: int = 48000):
         """
-        Initialize defect quantifier.
+        Initialisiert defect quantifier.
 
         Args:
             sample_rate: Audio sample rate
@@ -658,7 +658,7 @@ class DefectQuantifier:
         dropout: DropoutMetrics,
         noise_burst: NoiseBurstMetrics,
     ) -> list[str]:
-        """Determine which defects need priority restoration."""
+        """Bestimmt which defects need priority restoration."""
         priority = []
 
         if clicks.severity in ["HIGH", "EXTREME"]:

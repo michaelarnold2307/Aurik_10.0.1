@@ -135,7 +135,7 @@ class IntelligibilityScorer:
         optimal_cv_ratio: tuple[float, float] = (0.4, 0.6),
     ):
         """
-        Initialize intelligibility scorer.
+        Initialisiert intelligibility scorer.
 
         Args:
             use_phoneme_detection: Use phoneme detection if available
@@ -161,7 +161,7 @@ class IntelligibilityScorer:
         reference: np.ndarray | None = None,
     ) -> IntelligibilityReport:
         """
-        Compute comprehensive intelligibility score.
+        Berechnet comprehensive intelligibility score.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -249,7 +249,7 @@ class IntelligibilityScorer:
         sr: int,
     ) -> FormantData | None:
         """
-        Extract formant frequencies using LPC analysis.
+        Extrahiert formant frequencies using LPC analysis.
 
         Args:
             audio: Mono audio
@@ -398,7 +398,7 @@ class IntelligibilityScorer:
         phonemes: list[_PhonemeSegmentT],
     ) -> float:
         """
-        Compute consonant-to-vowel energy ratio using phoneme detection.
+        Berechnet consonant-to-vowel energy ratio using phoneme detection.
 
         Args:
             audio: Mono audio
@@ -516,7 +516,7 @@ class IntelligibilityScorer:
         sr: int,
     ) -> float:
         """
-        Estimate consonant-to-vowel ratio without phoneme detection.
+        Schätzt consonant-to-vowel ratio without phoneme detection.
 
         Uses spectral heuristics:
         - Vowels: strong low-mid frequencies (100-2000 Hz)
@@ -556,7 +556,7 @@ class IntelligibilityScorer:
         sr: int,
     ) -> float:
         """
-        Estimate consonant clarity without phoneme detection.
+        Schätzt consonant clarity without phoneme detection.
 
         Uses high-frequency content analysis.
 
@@ -708,7 +708,7 @@ class IntelligibilityScorer:
         temporal_clarity: float,
     ) -> float:
         """
-        Compute weighted overall intelligibility score.
+        Berechnet weighted overall intelligibility score.
 
         Args:
             formant_clarity: Formant clarity score
@@ -769,7 +769,7 @@ class IntelligibilityScorer:
         cv_ratio: float,
     ) -> list[str]:
         """
-        Generate actionable recommendations for improvement.
+        Generiert actionable recommendations for improvement.
 
         Args:
             formant_clarity: Formant clarity score

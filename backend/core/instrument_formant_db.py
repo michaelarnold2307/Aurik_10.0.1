@@ -720,7 +720,7 @@ for _k, _v in INSTRUMENT_DB.items():
 
 
 def get_formant_profile(instrument_key: str) -> FormantProfile | None:
-    """Return the FormantProfile for an instrument key (case-insensitive).
+    """Gibt the FormantProfile for an instrument key (case-insensitive) zurück.
 
     Args:
         instrument_key: Instrument name key (e.g. "violin", "soprano", "trumpet").
@@ -740,7 +740,7 @@ def get_formant_mask_hz(
     *,
     tolerance_factor: float = 1.5,
 ) -> list[tuple[float, float]] | None:
-    """Return Hz frequency ranges that should be protected from aggressive NR.
+    """Gibt Hz frequency ranges that should be protected from aggressive NR zurück.
 
     Each tuple is (low_hz, high_hz) defining a protected frequency band around
     each formant (centre ± bandwidth × tolerance_factor).
@@ -763,7 +763,7 @@ def get_formant_mask_hz(
 
 
 def get_instruments_by_category(category: str) -> list[str]:
-    """Return all instrument keys in a given category.
+    """Gibt all instrument keys in a given category zurück.
 
     Args:
         category: e.g. "voice", "bowed_string", "woodwind", "brass",
@@ -810,7 +810,7 @@ def get_nr_bypass_mask_bark(
     instrument_key: str,
     sr: int = 48000,
 ) -> np.ndarray | None:
-    """Return a 24-element boolean array indicating Bark bands to bypass NR.
+    """Gibt a 24-element boolean array indicating Bark bands to bypass NR zurück.
 
     Formant regions should not be aggressively denoised — they carry the
     timbral identity of the instrument.  This mask gates the NR algorithm.
@@ -865,12 +865,12 @@ def get_nr_bypass_mask_bark(
 
 
 def list_all_instruments() -> list[str]:
-    """Return all available instrument keys sorted alphabetically."""
+    """Gibt all available instrument keys sorted alphabetically zurück."""
     return sorted(INSTRUMENT_DB.keys())
 
 
 def list_categories() -> list[str]:
-    """Return all instrument categories."""
+    """Gibt all instrument categories zurück."""
     return sorted(_CATEGORY_INDEX.keys())
 
 

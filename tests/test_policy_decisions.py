@@ -11,8 +11,15 @@ This validates the BRAIN of the system - the decision logic.
 
 import logging
 import sys
+from typing import Any
 
-from policy.ml_policy_engine import MLModelPolicyEngine
+from policy.ml_policy_engine import (
+    CANONICAL_INSTRUMENTAL_NR_ROUTE,
+    CANONICAL_REPAIR_ROUTE,
+    CANONICAL_SEPARATION_ROUTE,
+    CANONICAL_VOCAL_NR_ROUTE,
+    MLModelPolicyEngine,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -27,7 +34,7 @@ def test_denoise_selections():
     engine = MLModelPolicyEngine()
 
     # 🎯 SEMANTIC-AWARE TEST CASES (replaces genre-based logic)
-    test_cases = [
+    test_cases: list[dict[str, Any]] = [
         {
             "name": "Classical Piano (Sustained)",
             "context": {
@@ -39,7 +46,7 @@ def test_denoise_selections():
                 "sample_rate": 48000,
             },
             "goal": {"target_quality": 0.85},
-            "expected": "resemble_enhance",  # Balanced for keys/piano
+            "expected": CANONICAL_INSTRUMENTAL_NR_ROUTE,
         },
         {
             "name": "Speech/Podcast (Vocals)",
@@ -51,7 +58,7 @@ def test_denoise_selections():
                 "sample_rate": 16000,
             },
             "goal": {"target_quality": 0.85},
-            "expected": "resemble_enhance",  # Voice-optimized
+            "expected": CANONICAL_VOCAL_NR_ROUTE,
         },
         {
             "name": "Vinyl Jazz",
@@ -62,7 +69,7 @@ def test_denoise_selections():
                 "sample_rate": 44100,
             },
             "goal": {"target_quality": 0.85},
-            "expected": "banquet",  # Vinyl-specialized
+            "expected": CANONICAL_INSTRUMENTAL_NR_ROUTE,
         },
         {
             "name": "Pop Music (Vocals)",
@@ -74,7 +81,7 @@ def test_denoise_selections():
                 "sample_rate": 48000,
             },
             "goal": {"target_quality": 0.85},
-            "expected": "resemble_enhance",  # Voice-optimized
+            "expected": CANONICAL_VOCAL_NR_ROUTE,
         },
         {
             "name": "Drum Kit (Transient-Rich)",
@@ -87,7 +94,7 @@ def test_denoise_selections():
                 "sample_rate": 48000,
             },
             "goal": {"target_quality": 0.85},
-            "expected": "mp_senet",  # Preserves transients
+            "expected": CANONICAL_INSTRUMENTAL_NR_ROUTE,
         },
         {
             "name": "Ambient/Drone (Sustained)",
@@ -99,7 +106,7 @@ def test_denoise_selections():
                 "sample_rate": 48000,
             },
             "goal": {"target_quality": 0.85},
-            "expected": "deepfilternet",  # Aggressive smoothing
+            "expected": CANONICAL_INSTRUMENTAL_NR_ROUTE,
         },
     ]
 
@@ -127,18 +134,18 @@ def test_repair_selections():
     engine = MLModelPolicyEngine()
 
     # Note: repair_model selection uses has_vocals, no semantic changes needed
-    test_cases = [
+    test_cases: list[dict[str, Any]] = [
         {
             "name": "Speech with Clipping",
             "context": {"has_vocals": True},
             "goal": {"target_quality": 0.85},
-            "expected": "mp_senet",
+            "expected": CANONICAL_REPAIR_ROUTE,
         },
         {
             "name": "Music with Clipping",
             "context": {"has_vocals": False},
             "goal": {"target_quality": 0.85},
-            "expected": "mp_senet",
+            "expected": CANONICAL_REPAIR_ROUTE,
         },
     ]
 
@@ -165,18 +172,18 @@ def test_separation_selections():
 
     engine = MLModelPolicyEngine()
 
-    test_cases = [
+    test_cases: list[dict[str, Any]] = [
         {
             "name": "High Quality (6-stem)",
             "context": {"sample_rate": 44100},
             "goal": {"target_quality": 0.9, "stems": 6},  # FIXED: added stems parameter
-            "expected": "demucs",
+            "expected": CANONICAL_SEPARATION_ROUTE,
         },
         {
             "name": "Fast Processing",
             "context": {"sample_rate": 44100},
             "goal": {"quality_level": "maximal", "priority": "speed"},  # FIXED: added quality_level
-            "expected": "mdx23c",
+            "expected": CANONICAL_SEPARATION_ROUTE,
         },
     ]
 

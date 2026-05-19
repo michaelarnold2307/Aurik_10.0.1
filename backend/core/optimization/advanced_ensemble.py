@@ -73,7 +73,7 @@ class MetaLearner(nn.Module):
 
     def forward(self, base_predictions: list[torch.Tensor]) -> torch.Tensor:
         """
-        Combine base model predictions using meta-learning.
+        Kombiniert base model predictions using meta-learning.
 
         Args:
             base_predictions: List of predictions from base models [batch_size, output_dim]
@@ -173,7 +173,7 @@ class DynamicEnsembleSelector(nn.Module):
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Select ensemble members dynamically.
+        Wählt aus: ensemble members dynamically.
 
         Args:
             x: Input tensor
@@ -200,7 +200,7 @@ class DynamicEnsembleSelector(nn.Module):
 
 class MixtureOfExperts(nn.Module):
     """
-    Mixture of Experts Ensemble.
+    Mixture-of-Experts-Ensemble.
 
     Jeder Expert spezialisiert sich auf verschiedene Input-Regionen.
     Gating Network entscheidet, welche Experts aktiviert werden.
@@ -290,7 +290,7 @@ class AdvancedEnsemble:
         device: str = "cpu",  # §9.5: Aurik 9 — ausschließlich CPU, kein CUDA/ROCm/Metal
     ) -> None:
         """
-        Initialize advanced ensemble.
+        Initialisiert advanced ensemble.
 
         Args:
             ensemble_members: List of ensemble members
@@ -521,7 +521,7 @@ class AdvancedEnsemble:
         logger.info("Meta-learner training completed!")
 
     def save(self, path: Path) -> None:
-        """Save ensemble configuration and learned components."""
+        """Speichert ensemble configuration and learned components."""
         save_dict = {
             "strategy": self.strategy,
             "n_members": len(self.members),

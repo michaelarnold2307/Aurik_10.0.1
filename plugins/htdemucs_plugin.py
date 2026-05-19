@@ -29,7 +29,7 @@ except ImportError:
 
 
 def get_htdemucs_plugin() -> MDX23CPlugin | None:
-    """Return MDX23C plugin (Kim_Vocal_2) as stem separator, or None."""
+    """Gibt MDX23C plugin (Kim_Vocal_2) as stem separator, or None zurück."""
     if not _AVAILABLE:
         return None
     return _get_mdx23c()

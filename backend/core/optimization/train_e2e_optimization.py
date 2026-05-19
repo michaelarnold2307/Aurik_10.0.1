@@ -47,7 +47,7 @@ class AudioRestorationDataset(Dataset):
         self, data_dir: Path, split: str = "train", sr: int = 48000, duration: float = 2.0, normalize: bool = True
     ) -> None:
         """
-        Initialize dataset.
+        Initialisiert dataset.
 
         Args:
             data_dir: Directory with audio files
@@ -68,7 +68,7 @@ class AudioRestorationDataset(Dataset):
         logger.info("AudioRestorationDataset(%s): %s pairs", split, len(self.audio_pairs))
 
     def _find_audio_pairs(self) -> list[tuple[Path, Path]]:
-        """Find pairs of degraded and clean audio files."""
+        """Findet Paare aus degradierten und sauberen Audiodateien."""
         pairs = []
 
         degraded_dir = self.data_dir / "degraded"
@@ -90,7 +90,7 @@ class AudioRestorationDataset(Dataset):
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Get audio pair.
+        Gibt zurück: audio pair.
 
         Returns:
             (degraded_audio, clean_audio) as tensors [1, samples]
@@ -283,7 +283,7 @@ def train_all_materials(dataset_path: Path, output_path: Path, n_trials: int = 1
 
 
 def main() -> None:
-    """Main training script."""
+    """Haupt-training script."""
     parser = argparse.ArgumentParser(description="Train Aurik 8.0 End-to-End Optimization")
 
     parser.add_argument(

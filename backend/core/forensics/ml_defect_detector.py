@@ -77,7 +77,7 @@ class DefectFeatures:
     spectral_irregularity: float = 0.0  # Spectrum anomalies
 
     def to_array(self) -> np.ndarray:
-        """Convert to numpy array."""
+        """Konvertiert to numpy array."""
         return np.array(
             [
                 # Clicks
@@ -137,7 +137,7 @@ class DefectFeatureExtractor:
         self, audio: np.ndarray, sr: int, verbose: bool = False
     ) -> tuple[AudioFeatures, DefectFeatures]:
         """
-        Extract base + defect features.
+        Extrahiert base + defect features.
 
         Args:
             audio: Audio signal (mono or stereo)
@@ -184,7 +184,7 @@ class DefectFeatureExtractor:
         return base_features, defect_features
 
     def _detect_impulsiveness(self, audio: np.ndarray, sr: int) -> float:
-        """Detect impulsiveness (clicks/pops)."""
+        """Erkennt impulsiveness (clicks/pops)."""
         # High-pass filter to emphasize clicks
         from scipy.signal import butter, sosfilt
 
@@ -222,7 +222,7 @@ class DefectFeatureExtractor:
         return 0.0
 
     def _hf_spikes(self, audio: np.ndarray, sr: int) -> float:
-        """Detect high-frequency energy spikes."""
+        """Erkennt high-frequency energy spikes."""
         from scipy.signal import butter, sosfilt
 
         sos = butter(4, 8000, btype="high", fs=sr, output="sos")
@@ -246,7 +246,7 @@ class DefectFeatureExtractor:
         return 0.0
 
     def _click_analysis(self, audio: np.ndarray, sr: int) -> tuple[float, float]:
-        """Analyze clicks: density and max amplitude."""
+        """Analysiert clicks: density and max amplitude."""
         from scipy.signal import find_peaks
 
         # Differentiate to emphasize transients
@@ -266,7 +266,7 @@ class DefectFeatureExtractor:
         return click_density, max_impulse
 
     def _detect_hum(self, audio: np.ndarray, sr: int) -> tuple[float, float]:
-        """Detect 50Hz and 60Hz hum."""
+        """Erkennt 50Hz and 60Hz hum."""
         from scipy.signal import welch
 
         # Power spectral density
@@ -283,7 +283,7 @@ class DefectFeatureExtractor:
         return hum_50hz_db, hum_60hz_db
 
     def _hum_harmonics(self, audio: np.ndarray, sr: int) -> float:
-        """Detect harmonic series of hum (50Hz or 60Hz)."""
+        """Erkennt harmonic series of hum (50Hz or 60Hz)."""
         from scipy.signal import welch
 
         f, psd = welch(audio, sr, nperseg=min(8192, len(audio)))
@@ -308,7 +308,7 @@ class DefectFeatureExtractor:
         return max(strength_50, strength_60)
 
     def _hum_modulation(self, audio: np.ndarray, sr: int) -> float:
-        """Detect amplitude modulation of hum."""
+        """Erkennt amplitude modulation of hum."""
         # Band-pass filter around 50-60Hz
         from scipy.signal import butter, sosfilt
 
@@ -353,7 +353,7 @@ class DefectFeatureExtractor:
         return 0.0
 
     def _detect_clipping(self, audio: np.ndarray) -> float:
-        """Detect clipping (samples at max amplitude)."""
+        """Erkennt clipping (samples at max amplitude)."""
         # Normalize to -1..+1
         if np.max(np.abs(audio)) > 0:
             audio_norm = audio / np.max(np.abs(audio))
@@ -367,7 +367,7 @@ class DefectFeatureExtractor:
         return clipping_percent
 
     def _harmonic_analysis(self, audio: np.ndarray, sr: int) -> tuple[float, float]:
-        """Analyze harmonic distribution."""
+        """Analysiert harmonic distribution."""
         from scipy.signal import welch
 
         f, psd = welch(audio, sr, nperseg=min(8192, len(audio)))
@@ -434,7 +434,7 @@ class DefectFeatureExtractor:
         return silence_ratio
 
     def _detect_dropouts(self, audio: np.ndarray, sr: int) -> tuple[int, float]:
-        """Detect dropouts (sudden amplitude drops)."""
+        """Erkennt dropouts (sudden amplitude drops)."""
         # Frame-based RMS
         frame_length = 2048
         hop_length = 512
@@ -462,7 +462,7 @@ class DefectFeatureExtractor:
         return int(dropout_count), max_discontinuity
 
     def _detect_transients(self, audio: np.ndarray, sr: int) -> tuple[int, float]:
-        """Detect transient noise bursts."""
+        """Erkennt transient noise bursts."""
         from scipy.signal import find_peaks
 
         # Envelope
@@ -488,7 +488,7 @@ class DefectFeatureExtractor:
         return transient_count, max_transient_db
 
     def _spectral_irregularity(self, audio: np.ndarray, sr: int) -> float:
-        """Measure spectral irregularity (noise bursts)."""
+        """Misst spectral irregularity (noise bursts)."""
         from scipy.signal import welch
 
         # Short-time spectral analysis
@@ -529,7 +529,7 @@ class MLDefectDetector:
 
     def __init__(self, n_estimators: int = 100, max_depth: int = 15, recall_target: float = 0.98) -> None:
         """
-        Initialize defect detector.
+        Initialisiert defect detector.
 
         Args:
             n_estimators: Number of trees in ensemble
@@ -744,7 +744,7 @@ class MLDefectDetector:
         return result
 
     def save(self, filepath: str) -> None:
-        """Save trained models to file."""
+        """Speichert trained models to file."""
         model_data = {
             "version": self.VERSION,
             "n_estimators": self.n_estimators,
@@ -764,7 +764,7 @@ class MLDefectDetector:
         logger.info("Model saved to %s", filepath)
 
     def load(self, filepath: str) -> None:
-        """Load trained models from file."""
+        """Lädt trained models from file."""
         with open(filepath, "rb") as f:
             model_data = pickle.load(f)  # nosec B301 — lokale, SHA256-verifizierte Modelldatei
 

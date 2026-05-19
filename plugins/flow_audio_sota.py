@@ -78,7 +78,7 @@ def _one_sided_gap_envelope(
     goal_weights: dict[str, float] | None = None,
     restorability_score: float = 65.0,
 ) -> np.ndarray:
-    """Return a bounded, goal-aware envelope for BOF/EOF gap synthesis.
+    """Gibt a bounded, goal-aware envelope for BOF/EOF gap synthesis zurück.
 
     One-sided gaps have only one physical anchor. The envelope therefore must
     always converge to the missing boundary, while its curvature is modulated by
@@ -182,7 +182,7 @@ def _pghi_reconstruct(
 
 
 def _stft(signal: np.ndarray, n_fft: int, hop_length: int) -> np.ndarray:
-    """Compute STFT with Hann window.
+    """Berechnet STFT with Hann window.
 
     Args:
         signal:      1D float array.
@@ -245,7 +245,7 @@ def _istft(stft_matrix: np.ndarray, hop_length: int, n_fft: int) -> np.ndarray:
 
 
 def _extract_spectral_envelope(signal: np.ndarray, sr: int, order: int) -> np.ndarray:
-    """Extract spectral envelope via LPC (Levinson-Durbin).
+    """Extrahiert spectral envelope via LPC (Levinson-Durbin).
 
     Uses autocorrelation method to compute LPC coefficients, then derives
     the spectral envelope from the all-pole model H(z) = 1 / A(z).
@@ -308,7 +308,7 @@ def _extract_spectral_envelope(signal: np.ndarray, sr: int, order: int) -> np.nd
 def _track_sinusoidal_partials(
     stft_mag: np.ndarray, sr: int, n_fft: int, n_partials: int = 32
 ) -> list[tuple[int, float]]:
-    """Track dominant sinusoidal partials from STFT magnitude.
+    """Verfolgt dominant sinusoidal partials from STFT magnitude.
 
     Identifies peaks in the averaged magnitude spectrum and returns their
     frequency bins and amplitudes for harmonic synthesis.
@@ -396,7 +396,7 @@ def _build_target_estimate(
     goal_weights: dict[str, float] | None = None,
     restorability_score: float = 65.0,
 ) -> np.ndarray:
-    """Build context-conditioned target estimate x_1 for flow matching.
+    """Erstellt context-conditioned target estimate x_1 for flow matching.
 
     Combines three components:
     1. Deterministic: Sinusoidal partials from context (harmonic content)
@@ -620,7 +620,7 @@ def _pghi_finalize(
     goal_weights: dict[str, float] | None = None,
     restorability_score: float = 65.0,
 ) -> np.ndarray:
-    """Apply PGHI phase reconstruction and boundary crossfade.
+    """Wendet an: PGHI phase reconstruction and boundary crossfade.
 
     Takes the flow-generated signal, recomputes its magnitude spectrogram,
     applies PGHI for phase-coherent reconstruction, then crossfades at

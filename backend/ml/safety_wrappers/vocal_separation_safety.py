@@ -51,7 +51,7 @@ class VocalSeparationSafetyWrapper:
 
     def __init__(self, separator, audit_log_path: Path | None = None, strict_mode: bool = False):
         """
-        Initialize safety wrapper
+        Initialisiert safety wrapper.
 
         Args:
             separator: VocalSeparator instance (MDX, Demucs, or Hybrid)
@@ -327,7 +327,7 @@ class VocalSeparationSafetyWrapper:
         return {"stage": "post_separation", "status": status, "checks": checks, "issues": issues}
 
     def _log_success(self, separation_id: str, pre_check: dict, post_check: dict, audio_shape: tuple, stems_info: dict):
-        """Log successful HIPS-compliant separation"""
+        """Protokolliert successful HIPS-compliant separation."""
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "separation_id": separation_id,
@@ -343,7 +343,7 @@ class VocalSeparationSafetyWrapper:
     def _log_violation(
         self, separation_id: str, check_result: dict, audio_shape: tuple, stems_info: dict | None = None
     ):
-        """Log HIPS violation"""
+        """Protokolliert HIPS violation."""
         self.violations_count += 1
 
         log_entry = {
@@ -358,7 +358,7 @@ class VocalSeparationSafetyWrapper:
         self._write_audit_log(log_entry)
 
     def _log_failure(self, separation_id: str, error: str, audio_shape: tuple) -> None:
-        """Log separation failure"""
+        """Protokolliert separation failure."""
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "separation_id": separation_id,
@@ -370,7 +370,7 @@ class VocalSeparationSafetyWrapper:
         self._write_audit_log(log_entry)
 
     def _write_audit_log(self, entry: dict) -> None:
-        """Write audit log entry (JSONL format)"""
+        """Schreibt audit log entry (JSONL format)."""
         try:
             with open(self.audit_log_path, "a") as f:
                 f.write(json.dumps(entry) + "\n")
@@ -379,7 +379,7 @@ class VocalSeparationSafetyWrapper:
 
     def get_compliance_report(self) -> dict[str, Any]:
         """
-        Get HIPS compliance report
+        Gibt zurück: HIPS compliance report.
 
         Returns summary of all separations and violations.
         """

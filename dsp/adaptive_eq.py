@@ -148,7 +148,7 @@ class GenreAdaptiveEQ:
 
     def apply_eq(self, audio: np.ndarray, sr: int, genre: str = "unknown", strength: float = 0.7) -> np.ndarray:
         """
-        Apply genre-specific EQ.
+        Wendet an: genre-specific EQ.
 
         Args:
             audio: Input audio
@@ -196,7 +196,7 @@ class GenreAdaptiveEQ:
 
     def _apply_peaking_eq(self, audio: np.ndarray, sr: int, freq: float, gain: float, q: float = 1.0) -> np.ndarray:
         """
-        Apply peaking EQ filter (parametric EQ).
+        Wendet an: peaking EQ filter (parametric EQ).
 
         Args:
             audio: Input audio
@@ -243,7 +243,7 @@ class GenreAdaptiveEQ:
         self, audio_original: np.ndarray, audio_eq: np.ndarray, sr: int, genre: str
     ) -> np.ndarray:
         """
-        Check if EQ created unnatural spectral balance.
+        Prüft if EQ created unnatural spectral balance.
 
         Safeguard: Prevent over-brightness or excessive bass.
         """
@@ -278,7 +278,7 @@ class GenreAdaptiveEQ:
 
     def _measure_spectral_balance(self, audio: np.ndarray, sr: int) -> dict[str, float]:
         """
-        Measure spectral energy in Bass, Mid, High regions.
+        Misst spectral energy in Bass, Mid, High regions.
         """
         # FFT
         spectrum = np.abs(np.fft.rfft(audio))

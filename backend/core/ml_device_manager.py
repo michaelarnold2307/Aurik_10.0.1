@@ -217,7 +217,7 @@ def _compute_gpu_tier(
     vram_gb: float,
     backend: GPUBackend = None,  # type: ignore[assignment]
 ) -> GPUTier:
-    """Determine GPU capability tier from architecture, VRAM and backend.
+    """Bestimmt GPU capability tier from architecture, VRAM and backend.
 
     ROCm (Linux):    tier reflects kernel / wavefront-mode support; GCN4+ unsupported.
     DirectML (Windows): DX12-based — GCN4 and GCN3 GPUs receive a one-tier uplift because
@@ -452,7 +452,7 @@ _init_lock: threading.Lock = threading.Lock()
 
 
 def get_ml_device_manager() -> MLDeviceManager:
-    """Return the process-wide MLDeviceManager singleton (thread-safe, lazy-init)."""
+    """Gibt the process-wide MLDeviceManager singleton (thread-safe, lazy-init) zurück."""
     global _instance
     if _instance is None:
         with _init_lock:
@@ -462,7 +462,7 @@ def get_ml_device_manager() -> MLDeviceManager:
 
 
 def get_torch_device(plugin_name: str = "") -> str:
-    """Return the PyTorch device string for *plugin_name*.
+    """Gibt the PyTorch device string for *plugin_name* zurück.
 
     Returns ``"cpu"``, ``"cuda"`` (ROCm), or ``"dml"`` (DirectML+torch-directml).
     Heavy plugins (in ``_HEAVY_ML_PLUGINS``) get the GPU device when available;
@@ -476,7 +476,7 @@ def get_torch_device(plugin_name: str = "") -> str:
 
 
 def get_ort_providers(plugin_name: str = "") -> list[str]:
-    """Return the ONNX Runtime provider list for *plugin_name*.
+    """Gibt the ONNX Runtime provider list for *plugin_name* zurück.
 
     Heavy plugins get GPU provider + CPU fallback; others get CPU-only.
     """
@@ -488,7 +488,7 @@ def get_ort_providers(plugin_name: str = "") -> list[str]:
 
 
 def get_ort_providers_fp16(plugin_name: str = "") -> list[str]:
-    """Return ORT providers with AMD ROCm fp16 hint for *plugin_name*.
+    """Gibt ORT providers with AMD ROCm fp16 hint for *plugin_name* zurück.
 
     For eligible ONNX plugins on ROCm, returns ROCMExecutionProvider with
     memory-efficient options.  Falls back to standard providers on CPU/DirectML.
@@ -501,7 +501,7 @@ def get_ort_providers_fp16(plugin_name: str = "") -> list[str]:
 
 
 def warmup_rocm_gpu() -> bool:
-    """Initialise AMD ROCm runtime to eliminate cold-start latency before first inference.
+    """Initialisiert AMD-ROCm-Laufzeitumgebung, um Cold-Start-Latenz vor der ersten Inferenz zu eliminieren.
 
     Call once from the application startup path (e.g. BatchProcessingThread.__init__).
     Safe no-op on CPU-only systems or Windows (DirectML warmup is automatic).
@@ -519,7 +519,7 @@ def warmup_rocm_gpu() -> bool:
 
 
 class MLDeviceManager:
-    """Detects GPU backend and manages device assignment for ML plugins.
+    """Erkennt GPU backend and manages device assignment for ML plugins.
 
     Responsibilities:
       1. Platform-aware GPU backend detection (ROCm / DirectML / None)
@@ -571,7 +571,7 @@ class MLDeviceManager:
             logger.info("MLDeviceManager: no GPU backend — CPU-only mode (ROCm/DirectML not found or not installed)")
 
     def _detect_rocm(self) -> None:
-        """Detect ROCm via torch.cuda (ROCm reuses the CUDA device namespace)."""
+        """Erkennt ROCm via torch.cuda (ROCm reuses the CUDA device namespace)."""
         try:
             import torch  # type: ignore[import]
 
@@ -723,7 +723,7 @@ class MLDeviceManager:
                 logger.debug("MLDeviceManager: ROCm ONNX Probe-Fehler (nicht HIP): %s", exc)
 
     def _detect_directml(self) -> None:
-        """Detect DirectML on Windows via onnxruntime-directml."""
+        """Erkennt DirectML on Windows via onnxruntime-directml."""
         try:
             import onnxruntime as _ort  # type: ignore[import]
 
@@ -812,7 +812,7 @@ class MLDeviceManager:
             return self._vram_total_gb  # assume empty on query failure
 
     def _query_vram_directml(self) -> float:
-        """Estimate VRAM for DirectML via WMIC (Windows) or conservative default."""
+        """Schätzt VRAM for DirectML via WMIC (Windows) or conservative default."""
         try:
             import subprocess  # nosec B404 — WMIC read-only hardware query
 
@@ -834,7 +834,7 @@ class MLDeviceManager:
     # ── Public API ────────────────────────────────────────────────────────
 
     def get_gpu_backend(self) -> GPUBackend:
-        """Return the detected GPU backend enum value."""
+        """Gibt the detected GPU backend enum value zurück."""
         return self._backend
 
     def is_gpu_available(self) -> bool:
@@ -847,21 +847,21 @@ class MLDeviceManager:
 
     @property
     def gpu_architecture(self) -> AMDArchitecture:
-        """Return the detected AMD GPU architecture family."""
+        """Gibt the detected AMD GPU architecture family zurück."""
         return self._gpu_architecture
 
     @property
     def gpu_tier(self) -> GPUTier:
-        """Return the GPU capability tier (1=best, 4=CPU-only recommended)."""
+        """Gibt the GPU capability tier (1=best, 4=CPU-only recommended) zurück."""
         return self._gpu_tier
 
     @property
     def gpu_name(self) -> str:
-        """Return the GPU device name (e.g. 'AMD Radeon RX 7900 XTX')."""
+        """Gibt the GPU device name (e.g. 'AMD Radeon RX 7900 XTX') zurück."""
         return self._gpu_name
 
     def get_torch_device(self, plugin_name: str = "") -> str:
-        """Return PyTorch device string for *plugin_name*.
+        """Gibt PyTorch device string for *plugin_name* zurück.
 
         Heavy plugins receive the GPU device string; all others receive ``"cpu"``.
         DirectML without torch-directml always returns ``"cpu"`` for PyTorch models.
@@ -882,7 +882,7 @@ class MLDeviceManager:
         return self._torch_gpu_device
 
     def get_ort_providers(self, plugin_name: str = "") -> list[str]:
-        """Return ONNX Runtime provider list for *plugin_name*.
+        """Gibt ONNX Runtime provider list for *plugin_name* zurück.
 
         Heavy plugins get the GPU provider (with CPU fallback); others get CPU-only.
         On ROCm, fp16-eligible plugins automatically receive fp16-optimised providers
@@ -902,7 +902,7 @@ class MLDeviceManager:
         return list(self._ort_gpu_providers)
 
     def is_ort_gpu_supported(self, plugin_name: str = "") -> bool:
-        """Return True if ORT-GPU should be used for *plugin_name* in this session.
+        """Gibt True if ORT-GPU should be used for *plugin_name* in this session zurück.
 
         Decision is conservative: GPU must be available, plugin must be in the heavy
         GPU-eligible set, and the plugin must not be session-disabled due to prior
@@ -921,7 +921,7 @@ class MLDeviceManager:
         return True
 
     def _is_tier_excluded(self, plugin_name: str) -> bool:
-        """Return True if *plugin_name* is excluded from GPU on the current tier."""
+        """Gibt True if *plugin_name* is excluded from GPU on the current tier zurück."""
         if self._gpu_tier == GPUTier.TIER_4:
             return plugin_name in _TIER4_GPU_EXCLUDE
         if self._gpu_tier == GPUTier.TIER_3:
@@ -929,7 +929,7 @@ class MLDeviceManager:
         return False
 
     def mark_ort_gpu_unsupported(self, plugin_name: str, reason: str = "") -> None:
-        """Disable ORT-GPU for *plugin_name* for the current session.
+        """Deaktiviert ORT-GPU for *plugin_name* for the current session.
 
         Use this when session creation/inference proves provider incompatibility.
         Subsequent calls to ``get_ort_providers(plugin_name)`` will return CPU-only.
@@ -945,7 +945,7 @@ class MLDeviceManager:
             logger.info("MLDeviceManager: ORT-GPU für %s deaktiviert → CPU", plugin_name)
 
     def get_vram_free_gb(self) -> float:
-        """Return current estimated free VRAM in GB (refreshed on ROCm via HW query)."""
+        """Gibt current estimated free VRAM in GB (refreshed on ROCm via HW query) zurück."""
         with self._lock:
             if self._backend == GPUBackend.ROCM:
                 self._vram_free_gb = self._query_vram_free_rocm()
@@ -1020,7 +1020,7 @@ class MLDeviceManager:
                 logger.debug("MLDeviceManager: VRAM released %s=%.2f GB", plugin_name, freed)
 
     def gpu_status_summary(self) -> dict[str, Any]:
-        """Return a status snapshot dict for UI display and diagnostics."""
+        """Gibt a status snapshot dict for UI display and diagnostics zurück."""
         with self._lock:
             return {
                 "backend": self._backend.value,
@@ -1094,7 +1094,7 @@ class MLDeviceManager:
         )
 
     def get_ort_providers_fp16(self, plugin_name: str = "") -> list[str]:
-        """Return ORT providers with fp16 precision hint for AMD ROCm.
+        """Gibt ORT providers with fp16 precision hint for AMD ROCm zurück.
 
         Uses ROCMExecutionProvider with memory-efficient options when eligible;
         falls back to standard providers otherwise (always CPU-safe).
@@ -1120,7 +1120,7 @@ class MLDeviceManager:
         ]
 
     def warmup_rocm(self) -> bool:
-        """Initialise ROCm runtime with a minimal dummy inference to amortise cold-start.
+        """Initialisiert ROCm-Laufzeitumgebung mit minimaler Dummy-Inferenz zur Cold-Start-Amortisierung.
 
         Running this once during application startup eliminates the ~500 ms–2 s first-
         inference latency caused by ROCm kernel compilation (HIP JIT). Returns True on
@@ -1146,7 +1146,7 @@ class MLDeviceManager:
             return False
 
     def pin_tensor_rocm(self, array: Any) -> Any:
-        """Return a pinned-memory copy of *array* for zero-copy CPU→GPU transfers.
+        """Gibt a pinned-memory copy of *array* for zero-copy CPU→GPU transfers zurück.
 
         Only active on ROCm; returns the original array unchanged on all other backends.
         Pinned memory avoids an extra memcopy during `.to('cuda')` and reduces plugin

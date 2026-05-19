@@ -1,5 +1,5 @@
 """
-optimization/priority3_oversampling.py — Adaptive oversampling processor
+optimization/priority3_oversampling.py – Adaptiver Oversampling-Prozessor.
 =========================================================================
 
 Applies 2× oversampling only on transient-dense regions to suppress
@@ -14,7 +14,7 @@ import numpy as np
 
 
 class AdaptiveOversamplingProcessor:
-    """Selectively oversample transient regions.
+    """Überabtastet selektiv transiente Regionen.
 
     Parameters
     ----------
@@ -33,7 +33,7 @@ class AdaptiveOversamplingProcessor:
     # ------------------------------------------------------------------
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Return processed audio of the same length as *audio*.
+        """Gibt processed audio of the same length as *audio* zurück.
 
         Transient regions are upsampled, processed, and downsampled;
         non-transient regions are passed through with a mild spectral
@@ -72,7 +72,7 @@ class AdaptiveOversamplingProcessor:
         sr: int,
         onsets: np.ndarray | Sequence[int],
     ) -> np.ndarray:
-        """Create a boolean mask marking transient regions.
+        """Erstellt a boolean mask marking transient regions.
 
         Each onset index triggers a 20 ms window to be marked.
         """

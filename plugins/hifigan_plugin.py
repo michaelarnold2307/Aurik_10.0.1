@@ -29,7 +29,7 @@ class HifiGanPlugin:
     """HiFi-GAN ONNX vocoder plugin for mel-to-waveform synthesis."""
 
     def __init__(self, model_path: str | None = None) -> None:
-        """Initialize HiFi-GAN plugin and attempt model load."""
+        """Initialisiert HiFi-GAN plugin and attempt model load."""
         self._session: Any = None
         self._try_load(model_path or _MODEL)
 
@@ -245,6 +245,6 @@ import numpy as _np
 
 
 def vocode_audio(audio: _np.ndarray, sr: int = 48000) -> _np.ndarray:
-    """Convert audio to mel spectrogram and back via HiFi-GAN."""
+    """Konvertiert audio to mel spectrogram and back via HiFi-GAN."""
     plugin = get_hifigan_plugin()
     return plugin.reconstruct(audio, sr)

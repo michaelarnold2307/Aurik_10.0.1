@@ -16,7 +16,7 @@ _lock = threading.Lock()
 
 
 def get_confidence_processor(rollback_callback: Callable[[str], None] | None = None) -> ConfidenceBasedProcessing:
-    """Get or create ConfidenceBasedProcessing singleton.
+    """Gibt zurück: or create ConfidenceBasedProcessing singleton.
 
     Args:
         rollback_callback: Callback function for rollbacks (only used on first call)
@@ -74,7 +74,7 @@ class ConfidenceBasedProcessing:
         return result
 
     def check_and_rollback(self, module_name: str, confidence: float) -> None:
-        """Check confidence and trigger rollback if needed.
+        """Prüft confidence and trigger rollback if needed.
 
         Args:
             module_name: Name of the module to potentially rollback

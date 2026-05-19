@@ -63,11 +63,11 @@ class UncertaintyEstimate:
     n_samples: int = 100
 
     def is_reliable(self, min_confidence: float = 0.70) -> bool:
-        """Return True if confidence >= min_confidence."""
+        """Gibt True if confidence >= min_confidence zurück."""
         return self.confidence >= min_confidence
 
     def get_warning(self) -> str | None:
-        """Return a warning string for LOW/VERY_LOW confidence, else None."""
+        """Gibt a warning string for LOW/VERY_LOW confidence, else None zurück."""
         if self.confidence_level == ConfidenceLevel.VERY_LOW:
             return (
                 f"SEHR UNSICHER: Ziel '{self.goal_name}' — "
@@ -95,11 +95,11 @@ class GoalsUncertaintyReport:
     unreliable_goals: list[str] = field(default_factory=list)
 
     def has_warnings(self) -> bool:
-        """Return True when any warnings are present."""
+        """Gibt True when any warnings are present zurück."""
         return bool(self.warnings)
 
     def get_summary(self) -> str:
-        """Return a human-readable summary string.
+        """Gibt a human-readable summary string zurück.
 
         Format includes overall confidence, reliable/total ratio, and warning count.
         Total = len(reliable_goals) + len(unreliable_goals) + len(warnings) + 1
@@ -200,7 +200,7 @@ class UncertaintyQuantifier:
         samples: np.ndarray,
         expected_range: tuple[float, float] = (0.0, 1.0),
     ) -> float:
-        """Compute a confidence score ∈ [0, 1].
+        """Berechnet a confidence score ∈ [0, 1].
 
         Confidence = (1 − cv) × in_range_fraction, where
         cv = coefficient of variation and in_range_fraction = share of samples
@@ -247,7 +247,7 @@ class UncertaintyQuantifier:
         return ConfidenceLevel.VERY_LOW
 
     def should_proceed(self, estimate: UncertaintyEstimate, strict: bool = False) -> bool:
-        """Return True if processing should continue given this estimate.
+        """Gibt True if processing should continue given this estimate zurück.
 
         Logic:
             HIGH   → always proceed
@@ -381,7 +381,7 @@ def quick_confidence_check(
 def get_uncertainty_summary(
     estimates: dict[str, UncertaintyEstimate],
 ) -> str:
-    """Return a human-readable table of all uncertainty estimates.
+    """Gibt a human-readable table of all uncertainty estimates zurück.
 
     Args:
         estimates: Dict mapping goal_name → UncertaintyEstimate.
@@ -406,7 +406,7 @@ _lock = threading.Lock()
 
 
 def get_uncertainty_quantifier() -> UncertaintyQuantifier:
-    """Return the module-level singleton UncertaintyQuantifier."""
+    """Gibt the module-level singleton UncertaintyQuantifier zurück."""
     global _instance
     if _instance is None:
         with _lock:

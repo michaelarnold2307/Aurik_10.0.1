@@ -4,11 +4,14 @@ AURIK Professional - Main Application Entry Point
 Launch the desktop application for audio restoration
 """
 
+import faulthandler
 import logging
 import os
 import signal
 import sys
+import threading
 import time
+from logging.handlers import RotatingFileHandler as _RFH
 from pathlib import Path
 
 # ── OpenBLAS/OMP thread-safety: must be set BEFORE any numpy/scipy import ────
@@ -36,7 +39,7 @@ except Exception:  # torch not installed / import error on first run
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# ── Logging-Setup: File + Konsole ─────────────────────────────────────────────
+# ── Logging setup: file + console ─────────────────────────────────────────────
 _LOG_DIR = Path(__file__).parent.parent / "logs"
 _LOG_DIR.mkdir(exist_ok=True)
 _log_file = _LOG_DIR / "aurik_backend.log"
@@ -44,12 +47,10 @@ _log_file = _LOG_DIR / "aurik_backend.log"
 _root_logger = logging.getLogger()
 _root_logger.setLevel(logging.DEBUG)
 
-# AURIK_DEBUG=1 → alle Handler auf DEBUG, dediziertes Timestamp-Log, volle Quelle
+# AURIK_DEBUG=1 → all handlers at DEBUG, dedicated timestamped log, full source info
 _DEBUG_MODE = os.getenv("AURIK_DEBUG", "0") == "1"
 
-# Datei-Handler (5 MB, Rotation)
-from logging.handlers import RotatingFileHandler as _RFH
-
+# File handler (5 MB, rotating)
 _fh = _RFH(str(_log_file), maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8")
 _fh.setLevel(logging.DEBUG if _DEBUG_MODE else logging.INFO)
 _fh.setFormatter(
@@ -62,7 +63,7 @@ _fh.setFormatter(
 )
 _root_logger.addHandler(_fh)
 
-# Debug-Session-Log: eigene Datei mit Timestamp — nie rotiert, immer vollständig
+# Debug session log: separate file with timestamp — never rotated, always complete
 if _DEBUG_MODE:
     import datetime as _dt
 
@@ -76,13 +77,13 @@ if _DEBUG_MODE:
         )
     )
     _root_logger.addHandler(_dfh)
-    # Pfad für shell-seitiges tail -f: in bekannter Datei hinterlegen
+    # Path for shell-side tail -f: store path in well-known file
     (_LOG_DIR / "aurik_debug_latest.log").write_text(str(_debug_log_file), encoding="utf-8")
 
-    # ── Noisy 3rd-party loggers: auf WARNING kappen — kein DSP/Aurik-Nutzen ─
-    # Numba JIT-Compiler gibt bei jeder Erstcompilierung hunderte DEBUG-Zeilen aus.
-    # PIL/fonttools/matplotlib werden durch Qt-Ressourcen gelegentlich importiert.
-    # triton/torch.fx sind reine Framework-Internals ohne Diagnosewert für Aurik.
+    # ── Noisy 3rd-party loggers: cap at WARNING — no DSP/Aurik diagnostic value ─
+    # Numba JIT compiler emits hundreds of DEBUG lines on first compilation.
+    # PIL/fonttools/matplotlib occasionally imported by Qt resources.
+    # triton/torch.fx are pure framework internals with no Aurik diagnostic value.
     for _noisy_logger in (
         "numba",
         "numba.core",
@@ -109,7 +110,7 @@ if _DEBUG_MODE:
     ):
         logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
 
-# Konsole-Handler (WARNING+ im Normalbetrieb; DEBUG im Debug-Modus → live sichtbar)
+# Console handler (WARNING+ in normal mode; DEBUG in debug mode → live output)
 _ch = logging.StreamHandler(sys.stderr)
 _ch.setLevel(logging.DEBUG if _DEBUG_MODE else logging.WARNING)
 _ch.setFormatter(
@@ -125,18 +126,21 @@ _root_logger.addHandler(_ch)
 
 logger = logging.getLogger(__name__)
 
+# Must outlive _enable_crash_forensics() — faulthandler holds a raw FILE* not a Python
+# The faulthandler file handle must be kept alive until the process exits.
+# Python docs: "The file must be kept open until the fault handler is disabled."
+_crash_log_fh: list = [None]  # mutable container avoids a global statement
+
 
 def _enable_crash_forensics() -> None:
-    """Enable native-crash diagnostics for hard faults (SIGSEGV/SIGABRT)."""
+    """Aktiviert native-crash diagnostics for hard faults (SIGSEGV/SIGABRT)."""
     try:
-        import faulthandler
-
         crash_log = _LOG_DIR / "python_faulthandler.log"
-        _fh = open(crash_log, "a", encoding="utf-8")
-        faulthandler.enable(file=_fh, all_threads=True)
+        _crash_log_fh[0] = open(crash_log, "a", encoding="utf-8")
+        faulthandler.enable(file=_crash_log_fh[0], all_threads=True)
         for _sig in (signal.SIGSEGV, signal.SIGABRT, signal.SIGBUS, signal.SIGFPE):
             try:
-                faulthandler.register(_sig, file=_fh, all_threads=True)
+                faulthandler.register(_sig, file=_crash_log_fh[0], all_threads=True)
             except Exception:
                 # Not all platforms allow explicit registration for every signal.
                 pass
@@ -145,36 +149,48 @@ def _enable_crash_forensics() -> None:
         logger.warning("Faulthandler setup failed (non-fatal): %s", exc)
 
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QMessageBox
+# PyQt5 and Aurik imports must come after logging setup and sys.path configuration.
+# pylint: disable=wrong-import-position
+# pylint: disable=no-name-in-module
+from PyQt5.QtCore import Qt, QTimer, qInstallMessageHandler  # type: ignore[attr-defined]
+from PyQt5.QtGui import QIcon  # type: ignore[attr-defined]
+from PyQt5.QtWidgets import QApplication, QMessageBox  # type: ignore[attr-defined]
 
+# pylint: enable=no-name-in-module
 from Aurik910 import __version__
 from Aurik910.ui.modern_window import ModernMainWindow
 
+# pylint: enable=wrong-import-position
 
-def _run_startup_model_check(app: QApplication) -> None:
-    """Prüft ML-Modelle vor dem Fensteraufbau — zeigt deutschen Dialog bei Problemen.
 
-    Nicht-blockierend bei fehlenden optionalen Modellen.
-    Warnung bei fehlenden Primär-Modellen (DSP-Fallback aktiv).
+def _run_startup_model_check(_app: QApplication) -> None:
+    """Prüft ML models before window creation — shows dialog on problems (non-fatal).
+
+    Non-blocking for missing optional models.
+    Warning for missing primary models (DSP fallback active).
     """
     try:
-        import time
-
-        from backend.api.bridge import get_model_downloader, get_startup_check_result
+        from backend.api.bridge import (  # pylint: disable=import-outside-toplevel
+            get_model_downloader,
+            get_startup_check_result,
+        )
 
         def run_self_heal(missing_primary, missing_optional):
             dl = get_model_downloader()
             to_repair = [m["name"] for m in (missing_primary + missing_optional)]
-            for i, name in enumerate(to_repair):
+            for name in to_repair:
                 entry = dl.get_entry(name)
                 if entry is not None:
-                    # Download SOTA-Upgrade falls konfiguriert, sonst bundled
+                    # Download SOTA-Upgrade if configured, otherwise use bundled
                     dl.schedule_sota_upgrade(entry)
-                # Fortschritt anzeigen (optional: Splash-Text, hier nur Sleep)
+                # Yield to Qt event loop between iterations
+                _app.processEvents()
                 time.sleep(0.2)
-            # Warten bis alle Downloads abgeschlossen (vereinfachte Variante)
-            time.sleep(2.0)
+            # Wait for all downloads to complete; split into 10 × 200 ms slices
+            # so Qt events continue to be processed (no UI freeze).
+            for _ in range(10):
+                _app.processEvents()
+                time.sleep(0.2)
 
         result = get_startup_check_result()
         if result is None:
@@ -185,44 +201,48 @@ def _run_startup_model_check(app: QApplication) -> None:
             box.setWindowTitle("AURIK — " + result.user_title_de)
             box.setText(result.user_message_de)
             box.setIcon(icon)
-            # Zusätzlicher Button für Selbstheilung
+            # Additional self-healing button
             repair_btn = box.addButton("Modelle reparieren", QMessageBox.ActionRole)
             box.setStandardButtons(QMessageBox.StandardButton.Ok)
             box.setDefaultButton(QMessageBox.StandardButton.Ok)
             box.exec_()
             if box.clickedButton() == repair_btn:
-                # Automatische Selbstheilung starten
+                # Start automatic self-healing
                 run_self_heal(result.missing_primary, result.missing_optional)
-                # Nach Abschluss Check wiederholen
+                # Re-run check after completion
                 result2 = get_startup_check_result()
                 if result2 is not None and result2.all_ok:
                     QMessageBox.information(
                         None,
                         "AURIK — Modelle repariert",
-                        "Alle ML-Modelle wurden erfolgreich repariert und geladen. Die Restaurierung ist jetzt freigeschaltet.",
+                        "Alle ML-Modelle wurden erfolgreich repariert und geladen."
+                        " Die Restaurierung ist jetzt freigeschaltet.",
                     )
                 else:
                     QMessageBox.critical(
                         None,
                         "AURIK — Reparatur fehlgeschlagen",
-                        "Einige Modelle konnten nicht repariert werden. Bitte prüfen Sie Ihre Internetverbindung oder wenden Sie sich an den Support.",
+                        "Einige Modelle konnten nicht repariert werden."
+                        " Bitte prüfen Sie Ihre Internetverbindung"
+                        " oder wenden Sie sich an den Support.",
                     )
     except Exception as exc:
-        # Startup-Check darf niemals den App-Start blockieren
-        logger.warning("Startup-Modell-Check fehlgeschlagen (non-fatal): %s", exc)
+        # Startup check must never block app startup
+        logger.warning("Startup model check failed (non-fatal): %s", exc)
 
 
 def _warmup_models_background() -> None:
     """Start background warmup of ML models — non-blocking daemon thread."""
-    import threading
 
     def _run() -> None:
         try:
-            from backend.api.bridge import warmup_models_background as _wb  # type: ignore[import]
+            from backend.api.bridge import (
+                warmup_models_background as _wb,  # type: ignore[import]  # pylint: disable=import-outside-toplevel
+            )
 
             _wb()
         except Exception as _e:
-            logger.debug("Warmup fehlgeschlagen (non-fatal): %s", _e)
+            logger.debug("Warmup failed (non-fatal): %s", _e)
 
     t = threading.Thread(target=_run, daemon=True, name="AurikWarmup")
     t.start()
@@ -241,11 +261,6 @@ def _emergency_checkpoint_if_running() -> None:
     Writes checkpoint atomically (.tmp → os.replace) if audio is available.
     """
     try:
-        # Import lazily to avoid circular imports at module level
-        from PyQt5.QtWidgets import QApplication
-
-        from Aurik910.ui.modern_window import ModernMainWindow  # type: ignore[import]
-
         app = QApplication.instance()
         if app is None:
             return
@@ -265,10 +280,10 @@ def _emergency_checkpoint_if_running() -> None:
         logger.debug("_emergency_checkpoint_if_running skipped: %s", _exc)
 
 
-_sigterm_shutdown_started = False
+_sigterm_shutdown_started = threading.Event()
 
 
-def _sigterm_handler(signum: int, frame: object) -> None:
+def _sigterm_handler(signum: int, _frame: object) -> None:
     """SIGTERM → emergency checkpoint + graceful Qt shutdown (§3.9.2).
 
     CRITICAL: Signal handlers are re-entrant-unsafe. This handler ONLY schedules
@@ -276,21 +291,18 @@ def _sigterm_handler(signum: int, frame: object) -> None:
     in the handler itself. The _sigterm_shutdown_started flag prevents
     re-entry of the finalization logic.
     """
-    global _sigterm_shutdown_started
-    if _sigterm_shutdown_started:
+    if _sigterm_shutdown_started.is_set():
         # SIGTERM came in again while shutdown was in progress.
         # Just return; don't hold the signal handler or do heavy work.
         return
     # Set immediately to prevent re-entry from concurrent SIGTERMs
-    _sigterm_shutdown_started = True
+    _sigterm_shutdown_started.set()
     logger.warning("SIGTERM received (signum=%d) — initiating emergency shutdown", signum)
 
     def _finalize_sigterm_shutdown() -> None:
         """Finalize shutdown: checkpoint → quit."""
         _emergency_checkpoint_if_running()
         try:
-            from PyQt5.QtWidgets import QApplication
-
             _app2 = QApplication.instance()
             if _app2:
                 _app2.quit()
@@ -299,9 +311,6 @@ def _sigterm_handler(signum: int, frame: object) -> None:
         # If Qt.quit fails, process will exit from SIGTERM anyhow
 
     try:
-        from PyQt5.QtCore import QTimer
-        from PyQt5.QtWidgets import QApplication
-
         _app = QApplication.instance()
         if _app:
             # Schedule via event loop (non-blocking from signal handler)
@@ -315,7 +324,7 @@ def _sigterm_handler(signum: int, frame: object) -> None:
 
 
 def _process_events_ms(app: "QApplication", ms: int) -> None:
-    """Process Qt events for *ms* milliseconds — keeps splash animation alive."""
+    """Verarbeitet Qt events for *ms* milliseconds — keeps splash animation alive."""
     deadline = time.monotonic() + ms / 1000.0
     while time.monotonic() < deadline:
         app.processEvents()
@@ -330,7 +339,7 @@ def main():
     # Can be disabled for troubleshooting via: AURIK_FORCE_SOFTWARE_OPENGL=0
     _force_sw_gl = os.getenv("AURIK_FORCE_SOFTWARE_OPENGL", "1") == "1"
 
-    # Enable high DPI scaling (PyQt5-Stubs kennen diese Attribute nicht -> ignore)
+    # Enable high DPI scaling (PyQt5 stubs do not expose these attributes -> ignore)
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)  # type: ignore[attr-defined]
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)  # type: ignore[attr-defined]
     if sys.platform.startswith("linux") and _force_sw_gl:
@@ -352,8 +361,6 @@ def main():
     _res = Path(__file__).parent / "resources"
     for _icon_path in (_res / "vinyl_gold.png", _res / "icon_premium.svg", _res / "icon.png"):
         if _icon_path.exists():
-            from PyQt5.QtGui import QIcon
-
             app.setWindowIcon(QIcon(str(_icon_path)))
             break
 
@@ -362,7 +369,6 @@ def main():
 
     # Capture Qt warnings/errors into Python logs for post-mortem analysis.
     try:
-        from PyQt5.QtCore import qInstallMessageHandler
 
         def _qt_msg_handler(mode, context, message):
             _file = getattr(context, "file", "?") if context is not None else "?"
@@ -389,7 +395,7 @@ def main():
     # ── Splash screen ─────────────────────────────────────────────────────────
     splash = None
     try:
-        from Aurik910.ui.splash_screen import AurikSplashScreen
+        from Aurik910.ui.splash_screen import AurikSplashScreen  # pylint: disable=import-outside-toplevel
 
         splash = AurikSplashScreen()
         splash.setWindowOpacity(0.0)
@@ -407,7 +413,7 @@ def main():
 
     except Exception as _exc:
         # Splash must never block the application from starting
-        logger.warning("Splash konnte nicht geladen werden (non-fatal): %s", _exc)
+        logger.warning("Splash screen could not be loaded (non-fatal): %s", _exc)
         splash = None
 
     # ── Startup model check ───────────────────────────────────────────────────
@@ -418,21 +424,21 @@ def main():
     _run_startup_model_check(app)
 
     # ── librosa numba JIT warmup (main thread) ────────────────────────────────
-    # numba 0.64.0 gufunc JIT in librosa.core.audio._resample_multi ist thread-unsafe:
-    # erstes Ausführen im nicht-Hauptthread → AttributeError 'get_call_template'.
-    # Fix: librosa.resample() einmal mit Dummy-Signal im Hauptthread aufrufen, damit
-    # numba JIT here abgearbeitet wird. Alle späteren Thread-Aufrufe treffen auf
-    # bereits kompilierten JIT-Code und sind sicher (numba cache ist thread-safe).
+    # numba 0.64.0 gufunc JIT in librosa.core.audio._resample_multi is thread-unsafe:
+    # first call from a non-main thread → AttributeError 'get_call_template'.
+    # Fix: call librosa.resample() once with a dummy signal on the main thread so
+    # numba JIT compiles here. All later thread calls hit already-compiled JIT code
+    # and are safe (numba cache is thread-safe).
     try:
-        import librosa as _librosa_warmup
-        import numpy as _np_warmup
+        import librosa as _librosa_warmup  # pylint: disable=import-outside-toplevel
+        import numpy as _np_warmup  # pylint: disable=import-outside-toplevel
 
         _dummy = _np_warmup.zeros(1024, dtype=_np_warmup.float32)
         _librosa_warmup.resample(_dummy, orig_sr=44100, target_sr=48000)
-        logger.info("librosa numba JIT warmup abgeschlossen (main thread)")
+        logger.info("librosa numba JIT warmup complete (main thread)")
         del _dummy, _np_warmup, _librosa_warmup
     except Exception as _wup_exc:
-        logger.warning("librosa warmup fehlgeschlagen (non-fatal): %s", _wup_exc)
+        logger.warning("librosa warmup failed (non-fatal): %s", _wup_exc)
 
     # ── Build main window ─────────────────────────────────────────────────────
     if splash:
@@ -461,8 +467,8 @@ def main():
         splash.close()
         splash = None
 
-    # §9.7.4 Modell-Warmup: ModernMainWindow.__init__ startet via QTimer.singleShot(2000)
-    # warmup_models_background() aus backend.api.bridge — kein zweiter Thread hier.
+    # §9.7.4 Model warmup: ModernMainWindow.__init__ starts via QTimer.singleShot(2000)
+    # warmup_models_background() from backend.api.bridge — no second thread here.
     sys.exit(app.exec_())
 
 

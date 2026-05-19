@@ -66,7 +66,7 @@ class MixedOp(nn.Module):
         self.alpha = nn.Parameter(torch.randn(len(operations)))
 
     def _create_operation(self, op_name: str, in_channels: int, out_channels: int, stride: int) -> nn.Module:
-        """Create operation based on name."""
+        """Erstellt operation based on name."""
 
         if op_name == "none":
             return Zero(stride, in_channels, out_channels)
@@ -154,7 +154,7 @@ class MixedOp(nn.Module):
         return output
 
     def get_best_operation(self) -> str:
-        """Get operation with highest weight."""
+        """Gibt zurück: operation with highest weight."""
         weights = F.softmax(self.alpha, dim=0)
         best_idx = int(torch.argmax(weights).item())
         return list(self.operations.keys())[best_idx]
@@ -254,7 +254,7 @@ class DARTSCell(nn.Module):
         return torch.cat(states[2:], dim=1)
 
     def get_genotype(self) -> dict[str, list[tuple[str, int]]]:
-        """Extract the best architecture (genotype)."""
+        """Extrahiert the best architecture (genotype)."""
         gene = []
         offset = 0
 
@@ -340,7 +340,7 @@ class AudioNASNetwork(nn.Module):
         return out
 
     def get_genotype(self) -> dict[str, Any]:
-        """Extract complete architecture genotype."""
+        """Extrahiert complete architecture genotype."""
         genotype = {"cells": []}
 
         for i, cell in enumerate(self.cells):
@@ -426,7 +426,7 @@ class NASTrainer:
 
     def search(self, train_loader, val_loader, epochs: int = 50) -> dict[str, Any]:
         """
-        Run architecture search.
+        Führt aus: architecture search.
 
         Args:
             train_loader: Training data loader
@@ -462,7 +462,7 @@ class NASTrainer:
         return {"genotype": genotype, "final_train_loss": avg_train_loss, "final_val_loss": avg_val_loss}
 
     def save_architecture(self, path: Path):
-        """Save discovered architecture."""
+        """Speichert discovered architecture."""
         genotype = self.model.get_genotype()
 
         with open(path, "w") as f:
@@ -471,7 +471,7 @@ class NASTrainer:
         logger.info("Architecture saved to %s", path)
 
     def load_architecture(self, path: Path) -> dict[str, Any]:
-        """Load architecture from file."""
+        """Lädt architecture from file."""
         with open(path) as f:
             genotype = json.load(f)
 

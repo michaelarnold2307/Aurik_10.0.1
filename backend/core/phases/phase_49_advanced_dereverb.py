@@ -117,7 +117,7 @@ class AdvancedDereverbPhase(PhaseInterface):
         self._current_material: str = "unknown"
 
     def _adaptive_clarity_limits(self, kwargs: dict[str, object]) -> tuple[float, float, float, float]:
-        """Compute song-adaptive C80/D50 guard limits.
+        """Berechnet song-adaptive C80/D50 guard limits.
 
         Keeps §4.5c behavior but adapts limits with §2.56 goal-importance context.
         Returns: (c80_down_limit_db, c80_soft_limit_db, c80_hard_limit_db, d50_limit)
@@ -397,6 +397,35 @@ class AdvancedDereverbPhase(PhaseInterface):
                 _raf_cap_49,
             )
             strength = _raf_cap_49
+
+        # §Lücke5 Era-authentische Raumcharakter-Protection (Dereverb-Ceiling nach Ära)
+        # Akustische Aufnahmen: kein Dereverb. Shellac: max 10 %. Vinyl-Frühphase: 20 %.
+        _era_decade_49 = int(kwargs.get("era_decade", 0) or 0)
+        _rt60_49 = float(_raf_49.get("rt60_s", 0.0))
+        # Ceiling-Tabelle: (era_from_inclusive, era_to_exclusive) → max_strength
+        _ERA_DEREVERB_CEILING: list[tuple[int, int, float]] = [
+            (0, 1930, 0.0),  # Akustische Aufnahmen (Trichter): kein Dereverb
+            (1930, 1950, 0.10),  # Elektrische Shellac: sehr konservativ
+            (1950, 1965, 0.20),  # Vinyl-Frühphase
+            (1965, 1980, 0.40),  # Analog-Bandzeitalter: nur bei starkem Nachhall
+            (1980, 9999, 1.0),  # Moderne: kein Ceiling
+        ]
+        if _era_decade_49 > 0:
+            for _era_lo, _era_hi, _era_ceil in _ERA_DEREVERB_CEILING:
+                if _era_lo <= _era_decade_49 < _era_hi:
+                    # Vinyl 1965–1980: nur bei RT60 > 2.5 s aktiv; sonst sehr konservativ
+                    if _era_lo == 1965 and _rt60_49 < 2.5:
+                        _era_ceil = 0.15
+                    if strength > _era_ceil:
+                        logger.debug(
+                            "Phase 49 §Lücke5 Era-Ceiling: era=%d → strength %.2f → %.2f (rt60=%.2fs)",
+                            _era_decade_49,
+                            strength,
+                            _era_ceil,
+                            _rt60_49,
+                        )
+                        strength = _era_ceil
+                    break
 
         protect_transients: bool = bool(kwargs.get("protect_transients", True))
         # Store material type for EMA-alpha selection in _dereverb_channel
@@ -830,7 +859,7 @@ class AdvancedDereverbPhase(PhaseInterface):
         return float(20.0 * np.log10(_rms + 1e-10))
 
     def _measure_c80_proxy(self, audio: np.ndarray, sr: int) -> float:
-        """Estimate Clarity C80 from time-domain energy ratio (Kuttruff 2009).
+        """Schätzt Clarity C80 from time-domain energy ratio (Kuttruff 2009).
 
         C80 = 10 × log10(E_early / E_late)
         where E_early = energy in first 80 ms, E_late = energy from 80 ms onward.
@@ -849,7 +878,7 @@ class AdvancedDereverbPhase(PhaseInterface):
         return 10.0 * float(np.log10(max(e_early, 1e-12) / e_late))
 
     def _measure_d50_proxy(self, audio: np.ndarray, sr: int) -> float:
-        """Estimate Definition D50 from time-domain energy ratio.
+        """Schätzt Definition D50 from time-domain energy ratio.
 
         D50 = E_early50 / E_total  where E_early50 = energy in first 50 ms.
         Returns 0.0 when audio is silent.

@@ -730,6 +730,65 @@ class DenoisePhase(PhaseInterface):
             _era_nr_routing,
         )
 
+        # §Lücke2 Vokal-Harmonik-Dekomposition: Separate G_floor-Anpassung per Bin
+        # Harmonische Bins (Vokal-Obertöne) bekommen höheren G_floor (0.35) als
+        # nicht-harmonische Bins (0.10) → verhindert Ausblenden von Obertonstrukturen.
+        # Nur bei Vokal-Material und ausreichend stimmhafter Fraktion.
+        if _is_vocal_material and _panns_singing >= 0.25:
+            try:
+                from backend.core.dsp.vocal_harmonic_decomp import (  # pylint: disable=import-outside-toplevel
+                    build_vocal_harmonic_mask,
+                )
+
+                _vhm = build_vocal_harmonic_mask(audio, sample_rate)
+                if _vhm is not None and _vhm.voiced_fraction > 0.15:
+                    _g_floor_harmonic = 0.35
+                    _g_floor_nonharm = float(params.get("g_floor", 0.10))
+                    _g_floor_map = _vhm.apply_g_floor_adjustment(
+                        g_floor_map=None,
+                        harm_g_floor=_g_floor_harmonic,
+                        nonharm_g_floor=_g_floor_nonharm,
+                    )
+                    if _g_floor_map is not None:
+                        params = dict(params)  # shallow copy
+                        params["g_floor_map"] = _g_floor_map
+                        logger.debug(
+                            "§Lücke2 VocalHarmonicDecomp: voiced=%.2f → g_floor_map injected (harm=%.2f, nonharm=%.2f)",
+                            _vhm.voiced_fraction,
+                            _g_floor_harmonic,
+                            _g_floor_nonharm,
+                        )
+            except Exception as _vhm_exc:
+                logger.debug("§Lücke2 VocalHarmonicDecomp: non-blocking fallback — %s", _vhm_exc)
+
+        # §Lücke-B TubeHarmonicFingerprint: H2/H4-Charakter erkennen und G_floor anheben.
+        # Bei authentischen Röhren-/Bandmaschinen-Aufnahmen (Shellac/Vinyl/Tape) schützt
+        # dies die Sättigungs-Signatur vor versehentlicher NR-Suppression.
+        if material_type in ("shellac", "vinyl", "tape", "reel_tape", "wax_cylinder"):
+            try:
+                from backend.core.dsp.tube_harmonic_fingerprint import (  # pylint: disable=import-outside-toplevel
+                    detect_tube_harmonic_fingerprint,
+                )
+
+                _thf = detect_tube_harmonic_fingerprint(
+                    audio,
+                    sample_rate,
+                    material_type=str(getattr(material_type, "value", material_type)),
+                )
+                if _thf.protect_harmonic_bins and _thf.g_floor_boost_harmonic > 0.0:
+                    _old_gfloor = float(params.get("g_floor", 0.10))
+                    params = dict(params)  # shallow copy
+                    params["g_floor"] = float(np.clip(_old_gfloor + _thf.g_floor_boost_harmonic, 0.10, 0.55))
+                    logger.info(
+                        "§Lücke-B TubeHarmonic: sig=%s conf=%.2f → g_floor %.2f→%.2f",
+                        _thf.signature_type,
+                        _thf.confidence,
+                        _old_gfloor,
+                        params["g_floor"],
+                    )
+            except Exception as _thf_exc:
+                logger.debug("§Lücke-B TubeHarmonicFingerprint: non-blocking fallback — %s", _thf_exc)
+
         # §4.5b-Instrumental: Rein instrumentales Material (PANNs-Gesang < 0.10) braucht
         # erhöhten g_floor um Obertonstrukturen bei Streichern/Bläsern/Chor (harmonische
         # Obertöne 2–8 kHz) nicht als Rauschen zu supprimieren. Sprach-trainierte Denoiser
@@ -791,7 +850,15 @@ class DenoisePhase(PhaseInterface):
                 _miipher_snr = _est_snr_db if _est_snr_db is not None else 0.0
                 if _miipher_plugin.should_activate(noise_snr_db=_miipher_snr, panns_singing=_panns_singing):
                     _miipher_audio_pre = np.asarray(audio, dtype=np.float32).copy()
-                    _miipher_out = _miipher_plugin.enhance(audio, sr=sample_rate, noise_snr_db=_miipher_snr)
+                    # §0p v9.12.9: Register-adaptiver energy_bias (aus VocalRegisterDetector).
+                    # _dfn_energy_bias_db wurde bereits temporal berechnet (Kopf=-3, Brust=-6, Fry=-9).
+                    _miipher_out = _miipher_plugin.enhance(
+                        audio,
+                        sr=sample_rate,
+                        noise_snr_db=_miipher_snr,
+                        vocal_energy_bias_db=_dfn_energy_bias_db,
+                        panns_singing=float(_panns_singing),  # §0p v9.12.9: SGMSE+ Vokal-Mode
+                    )
                     _miipher_out = np.nan_to_num(
                         np.asarray(_miipher_out, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
                     )
@@ -1573,6 +1640,110 @@ class DenoisePhase(PhaseInterface):
         except Exception as _ntr_exc_p03:
             logger.debug("§TimbralCoherence noise_texture_resynth phase03 (non-blocking): %s", _ntr_exc_p03)
 
+        # §G3 OMLSA post-DFN Restglätter (SOTA Matrix: "DFN v3 + OMLSA Restglätter danach").
+        # Nach DFN verbleiben spektrale Gain-Ripple (Musical Noise). IMCRA Noise-PSD → Wiener-
+        # Gain mit G_floor=0.10 → 25 % Wet-Blend. Nur wenn DFN tatsächlich aktiv war.
+        if _dfn_applied and _panns_singing >= 0.10:
+            try:
+                from backend.core.dsp.noise_estimator import compute_imcra_noise_estimate as _imcra_p03  # pylint: disable=import-outside-toplevel  # noqa: I001
+                from scipy.signal import stft as _stft_p03, istft as _istft_p03  # pylint: disable=import-outside-toplevel
+
+                _g3_mono = (
+                    result_audio.mean(axis=0).astype(np.float32)
+                    if (result_audio.ndim == 2 and result_audio.shape[0] == 2 and result_audio.shape[1] > 2)
+                    else (
+                        result_audio.mean(axis=1).astype(np.float32)
+                        if result_audio.ndim == 2
+                        else result_audio.astype(np.float32)
+                    )
+                )
+                _g3_n_fft = 2048
+                _g3_hop = 512
+                _g3_noise_psd = _imcra_p03(_g3_mono, sample_rate, n_fft=_g3_n_fft, hop_length=_g3_hop)
+                if _g3_noise_psd is not None and _g3_noise_psd.shape[0] == (_g3_n_fft // 2 + 1):
+                    _, _, _g3_stft = _stft_p03(
+                        _g3_mono, nperseg=_g3_n_fft, noverlap=_g3_n_fft - _g3_hop, boundary="even"
+                    )
+                    _g3_mag = np.abs(_g3_stft)
+                    _g3_n_frames = min(_g3_mag.shape[1], _g3_noise_psd.shape[1])
+                    _g3_sig_psd = _g3_mag[:, :_g3_n_frames] ** 2
+                    _g3_ns_psd = _g3_noise_psd[:, :_g3_n_frames].astype(np.float64)
+                    # §EraTarget: era-adaptive G_floor — preserves authentic carrier noise texture.
+                    # E.g. 1935 shellac → G_floor=0.35; 1990 CD → G_floor=0.10 (unchanged).
+                    _era_target_g3 = kwargs.get("_restoration_context", {}).get("era_carrier_target", {})
+                    _G_floor_g3 = float(np.clip(_era_target_g3.get("nr_g_floor", 0.10), 0.10, 0.50))
+                    # Wiener gain: G = max(G_floor, 1 - lambda_n / lambda_x)
+                    _g3_gain = np.maximum(_G_floor_g3, 1.0 - _g3_ns_psd / np.maximum(_g3_sig_psd, 1e-20))
+                    _g3_gain = np.clip(_g3_gain, _G_floor_g3, 1.0)
+                    # §4.8a-ii PRESERVE-Mask: G_eff = mask * 0.90 + (1-mask) * G_wiener
+                    # Floort NR-Gain in PRESERVE-Bins (shellac H2/H4, Vinyl-Wärme etc.) auf 0.90.
+                    _pm_g3 = kwargs.get("_restoration_context", {}).get("preserve_mask")
+                    if isinstance(_pm_g3, np.ndarray) and _pm_g3.size > 1:
+                        _G_PRES_G3 = 0.90
+                        _n_bins_g3 = _g3_gain.shape[0]
+                        if len(_pm_g3) != _n_bins_g3:
+                            _pm_g3_interp = np.interp(
+                                np.arange(_n_bins_g3),
+                                np.linspace(0, _n_bins_g3 - 1, len(_pm_g3)),
+                                _pm_g3.astype(np.float64),
+                            ).astype(np.float64)
+                        else:
+                            _pm_g3_interp = _pm_g3.astype(np.float64)
+                        _pm_g3_col = _pm_g3_interp[:, np.newaxis]  # (n_bins, 1)
+                        _g3_gain = _pm_g3_col * _G_PRES_G3 + (1.0 - _pm_g3_col) * _g3_gain
+                        _g3_gain = np.maximum(_g3_gain, 0.10)
+                        logger.debug("§4.8a-ii phase_03 preserve_mask: max_pm=%.2f", float(_pm_g3.max()))
+                    # §Gap5 EmotionalArc FrissonZone Schutz (§0p v9.12.8):
+                    # Frisson- und Whisper-Zonen erhalten weniger NR (arc_weight ≥ 1.4).
+                    # NR-Gain wird in geschützten Zonen Richtung 1.0 geblendet.
+                    _arc_plan = kwargs.get("_restoration_context", {}).get("arc_protection_weights")
+                    if _arc_plan is not None and hasattr(_arc_plan, "weight_at") and _g3_n_frames > 0:
+                        try:
+                            _hop_s = _g3_hop / max(1, sample_rate)
+                            # Vektorisiert: eine Gewicht pro STFT-Frame
+                            _frame_times_s = np.arange(_g3_n_frames, dtype=np.float64) * _hop_s
+                            _arc_weights = np.array(
+                                [_arc_plan.weight_at(float(t), float(t + _hop_s)) for t in _frame_times_s],
+                                dtype=np.float64,
+                            )  # shape: (n_frames,)
+                            # Schutz-Skalar: wie viel NR-Reduktion zurücknehmen
+                            # w=1.0 → kein Eingriff; w=1.5 (Frisson) → 25% der NR-Reduktion aufheben
+                            _arc_protect = np.clip((_arc_weights - 1.0) * 0.5, 0.0, 0.50)  # [0, 0.5]
+                            # Blend G Richtung 1.0 in geschützten Frames: G_protected = G + protect*(1.0-G)
+                            _g3_gain = _g3_gain + _arc_protect[np.newaxis, :] * (1.0 - _g3_gain)
+                            _g3_gain = np.clip(_g3_gain, _G_floor_g3, 1.0)
+                            _n_prot = int(np.sum(_arc_weights > 1.05))
+                            logger.debug("§Gap5 Arc-Schutz phase_03: %d/%d Frames geschützt", _n_prot, _g3_n_frames)
+                        except Exception as _arc_exc:
+                            logger.debug("§Gap5 Arc-Schutz phase_03 non-blocking: %s", _arc_exc)
+                    _g3_stft_sm = _g3_stft[:, :_g3_n_frames] * _g3_gain
+                    _, _g3_out = _istft_p03(_g3_stft_sm, nperseg=_g3_n_fft, noverlap=_g3_n_fft - _g3_hop, boundary=True)
+                    _g3_out = np.asarray(_g3_out, dtype=np.float32)
+                    _g3_len = result_audio.shape[-1] if result_audio.ndim == 2 else len(result_audio)
+                    if len(_g3_out) >= _g3_len:
+                        _g3_out = _g3_out[:_g3_len]
+                    else:
+                        _g3_out = np.pad(_g3_out, (0, _g3_len - len(_g3_out)))
+                    _wet_g3 = 0.25  # light blend — preserve DFN character, reduce only residual ripple
+                    if result_audio.ndim == 2 and result_audio.shape[0] == 2 and result_audio.shape[1] > 2:
+                        # Apply blended smoothing equally to both channels (M/S-linked for stereo coherence)
+                        _g3_blend_mono = _wet_g3 * _g3_out + (1.0 - _wet_g3) * _g3_mono
+                        _g3_diff = _g3_blend_mono - _g3_mono  # delta to apply to both channels
+                        _g3_result = result_audio + _g3_diff[np.newaxis, :]
+                    elif result_audio.ndim == 2:
+                        _g3_blend_mono = _wet_g3 * _g3_out + (1.0 - _wet_g3) * _g3_mono
+                        _g3_diff = _g3_blend_mono - _g3_mono
+                        _g3_result = result_audio + _g3_diff[:, np.newaxis]
+                    else:
+                        _g3_result = _wet_g3 * _g3_out + (1.0 - _wet_g3) * result_audio
+                    if np.isfinite(_g3_result).all():
+                        result_audio = np.clip(_g3_result.astype(np.float32), -1.0, 1.0)
+                        logger.debug(
+                            "§G3 OMLSA post-DFN: G_floor=%.2f wet=%.2f (Musical-Noise-Glättung)", _G_floor_g3, _wet_g3
+                        )
+            except Exception as _g3_exc:
+                logger.debug("§G3 OMLSA post-DFN non-blocking: %s", _g3_exc)
+
         # §0p VQI per-Phase Gate: Bei Vokalaufnahmen VQI messen und bei Rollback-Grenzwert
         # auf Eingangs-Audio zurückfallen, um Stimmqualitätsverlust durch NR zu verhindern.
         if _panns_singing >= 0.35:
@@ -1591,6 +1762,68 @@ class DenoisePhase(PhaseInterface):
                     result_audio = audio.copy()
             except Exception as _vqi_exc_p03:
                 logger.debug("VQI per-phase phase03 (non-blocking): %s", _vqi_exc_p03)
+
+        # §G1 Formant ±2 dB Guard (§0p RELEASE_MUST): F1–F4 via LPC post-NR.
+        # VQI allein erkennt keine subtilen Formantverschiebungen < 2 dB —
+        # hier direkt Spektralenergie-Shift an Formant-Bändern messen.
+        if _is_vocal_material and _panns_singing >= 0.25:
+            try:
+                from backend.core.dsp.lpc_formant_tracker import check_formant_shift_db as _cfs_p03  # pylint: disable=import-outside-toplevel  # noqa: I001
+
+                _fg_rollback_p03, _fg_shift_p03 = _cfs_p03(audio, result_audio, sample_rate, threshold_db=2.0)
+                if _fg_rollback_p03:
+                    result_audio = audio.copy()
+                    logger.warning(
+                        "§G1 FormantGuard phase_03: max F-shift %.2f dB > 2.0 dB → Rollback",
+                        _fg_shift_p03,
+                    )
+                else:
+                    logger.debug("§G1 FormantGuard phase_03: max F-shift %.2f dB — OK", _fg_shift_p03)
+            except Exception as _fg_p03_exc:
+                logger.debug("§G1 FormantGuard phase_03 non-blocking: %s", _fg_p03_exc)
+
+        # §G2 Breath-Segment Protection (§2.46f + §Frisson): EMOTIONAL_TENSION Atemgeräusche
+        # sind Naturalness-Marker — NR-Output in diesen Zonen mit Original zurückblenden.
+        # breath_segments aus _restoration_context (über UV3 injiziert, §0p).
+        _breath_segs_p03 = list(kwargs.get("breath_segments", []) or [])
+        if _breath_segs_p03:
+            try:
+                _n_out_p03 = result_audio.shape[-1] if result_audio.ndim == 2 else len(result_audio)
+                _n_in_p03 = audio.shape[-1] if audio.ndim == 2 else len(audio)
+                _n_blend_p03 = min(_n_out_p03, _n_in_p03)
+                _result_blend_p03 = np.array(result_audio, copy=True)
+                _blended_any_p03 = False
+                for _bs_p03 in _breath_segs_p03:
+                    _cat_p03 = getattr(_bs_p03, "category", None)
+                    _cat_str_p03 = str(getattr(_cat_p03, "value", _cat_p03 or "")).lower()
+                    if "tension" not in _cat_str_p03 and "emotional" not in _cat_str_p03:
+                        continue
+                    _bs_start_p03 = float(getattr(_bs_p03, "start_s", 0.0))
+                    _bs_end_p03 = float(getattr(_bs_p03, "end_s", 0.0))
+                    _g_fl_p03 = float(np.clip(getattr(_bs_p03, "recommended_g_floor", 0.50), 0.0, 1.0))
+                    _dry_p03 = float(np.clip(_g_fl_p03, 0.05, 0.95))  # G_floor = proportion of original to preserve
+                    if _bs_end_p03 <= _bs_start_p03:
+                        continue
+                    _si_p03 = int(round(_bs_start_p03 * sample_rate))
+                    _ei_p03 = int(round(_bs_end_p03 * sample_rate))
+                    _si_p03 = max(0, min(_si_p03, _n_blend_p03))
+                    _ei_p03 = max(0, min(_ei_p03, _n_blend_p03))
+                    if _si_p03 >= _ei_p03:
+                        continue
+                    if _result_blend_p03.ndim == 2 and audio.ndim == 2:
+                        _result_blend_p03[:, _si_p03:_ei_p03] = (
+                            _dry_p03 * audio[:, _si_p03:_ei_p03] + (1.0 - _dry_p03) * result_audio[:, _si_p03:_ei_p03]
+                        )
+                    elif _result_blend_p03.ndim == 1 and audio.ndim == 1:
+                        _result_blend_p03[_si_p03:_ei_p03] = (
+                            _dry_p03 * audio[_si_p03:_ei_p03] + (1.0 - _dry_p03) * result_audio[_si_p03:_ei_p03]
+                        )
+                    _blended_any_p03 = True
+                if _blended_any_p03:
+                    result_audio = np.clip(np.nan_to_num(_result_blend_p03, nan=0.0), -1.0, 1.0).astype(np.float32)
+                    logger.debug("§G2 BreathProtect phase_03: %d tension-segs geschützt", len(_breath_segs_p03))
+            except Exception as _g2_p03_exc:
+                logger.debug("§G2 BreathProtect phase_03 non-blocking: %s", _g2_p03_exc)
 
         # §Gap3 PhraseBoundaryGuard — taper DSP artifacts at phrase transitions (§0p Vocal-Supremacy)
         try:
@@ -2299,7 +2532,7 @@ class DenoisePhase(PhaseInterface):
         n_t: int,
         hop: int,
     ) -> np.ndarray:
-        """Compute a time-varying G_floor curve based on momentary loudness.
+        """Berechnet a time-varying G_floor curve based on momentary loudness.
 
         Scientific basis:
             Moore (2003) "Psychology of Hearing" §9: the simultaneous masking
@@ -2367,7 +2600,7 @@ class DenoisePhase(PhaseInterface):
         quality_mode: str,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive denoise guard targets from song context.
+        """Berechnet adaptive denoise guard targets from song context.
 
         Returns thresholds for quality warnings and minimum/target energy preservation.
         """
@@ -2528,7 +2761,7 @@ class DenoisePhase(PhaseInterface):
         self, gain: np.ndarray, freqs: np.ndarray, band_params: dict[str, dict[str, float]]
     ) -> np.ndarray:
         """
-        Apply frequency-dependent gain modifications.
+        Wendet an: frequency-dependent gain modifications.
 
         Returns:
             Modified gain (same shape as input)
@@ -2657,7 +2890,7 @@ class DenoisePhase(PhaseInterface):
 
     def _measure_noise_reduction(self, before: np.ndarray, after: np.ndarray) -> float:
         """
-        Measures noise reduction in dB.
+        Misst noise reduction in dB.
 
         Returns:
             Reduction in dB (positive = good)

@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 def _sosfilt_array(sos: np.ndarray, audio: np.ndarray) -> np.ndarray:
-    """Return only the filtered audio array from scipy.signal.sosfilt."""
+    """Gibt only the filtered audio array from scipy.signal.sosfilt zurück."""
     filtered = scipy_signal.sosfilt(sos, audio)
     if isinstance(filtered, tuple):
         return np.asarray(filtered[0])

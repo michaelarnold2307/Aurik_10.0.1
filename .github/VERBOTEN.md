@@ -29,6 +29,8 @@
 | MDX23C-Fallback | `HPSS` direkt | NMF-β-Separation (sdB ≥ 5) → HPSS als tertiärer Fallback |
 | Pflicht-Phasen | DefectScanner allein entscheidet | Material-Pflicht-Phasen (§6.2a) immer aktivieren |
 | Peak-Guard (Gain) | `np.max(np.abs(audio))` | `np.percentile(np.abs(audio), 99.9)` |
+| NumPy keepdims (Pylance) | `arr.max(axis=N, keepdims=True)` / `arr.min(axis=N, keepdims=True)` — Pylance Typfehler | `np.max(arr, axis=N, keepdims=True)` (funktionale Form) |
+| Toter Loop-Body | `for x in range(N): pass` — dead code, erzeugt `Unused variable` Pylance-Warnung | Loop vollständig entfernen oder vektorisieren; Spec-Konstante als Klassen-Attribut mit `N_X: int = N` dokumentieren |
 | Dolby NR Inversion | Statische globale HF-Absenkung ohne Typ-Erkennung | `DolbyNRDetector.detect()` → `phase_04(dolby_nr_type=..., dolby_nr_confidence=...)` (§6.7 Phase 1c) |
 | Head-Bump Tape | Kein LF-Kerbfilter bei Tape-Material | `phase_04(tape_speed_ips=X)` → HEAD_BUMP_PROFILES[nearest_speed] parametrischer Dip |
 | Inpainting HF-Halluzination | AR/Diffusion ohne BW-Begrenzung | `_MATERIAL_BW_CAP_HZ` in phase_55 — wax_cylinder ≤ 5kHz, wire_recording ≤ 6kHz (§0) |
@@ -79,6 +81,7 @@
 | `signal.lfilter` in Vocal Bell-EQ | `lfilter` in `_boost_presence`/`_enhance_chest` (phase_42) → Phasenverschiebung auf Transients | `signal.filtfilt` (zero-phase); Short-Signal-Fallback: `if len(audio) >= 9: filtfilt(...)` |
 | Festes `breath_preservation=0.70` für alle Altersgruppen | Senior/Mature-Stimmen erhalten aggressive Atemreduktion → Stimmidentitätsverlust | `_AGE_ADAPTIVE_FACTORS`: Senior=0.90, Mature=0.82, Adult=0.72, YoungAdult=0.70; GenderDetector.detect() → age_group (§VoiceAge) |
 | CausalDefectReasoner einseitige Tabellen [V12] | Neue Ursache nur in `CAUSE_TO_PHASES`, nicht in `CAUSES`/`LIKELIHOOD_FNS` | `CAUSES` + `CAUSE_TO_PHASES` bidirektional konsistent — Bayes-Loop iteriert ausschließlich `CAUSES` (§2.59). Linter V12 prüft automatisch. |
+| `_MATERIAL_PRIORITY_PHASES` Duplikat-Schlüssel [V13] | Zwei Einträge für denselben Material-String (z.B. `"cassette"`) in `_MATERIAL_PRIORITY_PHASES` → zweiter Eintrag überschreibt ersten lautlos; falsches Phasenset aktiv (F601) | Jeder Material-Schlüssel darf in `_MATERIAL_PRIORITY_PHASES` genau einmal vorkommen — Linter V13 prüft `unified_restorer_v3.py` auf F601-Duplikate in dieser Dict-Literal. |
 | QualityGate SNR/STFT vor Musical-Goal-Check | `_check_audio_array` vor Musical-Goals-Failures | `_check_musical_goals()` zuerst; bei Failure sofort `return` — teure STFT-Analyse nur wenn Goals bestanden |
 | TFS-Guard Hilbert vor Voiced-Gate | Hilbert-Phasenextraktion für alle 12 ERB-Bänder vor Voiced-Energy-Gate | Frame-Energie zuerst prüfen; Bänder mit < 3 Voiced-Frames überspringen vor `filtfilt` + Hilbert |
 | AudioSR ohne Wall-Time-Budget | AudioSR-Zonen-Schleife zeitlich unbegrenzt | `_AUDIOSR_WALL_BUDGET_S = 900.0`; Zonen jenseits Budget als Passthrough |
@@ -135,5 +138,6 @@
 | V09 | `backend/core/` | `consecutive_rollbacks +=` in Carrier-Repair-Phase → ERROR |
 | V11 | `backend/core/phases/` | `sosfilt(` + `+=` auf selben Signal → WARNING |
 | V12 | `backend/core/causal_defect_reasoner.py` | CAUSE_TO_PHASES-Schlüssel ohne CAUSES-Gegenstück oder CAUSES-Eintrag ohne C2P-Eintrag → ERROR |
+| V13 | `backend/core/unified_restorer_v3.py` | Duplikat-Schlüssel in `_MATERIAL_PRIORITY_PHASES`-Dict-Literal → ERROR (F601) |
 
 > Vollständige Linter-Implementierung: `scripts/aurik_verboten_linter.py`

@@ -38,7 +38,7 @@ from .safety_wrapper_template import (
 
 def estimate_snr(audio: np.ndarray, sr: int) -> float:
     """
-    Estimate Signal-to-Noise Ratio (SNR).
+    Schätzt Signal-to-Noise Ratio (SNR).
 
     Uses simple energy-based method:
     - Signal = peaks (top 25%)
@@ -191,7 +191,7 @@ def classify_noise_type(audio: np.ndarray, sr: int) -> tuple[str, float]:
 
 def detect_birdie_artifacts(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     """
-    Detect "birdie" artifacts (musical noise from aggressive noise reduction).
+    Erkennt "birdie" artifacts (musical noise from aggressive noise reduction).
 
     Birdies are tonal, brief, random-pitch artifacts.
 
@@ -250,7 +250,7 @@ def detect_birdie_artifacts(audio: np.ndarray, sr: int) -> tuple[bool, float]:
 
 def measure_spectral_balance(audio: np.ndarray, sr: int) -> dict[str, float]:
     """
-    Measure spectral balance across frequency bands.
+    Misst spectral balance across frequency bands.
 
     Args:
         audio: Input audio
@@ -293,7 +293,7 @@ def measure_spectral_balance(audio: np.ndarray, sr: int) -> dict[str, float]:
 
 def check_temporal_continuity(audio: np.ndarray, sr: int) -> float:
     """
-    Check temporal continuity (no gaps or dropouts).
+    Prüft temporal continuity (no gaps or dropouts).
 
     Args:
         audio: Input audio
@@ -370,7 +370,7 @@ class DeNoiseSafety(BaseSafetyWrapper):
         max_birdie_tolerance: float = 0.3,
     ):
         """
-        Initialize De-Noise Safety Wrapper.
+        Initialisiert De-Noise Safety Wrapper.
 
         Args:
             processor_func: De-noising function (audio, sr, noise_type, strength) -> audio
@@ -395,7 +395,7 @@ class DeNoiseSafety(BaseSafetyWrapper):
         self.max_birdie_tolerance = max_birdie_tolerance
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for de-noising."""
+        """Validiert pre-conditions for de-noising."""
         # Basic audio validation
         is_valid, errors = validate_audio_basic(audio)
 
@@ -474,7 +474,7 @@ class DeNoiseSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions after de-noising."""
+        """Validiert post-conditions after de-noising."""
         issues = []
         side_effects = []
         metrics = {}
@@ -572,7 +572,7 @@ class DeNoiseSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute overall quality score."""
+        """Berechnet overall quality score."""
         scores = []
 
         # SNR improvement

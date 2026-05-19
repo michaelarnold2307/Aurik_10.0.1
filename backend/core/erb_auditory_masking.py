@@ -63,7 +63,7 @@ def erb_rate(f_hz: float) -> float:
 
 
 def erb_rate_to_hz(n_cams: float) -> float:
-    """Convert ERB-rate (Cams) back to Hz."""
+    """Konvertiert ERB-rate (Cams) back to Hz."""
     return (10.0 ** (n_cams / 21.4) - 1.0) / 0.00437
 
 
@@ -197,7 +197,7 @@ class ERBAuditoryMaskingModel:
         defect_end_s: float,
         defect_freq_range: tuple[float, float] | None = None,
     ) -> ERBMaskingResult:
-        """Compute frequency-dependent masking threshold at a defect location.
+        """Berechnet frequency-dependent masking threshold at a defect location.
 
         Parameters
         ----------
@@ -402,7 +402,7 @@ class ERBAuditoryMaskingModel:
     # ------------------------------------------------------------------
 
     def _erb_centres(self, f_max: float) -> np.ndarray:
-        """Generate ERB centre frequencies up to *f_max*."""
+        """Generiert ERB centre frequencies up to *f_max*."""
         f_high = min(self._F_HIGH, f_max)
         n_low = erb_rate(self._F_LOW)
         n_high = erb_rate(f_high)
@@ -417,7 +417,7 @@ class ERBAuditoryMaskingModel:
         t_start: float,
         t_end: float,
     ) -> np.ndarray:
-        """Compute power in each ERB band for the given time range.
+        """Berechnet power in each ERB band for the given time range.
 
         Returns array of shape (n_bands,) with mean power per band.
         """
@@ -454,7 +454,7 @@ class ERBAuditoryMaskingModel:
         t_start: float,
         t_end: float,
     ) -> float:
-        """Estimate tonality of audio segment (0.0 = noise, 1.0 = pure tone).
+        """Schätzt tonality of audio segment (0.0 = noise, 1.0 = pure tone).
 
         Uses spectral flatness (Wiener entropy) as a proxy.
         Low flatness = tonal, high flatness = noise-like.
@@ -478,12 +478,12 @@ class ERBAuditoryMaskingModel:
 
     @staticmethod
     def _power_to_db(power: float) -> float:
-        """Convert power to dB with floor."""
+        """Konvertiert power to dB with floor."""
         return float(10.0 * np.log10(max(power, 1e-15)))
 
     @staticmethod
     def _to_mono_f64(audio: np.ndarray) -> np.ndarray:
-        """Convert to mono float64 with NaN/Inf guard.
+        """Konvertiert to mono float64 with NaN/Inf guard.
 
         Aurik canonical shape is (N, channels) — axis 1 is the channel dimension.
         For (N, 2): shape[0]=N >> shape[1]=2 → mean(axis=1) → N-element mono.
@@ -508,7 +508,7 @@ _lock = threading.Lock()
 
 
 def get_erb_auditory_masking_model() -> ERBAuditoryMaskingModel:
-    """Return thread-safe singleton ERBAuditoryMaskingModel."""
+    """Gibt thread-safe singleton ERBAuditoryMaskingModel zurück."""
     global _instance
     if _instance is None:
         with _lock:

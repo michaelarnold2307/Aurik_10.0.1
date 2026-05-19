@@ -102,14 +102,14 @@ VIOLATION_PATTERNS = [
 
 
 def get_line_context(lines: list[str], line_idx: int, context_size: int = 3) -> str:
-    """Extract surrounding context for analysis."""
+    """Extrahiert surrounding context for analysis."""
     start = max(0, line_idx - context_size)
     end = min(len(lines), line_idx + context_size + 1)
     return "\n".join(lines[start:end])
 
 
 def is_allowed_context(line: str, file_path: str, line_num: int) -> bool:
-    """Check if the np.max(np.abs(...)) usage is in an allowed context."""
+    """Prüft if the np.max(np.abs(...)) usage is in an allowed context."""
     # True-Peak-Limiter phase is allowed (it measures true peaks, not for normalization)
     if "phase_47_truepeak_limiter" in file_path or "phase_47" in file_path:
         return True

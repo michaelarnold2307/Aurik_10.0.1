@@ -75,7 +75,7 @@ class UnifiedForensicAnalysis:
 
 class UnifiedForensicAnalyzer:
     """
-    Unified Signal Forensics Analyzer.
+    Einheitlicher Signal-Forensik-Analysator.
 
     Orchestrates ML-based detectors for comprehensive analysis:
     1. Medium Detection → Material classification
@@ -94,7 +94,7 @@ class UnifiedForensicAnalyzer:
         defect_detector: MLDefectDetector | None = None,
     ) -> None:
         """
-        Initialize unified analyzer.
+        Initialisiert unified analyzer.
 
         Args:
             medium_detector: Trained ML Medium Detector
@@ -110,7 +110,7 @@ class UnifiedForensicAnalyzer:
 
     def analyze(self, audio: np.ndarray, sample_rate: int, verbose: bool = True) -> UnifiedForensicAnalysis:
         """
-        Perform unified forensic analysis.
+        Führt durch: unified forensic analysis.
 
         Args:
             audio: Audio signal (mono or stereo)
@@ -249,7 +249,7 @@ class UnifiedForensicAnalyzer:
 
     def _check_consistency(self, results: dict[str, Any], verbose: bool = False) -> float:
         """
-        Check consistency between detectors.
+        Prüft consistency between detectors.
 
         Returns:
             Consistency score (0.0-1.0)
@@ -433,7 +433,7 @@ class UnifiedForensicAnalyzer:
             return "LOW"
 
     def _generate_summary(self, results: dict[str, Any]) -> str:
-        """Generate concise summary."""
+        """Generiert concise summary."""
         medium = results["medium"].medium
         era = results["era"].era
 
@@ -444,7 +444,7 @@ class UnifiedForensicAnalyzer:
         return f"{medium} ({era}){defects_str}"
 
     def _generate_detailed_report(self, results: dict[str, Any], consistency_score: float) -> str:
-        """Generate detailed analysis report."""
+        """Generiert detailed analysis report."""
         lines = []
 
         lines.append("DETAILED FORENSIC ANALYSIS REPORT")
@@ -497,7 +497,7 @@ class UnifiedForensicAnalyzer:
         defect_model_path: str | None = None,
     ) -> dict[str, Any]:
         """
-        Load trained models from files.
+        Lädt trained models from files.
 
         Args:
             medium_model_path: Path to Medium Detector model
@@ -520,7 +520,7 @@ class UnifiedForensicAnalyzer:
             logger.info("Loaded Defect Detector from %s", defect_model_path)
 
     def is_ready(self) -> bool:
-        """Check if analyzer is ready (at least one detector loaded)."""
+        """Prüft if analyzer is ready (at least one detector loaded)."""
         return (
             (self.medium_detector is not None and self.medium_detector.is_trained)
             or (self.era_detector is not None and self.era_detector.is_trained)
@@ -528,7 +528,7 @@ class UnifiedForensicAnalyzer:
         )
 
     def get_status(self) -> dict[str, bool]:
-        """Get status of all detectors."""
+        """Gibt zurück: status of all detectors."""
         return {
             "medium_detector": self.medium_detector is not None and self.medium_detector.is_trained,
             "era_detector": self.era_detector is not None and self.era_detector.is_trained,

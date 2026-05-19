@@ -231,7 +231,7 @@ _ROUGHNESS_APPLICABLE_TYPES: frozenset = frozenset(
 
 
 def _as_membership_tuple(values: object) -> tuple[object, ...]:
-    """Normalize membership sources so runtime checks survive scalar misconfiguration."""
+    """Normalisiert membership sources so runtime checks survive scalar misconfiguration."""
     if values is None:
         return ()
     if isinstance(values, (str, bytes)):
@@ -323,7 +323,7 @@ class ArtifactFreedomGate:
         goal_weights: dict[str, float] | None = None,
         restorability_score: float | None = None,
     ) -> ArtifactFreedomResult:
-        """Evaluate artifact freedom of restored audio vs original.
+        """Bewertet artifact freedom of restored audio vs original.
 
         Args:
             original: input audio (float32, [-1, 1])
@@ -680,7 +680,7 @@ class ArtifactFreedomGate:
         sr: int,
         thresholds: dict,
     ) -> list[DetectedArtifact]:
-        """Detect isolated tonal peaks in silence segments of the residual."""
+        """Erkennt isolated tonal peaks in silence segments of the residual."""
         artifacts: list[DetectedArtifact] = []
         residual = restored - orig
         threshold_db = thresholds["musical_noise_peak_db"]
@@ -801,7 +801,7 @@ class ArtifactFreedomGate:
         thresholds: dict,
         level_scale: float = 1.0,
     ) -> list[DetectedArtifact]:
-        """Detect energy before transient attacks that wasn't in the original.
+        """Erkennt energy before transient attacks that wasn't in the original.
 
         level_scale: global RMS ratio (restored_rms / orig_rms).  Used in
             per-phase mode to avoid treating uniform gain changes (loudness
@@ -884,7 +884,7 @@ class ArtifactFreedomGate:
         sr: int,
         thresholds: dict,
     ) -> list[DetectedArtifact]:
-        """Detect frequency gaps in the restored passband that weren't in original."""
+        """Erkennt frequency gaps in the restored passband that weren't in original."""
         artifacts: list[DetectedArtifact] = []
         hole_threshold_hz = thresholds["spectral_hole_hz"]
 
@@ -994,7 +994,7 @@ class ArtifactFreedomGate:
         left: np.ndarray,
         right: np.ndarray,
     ) -> tuple[float, float]:
-        """Return (lr_corr, mono_compat) for a pair of channel frames."""
+        """Gibt (lr_corr, mono_compat) for a pair of channel frames zurück."""
         l_rms = float(np.sqrt(np.mean(left**2) + 1e-12))
         r_rms = float(np.sqrt(np.mean(right**2) + 1e-12))
 
@@ -1016,7 +1016,7 @@ class ArtifactFreedomGate:
         original_stereo: np.ndarray | None = None,
         delta_threshold: float = 0.12,
     ) -> list[DetectedArtifact]:
-        """Detect mono-incompatible phase cancellation in stereo output.
+        """Erkennt mono-incompatible phase cancellation in stereo output.
 
         In per-phase mode (``original_stereo`` provided) only frames where THIS
         phase *introduced or worsened* phase cancellation are counted.  Frames
@@ -1182,7 +1182,7 @@ class ArtifactFreedomGate:
         sr: int,
         thresholds: dict,
     ) -> list[DetectedArtifact]:
-        """Detect resonant peaks in CQT that persist > 50 ms."""
+        """Erkennt resonant peaks in CQT that persist > 50 ms."""
         artifacts: list[DetectedArtifact] = []
         threshold_db = thresholds["metallic_ringing_peak_db"]
         min_duration_samples = int(0.05 * sr)  # 50 ms
@@ -1257,7 +1257,7 @@ class ArtifactFreedomGate:
         sr: int,
         thresholds: dict,
     ) -> list[DetectedArtifact]:
-        """Detect impulse artifacts (crackle-like) introduced by this phase.
+        """Erkennt impulse artifacts (crackle-like) introduced by this phase.
 
         STFT/spectral phases can introduce impulse artifacts even when their
         primary purpose is restorative:
@@ -1421,7 +1421,7 @@ class ArtifactFreedomGate:
         frame_len: int,
         hop: int,
     ) -> float | None:
-        """Compute average spectral tilt (dB/octave) in silence frames."""
+        """Berechnet average spectral tilt (dB/octave) in silence frames."""
         n_fft = max(256, frame_len)
         win = np.hanning(frame_len).astype(np.float32)
         acc_mag = np.zeros(n_fft // 2 + 1, dtype=np.float64)
@@ -1466,7 +1466,7 @@ class ArtifactFreedomGate:
     # ── §2.49c Roughness/Sharpness (Zwicker/Bismarck) ─────────────────────
 
     def _compute_roughness_zwicker(self, audio: np.ndarray, sr: int) -> float:
-        """Estimate roughness in asper (Zwicker 1991 approximation).
+        """Schätzt roughness in asper (Zwicker 1991 approximation).
 
         Uses temporal envelope modulation energy in 15–300 Hz range.
         Reference: 1 asper ≈ 1 kHz tone, 60 dB SPL, 100 % AM at 70 Hz.
@@ -1503,7 +1503,7 @@ class ArtifactFreedomGate:
             return 0.0
 
     def _compute_sharpness_bismarck(self, audio: np.ndarray, sr: int) -> float:
-        """Estimate sharpness in acum (Bismarck 1974 / DIN 45692 approximation).
+        """Schätzt sharpness in acum (Bismarck 1974 / DIN 45692 approximation).
 
         Uses Bark-scale spectral centroid with g(z) psychoacoustic weighting.
         Reference: 1 acum = 1 kHz narrow-band noise at 60 dB SPL.
@@ -1606,7 +1606,7 @@ class ArtifactFreedomGate:
     # ── Salienz-Gewichtung (§2.49) ─────────────────────────────────────────
 
     def _compute_salience_weight(self, artifact: DetectedArtifact, sr: int) -> float:
-        """Compute perceptual salience weight for an artifact."""
+        """Berechnet perceptual salience weight for an artifact."""
         # Frequency factor
         freq = artifact.frequency_hz
         if 200.0 <= freq <= 5000.0:
@@ -1647,7 +1647,7 @@ class ArtifactFreedomGate:
     # ── Threshold helpers ──────────────────────────────────────────────────
 
     def _get_thresholds(self, material: str) -> dict:
-        """Get material-adaptive thresholds."""
+        """Gibt zurück: material-adaptive thresholds."""
         factors = _MATERIAL_FACTORS.get(material, _MATERIAL_FACTORS["digital"])
         thresholds = {}
         for key, base_val in _BASE_THRESHOLDS.items():
@@ -1672,7 +1672,7 @@ class ArtifactFreedomGate:
 
     @staticmethod
     def _estimate_interchannel_lag_samples(audio: np.ndarray, sr: int, max_seconds: float = 5.0) -> int:
-        """Estimate signed L/R lag using GCC-PHAT on a bounded source window."""
+        """Schätzt signed L/R lag using GCC-PHAT on a bounded source window."""
         try:
             arr = np.asarray(audio, dtype=np.float32)
             if arr.ndim != 2:

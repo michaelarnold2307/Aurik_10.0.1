@@ -93,14 +93,14 @@ class HyperparameterConfig:
 
 class MaterialSpecificOptimizer:
     """
-    Optimizes hyperparameters for specific source materials using Bayesian Optimization.
+    Optimiert hyperparameters for specific source materials using Bayesian Optimization.
     """
 
     def __init__(
         self, material_type: str, storage_path: Path | None = None, n_trials: int = 100, n_jobs: int = 4
     ) -> None:
         """
-        Initialize optimizer for specific material type.
+        Initialisiert optimizer for specific material type.
 
         Args:
             material_type: One of ['vinyl', 'tape_shellac', 'tape_cassette',
@@ -128,7 +128,7 @@ class MaterialSpecificOptimizer:
 
     @staticmethod
     def _ensure_optuna_available() -> None:
-        """Ensure Optuna is available before using optimization features."""
+        """Stellt sicher: Optuna is available before using optimization features."""
         if optuna is None or MedianPruner is None or TPESampler is None:
             raise RuntimeError(
                 "Optuna ist nicht installiert. Bitte 'optuna' installieren, um Hyperparameter-Optimierung zu nutzen."
@@ -275,7 +275,7 @@ class MaterialSpecificOptimizer:
 
     def compute_quality_score(self, output_audio: np.ndarray, reference_audio: np.ndarray) -> float:
         """
-        Compute quality score for optimization.
+        Berechnet quality score for optimization.
 
         Combines multiple objective metrics:
         - PESQ
@@ -325,7 +325,7 @@ class MaterialSpecificOptimizer:
         study_name: str | None = None,
     ) -> dict[str, Any]:
         """
-        Run optimization.
+        Führt aus: optimization.
 
         Args:
             evaluation_dataset: Dataset for evaluation
@@ -391,7 +391,7 @@ class MaterialSpecificOptimizer:
         }
 
     def save_best_parameters(self) -> None:
-        """Save best parameters to file."""
+        """Speichert best parameters to file."""
         output_path = self.storage_path / f"best_params_{self.material_type}.yaml"
 
         with open(output_path, "w") as f:
@@ -400,7 +400,7 @@ class MaterialSpecificOptimizer:
         logger.info("Best parameters saved: %s", output_path)
 
     def save_optimization_report(self) -> None:
-        """Save detailed optimization report."""
+        """Speichert detailed optimization report."""
         if self.study is None:
             logger.warning("No study available for report generation")
             return
@@ -455,7 +455,7 @@ class MaterialSpecificOptimizer:
             logger.warning("Optuna visualization not available, skipping plots")
 
     def load_best_parameters(self) -> dict[str, Any] | None:
-        """Load best parameters from file."""
+        """Lädt best parameters from file."""
         params_path = self.storage_path / f"best_params_{self.material_type}.yaml"
 
         if not params_path.exists():
@@ -472,7 +472,7 @@ class MaterialSpecificOptimizer:
 
 class MultiMaterialOptimizer:
     """
-    Optimizes hyperparameters for all material types in parallel.
+    Optimiert hyperparameters for all material types in parallel.
     """
 
     def __init__(self, storage_path: Path | None = None, n_trials_per_material: int = 100) -> None:
@@ -494,7 +494,7 @@ class MultiMaterialOptimizer:
         self, datasets: dict[str, list[tuple[np.ndarray, np.ndarray]]], process_functions: dict[str, Callable]
     ) -> dict[str, dict[str, Any]]:
         """
-        Optimize all materials.
+        Optimiert all materials.
 
         Args:
             datasets: Dict mapping material_type -> evaluation dataset
@@ -528,7 +528,7 @@ class MultiMaterialOptimizer:
         return results
 
     def generate_summary_report(self, results: dict[str, dict[str, Any]]) -> np.ndarray:
-        """Generate summary report for all materials."""
+        """Generiert summary report for all materials."""
         summary = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "materials": results,

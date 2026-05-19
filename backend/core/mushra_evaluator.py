@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 def _safe_fft_size(length: int, target: int = 2048, minimum: int = 64) -> int:
-    """Return power-of-two FFT size capped by signal length.
+    """Gibt power-of-two FFT size capped by signal length zurück.
 
     Prevents librosa short-signal warnings while keeping spectral resolution
     as close as possible to the nominal target.

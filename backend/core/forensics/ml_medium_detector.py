@@ -77,7 +77,7 @@ class MLMediumDetector:
 
     def __init__(self, n_estimators: int = 200, max_depth: int = 20, random_state: int = 42) -> None:
         """
-        Initialize ML Medium Detector.
+        Initialisiert ML Medium Detector.
 
         Args:
             n_estimators: Number of trees in Random Forest
@@ -272,7 +272,7 @@ class MLMediumDetector:
 
     def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, verbose: bool = True) -> dict[str, Any]:
         """
-        Evaluate model on test set.
+        Bewertet model on test set.
 
         Args:
             X_test: Test feature matrix
@@ -357,7 +357,7 @@ class MLMediumDetector:
 
     def get_feature_importance(self, top_n: int = 20) -> dict[str, float]:
         """
-        Get top N most important features from Random Forest.
+        Gibt zurück: top N most important features from Random Forest.
 
         Args:
             top_n: Number of top features to return
@@ -383,7 +383,7 @@ class MLMediumDetector:
 
     def save(self, filepath: Path) -> None:
         """
-        Save trained model to disk.
+        Speichert trained model to disk.
 
         Args:
             filepath: Path to save model (.pkl)
@@ -410,7 +410,7 @@ class MLMediumDetector:
 
     def load(self, filepath: Path) -> None:
         """
-        Load trained model from disk.
+        Lädt trained model from disk.
 
         Args:
             filepath: Path to model file (.pkl)

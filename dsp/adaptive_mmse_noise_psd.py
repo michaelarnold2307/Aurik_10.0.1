@@ -32,7 +32,7 @@ class AdaptiveMMSENoisePSD:
         self.bias_factor = bias_factor  # minimum-statistics bias compensation
 
     def estimate_noise(self, power_spectrogram: np.ndarray) -> np.ndarray:
-        """Estimate noise PSD using minimum-statistics with exponential smoothing.
+        """Schätzt noise PSD using minimum-statistics with exponential smoothing.
 
         Combines recursive PSD averaging with minimum tracking:
         1. Smooth PSD with exponential averaging

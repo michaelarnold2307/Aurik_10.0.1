@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 41: Professional Output Format Optimization v2.0
+Phase 41: Professional Output Format Optimization v2.0.
 =======================================================
 
 High-quality resampling, dithering, and format-specific optimization for final delivery.
@@ -158,7 +158,7 @@ class OutputFormatOptimization(PhaseInterface):
         **kwargs,
     ) -> PhaseResult:
         """
-        Apply output format optimization.
+        Wendet an: output format optimization.
 
         Args:
             audio: Audio samples (mono or stereo)
@@ -421,7 +421,7 @@ class OutputFormatOptimization(PhaseInterface):
         return audio_normalized, lufs_before, lufs_after
 
     def _measure_integrated_lufs(self, audio: np.ndarray, sample_rate: int) -> float:
-        """Measure integrated loudness using ITU-R BS.1770 where available."""
+        """Misst integrated loudness using ITU-R BS.1770 where available."""
         audio_arr = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
 
         if PROFESSIONAL_METERS_AVAILABLE:
@@ -526,7 +526,7 @@ class OutputFormatOptimization(PhaseInterface):
 
     def _apply_tpdf_dither(self, audio: np.ndarray, bit_depth: int = 16) -> np.ndarray:
         """
-        Apply TPDF (Triangular PDF) dither before bit-depth quantization.
+        Wendet an: TPDF (Triangular PDF) dither before bit-depth quantization.
         Supports 16-bit and 24-bit output.
         """
         if bit_depth == 16:
@@ -550,7 +550,7 @@ class OutputFormatOptimization(PhaseInterface):
 
     def _apply_noise_shaped_dither(self, audio: np.ndarray) -> np.ndarray:
         """
-        Apply noise-shaped dither (psychoacoustic optimization).
+        Wendet an: noise-shaped dither (psychoacoustic optimization).
         """
         # Simplified noise shaping: High-pass filtered dither
         # Pushes quantization noise to high frequencies (less audible)
@@ -605,7 +605,7 @@ class OutputFormatOptimization(PhaseInterface):
 
     def _estimate_snr(self, audio: np.ndarray) -> float:
         """
-        Estimate SNR via RMS-block method (O(N), avoids O(N log N) FFT overhead).
+        Schätzt SNR via RMS-block method (O(N), avoids O(N log N) FFT overhead).
         """
         flat = audio.flatten() if audio.ndim == 2 else audio
         rms_signal = float(np.sqrt(np.mean(flat**2))) + 1e-10

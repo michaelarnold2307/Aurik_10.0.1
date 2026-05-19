@@ -154,7 +154,7 @@ class WowFlutterFix(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive detection/confidence thresholds for phase_12.
+        """Berechnet adaptive detection/confidence thresholds for phase_12.
 
         Values are bounded to stable ranges and tuned to keep fast mode more
         conservative than quality while allowing low-restorability material to
@@ -306,7 +306,7 @@ class WowFlutterFix(PhaseInterface):
         }
 
     def get_metadata(self) -> PhaseMetadata:
-        """Get phase metadata."""
+        """Gibt zurück: phase metadata."""
         return PhaseMetadata(
             phase_id="phase_12_wow_flutter_fix",
             name="Wow & Flutter Correction v2 Professional",
@@ -1421,7 +1421,7 @@ class WowFlutterFix(PhaseInterface):
         bump_locations: list[tuple[float, float]],
         strength: float = 0.85,
     ) -> tuple[np.ndarray, int]:
-        """Repair impulsive transport bumps at known locations.
+        """Repariert impulsive transport bumps at known locations.
 
         Multi-stage repair strategy (v2):
             1. Amplitude envelope smoothing toward context RMS level
@@ -1550,7 +1550,7 @@ class WowFlutterFix(PhaseInterface):
         margin_samples: int,
         strength: float,
     ) -> np.ndarray:
-        """Smooth the amplitude envelope of a bump region toward the reference RMS level.
+        """Glättet the amplitude envelope of a bump region toward the reference RMS level.
 
         Uses a Hanning-weighted crossfade at margins and local RMS gain correction
         in the bump interior to eliminate sudden amplitude jumps.
@@ -1596,7 +1596,7 @@ class WowFlutterFix(PhaseInterface):
         ctx_after: np.ndarray,
         strength: float,
     ) -> np.ndarray:
-        """Blend the magnitude spectrum of a bump region toward surrounding context.
+        """Mischt the magnitude spectrum of a bump region toward surrounding context.
 
         Transport bumps inject spurious low-frequency energy (mechanical thump) and
         cause abrupt spectral centroid shifts. This method:
@@ -1708,7 +1708,7 @@ class WowFlutterFix(PhaseInterface):
         *,
         is_primary_tape: bool = True,
     ) -> tuple[np.ndarray, int]:
-        """Detect and repair tape head contact level dips — STFT-domain SOTA v2.
+        """Erkennt and repair tape head contact level dips — STFT-domain SOTA v2.
 
         Physics basis (Wallace 1951):
             When head-tape contact pressure varies, effective head-tape spacing
@@ -1947,7 +1947,7 @@ class WowFlutterFix(PhaseInterface):
 
         # ── Step 5: Apply spectral gain to each channel (§2.51 linked) ──
         def _apply_gain_to_channel(sig_ch: np.ndarray) -> np.ndarray:
-            """Apply the spectral_gain mask to one audio channel via STFT."""
+            """Wendet an: the spectral_gain mask to one audio channel via STFT."""
             _, _, X_ch = signal.stft(
                 sig_ch.astype(np.float64),
                 fs=sample_rate,
@@ -2163,7 +2163,7 @@ class WowFlutterFix(PhaseInterface):
         self, pitch_trajectory: np.ndarray, confidence: np.ndarray, threshold: float
     ) -> tuple[bool, float]:
         """
-        Detect wow & flutter by analyzing pitch deviations with confidence weighting.
+        Erkennt wow & flutter by analyzing pitch deviations with confidence weighting.
 
         Args:
             pitch_trajectory: Pitch estimates (Hz)
@@ -2286,7 +2286,7 @@ class WowFlutterFix(PhaseInterface):
         self, audio: np.ndarray, stretch_factors: np.ndarray, _sample_rate: int
     ) -> np.ndarray:
         """
-        Apply time-varying WSOLA-style time mapping for wow/flutter correction.
+        Wendet an: time-varying WSOLA-style time mapping for wow/flutter correction.
 
         Uses per-frame stretch factors interpolated to sample-rate, followed by a
         monotonic source-position mapping and band-limited interpolation. This keeps

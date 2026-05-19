@@ -130,7 +130,7 @@ class AttackTypeClassifier:
 
     @staticmethod
     def _mono(audio: np.ndarray) -> np.ndarray:
-        """Return mono view (averaged channels, float64)."""
+        """Gibt mono view (averaged channels, float64) zurück."""
         a = audio.astype(np.float64)
         if a.ndim == 2:
             return np.mean(a, axis=0) if a.shape[0] < a.shape[1] else np.mean(a, axis=1)
@@ -183,7 +183,7 @@ class AttackTypeClassifier:
 
     @staticmethod
     def _find_onset(mono: np.ndarray, sr: int) -> int:
-        """Detect the first prominent onset within the first ONSET_SEARCH_MS.
+        """Erkennt the first prominent onset within the first ONSET_SEARCH_MS.
 
         Uses a simple spectral flux onset detector (Bello et al. 2005):
         per-bin positive flux summed across the spectrum, peak-picked.
@@ -418,7 +418,7 @@ _lock = threading.Lock()
 
 
 def get_attack_type_classifier() -> AttackTypeClassifier:
-    """Return the module-level singleton :class:`AttackTypeClassifier`.
+    """Gibt the module-level singleton :class:`AttackTypeClassifier` zurück.
 
     Thread-safe via double-checked locking (§3.2).
     """

@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class FrissonZone:
-    """A time interval with high frisson-induction potential.
+    """time interval with high frisson-induction potential.
 
     Attributes:
         start_s: Zone start time in seconds.
@@ -78,7 +78,7 @@ class FrissonZone:
 
 
 class FrissonCandidateDetector:
-    """Detects time zones with high frisson/chill potential in audio.
+    """Erkennt time zones with high frisson/chill potential in audio.
 
     Thread-safe; use the module-level get_frisson_detector() singleton.
     """
@@ -95,7 +95,7 @@ class FrissonCandidateDetector:
     MAX_ANALYSIS_S: float = 600.0  # analyse at most 10 min; crop center for longer songs
 
     def detect(self, audio: np.ndarray, sr: int, max_zones: int = 20) -> list[FrissonZone]:
-        """Detect frisson candidate zones in audio.
+        """Erkennt frisson candidate zones in audio.
 
         Args:
             audio:     Audio signal (mono or stereo, any dtype).
@@ -176,7 +176,7 @@ class FrissonCandidateDetector:
         frame_size: int,
         hop: int,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Compute per-frame acoustic features.
+        """Berechnet per-frame acoustic features.
 
         Returns:
             rms_db:      [n_frames]     dBFS RMS per frame
@@ -279,7 +279,7 @@ class FrissonCandidateDetector:
         mel_energy: np.ndarray,
         sub_rms_db: np.ndarray,
     ) -> tuple[np.ndarray, list[str]]:
-        """Compute combined frisson score per frame.
+        """Berechnet combined frisson score per frame.
 
         Returns:
             total_score: [n_frames] combined score ∈ [0, 1]
@@ -380,7 +380,7 @@ class FrissonCandidateDetector:
         duration_s: float,
         max_zones: int,
     ) -> list[FrissonZone]:
-        """Find peak frames, wrap in 2-second zones, merge overlapping zones."""
+        """Findet Peak-Frames, fasst sie in 2-Sekunden-Zonen zusammen und führt überlappende Zonen zusammen."""
         n = len(scores)
         if n < 3:
             return []
@@ -438,7 +438,7 @@ class FrissonCandidateDetector:
 
     @staticmethod
     def _merge_zones(zones: list[FrissonZone]) -> list[FrissonZone]:
-        """Merge overlapping or adjacent zones (gap < 0.2 s), keep max score."""
+        """Führt zusammen: overlapping or adjacent zones (gap < 0.2 s), keep max score."""
         if len(zones) <= 1:
             return zones
 

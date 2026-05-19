@@ -37,7 +37,7 @@ from .safety_wrapper_template import (
 
 def measure_harmonic_headroom(audio: np.ndarray) -> float:
     """
-    Measure available headroom for harmonic generation.
+    Misst available headroom for harmonic generation.
 
     Harmonic exciters add energy - need headroom to avoid clipping.
     Uses 99.9th percentile instead of absolute max so that isolated
@@ -136,7 +136,7 @@ def classify_harmonic_content(audio: np.ndarray, sr: int) -> dict[str, float]:
 
 def detect_harshness(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     """
-    Detect harshness (excessive high-mid energy).
+    Erkennt harshness (excessive high-mid energy).
 
     Harshness frequency range: 2-6 kHz
 
@@ -182,7 +182,7 @@ def detect_harshness(audio: np.ndarray, sr: int) -> tuple[bool, float]:
 
 def measure_brightness(audio: np.ndarray, sr: int) -> float:
     """
-    Measure spectral brightness (high-frequency content).
+    Misst spectral brightness (high-frequency content).
 
     Args:
         audio: Input audio
@@ -203,7 +203,7 @@ def measure_brightness(audio: np.ndarray, sr: int) -> float:
 
 def detect_intermodulation_distortion(audio: np.ndarray, sr: int) -> float:
     """
-    Detect intermodulation distortion (IMD).
+    Erkennt intermodulation distortion (IMD).
 
     IMD creates sum/difference frequencies not in original signal.
 
@@ -282,7 +282,7 @@ class HarmonicExciterSafety(BaseSafetyWrapper):
         max_harshness: float = 0.6,
     ):
         """
-        Initialize Harmonic Exciter Safety Wrapper.
+        Initialisiert Harmonic Exciter Safety Wrapper.
 
         Args:
             processor_func: Exciter function (audio, sr, amount, harmonic_mode) -> audio
@@ -305,7 +305,7 @@ class HarmonicExciterSafety(BaseSafetyWrapper):
         self.max_harshness = max_harshness
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for harmonic excitement."""
+        """Validiert pre-conditions for harmonic excitement."""
         # Basic audio validation
         is_valid, errors = validate_audio_basic(audio)
 
@@ -394,7 +394,7 @@ class HarmonicExciterSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions after harmonic excitement."""
+        """Validiert post-conditions after harmonic excitement."""
         issues = []
         side_effects = []
         metrics = {}
@@ -489,7 +489,7 @@ class HarmonicExciterSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute overall quality score."""
+        """Berechnet overall quality score."""
         scores = []
 
         # No clipping

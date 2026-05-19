@@ -35,7 +35,7 @@ class ModelInfo:
     opset_version: int = 14
 
     def __post_init__(self):
-        """Validate model metadata."""
+        """Validiert model metadata."""
         if not isinstance(self.model_path, Path):
             self.model_path = Path(self.model_path)
 

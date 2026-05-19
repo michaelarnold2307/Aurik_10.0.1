@@ -104,7 +104,7 @@ class QualityControl:
 
 def create_quality_report_from_job(job: object) -> object:
     """
-    Create formal QualityReport from ResturationJob.
+    Erstellt formal QualityReport from ResturationJob.
 
     Extracts quality metrics from completed job and formats them
     according to AURIK Spec 3.5 (Quality Assurance & Audit).
@@ -543,7 +543,7 @@ class QualityGates:
         return all_passed, results
 
     def _compute_snr(self, audio: np.ndarray) -> float:
-        """Compute Signal-to-Noise Ratio (simplified)."""
+        """Berechnet Signal-to-Noise Ratio (simplified)."""
         # Signal: RMS of signal
         signal_rms = float(np.sqrt(np.mean(audio**2)))
 
@@ -563,7 +563,7 @@ class QualityGates:
 
     def _compute_thd(self, audio: np.ndarray, sr: int) -> float:
         """
-        Compute Total Harmonic Distortion (simplified).
+        Berechnet Total Harmonic Distortion (simplified).
 
         THD = sqrt(sum of harmonic powers) / fundamental power
         """
@@ -620,7 +620,7 @@ class QualityGates:
 
     def _compute_spectral_fidelity(self, audio_before: np.ndarray, audio_after: np.ndarray, sr: int) -> float:
         """
-        Compute spectral fidelity (how well frequency response is preserved).
+        Berechnet spectral fidelity (how well frequency response is preserved).
 
         Returns: float (0-1, where 1 = perfect preservation)
         """
@@ -658,11 +658,11 @@ class QualityGates:
         return float(np.clip(fidelity, 0, 1))
 
     def get_results_log(self) -> list:
-        """Returns all quality gate results."""
+        """Gibt all quality gate results zurück."""
         return self.results_log
 
     def print_report(self, results: dict):
-        """Print formatted quality gate report with ML metrics."""
+        """Gibt aus: formatted quality gate report with ML metrics."""
         logger.info("\n" + "=" * 80)
         logger.info("QUALITY GATES REPORT - AURIK v8.0")
         logger.info("=" * 80)

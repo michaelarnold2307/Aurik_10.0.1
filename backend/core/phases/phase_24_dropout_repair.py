@@ -95,8 +95,6 @@ except ImportError:
     QUALITY_MODE_AVAILABLE = False
 
 try:
-    pass
-
     _PGHI_AVAILABLE_P24 = True
 except ImportError:
     _PGHI_AVAILABLE_P24 = False
@@ -126,11 +124,11 @@ class DropoutRepairPhase(PhaseInterface):
 
     @staticmethod
     def _compute_inpainting_runtime_profile(
-        material: str,
+        material: str,  # pylint: disable=redefined-outer-name
         quality_mode: str,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive inpainting profile for context-aware dropout repair (§2.54)."""
+        """Berechnet adaptive inpainting profile for context-aware dropout repair (§2.54)."""
         mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         if restorability_score is None:
@@ -279,7 +277,8 @@ class DropoutRepairPhase(PhaseInterface):
     _MRSA_MAX_CONTEXT_SECONDS: float = 2.0
 
     def __init__(self):
-        """Initialize Phase 24 Dropout Repair."""
+        """Initialisiert Phase 24 Dropout Repair."""
+        super().__init__()
         self._audiosr_plugin = None
         self._gacela_plugin = None  # lazy-loaded on first GACELA repair attempt
         self._audioldm2_plugin = None  # lazy-loaded on first AudioLDM2 repair attempt
@@ -287,6 +286,7 @@ class DropoutRepairPhase(PhaseInterface):
         self._ml_guard_events: list[dict[str, Any]] = []
         self._current_material: str = "unknown"  # updated per process() call
         self._current_panns_tags: dict[str, float] = {}  # updated per process() call from kwargs
+        self._current_phoneme_timeline: object = None  # gesetzt in process()
 
     def _content_adaptive_repair_strength(
         self,
@@ -322,8 +322,12 @@ class DropoutRepairPhase(PhaseInterface):
 
         return float(np.clip(strength, 0.0, base_strength))
 
-    def _has_sufficient_ml_headroom(self, audio: np.ndarray, sample_rate: int) -> bool:
-        """Return True when enough physical RAM is available for AudioSR dropout repair.
+    def _has_sufficient_ml_headroom(
+        self,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
+        sample_rate: int,
+    ) -> bool:
+        """Gibt True when enough physical RAM is available for AudioSR dropout repair zurück.
 
         Guard 1 — material check: AudioSR is the wrong tool for lossy-codec dropout
         artifacts. DSP inpainting preferred; never load 6 GB model for this.
@@ -332,9 +336,9 @@ class DropoutRepairPhase(PhaseInterface):
         memory; empirical per-minute inference buffer overhead is added.
         """
         try:
-            import gc
+            import gc  # pylint: disable=import-outside-toplevel
 
-            import psutil
+            import psutil  # pylint: disable=import-outside-toplevel
         except Exception:
             return True
 
@@ -393,14 +397,14 @@ class DropoutRepairPhase(PhaseInterface):
         available_gb = float(psutil.virtual_memory().available / (1024**3))
         if available_gb < required_gb + 1.5:
             try:
-                from backend.core.plugin_lifecycle_manager import evict_stale_plugins
+                from backend.core.plugin_lifecycle_manager import evict_stale_plugins  # pylint: disable=import-outside-toplevel  # isort: skip
 
                 evict_stale_plugins(required_mb=int(required_gb * 1024))
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
             gc.collect()
             try:
-                import ctypes as _ct
+                import ctypes as _ct  # pylint: disable=import-outside-toplevel
 
                 _ct.CDLL("libc.so.6").malloc_trim(0)
             except Exception as _exc:
@@ -433,7 +437,7 @@ class DropoutRepairPhase(PhaseInterface):
 
     def _get_audiosr_plugin(self):
         """
-        Lazy load AudioSR Plugin.
+        Lädt beim ersten Zugriff: AudioSR Plugin.
 
         Returns:
             AudioSR plugin or None if unavailable
@@ -442,7 +446,7 @@ class DropoutRepairPhase(PhaseInterface):
             return self._audiosr_plugin
 
         try:
-            from plugins.audiosr_plugin import AudioSRPlugin
+            from plugins.audiosr_plugin import AudioSRPlugin  # pylint: disable=import-outside-toplevel
 
             self._audiosr_plugin = AudioSRPlugin()
             logger.info("✅ AudioSR Plugin loaded for Dropout Repair")
@@ -459,17 +463,17 @@ class DropoutRepairPhase(PhaseInterface):
             GacelaPlugin with _model_ready==True, or None if unavailable.
         """
         if self._gacela_plugin is not None:
-            return self._gacela_plugin if self._gacela_plugin._model_ready else None
+            return self._gacela_plugin if self._gacela_plugin._model_ready else None  # pylint: disable=protected-access
         try:
-            from plugins.gacela_plugin import get_gacela_plugin
+            from plugins.gacela_plugin import get_gacela_plugin  # pylint: disable=import-outside-toplevel
 
             plugin = get_gacela_plugin()
             self._gacela_plugin = plugin
-            if plugin._model_ready:
+            if plugin._model_ready:  # pylint: disable=protected-access
                 logger.info("GACELA plugin loaded for musical inpainting (50–750 ms).")
             else:
                 logger.debug("GACELA: model not ready, DSP fallback will be used.")
-            return plugin if plugin._model_ready else None
+            return plugin if plugin._model_ready else None  # pylint: disable=protected-access
         except Exception as exc:
             logger.debug("GACELA plugin unavailable: %s", exc)
             return None
@@ -481,17 +485,17 @@ class DropoutRepairPhase(PhaseInterface):
             AudioLDM2Plugin with _ok==True, or None if unavailable / budget exceeded.
         """
         if self._audioldm2_plugin is not None:
-            return self._audioldm2_plugin if self._audioldm2_plugin._ok else None
+            return self._audioldm2_plugin if self._audioldm2_plugin._ok else None  # pylint: disable=protected-access
         try:
-            from plugins.audioldm2_plugin import get_audioldm2_plugin
+            from plugins.audioldm2_plugin import get_audioldm2_plugin  # pylint: disable=import-outside-toplevel
 
             plugin = get_audioldm2_plugin()
             self._audioldm2_plugin = plugin
-            if plugin._ok:
+            if plugin._ok:  # pylint: disable=protected-access
                 logger.info("AudioLDM2 plugin loaded for very-long dropout synthesis (> 3 s).")
             else:
                 logger.debug("AudioLDM2: model not ready, AudioSR/DSP fallback will be used.")
-            return plugin if plugin._ok else None
+            return plugin if plugin._ok else None  # pylint: disable=protected-access
         except Exception as exc:
             logger.debug("AudioLDM2 plugin unavailable: %s", exc)
             return None
@@ -499,11 +503,11 @@ class DropoutRepairPhase(PhaseInterface):
     @staticmethod
     def _build_audioldm2_prompt(
         context_audio: np.ndarray,
-        sr: int,
-        material: str,
+        sr: int,  # pylint: disable=redefined-outer-name
+        material: str,  # pylint: disable=redefined-outer-name
         panns_tags: dict[str, float] | None = None,
     ) -> str:
-        """Build a descriptive text prompt for AudioLDM2 from context audio.
+        """Erstellt a descriptive text prompt for AudioLDM2 from context audio.
 
         Priority order for content classification:
         1. PANNs tags (if provided) — most reliable, model-derived
@@ -579,10 +583,10 @@ class DropoutRepairPhase(PhaseInterface):
 
     def _repair_with_audioldm2(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
         dropouts: list[tuple[int, int]],
     ) -> list[tuple[int, int]]:
-        """Repair very-long dropouts (> 3 s) via AudioLDM2 text-conditioned generative synthesis.
+        """Repariert very-long dropouts (> 3 s) via AudioLDM2 text-conditioned generative synthesis.
 
         AudioLDM2 generates plausible audio content from a text prompt derived from
         the context audio.  The generated audio is resampled from 16 kHz to 48 kHz,
@@ -600,7 +604,7 @@ class DropoutRepairPhase(PhaseInterface):
             List of (start, end) tuples that could NOT be repaired; caller
             falls back to AudioSR and then DSP for these.
         """
-        from scipy.signal import resample as _scipy_resample
+        from scipy.signal import resample as _scipy_resample  # pylint: disable=import-outside-toplevel
 
         plugin = self._get_audioldm2_plugin()
         if plugin is None:
@@ -660,7 +664,7 @@ class DropoutRepairPhase(PhaseInterface):
                 # Apply cosine crossfades
                 fade_n = max(2, int(self.sample_rate * _CROSSFADE_S))
                 if fade_n * 2 < target_samples:
-                    t = np.linspace(0.0, np.pi / 2, fade_n, dtype=np.float32)
+                    t = np.linspace(0.0, np.pi / 2, fade_n, dtype=np.float32)  # pylint: disable=redefined-outer-name
                     fade_in = np.sin(t)
                     fade_out = np.cos(t)
                     # Entry crossfade
@@ -689,10 +693,10 @@ class DropoutRepairPhase(PhaseInterface):
 
     def _repair_with_gacela(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
         dropouts: list[tuple[int, int]],
     ) -> list[tuple[int, int]]:
-        """Repair 50–750 ms dropouts via GACELA musical inpainting GAN (§4.4).
+        """Repariert 50–750 ms dropouts via GACELA musical inpainting GAN (§4.4).
 
         GACELA fills gaps by conditioning on left and right context audio and
         synthesising plausible musical content using a trained GAN.
@@ -786,12 +790,14 @@ class DropoutRepairPhase(PhaseInterface):
             is_cpu_intensive=True,
             is_io_intensive=False,
             quality_impact=0.94,  # Professional (was est. 0.80)
-            description="Professional dropout repair with context-aware inpainting (comparable to iZotope RX Spectral Repair)",
+            description=(
+                "Professional dropout repair with context-aware inpainting (comparable to iZotope RX Spectral Repair)"
+            ),
         )
 
     def process(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
         sample_rate: int = 48000,
         material_type: str = "unknown",
         quality_mode: str | None = None,
@@ -883,8 +889,55 @@ class DropoutRepairPhase(PhaseInterface):
         # §11.7a: Bereits von RekonstruktionsDenker reparierte Gap-Regionen filtern
         _repaired_gaps: list[tuple[int, int]] = kwargs.get("repaired_gap_samples", [])
 
+        # §2.68d [RELEASE_MUST] SSIP Null-Propagation-Guard: Stille-Zonen aus ORIGINAL-Audio.
+        # _get_structural_silence_zones() liefert immer eine Liste — niemals None.
+        _ssip_zones_p24: list[tuple[int, int]] = []
+        try:
+            from backend.core.dsp.structural_silence_isolation import (  # pylint: disable=import-outside-toplevel
+                _get_structural_silence_zones as _ssip_get_zones_p24,
+            )
+
+            _mat_key_p24 = str(kwargs.get("material_type", "unknown") or "unknown").lower()
+            _ssip_zones_p24 = _ssip_get_zones_p24(kwargs, audio, sample_rate, _mat_key_p24)
+            if _ssip_zones_p24:
+                _repaired_gaps = list(_repaired_gaps) + _ssip_zones_p24
+                logger.debug(
+                    "§2.68 SSIP phase_24: %d strukturelle Stille-Zone(n) als pre-repaired markiert",
+                    len(_ssip_zones_p24),
+                )
+        except Exception as _ssip_exc_p24:
+            logger.debug("SSIP phase_24 non-blocking: %s", _ssip_exc_p24)
+
+        # §silence-guarantee: gewollte Stille sind KEINE Dropouts — Stille-Zonen zur
+        # pre-repaired-Liste hinzufügen, damit die Dropout-Erkennung sie überspringt.
+        # Verhindert Pegelexplosionen durch AR-Interpolation / Inpainting in stillen Passagen.
+        _silence_mask_p24: np.ndarray | None = kwargs.get("silence_mask")
+        if _silence_mask_p24 is None:
+            _ctx_p24 = kwargs.get("restoration_context")
+            if isinstance(_ctx_p24, dict):
+                _silence_mask_p24 = _ctx_p24.get("silence_mask")
+        if isinstance(_silence_mask_p24, np.ndarray) and _silence_mask_p24.size > 1:
+            try:
+                _n_samples_p24 = int(audio.shape[0])  # after to_channels_last: (N,) or (N, C)
+                _mask_mono_p24 = _silence_mask_p24.ravel()[:_n_samples_p24]
+                _is_sil_p24 = _mask_mono_p24 < 0.5
+                if np.any(_is_sil_p24):
+                    _sil_padded = np.concatenate(([False], _is_sil_p24, [False])).astype(np.int8)
+                    _sil_changes = np.diff(_sil_padded)
+                    _sil_zone_starts = np.where(_sil_changes == 1)[0].tolist()
+                    _sil_zone_ends = np.where(_sil_changes == -1)[0].tolist()
+                    _silence_zones_p24 = list(zip(_sil_zone_starts, _sil_zone_ends))
+                    _repaired_gaps = list(_repaired_gaps) + _silence_zones_p24
+                    logger.debug(
+                        "§silence-guarantee phase_24: %d Stille-Zone(n) als pre-repaired markiert"
+                        " — Dropout-Reparatur überspringt sie",
+                        len(_silence_zones_p24),
+                    )
+            except Exception as _sil_exc_p24:
+                logger.debug("§silence-guarantee phase_24: non-blocking error: %s", _sil_exc_p24)
+
         def _filter_pre_repaired(dropouts: list[tuple[int, int]]) -> tuple[list[tuple[int, int]], int]:
-            """Filter out dropouts that overlap with already-repaired gaps."""
+            """Filtert out dropouts that overlap with already-repaired gaps."""
             if not _repaired_gaps:
                 return dropouts, 0
             filtered = []
@@ -1055,6 +1108,25 @@ class DropoutRepairPhase(PhaseInterface):
                 )
 
         repaired_audio = restore_layout(repaired_audio, _p24_transposed)
+
+        # §2.68 SSIP Post-Inpainting-Audit: Hard-Reset in Stille-Zonen (letzter Layer, V17).
+        # Muss nach restore_layout laufen damit Layout-Format korrekt ist.
+        if _ssip_zones_p24:
+            try:
+                from backend.core.dsp.structural_silence_isolation import (  # pylint: disable=import-outside-toplevel
+                    get_structural_silence_isolator as _get_ssip_audit_p24,
+                )
+
+                _original_layout = restore_layout(audio, _p24_transposed)
+                repaired_audio = _get_ssip_audit_p24().post_inpainting_silence_audit(
+                    audio_before_inpainting=_original_layout,
+                    audio_after_inpainting=repaired_audio,
+                    silence_zones=_ssip_zones_p24,
+                    sr=sample_rate,
+                )
+            except Exception as _ssip_audit_p24_exc:
+                logger.debug("SSIP post_inpainting_silence_audit phase_24 (non-blocking): %s", _ssip_audit_p24_exc)
+
         return create_phase_result(
             audio=repaired_audio,
             modifications={
@@ -1097,7 +1169,7 @@ class DropoutRepairPhase(PhaseInterface):
     # ------------------------------------------------------------------ #
     @staticmethod
     def _estimate_stereo_lag_samples(stereo_audio: np.ndarray, max_lag_samples: int = 960) -> int:
-        """Estimate inter-channel lag (R relative to L) for channels-last stereo."""
+        """Schätzt inter-channel lag (R relative to L) for channels-last stereo."""
         if stereo_audio.ndim != 2 or stereo_audio.shape[1] != 2:
             return 0
         left = np.asarray(stereo_audio[:, 0], dtype=np.float64)
@@ -1124,7 +1196,7 @@ class DropoutRepairPhase(PhaseInterface):
 
     @staticmethod
     def _shift_channel_no_wrap(channel: np.ndarray, shift_samples: int) -> np.ndarray:
-        """Shift channel with edge fill, never wrap samples."""
+        """Verschiebt channel with edge fill, never wrap samples."""
         x = np.asarray(channel, dtype=np.float32)
         n = len(x)
         if n == 0 or shift_samples == 0:
@@ -1185,7 +1257,11 @@ class DropoutRepairPhase(PhaseInterface):
         )
         return np.clip(corrected, -1.0, 1.0), stats
 
-    def _detect_dropouts_multimodal(self, audio: np.ndarray, params: dict[str, Any]) -> list[tuple[int, int]]:
+    def _detect_dropouts_multimodal(
+        self,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
+        params: dict[str, Any],
+    ) -> list[tuple[int, int]]:
         """
         Multi-modal dropout detection.
 
@@ -1212,12 +1288,16 @@ class DropoutRepairPhase(PhaseInterface):
 
         return all_dropouts
 
-    def _detect_amplitude_dropouts(self, audio: np.ndarray, params: dict[str, Any]) -> list[tuple[int, int]]:
-        """Detect dropouts via amplitude/energy drop."""
+    def _detect_amplitude_dropouts(
+        self,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
+        params: dict[str, Any],
+    ) -> list[tuple[int, int]]:
+        """Erkennt dropouts via amplitude/energy drop."""
         # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
         MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
         if len(audio) < MIN_AUDIO_SAMPLES:
-            logger.debug(f"phase_24: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}), no dropouts detected")
+            logger.debug("phase_24: audio too short (%d < %d), no dropouts detected", len(audio), MIN_AUDIO_SAMPLES)
             return []  # No dropouts in ultra-short audio
 
         # RMS envelope
@@ -1265,7 +1345,7 @@ class DropoutRepairPhase(PhaseInterface):
                 start_idx = i
                 in_dropout = True
             elif not is_dropout and in_dropout:
-                duration = i - start_idx
+                duration = i - start_idx  # pylint: disable=redefined-outer-name
                 if min_samples <= duration <= max_samples:
                     dropouts.append((start_idx, i))
                 in_dropout = False
@@ -1277,16 +1357,24 @@ class DropoutRepairPhase(PhaseInterface):
 
         return dropouts
 
-    def _detect_spectral_gaps(self, audio: np.ndarray, params: dict[str, Any]) -> list[tuple[int, int]]:
+    def _detect_spectral_gaps(
+        self,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
+        params: dict[str, Any],
+    ) -> list[tuple[int, int]]:
         """
-        Detect spectral gaps (missing frequency bands).
+        Erkennt spectral gaps (missing frequency bands).
 
         Uses STFT to find regions with sudden spectral energy loss.
         """
         # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
         MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
         if len(audio) < MIN_AUDIO_SAMPLES:
-            logger.debug(f"phase_24: audio too short ({len(audio)} < {MIN_AUDIO_SAMPLES}) for spectral gap detection")
+            logger.debug(
+                "phase_24: audio too short (%d < %d) for spectral gap detection",
+                len(audio),
+                MIN_AUDIO_SAMPLES,
+            )
             return []  # No spectral gaps in ultra-short audio
 
         # STFT
@@ -1340,7 +1428,7 @@ class DropoutRepairPhase(PhaseInterface):
         return dropouts
 
     def _merge_dropout_regions(self, dropouts: list[tuple[int, int]]) -> list[tuple[int, int]]:
-        """Merge overlapping/adjacent dropout regions."""
+        """Führt zusammen: overlapping/adjacent dropout regions."""
         if not dropouts:
             return []
 
@@ -1386,11 +1474,11 @@ class DropoutRepairPhase(PhaseInterface):
 
     def _sanitize_dropout_regions(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
         dropouts: list[tuple[int, int]],
         params: dict[str, Any],
     ) -> list[tuple[int, int]]:
-        """Filter dropout candidates by severity and cap total repaired coverage.
+        """Filtert dropout candidates by severity and cap total repaired coverage.
 
         Prevents over-detection from multimodal union, which can cause broad
         program attenuation and early perceived loudness collapse.
@@ -1458,7 +1546,11 @@ class DropoutRepairPhase(PhaseInterface):
         return self._merge_dropout_regions(kept)
 
     def _repair_dropouts_professional(
-        self, audio: np.ndarray, dropouts: list[tuple[int, int]], params: dict[str, Any], use_ml: bool = False
+        self,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
+        dropouts: list[tuple[int, int]],
+        params: dict[str, Any],
+        use_ml: bool = False,
     ) -> tuple[np.ndarray, int]:
         """
         Professional dropout repair with context-aware inpainting and ML-Hybrid support.
@@ -1589,9 +1681,13 @@ class DropoutRepairPhase(PhaseInterface):
 
         return repaired, ml_repaired_count
 
-    def _repair_with_audiosr(self, audio: np.ndarray, dropouts: list[tuple[int, int]]) -> bool:
+    def _repair_with_audiosr(
+        self,
+        audio: np.ndarray,  # pylint: disable=redefined-outer-name
+        dropouts: list[tuple[int, int]],
+    ) -> bool:
         """
-        Repair long dropouts (>100ms) using AudioSR generative model.
+        Repariert long dropouts (>100ms) using AudioSR generative model.
 
         AudioSR is a bandwidth-extension model — it must NOT be called on the
         full audio signal (would take 12+ minutes for a 4-minute song and freeze
@@ -1627,7 +1723,7 @@ class DropoutRepairPhase(PhaseInterface):
         # §4.6b: PLM active-guard — prevents emergency-eviction during AudioSR inference
         _plm24_asr = None
         try:
-            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm24
+            from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm24  # pylint: disable=import-outside-toplevel  # isort: skip
 
             _plm24_asr = _get_plm24()
             _plm24_asr.set_active("AudioSR", True)
@@ -1752,8 +1848,8 @@ class DropoutRepairPhase(PhaseInterface):
         else:
             return "mixed"
 
-    def _compute_harmonic_ratio(self, audio: np.ndarray) -> float:
-        """Compute harmonic-to-total ratio."""
+    def _compute_harmonic_ratio(self, audio: np.ndarray) -> float:  # pylint: disable=redefined-outer-name
+        """Berechnet harmonic-to-total ratio."""
         audio_1d = np.asarray(audio, dtype=np.float64).reshape(-1)
         spectrum = np.abs(np.fft.rfft(audio_1d))
         freqs = np.fft.rfftfreq(len(audio_1d), 1 / self.sample_rate)
@@ -1779,7 +1875,7 @@ class DropoutRepairPhase(PhaseInterface):
         audio_fill: np.ndarray,
         before: np.ndarray,
         after: np.ndarray,
-        sr: int,
+        sr: int,  # pylint: disable=redefined-outer-name
     ) -> np.ndarray:
         """MRSA zone-specific refinement for tonal gap fill.
 
@@ -1825,7 +1921,7 @@ class DropoutRepairPhase(PhaseInterface):
             eff_hop = max(1, int(hop * eff_win / win))  # Scale hop proportionally
 
             try:
-                from scipy.signal import stft as _stft_fn
+                from scipy.signal import stft as _stft_fn  # pylint: disable=import-outside-toplevel
 
                 _, _, Z_bef = _stft_fn(ctx_bef, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
                 _, _, Z_aft = _stft_fn(ctx_aft, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
@@ -1850,8 +1946,8 @@ class DropoutRepairPhase(PhaseInterface):
 
             # Represent fill signal at zone resolution
             try:
-                from scipy.signal import istft as _istft_fn
-                from scipy.signal import stft as _stft_fn
+                from scipy.signal import istft as _istft_fn  # pylint: disable=import-outside-toplevel
+                from scipy.signal import stft as _stft_fn  # pylint: disable=import-outside-toplevel
 
                 _, _, Zxx_fill = _stft_fn(audio_fill, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
             except Exception:
@@ -1895,7 +1991,7 @@ class DropoutRepairPhase(PhaseInterface):
         # Normalise blended result; fall back to original fill where no zone contributed
         with np.errstate(invalid="ignore", divide="ignore"):
             mask_valid = weight_sum > 1e-9
-            result = np.where(mask_valid, blended / np.where(mask_valid, weight_sum, 1.0), audio_fill)
+            result = np.where(mask_valid, blended / np.where(mask_valid, weight_sum, 1.0), audio_fill)  # pylint: disable=redefined-outer-name
 
         return np.clip(np.nan_to_num(result), -1.0, 1.0)
 
@@ -1944,7 +2040,7 @@ class DropoutRepairPhase(PhaseInterface):
 
             # Top-K Sinusoide aus Betragsspektrum (über Mittelwert selektiert)
             combined_mag = 0.5 * mag_bef + 0.5 * mag_aft
-            np.argsort(combined_mag)[-TOP_K:]
+            _top_k_indices = np.argsort(combined_mag)[-TOP_K:]
 
             # Phasen-Propagation: phi[n+1] = phi[n] + 2π*f*hop/sr (PGHI-Prinzip)
             # Anzahl Output-Frames
@@ -2108,13 +2204,13 @@ class DropoutRepairPhase(PhaseInterface):
         # 50/50 blend
         return 0.5 * tonal + 0.5 * atonal
 
-    def supports_material(self, material_type: str) -> bool:
+    def supports_material(self, material_type: str) -> bool:  # pylint: disable=unused-argument
         """All materials supported."""
         return True
 
 
 if __name__ == "__main__":
-    """Test Professional Dropout Repair Phase."""
+    # Test Professional Dropout Repair Phase.
 
     logger.debug("=" * 80)
     logger.debug("Professional Dropout Repair Phase v2.0 - Test")
@@ -2159,7 +2255,9 @@ if __name__ == "__main__":
         if result.success:
             logger.debug("✅ Processing Complete!")
             logger.debug(
-                f"   Execution Time: {result.metadata['execution_time_seconds']:.3f}s ({result.metadata['execution_time_seconds'] / duration:.2f}× realtime)"
+                "   Execution Time: %.3fs (%.2f× realtime)",
+                result.metadata["execution_time_seconds"],
+                result.metadata["execution_time_seconds"] / duration,
             )
             logger.debug("   Dropouts Repaired: %s", result.modifications["dropouts_repaired"])
             logger.debug("   Avg Duration: %.1fms", result.modifications["avg_dropout_duration_ms"])

@@ -23,7 +23,7 @@ _lock = threading.Lock()
 
 
 def get_import_pipeline(policy_template: dict[str, Any] | None = None) -> ImportPipeline:
-    """Get or create ImportPipeline singleton.
+    """Gibt zurück: or create ImportPipeline singleton.
 
     Args:
         policy_template: Policy template dict (only used on first call)

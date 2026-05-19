@@ -1,5 +1,5 @@
 """
-Logging configuration for pitch correction module.
+Logging-Konfiguration für das Pitch-Korrekturmodul.
 """
 
 import logging

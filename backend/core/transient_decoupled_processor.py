@@ -192,7 +192,7 @@ class TransientDecoupledProcessing:
         return violated
 
     def _grove_violated_ex(self, proc: np.ndarray, orig: np.ndarray, sr: int) -> tuple[bool, float]:
-        """Returns (is_violated, dtw_rms_ms)."""
+        """Gibt (is_violated, dtw_rms_ms) zurück."""
         try:
             hop = self._hop_length
             o_env = np.abs(orig[::hop])

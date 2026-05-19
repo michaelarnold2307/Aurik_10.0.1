@@ -2,7 +2,11 @@
 # Aurik 9 — Spec 04: DSP-Standards & SOTA-Algorithmen
 >
 > Psychoakustische Fundierung, SOTA-Entscheidungsmatrix, Pflicht-Algorithmen.
-> Algorithmen ab 2018 als Minimum. Legacy-Algorithmen als Primärverarbeitung VERBOTEN.
+>
+> **SOTA-Pflicht** gilt absolut: Nur Algorithmen auf dem aktuellen Stand der Wissenschaft
+> erlauben die Klanggüte aus §0 — qualitativ hochwertigste automatisierte Restaurierung
+> für Musik mit Gesang weltweit. Algorithmen ab 2018 als Minimum.
+> Legacy-Algorithmen als Primärverarbeitung **VERBOTEN**.
 
 ## §4.1 Pflicht-Konzepte (mindestens eines pro DSP-Funktion)
 
@@ -764,6 +768,208 @@ def compute_cumulative_generation_loss(transfer_chain: list[str]) -> dict:
 - `RestorationResult.metadata["carrier_chain_characteristics"]` enthält das vollständige Dict.
 
 **Invariante**: Die Formel ist deterministisch — gleiche `transfer_chain` → gleiches Ergebnis. Keine lernbasierten oder stochastischen Elemente in der Baseline-Berechnung.
+
+---
+
+## §4.8a [RELEASE_MUST] DSP-PRESERVE-Taxonomie — Was niemals repariert werden darf (v9.12.0)
+
+> **Normative Querverbindung**: §6.5 (Spec 05) definiert die vollständige Authentic Character
+> Taxonomy pro Materialtyp. §4.8a spezifiziert die **DSP-seitige Durchsetzung** — wie jede
+> Algorithmen-Klasse reagiert, wenn `IntentionalArtifactClassifier` ein Merkmal als PRESERVE
+> klassifiziert hat.
+
+### §4.8a-i PRESERVE-Klassen und ihre DSP-Invarianten
+
+| PRESERVE-Klasse | Merkmale | DSP-Invariante |
+| --- | --- | --- |
+| **VINTAGE_SATURATION** | H2/H3/H4 < −20 dBFS; regelmäßig verteilt | NR-Gain-Floor ≥ 0.90 in Harmonic-Bins; kein THD-Remover |
+| **ROOM_AMBIENCE** | frühe Reflexionen 5–50 ms; SNR > 15 dB | Dereverb-Wet ≤ 0.20; kein Gating unter −55 dBFS |
+| **RECORDING_AMBIENCE** | Raumrauschen −45 bis −35 dBFS; spectral_flatness > 0.5 | Masking-Guard G_floor ≥ 0.20; kein NR darunter |
+| **TAPE_SATURATION** | bandbegrenzte Obertöne 2–8 kHz; THD < 3 % | phase_07 Strength ≤ 0.10 wenn Ziel-Material gleich Tape |
+| **PERFORMANCE_VIBRATO** | F0-Modulation 4–7 Hz, Tiefe ≥ 10 Cent | Pitch-Correction-Strength = 0.0 in Vibrato-Segmenten |
+| **PERIOD_NOISE_FLOOR** | Spektrale Form konsistent mit Ära-Rauschprofil | OMLSA-Softening > 0.50 (kein aggressives NR) |
+| **AUTHENTIC_CLICKS** | Shellac: Clicks < 5 ms in charakteristischer Dichte | phase_09 Skip wenn AUTHENTIC_CLICK_DENSITY Flag gesetzt |
+| **ANALOG_WARMTH** | Tief-Mittenbetonung 200–800 Hz aus Bandbreite | kein HPF < 200 Hz für Kompensation; kein Equalizer-Flatten |
+
+### §4.8a-ii Durchsetzung in NR-Algorithmen
+
+```python
+# Für DeepFilterNet, OMLSA, SGMSE+, Apollo:
+# NACH IntentionalArtifactClassifier (Spec 03 §2.44) — VOR Phase-Ausführung:
+
+_preserve_mask = kwargs.get("preserve_mask")  # Von UV3 injiziert
+if _preserve_mask is not None:
+    # preserve_mask: 1.0 = PRESERVE-Zone (kein Eingriff erlaubt)
+    #               0.0 = REPAIR-Zone (normale NR-Stärke)
+
+    # NR-Gain wird mit preserve_mask gewichtet:
+    # effective_gain = preserve_mask * G_floor_preserve + (1 - preserve_mask) * G_computed
+    G_PRESERVE_FLOOR = 0.90  # NR fast abgeschaltet in PRESERVE-Zonen
+    effective_gain = (
+        _preserve_mask * G_PRESERVE_FLOOR
+        + (1.0 - _preserve_mask) * G_computed
+    )
+    # Nicht weniger als G_floor (§4.5d):
+    effective_gain = np.maximum(effective_gain, 0.10)
+```
+
+### §4.8a-iii Invarianten
+
+- **VERBOTEN**: DSP-Algorithmus ignoriert `preserve_mask` aus `_restoration_context`.
+- Alle NR-Phasen (phase_03, phase_29, phase_03_sgmse, phase_28_apollo) MÜSSEN `preserve_mask` akzeptieren.
+- Laufzeit: `get_preserve_mask()` (Spec 03 §2.44) ≤ 0.5 s/min Audio.
+- PRESERVE-Klassifikation ist **session-stabil**: einmal klassifiziert, gilt für gesamte Pipeline (keine Re-Klassifikation pro Phase).
+
+---
+
+## §4.11 [RELEASE_MUST] Pre-Echo-Detektionsalgorithmus — Temporal Masking Artifact (v9.12.0)
+
+> **Kontext**: Pre-Echo ist das diagnostisch schwierigste Codec-Artefakt. Es entsteht, wenn
+> Transform-Codecs (MP3, AAC, Opus) die zeitliche Vorwärts-Maskierung des menschlichen Gehörs
+> ausnutzen: Das Gehör maskiert kurze Geräusche vor einem lauten Transient (Prä-Masking: 5–20 ms).
+> Der Codec quantisiert das Block davor grob — bei niedrigen Bitraten wird das quantisierte
+> Rauschen hörbar als "Vorecho" vor dem Transient (−20 bis −30 dB unter Transientpeak).
+> **Konventionelle NR-Algorithmen versagen**: Pre-Echo ist kein stationäres Rauschen, kein Klick,
+> keine spektrale Lücke — es ist zeitlich-energetisch lokalisiertes Vorartefakt.
+
+### §4.11a Detektionsalgorithmus (DSP, kein ML erforderlich)
+
+```python
+# backend/core/dsp/pre_echo_detector.py
+# Singleton: get_pre_echo_detector()
+
+class PreEchoDetector:
+    """
+    Erkennt Pre-Echo-Artefakte durch Rückwärts-Temporal-Masking-Analyse.
+
+    Prinzip: Ein Block VOR einem Transient-Onset sollte LEISER sein als der Transient.
+    Pre-Echo = Block-Energie vor Onset überschreitet Temporal-Masking-Schwelle.
+    """
+
+    FRAME_SIZE_MS   = 23.2      # ISO 11172-3 Standard-Blockgröße (1024 Samples @ 44.1 kHz)
+    HOP_SIZE_MS     = 11.6      # 50 % Overlap
+    PRE_MASK_WINDOW = 3         # 3 Frames = ~34 ms vor Transient (Prä-Masking-Fenster)
+
+    # Pre-Echo-Schwellen (dB über geschätztem Pre-Masking-Boden)
+    # Kalibriert: Menschliche Hörschwelle für Vorecho (Fastl & Zwicker 2007, §7.2)
+    THRESHOLDS = {
+        "shellac":    +6.0,   # Shellac: hoher Rauschboden, tolerantere Schwelle
+        "vinyl":      +8.0,
+        "cd_digital": +12.0,  # CD/Digital: kein natürlicher Rauschboden → enge Schwelle
+        "mp3_low":    +10.0,
+        "mp3_high":   +11.0,
+        "aac":        +11.0,
+        "unknown":    +9.0,
+    }
+
+    def detect(
+        self,
+        audio: np.ndarray,  # Mono oder Stereo [C, T] oder [T]
+        sr: int,
+        material_key: str = "unknown",
+    ) -> List[Dict]:
+        """
+        Gibt Liste erkannter Pre-Echo-Ereignisse zurück.
+
+        Jedes Ereignis:
+        {
+            "onset_sample":  int,      # Sample-Position des Transients
+            "pre_echo_start": int,     # Beginn des Pre-Echo-Artefakts
+            "pre_echo_end":   int,     # Ende (= onset_sample)
+            "severity_db":   float,   # Energie-Überschuss in dB über Masking-Floor
+            "confidence":    float,   # [0, 1] Detektionssicherheit
+        }
+
+        Algorithmus:
+        1. STFT (Frame 1024, Hop 512 @ 48 kHz)
+        2. Onset-Detektor (Energiefluss, Kramer-Methode, Onset = +10 dB in ≤ 2 Frames)
+        3. Für jeden Onset: Rückwärts-Energieprofil über PRE_MASK_WINDOW Frames
+        4. Temporal-Masking-Boden = exponential decay: E_mask(t) = E_onset × 10^(-0.1 × dt_ms)
+           (Prä-Masking-Zerfallsrate: −10 dB per 20 ms, Fastl & Zwicker 2007 Fig 7.3)
+        5. Pre-Echo wenn: E_actual(frame) > E_mask(frame) + THRESHOLDS[material]
+        """
+        ...
+
+    def repair_region(
+        self,
+        audio: np.ndarray,
+        pre_echo_event: Dict,
+        sr: int,
+    ) -> np.ndarray:
+        """
+        Reduziert Pre-Echo durch zeitlich-selektives Spectral-Subtraction.
+
+        NICHT: globales NR (würde Transient beschädigen)
+        SONDERN: Frame-selektive Dämpfung nur im pre_echo_start:onset_sample-Bereich
+
+        Methode (Ephraim-Malah MMSE in pre_echo_region):
+        1. Noise-Estimation: E_mask(frame) als Referenz
+        2. Gain-Floor: max(G_floor, masking_threshold[band] / pre_echo_energy[band])
+        3. Apply gain zu spektralen Komponenten im Prä-Masking-Fenster only
+        4. PGHI Phasenrekonstruktion für modifiziertes Segment
+        5. 5 ms Crossfade zu benachbarten Frames (kein Click)
+
+        VERBOTEN: Gain < G_floor = 0.10 (§2.62 Masking-Gain-Floor-Invariante)
+        VERBOTEN: Eingriff außerhalb pre_echo_start:onset_sample + 2 ms Puffer
+        """
+        ...
+```
+
+### §4.11b Integration in Phase_50 und DefectScanner
+
+**DefectScanner-Pflicht** (neues Defect-Cause "pre_echo" mit Algorithmus):
+
+```python
+# In DefectScanner, bei Codec-Material (mp3_*, aac, opus):
+_pre_echo_detector = get_pre_echo_detector()
+_pre_echo_events = _pre_echo_detector.detect(audio, sr, material_key)
+if len(_pre_echo_events) > 0:
+    severity = np.mean([e["severity_db"] for e in _pre_echo_events])
+    defects["pre_echo"] = DefectResult(
+        detected=True,
+        severity=float(np.clip(severity / 20.0, 0.0, 1.0)),  # Normiert auf [0,1]
+        events=_pre_echo_events,
+    )
+```
+
+**Phase_50-Pflicht** (Pre-Echo-spezifische Verarbeitung):
+
+```python
+# In phase_50_spectral_repair.py, wenn pre_echo_events in kwargs:
+_events = kwargs.get("pre_echo_events", [])
+if _events:
+    for event in _events:
+        audio = _pre_echo_detector.repair_region(audio, event, sr)
+    # ANSCHLIESSEND erst allgemeines spektrales Repair (HF-Spikes etc.)
+    # Reihenfolge: Pre-Echo-Repair → generisches Spektral-Repair
+    # Begründung: Pre-Echo-Repair ändert lokale Spektral-Energieverteilung;
+    # generisches Repair würde reparierten Bereich sonst erneut als Artefakt flaggen
+```
+
+### §4.11c CAUSE_TO_PHASES-Update (normativ)
+
+In `CAUSE_TO_PHASES` in Spec 06 §7.2:
+
+```python
+"pre_echo": [
+    "phase_50_spectral_repair",      # Primär: Pre-Echo-Repair-Region + generisch
+    "phase_23_spectral_repair",      # Sekundär: Spektrale Lücken nach Repair
+]
+# VERBOTEN: phase_03_denoise als Pre-Echo-Recovery (Pre-Echo ist kein stationäres Rauschen)
+```
+
+### §4.11d Materialspezifische Aktivierung
+
+| Material | Aktivierung | Begründung |
+| --- | --- | --- |
+| `mp3_low` (< 128 kbps) | IMMER | Schwerer Pre-Echo praktisch garantiert |
+| `mp3_high` (≥ 128 kbps) | Wenn DefectScanner Severity ≥ 0.25 | Seltener, aber möglich |
+| `aac`, `opus` | Wenn DefectScanner Severity ≥ 0.20 | AAC hat besseres Temporal-Masking-Modell |
+| `shellac`, `vinyl` | NIEMALS | Pre-Echo ist Transform-Coding-Artefakt; kein analoges Äquivalent |
+| `cd_digital` | NIEMALS | CD ist linear PCM, kein lossy Codec |
+
+> **Kreuzreferenz**: §2.49 (Pre-Echo-Detektor im AFG, Gewicht 0.8), §4.1 (ISO 11172-3
+> Psychoacoustic Masking), Spec 06 §7.8 (Phase-50 HF-Spike-Schutz), §4.8a PRESERVE-Taxonomie
 
 ---
 

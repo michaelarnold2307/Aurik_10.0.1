@@ -437,7 +437,7 @@ def _sample_random_candidates(n: int, d: int, rng: np.random.Generator) -> np.nd
 
 
 def _safe_normalize_targets(y: np.ndarray) -> tuple[np.ndarray, float, float, np.ndarray]:
-    """Sanitize and normalize objective vectors for stable GP training.
+    """Bereinigt and normalize objective vectors for stable GP training.
 
     Returns:
         (y_clean, y_min, y_range, y_norm)
@@ -898,7 +898,7 @@ class GPParameterOptimizer:
         pred_means: np.ndarray,
         n_select: int,
     ) -> list[int]:
-        """Select n_select diverse representatives from Pareto front via crowding distance.
+        """Wählt aus: n_select diverse representatives from Pareto front via crowding distance.
 
         Args:
             pareto_indices: 1-D array of non-dominated candidate indices

@@ -141,7 +141,7 @@ expansion_target = min(expansion_target, max_expansion)
 
 ## §6.2c [RELEASE_MUST] Material-Bandwidth-Ceiling (v9.11.14)
 
-**Problem**: Additive Phasen (phase_06, phase_07, phase_23, phase_39) erzeugen kumulativ Frequenzinhalt, der das physikalische BW-Limit des Quellmaterials überschreiten kann. Einzelphasen haben per-Phase-Limits, aber der kumulative Effekt wird nicht zentral überwacht.
+**Problem**: Additive Phasen (phase_06, phase_07, phase_23, phase_39) erzeugen kumulativ Frequenzinhalt, der das physikalische BW-Limit des Quellmaterials überschreiten kann. Einzelphasen haben per-Phase-Limits, aber der kumulative Effect wird nicht zentral überwacht.
 
 **Normatives Dict (Single Source of Truth — identisch mit §4.8 `CARRIER_TRANSFER_CHARACTERISTICS`)**:
 
@@ -229,7 +229,7 @@ PRE_ECHO         # MP3/AAC Temporal-Masking-Artefakt vor Transienten
 QUANTIZATION_NOISE, JITTER_ARTIFACTS, DYNAMIC_COMPRESSION_EXCESS
 
 # Kopf-/Azimuth-Fehler:
-HEAD_WEAR        # Komplette Frequenzband-Ausblöschung → phase_56
+HEAD_WEAR        # Komplette Frequenzband-Auslöschung → phase_56
 AZIMUTH_ERROR    # Kammfilterung L/R durch Kopf-Fehlausrichtung → phase_14 + phase_25
                  # Signatur: frequenzabhängige L/R-Phasendifferenz, Kreuzkorrelation-Peak ≠ 0 lag
                  # Detektion: PHD(freq) = angle(STFT_L / STFT_R) → monotone HF-Drift > 20°/kHz
@@ -244,7 +244,7 @@ RIAA_CURVE_ERROR  # Falsche oder historische Disc-Entzerrungskurve → phase_04 
                   # phase_04 wendet Inverse-Kurve der erkannten Variante an
                   #
                   # §6.3a PRE-RIAA KURVENPARAMETER (kanonische Zeitkonstanten, bindend):
-                  # Alle Werte: (τ_bass_µs, τ_mid_µs, τ_treble_µs) → Pol/Nullstellen-Tripel.
+                  # Alle Werte: (τ_bass_µs, τ_mid_µs, τ_treble_µs) → Pol/Nullstellen-Triple.
                   # Inverse Korrektur: Shelving-EQ mit diesen Zeitkonstanten gespiegelt.
                   #
                   # PRE_RIAA_EQ_CURVES = {
@@ -353,7 +353,7 @@ Bei aktivem Fallback:
 
 Wenn mindestens 3 Events vorliegen, ist ein Confidence-Bonus zulässig, falls
 
-- Intervall-`cv < 0.35`
+- Interval-`cv < 0.35`
 - `median_interval_s` in `[0.5, 3.5]`
 
 Dann: `confidence += 0.08` (geclippt), plus
@@ -394,7 +394,7 @@ class MicrophoneProfile:
 | Neumann U47 | 1947–1965 | Condenser | relativ flach bis 12 kHz, sanfter Rolloff | Jazz, Klassik, Pop 1950–1965 |
 | Neumann U67 | 1960–1971 | Condenser | +2 dB @ 8–12 kHz, angenehme Brillanz | Rock, Pop, Beatles-Ära |
 | AKG C12 | 1953–1963 | Condenser | +3 dB @ 10 kHz, Presence-Peak | Klassik, Jazz |
-| Shure SM57 | 1965–heute | Dynamic | −3 dB @ 15 kHz, +2 dB @ 5–8 kHz | Rock, Blues, Live |
+| Sure SM57 | 1965–heute | Dynamic | −3 dB @ 15 kHz, +2 dB @ 5–8 kHz | Rock, Blues, Live |
 | Western Electric 618-A | 1929–1940 | Dynamic | −15 dB @ 8 kHz, für 78rpm optimiert | Shellac-Ära, früher Jazz |
 | Sony C37A | 1955–1965 | Condenser | +4 dB Presence 5–10 kHz | Japanischer Jazz, Pop |
 | Altec 639-B | 1942–1950 | Ribbon+Dynamic | warm, kaum HF > 10 kHz | Radio, Country, Western |
@@ -409,10 +409,12 @@ def get_profile(era_decade: int, genre_label: str, material_type: str) -> Microp
     None wenn kein passendes Profil vorhanden (digital/moderne Ären).
     """
 
-def get_eq_curve(era_decade: int, genre_label: str, material_type: str) -> dict[int, float]:
+def get_eq_curve(era_decade: int, genre_label: str, material_type: str, target_sr: int = 48000) -> tuple[np.ndarray, np.ndarray] | None:
     """
-    Gibt Frequenz-Response als {Hz: dB}-Dict zurück — für Recording-Chain-EQ in phase_38.
-    Kein Profil verfügbar → flat ({}). Keine Exception.
+    Gibt Frequenz-Response als (freqs_hz: np.ndarray, gains_linear: np.ndarray) zurück.
+    Frequenzen aufsteigend, gains_linear >= 0 (dB → linear konvertiert).
+    Höherwertige Implementierung gegenüber {Hz: dB}-Dict: DSP-ready für np.interp.
+    Kein Profil verfügbar → None. max wet_mix = 0.35 (§6.4a Hard-Cap). Keine Exception.
     """
 ```
 
@@ -770,6 +772,171 @@ AR-Prädiktionsmodell für Clicks, Bayesian-Crackle, probabilistisches Defektmod
 - **Han, Kim & Lee (2017)** **ISMIR** — Deep-Learning Instrument Recognition (IRMAS-Datensatz): SOTA für multi-label Instrument-Tagging
 - **Humphrey, Reddy & Bello (2018)** **OpenMic-2018, ISMIR** — Weakly supervised Instrument-Tagging: Basis für BEATs/PANNs Instrument-Tag-Interpretation
 - **Chen, Wu & Wang (2023, BEATs)** **ICML 2023** — BEATs iter3: Audio-Tagging SOTA für Instrument-Präsenz-Detektion ✅
+
+---
+
+---
+
+## §6.5 [RELEASE_MUST] Authentischer Klangcharakter vs. Defekt — Taxonomy (v9.12.0)
+
+> **Das wichtigste Konzept für Weltklasse-Restaurierung**: Aurik muss wissen, was es BEWAHREN
+> soll, nicht nur was es reparieren soll. Vintage-Charakter ist nicht dasselbe wie Schaden.
+> Fehlt diese Unterscheidung, wird authentische Klangfarbe als Defekt behandelt → Zerstörung
+> des originalen Klangs trotz technisch besserem Signal. §0 Primum non nocere gilt absolut.
+
+### §6.5a Kanonische Charakter-Bewahrungsliste pro Material
+
+Jeder Eintrag definiert: Signal-Merkmal → Klassifikation → Verarbeitungsregel.
+
+```python
+# IntentionalArtifactClassifier — normative Quelle (§2.44 Spec 03)
+# Implementiert in: backend/core/intentional_artifact_classifier.py
+
+AUTHENTIC_CHARACTER = {
+    "shellac": {
+        "surface_noise_texture":   "PRESERVE",  # charakteristisches 78-rpm Hintergrundrauschen;
+                                                  # NR nur bis zum shellac-Boden (-45 dBFS), nicht tiefer
+        "h2_h4_harmonic_saturation": "PRESERVE", # Röhren-/Kristallmikrofon-Sättigung; WärmeMetric
+        "bandwidth_ceiling_8khz":  "PRESERVE",   # physikalische Grenze — KEIN BW-Extension >8 kHz
+        "mono_center_image":       "PRESERVE",   # alle Shellac-Quellen sind Mono
+        "soft_transients":         "PRESERVE",   # AGC-bedingte weiche Transienten (kein Transient-Shaper!)
+    },
+    "vinyl": {
+        "groove_distortion_low":   "PRESERVE",   # leichte Rillenverzerrung < 1 % THD ist authentisch
+        "interlabel_noise_texture":"PRESERVE",   # Zwillingrauschen zwischen Grooves
+        "riaa_warmth_curve":       "PRESERVE",   # RIAA-Entzerrung erzeugt charakteristischen Bassanstieg
+        "inner_groove_compression":"PRESERVE",   # Innenspur-Kompression ist physikalisch bedingt
+        "low_level_wow_sub1hz":    "PRESERVE",   # Plattenteller-Gleichlaufschwankung < 1 Hz ist Charakter
+    },
+    "tape": {
+        "tape_saturation_knee":    "PRESERVE",   # charakteristisches Kompressionsknie bei Übersteuerung
+        "high_frequency_rolloff":  "PRESERVE",   # materialbedingt: Typ-I-Kassette rolliert ab ~12 kHz
+        "bias_noise_texture":      "PRESERVE",   # Bias-Rauschen (HF-Pfeifen > 18 kHz ist KEIN Defekt)
+        "dolby_breathing_slight":  "PRESERVE",   # leichtes Dolby-Atmen < -3 dB ist Epochencharakter
+        "tape_compression_even_harmonics": "PRESERVE",  # Bandsättigung fügt H2 hinzu: Wärme-Merkmal
+    },
+    "reel_tape": {
+        "studio_ambience_bleed":   "PRESERVE",   # Raumrauschboden des Aufnahmeraums ist Teil der Aufnahme
+        "tape_hiss_floor_texture": "PRESERVE",   # NR nur bis zum reel_tape-Boden (-60 dBFS)
+        "print_through_ghost":     "REPAIR",     # Print-Through (Vor-/Nachhall Spur auf Spur) = echter Defekt
+        "tape_head_clog":          "REPAIR",     # Kopfverstopfung = echter Defekt
+    },
+    "wax_cylinder": {
+        "trichter_bandlimit_3khz": "PRESERVE",   # akustische Aufnahme: BW ≤ 3 kHz ist die REALITÄT
+        "surface_crackle_fine":    "PRESERVE",   # feines Oberflächengeräusch ist Teil der Epoche
+        "mechanical_resonance":    "PRESERVE",   # Trichtereigenresonanz ≈ 300–600 Hz ist Charakteristik
+        "coarse_crackle_clicks":   "REPAIR",     # grobe Klicker > 10 ms sind Defekte
+    },
+    "cd_digital": {
+        "dithering_noise_floor":   "PRESERVE",   # 16-bit-Dithering-Rauschen ist Teil des Formats
+        "pre_emphasis_curve":      "PRESERVE",   # wenn Pre-Emphasis aktiv war: originalgetreu
+        "linear_phase_character":  "PRESERVE",   # CD hat nah-perfekte Linearphase — kein Phasenediting
+        "quantization_artifacts_mild": "PRESERVE",  # leichte Quantisierungsartefakte < -90 dBFS: normal
+    },
+    "mp3_low": {
+        "pre_echo_character_mild": "PRESERVE",   # leichtes Pre-Echo bei stabiler Musik ist Format-Charakter
+                                                  # NICHT als Knacken klassifizieren!
+        "psychoacoustic_residue":  "PRESERVE",   # wahrnehmungspsychologisches Kodierresiduum: Epoche
+        "severe_pre_echo":         "REPAIR",     # starkes Pre-Echo > 40 ms ist echter Defekt (phase_50)
+        "metallic_ringing":        "REPAIR",     # metallisches Klingen ist echter Defekt
+    },
+    "lacquer_disc": {
+        "substrate_texture":       "PRESERVE",   # Acetat-Substrat-Textur ist Materialcharakter
+        "light_surface_clicks":    "PRESERVE",   # leichte Oberflächenklicker ≤ 3 ms: Epoche
+        "deep_crack_clicks":       "REPAIR",     # tiefe Rissklicker > 5 ms: echter Defekt
+    },
+}
+
+# Klassifikations-Entscheidung:
+# "PRESERVE": Kein Eingriff. Bei versehentlicher Aktivierung durch DefectScanner:
+#             Strength auf max. 0.10 begrenzen.
+# "REPAIR":   Voller Eingriff erlaubt (CAUSE_TO_PHASES normal aktiv).
+# "AMBIGUOUS": Stärkeabhängig. Severity < 0.3 → PRESERVE. Severity ≥ 0.3 → REPAIR.
+```
+
+### §6.5b Implementierungs-Invarianten
+
+```python
+# IntentionalArtifactClassifier (Spec 03 §2.44) muss VOR DefectScanner
+# in der CAUSE_TO_PHASES-Auswahl aktiv sein.
+# Aufruf: classifier.classify(material_type, era_decade=None, artifact_freedom=1.0) → IntentionalArtifactResult
+# Rückgabe: .preserve_features, .repair_features, .ambiguous_features, .strength_caps{feature→max_strength}
+# KEIN audio/sr Parameter — Klassifikation basiert auf material_type + era_decade (DSP-frei)
+# VERBOTEN: PRESERVE-Klasse durch Phase bearbeiten, die Strength > 0.10 hat
+# VERBOTEN: material-agnostische NR auf Shellac/Wax-Cylinder (zerstört Epochencharakter)
+
+# Priorität: PRESERVE-Klassifikation schlägt DefectScanner-Aktivierung.
+# Ausnahme: Wenn artifact_freedom < 0.90 durch PRESERVE-Merkmal verursacht wird
+#           (z.B. extreme Shellac-Sättigung maskiert Vokalqualität),
+#           darf Strength bis 0.20 angehoben werden — mit HNR-Blend-Pflicht.
+```
+
+### §6.5c Era-spezifische Charakter-Profile (normative Verarbeitungsrichtlinien)
+
+| Ära | Authentischer Charakter | Maßnahme bei Fehlklassifikation |
+|---|---|---|
+| 1900–1925 | Trichterresonanz 300–600 Hz, BW-Ceiling ≤ 3 kHz, mono | Kein EQ unter 300 Hz; keine BW-Extension |
+| 1925–1945 | Röhren-H2/H4, AGC-Drift, elektrische Brumm-Teppiche | H2/H4 PRESERVE; Brumm nur bei f ≤ 120 Hz reparieren |
+| 1945–1965 | RIAA-Wärme, Raumdiffusion Aufnahmestudio, Nadelgeräusch | RIAA-Kurve NIE als Defekt klassifizieren |
+| 1965–1980 | Bandkompression, Bandbreite 12–14 kHz, Analog-Hiss | Hiss-Boden PRESERVE bis reel_tape-Schwellwert |
+| 1980–1995 | Dolby-B/C Rauschen, Kassettenklang, frühe Digital-Kanten | Dolby-Atmen PRESERVE wenn < -3 dB relativ zu Signal |
+| 1995–2010 | MP3-Psychoakustik-Residuum, leichte Pre-Echos | Mild Pre-Echo als Format-Signatur PRESERVE |
+| 2010+ | Clean Digital; Loudness-War-Clipping = echter Defekt | Clipping REPAIR; Rauschen < -90 dBFS PRESERVE |
+
+---
+
+## §6.6 [RELEASE_MUST] RIAA-Kurven-Klassifikation — normative Metriken (v9.12.0)
+
+> **LÜCKE geschlossen**: §6.3a hatte Zeitkonstanten aber keine Klassifikations-Metriken.
+
+### §6.6a Spektral-Slope-Grenzwerte pro RIAA-Kurve
+
+Messung: Spektraler Tilt in dB/Oktave über Bereich 250–8000 Hz (Fenster: Hann, FFT 4096 bei 48 kHz).
+
+```python
+# Toleranzband: ±1.0 dB/oct (±1.5 bei SNR < 10 dB)
+RIAA_SLOPE_PROFILES = {
+    # name:       (slope_dB_oct, bass_boost_db_at_100hz, hf_cut_freq_hz, bass_turnover_hz)
+    "riaa":       (-5.0,  +13.7,  2122, 3183),   # IEC 1994 Standard (τ: 75/318/3180 µs)
+    "nab":        (-4.5,  +13.7,  1590, 3183),   # NAB Broadcast (τ: 100/318/3180 µs)
+    "columbia":   (-3.5,  +16.0,  1590, 1590),   # Columbia Records 1948 (Bass-betont)
+    "aes":        (-4.5,  +12.0,  3183, 3183),   # AES 1951 (weniger Bass-Boost)
+    "capitol":    (-3.7,  +15.0,  1590, 2122),   # Capitol Records 1949
+    "london":     (-5.2,  +13.7,  2122, 3183),   # London/Decca (mehr HF-Boost als RIAA)
+    "ccir":       (-4.9,  +13.7,  3183, 3183),   # CCIR/EBU Rundfunk
+    "unknown":    None,                           # Bayes-Prior: uniform über alle Kurven
+}
+
+# Klassifikations-Algorithmus (Bayes):
+# P(curve | audio) ∝ P(audio | curve) × P(curve | era_decade)
+# Likelihood aus: slope_match + bass_turnover_match + hf_rolloff_match
+# Konfidenz-Schwelle: ≥ 0.70 → Kurve bestätigt; < 0.70 → "unknown" (konservativ)
+# Bei era_decade ≤ 1950: Prior für columbia/capitol/aes erhöht (×2.5)
+# Bei era_decade ≥ 1960: Prior für riaa erhöht (×3.0), columbia/capitol/aes reduziert
+
+def classify_riaa_curve(audio, sr, era_decade):
+    """Bayesianische RIAA-Kurvenklassifikation."""
+    slope = _measure_spectral_slope(audio, sr, f_low=250, f_high=8000)
+    bass_boost = _measure_bass_boost_at_100hz(audio, sr)
+    hf_turnover = _find_hf_turnover_freq(audio, sr)
+
+    likelihoods = {}
+    for curve, (s, b, h, bt) in RIAA_SLOPE_PROFILES.items():
+        if s is None:
+            likelihoods[curve] = 0.1  # uniform Prior für unknown
+            continue
+        d_slope = abs(slope - s) / 1.0        # Normiert auf Toleranz 1 dB/oct
+        d_bass  = abs(bass_boost - b) / 3.0   # Normiert auf Toleranz 3 dB
+        d_hf    = abs(hf_turnover - h) / 500  # Normiert auf Toleranz 500 Hz
+        likelihoods[curve] = np.exp(-0.5 * (d_slope**2 + d_bass**2 + d_hf**2))
+
+    era_priors = _get_era_riaa_priors(era_decade)
+    posteriors = {k: likelihoods[k] * era_priors.get(k, 1.0) for k in likelihoods}
+    posteriors = {k: v / sum(posteriors.values()) for k, v in posteriors.items()}
+
+    best_curve = max(posteriors, key=posteriors.get)
+    return best_curve if posteriors[best_curve] >= 0.70 else "unknown"
+```
 
 ---
 

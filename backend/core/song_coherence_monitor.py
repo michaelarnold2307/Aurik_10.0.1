@@ -78,10 +78,10 @@ class SongCoherenceResult:
 
 
 class SongCoherenceMonitor:
-    """Analyzes song-wide timbral coherence using MFCC fingerprints."""
+    """Analysiert song-wide timbral coherence using MFCC fingerprints."""
 
     def analyze(self, audio: np.ndarray, sr: int) -> SongCoherenceResult:
-        """Compute timbral coherence across all song sections.
+        """Berechnet timbral coherence across all song sections.
 
         Args:
             audio: Input audio (mono or stereo, any sample rate).
@@ -146,7 +146,7 @@ class SongCoherenceMonitor:
 
     @staticmethod
     def _compute_fingerprints(mono: np.ndarray, sr: int) -> tuple[list[np.ndarray], list[tuple[float, float]]]:
-        """Returns list of MFCC-13 mean vectors and corresponding (start_s, end_s) pairs."""
+        """Gibt list of MFCC-13 mean vectors and corresponding (start_s, end_s) pairs zurück."""
         window_n = int(_WINDOW_S * sr)
         hop_n = int(_HOP_S * sr)
         n = len(mono)
@@ -172,7 +172,7 @@ class SongCoherenceMonitor:
 
     @staticmethod
     def _mfcc_mean(seg: np.ndarray, sr: int) -> np.ndarray:
-        """Compute MFCC-13 mean vector for a segment.
+        """Berechnet MFCC-13 mean vector for a segment.
 
         Uses librosa if available, otherwise falls back to a lightweight
         mel-filterbank approximation.

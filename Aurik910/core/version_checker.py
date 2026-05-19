@@ -44,7 +44,7 @@ class VersionCheckResult:
 
 
 def _parse_version(v: str) -> tuple[int, ...]:
-    """Parse 'v9.10.77' or '9.10.77' into comparable tuple."""
+    """Parst 'v9.10.77' oder '9.10.77' in ein vergleichbares Tupel."""
     v = v.lstrip("vV").strip()
     parts = []
     for p in v.split("."):

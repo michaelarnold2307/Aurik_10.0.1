@@ -579,7 +579,7 @@ class LyricsTranscriber:
         return rms > self._STRESS_RMS_FACTOR * max(median_rms, 1e-10)
 
     def _detect_language_from_mono(self, mono: np.ndarray, sr: int) -> tuple[str, float]:
-        """Detect spoken language from audio via LPC formant analysis (SR-agnostic).
+        """Erkennt spoken language from audio via LPC formant analysis (SR-agnostic).
 
         Delegates to backend.core.phoneme_timeline._detect_language.
         Falls back to ("unknown", 0.0) on import error or any exception.

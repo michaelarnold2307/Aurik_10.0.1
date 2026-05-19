@@ -77,7 +77,7 @@ class MicrodynamicsAnalyzer:
 
     def analyze(self, audio: np.ndarray, sr: int, return_details: bool = True) -> MicrodynamicsAnalysis:
         """
-        Analyze microdynamics
+        Analysiert die Mikrodynamik.
 
         Parameters
         ----------
@@ -144,7 +144,7 @@ class MicrodynamicsAnalyzer:
 
     def _measure_frame_variance(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure RMS variance across frames
+        Misst RMS variance across frames.
 
         High variance = high microdynamics = good!
 
@@ -198,7 +198,7 @@ class MicrodynamicsAnalyzer:
 
     def _measure_envelope_modulation(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure envelope modulation depth
+        Misst envelope modulation depth.
 
         Envelope = Instantaneous amplitude (via Hilbert transform)
         Modulation = How much the envelope varies
@@ -251,7 +251,7 @@ class MicrodynamicsAnalyzer:
 
     def _measure_crest_variability(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure local crest factor variability
+        Misst local crest factor variability.
 
         Crest Factor = Peak / RMS (frame-by-frame)
         Variability = How much crest factor changes
@@ -304,7 +304,7 @@ class MicrodynamicsAnalyzer:
 
     def _measure_transient_diversity(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure transient density and diversity
+        Misst transient density and diversity.
 
         Transients = Short, sharp attacks (drums, piano, etc.)
         Density = How many transients per second
@@ -359,7 +359,7 @@ class MicrodynamicsAnalyzer:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[bool, float, dict[str, float]]:
         """
-        Check if processed audio maintains microdynamics
+        Prüft if processed audio maintains microdynamics.
 
         Parameters
         ----------
@@ -446,7 +446,7 @@ def analyze_microdynamics(
 
 def check_microdynamics_preservation(original: np.ndarray, processed: np.ndarray, sr: int) -> tuple[bool, float, dict]:
     """
-    Check if processing preserves microdynamics
+    Prüft if processing preserves microdynamics.
 
     Parameters
     ----------

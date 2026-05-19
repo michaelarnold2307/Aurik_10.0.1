@@ -572,7 +572,7 @@ class MusicalQualityAssurance:
     }
 
     def __init__(self):
-        """Initialize Musical Quality Assurance System."""
+        """Initialisiert Musical Quality Assurance System."""
         self.analyzer = QualityAnalyzer()
         logger.info("Musical Quality Assurance System initialized (v%s)", self.VERSION)
 
@@ -610,7 +610,7 @@ class MusicalQualityAssurance:
         module_name: str | None = None,
     ) -> tuple[bool, str]:
         """
-        Check if quality gates are met (during processing).
+        Prüft if quality gates are met (during processing).
 
         Args:
             audio: Current audio
@@ -766,7 +766,7 @@ class MusicalQualityAssurance:
         processing_mode: ProcessingMode,
     ) -> IntegrityCheckResult:
         """
-        Check musical integrity (compare original vs processed).
+        Prüft musical integrity (compare original vs processed).
 
         Detects violations like:
         - Overprocessing (too much change)
@@ -1064,7 +1064,7 @@ class MusicalQualityAssurance:
         modules_applied: list[str],
     ) -> MusicalQualityReport:
         """
-        Validate final quality after complete processing.
+        Validiert final quality after complete processing.
 
         Args:
             original_audio: Original audio
@@ -1225,7 +1225,7 @@ class MusicalQualityAssurance:
 
 
 def create_musical_quality_assurance() -> MusicalQualityAssurance:
-    """Factory function to create MQA system."""
+    """Factory-Funktion zum Erstellen des MQA-Systems."""
     return MusicalQualityAssurance()
 
 

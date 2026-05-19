@@ -308,7 +308,7 @@ class BanquetVinylPlugin:
         return np.clip(out, -1.0, 1.0)
 
     def _prepare_input(self, chunk: np.ndarray, channels: int) -> tuple[np.ndarray, np.ndarray]:
-        """Convert audio chunk [ch, chunk_len] → ONNX tensor [1, 128, 128, 128].
+        """Konvertiert audio chunk [ch, chunk_len] → ONNX tensor [1, 128, 128, 128].
 
         The Banquet model uses a band-split RNN (SeqBand) that expects:
             [batch=1, n_bands=128, n_frames=128, hidden=128]
@@ -368,7 +368,7 @@ class BanquetVinylPlugin:
         chunk_len: int,
         stft_ctx: np.ndarray | None = None,
     ) -> np.ndarray:
-        """Convert ONNX output [1, 128, 128, 128] back to time-domain audio.
+        """Konvertiert ONNX output [1, 128, 128, 128] back to time-domain audio.
 
         Interprets the model output as a Wiener-like spectral mask applied to
         the original STFT, then reconstructs audio via ISTFT using the

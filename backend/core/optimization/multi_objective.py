@@ -56,7 +56,7 @@ class Individual:
     dominates: list["Individual"] = field(default_factory=list)
 
     def dominates_other(self, other: "Individual") -> bool:
-        """Check if this individual dominates another (all objectives better or equal, at least one strictly better)."""
+        """Prüft if this individual dominates another (all objectives better or equal, at least one strictly better)."""
         if not self.objectives or not other.objectives:
             return False
 
@@ -96,7 +96,7 @@ class NSGAII:
         mutation_prob: float = 0.1,
     ):
         """
-        Initialize NSGA-II.
+        Initialisiert NSGA-II.
 
         Args:
             objectives: List of objective functions to optimize
@@ -119,7 +119,7 @@ class NSGAII:
         logger.info("NSGA-II initialized: %s objectives, pop_size=%s", len(objectives), population_size)
 
     def initialize_population(self) -> list[Individual]:
-        """Initialize random population."""
+        """Initialisiert random population."""
         population = []
 
         for _ in range(self.population_size):
@@ -136,7 +136,7 @@ class NSGAII:
         return population
 
     def evaluate_population(self, population: list[Individual]) -> None:
-        """Evaluate all objectives for all individuals."""
+        """Bewertet all objectives for all individuals."""
         for individual in population:
             for objective in self.objectives:
                 value = objective.evaluate(individual.parameters)
@@ -227,7 +227,7 @@ class NSGAII:
                 front_sorted[i].crowding_distance += float(distance)
 
     def tournament_selection(self, population: list[Individual]) -> Individual:
-        """Select individual using binary tournament selection."""
+        """Wählt aus: individual using binary tournament selection."""
         i1, i2 = np.random.choice(len(population), 2, replace=False)
         ind1, ind2 = population[i1], population[i2]
 
@@ -304,7 +304,7 @@ class NSGAII:
 
     def optimize(self) -> list[Individual]:
         """
-        Run NSGA-II optimization.
+        Führt aus: NSGA-II optimization.
 
         Returns:
             Pareto front (list of non-dominated individuals)
@@ -433,7 +433,7 @@ class NSGAII:
 
     def select_solution(self, preferences: dict[str, float] | None = None) -> Individual:
         """
-        Select a solution from Pareto front based on preferences.
+        Wählt aus: a solution from Pareto front based on preferences.
 
         Args:
             preferences: Dict mapping objective names to weights (higher = more important)
@@ -476,7 +476,7 @@ class NSGAII:
         return best_individual
 
     def save_pareto_front(self, path: Path):
-        """Save Pareto front to JSON."""
+        """Speichert Pareto front to JSON."""
         pareto_data = []
 
         for ind in self.pareto_front:
@@ -498,7 +498,7 @@ class NSGAII:
 # Example: Audio Restoration Multi-Objective Optimization
 def create_audio_restoration_moo() -> NSGAII:
     """
-    Create multi-objective optimizer for audio restoration.
+    Erstellt multi-objective optimizer for audio restoration.
 
     Objectives:
     1. Audio Quality (maximize)

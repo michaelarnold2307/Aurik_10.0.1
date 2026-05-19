@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProcessingPhase(Enum):
-    """Processing phases in UnifiedRestorerV2."""
+    """Verarbeitet phases in UnifiedRestorerV2."""
 
     PHASE_1_FORENSIC = "phase_1_forensic"
     PHASE_2_DENOISE = "phase_2_denoise"
@@ -52,7 +52,7 @@ class PhaseSkipper:
 
     def __init__(self, conservative: bool = False, min_confidence: float = 0.8):
         """
-        Initialize phase skipper.
+        Initialisiert phase skipper.
 
         Args:
             conservative: If True, skip fewer phases (safer)
@@ -65,7 +65,7 @@ class PhaseSkipper:
         self, defect_analysis: DefectAnalysis, semantic_profile: Any | None = None
     ) -> dict[ProcessingPhase, PhaseSkipDecision]:
         """
-        Analyze which phases can be skipped.
+        Analysiert, welche Phasen übersprungen werden können.
 
         Args:
             defect_analysis: Defect analysis of audio
@@ -270,7 +270,7 @@ class PhaseSkipper:
         self, defect_analysis: DefectAnalysis, semantic_profile: Any | None = None
     ) -> list[ProcessingPhase]:
         """
-        Get list of phases that can be skipped.
+        Gibt zurück: list of phases that can be skipped.
 
         Args:
             defect_analysis: Defect analysis
@@ -291,7 +291,7 @@ class PhaseSkipper:
 
     def estimate_speedup(self, defect_analysis: DefectAnalysis, semantic_profile: Any | None = None) -> float:
         """
-        Estimate processing time speedup.
+        Schätzt processing time speedup.
 
         Args:
             defect_analysis: Defect analysis
@@ -317,7 +317,7 @@ class PhaseSkipper:
 
     def generate_report(self, defect_analysis: DefectAnalysis, semantic_profile: Any | None = None) -> str:
         """
-        Generate human-readable phase skipping report.
+        Generiert human-readable phase skipping report.
 
         Args:
             defect_analysis: Defect analysis

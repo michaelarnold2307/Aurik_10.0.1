@@ -913,6 +913,240 @@ def test_compute_mas_convergence_early_stop():
 
 ---
 
+## §09.10 [RELEASE_MUST] §GOAL_BASELINE_CHECK — Pre-Pipeline-Absicherung (v9.12.0)
+
+> **Normative Spec-Grundlage** für das in Copilot Instructions §0k beschriebene Prinzip.
+> Schließt die CAUSE_TO_PHASES-Lücke: wenn DefectScanner einen Goal-Defizit nicht
+> als Defect-Cause erkennt, wird die Pipeline ohne Korrektur-Phase ausgeführt und
+> FeedbackChain kann das Goal über das Original-Niveau nicht heben.
+
+### §09.10a Algorithmus (in UV3._execute_pipeline(), vor Phasen)
+
+```python
+# Zeitbudget: ≤ 200 ms DSP-Proxy (FastGoalProxy, kein ML)
+_goal_snapshot = _fast_goal_snapshot(audio_input, sr)
+
+for goal_name, goal_score in _goal_snapshot.items():
+    _material_floor = get_material_floor(material_type, goal_name)
+    _threshold = _material_floor * 0.95  # 5% Toleranz
+
+    if goal_score < _threshold:
+        # Goal liegt unter materialadaptivem Boden → Recovery-Phase einfügen
+        _recovery_phases = get_goal_recovery_phases(goal_name, is_studio_2026)
+
+        for phase_id in _recovery_phases:
+            if phase_id not in selected_phases:
+                # §0a-Guard: Studio-Only-Phasen nicht in Restoration einfügen
+                if not is_studio_2026 and phase_id in _STUDIO_ONLY_PHASES:
+                    continue
+                selected_phases.insert(
+                    _get_primary_insertion_index(selected_phases, phase_id),
+                    phase_id
+                )
+                logger.info(
+                    "goal_baseline_check: goal=%s score=%.3f < floor=%.3f "
+                    "→ inserting recovery phase=%s",
+                    goal_name, goal_score, _threshold, phase_id
+                )
+
+        metadata["goal_baseline_gaps"][goal_name] = {
+            "score_before": goal_score,
+            "floor": _material_floor,
+            "recovery_phases_added": _recovery_phases,
+        }
+```
+
+### §09.10b Invarianten
+
+- **Non-blocking**: Exception in `_fast_goal_snapshot()` → kein Pipeline-Abbruch; normale Ausführung.
+- **§0a-Guard** ist aktiv: `_STUDIO_ONLY_PHASES = {"phase_21_exciter", "phase_35_multiband_compression", "phase_42_vocal_enhancement"}` — dürfen niemals in Restoration-`selected_phases` eingefügt werden.
+- **§2.45 Minimal-Intervention**: Recovery-Phase wird nur eingefügt wenn `goal_score < floor × 0.95` — kein Eingriff bei gesunden Goals.
+- **Disk-Guard**: Alle Phase-IDs in `get_goal_recovery_phases()` MÜSSEN gegen `backend/core/phases/phase_*.py` validiert sein (Test: `test_get_goal_recovery_phases_all_phase_ids_exist_on_disk()`).
+- **Keine Duplikate**: Vor dem Einfügen `if phase_id not in selected_phases`.
+
+---
+
+## §09.11 [RELEASE_MUST] Goal-Recovery-Phase-Mappings (v9.12.0)
+
+> **Normative Vollständig-Tabelle** für `get_goal_recovery_phases()` in
+> `backend/core/calibration_matrix.py`. Bis v9.12.0 nur in Copilot Instructions beschrieben —
+> hier erstmalig als Spec-Grundlage spezifiziert.
+
+### §09.11a `_GOAL_TO_RECOVERY_PHASES_RESTORATION`
+
+```python
+_GOAL_TO_RECOVERY_PHASES_RESTORATION: Dict[str, List[str]] = {
+    # P0 — Vokalqualität (nur wenn panns_singing ≥ 0.35)
+    "VocalQuality":         ["phase_65_vocal_naturalness_restoration", "phase_03_denoise"],
+    # phase_65: DSP-Korrektiv (subtraktiv/korrektiv, §0a-konform für Restoration).
+    # Adressiert HNR-Verlust nach NR, Spektral-Tilt-Shift, Formant-Drift.
+    # phase_42_vocal_enhancement: VERBOTEN in Restoration (§0a) — nie hier eintragen.
+    "FormantFidelity":      ["phase_42_vocal_enhancement"],                        # §0a: VERBOTEN in Restoration; Guard blockt es
+
+    # P1 — Natürlichkeit, Authentizität
+    "Natürlichkeit":        ["phase_29_tape_hiss_reduction", "phase_03_denoise"],
+    "Authentizität":        ["phase_09_declicker", "phase_11_dehum"],
+
+    # P2 — Tonales Zentrum, Timbre, Artikulation
+    "TonalCenter":          ["phase_12_wow_flutter_fix", "phase_04_riaa_eq"],
+    "Timbre":               ["phase_20_harmonic_analyzer", "phase_07_harmonic_enhancer"],
+    "Artikulation":         ["phase_03_denoise", "phase_09_declicker"],
+    "TransientEnergie":     ["phase_26_transient_shaper", "phase_08_transient_shaper_hpss"],
+    # phase_26: Dosierte Transient-Energie-Wiederherstellung (Restoration-konform)
+    # phase_08: HPSS-gestütztes Transient-Enhancement (subtraktiv/korrektiv)
+
+    # P3 — Emotionalität, Mikrodynamik, Groove
+    "Emotionalität":        ["phase_40_loudness_normalizer", "phase_26_transient_shaper"],
+    "MikroDynamik":         ["phase_26_transient_shaper", "phase_14_dc_offset"],
+    "Groove":               ["phase_12_wow_flutter_fix", "phase_15_phase_corrector"],
+
+    # P4 — Transparenz, Wärme, Basskraft, Trennschärfe
+    "Transparenz":          ["phase_29_tape_hiss_reduction", "phase_30_hum_remover"],
+    "Wärme":                ["phase_07_harmonic_enhancer", "phase_20_harmonic_analyzer"],
+    "BassKraft":            ["phase_05_rumble_filter", "phase_26_transient_shaper"],
+    "SepFidelity":          ["phase_20_harmonic_analyzer", "phase_03_denoise"],
+
+    # P5 — Brillanz, Raumtiefe
+    "Brillanz":             ["phase_06_bandwidth_extension", "phase_07_harmonic_enhancer"],
+    "Raumtiefe":            ["phase_46_spatial_enhancement", "phase_33_stereo_expander"],
+}
+```
+
+### §09.11b `_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS`
+
+```python
+# Studio 2026: Zusätzliche Phasen (ergänzend zu Restoration-Liste)
+_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS: Dict[str, List[str]] = {
+    "VocalQuality":         ["phase_42_vocal_enhancement"],   # Erlaubt in Studio 2026
+    "FormantFidelity":      ["phase_42_vocal_enhancement"],   # Erlaubt in Studio 2026
+    "Brillanz":             ["phase_23_audiosr_upsampling"],
+    "Wärme":                ["phase_21_exciter"],             # Erlaubt in Studio 2026
+    "Transparenz":          ["phase_35_multiband_compression"],  # Erlaubt in Studio 2026
+    "MikroDynamik":         ["phase_35_multiband_compression"],
+}
+```
+
+### §09.11c Richtungsregel (Anti-Inversion-Guard)
+
+**VERBOTEN**: Recovery-Phase darf nicht in entgegengesetzter Richtung zum Goal-Defizit wirken.
+
+| Goal-Defizit | Verbotene Recovery-Phase | Grund |
+| --- | --- | --- |
+| `Raumtiefe` zu niedrig | `phase_49_advanced_dereverb` | Entfernt Raumcues — verstärkt Defizit |
+| `Wärme` zu niedrig | `phase_31_digital_artifact_repair` | Bereinigt Obertöne — entfernt Wärme |
+| `Brillanz` zu niedrig | `phase_05_rumble_filter` | Tiefpasscharakter — senkt Brillanz |
+| `BassKraft` zu niedrig | `phase_06_bandwidth_extension` | HF-Erweiterung ohne Bass-Boost |
+
+### §09.11d Disk-Guard (Pflicht-Test)
+
+```python
+# tests/normative/test_calibration_matrix.py
+def test_get_goal_recovery_phases_all_phase_ids_exist_on_disk():
+    """
+    Alle Phase-IDs in _GOAL_TO_RECOVERY_PHASES_RESTORATION und
+    _GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS MÜSSEN auf Disk existieren.
+    """
+    import glob
+    phase_files = {
+        Path(p).stem
+        for p in glob.glob("backend/core/phases/phase_*.py")
+    }
+    for goal, phases in {
+        **_GOAL_TO_RECOVERY_PHASES_RESTORATION,
+        **_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS
+    }.items():
+        for phase_id in phases:
+            assert phase_id in phase_files, (
+                f"Recovery phase '{phase_id}' for goal '{goal}' "
+                f"does not exist on disk — fix _GOAL_TO_RECOVERY_PHASES"
+            )
+```
+
+---
+
+## §09.12 [RELEASE_MUST] Restorability-adaptive Floor-Skalierung (v9.12.0)
+
+> **Problem**: `get_material_floor()` liefert absolute Material-Böden (Shellac: 0.72, Vinyl: 0.82,
+> CD: 0.90). Bei extremer Degradierung (`restorability < 30`) sind diese Böden physikalisch
+> unerreichbar — nicht weil die Pipeline versagt, sondern weil das Material zerstört ist.
+> Resultat: §09.10 §GOAL_BASELINE_CHECK und PMGG-Gate lösen endlose Recovery-Kaskaden aus,
+> obwohl das **maximal mögliche** Ergebnis bereits erreicht ist.
+
+### §09.12a Algorithmus
+
+```python
+# backend/core/calibration_matrix.py
+
+RESTORABILITY_SCALE_MIN = 0.72  # Minimum-Skalierungsfaktor
+                                # Böden kollabieren maximal auf 72 % des Material-Bodens
+                                # (verhindert unkontrollierten Qualitätsabfall bei schlecht restaurierbarem Material)
+
+def get_effective_material_floor(
+    material_type: str,
+    goal_name: str,
+    restorability_score: float,  # 0–100
+) -> float:
+    """
+    Skaliert material-adaptiven Boden proportional zur Restorierbarkeit.
+
+    Formulierung:
+        floor_base   = get_material_floor(material_type, goal_name)
+        scale        = max(RESTORABILITY_SCALE_MIN, restorability_score / 100.0)
+        floor_eff    = floor_base × scale
+
+    Beispiele (Vinyl, Brillanz, floor_base = 0.82):
+        restorability=100 → floor_eff = 0.82 × 1.00 = 0.82   (voll)
+        restorability=72  → floor_eff = 0.82 × 0.72 = 0.59   (skaliert)
+        restorability=20  → floor_eff = 0.82 × 0.72 = 0.59   (Minimum-Clip)
+
+    Rationale: Restorability-Beitrag ist nicht linear — bei restorability=20
+    ist das Material zu 80 % zerstört, aber der Effektiv-Boden soll nicht
+    auf 20 % kollabieren (das wäre ein Freibrief für Totalausfall). Minimum
+    0.72 bedeutet: auch extremst degradiertes Material MUSS 72 % des Normal-
+    bodens erreichen — oder der Export erhält Status "degraded".
+    """
+    floor_base = get_material_floor(material_type, goal_name)
+    scale = max(RESTORABILITY_SCALE_MIN, float(np.clip(restorability_score / 100.0, 0.0, 1.0)))
+    return float(floor_base * scale)
+```
+
+### §09.12b Verwendung in UV3
+
+**§GOAL_BASELINE_CHECK (§09.10)** MUSS `get_effective_material_floor()` verwenden:
+
+```python
+# Vorher: _material_floor = get_material_floor(material_type, goal_name)
+# Nachher:
+_material_floor = get_effective_material_floor(material_type, goal_name, restorability_score)
+```
+
+**PMGG-Gate** verwendet weiterhin `get_material_floor()` (normative Böden, unverändert) —
+der Blend via `estimate_song_goal_targets()` → SGT handhabt dort die Skalierung (§09.2a).
+
+### §09.12c Export-Status bei niedrigen Restorability-Werten
+
+```python
+# In UV3._execute_pipeline():
+if restorability_score < 30:
+    metadata["degraded_restorability"] = True
+    metadata["degraded_restorability_score"] = restorability_score
+    # Export-Status: "degraded" (nicht "recovered") — ehrliche Kommunikation
+    # an die UI, dass das Ergebnis physikalisch limitiert ist
+```
+
+### §09.12d Invarianten
+
+- **`get_material_floor()` unverändert**: Normative Böden bleiben kanonisch für Tests und UI
+- **Nur UV3-Pipeline** verwendet `get_effective_material_floor()` — alle anderen Kalkulationen (Pre-Analysis, UI-Preview, Report) verwenden weiterhin `get_material_floor()`
+- **Non-breaking**: Bestehende Tests auf `get_material_floor()` schlagen nicht fehl
+- **Test-Pflicht**: `test_get_effective_material_floor_restorability_scale()` — überprüft:
+  - `restorability=100` → voller Boden
+  - `restorability=50` → 50 % Skalierung (über Min)
+  - `restorability=10` → RESTORABILITY_SCALE_MIN (0.72) als Boden
+  - `restorability=72` → exakt 72 % (Grenzfall Min-Clip)
+
+---
+
 ## Referenzen
 
 - Spec §01: Musical Goals (14 Ziele)

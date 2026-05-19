@@ -363,6 +363,54 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 },
             )
 
+        # §P2 Style-Intent-Guard: intentionale Pitch-Abweichungen (Blue Notes, Microtonal Bends)
+        # dürfen nicht per globaler Pitch-Korrektur entfernt werden. Bei hoher style_intent
+        # coverage → correction_strength proportional reduzieren.
+        _style_intent_zones_p31 = []
+        _vfa_p31 = kwargs.get("vfa_result") or kwargs.get("_restoration_context", {}).get("vfa_result", {})
+        if isinstance(_vfa_p31, dict):
+            _style_intent_zones_p31 = list(_vfa_p31.get("style_intent_zones", []))
+        elif hasattr(_vfa_p31, "style_intent_zones"):
+            _style_intent_zones_p31 = list(_vfa_p31.style_intent_zones)
+        if _style_intent_zones_p31:
+            _audio_dur_p31 = audio.shape[-1] / max(sample_rate, 1)
+            _style_s_p31 = sum((e - s) for s, e in _style_intent_zones_p31 if 0 <= s < e)
+            _style_cov_p31 = float(np.clip(_style_s_p31 / max(_audio_dur_p31, 1.0), 0.0, 1.0))
+            if _style_cov_p31 > 0.15:  # mind. 15 % Coverage für Guard-Aktivierung
+                _new_cs = float(params["correction_strength"]) * (1.0 - 0.80 * _style_cov_p31)
+                params["correction_strength"] = max(_new_cs, 0.0)
+                logger.info(
+                    "Phase31 §P2 style-intent-guard: %d Zonen, coverage=%.1f%% → correction_strength %.3f→%.3f",
+                    len(_style_intent_zones_p31),
+                    _style_cov_p31 * 100,
+                    float(params["correction_strength"]) / max(1.0 - 0.80 * _style_cov_p31, 1e-6),
+                    params["correction_strength"],
+                )
+
+        # §Lücke-A IntonationEvent-Guard: Vibrato/Portamento/Blue-Note-Schutz (§0p)
+        # IntonationEvents aus VFA-Analyse: pitch_correction_allowed=False für INTENTIONAL-Events.
+        # intonation_events ist via _restoration_context bereits in kwargs verfügbar.
+        _intonation_events_p31 = list(kwargs.get("intonation_events", []) or [])
+        if _intonation_events_p31:
+            _protected_s_p31 = sum(
+                (getattr(e, "end_s", 0.0) - getattr(e, "start_s", 0.0))
+                for e in _intonation_events_p31
+                if not getattr(e, "pitch_correction_allowed", True)
+            )
+            _audio_dur_p31 = float(audio.shape[-1]) / max(float(sample_rate), 1.0)
+            _prot_frac_p31 = float(np.clip(_protected_s_p31 / max(_audio_dur_p31, 1.0), 0.0, 1.0))
+            if _prot_frac_p31 > 0.05:
+                _orig_cs_p31 = float(params["correction_strength"])
+                _new_cs_p31 = _orig_cs_p31 * (1.0 - 0.90 * _prot_frac_p31)
+                params["correction_strength"] = max(_new_cs_p31, 0.0)
+                logger.info(
+                    "§Lücke-A IntonationGuard: %d Events, protected=%.1f%% → correction_strength %.3f→%.3f",
+                    len(_intonation_events_p31),
+                    _prot_frac_p31 * 100,
+                    _orig_cs_p31,
+                    float(params["correction_strength"]),
+                )
+
         # Apply correction if error significant (>0.3%)
         if abs(speed_error_percent) > 0.3:
             # Calculate corrected ratio
@@ -973,7 +1021,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
         return np.clip(result, -1.0, 1.0).astype(dtype)
 
     def _psola_compute_periods_mono(self, y_1d: np.ndarray, sr: int) -> np.ndarray | None:
-        """Compute PSOLA period array from a mono signal via pYIN.
+        """Berechnet PSOLA period array from a mono signal via pYIN.
 
         Returns the per-frame period in samples (length = number of pYIN frames),
         or None if f0 detection fails or no voiced frames are found.
@@ -1001,7 +1049,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             return None
 
     def _psola_apply_mono(self, y_1d: np.ndarray, period_samps: np.ndarray, ratio: float) -> np.ndarray:
-        """Apply PSOLA OLA synthesis with a pre-computed shared period array.
+        """Wendet an: PSOLA OLA synthesis with a pre-computed shared period array.
 
         Used by _correct_psola for both mono and stereo (§2.51): the same
         period_samps derived from the mono mix is passed for L and R to ensure

@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class Zone(Enum):
-    """Processing Zones basierend auf Confidence"""
+    """Verarbeitet Zones basierend auf Confidence."""
 
     A = "safe"  # High confidence (>= 0.90)
     B = "uncertain"  # Medium confidence (0.70 - 0.90)
@@ -73,7 +73,7 @@ class ConductEnforcer:
 
     def __init__(self, rules_path: Path | None = None):
         """
-        Initialize ConductEnforcer with conduct rules.
+        Initialisiert ConductEnforcer with conduct rules.
 
         Args:
             rules_path: Path to conduct_rules.yaml (default: ./conduct_rules.yaml)
@@ -109,7 +109,7 @@ class ConductEnforcer:
         self.min_confidence = epistemic_config.get("min_confidence", 0.80)
 
     def _load_conduct_rules(self) -> dict[str, Any]:
-        """Load conduct rules from YAML file."""
+        """Lädt conduct rules from YAML file."""
         if not self.rules_path.exists():
             raise FileNotFoundError(
                 f"Conduct rules not found at {self.rules_path}. Please create conduct_rules.yaml first."
@@ -414,7 +414,7 @@ class ConductEnforcer:
         return (True, f"Musical Goal '{goal_name}' erfüllt: {predicted:.3f} >= {threshold:.3f}")
 
     def _determine_zone(self, confidence: float, context: dict[str, Any]) -> Zone:
-        """Determine processing zone based on confidence."""
+        """Bestimmt processing zone based on confidence."""
         # Explicit zone override
         if "zone" in context:
             zone_str = context["zone"]
@@ -431,7 +431,7 @@ class ConductEnforcer:
             return Zone.C
 
     def _apply_zone_adjustments(self, zone: Zone) -> tuple[float, dict[str, float]]:
-        """Apply zone-specific adjustments to CAS limits and musical goals."""
+        """Wendet an: zone-specific adjustments to CAS limits and musical goals."""
         zone_adjustments = self.rules.get("zone_adjustments", {})
         zone_config = zone_adjustments.get(f"zone_{zone.name.lower()}", {})
 
@@ -446,7 +446,7 @@ class ConductEnforcer:
         return adjusted_cas_max, adjusted_musical_goals
 
     def _apply_medium_adjustments(self, medium_type: str, musical_goals: dict[str, float]) -> dict[str, float]:
-        """Apply medium-specific adjustments to musical goals."""
+        """Wendet an: medium-specific adjustments to musical goals."""
         medium_adjustments = self.rules.get("medium_adjustments", {}).get(medium_type, {})
         medium_goals = medium_adjustments.get("musical_goals", {})
 
@@ -457,7 +457,7 @@ class ConductEnforcer:
         return adjusted
 
     def _log_decision(self, result: ValidationResult, context: dict[str, Any]):
-        """Log validation decision for auditing."""
+        """Protokolliert validation decision for auditing."""
         self.decision_history.append(result)
 
         # Write to audit log if configured
@@ -492,11 +492,11 @@ class ConductEnforcer:
                 logger.debug("Warning: Could not write to audit log: %s", e)
 
     def get_decision_history(self) -> list[ValidationResult]:
-        """Returns complete decision history for Timeline visualization."""
+        """Gibt complete decision history for Timeline visualization zurück."""
         return self.decision_history.copy()
 
     def get_statistics(self) -> dict[str, Any]:
-        """Returns statistics about validation decisions."""
+        """Gibt statistics about validation decisions zurück."""
         total = len(self.decision_history)
         if total == 0:
             return {"total": 0, "allowed": 0, "blocked": 0}

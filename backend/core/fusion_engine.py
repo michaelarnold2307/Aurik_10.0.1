@@ -14,7 +14,7 @@ import numpy as np
 
 
 class FusionEngine:
-    """Blends multiple audio outputs into one.
+    """Mischt multiple audio outputs into one.
 
     Parameters
     ----------
@@ -36,7 +36,7 @@ class FusionEngine:
         outputs: Sequence[np.ndarray],
         weights: Sequence[float] | None = None,
     ) -> np.ndarray:
-        """Blend *outputs* into a single audio signal.
+        """Mischt *outputs* into a single audio signal.
 
         Parameters
         ----------
@@ -83,7 +83,7 @@ _fusion_engine_lock = _threading.Lock()
 
 
 def get_fusion_engine() -> FusionEngine:
-    """Return the process-wide singleton FusionEngine instance."""
+    """Gibt the process-wide singleton FusionEngine instance zurück."""
     global _fusion_engine_instance
     if _fusion_engine_instance is None:
         with _fusion_engine_lock:

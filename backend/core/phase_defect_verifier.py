@@ -314,7 +314,7 @@ class PhaseDefectVerifier:
         return self._reverse_map or {}
 
     def measure_proxies(self, phase_id: str, audio: np.ndarray, sr: int) -> dict[str, float]:
-        """Compute defect proxies for all targeted defect types of phase_id.
+        """Berechnet defect proxies for all targeted defect types of phase_id.
 
         Returns an empty dict if phase_id is not a restorative phase or if
         audio/sr are invalid.  Never raises.
@@ -343,7 +343,7 @@ class PhaseDefectVerifier:
         sr: int,
         metadata_store: dict | None = None,
     ) -> np.ndarray:
-        """Check whether the phase worsened its targeted defects.
+        """Prüft whether the phase worsened its targeted defects.
 
         Args:
             phase_id:       Full phase ID (e.g. 'phase_09_crackle_removal').
@@ -465,7 +465,7 @@ class PhaseDefectVerifier:
             pass
 
     def get_session_summary(self) -> dict:
-        """Return a summary of all PDV checks in this session."""
+        """Gibt a summary of all PDV checks in this session zurück."""
         try:
             with self._telem_lock:
                 entries = list(self._session_telemetry)
@@ -482,6 +482,6 @@ class PhaseDefectVerifier:
             return {}
 
     def reset_session(self) -> None:
-        """Reset session telemetry (call before each new restoration run)."""
+        """Setzt zurück: session telemetry (call before each new restoration run)."""
         with self._telem_lock:
             self._session_telemetry.clear()

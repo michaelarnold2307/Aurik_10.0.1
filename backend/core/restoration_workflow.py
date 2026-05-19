@@ -40,7 +40,7 @@ class RestorationWorkflow:
         processed: np.ndarray,
         phase: str,
     ) -> dict[str, Any]:
-        """Run the full workflow and return a result dict.
+        """Führt aus: the full workflow and return a result dict.
 
         Args:
             image_path: Cover image path (may not exist — heuristic-only).
@@ -91,7 +91,7 @@ _restoration_workflow_lock = _threading.Lock()
 
 
 def get_restoration_workflow() -> RestorationWorkflow:
-    """Return the process-wide singleton RestorationWorkflow instance."""
+    """Gibt the process-wide singleton RestorationWorkflow instance zurück."""
     global _restoration_workflow_instance
     if _restoration_workflow_instance is None:
         with _restoration_workflow_lock:

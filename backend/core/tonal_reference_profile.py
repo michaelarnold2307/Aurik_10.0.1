@@ -852,7 +852,7 @@ class TonalCurve:
     _mat_bw_hz: float = field(default=22050.0, repr=False)
 
     def ceiling_for_hz(self, freq_hz: float) -> float:
-        """Interpolated ceiling in dB for an arbitrary frequency."""
+        """Interpolierte Decke in dB für eine beliebige Frequenz."""
         freq = float(freq_hz)
         for i in range(24):
             if _BARK_EDGES_HZ[i] <= freq < _BARK_EDGES_HZ[i + 1]:
@@ -860,7 +860,7 @@ class TonalCurve:
         return float(self.band_ceiling_db[-1 if freq >= _BARK_EDGES_HZ[-1] else 0])
 
     def target_for_hz(self, freq_hz: float) -> float:
-        """Interpolated studio-day reconstruction target in dB."""
+        """Interpoliertes Studio-Tag-Rekonstruktionsziel in dB."""
         freq = float(freq_hz)
         for i in range(24):
             if _BARK_EDGES_HZ[i] <= freq < _BARK_EDGES_HZ[i + 1]:
@@ -873,7 +873,7 @@ class TonalCurve:
         audio_post: np.ndarray,
         sr: int,
     ) -> np.ndarray:
-        """Apply per-Bark-band ceiling. Only attenuates, never boosts. Non-blocking."""
+        """Wendet an: per-Bark-band ceiling. Only attenuates, never boosts. Non-blocking."""
         try:
             return _apply_bark_ceiling(audio_pre, audio_post, sr, self.band_ceiling_db, self.confidence)
         except Exception as exc:
@@ -1069,7 +1069,7 @@ class TonalCurve:
 
 
 def _bark_band_rms(audio: np.ndarray, sr: int) -> np.ndarray:
-    """Compute per-Bark-band RMS power via STFT.  Returns shape (24,)."""
+    """Berechnet per-Bark-band RMS power via STFT.  Returns shape (24,)."""
     n_fft = 2048
     hop = 512
     # Mono mix
@@ -1159,7 +1159,7 @@ def _estimate_bark_band_snr(audio: np.ndarray, sr: int, n_noise_frames: int = 10
 
 
 def _snr_scaled_ceilings(band_ceiling_db: np.ndarray, band_snr_db: np.ndarray) -> np.ndarray:
-    """Scale per-Bark-band ceiling headroom by measured SNR.
+    """Skaliert per-Bark-band ceiling headroom by measured SNR.
 
     Rationale: a band with high SNR (clean signal) can be expanded safely up to
     its full ceiling. A noisy band (low SNR) should not be expanded — boosting
@@ -1313,7 +1313,7 @@ def compute_tonal_reference_curve(
     _con_bp_override: list[tuple[float, float]] | None = None,
     _tap_bp_override: list[tuple[float, float]] | None = None,
 ) -> TonalCurve:
-    """Compute 24-Bark-band spectral ceilings and targets for a song context.
+    """Berechnet 24-Bark-band spectral ceilings and targets for a song context.
 
     The ceiling prevents over-processing (§0h §2.46e).
     The target guides restoration toward the original studio-day spectral
@@ -1429,7 +1429,7 @@ class TonalReferenceProfiler:
         restorability: float = 50.0,
         is_studio_2026: bool = False,
     ) -> TonalCurve:
-        """Return cached TonalCurve for the given era/genre/material/mode combination."""
+        """Gibt cached TonalCurve for the given era/genre/material/mode combination zurück."""
         key = (era_decade, str(genre_label).strip().lower(), str(material_type).strip().lower(), is_studio_2026)
         with self._lock:
             if key not in self._cache:
@@ -1446,7 +1446,7 @@ class TonalReferenceProfiler:
         self,
         console_type: str = "neve_1073",
     ) -> list[tuple[float, float]]:
-        """Return EQ breakpoints for a classic Studio-2026 console fingerprint.
+        """Gibt EQ breakpoints for a classic Studio-2026 console fingerprint zurück.
 
         Returns frequency-gain pairs (Hz, dB) from :data:`_STUDIO_CONSOLE_CURVES`.
         Designed for use in Studio 2026 mode as a subtle coloration pass
@@ -1610,7 +1610,7 @@ def get_tonal_reference_profiler() -> TonalReferenceProfiler:
 
 
 def get_era_harmonic_profile(era_decade: int | None) -> HarmonicProfile:
-    """Return the nearest HarmonicProfile for the given decade (rounds down).
+    """Gibt the nearest HarmonicProfile for the given decade (rounds down) zurück.
 
     Looks up ``_ERA_HARMONIC_PROFILE`` for the largest available key that is
     <= *era_decade*.  Falls back to the 1970 Transistor-Era entry when

@@ -143,7 +143,7 @@ def _make_pixmap(svg_path: str, size: int) -> object:
 
 def get_icon(key: str, size: int = 24) -> object | None:
     """
-    Return a QPixmap for the given icon key (emoji or SVG name) at the requested size.
+    Gibt a QPixmap for the given icon key (emoji or SVG name) at the requested size zurück.
     Result is cached per (key, size). Returns None if PyQt5 is unavailable.
 
     Args:

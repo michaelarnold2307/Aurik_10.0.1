@@ -98,7 +98,7 @@ def _formant_boost_eq(
 
     §0 Primum non nocere: boost_db ≤ _MAX_FORMANT_BOOST_DB (3 dB).
     """
-    from scipy.signal import sosfiltfilt  # zero-phase
+    from scipy.signal import sosfiltfilt  # pylint: disable=import-outside-toplevel
 
     boost_db = float(np.clip(boost_db, 0.0, _MAX_FORMANT_BOOST_DB))
     if boost_db < 0.1 or not formants_hz:
@@ -179,18 +179,18 @@ def lpc_formant_enhance(
     # Shellac BW ≤ 8 kHz → Nyquist bei 16 kHz reicht vollständig aus.
     # Rücktransformation nur für EQ-Anwendung, nicht für das Ausgangssignal.
     try:
-        import resampy  # type: ignore[import]
+        import resampy  # type: ignore[import]  # pylint: disable=import-outside-toplevel
 
         mono_16k: np.ndarray = resampy.resample(mono, sr, _LPC_ANALYSIS_SR).astype(np.float64)
         _analysis_sr = _LPC_ANALYSIS_SR
     except Exception:
         # Fallback: scipy resample wenn resampy nicht verfügbar
         try:
-            from scipy.signal import resample_poly as _rspoly
+            from scipy.signal import resample_poly as _rspoly  # pylint: disable=import-outside-toplevel
 
             _ratio_num = _LPC_ANALYSIS_SR
             _ratio_den = sr
-            from math import gcd as _gcd
+            from math import gcd as _gcd  # pylint: disable=import-outside-toplevel
 
             _g = _gcd(_ratio_num, _ratio_den)
             mono_16k = _rspoly(mono, _ratio_num // _g, _ratio_den // _g).astype(np.float64)
@@ -209,7 +209,7 @@ def lpc_formant_enhance(
 
     # Analyse auf tiefpassgefiltertem Signal (Shellac-BW ≤ 8 kHz)
     try:
-        from scipy.signal import butter, sosfilt
+        from scipy.signal import butter, sosfilt  # pylint: disable=import-outside-toplevel
 
         nyq = min(_SHELLAC_BW_HZ, _analysis_sr / 2.0 - 100.0)
         if nyq > 100.0:
@@ -269,6 +269,81 @@ def lpc_formant_enhance(
 # ---------------------------------------------------------------------------
 
 
+def check_formant_shift_db(
+    audio_pre: np.ndarray,
+    audio_post: np.ndarray,
+    sr: int,
+    threshold_db: float = 2.0,
+    max_formants: int = 4,
+) -> tuple[bool, float]:
+    """§G1/§G5 Formant ±2 dB Guard (§0p RELEASE_MUST).
+
+    Compares spectral energy at F1–F4 formant frequencies between pre-NR and
+    post-NR audio. Returns (rollback_needed, max_shift_db).
+
+    Uses a ±semitone band (±5.9%) around each detected formant frequency to
+    measure energy shift. G_floor for LPC analysis uses a 2 s mid-segment window.
+    """
+    try:
+        # Mono conversion
+        def _to_mono(a: np.ndarray) -> np.ndarray:
+            a = np.asarray(a, dtype=np.float32)
+            if a.ndim == 2:
+                return np.mean(a, axis=0) if a.shape[0] == 2 and a.shape[1] > 2 else np.mean(a, axis=1)
+            return a
+
+        pre_m = _to_mono(audio_pre)
+        post_m = _to_mono(audio_post)
+        n = min(len(pre_m), len(post_m))
+        if n < int(0.1 * sr):
+            return False, 0.0  # too short — skip
+
+        # Use 2 s mid-segment for analysis
+        win = min(int(2.0 * sr), n)
+        mid = n // 2
+        pre_seg = pre_m[mid - win // 2 : mid - win // 2 + win].astype(np.float64)
+        post_seg = post_m[mid - win // 2 : mid - win // 2 + win].astype(np.float64)
+
+        # Downsample to 16 kHz for LPC formant analysis
+        ds = max(1, sr // 16000)
+        pre_ds = pre_seg[::ds]
+        sr_ds = sr // ds
+
+        # Get formant frequencies from pre-NR signal using internal helper
+        formants_hz = _lpc_to_formants(pre_ds, sr_ds, max_formants=max_formants)
+        if not formants_hz:
+            return False, 0.0
+
+        # FFT for spectral energy measurement (native sr, 4096 bins)
+        n_fft = 4096
+        freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+        _pre_buf = pre_seg[:n_fft] if len(pre_seg) >= n_fft else np.pad(pre_seg, (0, n_fft - len(pre_seg)))
+        spec_pre = np.abs(np.fft.rfft(_pre_buf)) + 1e-12
+        _post_buf = post_seg[:n_fft] if len(post_seg) >= n_fft else np.pad(post_seg, (0, n_fft - len(post_seg)))
+        spec_post = np.abs(np.fft.rfft(_post_buf)) + 1e-12
+
+        # Measure energy at each formant band (±semitone ≈ ±5.9%)
+        max_shift = 0.0
+        for f_hz in formants_hz:
+            if f_hz <= 0 or f_hz >= sr / 2.0:
+                continue
+            f_lo = f_hz * 0.941  # -1 semitone
+            f_hi = f_hz * 1.059  # +1 semitone
+            band_mask = (freqs >= f_lo) & (freqs <= f_hi)
+            if not np.any(band_mask):
+                continue
+            e_pre = float(np.mean(spec_pre[band_mask] ** 2))
+            e_post = float(np.mean(spec_post[band_mask] ** 2))
+            if e_pre > 1e-20:
+                shift_db = abs(10.0 * np.log10(max(e_post, 1e-20) / e_pre))
+                max_shift = max(max_shift, shift_db)
+
+        rollback = max_shift > threshold_db
+        return rollback, max_shift
+    except Exception:
+        return False, 0.0
+
+
 class _LPCFormantTracker:
     """Singleton-Wrapper für lpc_formant_enhance."""
 
@@ -276,8 +351,31 @@ class _LPCFormantTracker:
         self._lock = threading.Lock()
 
     def enhance(self, audio: np.ndarray, sr: int, max_boost_db: float = 2.5) -> np.ndarray:
+        """Wendet an: LPC formant enhancement to audio (thread-safe)."""
         with self._lock:
             return lpc_formant_enhance(audio, sr, max_boost_db=max_boost_db)
+
+    def track(self, audio: np.ndarray, sr: int) -> dict:
+        """Gibt formant frequencies from LPC analysis zurück.
+
+        Returns dict with keys ``f1_mean``, ``f2_mean``, ``f3_mean``, ``f4_mean``
+        (Hz, 0.0 if not detected). Used by phase_03/20/29 formant integrity checks.
+        """
+        try:
+            mono = np.asarray(audio, dtype=np.float32)
+            if mono.ndim == 2:
+                mono = np.mean(mono, axis=0) if mono.shape[0] == 2 and mono.shape[1] > 2 else np.mean(mono, axis=1)
+            ds = max(1, sr // 16000)
+            mono_ds = mono[::ds].astype(np.float64)
+            sr_ds = sr // ds
+            formants = _lpc_to_formants(mono_ds, sr_ds, max_formants=4)
+            keys = ["f1_mean", "f2_mean", "f3_mean", "f4_mean"]
+            result = dict.fromkeys(keys, 0.0)
+            for i, f in enumerate(formants[:4]):
+                result[keys[i]] = float(f)
+            return result
+        except Exception:
+            return {"f1_mean": 0.0, "f2_mean": 0.0, "f3_mean": 0.0, "f4_mean": 0.0}
 
 
 _tracker_instance: _LPCFormantTracker | None = None

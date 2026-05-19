@@ -140,7 +140,7 @@ class PolyphonicSpeedCurveEstimator:
             self._bp = None
 
     def estimate(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
-        """Estimate a speed-deviation curve from polyphonic content.
+        """Schätzt a speed-deviation curve from polyphonic content.
 
         Returns a virtual pitch trajectory and confidence array that are
         drop-in compatible with phase_12's _separate_wow_flutter /
@@ -164,7 +164,7 @@ class PolyphonicSpeedCurveEstimator:
             return self._pyin_fallback(audio, sr)
 
     def _estimate_polyphonic(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
-        """Core polyphonic consensus estimation."""
+        """Kern-polyphonic consensus estimation."""
 
         from scipy.signal import savgol_filter
 
@@ -329,7 +329,7 @@ class HybridWowFlutter:
 
     def __init__(self, config: WowFlutterConfig | None = None) -> None:
         """
-        Initialize hybrid wow/flutter detector.
+        Initialisiert hybrid wow/flutter detector.
 
         Args:
             config: Wow/Flutter configuration
@@ -346,7 +346,7 @@ class HybridWowFlutter:
             self._init_crepe()
 
     def _init_crepe(self) -> None:
-        """Initialize pitch plugin: FCPE -> RMVPE -> PESTO -> pYIN (§4.4 Spec).
+        """Initialisiert pitch plugin: FCPE -> RMVPE -> PESTO -> pYIN (§4.4 Spec).
 
         Order: Tier-1 FCPE, Tier-2 RMVPE (Wei et al. ICASSP 2023, ~30 % lower pitch
         error for vocals), Tier-3 PESTO, Tier-4 CREPE legacy fallback.
@@ -524,7 +524,7 @@ class HybridWowFlutter:
         return self._apply_pyin(audio, sample_rate)
 
     def _apply_crepe(self, audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:
-        """Apply FCPE/CREPE ML pitch detection (numpy-API, kein Subprocess)."""
+        """Wendet an: FCPE/CREPE ML pitch detection (numpy-API, kein Subprocess)."""
         if self.crepe is None:
             return self._apply_pyin(audio, sample_rate)
         try:

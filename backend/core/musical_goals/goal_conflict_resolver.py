@@ -166,7 +166,7 @@ class GoalConflictResolver:
     }
 
     def __init__(self):
-        """Initialize Goal Conflict Resolver."""
+        """Initialisiert Goal Conflict Resolver."""
         self.conflict_history = []
         self.resolution_count = 0
 
@@ -270,7 +270,7 @@ class GoalConflictResolver:
         return GoalConflict(goal1, goal2, severity, delta1, delta2, reason)
 
     def _get_base_conflict(self, goal1: str, goal2: str) -> float:
-        """Get base conflict score from matrix."""
+        """Gibt zurück: base conflict score from matrix."""
         if goal1 in self.CONFLICT_MATRIX and goal2 in self.CONFLICT_MATRIX[goal1]:
             return self.CONFLICT_MATRIX[goal1][goal2]
         elif goal2 in self.CONFLICT_MATRIX and goal1 in self.CONFLICT_MATRIX[goal2]:
@@ -286,7 +286,7 @@ class GoalConflictResolver:
         context: dict[str, Any] | None = None,
     ) -> ResolutionStrategy:
         """
-        Resolved alle Konflikte durch Priority-based Adjustments.
+        Löst alle Konflikte durch prioritätsbasierte Anpassungen.
 
         Args:
             conflicts: List of detected conflicts
@@ -348,7 +348,7 @@ class GoalConflictResolver:
 
     def _get_priorities(self, context: dict[str, Any]) -> dict[str, float]:
         """
-        Get context-specific priority weights.
+        Gibt zurück: context-specific priority weights.
 
         Context can include:
         - medium_type: 'vinyl', 'tape', 'shellac', 'digital'
@@ -446,7 +446,7 @@ class GoalConflictResolver:
         return base
 
     def get_conflict_summary(self) -> dict[str, Any]:
-        """Get summary of all detected conflicts."""
+        """Gibt zurück: summary of all detected conflicts."""
         if not self.conflict_history:
             return {"total_conflicts": 0, "by_severity": {}, "most_conflicting_pairs": []}
 

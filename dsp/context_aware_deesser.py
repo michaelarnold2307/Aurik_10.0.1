@@ -136,7 +136,7 @@ class ProcessingMode(Enum):
 @dataclass
 class SibilantParameters:
     """
-    Processing parameters for specific sibilant type.
+    Verarbeitet parameters for specific sibilant type.
 
     Different sibilants have different spectral characteristics:
     - /s/, /z/: High frequency (7-9 kHz)
@@ -222,7 +222,7 @@ class DeEsserConfig:
 
 @dataclass
 class ProcessingReport:
-    """Processing statistics and metrics."""
+    """Verarbeitet statistics and metrics."""
 
     total_duration_sec: float
     phonemes_detected: int
@@ -260,7 +260,7 @@ class ContextAwareDeEsser:
 
     def __init__(self, config: DeEsserConfig | None = None):
         """
-        Initialize Context-Aware De-Esser.
+        Initialisiert Context-Aware De-Esser.
 
         Args:
             config: De-esser configuration (defaults to moderate)
@@ -305,7 +305,7 @@ class ContextAwareDeEsser:
         genre: str | None = None,
     ) -> tuple[np.ndarray, ProcessingReport]:
         """
-        Process audio with phoneme-aware de-essing.
+        Verarbeitet audio with phoneme-aware de-essing.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -352,7 +352,7 @@ class ContextAwareDeEsser:
         sr: int,
         genre: str | None,
     ) -> tuple[np.ndarray, ProcessingReport]:
-        """Process mono audio channel."""
+        """Verarbeitet mono audio channel."""
         duration_sec = len(audio) / sr
 
         # Step 1: Detect phonemes
@@ -448,7 +448,7 @@ class ContextAwareDeEsser:
         phonemes: list[PhonemeSegment],
     ) -> list[tuple[PhonemeSegment, SibilantType]]:
         """
-        Filter phoneme list to only sibilants.
+        Filtert phoneme list to only sibilants.
 
         Returns:
             List of (segment, sibilant_type) tuples
@@ -582,7 +582,7 @@ class ContextAwareDeEsser:
         base_reduction_db: float,
         mode: ProcessingMode,
     ) -> float:
-        """Scale reduction based on processing mode."""
+        """Skaliert reduction based on processing mode."""
         if mode == ProcessingMode.GENTLE:
             return base_reduction_db * 0.5
         elif mode == ProcessingMode.MODERATE:
@@ -601,7 +601,7 @@ class ContextAwareDeEsser:
         reduction_db: float,
     ) -> np.ndarray:
         """
-        Apply frequency-specific reduction to sibilant region.
+        Wendet an: frequency-specific reduction to sibilant region.
 
         Uses bandpass filter + dynamic range compression in target frequency band.
         """
@@ -667,7 +667,7 @@ class ContextAwareDeEsser:
         self,
         reports: list[ProcessingReport],
     ) -> ProcessingReport:
-        """Merge multiple processing reports (for stereo)."""
+        """Führt zusammen: multiple processing reports (for stereo)."""
         if not reports:
             raise ValueError("No reports to merge")
 

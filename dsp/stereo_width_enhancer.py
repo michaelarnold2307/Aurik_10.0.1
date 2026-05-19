@@ -53,7 +53,7 @@ class StereoWidthEnhancer:
 
     def lr_to_ms(self, left: np.ndarray, right: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
-        Convert Left/Right to Mid/Side.
+        Konvertiert Left/Right to Mid/Side.
 
         Mid = (L + R) / 2  (sum - mono compatible)
         Side = (L - R) / 2  (difference - stereo information)
@@ -78,7 +78,7 @@ class StereoWidthEnhancer:
 
     def ms_to_lr(self, mid: np.ndarray, side: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
-        Convert Mid/Side back to Left/Right.
+        Konvertiert Mid/Side back to Left/Right.
 
         L = M + S
         R = M - S
@@ -103,7 +103,7 @@ class StereoWidthEnhancer:
 
     def compute_phase_correlation(self, left: np.ndarray, right: np.ndarray) -> float:
         """
-        Compute phase correlation between left and right channels.
+        Berechnet phase correlation between left and right channels.
 
         Returns
         -------
@@ -128,7 +128,7 @@ class StereoWidthEnhancer:
         self, left: np.ndarray, right: np.ndarray, threshold_db: float = -40.0
     ) -> tuple[bool, float]:
         """
-        Check if stereo signal is mono-compatible.
+        Prüft if stereo signal is mono-compatible.
 
         When collapsed to mono (L+R), significant cancellation indicates
         phase problems or excessive width.
@@ -165,7 +165,7 @@ class StereoWidthEnhancer:
 
     def _apply_safe_limiting(self, mid: np.ndarray, side: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
-        Apply intelligent limiting to prevent extreme width artifacts.
+        Wendet an: intelligent limiting to prevent extreme width artifacts.
 
         Limits Side energy relative to Mid energy to prevent:
         - Phase issues
@@ -191,7 +191,7 @@ class StereoWidthEnhancer:
 
     def process(self, audio: np.ndarray, return_metrics: bool = False) -> tuple[np.ndarray, dict | None]:
         """
-        Apply stereo width enhancement.
+        Wendet an: stereo width enhancement.
 
         Parameters
         ----------
@@ -277,7 +277,7 @@ class StereoWidthEnhancer:
 
     def analyze_stereo_field(self, audio: np.ndarray) -> dict:
         """
-        Analyze stereo field properties without modification.
+        Analysiert Stereofeld-Eigenschaften ohne Modifikation.
 
         Parameters
         ----------

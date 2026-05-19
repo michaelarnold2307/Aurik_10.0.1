@@ -124,7 +124,7 @@ class GenreWeightRegistry:
     @classmethod
     def get_weights(cls, genre: Genre, confidence: float = 1.0) -> GenreWeights:
         """
-        Get genre-adaptive weights with confidence-based blending.
+        Gibt zurück: genre-adaptive weights with confidence-based blending.
 
         Args:
             genre: Detected genre
@@ -156,7 +156,7 @@ class GenreWeightRegistry:
 
     @classmethod
     def validate_all_weights(cls) -> bool:
-        """Validate that all genre weight tables sum to 1.0"""
+        """Validiert that all genre weight tables sum to 1.0."""
         for genre, weights in cls.GENRE_WEIGHTS.items():
             if not weights.validate_sum():
                 logger.warning("Genre %s weights do not sum to 1.0", genre)
@@ -846,7 +846,7 @@ class CompositeAestheticScoreCalculator:
         profile_after: AnalysisProfile,
     ) -> list[ConstraintCheckResult]:
         """
-        Check constraint system per Spec 3.2.3.
+        Prüft constraint system per Spec 3.2.3.
 
         Constraints:
         1. Authenticity Floor: Perceptual Similarity > 0.85
@@ -938,7 +938,7 @@ class CompositeAestheticScoreCalculator:
 
 class AestheticJudgmentModel:
     """
-    Main facade for the Aesthetic Judgment Model.
+    Haupt-facade for the Aesthetic Judgment Model.
 
     Orchestrates CAS calculation, genre-adaptive weighting, and constraint checking.
     """

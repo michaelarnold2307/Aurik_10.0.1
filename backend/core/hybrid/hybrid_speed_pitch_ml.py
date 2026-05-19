@@ -116,7 +116,7 @@ class HybridSpeedPitch:
 
     def __init__(self, config: SpeedPitchConfig | None = None) -> None:
         """
-        Initialize hybrid speed/pitch detector.
+        Initialisiert hybrid speed/pitch detector.
 
         Args:
             config: Speed/pitch configuration
@@ -133,7 +133,7 @@ class HybridSpeedPitch:
             self._init_crepe()
 
     def _init_crepe(self) -> None:
-        """Initialize pitch plugin: FCPE -> RMVPE -> PESTO -> pYIN (§4.4 Spec).
+        """Initialisiert pitch plugin: FCPE -> RMVPE -> PESTO -> pYIN (§4.4 Spec).
 
         Order: Tier-1 FCPE, Tier-2 RMVPE (Wei et al. ICASSP 2023, ~30 % lower pitch
         error for vocals), Tier-3 PESTO, Tier-4 CREPE legacy fallback.
@@ -177,7 +177,7 @@ class HybridSpeedPitch:
 
     def detect_global_pitch(self, audio: np.ndarray, sample_rate: int = 48000) -> SpeedPitchResult:
         """
-        Detect global pitch using hybrid YIN + CREPE.
+        Erkennt global pitch using hybrid YIN + CREPE.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -336,7 +336,7 @@ class HybridSpeedPitch:
 
     def _apply_crepe_global(self, audio: np.ndarray, sample_rate: int) -> tuple[float, float]:
         """
-        Apply ML pitch detector (RMVPE/PESTO/CREPE) for global pitch detection.
+        Wendet an: ML pitch detector (RMVPE/PESTO/CREPE) for global pitch detection.
 
         Args:
             audio: Mono audio

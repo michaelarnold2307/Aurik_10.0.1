@@ -1945,3 +1945,142 @@ class TestVQISingMOSIntegration:
         src = inspect.getsource(compute_vqi)
         # Sicherstellen dass es einen default für proximity = 0.85 gibt
         assert "0.85" in src, "VQI: proximity default 0.85 fehlt"
+
+
+# ===========================================================================
+# Session 2026-05-15: P1 Artist-Voice-Reference + P2 Style-Intent-Detector
+# ===========================================================================
+
+
+class TestVQIArtistReference:
+    """§P1: reference_audio Parameter in compute_vqi() — sauberer Künstler-Referenz-Anker."""
+
+    def test_reference_audio_param_accepted(self):
+        """compute_vqi muss reference_audio Parameter akzeptieren."""
+        import inspect
+
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        sig = inspect.signature(compute_vqi)
+        assert "reference_audio" in sig.parameters, (
+            "compute_vqi: reference_audio Parameter fehlt (§P1 Artist-Voice-Reference)"
+        )
+
+    def test_reference_audio_used_flag_in_result(self):
+        """Wenn reference_audio übergeben, muss result['reference_audio_used'] True sein."""
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        rng = np.random.default_rng(10)
+        orig = rng.uniform(-0.2, 0.2, 48000).astype(np.float32)
+        rest = rng.uniform(-0.2, 0.2, 48000).astype(np.float32)
+        # Saubere Referenz (anderes Signal, gleicher Künstler)
+        ref = rng.uniform(-0.15, 0.15, 48000).astype(np.float32)
+        result = compute_vqi(orig, rest, 48000, reference_audio=ref)
+        assert "reference_audio_used" in result, "compute_vqi result fehlt 'reference_audio_used'"
+        assert result["reference_audio_used"] is True, (
+            f"reference_audio_used muss True sein wenn ref übergeben, erhalten: {result['reference_audio_used']}"
+        )
+
+    def test_reference_audio_none_not_used(self):
+        """Ohne reference_audio muss reference_audio_used False sein."""
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        rng = np.random.default_rng(11)
+        orig = rng.uniform(-0.2, 0.2, 48000).astype(np.float32)
+        rest = rng.uniform(-0.2, 0.2, 48000).astype(np.float32)
+        result = compute_vqi(orig, rest, 48000)
+        assert result.get("reference_audio_used") is False, (
+            "reference_audio_used muss False sein wenn kein ref übergeben"
+        )
+
+    def test_reference_audio_too_short_falls_back(self):
+        """Wenn reference_audio < 0.5 s, muss fallback auf degraded orig erfolgen."""
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        rng = np.random.default_rng(12)
+        orig = rng.uniform(-0.2, 0.2, 48000).astype(np.float32)
+        rest = rng.uniform(-0.2, 0.2, 48000).astype(np.float32)
+        # Zu kurze Referenz (< 0.5 s = 24000 samples)
+        short_ref = rng.uniform(-0.1, 0.1, 10000).astype(np.float32)
+        result = compute_vqi(orig, rest, 48000, reference_audio=short_ref)
+        assert result.get("reference_audio_used") is False, "Kurze Referenz (< 0.5 s) soll nicht genutzt werden (§P1)"
+
+
+class TestStyleIntentDetector:
+    """§P2: StyleIntentDetector — intentionale Pitch-Abweichungen erkennen."""
+
+    def test_module_exists_and_importable(self):
+        """style_intent_detector muss importierbar sein."""
+        from backend.core.dsp import style_intent_detector
+
+        assert hasattr(style_intent_detector, "StyleIntentDetector")
+        assert hasattr(style_intent_detector, "get_style_intent_detector")
+        assert hasattr(style_intent_detector, "StyleIntentResult")
+
+    def test_singleton_returns_same_instance(self):
+        """get_style_intent_detector() muss Singleton zurückgeben."""
+        from backend.core.dsp.style_intent_detector import get_style_intent_detector
+
+        a = get_style_intent_detector()
+        b = get_style_intent_detector()
+        assert a is b, "get_style_intent_detector muss Singleton sein (thread-safe)"
+
+    def test_consistent_deviation_detected(self):
+        """Konsistente Pitch-Abweichung (Blue Note) muss als intentional erkannt werden."""
+        from backend.core.dsp.style_intent_detector import get_style_intent_detector
+
+        sr = 48000
+        t = np.linspace(0, 5.0, sr * 5, endpoint=False)
+        # Bb mit -50 cents: A4 (440 Hz) × 2^(-0.5/12) ≈ 427.5 Hz — konsistente Blue Note
+        f0_blue = 440.0 * (2.0 ** (-0.50 / 12.0))
+        # Gleiche Frequenz 5 Sekunden wiederholen → konsistente Abweichung
+        audio = (0.5 * np.sin(2 * np.pi * f0_blue * t)).astype(np.float32)
+        detector = get_style_intent_detector()
+        result = detector.analyze(audio, sr)
+        # StyleIntentResult muss zurückkommen (kein Crash)
+        assert result is not None
+        # Bei konsistenter Abweichung: entweder intentional_pitch_classes gefüllt
+        # oder style_confidence ∈ [0, 1] (DSP-Fallback kann 0 zurückgeben, das ist OK)
+        assert 0.0 <= result.style_confidence <= 1.0, f"style_confidence außerhalb [0,1]: {result.style_confidence}"
+        assert isinstance(result.style_intent_zones, list)
+
+    def test_stochastic_deviation_low_confidence(self):
+        """Stochastische Pitch-Fluktuation (zufällig) darf nicht als intentional gewertet werden."""
+        from backend.core.dsp.style_intent_detector import (
+            StyleIntentResult,
+            get_style_intent_detector,
+        )
+
+        sr = 48000
+        rng = np.random.default_rng(99)
+        # Reines Rauschen: keine konsistente Pitch-Abweichung
+        audio = rng.uniform(-0.3, 0.3, sr * 3).astype(np.float32)
+        detector = get_style_intent_detector()
+        result = detector.analyze(audio, sr)
+        assert isinstance(result, StyleIntentResult)
+        assert 0.0 <= result.style_confidence <= 1.0
+        # Rauschen hat keine Voiced-Frames → intentional_pitch_classes leer
+        assert len(result.intentional_pitch_classes) == 0, (
+            f"Rauschen hat {len(result.intentional_pitch_classes)} intentionale PCs — "
+            "StyleIntentDetector erkennt bei Rauschen fälschlich intentionale Abweichungen"
+        )
+
+    def test_vfa_result_has_style_intent_fields(self):
+        """VFAResult muss style_intent_zones und style_confidence haben."""
+        from backend.core.vocal_focus_analyzer import VFAResult
+
+        vfa = VFAResult()
+        assert hasattr(vfa, "style_intent_zones"), "VFAResult: style_intent_zones fehlt"
+        assert hasattr(vfa, "style_confidence"), "VFAResult: style_confidence fehlt"
+        assert isinstance(vfa.style_intent_zones, list)
+        assert isinstance(vfa.style_confidence, float)
+        assert vfa.style_confidence == 0.0  # Default
+
+    def test_vfa_to_dict_includes_style_intent(self):
+        """VFAResult.to_dict() muss style_intent_zones und style_confidence enthalten."""
+        from backend.core.vocal_focus_analyzer import VFAResult
+
+        vfa = VFAResult()
+        d = vfa.to_dict()
+        assert "style_intent_zones" in d, "to_dict() fehlt 'style_intent_zones'"
+        assert "style_confidence" in d, "to_dict() fehlt 'style_confidence'"

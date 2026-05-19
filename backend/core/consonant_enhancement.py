@@ -579,7 +579,7 @@ def preserve_plosive_transients(
 
 
 class PlosiveBurstPreserver:
-    """Detects plosive bursts and restores their transients after compression.
+    """Erkennt plosive bursts and restores their transients after compression.
 
     Plosive consonants (/p/, /t/, /k/, /b/, /d/, /g/) are characterised by a
     rapid energy onset (release burst, ≤ 5 ms rise time) followed by a short
@@ -629,7 +629,7 @@ class PlosiveBurstPreserver:
         processed: np.ndarray,
         blend: float = 0.60,
     ) -> PlosiveBurstResult:
-        """Detect plosive bursts in *original* and restore their transients.
+        """Erkennt plosive bursts in *original* and restore their transients.
 
         Args:
             original:  Pre-enhancement mono audio (float32, 48 kHz).
@@ -751,7 +751,7 @@ class PlosiveBurstPreserver:
         )
 
     def _rms_envelope(self, audio: np.ndarray, frame_n: int, hop_n: int) -> np.ndarray:
-        """Compute frame-wise RMS envelope."""
+        """Berechnet frame-wise RMS envelope."""
         n = len(audio)
         frames = []
         pos = 0

@@ -117,7 +117,7 @@ class AutoReprocessingEngine:
         enable_forensic_guidance: bool = True,
     ) -> None:
         """
-        Initialize Auto-Reprocessing Engine.
+        Initialisiert Auto-Reprocessing Engine.
 
         Args:
             max_attempts: Maximum retry attempts
@@ -315,7 +315,7 @@ class AutoReprocessingEngine:
         self, violations: dict[str, dict[str, float]], baseline: dict[str, float], context: dict[str, Any]
     ) -> list[ReprocessingStrategy]:
         """
-        Select optimal retry strategies based on failure characteristics.
+        Wählt aus: optimal retry strategies based on failure characteristics.
 
         Strategy Selection Heuristics:
         - Many violations + low baseline → FORENSIC_GUIDED (signal too degraded)
@@ -364,7 +364,7 @@ class AutoReprocessingEngine:
         context: dict[str, Any],
     ) -> tuple[np.ndarray, dict[str, Any]]:
         """
-        Execute specific reprocessing strategy.
+        Führt aus: specific reprocessing strategy.
 
         Returns:
             (reprocessed_audio, parameters_used)
@@ -416,7 +416,7 @@ class AutoReprocessingEngine:
     def _strategy_hybrid_blend(
         self, original: np.ndarray, processed: np.ndarray, sr: int, attempt_num: int, context: dict[str, Any]
     ) -> tuple[np.ndarray, dict[str, Any]]:
-        """Blend original + processed to preserve naturalness."""
+        """Mischt original + processed to preserve naturalness."""
         # Progressive blend: 70/30 → 60/40 → 50/50
         blend_ratios = [(0.7, 0.3), (0.6, 0.4), (0.5, 0.5)]
         proc_weight, orig_weight = blend_ratios[min(attempt_num - 1, len(blend_ratios) - 1)]

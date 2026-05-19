@@ -76,7 +76,7 @@ class PsychoacousticAnalysis:
     frequency_balance: dict[str, float]
 
     def summary_dict(self) -> dict[str, Any]:
-        """Get summary as dictionary."""
+        """Gibt zurück: summary as dictionary."""
         return {
             "perceptual_centroid_bark": self.perceptual_centroid_bark,
             "perceptual_bandwidth_bark": self.perceptual_bandwidth_bark,
@@ -137,7 +137,7 @@ class PsychoacousticConfig:
 
 class PsychoacousticCore:
     """
-    Unified psychoacoustic processing engine.
+    Einheitliche psychoakustische Verarbeitungs-Engine.
 
     Combines Bark scale, masking, and equal-loudness processing
     into a single, easy-to-use interface.
@@ -160,7 +160,7 @@ class PsychoacousticCore:
 
     def __init__(self, config: PsychoacousticConfig | None = None):
         """
-        Initialize psychoacoustic core.
+        Initialisiert psychoacoustic core.
 
         Args:
             config: Configuration (uses defaults if None)
@@ -190,7 +190,7 @@ class PsychoacousticCore:
 
     def analyze(self, audio: np.ndarray, sr: int) -> PsychoacousticAnalysis:
         """
-        Perform comprehensive psychoacoustic analysis.
+        Führt durch: comprehensive psychoacoustic analysis.
 
         Args:
             audio: Input audio (mono)
@@ -241,7 +241,7 @@ class PsychoacousticCore:
 
     def _compute_frequency_balance(self, bark_spectrum: BarkSpectrum) -> dict[str, float]:
         """
-        Compute energy distribution across musical frequency bands.
+        Berechnet energy distribution across musical frequency bands.
 
         Args:
             bark_spectrum: Bark spectrum
@@ -269,7 +269,7 @@ class PsychoacousticCore:
 
     def apply_loudness_compensation(self, audio: np.ndarray, sr: int, listening_level: str = "normal") -> np.ndarray:
         """
-        Apply Fletcher-Munson loudness compensation.
+        Wendet an: Fletcher-Munson loudness compensation.
 
         Args:
             audio: Input audio (mono)
@@ -292,7 +292,7 @@ class PsychoacousticCore:
 
     def remove_masked_components(self, audio: np.ndarray, sr: int, threshold_db: float = 0.0) -> np.ndarray:
         """
-        Remove perceptually masked (inaudible) components.
+        Entfernt perceptually masked (inaudible) components.
 
         Useful for:
         - Audio coding (remove redundant information)
@@ -316,7 +316,7 @@ class PsychoacousticCore:
         self, frequencies: np.ndarray, target_balance: dict[str, float] | None = None
     ) -> np.ndarray:
         """
-        Generate perceptual EQ curve to achieve target balance.
+        Generiert perceptual EQ curve to achieve target balance.
 
         Args:
             frequencies: Frequency points for EQ curve
@@ -353,15 +353,15 @@ class PsychoacousticCore:
         return eq_curve
 
     def get_bark_bands(self):
-        """Get list of Bark bands."""
+        """Gibt zurück: list of Bark bands."""
         return get_bark_bands()
 
     def hz_to_bark(self, freq_hz: float) -> float:
-        """Convert Hz to Bark scale."""
+        """Konvertiert Hz to Bark scale."""
         return hz_to_bark(freq_hz)
 
     def bark_to_hz(self, bark: float) -> float:
-        """Convert Bark scale to Hz."""
+        """Konvertiert Bark scale to Hz."""
         return bark_to_hz(bark)
 
 

@@ -441,7 +441,7 @@ class ObjectiveScorer:
         processing_time_sec: float = 0.0,
     ) -> ObjectiveScore:
         """
-        Score audio via objektive Metriken.
+        Bewertet audio via objektive Metriken.
 
         Args:
             audio: Processed audio array
@@ -701,7 +701,7 @@ class MultiPassEngine:
 
     def __init__(self, scorer: ObjectiveScorer | None = None):
         """
-        Initialize MultiPassEngine.
+        Initialisiert MultiPassEngine.
 
         Args:
             scorer: ObjectiveScorer instance (creates default if None)

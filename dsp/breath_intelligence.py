@@ -94,7 +94,7 @@ class BreathDetector:
 
     def detect(self, audio: np.ndarray, sr: int, vocal_mask: np.ndarray | None = None) -> list[BreathEvent]:
         """
-        Detect breath events in audio.
+        Erkennt breath events in audio.
 
         Parameters
         ----------
@@ -140,7 +140,7 @@ class BreathDetector:
 
     def _compute_breath_energy(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Compute energy in breath frequency band (500-3000 Hz).
+        Berechnet energy in breath frequency band (500-3000 Hz).
 
         Breath noise is typically noisy, broadband, low-energy, and
         concentrated in the 500-3000 Hz range (less harmonic structure).
@@ -172,7 +172,7 @@ class BreathDetector:
 
     def _compute_envelope(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Compute amplitude envelope using Hilbert transform.
+        Berechnet amplitude envelope using Hilbert transform.
         Chunked to prevent OOM on long audio (hilbert allocates complex128 FFT).
         """
         max_chunk = 30 * sr  # 30 s chunks — ~46 MB complex128 per chunk
@@ -208,7 +208,7 @@ class BreathDetector:
         self, candidates: np.ndarray, audio: np.ndarray, sr: int, detection_signal: np.ndarray
     ) -> list[BreathEvent]:
         """
-        Extract discrete breath events from candidate mask.
+        Extrahiert discrete breath events from candidate mask.
         """
         events = []
 
@@ -277,7 +277,7 @@ class BreathDetector:
 
     def _compute_spectral_centroid(self, audio: np.ndarray, sr: int) -> float:
         """
-        Compute spectral centroid.
+        Berechnet spectral centroid.
         """
         # Zero-pad to power of 2
         n_fft = 2 ** int(np.ceil(np.log2(len(audio))))
@@ -293,7 +293,7 @@ class BreathDetector:
 
     def _classify_breath_type(self, audio: np.ndarray, sr: int, spectral_centroid: float, energy: float) -> str:
         """
-        Simple breath type classification.
+        Einfaches breath type classification.
 
         - Inhale: Higher spectral centroid (>2 kHz), lower energy
         - Exhale: Lower spectral centroid (<1.5 kHz), moderate energy
@@ -315,7 +315,7 @@ class BreathDetector:
 
 class ArtisticIntentScorer:
     """
-    Scores artistic intent for breath preservation based on genre, era, and context.
+    Bewertet artistic intent for breath preservation based on genre, era, and context.
     """
 
     # Genre-based breath preservation scores (0.0 = remove, 1.0 = preserve)
@@ -346,7 +346,7 @@ class ArtisticIntentScorer:
         self, genre: str = "default", era: str = "default", context: str = "phrase_boundary"
     ) -> float:
         """
-        Score artistic intent for breath preservation.
+        Bewertet artistic intent for breath preservation.
 
         Parameters
         ----------
@@ -410,7 +410,7 @@ class BreathProcessor:
         aggressive: float = 0.5,
     ) -> tuple[np.ndarray, dict]:
         """
-        Process breath events with artistic intent.
+        Verarbeitet breath events with artistic intent.
 
         Parameters
         ----------
@@ -511,7 +511,7 @@ class BreathProcessor:
 
     def _determine_context(self, event: BreathEvent, audio: np.ndarray, sr: int) -> str:
         """
-        Determine context of breath event (phrase boundary, mid-phrase, etc.).
+        Bestimmt context of breath event (phrase boundary, mid-phrase, etc.).
         """
         # Simple heuristic: check energy before and after
         context_window = int(0.5 * sr)  # 500ms context
@@ -546,7 +546,7 @@ class BreathProcessor:
 
 class BreathIntelligence:
     """
-    Unified API for Breath Noise Intelligence.
+    Einheitliche API für Atemlärm-Intelligenz.
     """
 
     def __init__(self, sensitivity: float = 0.7, genre: str = "default", era: str = "default", aggressive: float = 0.5):

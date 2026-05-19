@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 def _as_mono_float_array(audio: np.ndarray) -> np.ndarray:
-    """Return audio as a contiguous 1D float64 ndarray for NumPy/SciPy ops."""
+    """Gibt audio as a contiguous 1D float64 ndarray for NumPy/SciPy ops zurück."""
     return np.asarray(audio, dtype=np.float64).reshape(-1)
 
 
@@ -53,7 +53,7 @@ class AuthenticityLevel(Enum):
 
 
 class RiskLevel(Enum):
-    """Processing risk assessment."""
+    """Verarbeitet risk assessment."""
 
     CRITICAL = "critical"  # Don't process - likely fake
     HIGH = "high"  # High risk - verify first
@@ -157,7 +157,7 @@ class AudioForensicsAnalyzer:
 
     def __init__(self, sensitivity: float = 0.7) -> None:
         """
-        Initialize forensics analyzer.
+        Initialisiert forensics analyzer.
 
         Args:
             sensitivity: Detection sensitivity (0.0-1.0)
@@ -173,7 +173,7 @@ class AudioForensicsAnalyzer:
         aurik_mode: str = "restoration",
     ) -> ForensicReport:
         """
-        Perform comprehensive forensic analysis.
+        Führt durch: comprehensive forensic analysis.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -247,7 +247,7 @@ class AudioForensicsAnalyzer:
         sr: int,
     ) -> tuple[float, bool, bool]:
         """
-        Detect AI-generated audio characteristics.
+        Erkennt AI-generated audio characteristics.
 
         Returns:
             (ai_confidence, gan_artifacts, diffusion_patterns)
@@ -273,7 +273,7 @@ class AudioForensicsAnalyzer:
         sr: int,
     ) -> float:
         """
-        Detect GAN-specific artifacts.
+        Erkennt GAN-specific artifacts.
 
         GANs often produce spectral periodicities and phase anomalies.
         """
@@ -296,7 +296,7 @@ class AudioForensicsAnalyzer:
         sr: int,
     ) -> float:
         """
-        Detect diffusion-model-specific patterns.
+        Erkennt diffusion-model-specific patterns.
 
         Diffusion models leave residual noise patterns.
         """
@@ -330,7 +330,7 @@ class AudioForensicsAnalyzer:
         sr: int,
     ) -> float:
         """
-        Detect voice cloning indicators.
+        Erkennt voice cloning indicators.
 
         Voice clones often have:
         - Unnatural prosody (timing)
@@ -385,7 +385,7 @@ class AudioForensicsAnalyzer:
         sr: int,
     ) -> list[DetectedEdit]:
         """
-        Detect splices, cuts, and other edits.
+        Erkennt splices, cuts, and other edits.
         """
         edits = []
 
@@ -404,7 +404,7 @@ class AudioForensicsAnalyzer:
         audio: np.ndarray,
         sr: int,
     ) -> list[DetectedEdit]:
-        """Detect splice points (cuts/pastes)."""
+        """Erkennt splice points (cuts/pastes)."""
         splices = []
         audio_array = _as_mono_float_array(audio)
 
@@ -441,7 +441,7 @@ class AudioForensicsAnalyzer:
         audio: np.ndarray,
         sr: int,
     ) -> list[DetectedEdit]:
-        """Detect copy-pasted regions."""
+        """Erkennt copy-pasted regions."""
         copy_pastes = []
 
         # Self-similarity matrix (computationally expensive - sample)
@@ -489,7 +489,7 @@ class AudioForensicsAnalyzer:
         audio: np.ndarray,
         sr: int,
     ) -> list[str]:
-        """Detect unusual spectral characteristics."""
+        """Erkennt unusual spectral characteristics."""
         anomalies = []
         audio_array = _as_mono_float_array(audio)
 
@@ -523,7 +523,7 @@ class AudioForensicsAnalyzer:
         audio: np.ndarray,
         sr: int,
     ) -> list[str]:
-        """Detect unusual temporal characteristics."""
+        """Erkennt unusual temporal characteristics."""
         anomalies = []
 
         # Check for unnatural silence/noise transitions
@@ -558,7 +558,7 @@ class AudioForensicsAnalyzer:
         temporal_anomaly_count: int,
     ) -> float:
         """
-        Compute overall authenticity score.
+        Berechnet overall authenticity score.
 
         1.0 = definitely authentic
         0.0 = definitely synthetic
@@ -614,7 +614,7 @@ class AudioForensicsAnalyzer:
         risk: RiskLevel,
         edits: list[DetectedEdit],
     ) -> str:
-        """Generate RESTORATION mode recommendation."""
+        """Generiert RESTORATION mode recommendation."""
         if risk == RiskLevel.CRITICAL:
             return "NOT RECOMMENDED: Audio appears to be AI-generated. Restoration may not be authentic."
         elif risk == RiskLevel.HIGH:
@@ -630,7 +630,7 @@ class AudioForensicsAnalyzer:
         risk: RiskLevel,
         ai_confidence: float,
     ) -> str:
-        """Generate HIGHEND STUDIO mode recommendation."""
+        """Generiert HIGHEND STUDIO mode recommendation."""
         if risk == RiskLevel.CRITICAL:
             return "DO NOT USE: Audio is likely AI-generated. Copyright/legal risk."
         elif risk == RiskLevel.HIGH:
@@ -646,7 +646,7 @@ class AudioForensicsAnalyzer:
         ai_confidence: float,
         edits: list[DetectedEdit],
     ) -> list[str]:
-        """Generate processing notes."""
+        """Generiert processing notes."""
         notes = []
 
         if ai_confidence > 0.7:

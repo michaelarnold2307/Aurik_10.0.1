@@ -33,7 +33,7 @@ _DEFAULT_CHAIN: list[str] = ["deepfilternet_v3_ii", "resemble_enhance"]
 
 
 class EnsembleProcessor:
-    """Runs an ensemble processing chain via *restoration_fn*.
+    """Führt aus: an ensemble processing chain via *restoration_fn*.
 
     Parameters
     ----------
@@ -63,7 +63,7 @@ class EnsembleProcessor:
         restoration_fn: Callable | None = None,
         **kwargs: Any,
     ) -> np.ndarray:
-        """Apply *restoration_fn* to *audio* and return a sanitised ndarray.
+        """Wendet an: *restoration_fn* to *audio* and return a sanitised ndarray.
 
         Parameters
         ----------
@@ -114,7 +114,7 @@ _ensemble_processor_lock = _threading.Lock()
 
 
 def get_ensemble_processor(context: Any = None, fusion_engine: FusionEngine | None = None) -> EnsembleProcessor:
-    """Return the process-wide singleton EnsembleProcessor instance."""
+    """Gibt the process-wide singleton EnsembleProcessor instance zurück."""
     global _ensemble_processor_instance
     if _ensemble_processor_instance is None:
         with _ensemble_processor_lock:
@@ -134,7 +134,7 @@ def process_ensemble(
     material: str = "restoration",
     restoration_fn: Callable | None = None,
 ) -> np.ndarray:
-    """Run a three-chain ensemble (CONSERVATIVE/BALANCED/AGGRESSIVE) on *audio*.
+    """Führt aus: a three-chain ensemble (CONSERVATIVE/BALANCED/AGGRESSIVE) on *audio*.
 
     Each chain calls ``restoration_fn(audio, sr, strength=s)`` with one of the
     three strength multipliers [0.6, 1.0, 1.4], then fuses results by

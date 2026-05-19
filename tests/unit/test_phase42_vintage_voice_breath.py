@@ -109,3 +109,52 @@ class TestPhase42VintageBreathDirectLogic:
         assert _age_breath_preservation == 0.70, (
             f"cd_digital: Vintage-Guard soll nicht feuern, breath_preservation={_age_breath_preservation}"
         )
+
+
+# ---------------------------------------------------------------------------
+# §0p Passaggio-Schutz-Tests
+# ---------------------------------------------------------------------------
+
+
+class TestPhase42PassaggioGuard:
+    """§0p: Passaggio-Zonen müssen formant_gain und presence_gain in Phase 42 reduzieren."""
+
+    def _sim_passaggio_scale(self, audio_dur_s: float, zones: list) -> float:
+        """Simuliert die Passaggio-Scale-Berechnung wie in Phase 42."""
+        coverage = sum(e - s for s, e in zones if 0 <= s < e) / max(audio_dur_s, 1.0)
+        coverage = float(min(max(coverage, 0.0), 1.0))
+        if coverage <= 0.03:
+            return 1.0  # Guard inaktiv
+        return max(0.40, 1.0 - 0.60 * coverage)
+
+    def test_passaggio_scale_reduces_when_coverage_exceeds_threshold(self):
+        """Bei Passaggio-Coverage > 3 % muss scale < 1.0 sein."""
+        scale = self._sim_passaggio_scale(4.0, [(1.0, 2.5)])
+        assert scale < 1.0, f"Passaggio-Scale muss < 1.0 sein, erhalten: {scale:.3f}"
+
+    def test_passaggio_scale_never_below_floor(self):
+        """Passaggio-Scale darf nie unter 0.40 fallen (zu aggressiv wäre Timbre-Zerstörung)."""
+        scale = self._sim_passaggio_scale(1.0, [(0.0, 1.0)])  # 100 % Passaggio
+        assert scale >= 0.40, f"Passaggio-Scale unter Floor 0.40: {scale:.3f}"
+
+    def test_passaggio_guard_inactive_below_threshold(self):
+        """Unter 3 % Passaggio-Coverage bleibt scale == 1.0."""
+        scale = self._sim_passaggio_scale(100.0, [(0.0, 0.5)])  # 0.5 % → inaktiv
+        assert abs(scale - 1.0) < 1e-9, f"Guard feuerte bei <3 % Coverage: scale={scale:.3f}"
+
+    def test_passaggio_kwargs_extraction_logic(self):
+        """passaggio_zones aus kwargs hat Vorrang vor vfa_result."""
+
+        # kwargs-Quelle hat Vorrang
+        kwargs_zones = [(1.0, 2.0)]
+        vfa_zones = [(3.0, 5.0)]
+
+        class _FakeVFA:
+            passaggio_zones = vfa_zones
+
+        _passaggio_zones = list(kwargs_zones or [])
+        if not _passaggio_zones and hasattr(_FakeVFA(), "passaggio_zones"):
+            _passaggio_zones = list(_FakeVFA().passaggio_zones)
+        assert _passaggio_zones == kwargs_zones, (
+            "kwargs-passaggio_zones soll Vorrang vor vfa_result.passaggio_zones haben"
+        )

@@ -77,6 +77,7 @@ class FeedbackChain:
         self._pqs_score_fn: Callable[[np.ndarray, int], object] | None = None
         self._versa_score_fn: Callable[[np.ndarray, int], object] | None = None
         self._last_score_source: str = "heuristic_rms"
+        self._last_analytics_overhead_s: float = 0.0  # §perf: accumulated goal-measurement overhead
         if self.use_pqs_in_loop:
             try:
                 from backend.core.perceptual_quality_scorer import score_audio_absolute
@@ -108,7 +109,7 @@ class FeedbackChain:
         return float(np.clip(1.0 + 4.0 * (1.0 - np.exp(-8.0 * rms)), 1.0, 5.0))
 
     def _compute_iteration_score(self, audio: np.ndarray, sr: int) -> float:
-        """Computes loop score with PQS-first strategy and heuristic fallback.
+        """Berechnet loop score with PQS-first strategy and heuristic fallback.
 
         Primary: VERSA mos (if enabled) or PerceptualQualityScorer.score_audio_absolute(...).
         Fallback: legacy RMS heuristic from compute_perceptual_score().
@@ -164,7 +165,7 @@ class FeedbackChain:
             return base_mos
 
     def _compute_versa_segmented_score(self, audio: np.ndarray, sr: int) -> float:
-        """Compute VERSA MOS on up to 5 representative segments, aggregate via min.
+        """Berechnet VERSA MOS on up to 5 representative segments, aggregate via min.
 
         Motivation: avoid local quality collapses being hidden by a single global MOS.
         """
@@ -524,7 +525,7 @@ class FeedbackChain:
         if _phase_list_mode:
 
             def _build_combined_fn(active_phase_list: list):
-                """Build improve_fn from currently active phases."""
+                """Erstellt improve_fn from currently active phases."""
 
                 def _combined_fn(a: np.ndarray, _sr2: int) -> np.ndarray:
                     out = a
@@ -590,7 +591,7 @@ class FeedbackChain:
         _GOAL_WINDOW_SAMPLES = int(_sr * 30.0)
 
         def _goal_window(a: np.ndarray) -> np.ndarray:
-            """Return a centre-slice ≤ 30 s for goal measurement."""
+            """Gibt a centre-slice ≤ 30 s for goal measurement zurück."""
             total = a.shape[-1] if a.ndim == 2 else len(a)
             if total <= _GOAL_WINDOW_SAMPLES:
                 return a
@@ -630,11 +631,11 @@ class FeedbackChain:
                 # while being the only FC phase nudging that goal above threshold).
                 _fc_deficit_factor = 1.0
                 if _prev_goals and isinstance(self.adaptive_goal_thresholds, dict) and self.adaptive_goal_thresholds:
-                    _agt_local = self.adaptive_goal_thresholds
+                    _agt_local: dict[str, float] = self.adaptive_goal_thresholds or {}
                     _deficits = [
-                        float(_agt_local[_dg] - _prev_goals[_dg])  # type: ignore[index]
+                        float(_agt_local[_dg] - _prev_goals[_dg])
                         for _dg in _prev_goals
-                        if _dg in _agt_local and _prev_goals[_dg] < _agt_local[_dg]  # type: ignore[operator]
+                        if _dg in _agt_local and _prev_goals[_dg] < _agt_local[_dg]
                     ]
                     if _deficits:
                         _max_deficit = max(_deficits)
@@ -915,7 +916,7 @@ _lock = threading.Lock()
 
 
 def get_feedback_chain() -> FeedbackChain:
-    global _instance
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:
@@ -938,35 +939,33 @@ def compute_perceptual_score(
         transient_score    Hüllkurven-Korrelation ∈ [0, 1]
         combined       Gewichteter Gesamt-Score ∈ [0, 1]
     """
-    import numpy as _np
-
     _ = sample_rate  # wird für zukünftige SR-abhängige Metriken genutzt
 
-    orig = _np.nan_to_num(_np.asarray(original, dtype=_np.float32)).ravel()
-    deg = _np.nan_to_num(_np.asarray(degraded, dtype=_np.float32)).ravel()
+    orig = np.nan_to_num(np.asarray(original, dtype=np.float32)).ravel()
+    deg = np.nan_to_num(np.asarray(degraded, dtype=np.float32)).ravel()
     n = min(len(orig), len(deg))
     orig, deg = orig[:n], deg[:n]
 
     # — SI-SNR (Scale-Invariant SNR) ——————————————————————————————————————
-    orig64 = orig.astype(_np.float64)
-    deg64 = deg.astype(_np.float64)
-    dot = float(_np.dot(orig64, orig64)) + 1e-12
-    s_target = (_np.dot(deg64, orig64) / dot) * orig64
+    orig64 = orig.astype(np.float64)
+    deg64 = deg.astype(np.float64)
+    dot = float(np.dot(orig64, orig64)) + 1e-12
+    s_target = (np.dot(deg64, orig64) / dot) * orig64
     e_noise = deg64 - s_target
-    sisnr = 10.0 * float(_np.log10((_np.dot(s_target, s_target) + 1e-12) / (_np.dot(e_noise, e_noise) + 1e-12)))
+    sisnr = 10.0 * float(np.log10((np.dot(s_target, s_target) + 1e-12) / (np.dot(e_noise, e_noise) + 1e-12)))
 
     # — SNR ——————————————————————————————————————————————————————————————
-    signal_power = float(_np.mean(orig64**2)) + 1e-12
-    noise_power = float(_np.mean((deg64 - orig64) ** 2)) + 1e-12
-    raw_snr = 10.0 * _np.log10(signal_power / noise_power)
-    snr_db = float(_np.nan_to_num(raw_snr, nan=0.0, posinf=60.0, neginf=-60.0))
+    signal_power = float(np.mean(orig64**2)) + 1e-12
+    noise_power = float(np.mean((deg64 - orig64) ** 2)) + 1e-12
+    raw_snr = 10.0 * np.log10(signal_power / noise_power)
+    snr_db = float(np.nan_to_num(raw_snr, nan=0.0, posinf=60.0, neginf=-60.0))
 
     # — Spectral Flatness ——————————————————————————————————————————————
     n_fft = min(2048, max(4, len(deg) // 4))
-    spec = _np.abs(_np.fft.rfft(deg, n=n_fft)) + 1e-12
+    spec = np.abs(np.fft.rfft(deg, n=n_fft)) + 1e-12
     spectral_flatness = float(
-        _np.clip(
-            _np.exp(float(_np.mean(_np.log(spec)))) / (float(_np.mean(spec)) + 1e-12),
+        np.clip(
+            np.exp(float(np.mean(np.log(spec)))) / (float(np.mean(spec)) + 1e-12),
             0.0,
             1.0,
         )
@@ -974,31 +973,31 @@ def compute_perceptual_score(
 
     # — Transient Score (Hüllkurven-Korrelation) ——————————————————————
     hop = max(1, len(orig) // 200)
-    env_o = _np.array(
-        [float(_np.max(_np.abs(orig[i : i + hop]))) for i in range(0, len(orig) - hop, hop)],
-        dtype=_np.float64,
+    env_o = np.array(
+        [float(np.max(np.abs(orig[i : i + hop]))) for i in range(0, len(orig) - hop, hop)],
+        dtype=np.float64,
     )
-    env_d = _np.array(
-        [float(_np.max(_np.abs(deg[i : i + hop]))) for i in range(0, len(deg) - hop, hop)],
-        dtype=_np.float64,
+    env_d = np.array(
+        [float(np.max(np.abs(deg[i : i + hop]))) for i in range(0, len(deg) - hop, hop)],
+        dtype=np.float64,
     )
     ml = min(len(env_o), len(env_d))
-    if ml > 1 and _np.std(env_o[:ml]) > 1e-10 and _np.std(env_d[:ml]) > 1e-10:
+    if ml > 1 and np.std(env_o[:ml]) > 1e-10 and np.std(env_d[:ml]) > 1e-10:
         _eo = env_o[:ml] - env_o[:ml].mean()
         _ed = env_d[:ml] - env_d[:ml].mean()
-        _no = float(_np.linalg.norm(_eo))
-        _nd = float(_np.linalg.norm(_ed))
-        _raw_corr = float(_np.dot(_eo, _ed) / (_no * _nd + 1e-10))
-        transient_score = float(_np.clip((_raw_corr + 1.0) / 2.0, 0.0, 1.0)) if _np.isfinite(_raw_corr) else 0.5
-    elif ml > 1 and _np.std(env_o[:ml]) < 1e-10 and _np.std(env_d[:ml]) < 1e-10:
+        _no = float(np.linalg.norm(_eo))
+        _nd = float(np.linalg.norm(_ed))
+        _raw_corr = float(np.dot(_eo, _ed) / (_no * _nd + 1e-10))
+        transient_score = float(np.clip((_raw_corr + 1.0) / 2.0, 0.0, 1.0)) if np.isfinite(_raw_corr) else 0.5
+    elif ml > 1 and np.std(env_o[:ml]) < 1e-10 and np.std(env_d[:ml]) < 1e-10:
         transient_score = 1.0  # Both silent — trivially matched
     else:
         transient_score = 0.5
 
     # — Combined ———————————————————————————————————————————————————————
-    sisnr_norm = float(_np.clip((sisnr + 20.0) / 80.0, 0.0, 1.0))
+    sisnr_norm = float(np.clip((sisnr + 20.0) / 80.0, 0.0, 1.0))
     combined = float(
-        _np.clip(
+        np.clip(
             0.4 * sisnr_norm + 0.3 * transient_score + 0.3 * (1.0 - spectral_flatness),
             0.0,
             1.0,

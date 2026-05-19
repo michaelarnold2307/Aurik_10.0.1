@@ -12,7 +12,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class DCOffsetDetector(DefectDetector):
     """
-    Detects DC offset.
+    Erkennt DC offset.
 
     DC offset is a constant shift away from zero in the waveform,
     caused by hardware issues or poor digitization.
@@ -23,13 +23,13 @@ class DCOffsetDetector(DefectDetector):
         self.threshold = threshold
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.02, **kwargs) -> list[DefectInstance]:
-        """Detect DC offset, kontextbewusst."""
+        """Erkennt DC offset, kontextbewusst."""
         if audio.ndim == 2:
             return self._detect_multichannel(audio, sr, tolerance)
         return self._detect_mono(audio, sr, tolerance)
 
     def _detect_mono(self, audio: np.ndarray, sr: int, tolerance: float) -> list[DefectInstance]:
-        """Detect DC offset in mono audio."""
+        """Erkennt DC offset in mono audio."""
 
         # Calculate mean (DC component)
         dc_offset = np.mean(audio)
@@ -60,7 +60,7 @@ class DCOffsetDetector(DefectDetector):
         ]
 
     def _detect_multichannel(self, audio: np.ndarray, sr: int, tolerance: float) -> list[DefectInstance]:
-        """Detect DC offset in multi-channel audio."""
+        """Erkennt DC offset in multi-channel audio."""
 
         defects = []
 

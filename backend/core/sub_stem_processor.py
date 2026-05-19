@@ -206,7 +206,7 @@ def _lr4_highpass(audio: np.ndarray, sr: int, cutoff_hz: float) -> NDArray[np.fl
 
 
 def _extract_band(audio: np.ndarray, sr: int, low_hz: float, high_hz: float) -> np.ndarray:
-    """Extract the frequency band [low_hz, high_hz] from *audio* via LR4 crossovers."""
+    """Extrahiert the frequency band [low_hz, high_hz] from *audio* via LR4 crossovers."""
     nyq = sr / 2.0
     # LP at high_hz unless it's effectively SR/2 (pass-through that edge)
     band = _lr4_lowpass(audio, sr, high_hz) if high_hz < nyq * 0.95 else audio.astype(np.float32)
@@ -222,7 +222,7 @@ def _extract_band(audio: np.ndarray, sr: int, low_hz: float, high_hz: float) -> 
 def _soft_spectral_subtraction(
     band: np.ndarray, strength: float, noise_estimate_frames: int = 10
 ) -> tuple[np.ndarray, float]:
-    """Lightweight stationary-noise spectral subtraction for a narrow band signal.
+    """Leichtgewichtiges stationary-noise spectral subtraction for a narrow band signal.
 
     Estimates noise floor from the quietest *noise_estimate_frames* frames of
     the STFT and subtracts it with a soft-knee Wiener-style mask.
@@ -298,7 +298,7 @@ def _soft_spectral_subtraction(
 
 
 def _apply_gain_db(audio: np.ndarray, gain_db: float, strength: float) -> NDArray[np.float32]:
-    """Apply a linear gain (dB) scaled by *strength* to *audio*."""
+    """Wendet einen linearen Gain (dB) skaliert mit *strength* auf *audio* an."""
     effective_db = gain_db * float(np.clip(strength, 0.0, 1.0))
     if abs(effective_db) < 0.01:
         return np.asarray(audio, dtype=np.float32)
@@ -339,7 +339,7 @@ class SubStemProcessor:
         instrument: str = "guitar",
         processing_strength: float | None = None,
     ) -> SubStemResult:
-        """Process *audio* by sub-stem decomposition.
+        """Verarbeitet *audio* by sub-stem decomposition.
 
         Args:
             audio:               Mono or stereo audio at 48 000 Hz.
@@ -420,7 +420,7 @@ class SubStemProcessor:
         bands_cfg: list[tuple[float, float, str, float]],
         strength: float,
     ) -> tuple[np.ndarray, list[SubStemBandResult]]:
-        """Process a single mono signal through the band decomposition chain."""
+        """Verarbeitet a single mono signal through the band decomposition chain."""
 
         sub_stems: list[np.ndarray] = []
         band_results: list[SubStemBandResult] = []
@@ -486,7 +486,7 @@ class _SingletonMeta(type):
 
 
 def get_sub_stem_processor() -> SubStemProcessor:
-    """Return the module-level singleton :class:`SubStemProcessor`.
+    """Gibt the module-level singleton :class:`SubStemProcessor` zurück.
 
     Thread-safe via double-checked locking (§3.2).
     """

@@ -125,7 +125,7 @@ class BreathDetector:
         audio: npt.NDArray[np.float32],
         sample_rate: int,
     ) -> BreathDetectionResult:
-        """Detect breath segments in vocal audio.
+        """Erkennt breath segments in vocal audio.
 
         Args:
             audio: float32/64 ndarray, mono or stereo (mixed to mono)
@@ -200,7 +200,7 @@ class BreathDetector:
         result: BreathDetectionResult,
         sr: int,
     ) -> npt.NDArray[np.float32]:
-        """Apply 5 ms Hanning crossfade gate at breath segment boundaries (§2.8).
+        """Wendet 5-ms-Hanning-Überblend-Gate an Atemsegmentgrenzen an (§2.8).
 
         Softens voiced ↔ breath transitions to prevent click artifacts.
         """
@@ -237,7 +237,7 @@ class BreathDetector:
         frame_size: int,
         hop_size: int,
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-        """Compute RMS energy (dBFS) and ZCR per short-time frame."""
+        """Berechnet RMS energy (dBFS) and ZCR per short-time frame."""
         n = len(mono)
         n_frames = max(1, 1 + (n - frame_size) // hop_size)
         energy_db = np.full(n_frames, -120.0, dtype=np.float32)
@@ -262,7 +262,7 @@ class BreathDetector:
         hop_size: int,
         frame_size: int,
     ) -> list[tuple[int, int]]:
-        """Convert boolean frame mask to (start_sample, end_sample) pairs."""
+        """Konvertiert boolean frame mask to (start_sample, end_sample) pairs."""
         segments: list[tuple[int, int]] = []
         in_seg = False
         seg_start = 0
@@ -282,7 +282,7 @@ class BreathDetector:
         segments: list[tuple[int, int]],
         gap_samples: int,
     ) -> list[tuple[int, int]]:
-        """Merge adjacent segments separated by fewer than gap_samples."""
+        """Führt zusammen: adjacent segments separated by fewer than gap_samples."""
         if not segments:
             return []
         merged: list[tuple[int, int]] = [segments[0]]

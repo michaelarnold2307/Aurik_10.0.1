@@ -19,17 +19,17 @@ class CommunityAggregate:
 
 
 class CommunityRatingPlatform:
-    """Collects community ratings and computes per-dimension averages."""
+    """Sammelt community ratings and computes per-dimension averages."""
 
     def __init__(self) -> None:
         self._ratings: list[dict[str, float]] = []
 
     def add_rating(self, user: str, scores: dict[str, float]) -> None:
-        """Add *scores* from community *user*."""
+        """Fügt hinzu: *scores* from community *user*."""
         self._ratings.append(dict(scores))
 
     def aggregate(self) -> CommunityAggregate:
-        """Return the mean score per dimension across all ratings."""
+        """Gibt the mean score per dimension across all ratings zurück."""
         if not self._ratings:
             return CommunityAggregate()
         keys = self._ratings[0].keys()
@@ -46,7 +46,7 @@ _community_rating_platform_lock = _threading.Lock()
 
 
 def get_community_rating_platform() -> CommunityRatingPlatform:
-    """Return the process-wide singleton CommunityRatingPlatform instance."""
+    """Gibt the process-wide singleton CommunityRatingPlatform instance zurück."""
     global _community_rating_platform_instance
     if _community_rating_platform_instance is None:
         with _community_rating_platform_lock:

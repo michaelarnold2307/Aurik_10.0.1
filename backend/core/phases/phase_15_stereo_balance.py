@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 15: Stereo Balance Correction v2.0 (Professional)
+Phase 15: Stereo Balance Correction v2.0 (Professional).
 Multi-band spectral balance correction with transient preservation.
 
 Algorithm (Professional-Grade):
@@ -116,7 +116,7 @@ class StereoBalancePhaseV2(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.VINYL, **kwargs
     ) -> PhaseResult:
         """
-        Apply professional-grade stereo balance correction.
+        Wendet an: professional-grade stereo balance correction.
 
         Args:
             audio: Stereo audio [samples, 2]
@@ -345,7 +345,7 @@ class StereoBalancePhaseV2(PhaseInterface):
         self, audio: np.ndarray, imbalance_db: float, strength: float, sample_rate: int
     ) -> np.ndarray:
         """
-        Apply smooth gain correction with transient preservation.
+        Wendet an: smooth gain correction with transient preservation.
 
         Uses Gaussian smoothing to create smooth gain envelope,
         avoiding clicks/pops from abrupt gain changes.
@@ -403,7 +403,7 @@ class StereoBalancePhaseV2(PhaseInterface):
 
     def _measure_global_imbalance(self, audio: np.ndarray) -> float:
         """
-        Measure overall L/R imbalance (single number).
+        Misst overall L/R imbalance (single number).
         """
         left_rms = np.sqrt(np.mean(audio[:, 0] ** 2))
         right_rms = np.sqrt(np.mean(audio[:, 1] ** 2))
@@ -417,7 +417,7 @@ class StereoBalancePhaseV2(PhaseInterface):
         return sum(bands)
 
     def get_metadata(self) -> PhaseMetadata:
-        """Get phase metadata."""
+        """Gibt zurück: phase metadata."""
         return PhaseMetadata(
             phase_id="phase_15_stereo_balance",
             name="Stereo Balance v2.0 (Professional)",

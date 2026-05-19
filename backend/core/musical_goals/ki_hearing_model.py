@@ -415,7 +415,7 @@ def compute_vocal_proximity_score(
     sr: int,
     vocal_segments: list[tuple[float, float]] | None = None,
 ) -> dict[str, float]:
-    """Compute vocal proximity score (§2.35b).
+    """Berechnet vocal proximity score (§2.35b).
 
     Measures whether restoration preserved the perceived closeness/intimacy
     of a vocal performance. Three orthogonal components:

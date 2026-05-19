@@ -50,7 +50,7 @@ class ProcessingMode(Enum):
 
     @classmethod
     def from_string(cls, mode: str) -> "ProcessingMode":
-        """Convert string to ProcessingMode enum."""
+        """Konvertiert string to ProcessingMode enum."""
         mode_lower = mode.lower()
         for m in cls:
             if m.value == mode_lower:
@@ -172,16 +172,16 @@ class ProcessingConfig:
     """Human-readable description of this mode."""
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary (for JSON serialization)."""
+        """Konvertiert to dictionary (for JSON serialization)."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ProcessingConfig":
-        """Create from dictionary."""
+        """Erstellt from dictionary."""
         return cls(**data)
 
     def validate(self) -> None:
-        """Validate parameter ranges."""
+        """Validiert parameter ranges."""
         # Validate strength parameters (0.0-1.0)
         for param in [
             "denoise_strength",
@@ -339,7 +339,7 @@ PROCESSING_CONFIGS: dict[ProcessingMode, ProcessingConfig] = {
 
 
 def get_processing_config(mode: ProcessingMode) -> ProcessingConfig:
-    """Get processing configuration for a given mode.
+    """Gibt zurück: processing configuration for a given mode.
 
     Args:
         mode: Processing mode enum
@@ -357,7 +357,7 @@ def get_processing_config(mode: ProcessingMode) -> ProcessingConfig:
 
 
 def list_available_modes() -> dict[str, str]:
-    """List all available processing modes with descriptions.
+    """Listet auf: all available processing modes with descriptions.
 
     Returns:
         Dictionary mapping mode names to descriptions
@@ -366,7 +366,7 @@ def list_available_modes() -> dict[str, str]:
 
 
 def create_custom_config(**kwargs) -> ProcessingConfig:
-    """Create a custom processing configuration.
+    """Erstellt a custom processing configuration.
 
     Args:
         **kwargs: Parameter overrides (see ProcessingConfig fields)
@@ -391,7 +391,7 @@ def create_custom_config(**kwargs) -> ProcessingConfig:
 
 # Convenience function
 def get_config_by_name(mode_name: str) -> ProcessingConfig:
-    """Get processing configuration by mode name (string).
+    """Gibt zurück: processing configuration by mode name (string).
 
     Args:
         mode_name: Mode name (e.g., "restoration", "studio_2026")

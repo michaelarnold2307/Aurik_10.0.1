@@ -163,7 +163,7 @@ class DefektDenker:
     # ------------------------------------------------------------------
 
     def _ensure_loaded(self) -> None:
-        """Load DefectScanner and CausalDefectReasoner lazily."""
+        """Lädt DefectScanner and CausalDefectReasoner lazily."""
         if self._loaded:
             return
         with self._init_lock:
@@ -313,7 +313,7 @@ class DefektDenker:
 
     @staticmethod
     def _extract_scores(scan_result: Any) -> dict[str, float]:
-        """Extract DefectType → severity float dict from DefectAnalysisResult."""
+        """Extrahiert DefectType → severity float dict from DefectAnalysisResult."""
         scores: dict[str, float] = {}
         raw = getattr(scan_result, "scores", {})
         if not isinstance(raw, dict):
@@ -331,7 +331,7 @@ class DefektDenker:
 
     @staticmethod
     def _overall_severity(scores: dict[str, float]) -> float:
-        """Compute mean severity, guarded against NaN/empty."""
+        """Berechnet mean severity, guarded against NaN/empty."""
         vals = [v for v in scores.values() if math.isfinite(v) and v > 0]
         if not vals:
             return 0.0
@@ -343,7 +343,7 @@ class DefektDenker:
         plan: Any | None,
         material: str,
     ) -> DefektBericht:
-        """Convert raw scan/plan results to DefektBericht."""
+        """Konvertiert raw scan/plan results to DefektBericht."""
         if plan is not None:
             primary = str(getattr(plan, "primary_cause", "unknown"))
             confidence = float(getattr(plan, "confidence", 0.5))

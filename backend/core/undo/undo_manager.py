@@ -73,7 +73,7 @@ class AudioSnapshot:
 
     def get_audio(self, reference: np.ndarray | None = None) -> np.ndarray:
         """
-        Reconstruct audio from snapshot.
+        Rekonstruiert audio from snapshot.
 
         Args:
             reference: Reference audio if using delta compression
@@ -94,18 +94,18 @@ class AudioSnapshot:
 
     @classmethod
     def create_full(cls, audio: np.ndarray, sr: int) -> "AudioSnapshot":
-        """Create full audio snapshot (no compression)."""
+        """Erstellt full audio snapshot (no compression)."""
         return cls(audio=audio.copy(), sample_rate=sr, shape=audio.shape, is_compressed=False)
 
     @classmethod
     def create_delta(cls, audio: np.ndarray, reference: np.ndarray, sr: int, reference_index: int) -> "AudioSnapshot":
-        """Create delta-compressed snapshot."""
+        """Erstellt delta-compressed snapshot."""
         delta = audio - reference
 
         return cls(delta=delta, sample_rate=sr, shape=audio.shape, is_compressed=True, reference_index=reference_index)
 
     def memory_size(self) -> int:
-        """Estimate memory size in bytes."""
+        """Schätzt memory size in bytes."""
         if self.audio is not None:
             return self.audio.nbytes
         elif self.delta is not None:
@@ -140,7 +140,7 @@ class Action(ABC):
     @abstractmethod
     def apply(self) -> dict[str, Any]:
         """
-        Apply action (redo).
+        Wendet Aktion erneut an (Redo).
 
         Returns:
             State dict with new values
@@ -206,7 +206,7 @@ class ProcessingAction(Action):
         }
 
     def apply(self) -> dict[str, Any]:
-        """Apply processing (go to after-audio)."""
+        """Wendet an: processing (go to after-audio)."""
         self.current_state = "after"
         if self.after_snapshot is None:
             raise RuntimeError("After snapshot is not available")
@@ -219,7 +219,7 @@ class ProcessingAction(Action):
         self._reference_audio = None
 
     def memory_size(self) -> int:
-        """Estimate total memory usage."""
+        """Schätzt total memory usage."""
         size = 0
         if self.before_snapshot:
             size += self.before_snapshot.memory_size()
@@ -249,7 +249,7 @@ class ParameterChangeAction(Action):
         return {"parameter": self.parameter_name, "value": self.old_value}
 
     def apply(self) -> dict[str, Any]:
-        """Apply new parameter value."""
+        """Wendet an: new parameter value."""
         self.current_value = self.new_value
         return {"parameter": self.parameter_name, "value": self.new_value}
 
@@ -278,7 +278,7 @@ class ModeChangeAction(Action):
         return {"mode": self.old_mode, "config": self.mode_config}
 
     def apply(self) -> dict[str, Any]:
-        """Apply new mode."""
+        """Wendet an: new mode."""
         self.current_mode = self.new_mode
         return {"mode": self.new_mode, "config": self.mode_config}
 
@@ -311,7 +311,7 @@ class FileOperationAction(Action):
         return {"operation": f"revert_{self.operation}", "file_path": self.file_path, "metadata": self.metadata}
 
     def apply(self) -> dict[str, Any]:
-        """Apply file operation."""
+        """Wendet an: file operation."""
         return {"operation": self.operation, "file_path": self.file_path, "metadata": self.metadata}
 
     def cleanup(self) -> None:
@@ -340,7 +340,7 @@ class CompositeAction(Action):
         return {"composite_results": results, "action_count": len(self.actions)}
 
     def apply(self) -> dict[str, Any]:
-        """Apply all actions in forward order."""
+        """Wendet alle Aktionen in Vorwärtsreihenfolge an."""
         results = []
         for action in self.actions:
             result = action.apply()
@@ -388,7 +388,7 @@ class UndoManager:
 
     def __init__(self, max_undo_levels: int = 50, enable_delta_compression: bool = True):
         """
-        Initialize UndoManager.
+        Initialisiert UndoManager.
 
         Args:
             max_undo_levels: Maximum number of undo actions to keep
@@ -467,16 +467,16 @@ class UndoManager:
         return new_state
 
     def can_undo(self) -> bool:
-        """Check if undo is possible."""
+        """Prüft if undo is possible."""
         return len(self.undo_stack) > 0
 
     def can_redo(self) -> bool:
-        """Check if redo is possible."""
+        """Prüft if redo is possible."""
         return len(self.redo_stack) > 0
 
     def get_undo_history(self) -> list[str]:
         """
-        Get user-readable undo history.
+        Gibt zurück: user-readable undo history.
 
         Returns:
             List of action descriptions (most recent last)
@@ -485,7 +485,7 @@ class UndoManager:
 
     def get_redo_history(self) -> list[str]:
         """
-        Get user-readable redo history.
+        Gibt zurück: user-readable redo history.
 
         Returns:
             List of action descriptions (most recent first)
@@ -493,7 +493,7 @@ class UndoManager:
         return [action.description for action in reversed(self.redo_stack)]
 
     def clear_history(self):
-        """Clear all undo/redo history."""
+        """Löscht all undo/redo history."""
         # Cleanup all actions
         for action in self.undo_stack:
             action.cleanup()
@@ -507,7 +507,7 @@ class UndoManager:
 
     def get_memory_usage(self) -> int:
         """
-        Estimate total memory usage in bytes.
+        Schätzt total memory usage in bytes.
 
         Returns:
             Approximate memory usage
@@ -525,7 +525,7 @@ class UndoManager:
         return total
 
     def get_memory_usage_mb(self) -> float:
-        """Get memory usage in MB."""
+        """Gibt zurück: memory usage in MB."""
         return self.get_memory_usage() / (1024 * 1024)
 
 

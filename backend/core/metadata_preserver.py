@@ -67,7 +67,7 @@ _TAG_MAP: dict[str, tuple[str, str]] = {
 
 @dataclass
 class AudioMetadata:
-    """Extracted audio metadata for transfer between files."""
+    """Extrahierte Audio-Metadaten für den Dateitransfer."""
 
     title: str = ""
     artist: str = ""
@@ -80,15 +80,15 @@ class AudioMetadata:
     extra: dict[str, str] = field(default_factory=dict)
 
     def has_content(self) -> bool:
-        """Return True if any meaningful tag is set."""
+        """Gibt True if any meaningful tag is set zurück."""
         return bool(self.title or self.artist or self.album or self.date or self.genre)
 
 
 class MetadataPreserver:
-    """Extracts metadata from source audio and applies it to exported files."""
+    """Extrahiert metadata from source audio and applies it to exported files."""
 
     def extract(self, source_path: str | Path) -> AudioMetadata:
-        """Extract metadata from source audio file.
+        """Extrahiert metadata from source audio file.
 
         Parameters
         ----------
@@ -175,7 +175,7 @@ class MetadataPreserver:
         aurik_version: str = "",
         original_hash: str = "",
     ) -> bool:
-        """Apply metadata tags to an exported audio file.
+        """Wendet an: metadata tags to an exported audio file.
 
         Parameters
         ----------
@@ -224,7 +224,7 @@ class MetadataPreserver:
         *,
         aurik_version: str = "",
     ) -> bool:
-        """Extract metadata from source and apply to target in one call.
+        """Extrahiert metadata from source and apply to target in one call.
 
         Also computes SHA-256 provenance hash of the source file.
         """
@@ -243,7 +243,7 @@ class MetadataPreserver:
     # ── Private: format-specific writers ──────────────────────────────────
 
     def _provenance_comment(self, aurik_version: str, original_hash: str) -> str:
-        """Build provenance string for embedding in tags."""
+        """Erstellt provenance string for embedding in tags."""
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         parts = [f"Restored by Aurik {aurik_version}" if aurik_version else "Restored by Aurik"]
         parts.append(f"Date: {ts}")
@@ -347,7 +347,7 @@ class MetadataPreserver:
 
     @staticmethod
     def _file_hash(path: str | Path, chunk_size: int = 65536) -> str:
-        """Compute SHA-256 of a file (first 1 MB for speed)."""
+        """Berechnet SHA-256 of a file (first 1 MB for speed)."""
         h = hashlib.sha256()
         remaining = 1024 * 1024  # 1 MB cap for speed
         try:

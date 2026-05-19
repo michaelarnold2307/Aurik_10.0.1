@@ -14,6 +14,7 @@ from backend.core.calibration_matrix import (
     CANONICAL_THRESHOLDS_RESTORATION,
     CANONICAL_THRESHOLDS_STUDIO2026,
     estimate_song_goal_targets,
+    get_goal_recovery_phases,
     get_material_floor,
     get_phase_strength_range,
     predict_quality_score,
@@ -319,9 +320,7 @@ def test_get_material_floor_vinyl_between_shellac_and_cd():
     f_shellac = get_material_floor("shellac", "brillanz")
     f_vinyl = get_material_floor("vinyl", "brillanz")
     f_cd = get_material_floor("cd_digital", "brillanz")
-    assert f_shellac < f_vinyl <= f_cd, (
-        f"Expected shellac({f_shellac:.3f}) < vinyl({f_vinyl:.3f}) <= cd({f_cd:.3f})"
-    )
+    assert f_shellac < f_vinyl <= f_cd, f"Expected shellac({f_shellac:.3f}) < vinyl({f_vinyl:.3f}) <= cd({f_cd:.3f})"
 
 
 def test_get_material_floor_cd_matches_canonical_closely():
@@ -387,8 +386,12 @@ def test_get_phase_strength_range_high_restorability_reduces_max():
 def test_get_phase_strength_range_min_never_exceeds_max():
     """min_strength must always be <= max_strength for all materials/phases."""
     phases = [
-        "phase_03_denoise", "phase_07_harmonic_restoration", "phase_09_crackle_removal",
-        "phase_23_spectral_repair", "phase_26_dynamic_range_expansion", "phase_49_advanced_dereverb",
+        "phase_03_denoise",
+        "phase_07_harmonic_restoration",
+        "phase_09_crackle_removal",
+        "phase_23_spectral_repair",
+        "phase_26_dynamic_range_expansion",
+        "phase_49_advanced_dereverb",
     ]
     materials = ["wax_cylinder", "shellac", "vinyl", "tape", "cd_digital", "mp3_low"]
     for mat in materials:
@@ -449,13 +452,23 @@ def test_material_floor_ordering_ultra_analog_to_digital():
     """Physical material quality ordering must hold for brillanz floor:
     wax_cylinder < shellac ≤ lacquer_disc < vinyl < mp3_low < minidisc ≤ mp3_high ≤ aac < dat < cd_digital
     """
-    materials = ["wax_cylinder", "shellac", "lacquer_disc", "vinyl", "mp3_low",
-                 "minidisc", "mp3_high", "aac", "dat", "cd_digital"]
+    materials = [
+        "wax_cylinder",
+        "shellac",
+        "lacquer_disc",
+        "vinyl",
+        "mp3_low",
+        "minidisc",
+        "mp3_high",
+        "aac",
+        "dat",
+        "cd_digital",
+    ]
     floors = [get_material_floor(m, "brillanz") for m in materials]
     for i in range(len(floors) - 1):
         assert floors[i] <= floors[i + 1] + 0.02, (  # 0.02 tolerance for equal-tier materials
             f"brillanz floor ordering violated: {materials[i]}={floors[i]:.3f} "
-            f"> {materials[i+1]}={floors[i+1]:.3f} (§0a physical medium ordering)"
+            f"> {materials[i + 1]}={floors[i + 1]:.3f} (§0a physical medium ordering)"
         )
 
 
@@ -467,8 +480,10 @@ def test_pmgg_canonical_thresholds_match_calibration_matrix():
     gate inconsistencies — goals pass at pipeline end but fail in PMGG or vice versa.
     """
     from backend.core.per_phase_musical_goals_gate import (
-        _CANONICAL_THRESHOLDS_RESTORATION as pmgg_rest,
-        _CANONICAL_THRESHOLDS_STUDIO2026 as pmgg_s26,
+        _CANONICAL_THRESHOLDS_RESTORATION as PMGG_REST,
+    )
+    from backend.core.per_phase_musical_goals_gate import (
+        _CANONICAL_THRESHOLDS_STUDIO2026 as PMGG_S26,
     )
 
     # Key normalization: PMGG uses short aliases (micro_dynamics, bass_kraft, spatial_depth)
@@ -487,8 +502,8 @@ def test_pmgg_canonical_thresholds_match_calibration_matrix():
             out[key] = v
         return out
 
-    pmgg_r_norm = _norm(pmgg_rest)
-    pmgg_s_norm = _norm(pmgg_s26)
+    pmgg_r_norm = _norm(PMGG_REST)
+    pmgg_s_norm = _norm(PMGG_S26)
     cal_r_norm = _norm(CANONICAL_THRESHOLDS_RESTORATION)
     cal_s_norm = _norm(CANONICAL_THRESHOLDS_STUDIO2026)
 
@@ -505,3 +520,222 @@ def test_pmgg_canonical_thresholds_match_calibration_matrix():
                 f"PMGG studio2026 threshold for '{goal}' = {pmgg_s_norm[goal]:.4f} "
                 f"differs from calibration_matrix {cal_s_norm[goal]:.4f} — §2.55 sync violation"
             )
+
+
+# ---------------------------------------------------------------------------
+# §09.10 get_goal_recovery_phases — GOAL_BASELINE_CHECK backing data
+# ---------------------------------------------------------------------------
+
+_ALL_14_GOALS = {
+    "brillanz",
+    "waerme",
+    "natuerlichkeit",
+    "transparenz",
+    "tonal_center",
+    "groove",
+    "artikulation",
+    "micro_dynamics",
+    "emotionalitaet",
+    "bass_kraft",
+    "separation_fidelity",
+    "spatial_depth",
+    "authentizitaet",
+    "timbre_authentizitaet",
+}
+
+# Canonical §0a-forbidden phases — must NEVER appear in restoration mode results
+_FORBIDDEN_RESTORATION_PHASES = {
+    "phase_21_exciter",
+    "phase_35_multiband_compression",
+    "phase_42_vocal_enhancement",
+}
+
+
+def test_get_goal_recovery_phases_returns_list_of_strings():
+    """get_goal_recovery_phases must return a list of phase-id strings."""
+    result = get_goal_recovery_phases("brillanz")
+    assert isinstance(result, list)
+    assert all(isinstance(p, str) for p in result)
+
+
+def test_get_goal_recovery_phases_all_14_goals_have_entries():
+    """Every canonical Musical Goal must have at least one restoration recovery phase."""
+    missing = []
+    for goal in _ALL_14_GOALS:
+        phases = get_goal_recovery_phases(goal, is_studio_2026=False)
+        if not phases:
+            missing.append(goal)
+    assert not missing, (
+        f"Goals with no restoration recovery phases: {sorted(missing)} — "
+        "§GOAL_BASELINE_CHECK cannot guarantee threshold achievement for these goals"
+    )
+
+
+def test_get_goal_recovery_phases_no_forbidden_in_restoration():
+    """§0a: phase_21/35/42 must NEVER appear in restoration mode recovery lists."""
+    violations = []
+    for goal in _ALL_14_GOALS:
+        phases = get_goal_recovery_phases(goal, is_studio_2026=False)
+        bad = set(phases) & _FORBIDDEN_RESTORATION_PHASES
+        if bad:
+            violations.append(f"{goal}: {sorted(bad)}")
+    assert not violations, f"§0a violation — forbidden phases in restoration recovery list: {violations}"
+
+
+def test_get_goal_recovery_phases_studio_extras_add_phases():
+    """Studio 2026 mode must return at least as many phases as restoration for all goals."""
+    for goal in _ALL_14_GOALS:
+        rest_phases = get_goal_recovery_phases(goal, is_studio_2026=False)
+        studio_phases = get_goal_recovery_phases(goal, is_studio_2026=True)
+        assert len(studio_phases) >= len(rest_phases), (
+            f"Studio 2026 should return ≥ restoration phases for '{goal}': rest={rest_phases} studio={studio_phases}"
+        )
+
+
+def test_get_goal_recovery_phases_unknown_goal_returns_empty():
+    """Unknown goal keys must return empty list (non-blocking behaviour)."""
+    assert get_goal_recovery_phases("nonexistent_goal_xyz") == []
+    assert get_goal_recovery_phases("") == []
+
+
+def test_get_goal_recovery_phases_alias_normalisation():
+    """Legacy aliases (raumtiefe, mikrodynamik, basskraft) must resolve to the same
+    phases as their canonical names (spatial_depth, micro_dynamics, bass_kraft)."""
+    alias_pairs = [
+        ("raumtiefe", "spatial_depth"),
+        ("mikrodynamik", "micro_dynamics"),
+        ("basskraft", "bass_kraft"),
+    ]
+    for alias, canonical in alias_pairs:
+        assert get_goal_recovery_phases(alias) == get_goal_recovery_phases(canonical), (
+            f"Alias '{alias}' returns different phases than canonical '{canonical}'"
+        )
+
+
+def test_get_goal_recovery_phases_no_duplicates():
+    """Returned phase list must have no duplicate entries for any goal or mode."""
+    for goal in _ALL_14_GOALS:
+        for studio in (False, True):
+            phases = get_goal_recovery_phases(goal, is_studio_2026=studio)
+            assert len(phases) == len(set(phases)), f"Duplicate phases for goal='{goal}' studio={studio}: {phases}"
+
+
+def test_get_goal_recovery_phases_primary_phase_is_string():
+    """Primary recovery phase (index 0) must be a non-empty string for all 14 goals."""
+    for goal in _ALL_14_GOALS:
+        phases = get_goal_recovery_phases(goal)
+        assert phases and phases[0], f"Primary recovery phase for '{goal}' is empty/None: {phases}"
+
+
+def test_get_goal_recovery_phases_all_phase_ids_exist_on_disk():
+    """All phase IDs in both recovery dicts must map to a real phase_*.py file.
+
+    Root-cause guard for the class of bugs where a wrong or renamed phase ID is
+    entered into _GOAL_TO_RECOVERY_PHASES_RESTORATION / _STUDIO_EXTRAS. Such an
+    ID passes all structural tests but causes §GOAL_BASELINE_CHECK to silently
+    insert a phase that UV3 cannot find — recovery mechanism fails without error.
+    """
+    import pathlib
+
+    import backend.core.calibration_matrix as _cm
+
+    phases_dir = pathlib.Path(__file__).parent.parent.parent / "backend" / "core" / "phases"
+    valid_ids = {p.stem for p in phases_dir.glob("phase_*.py")}
+
+    violations: list[str] = []
+    for goal, phases in _cm._GOAL_TO_RECOVERY_PHASES_RESTORATION.items():
+        for phase_id in phases:
+            if phase_id not in valid_ids:
+                violations.append(f"RESTORATION goal='{goal}': '{phase_id}' — no matching phase file")
+    for goal, phases in _cm._GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS.items():
+        for phase_id in phases:
+            if phase_id not in valid_ids:
+                violations.append(f"STUDIO_EXTRAS goal='{goal}': '{phase_id}' — no matching phase file")
+
+    assert not violations, "Phase IDs in recovery dicts do not match any backend/core/phases/phase_*.py:\n" + "\n".join(
+        f"  \u2022 {v}" for v in violations
+    )
+
+
+# ---------------------------------------------------------------------------
+# §09.12 get_effective_material_floor()
+# ---------------------------------------------------------------------------
+
+
+def test_get_effective_material_floor_restorability_100():
+    """restorability=100 → scale=1.0 → gleicher Floor wie get_material_floor()."""
+    from backend.core.calibration_matrix import get_effective_material_floor
+
+    base = get_material_floor("cd_digital", "natuerlichkeit")
+    eff = get_effective_material_floor("cd_digital", "natuerlichkeit", 100.0)
+    assert abs(eff - base) < 1e-6, f"restorability=100 Abweichung: base={base} eff={eff}"
+
+
+def test_get_effective_material_floor_restorability_50():
+    """restorability=50 → scale=max(0.72, 0.50)=0.72."""
+    from backend.core.calibration_matrix import (
+        RESTORABILITY_SCALE_MIN,
+        get_effective_material_floor,
+    )
+
+    base = get_material_floor("vinyl", "natuerlichkeit")
+    eff = get_effective_material_floor("vinyl", "natuerlichkeit", 50.0)
+    # scale = max(0.72, 0.50) = 0.72
+    expected = float(np.clip(base * RESTORABILITY_SCALE_MIN, 0.20, 0.99))
+    assert abs(eff - expected) < 1e-6, f"Expected {expected}, got {eff}"
+
+
+def test_get_effective_material_floor_restorability_10():
+    """restorability=10 → scale=RESTORABILITY_SCALE_MIN (Untergrenze)."""
+    from backend.core.calibration_matrix import (
+        RESTORABILITY_SCALE_MIN,
+        get_effective_material_floor,
+    )
+
+    base = get_material_floor("shellac", "natuerlichkeit")
+    eff = get_effective_material_floor("shellac", "natuerlichkeit", 10.0)
+    expected = float(np.clip(base * RESTORABILITY_SCALE_MIN, 0.20, 0.99))
+    assert abs(eff - expected) < 1e-6
+
+
+def test_get_effective_material_floor_restorability_0():
+    """restorability=0 → clamp auf RESTORABILITY_SCALE_MIN (kein negativer Floor)."""
+    from backend.core.calibration_matrix import get_effective_material_floor
+
+    eff = get_effective_material_floor("unknown", "groove", 0.0)
+    assert eff >= 0.20, "Floor darf nicht unter 0.20 fallen"
+
+
+def test_restorability_scale_min_constant():
+    """RESTORABILITY_SCALE_MIN MUSS 0.72 sein (§09.12 Spec-Vorgabe)."""
+    from backend.core.calibration_matrix import RESTORABILITY_SCALE_MIN
+
+    assert RESTORABILITY_SCALE_MIN == 0.72
+
+
+def test_effective_floor_always_below_base():
+    """get_effective_material_floor() darf niemals ÜBER get_material_floor() liegen."""
+    from backend.core.calibration_matrix import get_effective_material_floor
+
+    for mat in ("shellac", "vinyl", "cd_digital", "mp3_low", "unknown"):
+        for goal in ("natuerlichkeit", "groove", "brillanz"):
+            base = get_material_floor(mat, goal)
+            for rest in (0, 25, 50, 75, 99):
+                eff = get_effective_material_floor(mat, goal, float(rest))
+                assert eff <= base + 1e-6, (
+                    f"Effective floor ({eff:.4f}) > base floor ({base:.4f}) für mat={mat} goal={goal} rest={rest}"
+                )
+
+
+def test_get_effective_material_floor_in_all_list():
+    """get_effective_material_floor MUSS in __all__ stehen."""
+    import backend.core.calibration_matrix as _cm
+
+    assert "get_effective_material_floor" in _cm.__all__
+
+
+def test_restorability_scale_min_in_all_list():
+    """RESTORABILITY_SCALE_MIN MUSS in __all__ stehen."""
+    import backend.core.calibration_matrix as _cm
+
+    assert "RESTORABILITY_SCALE_MIN" in _cm.__all__

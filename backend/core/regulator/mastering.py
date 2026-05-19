@@ -27,7 +27,7 @@ except ImportError:
 
 
 def lufs_normalize(audio: np.ndarray, sr: int, target_lufs: float = -14.0) -> np.ndarray:
-    """Normalize program loudness while protecting intentionally quiet edges."""
+    """Normalisiert program loudness while protecting intentionally quiet edges."""
     if pyln is None:
         raise RuntimeError("pyloudnorm muss installiert sein für LUFS-Normalisierung.")
     meter = pyln.Meter(sr)
@@ -51,7 +51,7 @@ def lufs_normalize(audio: np.ndarray, sr: int, target_lufs: float = -14.0) -> np
 def multiband_compress(
     audio: np.ndarray, sr: int, bands=((20, 250), (250, 4000), (4000, 20000)), ratio=2.0
 ) -> np.ndarray:
-    """Apply a simple three-band downward compression pass."""
+    """Wendet einen einfachen Drei-Band-Abwärts-Kompressionspass an."""
     # Einfache Multiband-Kompression (SOTA: für Produktion durch spezialisierte Module ersetzen)
     out = np.zeros_like(audio)
     for low, high in bands:
@@ -69,7 +69,7 @@ def multiband_compress(
 
 
 def adaptive_eq(audio: np.ndarray, sr: int) -> np.ndarray:
-    """Apply spectral-balancing EQ with phase-preserving reconstruction."""
+    """Wendet an: spectral-balancing EQ with phase-preserving reconstruction."""
     # SOTA: spectral smoothing EQ — phase reconstruction via PGHI (§4.5 RELEASE_MUST)
     n_fft = 2048
     hop = n_fft // 4
@@ -92,7 +92,7 @@ def adaptive_eq(audio: np.ndarray, sr: int) -> np.ndarray:
 
 
 def limiter(audio: np.ndarray, threshold: float = 0.98) -> np.ndarray:
-    """Apply attenuation-only peak limiting against the 99.9th percentile peak."""
+    """Wendet ausschließlich dämpfendes Peak-Limiting gegen das 99,9%-Perzentil an."""
     # True Peak Limiter (vereinfachte Version) — §2.45a Peak-Guard Conformity
     # Use percentile(99.9) to prevent single transient from blocking limiting
     # Only reduce gain if needed (never amplify - that would be compression, not limiting)

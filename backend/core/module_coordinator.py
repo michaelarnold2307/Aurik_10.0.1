@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 class ExecutionStrategy(Enum):
-    """Execution strategies for module processing."""
+    """Ausführungsstrategien für Modulverarbeitung."""
 
     SEQUENTIAL = "sequential"  # One module at a time
     PARALLEL = "parallel"  # Independent modules in parallel
@@ -246,7 +246,7 @@ class ModuleCoordinator:
         default_params: dict[str, Any] | None = None,
     ) -> None:
         """
-        Register a processing module.
+        Registriert a processing module.
 
         Args:
             name: Unique module name
@@ -304,7 +304,7 @@ class ModuleCoordinator:
                 logger.info("Unregistered module: %s", name)
 
     def get_registered_modules(self) -> list[str]:
-        """Get list of registered module names."""
+        """Gibt zurück: list of registered module names."""
         with self._lock:
             return list(self._modules.keys())
 
@@ -314,7 +314,7 @@ class ModuleCoordinator:
         self, selected_modules: list[str] | None = None, forensic_analysis: dict[str, Any] | None = None
     ) -> ExecutionPlan:
         """
-        Build optimal execution plan using topological sort.
+        Erstellt optimal execution plan using topological sort.
 
         Args:
             selected_modules: Specific modules to execute (None = all)
@@ -414,7 +414,7 @@ class ModuleCoordinator:
 
     def _find_critical_path(self, modules: list[str]) -> list[str]:
         """
-        Find critical path (longest path through dependency graph).
+        Findet den kritischen Pfad (längsten Pfad durch den Abhängigkeitsgraphen).
 
         Returns:
             List of module names on critical path
@@ -434,7 +434,7 @@ class ModuleCoordinator:
         return []
 
     def _compute_depth(self, module: str, allowed_modules: list[str], visited: set[str] | None = None) -> int:
-        """Compute depth in dependency graph with cycle detection."""
+        """Berechnet depth in dependency graph with cycle detection."""
         if visited is None:
             visited = set()
 
@@ -477,7 +477,7 @@ class ModuleCoordinator:
 
     def _filter_by_forensics(self, modules: list[str], forensic_analysis: dict[str, Any]) -> list[str]:
         """
-        Filter modules based on forensic analysis.
+        Filtert modules based on forensic analysis.
 
         Intelligent module selection based on detected material and defects.
         """
@@ -530,7 +530,7 @@ class ModuleCoordinator:
         medium_type: MediumType | None = None,
     ) -> dict[str, Any]:
         """
-        Execute modules according to optimal plan.
+        Führt aus: modules according to optimal plan.
 
         Args:
             audio: Input audio
@@ -747,7 +747,7 @@ class ModuleCoordinator:
         sample_rate: int,
         forensic_analysis: dict[str, Any] | None,
     ) -> list[ExecutionResult]:
-        """Execute stage modules sequentially."""
+        """Führt aus: stage modules sequentially."""
         results = []
         current_audio = audio
 
@@ -775,7 +775,7 @@ class ModuleCoordinator:
         sample_rate: int,
         forensic_analysis: dict[str, Any] | None,
     ) -> list[ExecutionResult]:
-        """Execute stage modules in parallel."""
+        """Führt aus: stage modules in parallel."""
         if self._thread_pool is None:
             self._thread_pool = ThreadPoolExecutor(max_workers=self.max_workers)
 
@@ -803,7 +803,7 @@ class ModuleCoordinator:
         forensic_analysis: dict[str, Any] | None,
     ) -> ExecutionResult:
         """
-        Execute a single module with error handling.
+        Führt aus: a single module with error handling.
         """
         start_time = time.time()
 
@@ -966,7 +966,7 @@ class ModuleCoordinator:
     # === Statistics ===
 
     def get_statistics(self) -> dict[str, Any]:
-        """Get coordinator statistics."""
+        """Gibt zurück: coordinator statistics."""
         with self._lock:
             return {
                 "registered_modules": len(self._modules),
@@ -1003,7 +1003,7 @@ class ModuleCoordinator:
 def create_coordinator(
     context: ProcessingContext, bus: ModuleCommunicationBus, max_workers: int = 4
 ) -> ModuleCoordinator:
-    """Create a module coordinator with default settings."""
+    """Erstellt a module coordinator with default settings."""
     return ModuleCoordinator(
         context=context, bus=bus, max_workers=max_workers, enable_ml_optimization=True, enable_quality_prediction=True
     )

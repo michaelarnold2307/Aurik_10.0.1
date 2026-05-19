@@ -76,7 +76,7 @@ def _estimate_alpha_f(
     hop: int,
     alpha_max: float,
 ) -> np.ndarray:
-    """Estimate frequency-dependent crosstalk coefficient α(f) via long-term spectra.
+    """Schätzt frequency-dependent crosstalk coefficient α(f) via long-term spectra.
 
     Uses the coherence between L and R as the magnitude estimate for α, which is
     the correct estimator for the model  L = S + αR, R = S' + αL (Avendano & Jot 2002).
@@ -120,7 +120,7 @@ def apply(
     min_crosstalk_score: float = _MIN_CROSSTALK_SCORE,
     alpha_max: float = _ALPHA_MAX,
 ) -> np.ndarray:
-    """Main entry point for Phase 62."""
+    """Haupt-entry point for Phase 62."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -329,10 +329,13 @@ class CrosstalkCancellationPhase(PhaseInterface):
         # §2.46f NPA-Guard: Atemgeräusche und Early-Reflections vor Crosstalk-Subtraktion schützen.
         try:
             from backend.core.natural_performance_detector import get_natural_performance_detector
+
             _mono62 = audio.mean(axis=0) if audio.ndim == 2 else audio
-            _npa_mask62 = get_natural_performance_detector().detect(
-                _mono62, sample_rate
-            ).get_protected_mask(len(_mono62), sample_rate)
+            _npa_mask62 = (
+                get_natural_performance_detector()
+                .detect(_mono62, sample_rate)
+                .get_protected_mask(len(_mono62), sample_rate)
+            )
             if _npa_mask62 is not None and _npa_mask62.any():
                 if result_audio.ndim == 2:
                     result_audio[:, _npa_mask62] = audio[:, _npa_mask62]
@@ -345,9 +348,8 @@ class CrosstalkCancellationPhase(PhaseInterface):
         # keine vom Musiksignal maskierten Komponenten (G_floor ≥ 0.10).
         try:
             from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
-            result_audio = apply_psychoacoustic_masking_clamp(
-                audio, result_audio, sample_rate, mode="restoration"
-            )
+
+            result_audio = apply_psychoacoustic_masking_clamp(audio, result_audio, sample_rate, mode="restoration")
         except Exception as _pmask62_exc:
             logger.debug("§2.62 Phase62 Masking-Guard (non-blocking): %s", _pmask62_exc)
 

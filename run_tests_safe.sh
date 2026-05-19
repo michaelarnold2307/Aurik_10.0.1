@@ -34,6 +34,7 @@ PYTHON="${SCRIPT_DIR}/.venv_aurik/bin/python"
 MEM_GB="${AURIK_MEM_GB:-8}"
 MEM_BYTES=$(( MEM_GB * 1024 * 1024 * 1024 ))
 MEM_MB=$(( MEM_GB * 1024 ))
+MEM_KB=$(( MEM_GB * 1024 * 1024 ))
 LOG_FILE="${AURIK_LOG_FILE:-${SCRIPT_DIR}/logs/pytest_safe.log}"
 RSS_LIMIT_MB="${AURIK_TEST_RSS_LIMIT_MB:-$(( MEM_GB * 1024 * 85 / 100 ))}"
 
@@ -64,7 +65,8 @@ fi
 
 if [[ "$_SYSTEMD_OK" -eq 1 ]]; then
     echo "[safe-runner] Methode: systemd-run cgroup (MemoryMax=${MEM_GB}G)"
-    exec systemd-run \
+    set +e
+    systemd-run \
         --user \
         --scope \
         --collect \
@@ -80,6 +82,9 @@ if [[ "$_SYSTEMD_OK" -eq 1 ]]; then
         --disable-warnings \
         --no-header \
         2>&1 | tee "$LOG_FILE"
+    _rc=${PIPESTATUS[0]}
+    set -e
+    exit "$_rc"
 fi
 
 # ── Methode 2: setsid + ulimit (Fallback ohne systemd) ───────────────────────
@@ -91,8 +96,8 @@ echo "[safe-runner] Methode: setsid + ulimit -v ${MEM_MB}M"
 (
     # Eigene Session → eigene Prozessgruppe → kein Signal-Forwarding zu VS Code
     exec setsid bash -c "
-        ulimit -v $MEM_MB 2>/dev/null || true
-        ulimit -m $MEM_MB 2>/dev/null || true
+        ulimit -v $MEM_KB 2>/dev/null || true
+        ulimit -m $MEM_KB 2>/dev/null || true
         exec '$PYTHON' -m pytest \"\$@\" \
             --override-ini='addopts=--strict-markers --import-mode=importlib' \
             -p no:xdist \

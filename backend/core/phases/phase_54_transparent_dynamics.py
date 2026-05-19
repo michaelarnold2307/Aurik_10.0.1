@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 53: Transparent Dynamics v1.0 - Tier 1 ML-Hybrid
+Phase 53: Transparent Dynamics v1.0 - Tier 1 ML-Hybrid.
 Psychoacoustic-aware compression that adapts to musical genre and content.
 
 Algorithm Overview:
@@ -172,7 +172,7 @@ class TransparentDynamicsV1(PhaseInterface):
 
     def __init__(self, sample_rate: int = 48000, genre: str = "default", **kwargs):
         """
-        Initialize Transparent Dynamics Processor.
+        Initialisiert Transparent Dynamics Processor.
 
         Args:
             sample_rate: Audio sample rate (Hz)
@@ -214,7 +214,7 @@ class TransparentDynamicsV1(PhaseInterface):
         **kwargs,
     ) -> PhaseResult:
         """
-        Apply transparent psychoacoustic-aware compression.
+        Wendet an: transparent psychoacoustic-aware compression.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -391,7 +391,7 @@ class TransparentDynamicsV1(PhaseInterface):
 
     def _detect_psychoacoustic_masking(self, audio: np.ndarray) -> np.ndarray:
         """
-        Detect psychoacoustic masking zones (quiet passages where compression is hidden).
+        Erkennt psychoacoustic masking zones (quiet passages where compression is hidden).
 
         Returns masking curve: 0.0 = no masking (preserve), 1.0 = full masking (compress freely)
         """
@@ -421,7 +421,7 @@ class TransparentDynamicsV1(PhaseInterface):
 
     def _detect_transients(self, audio: np.ndarray) -> np.ndarray:
         """
-        Detect transients (drum hits, piano attacks) for preservation.
+        Erkennt transients (drum hits, piano attacks) for preservation.
 
         Returns transient mask: 1.0 = transient (preserve), 0.0 = non-transient (compress)
         """
@@ -472,7 +472,7 @@ class TransparentDynamicsV1(PhaseInterface):
         transient_mask: np.ndarray,
     ) -> np.ndarray:
         """
-        Apply genre-adaptive soft-knee compression with psychoacoustic awareness.
+        Wendet an: genre-adaptive soft-knee compression with psychoacoustic awareness.
         """
         # Convert attack/release to samples
         attack_samples = int(attack_ms * self.sample_rate / 1000)
@@ -538,7 +538,7 @@ class TransparentDynamicsV1(PhaseInterface):
         return audio_compressed
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_54_transparent_dynamics",
             name="Transparent Dynamics v1.0",
@@ -555,7 +555,7 @@ class TransparentDynamicsV1(PhaseInterface):
         )
 
     def supports_material(self, material_type: MaterialType) -> bool:
-        """Check if material type is supported."""
+        """Prüft if material type is supported."""
         return material_type in self.MATERIAL_CEILING or material_type in [
             MaterialType.REEL_TAPE,
             MaterialType.DAT,
@@ -565,7 +565,7 @@ class TransparentDynamicsV1(PhaseInterface):
         ]
 
     def estimate_time(self, audio_duration_seconds: float) -> float:
-        """Estimate processing time."""
+        """Schätzt processing time."""
         return audio_duration_seconds * 0.25  # 0.25× realtime
 
 

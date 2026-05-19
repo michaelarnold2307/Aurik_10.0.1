@@ -430,3 +430,60 @@ class TestPhase04HeadBumpChainAware:
             transfer_chain=["vinyl", "reel_tape", "cd_digital"],
         )
         assert result.metadata.get("head_bump_applied") is True
+
+
+class TestMediumDetectorCodecGuardForAnalogChains:
+    """Test codec guard that prefers mp3_low for analog transfer chains."""
+
+    def test_vinyl_tape_mp3_chain_codec_guard_limits_mp3_high(self, monkeypatch):
+        """Analog chain (vinyl + tape) with limited BW must end in mp3_low, not mp3_high."""
+        from forensics.medium_detector import MediumDetector, SpectralFingerprint
+
+        detector = MediumDetector()
+
+        # Analog-evidence fingerprint: tape characteristics (flutter), limited HF bandwidth
+        fp = SpectralFingerprint(
+            rolloff_95_hz=7500.0,
+            wow_flutter_index=0.050,
+            hf_energy_above_16k=0.0002,
+            noise_floor_db=-35.0,
+            effective_bandwidth_hz=15_000.0,  # Below 18 kHz threshold for analog chains
+            codec_artifact_score=0.25,
+            codec_type_code=1.0,
+            crackle_density=0.018,
+            rotation_strength=0.35,  # Vinyl rotation
+            infrasonic_rms=0.028,
+        )
+
+        # Mock the Bayesian scorer to prefer higher codecs naively
+        monkeypatch.setattr(detector, "_compute_fingerprint", lambda _audio, _sr: fp)
+        monkeypatch.setattr(
+            detector,
+            "_bayesian_score",
+            lambda _fp, **_kw: {
+                "mp3_high": 0.40,  # Higher score, but should not win for limited BW + analog chain
+                "mp3_low": 0.18,
+                "cd_digital": 0.15,
+                "vinyl": 0.12,
+                "tape": 0.10,
+            },
+        )
+        monkeypatch.setattr(
+            detector,
+            "_infer_analog_source_from_fingerprint",
+            lambda _fp: [("vinyl", 0.65), ("tape", 0.55)],
+        )
+        monkeypatch.setattr(detector, "_is_benign_codec_source", lambda _audio, _sr, _fp: False)
+
+        audio = np.zeros(SR * 3, dtype=np.float32)
+        result = detector.detect(audio, SR, file_ext=".mp3")
+
+        assert result.primary_material == "vinyl", f"Expected vinyl primary, got {result.primary_material}"
+        assert "tape" in result.transfer_chain, f"Expected tape in chain, got {result.transfer_chain}"
+        assert result.transfer_chain[-1] == "mp3_low", (
+            f"Expected vinyl→tape→mp3_low, but codec-guard did not apply. "
+            f"Chain={result.transfer_chain}, BW={fp.effective_bandwidth_hz} Hz"
+        )
+        # Confirm evidence shows guard was triggered
+        guard_fired = any("Codec-Guard" in e for e in result.evidence)
+        assert guard_fired, f"Codec-Guard evidence not found in: {result.evidence}"

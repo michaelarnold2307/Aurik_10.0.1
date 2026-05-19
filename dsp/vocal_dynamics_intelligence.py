@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _chunked_hilbert_envelope(audio: np.ndarray, sr: int) -> np.ndarray:
-    """Compute |hilbert(audio)| in 30-s chunks to prevent OOM on long audio."""
+    """Berechnet |hilbert(audio)| in 30-s chunks to prevent OOM on long audio."""
     max_chunk = 30 * sr  # 30 s — ~46 MB complex128 per chunk
     n = len(audio)
     if n <= max_chunk:
@@ -72,7 +72,7 @@ class MicroCompressor:
 
     def compress(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply micro-compression.
+        Wendet an: micro-compression.
 
         Parameters
         ----------
@@ -128,7 +128,7 @@ class MicroCompressor:
 
     def _compute_envelope(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Compute amplitude envelope using chunked Hilbert transform (OOM-safe).
+        Berechnet amplitude envelope using chunked Hilbert transform (OOM-safe).
         """
         envelope = _chunked_hilbert_envelope(audio, sr)
 
@@ -142,7 +142,7 @@ class MicroCompressor:
 
     def _apply_ballistics(self, gain_reduction: np.ndarray, sr: int, attack_ms: float, release_ms: float) -> np.ndarray:
         """
-        Apply attack/release ballistics.
+        Wendet Attack/Release-Ballistiken an.
         """
         attack_coeff = np.exp(-1000 / (attack_ms * sr))
         release_coeff = np.exp(-1000 / (release_ms * sr))
@@ -216,7 +216,7 @@ class ConsonantPunchEnhancer:
 
     def _detect_transients(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Detect transients using envelope derivative.
+        Erkennt transients using envelope derivative.
         """
         # Compute envelope (chunked Hilbert — OOM-safe)
         envelope = _chunked_hilbert_envelope(audio, sr)
@@ -255,7 +255,7 @@ class BreathAwareGate:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply breath-aware gating.
+        Wendet atemgesteuertes Gating an.
 
         Parameters
         ----------
@@ -307,7 +307,7 @@ class BreathAwareGate:
 
     def _apply_hold(self, gate_open: np.ndarray, sr: int, hold_ms: float) -> np.ndarray:
         """
-        Apply hold time to gate (vectorised).
+        Wendet an: hold time to gate (vectorised).
         """
         hold_samples = int(hold_ms * sr / 1000)
         if hold_samples <= 0:
@@ -331,7 +331,7 @@ class BreathAwareGate:
 
 class VocalDynamicsIntelligence:
     """
-    Unified API for vocal dynamics intelligence.
+    Einheitliche API für Vokal-Dynamik-Intelligenz.
     """
 
     def __init__(self, compression_ratio: float = 2.0, enhancement_db: float = 3.0, gate_enabled: bool = True):

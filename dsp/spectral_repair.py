@@ -86,7 +86,7 @@ class SpectralRepair:
 
     def __init__(self, config: SpectralRepairConfig | None = None):
         """
-        Initialize spectral repair processor.
+        Initialisiert spectral repair processor.
 
         Args:
             config: Spectral repair configuration (uses defaults if None)
@@ -96,7 +96,7 @@ class SpectralRepair:
 
     def process(self, audio: npt.NDArray[np.float64], sr: int) -> npt.NDArray[np.float64]:
         """
-        Process audio with spectral repair.
+        Verarbeitet audio with spectral repair.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -119,7 +119,7 @@ class SpectralRepair:
             return self._process_mono(audio, sr)
 
     def _process_mono(self, audio: npt.NDArray[np.float64], sr: int) -> npt.NDArray[np.float64]:
-        """Process mono audio."""
+        """Verarbeitet mono audio."""
         # STFT
         f, _t, Zxx = scipy.signal.stft(
             audio,
@@ -165,7 +165,7 @@ class SpectralRepair:
         self, Zxx: npt.NDArray[np.complex128], f: npt.NDArray[np.float64], sr: int
     ) -> npt.NDArray[np.complex128]:
         """
-        Detect and repair spectral holes.
+        Erkennt and repair spectral holes.
 
         Common scenarios:
         - MP3: Hole above 16 kHz (HF cutoff)
@@ -209,7 +209,7 @@ class SpectralRepair:
     def _find_contiguous_regions(
         self, mask: npt.NDArray[np.bool_], f: npt.NDArray[np.float64], min_width_hz: float
     ) -> list:
-        """Find contiguous regions in binary mask."""
+        """Findet zusammenhängende Regionen in binärer Maske."""
         regions = []
         in_region = False
         start_idx = 0
@@ -242,7 +242,7 @@ class SpectralRepair:
         self, Zxx: npt.NDArray[np.complex128], f: npt.NDArray[np.float64], start_idx: int, end_idx: int, sr: int
     ) -> npt.NDArray[np.complex128]:
         """
-        Repair spectral hole using harmonic extrapolation.
+        Repariert spectral hole using harmonic extrapolation.
 
         Method:
         1. Analyze harmonics below hole
@@ -293,7 +293,7 @@ class SpectralRepair:
         self, Zxx: npt.NDArray[np.complex128], f: npt.NDArray[np.float64], sr: int
     ) -> npt.NDArray[np.complex128]:
         """
-        Smooth codec artifacts (quantization noise, ringing).
+        Glättet codec artifacts (quantization noise, ringing).
 
         Method:
         - Apply gentle spectral smoothing in codec artifact bands
@@ -333,7 +333,7 @@ class SpectralRepair:
 
     def get_metrics(self) -> dict[str, Any]:
         """
-        Get processing metrics.
+        Gibt zurück: processing metrics.
 
         Returns:
             Dictionary with metrics:

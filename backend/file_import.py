@@ -32,7 +32,7 @@ _SF_UNSUPPORTED_EXT: frozenset[str] = frozenset(
 
 
 def _estimate_interchannel_lag_samples(audio: np.ndarray, sr: int, max_seconds: float = 5.0) -> int:
-    """Estimate L/R lag (samples) using GCC-PHAT on a bounded window.
+    """Schätzt L/R lag (samples) using GCC-PHAT on a bounded window.
 
     Returns 0 for non-stereo inputs or on analysis failure.
     """

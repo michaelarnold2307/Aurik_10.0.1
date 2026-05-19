@@ -56,7 +56,7 @@ except ImportError:
 
 class SpectralStemSeparator:
     """
-    Simple spectral-based stem separation.
+    Einfaches spectral-based stem separation.
 
     Fast and always available, but basic quality.
     Good for preview/quick exports.
@@ -167,7 +167,7 @@ class SpectralStemSeparator:
         return {k: np.asarray(v).astype(orig_dtype) for k, v in stems.items()}
 
     def _create_freq_mask(self, frequencies: np.ndarray, freq_range: tuple[float, float]) -> np.ndarray:
-        """Create binary frequency mask"""
+        """Erstellt binary frequency mask."""
         low, high = freq_range
         mask = ((frequencies >= low) & (frequencies <= high)).astype(float)
         return mask
@@ -176,7 +176,7 @@ class SpectralStemSeparator:
         self, Zxx: np.ndarray, frequencies: np.ndarray, freq_range: tuple[float, float]
     ) -> np.ndarray:
         """
-        Create transient-based mask for drums.
+        Erstellt transient-based mask for drums.
 
         Drums have strong transients (sharp onset).
         """
@@ -217,7 +217,7 @@ class SpectralStemSeparator:
             return audio
 
     def get_metrics(self) -> dict:
-        """Get separation metrics"""
+        """Gibt zurück: separation metrics."""
         return self.metrics
 
 
@@ -275,7 +275,7 @@ class BanquetStemSeparator:
         return {k: v.astype(orig_dtype) for k, v in stems.items()}
 
     def get_metrics(self) -> dict:
-        """Get separation metrics"""
+        """Gibt zurück: separation metrics."""
         return self.metrics
 
 
@@ -564,7 +564,7 @@ class MLStemSeparator:
 
 class StemSeparator:
     """
-    Unified API for stem separation.
+    Einheitliche API für Stem-Separation.
 
     Automatically selects best available backend:
     - Banquet (if available) for best quality
@@ -629,7 +629,7 @@ class StemSeparator:
         return self.backend.separate(audio, sample_rate)
 
     def get_backend_info(self) -> dict[str, str]:
-        """Get information about current backend"""
+        """Gibt zurück: information about current backend."""
         if self.backend_name == "banquet":
             return {
                 "backend": "banquet",
@@ -663,7 +663,7 @@ class StemSeparator:
             }
 
     def get_metrics(self) -> dict:
-        """Get separation metrics from backend"""
+        """Gibt zurück: separation metrics from backend."""
         return self.backend.get_metrics()
 
 

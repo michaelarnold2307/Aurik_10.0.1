@@ -131,7 +131,7 @@ class Exciter(PhaseInterface):
         quality_mode: str,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive runtime constants for harmonic excitation."""
+        """Berechnet adaptive runtime constants for harmonic excitation."""
         _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
         _qm = str(quality_mode or "balanced").lower().replace("-", "_")
         _rest = float(np.clip(restorability_score, 0.0, 100.0))
@@ -174,7 +174,7 @@ class Exciter(PhaseInterface):
         self.name = "Harmonic Exciter v2 Professional"
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_21_exciter",
             name="Harmonic Exciter v2 Professional",
@@ -194,7 +194,7 @@ class Exciter(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply multi-band harmonic excitation to audio.
+        Wendet an: multi-band harmonic excitation to audio.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -376,7 +376,7 @@ class Exciter(PhaseInterface):
         )
 
     def _excite_channel(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Apply multi-band excitation to a single channel."""
+        """Wendet an: multi-band excitation to a single channel."""
         excited_bands = []
 
         # Process each frequency band
@@ -408,7 +408,7 @@ class Exciter(PhaseInterface):
         return excited_audio
 
     def _extract_band(self, audio: np.ndarray, sample_rate: int, freq_range: tuple[float, float]) -> np.ndarray:
-        """Extract frequency band using bandpass filter."""
+        """Extrahiert frequency band using bandpass filter."""
         sos = signal.butter(4, freq_range, btype="band", fs=sample_rate, output="sos")
         # §2.51 Anti-Zeitversatz: sosfiltfilt (Zero-Phase) — band wird mit original gemischt.
         return signal.sosfiltfilt(sos, audio)
@@ -416,7 +416,7 @@ class Exciter(PhaseInterface):
     def _generate_harmonics(
         self, audio: np.ndarray, intensity: float, harmonic_type: str, saturation_type: str
     ) -> np.ndarray:
-        """Generate harmonics using waveshaping."""
+        """Generiert harmonics using waveshaping."""
         # Scale input for saturation
         scaled = audio * intensity * 3.0
 
@@ -451,7 +451,7 @@ class Exciter(PhaseInterface):
         return harmonics_only * 0.7  # Scale down
 
     def _measure_hf_energy(self, audio: np.ndarray, sample_rate: int) -> float:
-        """Measure high-frequency energy (>6 kHz)."""
+        """Misst high-frequency energy (>6 kHz)."""
         if audio.ndim == 2:
             audio = audio[:, 0]
 

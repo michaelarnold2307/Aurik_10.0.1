@@ -1,5 +1,5 @@
 """
-Phase 38: Presence Boost v2.0 - Professional
+Phase 38: Presence Boost v2.0 - Professional.
 Mid-range clarity and vocal/instrument presence enhancement.
 
 Algorithm Overview:
@@ -114,7 +114,7 @@ class PresenceBoost(PhaseInterface):
         self.name = "Presence Boost v2 Professional"
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_38_presence_boost",
             name="Presence Boost v2 Professional",
@@ -135,7 +135,7 @@ class PresenceBoost(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply presence boost to audio.
+        Wendet an: presence boost to audio.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -409,7 +409,7 @@ class PresenceBoost(PhaseInterface):
     def _apply_bell_filter(
         self, audio: np.ndarray, sample_rate: int, center_freq: float, gain_db: float, q: float
     ) -> np.ndarray:
-        """Apply parametric EQ bell filter."""
+        """Wendet an: parametric EQ bell filter."""
         # Design peaking filter
         w0 = 2 * np.pi * center_freq / sample_rate
         alpha = np.sin(w0) / (2 * q)

@@ -44,7 +44,7 @@ class SpectralSubtractor:
         self.oversubtraction = oversubtraction
 
     def process(self, audio: npt.NDArray[np.float64], sr: int) -> npt.NDArray[np.float64]:
-        """Process input signal with MMSE-inspired spectral reduction.
+        """Verarbeitet input signal with MMSE-inspired spectral reduction.
 
         Instead of raw subtraction (mag - noise), computes a proper gain:
             gain = max(1 - oversubtraction * (noise_pow / noisy_pow), spectral_floor)

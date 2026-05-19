@@ -184,7 +184,7 @@ class MatcheringPlugin:
     # ------------------------------------------------------------------
 
     def _to_stereo(self, audio: np.ndarray) -> np.ndarray:
-        """Return (2, samples) float32, duplicating mono if needed."""
+        """Gibt (2, samples) float32, duplicating mono if needed zurück."""
         a = np.asarray(audio, dtype=np.float32)
         if a.ndim == 1:
             return np.stack([a, a], axis=0)
@@ -195,12 +195,12 @@ class MatcheringPlugin:
         return np.stack([a[0], a[0]], axis=0)
 
     def _to_interleaved(self, audio: np.ndarray) -> np.ndarray:
-        """Return (samples, 2) float32 interleaved for soundfile."""
+        """Gibt (samples, 2) float32 interleaved for soundfile zurück."""
         stereo = self._to_stereo(audio)  # (2, samples)
         return stereo.T  # (samples, 2)
 
     def _restore_shape(self, out_stereo: np.ndarray, original: np.ndarray) -> np.ndarray:
-        """Restore original channel layout from (2, samples) result."""
+        """Restauriert original channel layout from (2, samples) result."""
         orig = np.asarray(original, dtype=np.float32)
         if orig.ndim == 1:
             n_orig = orig.shape[0]
@@ -238,5 +238,5 @@ def match_reference(target: np.ndarray, reference: np.ndarray, sr: int = 48000) 
 
 
 def is_matchering_available() -> bool:
-    """Returns True if the matchering 2.0 library is installed."""
+    """Gibt True if the matchering 2.0 library is installed zurück."""
     return _MATCHERING_AVAILABLE

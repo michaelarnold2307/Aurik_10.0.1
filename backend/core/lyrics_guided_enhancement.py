@@ -4,6 +4,7 @@ import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -41,9 +42,10 @@ class LyricsTranscriptionResult:
 def _assert_no_lyrics_in_log(words: list[WordTimestamp]) -> None:
     """§2.36 Datenschutz-Guard: Lyrics-Text darf NIEMALS geloggt werden.
 
-    Stellt sicher, dass ``word.word`` nicht in Logger-Ausgaben landet.
-    Aufrufpflicht: vor jedem ``logger.*``-Aufruf, der WordTimestamp-Objekte
-    verarbeitet.  Wirft AssertionError wenn ein Wort-Text in der Logzeile auftaucht.
+    Stellt sicher, dass ``word.word`` vor jedem Logging- oder Metadata-Pfad
+    leer ist. Aufrufpflicht: vor jedem ``logger.*``-Aufruf, der
+    WordTimestamp-Objekte verarbeitet. Wirft AssertionError, wenn ein
+    WordTimestamp noch Lyrics-Text enthält.
 
     Privacy invariant (§2.36):
         "Datenschutz-Pflicht: Lyrics-Text NIEMALS geloggt,
@@ -97,7 +99,7 @@ class ContentAwareProcessor:
 
     @staticmethod
     def _lpc_burg_coeffs(signal: np.ndarray, order: int) -> np.ndarray:
-        """Estimate LPC coefficients with Burg recursion (stable AR fit).
+        """Schätzt LPC coefficients with Burg recursion (stable AR fit).
 
         Returns polynomial A(z) with A[0] = 1.0 and length order+1.
         Falls back to [1.0] for degenerate inputs.
@@ -302,7 +304,7 @@ class ContentAwareProcessor:
         sr: int = 48_000,
         strength: float = 0.50,
     ) -> np.ndarray:
-        """Apply _apply_phoneme_dsp() to each transcription segment in-place.
+        """Wendet _apply_phoneme_dsp() auf jedes Transkriptionssegment in-place an.
 
         Iterates over transcription.words (phoneme_type only — no word text
         is accessed, satisfying §2.36 privacy invariant) and writes the
@@ -350,7 +352,7 @@ class ContentAwareProcessor:
         transcription: LyricsTranscriptionResult,
         sr: int = 48_000,
     ) -> np.ndarray:
-        """Apply phoneme-class SALIENCY_BOOST to a pre-computed base saliency map.
+        """Wendet an: phoneme-class SALIENCY_BOOST to a pre-computed base saliency map.
 
         Each WordTimestamp region in ``transcription`` overwrites the corresponding
         sample range in ``base_saliency`` with the class-specific boost factor.
@@ -511,7 +513,7 @@ _lge_lock = threading.Lock()
 
 
 def is_lyrics_guided_loaded() -> bool:
-    """Return True only if the LGE singleton is already initialised (models loaded).
+    """Gibt True only if the LGE singleton is already initialised (models loaded) zurück.
 
     Use this guard before calling get_lyrics_guided_enhancement() in
     latency-sensitive paths (e.g. pre-analysis, genre classification during
@@ -593,7 +595,7 @@ class LyricsGuidedEnhancement:
     # ── ONNX bootstrap ─────────────────────────────────────────────────────
 
     def _try_load_onnx(self) -> None:
-        """Load whisper_tiny.onnx with CPUExecutionProvider (no GPU, no network)."""
+        """Lädt whisper_tiny.onnx with CPUExecutionProvider (no GPU, no network)."""
         # [RELEASE_MUST] memory budget guard before InferenceSession (§2.37 Checkliste)
         _release_on_fail: Callable[[], None] | None = None
         try:
@@ -609,9 +611,7 @@ class LyricsGuidedEnhancement:
                     "LyricsGuidedEnhancement: ML-Budget erschöpft (Whisper) — DSP-Fallback aktiv.",
                 )
                 return
-            _release_on_fail = (  # pylint: disable=unnecessary-lambda-assignment
-                lambda: _ml_release("lyrics_transcriber_whisper")
-            )
+            _release_on_fail = partial(_ml_release, "lyrics_transcriber_whisper")
         except ImportError:
             pass  # budget module absent → attempt load anyway
         _loaded = False
@@ -657,7 +657,7 @@ class LyricsGuidedEnhancement:
                     logger.debug("Operation failed (non-critical): %s", _exc)
 
     def _try_load_aligner(self) -> None:
-        """Load wav2vec2_forced_alignment.onnx (§2.36 PFLICHT: Phonem-Alignment).
+        """Lädt wav2vec2_forced_alignment.onnx (§2.36 PFLICHT: Phonem-Alignment).
 
         Model: 125 MB, CPUExecutionProvider, no network access.
         Fallback: DSP energy-threshold segmentation + Whisper token ID phoneme prior.
@@ -677,9 +677,7 @@ class LyricsGuidedEnhancement:
                     "LyricsGuidedEnhancement: ML-Budget erschöpft (wav2vec2 Aligner) — DSP-Fallback aktiv.",
                 )
                 return
-            _release_on_fail = (  # pylint: disable=unnecessary-lambda-assignment
-                lambda: _ml_release("lyrics_aligner_wav2vec2")
-            )
+            _release_on_fail = partial(_ml_release, "lyrics_aligner_wav2vec2")
         except ImportError:
             pass  # budget module absent → attempt load anyway
         _loaded = False
@@ -856,7 +854,7 @@ class LyricsGuidedEnhancement:
 
                 seg_logits = logits[frame_start:frame_end]  # (T_seg, vocab)
                 # Mean probability per token class (softmax approximation)
-                probs = np.exp(seg_logits - seg_logits.max(axis=-1, keepdims=True))
+                probs = np.exp(seg_logits - np.max(seg_logits, axis=-1, keepdims=True))
                 probs /= probs.sum(axis=-1, keepdims=True) + 1e-9
                 mean_probs = probs.mean(axis=0)  # (vocab_size,)
 
@@ -895,7 +893,7 @@ class LyricsGuidedEnhancement:
         audio: np.ndarray,
         sr: int,
     ) -> tuple[np.ndarray, LyricsTranscriptionResult]:
-        """Apply lyrics-guided saliency enhancement (§2.36).
+        """Wendet an: lyrics-guided saliency enhancement (§2.36).
 
         Args:
             audio: float32 ndarray, mono (N,) or stereo (N, 2), at ``sr`` Hz.
@@ -919,6 +917,42 @@ class LyricsGuidedEnhancement:
         _assert_no_lyrics_in_log(transcription.words)
         saliency = self._build_sample_saliency(transcription, n_samples, sr)
 
+        # §LSM-1 Sentiment-Modulation: Emotionaler Kontext des Texts
+        # beeinflusst die Saliency-Kurve sanft.
+        # Traurige/intime Passagen → gedämpftere Dynamik-Bearbeitung (scale < 1.0)
+        # Triumphierende Passagen → stärkere Dynamik (scale > 1.0)
+        # Non-blocking: Exception → Saliency bleibt unverändert.
+        try:
+            from backend.core.lyrics_sentiment_analyzer import get_lyrics_sentiment_analyzer
+
+            _sentiment = get_lyrics_sentiment_analyzer().analyze(transcription, dur)
+            if _sentiment.model_used != "neutral_fallback" and len(_sentiment.segments) > 1:
+                # Sentiment-Modulations-Array erstellen (sample-genau)
+                _sent_mod = np.ones(n_samples, dtype=np.float32)
+                for _seg in _sentiment.segments:
+                    _s_idx = int(np.clip(_seg.start_s * sr, 0, n_samples))
+                    _e_idx = int(np.clip(_seg.end_s * sr, 0, n_samples))
+                    _dscale = float(np.clip(_seg.dsp_params.get("dynamics_scale", 1.0), 0.60, 1.25))
+                    _sent_mod[_s_idx:_e_idx] = _dscale
+                # Sanfte Überblendung zwischen Segmenten (250ms Crossfade)
+                _xfade_samples = int(0.250 * sr)
+                if _xfade_samples > 2:
+                    _kernel = np.hanning(_xfade_samples * 2 + 1)
+                    _kernel /= _kernel.sum() + 1e-12
+                    _sent_mod = np.convolve(_sent_mod, _kernel, mode="same").astype(np.float32)
+                # Modulation mit 30 % Stärke auf Saliency anwenden
+                _sent_strength = 0.30
+                saliency = saliency * (1.0 + _sent_strength * (_sent_mod - 1.0))
+                saliency = np.clip(saliency, 0.70, 1.30)
+                logger.info(
+                    "§LSM-1: Sentiment-Modulation aktiv: dominant=%s V=%.2f A=%.2f",
+                    _sentiment.dominant_emotion,
+                    _sentiment.valence_mean,
+                    _sentiment.arousal_mean,
+                )
+        except Exception as _lsm_exc:
+            logger.debug("§LSM-1 Sentiment non-blocking: %s", _lsm_exc)
+
         audio_out = audio * saliency[np.newaxis, :] if audio.ndim == 2 else audio * saliency
 
         # §2.36a: per-phoneme spectral DSP on top of saliency boost
@@ -933,7 +967,7 @@ class LyricsGuidedEnhancement:
         return audio_out, transcription
 
     def transcribe(self, audio: np.ndarray, sr: int) -> LyricsTranscriptionResult:
-        """Return §2.36 transcription without modifying the audio."""
+        """Gibt §2.36 transcription without modifying the audio zurück."""
         assert sr == 48_000, f"SR guard: expected 48000, got {sr}"
         audio = np.asarray(audio, dtype=np.float32)
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -996,7 +1030,7 @@ class LyricsGuidedEnhancement:
         return mask
 
     def get_timeline(self) -> LyricsGuidedTimeline:
-        """Return the timeline renderer used by ``_toggle_lyrics_overlay`` in the frontend."""
+        """Gibt the timeline renderer used by ``_toggle_lyrics_overlay`` in the frontend zurück."""
         return self._tl
 
     # ── Internal transcription ──────────────────────────────────────────────
@@ -1014,7 +1048,7 @@ class LyricsGuidedEnhancement:
         return self._transcribe_dsp(mono, sr, dur)
 
     def _transcribe_onnx(self, mono: np.ndarray, sr: int, dur: float) -> LyricsTranscriptionResult:
-        """Run whisper_tiny.onnx encoder; derive vocal segments from hidden-state RMS.
+        """Führt aus: whisper_tiny.onnx encoder; derive vocal segments from hidden-state RMS.
 
         The encoder's last_hidden_state (1500 frames × 384 dims) is condensed to a
         scalar energy per frame via RMS.  High-energy frames correspond to voiced /
@@ -1091,7 +1125,7 @@ class LyricsGuidedEnhancement:
     # ── Language detection ─────────────────────────────────────────────────
 
     def _detect_language_from_mono(self, mono: np.ndarray, sr: int) -> tuple[str, float]:
-        """Detect spoken language from audio via LPC formant analysis (SR-agnostic).
+        """Erkennt spoken language from audio via LPC formant analysis (SR-agnostic).
 
         Delegates to backend.core.phoneme_timeline._detect_language.
         Falls back to ("unknown", 0.0) on import error or any exception.
@@ -1134,6 +1168,24 @@ class LyricsGuidedEnhancement:
         n = len(segment_audio)
         dur_ms = 1000.0 * n / max(1, sr)
 
+        try:
+            from backend.core.dsp.phoneme_boundary_detector import (  # pylint: disable=import-outside-toplevel
+                PhonemeClass,
+                get_phoneme_features_dsp,
+            )
+
+            features = get_phoneme_features_dsp(segment_audio, sr, hop_length=max(128, min(512, n // 4 or 128)))
+            if features:
+                classes = [feature.phoneme_class for feature in features]
+                plosive_ratio = classes.count(PhonemeClass.PLOSIVE) / len(classes)
+                fricative_ratio = classes.count(PhonemeClass.FRICATIVE) / len(classes)
+                if plosive_ratio >= 0.20:
+                    return "plosive"
+                if fricative_ratio >= 0.30:
+                    return "fricative_stressed" if is_stressed else "fricative_unstressed"
+        except Exception as _phoneme_exc:
+            logger.debug("LGE phoneme DSP classifier unavailable (non-critical): %s", _phoneme_exc)
+
         # --- Plosive: very short burst (< 30 ms) with high peak/RMS ratio ---
         if dur_ms < 30.0 and n >= 4:
             rms = float(np.sqrt(np.mean(segment_audio**2))) or 1e-10
@@ -1174,7 +1226,7 @@ class LyricsGuidedEnhancement:
         source_audio: np.ndarray | None = None,
         sr: int = 48_000,
     ) -> list[WordTimestamp]:
-        """Convert normalised frame-level energy to pseudo WordTimestamp objects.
+        """Konvertiert normalised frame-level energy to pseudo WordTimestamp objects.
 
         Active frames (energy ≥ 60th percentile) are collapsed into contiguous
         segments.  ``word`` is always empty — privacy invariant: no text in logs.
@@ -1243,7 +1295,7 @@ class LyricsGuidedEnhancement:
         n_samples: int,
         sr: int,
     ) -> np.ndarray:
-        """Build sample-level gain curve from word timestamps; values ∈ [0.3, 2.0]."""
+        """Erstellt sample-level gain curve from word timestamps; values ∈ [0.3, 2.0]."""
         saliency = np.ones(n_samples, dtype=np.float32)
         if transcription.fallback_used or not transcription.words:
             return saliency
@@ -1272,7 +1324,7 @@ class LyricsGuidedEnhancement:
             return mono[indices].astype(np.float32)
 
     def _compute_mel_features(self, mono_16k: np.ndarray) -> np.ndarray:
-        """Compute Whisper-compatible 80-channel log-mel spectrogram.
+        """Berechnet Whisper-compatible 80-channel log-mel spectrogram.
 
         Follows Radford et al. (2022) preprocessing:
           n_fft=400, hop_length=160, n_mels=80, sr=16 000 Hz, fmax=8 000 Hz.
@@ -1331,7 +1383,7 @@ def get_phoneme_mask(audio: np.ndarray, sr: int, hop_length: int = 512) -> np.nd
     return get_lyrics_guided_enhancement().get_phoneme_mask(audio, sr, hop_length=hop_length)
 
 
-def _detect_transients_energy_proxy(
+def _detect_transients_energy_proxy(  # pylint: disable=too-many-positional-arguments
     mono: np.ndarray,
     sr: int,
     hop_length: int = 512,
@@ -1388,7 +1440,7 @@ def _detect_transients_energy_proxy(
     return mask
 
 
-def reconstruct_consonant_bursts(
+def reconstruct_consonant_bursts(  # pylint: disable=too-many-positional-arguments
     audio_degraded: np.ndarray,
     audio_restored: np.ndarray,
     sr: int,
@@ -1409,7 +1461,7 @@ def reconstruct_consonant_bursts(
            mit alpha ≤ max_blend_alpha zurückblenden
         4. Sanfter Blend (nicht hartes Replace): Natürlichkeit bleibt gewahrt
 
-    §0 Primum non nocere: Nur Frames mit nachweisbarem Energieverlust werden korrigiert.
+    §0 Primum non nocere: Nur Frames mit nachweisbarem Energieverlust werden konzipiert.
     Frames ohne signifikante Abschwächung bleiben unverändert.
 
     Args:
@@ -1429,7 +1481,7 @@ def reconstruct_consonant_bursts(
     audio_deg = np.asarray(audio_degraded, dtype=np.float32)
     audio_rest = np.asarray(audio_restored, dtype=np.float32)
 
-    # Längendifferenz abfangen (Pipeline kann Länge minimal ändern)
+    # Längendifferenz abandon (Pipeline kann Länge minimal ändern)
     n = min(len(audio_deg), len(audio_rest))
     if n == 0:
         return audio_rest.copy()

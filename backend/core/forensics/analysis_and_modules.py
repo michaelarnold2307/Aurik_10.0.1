@@ -2,11 +2,78 @@
 SOTA-konforme Analyse- und Policy-Module für Musikrestaurierung
 """
 
+# Optional DSP/ML dependencies are imported lazily inside analysis paths.
+# pylint: disable=import-outside-toplevel
+
 import concurrent.futures
+import logging
 import time
 from typing import Any, Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+def _integrated_lufs_bs1770_approx(audio: np.ndarray, sr: int) -> float:
+    """Berechnet BS.1770-like integrated loudness with K-weighting and gating."""
+    arr = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+    if arr.size == 0:
+        return -100.0
+    if arr.ndim == 1:
+        channels = arr[np.newaxis, :]
+    elif arr.ndim == 2 and arr.shape[0] <= 8 and arr.shape[1] > arr.shape[0]:
+        channels = arr
+    elif arr.ndim == 2:
+        channels = arr.T
+    else:
+        channels = arr.reshape(1, -1)
+
+    weighted = []
+    for ch in channels:
+        weighted.append(_k_weight_channel(ch.astype(np.float64), sr))
+    y = np.vstack(weighted)
+    if y.shape[1] < max(1, int(sr * 0.1)):
+        power = float(np.mean(np.sum(y**2, axis=0)))
+        return float(np.clip(-0.691 + 10.0 * np.log10(power + 1e-20), -100.0, 6.0))
+
+    block = max(1, int(round(sr * 0.400)))
+    hop = max(1, int(round(sr * 0.100)))
+    powers = []
+    for start in range(0, max(1, y.shape[1] - block + 1), hop):
+        segment = y[:, start : start + block]
+        if segment.shape[1] < block:
+            break
+        powers.append(float(np.mean(np.sum(segment**2, axis=0))))
+    if not powers:
+        powers = [float(np.mean(np.sum(y**2, axis=0)))]
+
+    block_lufs = np.array([-0.691 + 10.0 * np.log10(power + 1e-20) for power in powers], dtype=np.float64)
+    absolute_mask = block_lufs > -70.0
+    gated_powers = np.array(powers, dtype=np.float64)[absolute_mask]
+    if gated_powers.size == 0:
+        return -100.0
+    ungated_loudness = -0.691 + 10.0 * np.log10(float(np.mean(gated_powers)) + 1e-20)
+    relative_mask = block_lufs[absolute_mask] > (ungated_loudness - 10.0)
+    gated_powers = gated_powers[relative_mask]
+    if gated_powers.size == 0:
+        return float(np.clip(ungated_loudness, -100.0, 6.0))
+    return float(np.clip(-0.691 + 10.0 * np.log10(float(np.mean(gated_powers)) + 1e-20), -100.0, 6.0))
+
+
+def _k_weight_channel(channel: np.ndarray, sr: int) -> np.ndarray:
+    """Wendet eine konservative K-Gewichtungs-Approximation auf einen Kanal an."""
+    try:
+        from scipy.signal import butter, sosfiltfilt  # pylint: disable=import-outside-toplevel
+
+        hp_hz = min(80.0, max(20.0, sr * 0.01))
+        sos_hp = butter(2, hp_hz, btype="highpass", fs=sr, output="sos")
+        weighted = sosfiltfilt(sos_hp, channel)
+        sos_hi = butter(1, 1500.0, btype="highpass", fs=sr, output="sos")
+        high = sosfiltfilt(sos_hi, weighted)
+        return weighted + high * 0.18
+    except Exception:
+        return channel
 
 
 class PolicyManager:
@@ -18,6 +85,7 @@ class PolicyManager:
         self.callback = callback  # Optional: Funktion für externe Aktionen (z.B. Logging, Notification)
 
     def update(self, feedback: dict) -> None:
+        """Aktualisiert gate failure counters and escalation state from feedback."""
         # SOTA-Policy-Logik: Logging, Eskalation, Reset, Aktionen, Zeitstempel, Callbacks
         now = time.time()
         if "_log" not in self.policy:
@@ -85,6 +153,7 @@ class PolicyManager:
         return self.policy
 
     def reset_policy(self) -> dict[str, Any]:
+        """Setzt zurück: all policy gate states while preserving the policy log."""
         # Setzt alle Policy-Zustände (außer Log) zurück
         for k in list(self.policy.keys()):
             if k != "_log":
@@ -95,6 +164,7 @@ class PolicyManager:
                     "escalation_level": None,
                     "action": None,
                 }
+        return self.policy
 
 
 class FeatureExtractor:
@@ -110,13 +180,17 @@ class FeatureExtractor:
         reference: np.ndarray | None = None,
         policy_manager: Optional["PolicyManager"] = None,
     ) -> dict:
+        """Extrahiert robust forensic and musical features from mono or stereo audio."""
+        audio = np.nan_to_num(np.asarray(audio, dtype=np.float32))
+        y_mono = self._to_mono(audio)
+        channels = self._as_channels(audio)
         features = {}
 
         def crepe_features() -> dict[str, Any]:
             try:
                 from plugins.fcpe_plugin import get_fcpe_plugin as _get_fcpe
 
-                _r = _get_fcpe().analyze(audio, sr)
+                _r = _get_fcpe().analyze(y_mono, sr)
                 voiced = _r.voiced_prob > 0.5
                 f0_vals = _r.f0_hz[voiced] if voiced.any() else _r.f0_hz
                 return {
@@ -131,7 +205,7 @@ class FeatureExtractor:
             try:
                 import librosa
 
-                y = audio if audio.ndim == 1 else np.mean(audio, axis=0)
+                y = y_mono
                 if len(y) >= 2048:
                     chroma = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=min(2048, len(y)))
                     key = librosa.feature.chroma_cqt(y=y, sr=sr)
@@ -146,16 +220,15 @@ class FeatureExtractor:
                         "mfcc_mean": float(np.mean(melody)),
                         "mfcc_std": float(np.std(melody)),
                     }
-                else:
-                    return {
-                        "chroma_mean": -1.0,
-                        "chroma_std": -1.0,
-                        "key_chroma_cqt_mean": -1.0,
-                        "tempo_bpm": -1.0,
-                        "beat_count": 0,
-                        "mfcc_mean": -1.0,
-                        "mfcc_std": -1.0,
-                    }
+                return {
+                    "chroma_mean": -1.0,
+                    "chroma_std": -1.0,
+                    "key_chroma_cqt_mean": -1.0,
+                    "tempo_bpm": -1.0,
+                    "beat_count": 0,
+                    "mfcc_mean": -1.0,
+                    "mfcc_std": -1.0,
+                }
             except Exception:
                 return {
                     "chroma_mean": -1.0,
@@ -177,7 +250,7 @@ class FeatureExtractor:
                 from plugins.panns_plugin import PANNSPlugin
 
                 panns = PANNSPlugin()
-                audio_for_panns = audio if audio.ndim == 1 else np.mean(audio, axis=0)
+                audio_for_panns = y_mono
                 with (
                     tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_in,
                     tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp_out,
@@ -206,14 +279,14 @@ class FeatureExtractor:
             features.update(panns_result)
 
         # ...restliche Features wie RMS, ZCR, Spectral, Dynamics, Stereo etc. synchron
-        features["rms"] = float(np.sqrt(np.mean(audio**2)))
-        features["zcr"] = float(np.mean(np.abs(np.diff(np.sign(audio)))))
+        features["rms"] = float(np.sqrt(np.mean(y_mono**2)))
+        features["zcr"] = float(np.mean(np.abs(np.diff(np.sign(y_mono))))) if y_mono.size > 1 else 0.0
         # Erweiterte musikalische Features (Harmonie, Rhythmus, Melodie)
         try:
             import librosa
 
             # Mono für Harmonie/Rhythmus-Features
-            y = audio if audio.ndim == 1 else np.mean(audio, axis=0)
+            y = y_mono
             # Nur verarbeiten, wenn Signal lang genug ist
             if len(y) >= 2048:
                 # Chroma (Harmonie)
@@ -248,26 +321,17 @@ class FeatureExtractor:
             features["beat_count"] = -1
             features["mfcc_mean"] = -1.0
             features["mfcc_std"] = -1.0
-        if audio.ndim == 2:
+        if channels.shape[0] > 1:
             # Stereo: pro Kanal berechnen und mitteln
             centroids = []
             rolloffs = []
             flatnesses = []
             contrasts = []
-            for ch in range(audio.shape[0]):
-                mag = np.abs(np.fft.rfft(audio[ch]))
-                freqs = np.fft.rfftfreq(len(audio[ch]), 1 / sr)
-                centroids.append(np.sum(mag * freqs) / (np.sum(mag) + 1e-10))
-                total_energy = np.sum(mag)
-                threshold = 0.85 * total_energy
-                cumulative = np.cumsum(mag)
-                rolloff_idx = np.where(cumulative >= threshold)[0][0]
-                rolloffs.append(freqs[rolloff_idx])
-                geo_mean = np.exp(np.mean(np.log(mag + 1e-10)))
-                arith_mean = np.mean(mag + 1e-10)
-                flatnesses.append(geo_mean / arith_mean)
-                bands = np.array_split(mag, 6)
-                contrast = [float(np.max(b) - np.min(b)) for b in bands if len(b) > 0]
+            for channel in channels:
+                centroid, rolloff, flatness, contrast = self._spectral_summary(channel, sr)
+                centroids.append(centroid)
+                rolloffs.append(rolloff)
+                flatnesses.append(flatness)
                 contrasts.append(contrast)
             features["spectral_centroid"] = float(np.mean(centroids))
             features["spectral_rolloff"] = float(np.mean(rolloffs))
@@ -275,35 +339,28 @@ class FeatureExtractor:
             # Mittelwert über alle Bänder und Kanäle
             features["spectral_contrast"] = [float(np.mean([c[i] for c in contrasts if len(c) > i])) for i in range(6)]
         else:
-            mag = np.abs(np.fft.rfft(audio))
-            freqs = np.fft.rfftfreq(len(audio), 1 / sr)
-            features["spectral_centroid"] = float(np.sum(mag * freqs) / (np.sum(mag) + 1e-10))
-            total_energy = np.sum(mag)
-            threshold = 0.85 * total_energy
-            cumulative = np.cumsum(mag)
-            rolloff_idx = np.where(cumulative >= threshold)[0][0]
-            features["spectral_rolloff"] = float(freqs[rolloff_idx])
-            geo_mean = np.exp(np.mean(np.log(mag + 1e-10)))
-            arith_mean = np.mean(mag + 1e-10)
-            features["spectral_flatness"] = float(geo_mean / arith_mean)
-            bands = np.array_split(mag, 6)
-            contrast = [float(np.max(b) - np.min(b)) for b in bands if len(b) > 0]
+            centroid, rolloff, flatness, contrast = self._spectral_summary(y_mono, sr)
+            features["spectral_centroid"] = centroid
+            features["spectral_rolloff"] = rolloff
+            features["spectral_flatness"] = flatness
             features["spectral_contrast"] = contrast
         # Crest Factor
-        peak = np.max(np.abs(audio))
+        peak = np.max(np.abs(y_mono)) if y_mono.size else 0.0
         features["crest_factor"] = float(peak / (features["rms"] + 1e-10))
-        # Loudness (LUFS, Stub)
-        features["lufs"] = float(-0.691 + 10 * np.log10(features["rms"] + 1e-10))
+        features["lufs"] = _integrated_lufs_bs1770_approx(audio, sr)
         # SNR/SI-SDR falls Referenz vorhanden
         if reference is not None:
-            noise = audio - reference
-            features["snr"] = float(10 * np.log10(np.sum(reference**2) / (np.sum(noise**2) + 1e-10)))
-            ref = reference - np.mean(reference)
-            est = audio - np.mean(audio)
-            alpha = np.dot(est, ref) / (np.dot(ref, ref) + 1e-10)
-            s_target = alpha * ref
-            e_noise = est - s_target
-            features["si_sdr"] = float(10 * np.log10(np.sum(s_target**2) / (np.sum(e_noise**2) + 1e-10)))
+            ref_mono = self._to_mono(np.nan_to_num(np.asarray(reference, dtype=np.float32)))
+            est_aligned, ref_aligned = self._align_pair(y_mono, ref_mono)
+            if est_aligned.size > 0:
+                noise = est_aligned - ref_aligned
+                features["snr"] = float(10 * np.log10(np.sum(ref_aligned**2) / (np.sum(noise**2) + 1e-10)))
+                ref = ref_aligned - np.mean(ref_aligned)
+                est = est_aligned - np.mean(est_aligned)
+                alpha = np.dot(est, ref) / (np.dot(ref, ref) + 1e-10)
+                s_target = alpha * ref
+                e_noise = est - s_target
+                features["si_sdr"] = float(10 * np.log10(np.sum(s_target**2) / (np.sum(e_noise**2) + 1e-10)))
 
         # Quality-Gates automatisch prüfen
         def log_callback(entry):
@@ -321,6 +378,7 @@ class FeatureExtractor:
         }
         # QualityEvaluator entfernt: quality_gates als Dummy (alle Metriken >=0.0 -> True)
         features["quality_gates"] = {k: (v is not None and v >= 0.0) for k, v in metrics.items()}
+        log_callback({"event": "quality_gates", "gates": features["quality_gates"], "timestamp": time.time()})
         # Policy-Integration: PolicyManager erhält Quality-Gate-Resultate
         if policy_manager is not None:
             # Gender-Neutral: PolicyManager darf keine Policy-Entscheidung auf Basis von f0_median/f0_mean treffen
@@ -328,8 +386,6 @@ class FeatureExtractor:
 
         # === DEFECT DETECTION (Week 9 Integration) ===
         # Detect clicks, crackle, clipping, dropouts, wow/flutter, hum
-        y_mono = audio if audio.ndim == 1 else np.mean(audio, axis=0)
-
         # Click detection (vinyl)
         features["click_density"] = self._detect_clicks(y_mono, sr)
         features["click_count"] = int(features["click_density"] * len(y_mono) / sr)
@@ -354,9 +410,66 @@ class FeatureExtractor:
 
         return features
 
+    @staticmethod
+    def _to_mono(audio: np.ndarray) -> np.ndarray:
+        """Gibt mono audio from mono, channel-first, or channel-last input zurück."""
+        if audio.ndim != 2:
+            return audio.reshape(-1)
+        rows, cols = audio.shape
+        if rows <= 8 and cols > rows:
+            return audio.mean(axis=0)
+        if cols <= 8 and rows > cols:
+            return audio.mean(axis=1)
+        return audio.mean(axis=0)
+
+    @staticmethod
+    def _as_channels(audio: np.ndarray) -> np.ndarray:
+        """Gibt audio as a channel-first array zurück."""
+        if audio.ndim == 1:
+            return audio[np.newaxis, :]
+        rows, cols = audio.shape
+        if rows <= 8 and cols > rows:
+            return audio
+        if cols <= 8 and rows > cols:
+            return audio.T
+        return audio.reshape(1, -1)
+
+    @staticmethod
+    def _spectral_summary(channel: np.ndarray, sr: int) -> tuple[float, float, float, list[float]]:
+        """Gibt centroid, rolloff, flatness, and six-band contrast safely zurück."""
+        if channel.size == 0:
+            return 0.0, 0.0, 0.0, [0.0] * 6
+        mag = np.abs(np.fft.rfft(channel))
+        if mag.size == 0:
+            return 0.0, 0.0, 0.0, [0.0] * 6
+        freqs = np.fft.rfftfreq(len(channel), 1 / sr)
+        total_energy = float(np.sum(mag))
+        if total_energy <= 1e-12:
+            return 0.0, 0.0, 0.0, [0.0] * 6
+        centroid = float(np.sum(mag * freqs) / (total_energy + 1e-10))
+        cumulative = np.cumsum(mag)
+        rolloff_candidates = np.flatnonzero(cumulative >= 0.85 * total_energy)
+        rolloff = float(freqs[int(rolloff_candidates[0])]) if rolloff_candidates.size else 0.0
+        geo_mean = float(np.exp(np.mean(np.log(mag + 1e-10))))
+        arith_mean = float(np.mean(mag + 1e-10))
+        flatness = float(geo_mean / (arith_mean + 1e-10))
+        bands = np.array_split(mag, 6)
+        contrast = [float(np.max(b) - np.min(b)) if len(b) > 0 else 0.0 for b in bands]
+        while len(contrast) < 6:
+            contrast.append(0.0)
+        return centroid, rolloff, flatness, contrast[:6]
+
+    @staticmethod
+    def _align_pair(estimate: np.ndarray, reference: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Gibt equal-length mono estimate/reference arrays for quality metrics zurück."""
+        n = min(estimate.size, reference.size)
+        if n <= 0:
+            return np.zeros(0, dtype=np.float32), np.zeros(0, dtype=np.float32)
+        return estimate[:n].astype(np.float32, copy=False), reference[:n].astype(np.float32, copy=False)
+
     def _detect_clicks(self, audio: np.ndarray, sr: int) -> float:
         """
-        Detect click density (clicks per second).
+        Erkennt click density (clicks per second).
         Uses multi-stage detection: transient + spectral anomaly + statistical outlier.
 
         Returns:
@@ -403,7 +516,7 @@ class FeatureExtractor:
 
     def _detect_crackle(self, audio: np.ndarray, sr: int) -> float:
         """
-        Detect crackle density (impulse density).
+        Erkennt crackle density (impulse density).
         Uses high-pass filtering + impulse density computation.
 
         Returns:
@@ -440,7 +553,7 @@ class FeatureExtractor:
 
     def _detect_clipping_percentage(self, audio: np.ndarray) -> float:
         """
-        Detect clipping percentage (% of samples at max amplitude).
+        Erkennt clipping percentage (% of samples at max amplitude).
 
         Returns:
                 Percentage of clipped samples (0.0 - 100.0)
@@ -456,7 +569,7 @@ class FeatureExtractor:
 
     def _detect_dropouts(self, audio: np.ndarray, sr: int) -> tuple:
         """
-        Detect tape dropouts (sudden energy drops).
+        Erkennt tape dropouts (sudden energy drops).
 
         Returns:
                 Tuple of (dropout_regions, dropout_count)
@@ -507,7 +620,7 @@ class FeatureExtractor:
 
     def _detect_wow_flutter(self, audio: np.ndarray, sr: int) -> tuple:
         """
-        Detect wow and flutter (pitch modulation).
+        Erkennt wow and flutter (pitch modulation).
         Wow: <1 Hz, Flutter: 1-100 Hz
 
         Returns:
@@ -562,7 +675,7 @@ class FeatureExtractor:
 
     def _detect_hum(self, audio: np.ndarray, sr: int) -> float:
         """
-        Detect hum (50/60 Hz power line interference).
+        Erkennt hum (50/60 Hz power line interference).
 
         Returns:
                 Hum score (0.0 - 1.0, >0.05 = significant hum)
@@ -610,7 +723,7 @@ class FeatureExtractor:
 
 class AnalysisEngineAdapter:
     """
-    Bridge between existing FeatureExtractor and formal AnalysisProfile.
+    Verbindet between existing FeatureExtractor and formal AnalysisProfile.
 
     Maps dict-based features to typed Pydantic models per AURIK Spec 3.1.
     Maintains backward compatibility while producing formal data structures.
@@ -621,7 +734,7 @@ class AnalysisEngineAdapter:
 
     def analyze(self, audio: np.ndarray, sr: int, audio_path: str | None = None) -> object:  # type: ignore[override]
         """
-        Create comprehensive AnalysisProfile from audio.
+        Erstellt comprehensive AnalysisProfile from audio.
 
         Args:
                 audio: Audio signal (mono or stereo)
@@ -631,6 +744,7 @@ class AnalysisEngineAdapter:
         Returns:
                 AnalysisProfile with complete analysis
         """
+        del audio_path
         # Import here to avoid circular dependency
         from backend.core.data_models import (
             AnalysisProfile,
@@ -689,7 +803,7 @@ class AnalysisEngineAdapter:
                 # Short audio: use full audio 3 times (deterministic)
                 segments = [(0, len(audio_for_panns))] * 3
 
-            for segment_idx, (start, end) in enumerate(segments):
+            for start, end in segments:
                 with (
                     tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_in,
                     tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp_out,
@@ -729,34 +843,30 @@ class AnalysisEngineAdapter:
                 # 🎯 CONFIDENCE THRESHOLD: Only report if >50% confident
                 if genre_confidence < 0.50:
                     genre = Genre.UNKNOWN
-                    genre_confidence = genre_confidence  # Keep low confidence for diagnostics
             else:
                 genre = Genre.UNKNOWN
                 genre_confidence = 0.3
 
             # 🗳️ MAJORITY VOTING for Vocals (2 out of 3)
-            has_vocals = sum([v for v, _ in vocal_votes]) >= 2
+            has_vocals = sum(v for v, _ in vocal_votes) >= 2
             vocal_confidence = np.mean([conf for _, conf in vocal_votes])
 
             # Use first segment's tags for instruments (less critical)
             instruments = self._extract_instruments_from_panns(all_panns_tags[0])
 
-            # Log PANNS results with ensemble info
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.info(
-                f"PANNS ENSEMBLE: Genre={genre.value if hasattr(genre, 'value') else genre} ({genre_confidence:.2f}) "
-                f"[votes: {[g.value if hasattr(g, 'value') else g for g, _ in genre_votes]}], "
-                f"Vocals={has_vocals} ({vocal_confidence:.2f}), "
-                f"Instruments={len(instruments)}"
+                "PANNS ENSEMBLE: Genre=%s (%.2f) [votes: %s], Vocals=%s (%.2f), Instruments=%d",
+                genre.value if hasattr(genre, "value") else genre,
+                genre_confidence,
+                [g.value if hasattr(g, "value") else g for g, _ in genre_votes],
+                has_vocals,
+                vocal_confidence,
+                len(instruments),
             )
 
         except Exception as e:
             # PANNS failed - use fallback values
-            import logging
-
-            logging.warning(f"PANNS tagging failed: {e}. Using placeholder values.")
+            logger.warning("PANNS tagging failed: %s. Using placeholder values.", e)
             # Keep default values set above
 
         # Prepare audio for stereo analysis
@@ -766,8 +876,6 @@ class AnalysisEngineAdapter:
         else:
             audio_stereo = audio
             channels = audio.shape[0]
-
-        len(audio) / sr if sr > 0 else 0.0
 
         # 1. Format Info (Spec 3.1.1)
         # Detect actual bit depth from audio dynamic range
@@ -779,7 +887,7 @@ class AnalysisEngineAdapter:
         else:
             _est_bits = 16
         # Float32 input from soundfile → likely 24 or 32 bit source
-        if audio.dtype == np.float32 or audio.dtype == np.float64:
+        if audio.dtype in (np.float32, np.float64):
             _est_bits = max(_est_bits, 24)
 
         format_info = FormatInfo(
@@ -960,7 +1068,7 @@ class AnalysisEngineAdapter:
 
     def _extract_genre_from_panns(self, tags: dict) -> tuple:
         """
-        Extract genre from PANNS tags with specialized SCHLAGER recognition.
+        Extrahiert genre from PANNS tags with specialized SCHLAGER recognition.
 
         Args:
                 tags: PANNS output dict with {tag: confidence}
@@ -1031,7 +1139,7 @@ class AnalysisEngineAdapter:
 
     def _extract_vocals_from_panns(self, tags: dict) -> tuple:
         """
-        Extract vocal detection from PANNS tags.
+        Extrahiert vocal detection from PANNS tags.
 
         Args:
                 tags: PANNS output dict
@@ -1054,7 +1162,7 @@ class AnalysisEngineAdapter:
         ]
 
         # Find max vocal score
-        max_vocal_score = max([tags.get(tag, 0.0) for tag in vocal_tags], default=0.0)
+        max_vocal_score = max((tags.get(tag, 0.0) for tag in vocal_tags), default=0.0)
 
         # Threshold for vocal detection
         has_vocals = max_vocal_score > 0.3
@@ -1063,7 +1171,7 @@ class AnalysisEngineAdapter:
 
     def _extract_instruments_from_panns(self, tags: dict) -> list:
         """
-        Extract dominant instruments from PANNS tags.
+        Extrahiert dominant instruments from PANNS tags.
 
         Args:
                 tags: PANNS output dict

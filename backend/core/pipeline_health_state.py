@@ -42,7 +42,7 @@ class FailReason:
     phase_id: str = ""
 
     def to_dict(self) -> dict[str, str]:
-        """Convert to legacy dict format for backward compatibility."""
+        """Konvertiert to legacy dict format for backward compatibility."""
         return {
             "component": self.component,
             "error_code": self.error_code,
@@ -62,7 +62,7 @@ def make_fail_reason(
     details: str = "",
     phase_id: str = "",
 ) -> FailReason:
-    """Factory for FailReason — convenience wrapper."""
+    """Factory für FailReason – Komfort-Wrapper."""
     return FailReason(
         component=component,
         error_code=error_code,
@@ -88,7 +88,7 @@ class PipelineHealthState(str, Enum):
 
 
 def normalize_pipeline_health_state(raw: Any) -> PipelineHealthState:
-    """Normalize external/raw state values to canonical enum values."""
+    """Normalisiert external/raw state values to canonical enum values."""
     value = str(raw or "").strip().lower()
     for state in PipelineHealthState:
         if value == state.value:
@@ -135,7 +135,7 @@ def primary_fail_reason_from_fail_reasons(
     *,
     default: str = "",
 ) -> str:
-    """Resolve a deterministic primary fail reason from structured fail_reasons.
+    """Löst auf: a deterministic primary fail reason from structured fail_reasons.
 
     Priority per entry: error_code -> exc_msg -> message.
     The first non-empty candidate across entries is used.
@@ -161,7 +161,7 @@ def resolve_fail_reason(
     stage_notes: dict[str, Any] | None = None,
     fail_reasons: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Resolve fail_reason from typed field, metadata, and stage notes with clear precedence."""
+    """Löst auf: fail_reason from typed field, metadata, and stage notes with clear precedence."""
     meta = metadata or {}
     notes = stage_notes or {}
     reason = typed_fail_reason or meta.get("fail_reason", "") or notes.get("fail_reason", "")

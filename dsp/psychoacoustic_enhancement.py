@@ -37,7 +37,7 @@ class PsychoacousticEnhancer:
         harmonic_gain_db: float = 6.0,
         mix: float = 0.5,
     ):
-        """Initialize PsychoacousticEnhancer.
+        """Initialisiert PsychoacousticEnhancer.
 
         Args:
             bass_freq_range: Frequency range for bass extraction (Hz)
@@ -153,7 +153,7 @@ class PsychoacousticEnhancer:
         return result
 
     def _extract_bass(self, channel: np.ndarray, sr: int) -> np.ndarray:
-        """Extract bass frequencies using bandpass filter."""
+        """Extrahiert bass frequencies using bandpass filter."""
         nyquist = sr / 2
         low = self.bass_freq_range[0] / nyquist
         high = self.bass_freq_range[1] / nyquist
@@ -173,7 +173,7 @@ class PsychoacousticEnhancer:
 
     def _generate_harmonics(self, bass_signal: np.ndarray, sr: int) -> np.ndarray:
         """
-        Generate 2nd and 3rd harmonics using envelope detection.
+        Generiert 2nd and 3rd harmonics using envelope detection.
 
         Technique: Extract envelope, then synthesize harmonics at 2x and 3x frequency.
         """
@@ -212,7 +212,7 @@ class PsychoacousticEnhancer:
         return harmonics_filtered
 
     def _measure_bass_energy(self, audio: np.ndarray, sr: int) -> float:
-        """Measure bass energy in 40-240 Hz range."""
+        """Misst bass energy in 40-240 Hz range."""
         audio_mono = np.mean(audio, axis=0) if audio.ndim == 2 else audio
 
         # Extract 40-240 Hz range
@@ -231,7 +231,7 @@ class PsychoacousticEnhancer:
 def create_psychoacoustic_enhancer(
     bass_freq_range: tuple[float, float] = (20, 80), harmonic_gain_db: float = 6.0, mix: float = 0.5
 ) -> PsychoacousticEnhancer:
-    """Factory function to create PsychoacousticEnhancer instance."""
+    """Factory-Funktion zum Erstellen einer PsychoacousticEnhancer-Instanz."""
     return PsychoacousticEnhancer(bass_freq_range=bass_freq_range, harmonic_gain_db=harmonic_gain_db, mix=mix)
 
 

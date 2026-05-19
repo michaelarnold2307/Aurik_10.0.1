@@ -23,7 +23,7 @@ class AdaptiveMMSELSA:
         self.spectral_floor = spectral_floor
 
     def mmse_lsa(self, noisy_mag, noise_mag, *, sr: int = 48000, **kwargs):
-        """Compute MMSE-LSA gain for magnitude spectra (Ephraim & Malah 1985).
+        """Berechnet MMSE-LSA gain for magnitude spectra (Ephraim & Malah 1985).
 
         Args:
             noisy_mag: Noisy magnitude spectrum

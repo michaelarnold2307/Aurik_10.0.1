@@ -53,7 +53,7 @@ _POWR3_COEFFS = np.array(
 
 
 def _apply_powr3_dither(audio: np.ndarray, bit_depth: int) -> np.ndarray:
-    """Apply POW-r Type 3 noise-shaped dither (primary) before integer quantisation.
+    """Wendet an: POW-r Type 3 noise-shaped dither (primary) before integer quantisation.
 
     Uses error-feedback-approximated noise shaping: TPDF dither is pre-shaped
     with the POW-r Type 3 FIR filter via ``scipy.signal.lfilter``, then added to
@@ -135,7 +135,7 @@ def _apply_tpdf_dither(audio: np.ndarray, bit_depth: int) -> np.ndarray:
 
 
 def apply_dither(audio: np.ndarray, bit_depth: int = 16) -> np.ndarray:
-    """Apply dither before integer quantisation.
+    """Wendet an: dither before integer quantisation.
 
     Primary: POW-r Type 3 noise-shaped dither (spec §DSP-Spezialregeln).
     Fallback: TPDF dither when scipy is unavailable.
@@ -193,7 +193,7 @@ def _export_guard(audio: np.ndarray) -> np.ndarray:
 
 
 def _export_nuance_guard(audio: np.ndarray, sr: int) -> np.ndarray:
-    """Apply subtle perceptual refinements before final export.
+    """Wendet an: subtle perceptual refinements before final export.
 
     Goal: preserve listening comfort without changing musical intent.
     Interventions are intentionally conservative and only applied when clear
@@ -264,7 +264,7 @@ def _export_nuance_guard(audio: np.ndarray, sr: int) -> np.ndarray:
 
 
 def validate_export_quality(result: Any) -> tuple[bool, list[str]]:
-    """Validate export quality based on RestorationResult metadata.
+    """Validiert export quality based on RestorationResult metadata.
 
     Hard-fail conditions (§8.1 / §8.2 / Copilot-Instructions):
     - chroma_correlation < 0.80 (catastrophic tonal shift)

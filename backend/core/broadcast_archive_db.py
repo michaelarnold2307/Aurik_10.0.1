@@ -564,7 +564,7 @@ _ALIASES: dict[str, str] = {
 
 
 def _era_fade(adj: ProvenanceAdjustment, era_decade: int | None) -> float:
-    """Return a 0..1 relevance weight based on how far era_decade is from the
+    """Gibt a 0..1 relevance weight based on how far era_decade is from the zurück.
     adjustment's valid range.  Fades to 0 over ±20 years outside the range."""
     if era_decade is None:
         return 0.7  # partial confidence when era unknown
@@ -641,7 +641,7 @@ def apply_provenance_to_chain(
     adj: ProvenanceAdjustment,
     era_decade: int | None = None,
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]], list[tuple[float, float]]]:
-    """Merge provenance deltas into the three breakpoint lists.
+    """Führt zusammen: provenance deltas into the three breakpoint lists.
 
     Adds ``adj.mic_delta`` / ``console_delta`` / ``tape_delta`` at matching Hz
     breakpoints by linear interpolation, scaled by era_fade relevance.
@@ -691,7 +691,7 @@ def apply_provenance_to_chain(
 
 
 def list_provenance_keys() -> list[str]:
-    """Return all known canonical provenance keys."""
+    """Gibt all known canonical provenance keys zurück."""
     return sorted(_PROVENANCE_DB.keys())
 
 

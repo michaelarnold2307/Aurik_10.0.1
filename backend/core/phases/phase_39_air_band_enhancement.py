@@ -48,9 +48,9 @@ from .output_guard import evaluate_output_guard
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 try:
-    from backend.core.hallucination_guard import apply_hallucination_guard as _apply_hg39_fn
+    from backend.core.dsp.hallucination_guard import check_hallucination as _check_hallucination39
 except Exception:
-    _apply_hg39_fn = None  # type: ignore[assignment]
+    _check_hallucination39 = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ class AirBandEnhancement(PhaseInterface):
         self._cache_lock = threading.Lock()
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_39_air_band_enhancement",
             name="Air Band Enhancement v2 Professional",
@@ -174,7 +174,7 @@ class AirBandEnhancement(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply air band enhancement to audio.
+        Wendet Air-Band-Verbesserung auf Audio an.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -482,24 +482,30 @@ class AirBandEnhancement(PhaseInterface):
             except Exception as _bw39_exc:
                 logger.debug("§6.2c phase_39 BW-Ceiling (non-blocking): %s", _bw39_exc)
 
-        # §2.46e Hallucination-Guard: prueft ob Air-Band-Enhancement HF halluziniert hat
+        # §2.46e Hallucination-Guard: check_hallucination aus backend.core.dsp.hallucination_guard
+        # Pflicht nach letzter additiver Op — unconditional, fuer alle Materialien (§2.46e VERBOTEN).
+        # `.requires_rollback` → enhanced_audio = audio.copy(); `.score_penalty > 0` → Metadata-0.3.
         _hg_mode_39 = str(kwargs.get("mode", kwargs.get("processing_mode", "restoration"))).lower()
-        _bw_cap_hg_39 = _bw_cap_39  # already computed above
-        if _bw_cap_hg_39 is not None:
+        _hg_score_penalty_39 = 0.0
+        _hg_rollback_39 = False
+        if _check_hallucination39 is not None:
             try:
-                enhanced_audio, _hg_meta39 = _apply_hg39_fn(  # type: ignore[misc]
+                _hg_result39 = _check_hallucination39(
                     audio,
                     enhanced_audio,
                     sr=sample_rate,
-                    material_bw_ceiling_hz=_bw_cap_hg_39,
                     mode=_hg_mode_39,
+                    material_bw_ceiling_hz=_bw_cap_39,
                 )
-                if _hg_meta39.get("hallucination_decision") == "rollback":
+                if _hg_result39.requires_rollback:
                     logger.warning(
-                        "§2.46e Phase-39 Hallucination-Rollback: %s ceiling=%.0f Hz",
-                        _hg_meta39.get("hallucination_severity", "?"),
-                        _bw_cap_hg_39,
+                        "§2.46e Phase-39 Hallucination-Rollback: spectral_novelty=%.3f (Threshold 0.15)",
+                        _hg_result39.spectral_novelty,
                     )
+                    enhanced_audio = audio.copy()
+                    _hg_rollback_39 = True
+                if _hg_result39.score_penalty > 0:
+                    _hg_score_penalty_39 = float(_hg_result39.score_penalty)
             except Exception as _hg39_exc:
                 logger.debug("Phase 39 HallucinationGuard (non-blocking): %s", _hg39_exc)
 
@@ -524,6 +530,8 @@ class AirBandEnhancement(PhaseInterface):
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "spectral_tilt_capped": _tilt_capped_p39,
+                "hg_score_penalty": _hg_score_penalty_39,
+                "hg_rollback": _hg_rollback_39,
                 "rms_drop_db": 0.0,
                 "loudness_makeup_db": 0.0,
             },
@@ -577,7 +585,7 @@ class AirBandEnhancement(PhaseInterface):
         return enhanced
 
     def _apply_high_shelf(self, audio: np.ndarray, sample_rate: int, freq_hz: float, gain_db: float) -> np.ndarray:
-        """Apply high-frequency shelving filter (biquad coefficients cached per key)."""
+        """Wendet an: high-frequency shelving filter (biquad coefficients cached per key)."""
         cache_key = (sample_rate, freq_hz, gain_db)
         with self._cache_lock:
             if cache_key not in self._shelf_coeffs:
@@ -601,7 +609,7 @@ class AirBandEnhancement(PhaseInterface):
         return signal.lfilter(b, a, audio)
 
     def _apply_exciter(self, audio: np.ndarray, sample_rate: int, mix: float, drive: float) -> np.ndarray:
-        """Apply harmonic exciter to HF region (SOS filter cached per sample_rate)."""
+        """Wendet an: harmonic exciter to HF region (SOS filter cached per sample_rate)."""
         with self._cache_lock:
             if sample_rate not in self._sos_air_cache:
                 self._sos_air_cache[sample_rate] = signal.butter(
@@ -614,7 +622,7 @@ class AirBandEnhancement(PhaseInterface):
         return audio + excited_hf * mix
 
     def _measure_hf_energy(self, audio: np.ndarray, sample_rate: int) -> float:
-        """Measure high-frequency energy (12-20 kHz RMS, cached SOS filter)."""
+        """Misst high-frequency energy (12-20 kHz RMS, cached SOS filter)."""
         if audio.ndim == 2:
             audio = audio[:, 0]  # Use left channel
         with self._cache_lock:

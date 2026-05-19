@@ -89,7 +89,7 @@ def _to_mono_analysis(audio: np.ndarray) -> np.ndarray:
 
 
 def _mid_window(signal: np.ndarray, sr: int) -> np.ndarray:
-    """Extract a 10-second window from the middle of *signal*."""
+    """Extrahiert a 10-second window from the middle of *signal*."""
     n_window = int(_ANALYSIS_WINDOW_S * sr)
     n = min(len(signal), n_window)
     start = max(0, (len(signal) - n) // 2)
@@ -128,7 +128,7 @@ def _gcc_phat(r: np.ndarray, t: np.ndarray) -> tuple[np.ndarray, int]:
 
 
 def _estimate_delay_subsample(ref: np.ndarray, target: np.ndarray, sr: int) -> float:
-    """Estimate the fractional-sample delay of *target* relative to *ref*.
+    """Schätzt the fractional-sample delay of *target* relative to *ref*.
 
     Convention:
       positive  → target is AHEAD of ref (target occurred earlier in time)
@@ -203,7 +203,7 @@ def _estimate_delay_subsample(ref: np.ndarray, target: np.ndarray, sr: int) -> f
 
 
 def _apply_correction_shift(signal: np.ndarray, shift_samples: float) -> np.ndarray:
-    """Apply a signed fractional-sample shift to a 1-D float32 array.
+    """Wendet eine vorzeichenbehaftete fraktionale Sampleverzögerung auf ein 1-D-float32-Array an.
 
     Positive shift_samples → signal content moves to later indices (rightward, delay).
     Negative shift_samples → signal content moves to earlier indices (advance).
@@ -239,7 +239,7 @@ def _apply_correction_shift(signal: np.ndarray, shift_samples: float) -> np.ndar
 
 
 def _apply_shift_to_audio(audio: np.ndarray, shift_samples: float) -> np.ndarray:
-    """Apply fractional-sample shift to audio (mono or stereo, any orientation).
+    """Wendet an: fractional-sample shift to audio (mono or stereo, any orientation).
 
     For stereo, the SAME shift is applied to ALL channels (linked-stereo, §2.51):
     the inter-channel relationship is preserved; the whole signal is moved in time.
@@ -283,7 +283,7 @@ def _apply_shift_to_audio(audio: np.ndarray, shift_samples: float) -> np.ndarray
 
 
 class StereoTemporalCoherenceGuard:
-    """Ensures temporal coherence across stereo channels and between separated stems.
+    """Stellt sicher: temporal coherence across stereo channels and between separated stems.
 
     Thread-safe. Instantiate via get_stereo_temporal_coherence_guard().
 
@@ -304,7 +304,7 @@ class StereoTemporalCoherenceGuard:
         sr: int,
         phase_id: str = "unknown",
     ) -> np.ndarray:
-        """Detect and correct any L-R inter-channel temporal offset.
+        """Erkennt and correct any L-R inter-channel temporal offset.
 
         The RIGHT channel is corrected to align with the LEFT channel as reference.
         LEFT channel is never modified (preserves mono-down-mix identity).
@@ -462,7 +462,7 @@ _lock = threading.Lock()
 
 
 def get_stereo_temporal_coherence_guard() -> StereoTemporalCoherenceGuard:
-    """Return the process-wide StereoTemporalCoherenceGuard singleton."""
+    """Gibt the process-wide StereoTemporalCoherenceGuard singleton zurück."""
     global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:

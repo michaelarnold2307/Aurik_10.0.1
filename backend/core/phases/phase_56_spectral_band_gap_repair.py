@@ -747,7 +747,7 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         # §2.46f NPA-Guard: Atemgeräusche/Vibrato in reparierten Bändern nicht überschreiben.
         # §2.46e Hallucination-Guard: Additive Spektral-Synthese darf kein neues Material einbringen.
         try:
-            from backend.core.hallucination_guard import apply_hallucination_guard
+            from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg56
             from backend.core.natural_performance_detector import get_natural_performance_detector
 
             _mono56 = audio.mean(axis=-1) if audio.ndim == 2 else audio
@@ -772,17 +772,25 @@ class SpectralBandGapRepairPhase(PhaseInterface):
                 if "studio" not in _mode56:
                     _bw_cap56 = float(_band_gap_profile.get("bw_cap_hz", 22050.0))
                     _mono_out56 = out.mean(axis=-1) if out.ndim == 2 else out
-                    _, _h_meta56 = apply_hallucination_guard(_mono56, _mono_out56, sample_rate, _bw_cap56, _mode56)
-                    _rollback56 = _h_meta56.get("hallucination_decision") == "rollback" or bool(
-                        _h_meta56.get("rollback", False)
+                    _hg_result56 = _check_hg56(
+                        _mono56,
+                        _mono_out56,
+                        sr=sample_rate,
+                        mode=_mode56,
+                        material_bw_ceiling_hz=_bw_cap56,
                     )
-                    if _rollback56:
+                    if _hg_result56.requires_rollback:
                         logger.debug(
-                            "§2.46e Phase56 Hallucination rollback: novelty=%.3f severity=%s",
-                            _h_meta56.get("novelty", 0.0),
-                            _h_meta56.get("hallucination_severity", "unknown"),
+                            "§2.46e Phase56 Hallucination rollback: spectral_novelty=%.3f",
+                            _hg_result56.spectral_novelty,
                         )
                         out = audio.copy()
+                    if _hg_result56.score_penalty > 0:
+                        logger.info(
+                            "§2.46e Phase56 score_penalty=%.1f (spectral_novelty=%.3f)",
+                            _hg_result56.score_penalty,
+                            _hg_result56.spectral_novelty,
+                        )
             except Exception as _hg56_exc:
                 logger.debug("§2.46e Phase56 Hallucination-Guard (non-blocking): %s", _hg56_exc)
         except Exception as _guard56_exc:

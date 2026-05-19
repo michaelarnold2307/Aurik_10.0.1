@@ -115,7 +115,7 @@ class GenericNoiseReductionSafety(BaseSafetyWrapper):
         return dict(normalized)
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for noise reduction."""
+        """Validiert pre-conditions for noise reduction."""
         is_valid, errors = validate_audio_basic(audio)
 
         if not is_valid:
@@ -174,7 +174,7 @@ class GenericNoiseReductionSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions for noise reduction."""
+        """Validiert post-conditions for noise reduction."""
         issues = []
         side_effects = []
         metrics = {}
@@ -244,7 +244,7 @@ class GenericNoiseReductionSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute quality score for noise reduction."""
+        """Berechnet quality score for noise reduction."""
         metrics = post_check.metrics
 
         # Weighted combination of factors
@@ -261,7 +261,7 @@ class GenericNoiseReductionSafety(BaseSafetyWrapper):
     # Helper methods
 
     def _estimate_noise_floor(self, audio: np.ndarray) -> float:
-        """Estimate noise floor using minimum statistics."""
+        """Schätzt noise floor using minimum statistics."""
         # Compute short-term energy
         frame_length = 2048
         hop_length = 512
@@ -283,7 +283,7 @@ class GenericNoiseReductionSafety(BaseSafetyWrapper):
         return float(noise_floor)
 
     def _compute_noise_detection_confidence(self, audio: np.ndarray, noise_floor: float) -> float:
-        """Compute confidence in noise detection."""
+        """Berechnet confidence in noise detection."""
         signal_level = np.sqrt(np.mean(audio**2))
         snr_db = 20 * np.log10((signal_level + 1e-10) / (noise_floor + 1e-10))
 
@@ -296,7 +296,7 @@ class GenericNoiseReductionSafety(BaseSafetyWrapper):
             return 0.6
 
     def _detect_musical_noise(self, audio: np.ndarray, sr: int) -> float:
-        """Detect musical noise artifacts (tonal bursts)."""
+        """Erkennt musical noise artifacts (tonal bursts)."""
         audio_mono = audio if audio.ndim == 1 else np.mean(audio, axis=0)
 
         # Musical noise shows up as isolated spectral peaks varying rapidly
@@ -335,7 +335,7 @@ class GenericNoiseReductionSafety(BaseSafetyWrapper):
         return float(musical_noise_score)
 
     def _check_transient_preservation(self, original: np.ndarray, processed: np.ndarray, sr: int) -> float:
-        """Check if transients are preserved."""
+        """Prüft if transients are preserved."""
         orig_mono = original if original.ndim == 1 else np.mean(original, axis=0)
         proc_mono = processed if processed.ndim == 1 else np.mean(processed, axis=0)
 
@@ -421,7 +421,7 @@ class GenericRestorationSafety(BaseSafetyWrapper):
         self.musical_goals = MusicalGoalsChecker()
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for restoration."""
+        """Validiert pre-conditions for restoration."""
         is_valid, errors = validate_audio_basic(audio)
 
         if not is_valid:
@@ -465,7 +465,7 @@ class GenericRestorationSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions for restoration."""
+        """Validiert post-conditions for restoration."""
         issues = []
         side_effects = []
         metrics = {}
@@ -531,11 +531,11 @@ class GenericRestorationSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute quality score for restoration."""
+        """Berechnet quality score for restoration."""
         return self._compute_restoration_quality(post_check.metrics)
 
     def _detect_impulsive_defects(self, audio: np.ndarray, sr: int) -> float:
-        """Detect impulsive defects (clicks, pops, crackle)."""
+        """Erkennt impulsive defects (clicks, pops, crackle)."""
         # Compute envelope
         from scipy.ndimage import maximum_filter1d
 
@@ -552,7 +552,7 @@ class GenericRestorationSafety(BaseSafetyWrapper):
         return float(np.clip(defect_score, 0.0, 1.0))
 
     def _compute_restoration_quality(self, metrics: dict[str, Any]) -> float:
-        """Compute quality score for restoration."""
+        """Berechnet quality score for restoration."""
         defect_reduction = metrics.get("defect_reduction", 0.0)
         correlation = metrics.get("correlation", 0.85)
         centroid_change = metrics.get("spectral_centroid_change", 0.05)
@@ -579,7 +579,7 @@ def create_safety_wrapper(
     processing_mode: ProcessingMode = ProcessingMode.RESTORATION,
 ) -> BaseSafetyWrapper:
     """
-    Factory function to create appropriate safety wrapper for DSP module.
+    Factory-Funktion zum Erstellen eines passenden Sicherheits-Wrappers für DSP-Module.
 
     Args:
         module_name: Name of DSP module

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 14: Professional Phase Correction v2.0
+Phase 14: Professional Phase Correction v2.0.
 =============================================
 
 Multi-band stereo phase alignment for optimal imaging and mono compatibility.
@@ -126,7 +126,7 @@ class PhaseCorrection(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.VINYL, **kwargs
     ) -> PhaseResult:
         """
-        Apply multi-band phase correction.
+        Wendet an: multi-band phase correction.
 
         Args:
             audio: Stereo audio [samples, 2]
@@ -387,7 +387,7 @@ class PhaseCorrection(PhaseInterface):
         return bands
 
     def _multiband_reconstruct(self, bands: list) -> np.ndarray:
-        """Reconstruct audio from bands (simple sum for Linkwitz-Riley)."""
+        """Rekonstruiert audio from bands (simple sum for Linkwitz-Riley)."""
         # Ensure all bands same length
         min_len = min(len(b) for b in bands)
         bands_trimmed = [b[:min_len] for b in bands]
@@ -398,7 +398,7 @@ class PhaseCorrection(PhaseInterface):
 
     def _analyze_phase(self, left: np.ndarray, right: np.ndarray, max_delay: int) -> tuple[float, float]:
         """
-        Analyze phase alignment via cross-correlation with sub-sample precision.
+        Analysiert die Phasenausrichtung via Kreuzkorrelation mit Sub-Sample-Präzision.
 
         Integer peak is refined by parabolic interpolation of the XCF envelope
         (Smith 2011 §3.4), giving sub-sample delay estimation accurate to ~0.02

@@ -126,7 +126,7 @@ def _estimate_hf_energy_ratio(audio: np.ndarray, sr: int, cutoff_hz: float) -> f
 
 
 def get_material_hf_cap(material: str) -> float:
-    """Return the material BW cap in Hz (lookup with fallback)."""
+    """Gibt the material BW cap in Hz (lookup with fallback) zurück."""
     return _MATERIAL_HF_CAP_HZ.get(str(material).lower(), _DEFAULT_HF_CAP_HZ)
 
 

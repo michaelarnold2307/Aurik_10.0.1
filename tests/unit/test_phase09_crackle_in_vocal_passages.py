@@ -147,3 +147,43 @@ def test_pure_harmonic_not_over_processed(phase09):
     assert total_crackle_samples <= SR * 0.10, (
         f"Pure harmonic signal falsely classified as crackle: {total_crackle_samples / SR:.2f}s of {1.0:.2f}s total"
     )
+
+
+# ---------------------------------------------------------------------------
+# §0p Vokal-Konservatismus-Tests
+# ---------------------------------------------------------------------------
+
+
+def test_vocal_cap_limits_strength_when_singing_high(phase09):
+    """§0p: Bei panns_singing >= 0.35 darf effective_strength 0.70 nicht überschreiten."""
+    np.random.default_rng(42)
+    t = np.arange(SR, dtype=np.float32) / SR
+    audio = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+
+    # panns_singing=0.80, strength=1.0 → effective_strength sollte auf 0.70 gecapped werden
+    result = phase09.process(
+        audio,
+        material_type="vinyl",
+        sample_rate=SR,
+        strength=1.0,
+        panns_singing=0.80,
+    )
+    eff = result.metadata.get("effective_strength", 1.0)
+    assert eff <= 0.70 + 1e-6, f"§0p Vokal-Cap verletzt: effective_strength={eff:.3f} > 0.70 bei panns_singing=0.80"
+
+
+def test_vocal_cap_does_not_activate_when_singing_low(phase09):
+    """§0p: Bei panns_singing < 0.35 bleibt effective_strength unbegrenzt."""
+    np.random.default_rng(42)
+    t = np.arange(SR, dtype=np.float32) / SR
+    audio = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+
+    result = phase09.process(
+        audio,
+        material_type="vinyl",
+        sample_rate=SR,
+        strength=1.0,
+        panns_singing=0.10,
+    )
+    eff = result.metadata.get("effective_strength", 0.0)
+    assert eff > 0.70, f"§0p Vokal-Cap fälschlicherweise aktiv: effective_strength={eff:.3f} bei panns_singing=0.10"

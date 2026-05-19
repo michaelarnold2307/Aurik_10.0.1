@@ -240,7 +240,7 @@ def _peak_eq_coeffs(f0_hz: float, q: float, gain_db: float, sr: int) -> tuple[np
 
 
 def _apply_peak(audio: np.ndarray, sr: int, f0: float, q: float, gain_db: float) -> np.ndarray:
-    """Apply a single biquad peak-EQ to mono *audio*."""
+    """Wendet einen einzelnen Biquad-Peak-EQ auf Mono-*audio* an."""
     if abs(gain_db) < 0.01:
         return audio
     b, a = _peak_eq_coeffs(f0, q, gain_db, sr)
@@ -252,7 +252,7 @@ def _apply_peak(audio: np.ndarray, sr: int, f0: float, q: float, gain_db: float)
 
 
 class PhysicsResonanceEnhancer:
-    """Apply physics-derived body resonance coloration to instrument audio.
+    """Wendet an: physics-derived body resonance coloration to instrument audio.
 
     Uses cascaded biquad peak-EQ filters whose center frequencies, Q values
     and gains are sourced from acoustic literature for each instrument class.
@@ -276,7 +276,7 @@ class PhysicsResonanceEnhancer:
         instrument: str = "guitar",
         enhancement_strength: float | None = None,
     ) -> PhysicsResonanceResult:
-        """Apply instrument body resonance coloration to *audio*.
+        """Wendet an: instrument body resonance coloration to *audio*.
 
         Args:
             audio:                Mono or stereo audio at 48 000 Hz.
@@ -363,7 +363,7 @@ class PhysicsResonanceEnhancer:
         resonances: list[tuple[float, float, float]],
         strength: float,
     ) -> tuple[np.ndarray, list[ResonancePeakResult]]:
-        """Apply cascaded biquad peaks to a single mono channel."""
+        """Wendet kaskadierte Biquad-Peaks auf einen einzelnen Mono-Kanal an."""
         enhanced = mono.copy()
         peak_results: list[ResonancePeakResult] = []
 
@@ -396,7 +396,7 @@ _lock = threading.Lock()
 
 
 def get_physics_resonance_enhancer() -> PhysicsResonanceEnhancer:
-    """Return the module-level singleton :class:`PhysicsResonanceEnhancer`.
+    """Gibt the module-level singleton :class:`PhysicsResonanceEnhancer` zurück.
 
     Thread-safe via double-checked locking (§3.2).
     """

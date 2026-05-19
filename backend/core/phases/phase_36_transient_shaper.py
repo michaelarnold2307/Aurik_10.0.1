@@ -124,7 +124,7 @@ class TransientShaper(PhaseInterface):
         self.name = "Transient Shaper v2 Professional"
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_36_transient_shaper",
             name="Transient Shaper v2 Professional",
@@ -145,7 +145,7 @@ class TransientShaper(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply transient shaping to audio.
+        Wendet an: transient shaping to audio.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -451,8 +451,14 @@ class TransientShaper(PhaseInterface):
         a_att = np.array([1.0, -(1.0 - attack_coeff)])
         b_rel = np.array([release_coeff])
         a_rel = np.array([1.0, -(1.0 - release_coeff)])
-        att_pass = signal.lfilter(b_att, a_att, abs_ds_db)
-        rel_pass = signal.lfilter(b_rel, a_rel, abs_ds_db)
+        # Initialize at first-sample steady state to prevent IC=0 transient artifact.
+        # Without zi, the slow release filter starts at 0 dBFS and takes hundreds of
+        # samples to converge, dominating max-envelope and corrupting quiet-transient
+        # detection (Giannoulis 2012, §2.4).
+        _zi_att = signal.lfilter_zi(b_att, a_att) * abs_ds_db[0]
+        _zi_rel = signal.lfilter_zi(b_rel, a_rel) * abs_ds_db[0]
+        att_pass, _ = signal.lfilter(b_att, a_att, abs_ds_db, zi=_zi_att)
+        rel_pass, _ = signal.lfilter(b_rel, a_rel, abs_ds_db, zi=_zi_rel)
         envelope_db = np.maximum(att_pass, rel_pass)
 
         # Convert back to linear domain for downstream compatibility
@@ -466,7 +472,7 @@ class TransientShaper(PhaseInterface):
         return envelope
 
     def _detect_transients(self, envelope: np.ndarray, attack_samples: int) -> np.ndarray:
-        """Detect transients based on envelope slope."""
+        """Erkennt transients based on envelope slope."""
         # Compute derivative (rate of change)
         slope = np.diff(envelope, prepend=envelope[0])
 
@@ -515,12 +521,12 @@ class TransientShaper(PhaseInterface):
         return extended_mask
 
     def _combine_bands(self, bands: list) -> np.ndarray:
-        """Combine frequency bands."""
+        """Kombiniert frequency bands."""
         combined = sum(bands)
         return combined
 
     def _measure_transient_energy(self, audio: np.ndarray, sample_rate: int) -> float:
-        """Measure transient energy (high-frequency content in first 20ms)."""
+        """Misst transient energy (high-frequency content in first 20ms)."""
         if audio.ndim == 2:
             audio = audio[:, 0]  # Use left channel
 

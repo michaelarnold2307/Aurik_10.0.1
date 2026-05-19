@@ -129,7 +129,7 @@ class BassEnhancement(PhaseInterface):
         self._sos_cache_lock = threading.Lock()
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_37_bass_enhancement",
             name="Bass Enhancement v2 Professional",
@@ -150,7 +150,7 @@ class BassEnhancement(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply bass enhancement to audio.
+        Wendet Bass-Verbesserung auf Audio an.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -332,7 +332,7 @@ class BassEnhancement(PhaseInterface):
         return enhanced
 
     def _generate_harmonics(self, bass: np.ndarray, config: dict[str, float]) -> np.ndarray:
-        """Generate harmonic content from bass."""
+        """Generiert harmonic content from bass."""
         # Soft saturation (generates 2nd and 3rd harmonics naturally)
         drive = config["saturation_drive"]
         saturated = np.tanh(bass * drive * 3) / (drive + 0.5)
@@ -352,7 +352,7 @@ class BassEnhancement(PhaseInterface):
         return harmonics
 
     def _generate_sub_harmonic(self, bass: np.ndarray) -> np.ndarray:
-        """Generate sub-harmonic (octave down)."""
+        """Generiert sub-harmonic (octave down)."""
         # Vectorized octave-down via sample-and-hold (avoids Python for-loop)
         sub = np.repeat(bass[::2], 2)[: len(bass)]
         return sub
@@ -440,7 +440,7 @@ class BassEnhancement(PhaseInterface):
         return sub_result
 
     def _measure_bass_energy(self, audio: np.ndarray, sample_rate: int) -> float:
-        """Measure bass energy (20-250 Hz RMS)."""
+        """Misst bass energy (20-250 Hz RMS)."""
         if audio.ndim == 2:
             audio = audio[:, 0]  # Use left channel
 

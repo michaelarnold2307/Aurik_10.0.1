@@ -120,7 +120,7 @@ _last_swap_sout: int = 0
 
 
 def _swap_io_rate_mb_per_s(swap_obj: object) -> float:
-    """Estimate recent swap I/O activity in MB/s.
+    """Schätzt recent swap I/O activity in MB/s.
 
     High swap usage alone does not always mean active thrashing. This helper uses
     swap sin/sout counters to distinguish stale high swap occupancy from ongoing
@@ -153,14 +153,14 @@ def _swap_io_rate_mb_per_s(swap_obj: object) -> float:
 
 
 def _available_memory_mb() -> float:
-    """Return available system memory in MB, or inf if psutil is unavailable."""
+    """Gibt available system memory in MB, or inf if psutil is unavailable zurück."""
     if _psutil is None:
         return float("inf")
     return float(_psutil.virtual_memory().available / (1024 * 1024))
 
 
 def is_system_thrashing() -> bool:
-    """Detect swap-thrashing: high swap usage or combined swap+RAM pressure.
+    """Erkennt swap-thrashing: high swap usage or combined swap+RAM pressure.
 
         Conditions (any triggers):
             1. swap > 80 % AND active swap I/O > 8 MB/s (real thrashing)
@@ -270,7 +270,7 @@ def _allow_lightweight_under_pressure(model_name: str, size_gb: float) -> bool:
 
 
 def _should_block_heavy_ml_load(size_gb: float) -> bool:
-    """Return True when heavy model loads should be blocked preemptively.
+    """Gibt True when heavy model loads should be blocked preemptively zurück.
 
     Rationale:
     - Crash pattern: swap climbs from ~70 % to >85 % during a single heavy load wave
@@ -527,7 +527,7 @@ def release(model_name: str) -> None:
 
 
 def get_status() -> dict:
-    """Return current budget status (for logging/debug)."""
+    """Gibt current budget status (for logging/debug) zurück."""
     with _lock:
         return {
             "max_gb": ML_MAX_GB,
@@ -551,7 +551,7 @@ def set_budget(max_gb: float) -> None:
 
 
 def _reconcile_on_startup() -> None:
-    """Reset allocated budget to 0 on fresh process start (§3.9.5).
+    """Setzt zurück: allocated budget to 0 on fresh process start (§3.9.5).
 
     Rationale: All allocations from a previous process are gone after OS
     cleanup (SIGKILL / crash). Each module re-registers via try_allocate()
@@ -595,7 +595,7 @@ _proxy_instance = _MLMemoryBudgetProxy()
 
 
 def get_ml_memory_budget() -> _MLMemoryBudgetProxy:
-    """Return the global ML-memory-budget proxy (singleton-safe).
+    """Gibt the global ML-memory-budget proxy (singleton-safe) zurück.
 
     Provides an OO API (.try_allocate / .release) in addition to the
     module-level functions, so both usage styles work.

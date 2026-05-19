@@ -154,7 +154,7 @@ class BSRoFormerPlugin:
 
     @staticmethod
     def _shape_rank(shape: list[int | str | None] | tuple[int | str | None, ...] | None) -> int:
-        """Return declared ONNX rank from metadata shape."""
+        """Gibt declared ONNX rank from metadata shape zurück."""
         if shape is None:
             return 0
         return len(shape)
@@ -317,7 +317,7 @@ class BSRoFormerPlugin:
 
     @staticmethod
     def _mbr_mel_band_boundaries() -> np.ndarray:
-        """Compute mel-spaced subband bin boundaries for MelBandRoformer.
+        """Berechnet mel-spaced subband bin boundaries for MelBandRoformer.
 
         Returns integer array of shape (N_BANDS+1,) with STFT-bin indices
         delimiting each of the 60 mel-spaced subbands for n_fft=7914, sr=44100.

@@ -63,7 +63,7 @@ class CREPEPitchDetector:
         viterbi: bool = True,  # Use Viterbi smoothing
     ):
         """
-        Initialize CREPE pitch detector.
+        Initialisiert CREPE pitch detector.
 
         Args:
             sample_rate: Audio sample rate (Hz)
@@ -87,7 +87,7 @@ class CREPEPitchDetector:
 
     def detect(self, audio: np.ndarray, min_confidence: float = 0.85) -> PitchAnalysis:
         """
-        Detect pitch and analyze musical expression.
+        Erkennt pitch and analyze musical expression.
 
         Args:
             audio: Audio signal (mono, float32)
@@ -148,7 +148,7 @@ class CREPEPitchDetector:
 
     def _fallback_pitch_detection(self, audio: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Simple autocorrelation-based pitch detection as fallback.
+        Einfaches autocorrelation-based pitch detection as fallback.
         """
         frame_length = int(0.025 * self.sample_rate)  # 25ms frames
         hop_length = int(self.step_size / 1000 * self.sample_rate)
@@ -191,7 +191,7 @@ class CREPEPitchDetector:
         min_extent_cents: float = 20.0,  # Minimum vibrato depth
     ) -> bool:
         """
-        Detect vibrato (periodic pitch variation).
+        Erkennt vibrato (periodic pitch variation).
 
         Vibrato characteristics:
         - Rate: 4-8 Hz (typical)
@@ -244,7 +244,7 @@ class CREPEPitchDetector:
         min_slope_cents_per_sec: float = 200.0,  # Minimum slope for glissando
     ) -> bool:
         """
-        Detect glissando (continuous pitch slide).
+        Erkennt glissando (continuous pitch slide).
 
         Glissando characteristics:
         - Continuous pitch change
@@ -300,7 +300,7 @@ class CREPEPitchDetector:
         error_threshold_cents: float = 25.0,  # Minimum deviation to be considered error
     ) -> list[dict]:
         """
-        Detect pitch errors (deviations from expected pitch).
+        Erkennt pitch errors (deviations from expected pitch).
 
         This is conservative: only detects obvious errors that are unlikely
         to be intentional musical expression.
@@ -422,7 +422,7 @@ class CREPEPitchDetector:
         self, confidence: np.ndarray, vibrato_detected: bool, glissando_detected: bool, pitch_errors: list[dict]
     ) -> float:
         """
-        Compute epistemic confidence: How sure are we that we can distinguish
+        Berechnet epistemic confidence: How sure are we that we can distinguish.
         pitch errors from musical expression?
 
         Low confidence when:

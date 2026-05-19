@@ -86,7 +86,7 @@ class HarmonicCharacterAnalyzer:
 
     def analyze(self, audio: np.ndarray, sr: int, return_details: bool = True) -> HarmonicAnalysis:
         """
-        Analyze harmonic character
+        Analysiert den harmonischen Charakter.
 
         Parameters
         ----------
@@ -171,7 +171,7 @@ class HarmonicCharacterAnalyzer:
 
     def _analyze_harmonics(self, audio: np.ndarray, sr: int) -> tuple[float, float, float, dict[str, float]]:
         """
-        Analyze even vs. odd harmonics using FFT
+        Analysiert gerade vs. ungerade Obertöne mittels FFT.
 
         Returns
         -------
@@ -253,7 +253,7 @@ class HarmonicCharacterAnalyzer:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[bool, float, dict[str, float]]:
         """
-        Check if processing improves/maintains harmonic character
+        Prüft if processing improves/maintains harmonic character.
 
         Parameters
         ----------
@@ -366,7 +366,7 @@ class MusicalHarmonicEnhancer:
 
     def enhance(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Add musical even harmonics
+        Fügt hinzu: musical even harmonics.
 
         Parameters
         ----------
@@ -454,7 +454,7 @@ def enhance_harmonic_warmth(
     audio: np.ndarray, sr: int, saturation_gain: float = 0.1, mix: float = 0.15
 ) -> tuple[np.ndarray, dict]:
     """
-    Add musical warmth via even harmonic enhancement
+    Fügt hinzu: musical warmth via even harmonic enhancement.
 
     Parameters
     ----------

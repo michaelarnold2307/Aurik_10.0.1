@@ -58,7 +58,7 @@ class ArchiveManager:
 
     def __init__(self, base_archive_path: str = "/archive", models_path: str = "/models/versions"):
         """
-        Initialize Archive Manager.
+        Initialisiert Archive Manager.
 
         Args:
             base_archive_path: Root path for job archives
@@ -79,7 +79,7 @@ class ArchiveManager:
         logger.info("ArchiveManager initialized: base_path=%s", self.base_path)
 
     def _ensure_directory_structure(self) -> None:
-        """Create archive directory structure if it doesn't exist."""
+        """Erstellt archive directory structure if it doesn't exist."""
         for directory in [
             self.originals_dir,
             self.intermediates_dir,
@@ -142,7 +142,7 @@ class ArchiveManager:
         self, job_id: UUID, created_at: datetime, retention_days: int = 90
     ) -> dict[str, Any]:
         """
-        Create retention metadata for intermediate files.
+        Erstellt retention metadata for intermediate files.
 
         Args:
             job_id: Job UUID
@@ -358,14 +358,14 @@ class ArchiveManager:
 
     def get_archive_stats(self) -> dict[str, Any]:
         """
-        Get statistics about archive usage.
+        Gibt zurück: statistics about archive usage.
 
         Returns:
             Dictionary with archive statistics
         """
 
         def count_files_and_size(directory: Path) -> tuple[int, int]:
-            """Count files and total size in directory"""
+            """Zählt files and total size in directory."""
             file_count = 0
             total_size = 0
             for item in directory.rglob("*"):
@@ -443,7 +443,7 @@ class ArchiveManager:
 
     def list_archived_jobs(self, limit: int | None = None) -> list[dict]:
         """
-        List all archived jobs with basic metadata.
+        Listet auf: all archived jobs with basic metadata.
 
         Args:
             limit: Maximum number of jobs to return (None = all)

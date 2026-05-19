@@ -2,6 +2,11 @@
 
 > **Einzige normative Quelle** für alle Goal-Schwellwerte, Prioritäten, Adaptive Thresholds
 > und Applicability-Regeln. Alle anderen Dateien **referenzieren** hierher.
+>
+> **Zweck**: Die 14 Ziele operationalisieren §0 — sie messen, ob Aurik bei jeder Importdatei
+> unter Berücksichtigung der Quelldatei und der physikalischen Grenzen das maximal mögliche
+> Ergebnis erreicht. Ihre Schwellwerte sind so kalibriert, dass sie die qualitativ hochwertigsten
+> automatisierten Restaurierungsergebnisse für Musik mit Gesang weltweit ermöglichen.
 
 ## §1.0a [RELEASE_MUST] Universaler Zielraum (All-Import Contract)
 
@@ -31,7 +36,8 @@ aufgerufen via `MusicalGoalsChecker.measure_all(audio, sr)`.
 | **Authentizität** (`AuthentizitaetMetric`) | Voice Identity, spektraler Fingerabdruck | **1** | ≥ **0.88** | ≥ **0.90** |
 | **Tonales Zentrum** (`TonalCenterMetric`) | Chroma-Korrelation Original↔Restauriert, kein Key-Shift > 0 Cent | **2** | ≥ **0.95** | ≥ **0.96** |
 | **Timbre-Authentizität** (`TimbralAuthenticityMetric`) | MFCC-Pearson ≥ 0.95, Spectral-Centroid-Korrelation ≥ 0.93, Rolloff-Abw. ≤ 5 % | **2** | ≥ **0.87** | ≥ **0.89** |
-| **Artikulation** (`ArticulationMetric`) | Attack-Charakter-Erhalt (Staccato vs. Legato): Transient-Shape-Korrelation ≥ 0.90, Attack-Time-Abweichung ≤ 10 ms | **2** | ≥ **0.85** | ≥ **0.87** |
+| **Artikulation** (`ArticulationMetric`) | Attack-Charakter-Erhalt (Staccato vs. Legato): Transient-Shape-Korrelation ≥ 0.90, Attack-Time-Abweichung ≤ 10 ms | **2** | ≥ **0.85** | ≥ **0.87** |
+| **Transient-Energie** (`TransientEnergyMetric`) | Onset-Amplitude-Ratio: E(attack_restored, 5 ms) / E(attack_original, 5 ms) ≥ 0.85 per Onset (geometrisches Mittel aller erkannten Onsets via HPSS + librosa.onset_detect) | **2** | ≥ **0.83** | ≥ **0.85** |
 | **Emotionalität** (`EmotionalitaetMetric`) | Dynamik, Ausdruck, Modulationstiefe | **3** | ≥ **0.82** | ≥ **0.84** |
 | **Mikro-Dynamik** (`MicroDynamicsMetric`) | Momentane LUFS-Profil-Korrelation (400 ms-Fenster), Crest-Faktor-Erhalt ≤ 1.5 dB | **3** | ≥ **0.88** | ≥ **0.90** |
 | **Groove** (`GrooveMetric`) | Mikro-Timing, Swing, Event-Onset-Präzision (DTW ≤ 8 ms RMS) | **3** | ≥ **0.83** | ≥ **0.85** |
@@ -805,3 +811,255 @@ _is_noise_dominated = _max_onset_density > 6.0  # War: _gdur_s < 10.0 and ...
 ```
 
 **Invariante**: Wenn die restaurierte Seite 1.5× mehr Onsets als das Original hat UND der DTW-Score < 0.3, liegen Pipeline-Artefakte vor — IOI-Fallback (referenzfrei). Gilt für alle Song-Längen.
+
+---
+
+### §1.4.6 [RELEASE_MUST] TransientEnergyMetric — Algorithmus-Spezifikation (v9.12.0)
+
+> **Neue Sub-Spec für das in §1.2 neu eingeführte Goal `Transient-Energie`** (Prio 2).
+>
+> **Abgrenzung von `artikulation`**: `ArticulationMetric` misst **Form** (Transient-Shape-
+> Korrelation) und **Timing** (Attack-Time-Abweichung ≤ 10 ms). `TransientEnergyMetric`
+> misst ausschließlich die **Amplitude/Energie** des Transient-Impuls. Beide Metriken können
+> unabhängig fehlschlagen: Ein Transient kann zeitlich korrekt liegen (artikulation = 1.0)
+> aber signifikant leiser sein (transient_energie < 0.80) — typisch bei NR-Over-Processing
+> oder Noise-Gate-Anbiss.
+
+**Implementierung**: `backend/core/musical_goals/transient_energy_metric.py`
+
+**Singleton**: `get_transient_energy_metric()`
+
+```python
+def measure_transient_energy(
+    audio_input:    np.ndarray,   # Pre-Pipeline-Original (Reference)
+    audio_restored: np.ndarray,   # Post-Pipeline-Restauriert
+    sr: int,
+) -> Dict:
+    """
+    Misst Onset-Energie-Ratio über alle erkannten Transients.
+
+    Algorithmus:
+    1. HPSS (harmonic/percussive separation) auf BEIDEN Signalen
+    2. librosa.onset_detect() auf percussive Komponente des Originals
+    3. Für jeden Onset-Sample i:
+       - E_orig[i]     = RMS(audio_input[i : i + 5ms × sr])
+       - E_restored[i] = RMS(audio_restored[i : i + 5ms × sr])
+       - ratio[i]      = min(1.0, E_restored[i] / max(E_orig[i], 1e-9))
+    4. transient_energy_score = exp(mean(log(ratio[:])))  # geometrisches Mittel
+       (Verhindert Über-Gewichtung extremer Onsets)
+
+    Rückgabe:
+    {
+        "transient_energy_score": float,      # [0, 1] — Gesamt-Score
+        "per_onset_ratios":       List[float], # Ratio je Onset
+        "onset_positions_samples": List[int],  # Onset-Positionen
+        "n_onsets_detected":      int,
+        "material_floor":         float,       # materialadaptiver Boden
+    }
+    """
+    ...
+```
+
+**Material-adaptive Böden**:
+
+```python
+_TRANSIENT_ENERGY_FLOORS = {
+    "shellac":    0.72,   # Mechanische Aufnahme hat natürlichen Energie-Rolloff
+    "vinyl":      0.78,
+    "cd_digital": 0.83,
+    "mp3_low":    0.80,   # Pre-Echo raubt Transient-Energie — toleranterer Boden
+    "unknown":    0.80,
+}
+```
+
+**PHASE_GOAL_EXCLUSIONS** (ergänzt §1.4.3):
+
+```python
+# phase_18_noise_gate: Schneidet Note-Attacks → transient_energie sinkt strukturell
+PHASE_GOAL_EXCLUSIONS["phase_18_noise_gate"].add("transient_energie")
+_PHASE_SPECIFIC_DRIFT_EXCLUSIONS["phase_18_noise_gate"].add("transient_energie")
+
+# phase_26_transient_shaper: Formt Transienten absichtlich um → Messung sinnlos
+PHASE_GOAL_EXCLUSIONS["phase_26_transient_shaper"] = (
+    PHASE_GOAL_EXCLUSIONS.get("phase_26_transient_shaper", set()) | {"transient_energie"}
+)
+```
+
+**PMGG-Recovery-Trigger**:
+
+```python
+# Wenn transient_energy_score < floor UND letzte Phase ist SUBTRACTIVE:
+# → per-Onset Wet/Dry-Blend mit stärkstem Rollback für Onset-Regionen
+# (kein globales Rollback — nur Onset-Fenster 5 ms wiederherstellen)
+if transient_energy_score < material_floor AND last_phase.taxonomy == "SUBTRACTIVE":
+    audio = _blend_onset_regions(audio_dry, audio_wet,
+                                 onset_positions, sr,
+                                 window_ms=5.0)
+```
+
+**Goal-Recovery-Mapping** (ergänzt §09.11):
+
+```python
+_GOAL_TO_RECOVERY_PHASES_RESTORATION["TransientEnergie"] = [
+    "phase_26_transient_shaper",  # Kann Transient-Energie dosiert wiederherstellen
+    "phase_08_transient_shaper_hpss",  # HPSS-gestütztes Transient-Enhancement
+]
+```
+
+> **Kreuzreferenz**: §1.2 (Goal-Tabelle), §1.4.3 (phase_18 Exclusion), §09.11 (Recovery),
+> `ArticulationMetric` (Abgrenzung Form vs. Energie)
+
+---
+
+## §2.35d [RELEASE_MUST] VQI Sub-Komponenten-Dekomposition (v9.12.0)
+
+> **Konzeptuelle Kernlücke geschlossen**: VQI war ein Black-Box-Skalar. Für Weltklasse-Vocal-
+> Restaurierung muss jeder Aspekt der Vokalqualität einzeln messbar und angreifbar sein —
+> sonst kann kein Recovery-Pfad gezielt intervenieren.
+
+Die `compute_vqi()`-Funktion gibt ab v9.12.0 neben `vqi` drei normierte Sub-Scores zurück:
+
+```python
+# backend/core/musical_goals/vocal_quality_index.py
+result = compute_vqi(audio_orig, audio_restored, sr)
+# {
+#   "vqi":                     float,   # Haupt-Score (geometrisches Mittel der 3 Sub-Scores)
+#   "vibrato_precision":       float,   # Vibrato-Rate-Erhalt + Tiefen-Erhalt
+#   "consonant_clarity":       float,   # Konsonant-Energie-Ratio orig/restored
+#   "register_transition":     float,   # Passaggio-Naturalness (Brust→Kopf→Falsett)
+#   "singer_identity_cosine":  float,   # d-vector Cosine-Similarity
+#   "hnr_delta":               float,   # Harmonics-to-Noise-Ratio Differenz (positiv = besser)
+# }
+```
+
+### §2.35d-i VibratoPrecision — Messung und Schwellwerte
+
+```python
+# Messung via CREPE f₀-Spur:
+# 1. f₀-Kurve extrahieren (25 ms Hop)
+# 2. Vibrato-Segmente erkennen: Modulation 4–7 Hz, Tiefe ≥ 10 Cent
+# 3. Rate-Fehler: |rate_original - rate_restored| ≤ 0.3 Hz → Score 1.0
+#    Rate-Fehler > 1.0 Hz → Score 0.0 (lineare Interpolation dazwischen)
+# 4. Tiefen-Erhalt: |depth_original - depth_restored| / depth_original
+#    ≤ 0.15 → Score 1.0; > 0.50 → Score 0.0
+
+VibratoPrecision_floor:
+  Restoration: ≥ 0.80   (leichtes Vibrato-Glätting toleriert)
+  Studio 2026: ≥ 0.85   (Enhancement darf Vibrato nicht dämpfen)
+  Material-adaptiv: Shellac → ≥ 0.72 (Tonträgerbandbreite limitiert)
+```
+
+### §2.35d-ii ConsonantClarity — Messung und Schwellwerte
+
+```python
+# Messung via LyricsGuidedEnhancement (§2.36) Phonem-Alignment:
+# 1. Plosiv/Frikativ-Segmente isolieren ([p,t,k,b,d,g,s,ʃ,f,v,z])
+# 2. Energie-Ratio: E_restored(consonant) / E_original(consonant)
+#    ≥ 0.85 → Score 1.0; < 0.60 → Score 0.0
+# 3. Spectral-Centroid-Korrelation im Konsonant-Segment ≥ 0.85 → Score 1.0
+
+# Fallback wenn LGE nicht verfügbar:
+# Onset-Energie (20–250 Hz-gated attack transients) als Konsonant-Proxy
+
+ConsonantClarity_floor:
+  Restoration: ≥ 0.82
+  Studio 2026: ≥ 0.87
+```
+
+### §2.35d-iii RegisterTransition — Messung und Schwellwerte
+
+```python
+# Messung:
+# 1. Passaggio-Zonen erkennen: detect_vocal_register_temporal() → segments
+# 2. In jeder Übergangszone: f₀-Kontinuität prüfen (kein Pitch-Sprung > 50 Cent)
+# 3. Formant-F1-Kontinuität: kein F1-Sprung > 100 Hz in Übergangszone
+# 4. Energie-Kontinuität: kein RMS-Sprung > 3 dB in 100 ms um Übergang
+
+# Score: Anteil Übergänge ohne messbare Diskontinuität / Gesamtzahl Übergänge
+# 1.0 wenn keine Übergänge (Monochromatic Voice) — kein Penalty
+
+RegisterTransition_floor:
+  Restoration: ≥ 0.80
+  Studio 2026: ≥ 0.85
+```
+
+### §2.35d-iv VQI Gesamtformel
+
+```python
+vqi = (vibrato_precision ** 0.40) * (consonant_clarity ** 0.35) * (register_transition ** 0.25)
+# Gewichtung: Vibrato-Preservierung > Konsonant-Klarheit > Registerübergang
+# (empirisch aus Hörertests: Vibrato-Störungen werden als am störendsten empfunden)
+```
+
+---
+
+## §2.35e [RELEASE_MUST] Dynamikbogen-Schutz (EmotionalArc) als explizites Qualitätsziel (v9.12.0)
+
+> **Konzeptuelle Kernlücke geschlossen**: Der Dynamikbogen war nur Gewichtungsfaktor in der
+> HPI-Formel (§2.44), aber kein messbares Ziel mit Schwellwert und Recovery-Pfad.
+> Weltklasse bedeutet: Crescendo kommt dramatisch an, Klimax kippt nicht durch NR weg,
+> Pianissimo-Passagen bleiben zart — auch nach Restaurierung.
+
+### §2.35e-i Dynamikbogen-Messung
+
+```python
+# Implementiert in: backend/core/musical_goals/emotional_arc_metric.py
+# Singleton: get_emotional_arc_metric()
+
+def measure_emotional_arc_preservation(
+    audio_orig: np.ndarray,
+    audio_restored: np.ndarray,
+    sr: int,
+) -> Dict:
+    """
+    Misst Übereinstimmung der Lautstärke-Kurve (momentane LUFS, 400 ms-Fenster)
+    zwischen Original und Restaurierung.
+
+    Methode:
+    1. Loudness-Kurve extrahieren: L(t) = momentane LUFS (BS.1770-5, 400 ms)
+    2. Normieren: L_norm(t) = (L(t) - min(L)) / (max(L) - min(L))
+    3. Pearson-Korrelation r zwischen L_orig_norm und L_restored_norm
+    4. Arc-Preservation-Score = (r + 1.0) / 2.0  → [0, 1]
+
+    Gesonderte Prüfung:
+    5. Klimax-Schutz: Identifiziere Top-5% Lautstärke-Segmente (Klimax)
+       Klimax-Score: Energie in Klimax-Segmenten muss ≥ 0.90 × Original
+    6. Pianissimo-Schutz: Identifiziere Bottom-10% Segmente (Pianissimo)
+       Pianissimo-Score: Energie in Pianissimo-Segmenten ≤ 1.10 × Original
+       (kein Gain-Creep in leisen Passagen)
+
+    Returns: {
+      "arc_preservation": float,
+      "klimax_preservation": float,
+      "pianissimo_preservation": float,
+      "emotional_arc_score": float,  # Gesamtscore: min(arc, klimax, pianissimo)
+    }
+    """
+```
+
+### §2.35e-ii Schwellwerte
+
+| Dimension | Restoration | Studio 2026 |
+| --- | --- | --- |
+| `arc_preservation` (Gesamtkurve) | ≥ 0.88 | ≥ 0.90 |
+| `klimax_preservation` (Top-5%) | ≥ 0.92 | ≥ 0.93 |
+| `pianissimo_preservation` (Bottom-10%) | ≥ 0.85 | ≥ 0.88 |
+| `emotional_arc_score` (Gesamtziel) | ≥ 0.85 | ≥ 0.88 |
+
+**Recovery-Trigger**: `emotional_arc_score < 0.80` → `_recovery_cascade()` für die Phase
+mit dem größten negativen Beitrag zur Dynamikbogen-Änderung (via `phase_deltas`).
+
+### §2.35e-iii Integration in §2.44 HPI
+
+Der bisherige `emotional_arc_preservation`-Term in §2.44 HPI wird ersetzt durch
+`emotional_arc_metric.emotional_arc_score` aus dieser Spezifikation — nicht mehr
+als anonymer Faktor, sondern als gemessener und loggbarer Score.
+
+```python
+# Pflicht in UV3._holisticperceptualgate():
+_arc_result = get_emotional_arc_metric().measure_emotional_arc_preservation(
+    _pipeline_original_reference, _best_sig, sr
+)
+metadata["emotional_arc"] = _arc_result
+# Veto nur bei artifact_freedom (§0h). Arc-Score beeinflusst HPI-Wert.
+```

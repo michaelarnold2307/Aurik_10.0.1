@@ -11,7 +11,7 @@ Referenz:
 
 SOTA-Entscheidungsmatrix (§4.4 Aurik-Spec):
     Primär:   BigVGAN-v2 (ONNX, CPUExecutionProvider, Mel-Eingang 80 Bänder)
-    Fallback: HiFi-GAN v2 (2021) → PGHI-ISTFT (Rohrekonstruktion)
+    Fallback: Vocos → HiFi-GAN v2 (2021) → phase-coherent iSTFT
 
 Aktivierungsbedingungen (§4.5 Aurik-Spec):
     - Studio-2026-Modus: PQS-MOS < 4.3 nach Phase-Pipeline
@@ -21,6 +21,9 @@ Aktivierungsbedingungen (§4.5 Aurik-Spec):
 CPU-Policy: Ausschließlich CPUExecutionProvider, torch.set_num_threads(os.cpu_count()).
 Modell-Gewichte: ~/.aurik/models/bigvgan_v2/ (via ModelDownloader, Apache 2.0)
 """
+
+# Optional ML/DSP dependencies are imported lazily inside model and fallback paths.
+# pylint: disable=import-outside-toplevel
 
 from __future__ import annotations
 
@@ -60,7 +63,7 @@ class VocoderResult:
         audio:         Synthetisiertes Audio (float32, normalisiert [-1,1], 48000 Hz)
         sr:            Sample-Rate (48000 Hz)
         pqs_mos:       Geschätzter PQS-MOS des Ausgangs ∈ [1.0, 5.0]
-        model_used:    "bigvgan_v2" | "hifigan_v2_fallback" | "pghi_istft_fallback"
+        model_used:    "bigvgan_v2" | "vocos_fallback" | "hifigan_v2_fallback" | "phase_coherent_istft_fallback"
         confidence:    Konfidenz der Synthese ∈ [0, 1]
         mel_snr_db:    Mel-Spektrogramm SNR Original vs. Synthese [dB]
     """
@@ -74,6 +77,7 @@ class VocoderResult:
     metadata: dict[str, float] = field(default_factory=dict)
 
     def as_dict(self) -> dict:
+        """Gibt serializable vocoder metrics without embedding audio samples zurück."""
         return {
             "sr": self.sr,
             "pqs_mos": self.pqs_mos,
@@ -106,7 +110,8 @@ class BigVGANv2Plugin:
 
     Fallback-Kaskade:
         1. HiFi-GAN v2 (2021, kleineres Modell) — wenn BigVGAN nicht verfügbar
-        2. PGHI-ISTFT (Perraudin 2013) — wenn kein GAN-Modell verfügbar
+        2. Vocos/HiFi-GAN — wenn BigVGAN nicht verfügbar
+        3. Phase-coherent iSTFT — wenn kein neuronales Modell verfügbar
 
     CPU-Policy:
         torch.set_num_threads(os.cpu_count())  # alle CPU-Kerne nutzen
@@ -127,8 +132,7 @@ class BigVGANv2Plugin:
         self._session = None  # onnxruntime.InferenceSession
         self._torch_gen = None  # torch.nn.Module (Generator)
         self._model_loaded: bool = False
-        self._fallback_mode: str = "pghi_istft"
-        self._device: str = "cpu"  # set by _try_load_model
+        self._fallback_mode: str = "phase_coherent_istft"
         self._device: str = "cpu"  # set by _try_load_model
         self._try_load_model()
 
@@ -143,8 +147,8 @@ class BigVGANv2Plugin:
             from backend.core.ml_memory_budget import try_allocate
 
             if not try_allocate(self._BUDGET_NAME, size_gb=self._BUDGET_SIZE_GB):
-                logger.info("BigVGAN-v2: ML-Budget erschöpft — PGHI-ISTFT Fallback aktiv.")
-                self._fallback_mode = "pghi_istft"
+                logger.info("BigVGAN-v2: ML-Budget erschöpft — phase-coherent iSTFT fallback aktiv.")
+                self._fallback_mode = "phase_coherent_istft"
                 return
         except ImportError:
             pass  # budget module absent → attempt load anyway
@@ -161,13 +165,20 @@ class BigVGANv2Plugin:
                     _dev = _get_dev("BigVGAN")
                 except Exception:
                     _dev = "cpu"
-                self._torch_gen = torch.load(str(checkpoint), map_location=_dev)  # nosec B614 — lokales Modell aus models/
+                self._torch_gen = torch.load(
+                    str(checkpoint),
+                    map_location=_dev,
+                )  # nosec B614 — lokales Modell aus models/
                 self._torch_gen.eval()
                 self._torch_gen.to(_dev)
                 self._device = _dev
                 self._model_loaded = True
                 self._fallback_mode = "bigvgan_v2_torch"
-                logger.info("🟢 BigVGAN-v2: torch-Modell geladen (device=%s, %s)", _dev, checkpoint)
+                logger.info(
+                    "🟢 BigVGAN-v2: torch-Modell geladen (device=%s, %s)",
+                    _dev,
+                    checkpoint,
+                )
                 try:
                     from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
@@ -192,10 +203,10 @@ class BigVGANv2Plugin:
 
         # Kein Modell gefunden
         logger.info(
-            "BigVGAN-v2: Kein Modell in %s — PGHI-ISTFT Fallback aktiv",
+            "BigVGAN-v2: Kein Modell in %s — Vocos/HiFi-GAN/phase-coherent iSTFT fallback aktiv",
             self.MODELS_DIR,
         )
-        self._fallback_mode = "pghi_istft"
+        self._fallback_mode = "phase_coherent_istft"
 
     # ------------------------------------------------------------------
     # Öffentliche API
@@ -244,7 +255,7 @@ class BigVGANv2Plugin:
         if self._model_loaded:
             result_audio, model_name, conf = self._synthesize_bigvgan(audio_f32, sr)
         else:
-            result_audio, model_name, conf = self._synthesize_pghi_fallback(audio_f32, sr)
+            result_audio, model_name, conf = self._synthesize_fallback_chain(audio_f32, sr)
 
         pqs_mos = self._estimate_pqs_mos(audio_f32, result_audio, sr)
         mel_snr = self._mel_snr(audio_f32, result_audio, sr)
@@ -294,7 +305,7 @@ class BigVGANv2Plugin:
                 if outputs and outputs[0] is not None:
                     synthesized = outputs[0].flatten()
                 else:
-                    synthesized = np.zeros(int(mel.shape[1] * self._HOP_SIZE), dtype=np.float32)
+                    synthesized = np.zeros(int(mel.shape[1] * self.MEL_HOP), dtype=np.float32)
             elif self._torch_gen is not None:
                 # torch-Pfad
                 import torch
@@ -304,7 +315,10 @@ class BigVGANv2Plugin:
 
                     _pin_fn = _get_mdm().pin_tensor_rocm
                 except Exception:
-                    _pin_fn = lambda x: x
+
+                    def _pin_fn(array):
+                        return array
+
                 with torch.no_grad():
                     _mel_arr = mel[np.newaxis, :, :]
                     _pinned = _pin_fn(_mel_arr)
@@ -338,8 +352,8 @@ class BigVGANv2Plugin:
                     logger.debug("BigVGAN-v2 GPU→CPU move fehlgeschlagen: %s", _mv_exc)
                     self._device = "cpu"
                 return self._synthesize_bigvgan(audio, sr)
-            logger.warning("BigVGAN-v2 Inferenz-Fehler: %s — PGHI-Fallback", exc)
-            return self._synthesize_pghi_fallback(audio, sr)
+            logger.warning("BigVGAN-v2 Inferenz-Fehler: %s — fallback chain", exc)
+            return self._synthesize_fallback_chain(audio, sr)
         finally:
             if _plm is not None:
                 try:
@@ -348,37 +362,98 @@ class BigVGANv2Plugin:
                     pass
 
     # ------------------------------------------------------------------
-    # PGHI-ISTFT Fallback
+    # Fallback chain
     # ------------------------------------------------------------------
+
+    def _synthesize_fallback_chain(
+        self,
+        audio: np.ndarray,
+        sr: int,
+    ) -> tuple[np.ndarray, str, float]:
+        """Use Vocos/HiFi-GAN when loaded, then phase-coherent iSTFT."""
+        try:
+            from plugins.vocos_plugin import get_vocos_plugin  # pylint: disable=import-outside-toplevel
+
+            vocos = get_vocos_plugin()
+            if bool(getattr(vocos, "model_loaded", False)):
+                result = vocos.vocode(audio, sr, mode="studio2026")
+                out = self._coerce_like(getattr(result, "audio", audio), audio)
+                if self._usable_vocoder_output(audio, out):
+                    return out, "vocos_fallback", 0.86
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.debug("BigVGAN-v2: Vocos fallback unavailable: %s", exc)
+
+        try:
+            from plugins.hifigan_plugin import get_hifigan_plugin  # pylint: disable=import-outside-toplevel
+
+            hifigan = get_hifigan_plugin()
+            if getattr(hifigan, "_session", None) is not None:
+                out = self._coerce_like(hifigan.reconstruct(audio, sr), audio)
+                if self._usable_vocoder_output(audio, out):
+                    return out, "hifigan_v2_fallback", 0.74
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.debug("BigVGAN-v2: HiFi-GAN fallback unavailable: %s", exc)
+
+        return self._synthesize_phase_coherent_istft_fallback(audio, sr)
+
+    @staticmethod
+    def _coerce_like(candidate: np.ndarray, reference: np.ndarray) -> np.ndarray:
+        """Gibt finite clipped candidate with reference length zurück."""
+        out = np.asarray(candidate, dtype=np.float32).reshape(-1)
+        ref = np.asarray(reference, dtype=np.float32).reshape(-1)
+        if len(out) > len(ref):
+            out = out[: len(ref)]
+        elif len(out) < len(ref):
+            out = np.pad(out, (0, len(ref) - len(out)), mode="constant")
+        return np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)
+
+    @staticmethod
+    def _usable_vocoder_output(reference: np.ndarray, candidate: np.ndarray) -> bool:
+        """Reject silent or numerically broken fallback output."""
+        cand = np.asarray(candidate, dtype=np.float32)
+        if cand.size == 0 or not np.isfinite(cand).all():
+            return False
+        cand_rms = float(np.sqrt(np.mean(cand.astype(np.float64) ** 2) + 1e-12))
+        ref_rms = float(np.sqrt(np.mean(np.asarray(reference, dtype=np.float64) ** 2) + 1e-12))
+        return cand_rms > max(1e-5, ref_rms * 0.02)
+
+    def _synthesize_phase_coherent_istft_fallback(
+        self,
+        audio: np.ndarray,
+        sr: int,
+    ) -> tuple[np.ndarray, str, float]:
+        """Phase-coherent STFT/iSTFT fallback without neural model dependency."""
+        n_fft = max(64, int(round(sr * MEL_WIN_MS / 1000.0)))
+        hop = max(1, int(round(sr * MEL_HOP_MS / 1000.0)))
+        window = np.hanning(n_fft).astype(np.float32)
+
+        if len(audio) < n_fft:
+            return self._coerce_like(audio, audio), "phase_coherent_istft_fallback", 0.62
+
+        frames = []
+        for start in range(0, len(audio) - n_fft, hop):
+            frame = audio[start : start + n_fft] * window
+            spec = np.fft.rfft(frame, n=n_fft)
+            frames.append((start, spec))
+
+        result = np.zeros(len(audio), dtype=np.float32)
+        norm = np.zeros(len(audio), dtype=np.float32)
+        for start, spec in frames:
+            frame_out = np.fft.irfft(spec, n=n_fft).real.astype(np.float32) * window
+            result[start : start + n_fft] += frame_out
+            norm[start : start + n_fft] += window**2
+
+        norm = np.where(norm > 1e-8, norm, 1.0)
+        result = np.nan_to_num(result / norm, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.clip(result, -1.0, 1.0).astype(np.float32), "phase_coherent_istft_fallback", 0.62
 
     def _synthesize_pghi_fallback(
         self,
         audio: np.ndarray,
         sr: int,
     ) -> tuple[np.ndarray, str, float]:
-        """PGHI-ISTFT Fallback — phasenkonsistente Rekonstruktion ohne GAN.
-
-        Referenz: Perraudin et al. (2013) PGHI.
-        """
-        n_fft = self.MEL_WIN
-        hop = self.MEL_HOP
-        window = np.hanning(n_fft).astype(np.float32)
-
-        # OLA-STFT → Modifikation → ISTFT (Magnitude-Only, Griffin-Lim-ähnlich)
-        frames = []
-        for start in range(0, len(audio) - n_fft, hop):
-            frame = audio[start : start + n_fft] * window
-            spec = np.fft.rfft(frame, n=n_fft)
-            # Magnitude-only PGHI-Stub: Phasen aus Original behalten
-            frames.append((start, spec))
-
-        result = np.zeros(len(audio), dtype=np.float32)
-        for start, spec in frames:
-            frame_out = np.fft.irfft(spec, n=n_fft).real.astype(np.float32) * window
-            result[start : start + n_fft] += frame_out
-
-        result = np.nan_to_num(result, nan=0.0)
-        return np.clip(result, -1.0, 1.0).astype(np.float32), "pghi_istft_fallback", 0.55
+        """Backward-compatible alias for older tests/callsites."""
+        return self._synthesize_phase_coherent_istft_fallback(audio, sr)
 
     # ------------------------------------------------------------------
     # Mel-Spektrogramm-Extraktion
@@ -430,20 +505,23 @@ class BigVGANv2Plugin:
     @staticmethod
     def _estimate_pqs_mos(original: np.ndarray, synthesized: np.ndarray, sr: int) -> float:
         """Schätzt PQS-MOS via Spektral-Kohärenz ∈ [1.0, 5.0]."""
-        n = min(len(original), len(synthesized), 4096)
+        analysis_len = max(64, int(round(sr * 4096 / 48000.0)))
+        n = min(len(original), len(synthesized), analysis_len)
         if n < 64:
             return 3.5
-        orig_spec = np.abs(np.fft.rfft(original[:n], n=4096))
-        synth_spec = np.abs(np.fft.rfft(synthesized[:n], n=4096))
+        n_fft = 2 ** int(np.ceil(np.log2(n)))
+        orig_spec = np.abs(np.fft.rfft(original[:n], n=n_fft))
+        synth_spec = np.abs(np.fft.rfft(synthesized[:n], n=n_fft))
         total = np.sum(orig_spec) + 1e-12
-        cohérence = float(np.sum(np.minimum(orig_spec, synth_spec)) / total)
-        mos = 1.0 + 4.0 / (1.0 + np.exp(-8.0 * (cohérence - 0.5)))
+        coherence = float(np.sum(np.minimum(orig_spec, synth_spec)) / total)
+        mos = 1.0 + 4.0 / (1.0 + np.exp(-8.0 * (coherence - 0.5)))
         return float(np.clip(mos, 1.0, 5.0))
 
     @staticmethod
     def _mel_snr(original: np.ndarray, synthesized: np.ndarray, sr: int) -> float:
         """Mel-Spektrogramm SNR original vs. Synthese [dB] (höher = besser)."""
-        n = min(len(original), len(synthesized), 4096)
+        analysis_len = max(64, int(round(sr * 4096 / 48000.0)))
+        n = min(len(original), len(synthesized), analysis_len)
         if n < 64:
             return 0.0
         sig_e = float(np.mean(original[:n] ** 2))
@@ -460,7 +538,7 @@ class BigVGANv2Plugin:
 
 def get_bigvgan_v2() -> BigVGANv2Plugin:
     """Thread-sicherer Singleton-Accessor (Double-Checked Locking)."""
-    global _instance
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:

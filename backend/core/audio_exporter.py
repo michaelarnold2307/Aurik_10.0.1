@@ -1,5 +1,5 @@
 """
-Extended Audio Export Module for AURIK
+Erweitertes Audio-Export-Modul für AURIK.
 
 Supports multiple audio formats with metadata preservation:
 - WAV (PCM 16/24/32-bit)
@@ -16,6 +16,9 @@ Features:
 - Sample rate conversion
 - Bit depth conversion
 """
+
+# Optional export helpers are imported lazily inside non-critical paths.
+# pylint: disable=import-outside-toplevel
 
 from __future__ import annotations
 
@@ -67,6 +70,7 @@ def _apply_dither_16bit(audio: np.ndarray) -> np.ndarray:
     try:
         if _scipy_lfilter is None:
             raise ImportError("scipy.signal.lfilter unavailable")
+        scipy_lfilter = _scipy_lfilter
         # POW-r Type 3 noise-shaping FIR coefficients.
         # Dual-set: 48 kHz primary (Aurik processing SR), 44.1 kHz secondary.
         # 48 kHz coefficients re-optimised following Wannamaker, Lipshitz &
@@ -91,7 +95,7 @@ def _apply_dither_16bit(audio: np.ndarray) -> np.ndarray:
             # TPDF base noise: two uniform distributions → triangular ±1 LSB RMS
             tpdf = np.random.uniform(-LSB, LSB, n) + np.random.uniform(-LSB, LSB, n)
             # Apply POW-r Type 3 spectral shaping to the dither noise
-            shaped = _scipy_lfilter(_POWR3_FIR, [1.0], tpdf)
+            shaped = scipy_lfilter(_POWR3_FIR, [1.0], tpdf)
             # Add shaped dither, quantise, re-normalise to float
             dithered = ch.astype(np.float64) + shaped
             out = np.asarray((np.round(np.clip(dithered, -1.0, 1.0) * 32767.0) / 32767.0), dtype=np.float32)
@@ -120,7 +124,7 @@ _INSTANCE_HOLDER: dict[str, AudioExporter | None] = {"instance": None}
 
 
 def get_audio_exporter() -> AudioExporter:
-    """Get or create AudioExporter singleton.
+    """Gibt zurück: or create AudioExporter singleton.
 
     Returns:
         AudioExporter singleton instance
@@ -133,7 +137,7 @@ def get_audio_exporter() -> AudioExporter:
 
 
 class AudioExporter:
-    """Extended audio exporter with multi-format support."""
+    """Erweiterter Audio-Exporter mit Mehrformat-Unterstützung."""
 
     # Supported formats and their properties
     FORMATS = {
@@ -167,7 +171,10 @@ class AudioExporter:
         metadata: dict[str, str] | None = None,
         normalize: bool = False,
         reference_audio: np.ndarray | None = None,
+        playback_device: str | None = None,
+        translation_eq_strength: float = 0.35,
     ) -> Path:
+        # pylint: disable=too-many-positional-arguments
         """
         Export audio to file with specified format and options.
 
@@ -176,10 +183,15 @@ class AudioExporter:
             sr: Sample rate
             output_path: Output file path (extension determines format)
             bit_depth: Bit depth for PCM formats (16, 24, or 32)
-            quality: Quality for lossy formats ('low', 'medium', 'high', 'veryh igh')
+            quality: Quality for lossy formats ('low', 'medium', 'high', 'veryhigh')
             metadata: Optional metadata dict (title, artist, album, etc.)
             normalize: Normalize audio to -0.1dBFS before export
             reference_audio: Original import audio used for final quiet-edge clamp
+            playback_device: Optional target playback device ID for Translation-EQ
+                (e.g. 'consumer_headphone_avg', 'laptop_speaker', 'airpods').
+                None = kein Translation-EQ (Studio-Referenz bleibt unverändert).
+            translation_eq_strength: Stärke des Translation-EQ [0.0–1.0], Default 0.35
+                (sanfte Korrektur — kein Über-EQ).
 
         Returns:
             Path to exported file
@@ -293,12 +305,40 @@ class AudioExporter:
             except Exception as _quiet_edge_exc:
                 logger.debug("Final quiet-edge export clamp skipped: %s", _quiet_edge_exc)
 
+        # §PDV-1 Translation-EQ: sanfte Anpassung an Ziel-Abspielgerät.
+        # Non-blocking: Fehler überspringen Translation-EQ, Export läuft weiter.
+        if playback_device is not None and float(translation_eq_strength) > 0.0:
+            try:
+                from backend.core.playback_device_profile import (
+                    apply_translation_eq,
+                    get_cached_profile,
+                )
+
+                _pdv_profile = get_cached_profile(playback_device)
+                _pre_peak_pdv = float(np.percentile(np.abs(audio_export), 99.9))
+                audio_export = apply_translation_eq(
+                    audio_export, sr, _pdv_profile, strength=float(translation_eq_strength)
+                )
+                # §0h Guard: Translation-EQ darf keine Pegelexplosion erzeugen
+                _post_peak_pdv = float(np.percentile(np.abs(audio_export), 99.9))
+                if _post_peak_pdv > _pre_peak_pdv * 1.05:
+                    audio_export = audio_export * (_pre_peak_pdv / max(_post_peak_pdv, 1e-9))
+                logger.info(
+                    "§PDV-1 Translation-EQ: device=%s strength=%.2f pre_peak=%.3f post_peak=%.3f",
+                    _pdv_profile.device_id,
+                    translation_eq_strength,
+                    _pre_peak_pdv,
+                    _post_peak_pdv,
+                )
+            except Exception as _pdv_exc:
+                logger.debug("§PDV-1 Translation-EQ non-blocking: %s", _pdv_exc)
+
         # Ensure correct dtype for bit depth
         if not format_info["lossy"]:
             if bit_depth == 16:
                 # §DSP-Spezialregeln: POW-r Typ 3 Dithering — VERBOTEN: Truncation ohne Dithering
                 audio_export = _apply_dither_16bit(audio_export.astype(np.float32))
-            elif bit_depth == 24 or bit_depth == 32:
+            elif bit_depth in (24, 32):
                 # Keep as float32 for soundfile
                 audio_export = audio_export.astype(np.float32)
 
@@ -447,12 +487,12 @@ class AudioExporter:
         return results
 
     def get_format_info(self, extension: str) -> dict[str, Any]:
-        """Get format information for given extension."""
+        """Gibt zurück: format information for given extension."""
         ext = extension if extension.startswith(".") else f".{extension}"
         return self.FORMATS.get(ext, {})
 
     def list_supported_formats(self) -> list[str]:
-        """List all supported export formats."""
+        """Listet auf: all supported export formats."""
         return list(self.FORMATS.keys())
 
 
@@ -464,7 +504,10 @@ def export_audio(
     quality: str = "high",
     metadata: dict[str, str] | None = None,
     normalize: bool = False,
+    playback_device: str | None = None,
+    translation_eq_strength: float = 0.35,
 ) -> str:
+    # pylint: disable=too-many-positional-arguments
     """
     Convenience function for exporting audio.
 
@@ -476,13 +519,23 @@ def export_audio(
         quality: Quality for lossy formats
         metadata: Optional metadata
         normalize: Normalize before export
+        playback_device: Optional target device for Translation-EQ (§PDV-1)
+        translation_eq_strength: Translation-EQ strength [0.0–1.0]
 
     Returns:
         Path to exported file (as string)
     """
     exporter = AudioExporter()
     result_path = exporter.export(
-        audio, sr, Path(output_path), bit_depth=bit_depth, quality=quality, metadata=metadata, normalize=normalize
+        audio,
+        sr,
+        Path(output_path),
+        bit_depth=bit_depth,
+        quality=quality,
+        metadata=metadata,
+        normalize=normalize,
+        playback_device=playback_device,
+        translation_eq_strength=translation_eq_strength,
     )
     return str(result_path)
 

@@ -98,7 +98,7 @@ class ModuleParallelProcessor:
 
     def __init__(self, max_workers: int = 4, enable_parallel: bool = True):
         """
-        Initialize module parallel processor.
+        Initialisiert module parallel processor.
 
         Args:
             max_workers: Maximum number of parallel workers
@@ -115,7 +115,7 @@ class ModuleParallelProcessor:
 
     def process(self, audio: np.ndarray, sr: int, modules: list[ModuleInfo]) -> np.ndarray:
         """
-        Process audio through module pipeline with parallel execution.
+        Verarbeitet audio through module pipeline with parallel execution.
 
         Args:
             audio: Input audio data
@@ -184,7 +184,7 @@ class ModuleParallelProcessor:
 
     def _build_execution_phases(self, modules: list[ModuleInfo]) -> list[list[ModuleInfo]]:
         """
-        Build execution phases based on module dependencies.
+        Erstellt execution phases based on module dependencies.
 
         Modules in the same phase can be executed in parallel.
         Phases are executed sequentially.
@@ -235,7 +235,7 @@ class ModuleParallelProcessor:
         self, audio: np.ndarray, sr: int, modules: list[ModuleInfo], module_outputs: dict[str, np.ndarray]
     ) -> list[ModuleResult]:
         """
-        Process modules in parallel.
+        Verarbeitet modules in parallel.
 
         Args:
             audio: Current audio state
@@ -270,7 +270,7 @@ class ModuleParallelProcessor:
         self, audio: np.ndarray, sr: int, modules: list[ModuleInfo], module_outputs: dict[str, np.ndarray]
     ) -> list[ModuleResult]:
         """
-        Process modules sequentially.
+        Verarbeitet modules sequentially.
 
         Args:
             audio: Current audio state
@@ -296,7 +296,7 @@ class ModuleParallelProcessor:
         self, audio: np.ndarray, sr: int, module: ModuleInfo, module_outputs: dict[str, np.ndarray]
     ) -> ModuleResult:
         """
-        Process a single module.
+        Verarbeitet a single module.
 
         Args:
             audio: Current audio state
@@ -349,7 +349,7 @@ class ModuleParallelProcessor:
 
     def get_stats(self) -> dict[str, Any]:
         """
-        Get processing statistics.
+        Gibt zurück: processing statistics.
 
         Returns:
             Dictionary with processing stats
@@ -362,7 +362,7 @@ class ModuleParallelProcessor:
         }
 
     def reset_stats(self):
-        """Reset processing statistics."""
+        """Setzt zurück: processing statistics."""
         self._processing_stats = {
             "total_processed": 0,
             "parallel_phases": 0,
@@ -373,7 +373,7 @@ class ModuleParallelProcessor:
 
 class PipelineBuilder:
     """
-    Helper class to build module pipelines with proper dependencies.
+    Hilfsfunktion: class to build module pipelines with proper dependencies.
 
     Simplifies the creation of complex processing pipelines by providing
     a fluent interface for adding modules and defining dependencies.
@@ -386,7 +386,7 @@ class PipelineBuilder:
     """
 
     def __init__(self):
-        """Initialize pipeline builder."""
+        """Initialisiert pipeline builder."""
         self._modules = []
 
     def add_module(
@@ -398,7 +398,7 @@ class PipelineBuilder:
         metadata: dict[str, Any] | None = None,
     ) -> "PipelineBuilder":
         """
-        Add a module to the pipeline.
+        Fügt hinzu: a module to the pipeline.
 
         Args:
             name: Module name (unique)
@@ -434,7 +434,7 @@ class PipelineBuilder:
 
     def build(self) -> list[ModuleInfo]:
         """
-        Build the module list.
+        Erstellt the module list.
 
         Returns:
             List of modules ready for processing
@@ -452,5 +452,5 @@ class PipelineBuilder:
         return self._modules.copy()
 
     def clear(self):
-        """Clear all modules."""
+        """Löscht all modules."""
         self._modules = []

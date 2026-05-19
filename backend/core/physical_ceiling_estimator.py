@@ -143,7 +143,7 @@ class PhysicalCeilingEstimator:
         )
 
     def ceiling_avg(self) -> float:
-        """Return arithmetic mean of all Musical-Goal ceiling values from last estimate() call.
+        """Gibt arithmetic mean of all Musical-Goal ceiling values from last estimate() call zurück.
 
         Spec §2.33: ceiling_avg() is used to derive headroom tiers 1.00 / 0.93 / 0.85 / 0.75.
         Returns 0.85 if estimate() has not been called yet (conservative fallback).

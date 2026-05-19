@@ -59,7 +59,7 @@ def apply(
     min_igd_score: float = _MIN_IGD_SCORE,
     n_segments: int = _N_SEGMENTS,
 ) -> np.ndarray:
-    """Main entry point for Phase 60."""
+    """Haupt-entry point for Phase 60."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -263,6 +263,7 @@ class InnerGrooveDistortionRepairPhase(PhaseInterface):
             )
         except Exception as _pm60_exc:
             import logging as _log60m
+
             _log60m.getLogger(__name__).debug("Phase60 masking clamp non-blocking: %s", _pm60_exc)
 
         # §2.46f Natural-Performance-Artifacts-Guard — THD-Reduktion darf Atemgeräusche
@@ -291,6 +292,7 @@ class InnerGrooveDistortionRepairPhase(PhaseInterface):
                     result_audio[_npa_m60] = audio[_npa_m60]
         except Exception as _npa60_exc:
             import logging as _log60n
+
             _log60n.getLogger(__name__).debug("§2.46f phase_60 NPA-Guard (non-blocking): %s", _npa60_exc)
 
         _rms_out_db = _rms_dbfs_gated(result_audio)

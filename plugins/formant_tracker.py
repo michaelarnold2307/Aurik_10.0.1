@@ -192,7 +192,7 @@ class FormantTracker:
         audio: npt.NDArray[np.float32],
         sample_rate: int,
     ) -> FormantTrackingResult:
-        """Track formants F1–F4 in vocal audio.
+        """Verfolgt formants F1–F4 in vocal audio.
 
         Primary path: DeepFormants CNN (ONNX, Krug et al. 2022) when model available.
         Fallback: LPC Burg order-16 (§4.4 DSP standard).
@@ -437,7 +437,7 @@ class FormantTracker:
         frame: npt.NDArray[np.float32],
         order: int,
     ) -> npt.NDArray[np.float64] | None:
-        """Compute LPC coefficients via Burg's method.
+        """Berechnet LPC coefficients via Burg's method.
 
         Returns coefficient array [1, a_1, …, a_p] or None on failure.
         """
@@ -494,7 +494,7 @@ class FormantTracker:
         lpc: npt.NDArray[np.float64],
         sr: int,
     ) -> FormantFrame | None:
-        """Convert LPC polynomial to F1–F4 formant estimates."""
+        """Konvertiert LPC polynomial to F1–F4 formant estimates."""
         try:
             roots = np.roots(lpc)
         except (np.linalg.LinAlgError, ValueError):

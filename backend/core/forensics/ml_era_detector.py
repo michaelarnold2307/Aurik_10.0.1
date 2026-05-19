@@ -81,7 +81,7 @@ class EraFeatures:
     release_time_ms: float = 0.0
 
     def to_array(self) -> np.ndarray:
-        """Convert to numpy array for ML."""
+        """Konvertiert to numpy array for ML."""
         return np.array(
             [
                 self.bandwidth_low_hz,
@@ -122,7 +122,7 @@ class EraDetectionResult:
 
 class EraFeatureExtractor:
     """
-    Extracts era-specific features from audio.
+    Extrahiert era-specific features from audio.
     Combines general AudioFeatures with era-specific analysis.
     """
 
@@ -133,7 +133,7 @@ class EraFeatureExtractor:
         self, audio: np.ndarray, sr: int, verbose: bool = False
     ) -> tuple[AudioFeatures, EraFeatures]:
         """
-        Extract both general and era-specific features.
+        Extrahiert both general and era-specific features.
 
         Args:
             audio: Audio signal (mono or stereo)
@@ -265,7 +265,7 @@ class MLEraDetector:
 
     def __init__(self, n_estimators: int = 200, max_depth: int = 20, random_state: int = 42) -> None:
         """
-        Initialize ML Era Detector.
+        Initialisiert ML Era Detector.
 
         Args:
             n_estimators: Number of trees in Random Forest
@@ -454,7 +454,7 @@ class MLEraDetector:
 
     def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, verbose: bool = True) -> dict[str, Any]:
         """
-        Evaluate model on test set.
+        Bewertet model on test set.
 
         Args:
             X_test: Test feature matrix
@@ -532,7 +532,7 @@ class MLEraDetector:
         return metrics
 
     def save(self, filepath: Path) -> None:
-        """Save trained model to disk."""
+        """Speichert trained model to disk."""
         if not self.is_trained:
             raise RuntimeError("Model not trained. Cannot save.")
 
@@ -554,7 +554,7 @@ class MLEraDetector:
         logger.info("✅ Era Detector model saved to %s", filepath)
 
     def load(self, filepath: Path) -> None:
-        """Load trained model from disk."""
+        """Lädt trained model from disk."""
         with open(filepath, "rb") as f:
             model_data = pickle.load(f)  # nosec B301 — lokale, SHA256-verifizierte Modelldatei
 

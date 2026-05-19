@@ -181,11 +181,11 @@ class ComprehensiveMetricsResult:
     aurik_quality_score: float  # 0-100 (Weltklasse: >90)
 
     def to_dict(self) -> dict:
-        """Convert to dictionary."""
+        """Konvertiert to dictionary."""
         return asdict(self)
 
     def passes_aurik_standards(self) -> bool:
-        """Check if metrics meet Aurik Weltklasse standards."""
+        """Prüft if metrics meet Aurik Weltklasse standards."""
         return self.aurik_quality_score >= 90.0
 
 
@@ -390,7 +390,7 @@ class ComprehensiveMetricsCalculator:
         return float(np.clip(sinad, 0, 100))
 
     def _compute_loudness(self, audio: np.ndarray) -> tuple[float, float, float]:
-        """Compute LUFS, LRA, True Peak."""
+        """Berechnet LUFS, LRA, True Peak."""
         if PROFESSIONAL_METERS_AVAILABLE and audio.ndim == 2:
             try:
                 # LUFSMeter expects (channels, samples); many callers provide (samples, channels).
@@ -442,7 +442,7 @@ class ComprehensiveMetricsCalculator:
     def _safe_stft(
         self, audio: np.ndarray, nperseg: int = 2048, noverlap: int | None = None
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Compute STFT with adaptive parameters for short clips.
+        """Berechnet STFT with adaptive parameters for short clips.
 
         This avoids SciPy warnings/exceptions when input is shorter than fixed STFT windows.
         """
@@ -537,7 +537,7 @@ class ComprehensiveMetricsCalculator:
         return float(np.clip(tonality, 0, 1))
 
     def _detect_pre_echo(self, audio: np.ndarray) -> float:
-        """Detect pre-echo artifacts (score: 1=clean, 0=artifacts)."""
+        """Erkennt pre-echo artifacts (score: 1=clean, 0=artifacts)."""
         # Detect transients
         envelope = np.abs(_hilbert(audio))
         transients, _ = signal.find_peaks(envelope, height=np.percentile(envelope, 90))
@@ -559,7 +559,7 @@ class ComprehensiveMetricsCalculator:
         return float(np.clip(score, 0, 1))
 
     def _detect_clicks(self, audio: np.ndarray) -> int:
-        """Count detected clicks/pops."""
+        """Zählt detected clicks/pops."""
         # High-pass filter to isolate clicks
         sos = signal.butter(4, 2000, "high", fs=self.sr, output="sos")
         filtered: np.ndarray = np.asarray(signal.sosfilt(sos, audio))  # type: ignore[arg-type]
@@ -723,7 +723,7 @@ class ComprehensiveMetricsCalculator:
         return float(np.clip(stability, 0, 1))
 
     def _detect_key(self, audio: np.ndarray) -> tuple[str, float]:
-        """Detect musical key (simplified Krumhansl-Schmuckler)."""
+        """Erkennt musical key (simplified Krumhansl-Schmuckler)."""
         # Chromagram
         chroma = self._compute_chromagram(audio)
 
@@ -758,7 +758,7 @@ class ComprehensiveMetricsCalculator:
         return best_key, confidence
 
     def _compute_chromagram(self, audio: np.ndarray) -> np.ndarray:
-        """Compute 12-bin chromagram (pitch class profile)."""
+        """Berechnet 12-bin chromagram (pitch class profile)."""
         spectrum = np.abs(_rfft(audio))
         freqs = fft.rfftfreq(len(audio), 1 / self.sr)
 
@@ -805,7 +805,7 @@ class ComprehensiveMetricsCalculator:
         return float(np.clip(consonance, 0, 1))
 
     def _detect_tempo(self, audio: np.ndarray) -> tuple[float, float]:
-        """Detect tempo (BPM) and stability."""
+        """Erkennt tempo (BPM) and stability."""
         if len(audio) < 16:
             return 120.0, 0.5
 
@@ -1010,7 +1010,7 @@ class ComprehensiveMetricsCalculator:
         return float(np.clip(balance, 0, 1))
 
     def _compute_timbral_qualities(self, audio: np.ndarray) -> tuple[float, float, float]:
-        """Compute warmth, brightness, fullness."""
+        """Berechnet warmth, brightness, fullness."""
         spectrum = np.abs(_rfft(audio))
         freqs = fft.rfftfreq(len(audio), 1 / self.sr)
 
@@ -1082,7 +1082,7 @@ class ComprehensiveMetricsCalculator:
 
     def _compute_valence_arousal(self, audio: np.ndarray) -> tuple[float, float]:
         """
-        Compute valence and arousal (Russell's Circumplex Model).
+        Berechnet valence and arousal (Russell's Circumplex Model).
 
         Valence: Pleasantness (consonance, harmonic content)
         Arousal: Energy/Activation (tempo, loudness, spectral flux)
@@ -1271,7 +1271,7 @@ class ComprehensiveMetricsCalculator:
     # ========================================
 
     def _compute_technical_quality(self, psycho: PsychoAcousticMetrics) -> float:
-        """Compute overall technical quality score (0-1)."""
+        """Berechnet overall technical quality score (0-1)."""
         scores = []
 
         # Signal quality
@@ -1292,7 +1292,7 @@ class ComprehensiveMetricsCalculator:
         return float(np.mean(scores))
 
     def _compute_musical_quality(self, musical: MusicalMetrics) -> float:
-        """Compute overall musical quality score (0-1)."""
+        """Berechnet overall musical quality score (0-1)."""
         scores = []
 
         # Harmonic content
@@ -1313,7 +1313,7 @@ class ComprehensiveMetricsCalculator:
         return float(np.mean(scores))
 
     def _compute_emotional_impact(self, emotional: EmotionalMetrics) -> float:
-        """Compute overall emotional impact score (0-1)."""
+        """Berechnet overall emotional impact score (0-1)."""
         scores = []
 
         # Energy and intensity
@@ -1345,7 +1345,7 @@ class ComprehensiveMetricsCalculator:
 
 
 def generate_metrics_report(result: ComprehensiveMetricsResult) -> str:
-    """Generate human-readable metrics report."""
+    """Generiert human-readable metrics report."""
     report = []
     report.append("=" * 70)
     report.append("AURIK 9.0 COMPREHENSIVE AUDIO QUALITY METRICS")

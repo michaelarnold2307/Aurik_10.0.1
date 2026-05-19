@@ -49,7 +49,7 @@ class QualityMetrics:
     dynamic_range_db: float  # Dynamic range (peak - RMS)
 
     def to_dict(self) -> dict[str, float]:
-        """Convert to dictionary for JSON serialization."""
+        """Konvertiert to dictionary for JSON serialization."""
         return asdict(self)
 
 
@@ -85,7 +85,7 @@ class ProcessingStep:
         return self.metrics_after.thd_percent - self.metrics_before.thd_percent
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
+        """Konvertiert to dictionary for JSON serialization."""
         return {
             "step_id": self.step_id,
             "phase": self.phase,
@@ -144,7 +144,7 @@ class ProcessingTrace:
         return sum(s.processing_time_ms for s in self.steps) / len(self.steps)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
+        """Konvertiert to dictionary for JSON serialization."""
         return {
             "session_id": self.session_id,
             "input_file": self.input_file,
@@ -164,7 +164,7 @@ class ProcessingTrace:
         }
 
     def to_markdown(self) -> str:
-        """Generate Markdown summary report."""
+        """Generiert Markdown summary report."""
         md = "# Processing Trace Report\n\n"
         md += f"**Session ID:** {self.session_id}\n"
         md += f"**Input File:** {self.input_file}\n"
@@ -210,7 +210,7 @@ class ProcessingLogger:
         save_markdown: bool = True,
     ):
         """
-        Initialize ProcessingLogger.
+        Initialisiert ProcessingLogger.
 
         Args:
             session_id: Unique session identifier (auto-generated if None)
@@ -250,7 +250,7 @@ class ProcessingLogger:
         parameters: dict[str, Any] | None = None,
     ):
         """
-        Log a single processing step.
+        Protokolliert a single processing step.
 
         Args:
             step_id: Unique step identifier
@@ -321,7 +321,7 @@ class ProcessingLogger:
         return self.trace
 
     def _compute_metrics(self, audio: np.ndarray, sr: int) -> QualityMetrics:
-        """Compute quality metrics for audio."""
+        """Berechnet quality metrics for audio."""
         # Ensure mono for consistent metrics
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0)
@@ -368,7 +368,7 @@ class ProcessingLogger:
         )
 
     def _estimate_snr(self, audio: np.ndarray, sr: int) -> float:
-        """Estimate Signal-to-Noise Ratio."""
+        """Schätzt Signal-to-Noise Ratio."""
         # Simple estimation: high-pass filtered energy / full signal energy
         from scipy import signal
 
@@ -388,7 +388,7 @@ class ProcessingLogger:
         return float(np.clip(snr, -20, 80))  # Reasonable bounds
 
     def _estimate_thd(self, audio: np.ndarray, sr: int) -> float:
-        """Estimate Total Harmonic Distortion."""
+        """Schätzt Total Harmonic Distortion."""
         # Simple estimation using spectral analysis
         # Real THD would require fundamental frequency detection
 
@@ -422,7 +422,7 @@ def create_logger(
     session_id: str | None = None, output_dir: Path | None = None, save_audio: bool = True, compress: bool = False
 ) -> ProcessingLogger:
     """
-    Create a ProcessingLogger instance.
+    Erstellt a ProcessingLogger instance.
 
     Args:
         session_id: Optional session ID

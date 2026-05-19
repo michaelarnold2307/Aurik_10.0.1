@@ -107,7 +107,7 @@ class MLRefinementThread(QThread):
 
     @staticmethod
     def should_start(job: DeferredRefinementJob) -> bool:
-        """Return True when all Stufe-2 start conditions are met (§2.38)."""
+        """Gibt True when all Stufe-2 start conditions are met (§2.38) zurück."""
         if not job.deferred_phase_ids:
             return False
         try:
@@ -126,7 +126,7 @@ class MLRefinementThread(QThread):
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        """Execute KMV Stufe-2: full ML pass → conditional atomic overwrite."""
+        """Führt aus: KMV Stufe-2: full ML pass → conditional atomic overwrite."""
         job = self.job
         output_path = job.output_path
 
@@ -300,7 +300,7 @@ class MLRefinementThread(QThread):
 
 
 def _extract_quality(result: object) -> float | None:
-    """Extract quality_estimate from AurikErgebnis or RestorationResult."""
+    """Extrahiert quality_estimate from AurikErgebnis or RestorationResult."""
     if result is None:
         return None
     # AurikErgebnis
@@ -318,7 +318,7 @@ def _extract_quality(result: object) -> float | None:
 
 
 def _extract_audio(result: object) -> np.ndarray | None:
-    """Extract audio array from AurikErgebnis or RestorationResult."""
+    """Extrahiert audio array from AurikErgebnis or RestorationResult."""
     if result is None:
         return None
     # Direct .audio attribute
@@ -335,7 +335,7 @@ def _extract_audio(result: object) -> np.ndarray | None:
 
 
 def _write_audio(audio: np.ndarray, sr: int, path: str) -> None:
-    """Write audio to file — tries soundfile, falls back to scipy.io.wavfile."""
+    """Schreibt audio to file — tries soundfile, falls back to scipy.io.wavfile."""
     try:
         import soundfile as sf
 

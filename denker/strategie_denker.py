@@ -202,7 +202,7 @@ class StrategieDenker:
 
     @staticmethod
     def _parse_mode(mode_str: str) -> Any:
-        """Convert mode string to QualityMode enum value if available."""
+        """Konvertiert mode string to QualityMode enum value if available."""
         try:
             from backend.core.unified_restorer_v3 import QualityMode
 
@@ -439,7 +439,7 @@ class StrategieDenker:
 
 
 def _safe_duration(audio: np.ndarray, sr: int) -> float:
-    """Return audio duration in seconds, guarded for NaN and edge cases.
+    """Gibt audio duration in seconds, guarded for NaN and edge cases zurück.
 
     Handles both (channels, samples) and (samples, channels) layouts by
     using the same heuristic as AurikDenker.denke(): axis with size <= 2
@@ -460,7 +460,7 @@ def _safe_duration(audio: np.ndarray, sr: int) -> float:
 
 
 def _adaptive_chunk(audio_dur_s: float, defect_severity: float = 0.0) -> float:
-    """Determine recommended chunk size per §7.6 (defect-density adaptive).
+    """Bestimmt recommended chunk size per §7.6 (defect-density adaptive).
 
     Spec §7.6:
         defect_severity >= 0.6  →  5 s   (fine-grained, high-defect material)

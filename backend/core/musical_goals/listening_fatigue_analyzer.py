@@ -105,7 +105,7 @@ class ListeningFatigueAnalyzer:
 
     def analyze(self, audio: np.ndarray, sr: int, return_details: bool = True) -> FatigueAnalysis:
         """
-        Analyze listening fatigue factors
+        Analysiert Hörmüdigkeitsfaktoren.
 
         Parameters
         ----------
@@ -480,7 +480,7 @@ class ListeningFatigueAnalyzer:
         self, original: np.ndarray, processed: np.ndarray, sr: int
     ) -> tuple[bool, float, dict[str, float]]:
         """
-        Check if processed audio is less fatiguing than original
+        Prüft if processed audio is less fatiguing than original.
 
         Parameters
         ----------
@@ -564,7 +564,7 @@ def analyze_listening_fatigue(audio: np.ndarray, sr: int, threshold: float = 0.9
 
 def check_fatigue_preservation(original: np.ndarray, processed: np.ndarray, sr: int) -> tuple[bool, float, dict]:
     """
-    Check if processing maintains/improves listening comfort
+    Prüft if processing maintains/improves listening comfort.
 
     Parameters
     ----------

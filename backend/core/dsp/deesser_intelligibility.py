@@ -11,7 +11,7 @@ from backend.core.consonant_enhancement import measure_fricative_snr
 
 @dataclass(frozen=True)
 class DeEsserIntelligibilityReport:
-    """Lightweight intelligibility summary for de-essing decisions."""
+    """Leichtgewichtiges intelligibility summary for de-essing decisions."""
 
     presence_ratio: float
     articulation_ratio: float

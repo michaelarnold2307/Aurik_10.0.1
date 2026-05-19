@@ -147,7 +147,7 @@ def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
 
 
 def _pad_to_stride(audio: np.ndarray) -> tuple[np.ndarray, int]:
-    """Pad last axis to multiple of _STRIDE. Returns (padded, original_length)."""
+    """Füllt auf: last axis to multiple of _STRIDE. Returns (padded, original_length)."""
     orig_len = audio.shape[-1]
     remainder = orig_len % _STRIDE
     if remainder:
@@ -177,7 +177,7 @@ def _make_session_options():
 
 
 def _estimate_snr(original: np.ndarray, reconstructed: np.ndarray) -> float:
-    """Estimate SNR in dB between original and reconstructed signals."""
+    """Schätzt SNR in dB between original and reconstructed signals."""
     # Align lengths
     n = min(original.shape[-1], reconstructed.shape[-1])
     orig = original.flat[:n]
@@ -217,7 +217,7 @@ class DacPlugin:
         self._try_load()
 
     def _try_load(self) -> None:
-        """Load encoder and decoder ONNX sessions."""
+        """Lädt encoder and decoder ONNX sessions."""
         if not _ENCODER_PATH.exists():
             logger.info(
                 "DAC encoder ONNX not found (%s) — plugin unavailable. "
@@ -329,7 +329,7 @@ class DacPlugin:
         return self._dec_loaded and self._dec_session is not None
 
     def encode(self, audio: np.ndarray, sr: int) -> DacEncodeResult:
-        """Encode audio to discrete DAC codes.
+        """Kodiert audio to discrete DAC codes.
 
         Args:
             audio: float32 PCM, shape [T], [C, T], or [B, C, T].
@@ -407,7 +407,7 @@ class DacPlugin:
                     pass
 
     def decode(self, codes: np.ndarray) -> DacDecodeResult:
-        """Decode discrete DAC codes back to audio.
+        """Dekodiert discrete DAC codes back to audio.
 
         Args:
             codes: int64, shape [B, 9, T_frames] or [9, T_frames].
@@ -469,7 +469,7 @@ class DacPlugin:
                     pass
 
     def round_trip(self, audio: np.ndarray, sr: int) -> DacRoundTripResult:
-        """Encode then decode (round-trip). Used for conditioning context and quality checks.
+        """Kodiert then decode (round-trip). Used for conditioning context and quality checks.
 
         The reconstructed audio provides a perceptually quantized version of
         the input, useful as a conditioning signal for diffusion-based inpainting.
@@ -527,7 +527,7 @@ class DacPlugin:
 
 
 def get_dac_plugin() -> DacPlugin:
-    """Return thread-safe singleton DacPlugin instance (double-checked locking)."""
+    """Gibt thread-safe singleton DacPlugin instance (double-checked locking) zurück."""
     global _instance
     if _instance is None:
         with _lock:
@@ -542,15 +542,15 @@ def get_dac_plugin() -> DacPlugin:
 
 
 def dac_encode(audio: np.ndarray, sr: int = _AURIK_SR) -> DacEncodeResult:
-    """Encode audio to discrete DAC codes. Convenience wrapper."""
+    """Kodiert audio to discrete DAC codes. Convenience wrapper."""
     return get_dac_plugin().encode(audio, sr)
 
 
 def dac_decode(codes: np.ndarray) -> DacDecodeResult:
-    """Decode DAC codes to audio. Convenience wrapper."""
+    """Dekodiert DAC codes to audio. Convenience wrapper."""
     return get_dac_plugin().decode(codes)
 
 
 def dac_round_trip(audio: np.ndarray, sr: int = _AURIK_SR) -> DacRoundTripResult:
-    """Encode + decode round-trip for conditioning/quality check. Convenience wrapper."""
+    """Kodiert + decode round-trip for conditioning/quality check. Convenience wrapper."""
     return get_dac_plugin().round_trip(audio, sr)

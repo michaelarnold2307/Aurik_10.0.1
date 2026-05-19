@@ -57,7 +57,7 @@ class TestImportAndConstants:
         assert CausalDefectReasoner is not None
 
     def test_02_causes_list_length(self):
-        assert len(CAUSES) == 49
+        assert len(CAUSES) == 53  # v9.12.2: +clicks, +dolby_nr_mismatch, +tape_head_level_dip (was 50 after v9.12.1)
 
     def test_03_causes_contains_soft_saturation(self):
         assert "soft_saturation" in CAUSES
@@ -391,3 +391,53 @@ class TestConvenienceFunctions:
     def test_53_non_finite_scores_are_sanitized(self):
         plan = reason_about_defects({"clicks": float("nan"), "dropouts": float("inf")}, material="tape")
         assert isinstance(plan, RestorationPlan)
+
+    def test_54_wax_cylinder_phase07_excluded_from_plan(self):
+        """§6.2b §ERA 1900-1925: phase_07_harmonic_restoration darf für wax_cylinder nie vorgeschlagen werden."""
+        from backend.core.causal_defect_reasoner import _MATERIAL_PHASE_EXCLUSIONS
+
+        assert "wax_cylinder" in _MATERIAL_PHASE_EXCLUSIONS, (
+            "§6.2b: _MATERIAL_PHASE_EXCLUSIONS hat keinen Eintrag für 'wax_cylinder'"
+        )
+        assert "phase_07_harmonic_restoration" in _MATERIAL_PHASE_EXCLUSIONS["wax_cylinder"], (
+            "§ERA 1900-1925: phase_07_harmonic_restoration fehlt in wax_cylinder-Exclusions"
+        )
+
+    def test_55_wax_cylinder_reason_does_not_contain_phase07(self):
+        """§ERA 1900-1925: reason() mit bandwidth_loss auf wax_cylinder darf phase_07 nicht zurückgeben."""
+        plan = reason_about_defects({"bandwidth_loss": 0.8, "high_freq_noise": 0.3}, material="wax_cylinder")
+        assert "phase_07_harmonic_restoration" not in plan.recommended_phases, (
+            f"§ERA 1900-1925: phase_07 in Plan für wax_cylinder — VERBOTEN. Gefundene Phasen: {plan.recommended_phases}"
+        )
+
+    def test_56_wire_recording_phase07_excluded(self):
+        """Drahtaufnahmen: phase_07 VERBOTEN (keine verlässliche harmonische Basis)."""
+        plan = reason_about_defects({"bandwidth_loss": 0.7}, material="wire_recording")
+        assert "phase_07_harmonic_restoration" not in plan.recommended_phases, (
+            f"phase_07 in Plan für wire_recording — VERBOTEN. Phasen: {plan.recommended_phases}"
+        )
+
+    def test_57_phase06_wax_cylinder_bw_ceiling_is_3000hz(self):
+        """§ERA 1900-1925: phase_06 BW-Ceiling für wax_cylinder muss 3000 Hz sein (Spec: max 3 kHz)."""
+        import pathlib
+
+        src = (
+            pathlib.Path(__file__).parents[2] / "backend" / "core" / "phases" / "phase_06_frequency_restoration.py"
+        ).read_text()
+        # Prüfe dass kein 5000-Eintrag für wax_cylinder mehr vorhanden ist
+        assert '"wax_cylinder": 5000.0' not in src, (
+            "§ERA 1900-1925: phase_06 BW-Ceiling für wax_cylinder ist noch 5000 Hz — muss 3000 Hz sein"
+        )
+        assert '"wax_cylinder": 3000.0' in src, "§ERA 1900-1925: phase_06 BW-Ceiling für wax_cylinder muss 3000 Hz sein"
+
+    def test_58_phase07_wax_cylinder_bw_ceiling_is_3000hz(self):
+        """§ERA 1900-1925: phase_07 BW-Ceiling für wax_cylinder muss 3000 Hz sein (Sekundär-Guard)."""
+        import pathlib
+
+        src = (
+            pathlib.Path(__file__).parents[2] / "backend" / "core" / "phases" / "phase_07_harmonic_restoration.py"
+        ).read_text()
+        assert '"wax_cylinder": 5000.0' not in src, (
+            "§ERA 1900-1925: phase_07 BW-Ceiling für wax_cylinder ist noch 5000 Hz — muss 3000 Hz sein"
+        )
+        assert '"wax_cylinder": 3000.0' in src, "§ERA 1900-1925: phase_07 BW-Ceiling für wax_cylinder muss 3000 Hz sein"

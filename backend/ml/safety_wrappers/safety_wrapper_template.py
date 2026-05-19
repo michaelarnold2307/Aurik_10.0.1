@@ -45,7 +45,7 @@ class ConfidenceLevel(Enum):
 
 
 class ProcessingDecision(Enum):
-    """Processing decision outcomes"""
+    """Verarbeitet decision outcomes."""
 
     PROCEED = "proceed"
     ABORT = "abort"
@@ -138,7 +138,7 @@ class BaseSafetyWrapper:
         quality_threshold: float = 0.6,
     ):
         """
-        Initialize safety wrapper.
+        Initialisiert safety wrapper.
 
         Args:
             module_name: Name of wrapped DSP module
@@ -172,7 +172,7 @@ class BaseSafetyWrapper:
 
     def process(self, audio: np.ndarray, sr: int, **processing_params) -> tuple[np.ndarray, ProcessingReport]:
         """
-        Main processing entry point with full HIPS compliance.
+        Haupt-processing entry point with full HIPS compliance.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -298,7 +298,7 @@ class BaseSafetyWrapper:
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
         """
-        Validate pre-conditions before processing.
+        Validiert pre-conditions before processing.
 
         MUST IMPLEMENT in subclass with module-specific checks:
         - Input validity (NaN, Inf, clipping)
@@ -361,7 +361,7 @@ class BaseSafetyWrapper:
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
         """
-        Validate post-conditions after processing.
+        Validiert post-conditions after processing.
 
         MUST IMPLEMENT in subclass with module-specific checks:
         - No new artifacts introduced
@@ -396,7 +396,7 @@ class BaseSafetyWrapper:
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
         """
-        Compute overall quality score for processed audio.
+        Berechnet overall quality score for processed audio.
 
         MUST IMPLEMENT in subclass with module-specific metrics:
         - Artifact scores
@@ -422,7 +422,7 @@ class BaseSafetyWrapper:
 
     def _log_audit_trail(self, report: ProcessingReport) -> None:
         """
-        Log audit trail to disk.
+        Protokolliert audit trail to disk.
 
         MUST IMPLEMENT in subclass with module-specific format.
         Default: JSONL format
@@ -458,7 +458,7 @@ class BaseSafetyWrapper:
         self, audio: np.ndarray, sr: int, post_check: PostCheckResult, **params
     ) -> np.ndarray:
         """
-        Apply fallback processing if post-check fails.
+        Wendet an: fallback processing if post-check fails.
 
         Optional override for module-specific fallback.
         Default: Return original audio
@@ -487,7 +487,7 @@ class BaseSafetyWrapper:
     # =========================================================================
 
     def _extract_input_metadata(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
-        """Extract metadata from input audio."""
+        """Extrahiert metadata from input audio."""
         return {
             "shape": audio.shape,
             "dtype": str(audio.dtype),
@@ -501,7 +501,7 @@ class BaseSafetyWrapper:
         }
 
     def _extract_output_metadata(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
-        """Extract metadata from output audio."""
+        """Extrahiert metadata from output audio."""
         return self._extract_input_metadata(audio, sr)
 
     def _create_abort_response(
@@ -512,7 +512,7 @@ class BaseSafetyWrapper:
         start_time: datetime,
         reason: str = "Pre-check failed",
     ) -> tuple[np.ndarray, ProcessingReport]:
-        """Create response when processing is aborted."""
+        """Erstellt response when processing is aborted."""
         processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000
 
         report = ProcessingReport(
@@ -537,7 +537,7 @@ class BaseSafetyWrapper:
         return original_audio, report
 
     def get_statistics(self) -> dict[str, Any]:
-        """Get wrapper statistics."""
+        """Gibt zurück: wrapper statistics."""
         stats = {
             "total_calls": self.total_calls,
             "successful_calls": self.successful_calls,
@@ -597,7 +597,7 @@ def validate_audio_basic(audio: np.ndarray) -> tuple[bool, list[str]]:
 
 
 def compute_spectral_centroid(audio: np.ndarray, sr: int) -> float:
-    """Compute spectral centroid (brightness measure)."""
+    """Berechnet spectral centroid (brightness measure)."""
     # Simple FFT-based centroid
     spectrum = np.abs(np.fft.rfft(audio))
     freqs = np.fft.rfftfreq(len(audio), 1 / sr)
@@ -606,7 +606,7 @@ def compute_spectral_centroid(audio: np.ndarray, sr: int) -> float:
 
 
 def compute_energy_ratio(original: np.ndarray, processed: np.ndarray) -> float:
-    """Compute energy preservation ratio."""
+    """Berechnet energy preservation ratio."""
     energy_orig = np.sum(original**2)
     energy_proc = np.sum(processed**2)
 
@@ -617,7 +617,7 @@ def compute_energy_ratio(original: np.ndarray, processed: np.ndarray) -> float:
 
 
 def compute_correlation(original: np.ndarray, processed: np.ndarray) -> float:
-    """Compute correlation between original and processed."""
+    """Berechnet correlation between original and processed."""
     # Ensure same length
     min_len = min(len(original), len(processed))
     orig = original[:min_len]

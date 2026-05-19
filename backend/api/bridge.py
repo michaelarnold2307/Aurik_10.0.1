@@ -61,6 +61,9 @@ Verwendung im Frontend::
 Referenz: Spec 08 §11 Softwareschichten-Architektur.
 """
 
+# pylint: disable=import-outside-toplevel
+# cspell:disable
+
 from __future__ import annotations
 
 import hashlib
@@ -221,7 +224,7 @@ class _AnalysisLruCache:
                 self._path_to_key = {p: k for p, k in self._path_to_key.items() if k != evicted_key}
 
     def get(self, key: str) -> Any | None:
-        """Return cached value for *key* and promote to MRU, or ``None``."""
+        """Gibt cached value for *key* and promote to MRU, or ``None`` zurück."""
         with self._lock:
             if key not in self._data:
                 return None
@@ -229,7 +232,7 @@ class _AnalysisLruCache:
             return self._data[key]
 
     def get_by_path(self, path: str) -> Any | None:
-        """Return cached value using a path alias, or ``None``."""
+        """Gibt cached value using a path alias, or ``None`` zurück."""
         with self._lock:
             key = self._path_to_key.get(path)
             if key is None or key not in self._data:
@@ -238,7 +241,7 @@ class _AnalysisLruCache:
             return self._data[key]
 
     def remove(self, key_or_path: str) -> None:
-        """Remove entry by content-key or path alias."""
+        """Entfernt entry by content-key or path alias."""
         with self._lock:
             # Try as path alias first
             key = self._path_to_key.pop(key_or_path, key_or_path)
@@ -247,7 +250,7 @@ class _AnalysisLruCache:
             self._path_to_key = {p: k for p, k in self._path_to_key.items() if k != key}
 
     def clear(self) -> None:
-        """Remove all entries."""
+        """Entfernt all entries."""
         with self._lock:
             self._data.clear()
             self._path_to_key.clear()
@@ -258,7 +261,7 @@ class _AnalysisLruCache:
 
 
 def content_cache_key(file_path: str) -> str:
-    """Compute a content-addressed cache key for *file_path*.
+    """Berechnet a content-addressed cache key for *file_path*.
 
     Uses SHA-256 over the first and last ``_CONTENT_CHUNK`` bytes of the
     file (fast, file-size independent).  Falls back to the path itself when
@@ -332,7 +335,7 @@ def cache_defect_result(file_path: str, result: object) -> None:
 
 
 def get_cached_defect_result(file_path: str) -> object | None:
-    """Return a cached DefectScanner result or ``None``."""
+    """Gibt a cached DefectScanner result or ``None`` zurück."""
     key = content_cache_key(file_path)
     result = _defect_lru.get(key)
     if result is None:
@@ -341,7 +344,7 @@ def get_cached_defect_result(file_path: str) -> object | None:
 
 
 def clear_defect_cache(file_path: str | None = None) -> None:
-    """Remove one entry (by path) or all entries from the defect cache."""
+    """Entfernt one entry (by path) or all entries from the defect cache."""
     if file_path is not None:
         key = content_cache_key(file_path)
         _defect_lru.remove(key)
@@ -373,7 +376,7 @@ def cache_era_genre_result(
 
 
 def get_cached_era_genre_result(file_path: str) -> dict[str, object] | None:
-    """Return cached Era/Genre results or ``None``.
+    """Gibt cached Era/Genre results or ``None`` zurück.
 
     Returns:
         dict with keys ``era_result`` and ``genre_result``, or ``None``.
@@ -386,7 +389,7 @@ def get_cached_era_genre_result(file_path: str) -> dict[str, object] | None:
 
 
 def clear_era_genre_cache(file_path: str | None = None) -> None:
-    """Remove one entry (by path) or all entries from the Era/Genre cache."""
+    """Entfernt one entry (by path) or all entries from the Era/Genre cache."""
     if file_path is not None:
         key = content_cache_key(file_path)
         _era_genre_lru.remove(key)
@@ -407,7 +410,7 @@ def cache_medium_result(file_path: str, result: object) -> None:
 
 
 def get_cached_medium_result(file_path: str) -> object | None:
-    """Return a cached MediumClassifier result or ``None``."""
+    """Gibt a cached MediumClassifier result or ``None`` zurück."""
     key = content_cache_key(file_path)
     result = _medium_lru.get(key)
     if result is None:
@@ -440,7 +443,7 @@ def cache_restorability_result(file_path: str, result: object) -> None:
 
 
 def get_cached_restorability_result(file_path: str) -> object | None:
-    """Return a cached RestorabilityEstimator result or ``None``."""
+    """Gibt a cached RestorabilityEstimator result or ``None`` zurück."""
     key = content_cache_key(file_path)
     result = _restorability_lru.get(key)
     if result is None:
@@ -603,7 +606,7 @@ def get_restorability_estimator_class() -> type:
 
 
 def get_medium_detector():
-    """Return the ``MediumDetector`` singleton (lazy import, §6.1 / §11.1).
+    """Gibt the ``MediumDetector`` singleton (lazy import, §6.1 / §11.1) zurück.
 
     Canonical forensic carrier-chain detector.  Preferred over
     ``get_medium_classifier_fn()`` in all production paths because
@@ -715,7 +718,7 @@ def resolve_pipeline_fail_reason(
 
 
 def get_experience_insights(result: Any) -> dict[str, Any]:
-    """Extract normalized joy/fatigue/recommendation insights from a result object.
+    """Extrahiert normalized joy/fatigue/recommendation insights from a result object.
 
     Frontend-safe helper for AurikErgebnis/RestorationResult-like objects.
     Returns stable keys even if metadata is partially missing.
@@ -974,9 +977,7 @@ def record_goal_feedback(
         )
         get_feedback_store().record_feedback(entry)
     except Exception as _fb_exc:
-        import logging as _logging
-
-        _logging.getLogger(__name__).warning("§C10 record_goal_feedback failed: %s", _fb_exc)
+        logger.warning("§C10 record_goal_feedback failed: %s", _fb_exc)
 
 
 def get_stem_remix_balancer_fn():
@@ -1180,7 +1181,7 @@ def export_guard(audio: np.ndarray) -> np.ndarray:
 
 
 def validate_export_quality(result: object) -> tuple[bool, list[str]]:
-    """Validate export quality based on RestorationResult fields.
+    """Validiert export quality based on RestorationResult fields.
 
     Delegates to :func:`backend.exporter.validate_export_quality`.
     Returns ``(passed, warnings)`` — *passed* is False only on catastrophic
@@ -1196,7 +1197,7 @@ def validate_export_quality(result: object) -> tuple[bool, list[str]]:
 
 
 def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
-    """Build export_workflow-compatible quality_gate payload from a result object.
+    """Erstellt export_workflow-compatible quality_gate payload from a result object.
 
     This is the canonical bridge-side payload builder used by frontend/CLI callers
     before calling ``backend.core.export_workflow.export_audio``.
@@ -1210,6 +1211,11 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
     primary_fail_reason = str(meta.get("fail_reason", "") or "")
     degradation_status = str(meta.get("degradation_status", "") or "")
     fqf = meta.get("fallback_quality_floor") if isinstance(meta.get("fallback_quality_floor"), dict) else {}
+
+    _degradation_norm = degradation_status.strip().lower()
+    _has_structured_gate_issue = _degradation_norm not in {"", "ok"} or bool(fail_reasons)
+    if _has_structured_gate_issue:
+        passed = False
 
     fqf_triggered = bool(fqf.get("triggered", False))
     fqf_status = str(fqf.get("status", "")).strip().lower()
@@ -1251,7 +1257,7 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
 
 
 def build_export_metadata(result: object, **tag_kwargs):
-    """Build an ExportMetadata instance populated with fidelity-guard telemetry.
+    """Erstellt an ExportMetadata instance populated with fidelity-guard telemetry.
 
     Reads ``spectral_tilt_guard`` and ``hf_hallucination_guard`` from
     ``result.metadata`` (both written by UV3) and stores them under the
@@ -1274,7 +1280,7 @@ def build_export_metadata(result: object, **tag_kwargs):
         meta = {}
 
     def _safe_guard(raw: object) -> dict | None:
-        """Return guard dict with only JSON-safe numeric / list values, or None."""
+        """Gibt guard dict with only JSON-safe numeric / list values, or None zurück."""
         if not isinstance(raw, dict):
             return None
         out: dict = {}
@@ -1353,7 +1359,7 @@ def warmup_models_background() -> None:
             fn = getattr(m, _accessor, None)
             if fn is not None:
                 fn()
-                logger.debug("bridge: %s.%s vorgeladen", _mod.split(".")[-1], _accessor)
+                logger.debug("bridge: %s.%s vorgeladen", _mod.rsplit(".", maxsplit=1)[-1], _accessor)
         except Exception as _e:
             logger.debug("bridge: %s.%s übersprungen: %s", _mod, _accessor, _e)
     logger.info("bridge: warmup complete")
@@ -1379,7 +1385,7 @@ def warmup_rocm() -> None:
 
 
 def get_deferred_refinement_job_class() -> type:
-    """Return ``DeferredRefinementJob`` class (lazy import, §2.38 KMV Stufe 2).
+    """Gibt ``DeferredRefinementJob`` class (lazy import, §2.38 KMV Stufe 2) zurück.
 
     Used by MLRefinementThread and ModernMainWindow._maybe_start_kmv_refinement.
     """
@@ -1389,14 +1395,14 @@ def get_deferred_refinement_job_class() -> type:
 
 
 def get_save_checkpoint_fn():
-    """Return ``save_checkpoint`` from recovery_checkpoint (lazy, §2.39)."""
+    """Gibt ``save_checkpoint`` from recovery_checkpoint (lazy, §2.39) zurück."""
     from backend.core.recovery_checkpoint import save_checkpoint  # type: ignore[import]
 
     return save_checkpoint
 
 
 def get_recovery_checkpoint_fns() -> tuple:
-    """Return ``(cleanup_expired_checkpoints, find_pending_checkpoints, delete_checkpoint)`` (lazy, §2.39).
+    """Gibt ``(cleanup_expired_checkpoints, find_pending_checkpoints, delete_checkpoint)`` (lazy, §2.39) zurück.
 
     Usage::
 
@@ -1415,7 +1421,7 @@ def get_recovery_checkpoint_fns() -> tuple:
 
 
 def get_era_medium_constraint() -> tuple:
-    """Return ``(MEDIUM_DECADE_FLOOR, constrain_era_to_medium)`` from era_classifier (lazy import).
+    """Gibt ``(MEDIUM_DECADE_FLOOR, constrain_era_to_medium)`` from era_classifier (lazy import) zurück.
 
     Usage::
 
@@ -1432,7 +1438,7 @@ def get_era_medium_constraint() -> tuple:
 
 
 def get_ml_memory_budget():
-    """Return the ``MlMemoryBudget`` singleton (lazy import, §2.37).
+    """Gibt the ``MlMemoryBudget`` singleton (lazy import, §2.37) zurück.
 
     Usage::
 
@@ -1448,7 +1454,7 @@ def get_ml_memory_budget():
 
 
 def get_model_downloader():
-    """Return the ``ModelDownloader`` singleton (lazy import, §9.x / §13.x).
+    """Gibt the ``ModelDownloader`` singleton (lazy import, §9.x / §13.x) zurück.
 
     Used in Aurik startup self-heal to repair missing/corrupted bundled models.
     """
@@ -1464,7 +1470,7 @@ def get_model_downloader():
 
 
 def get_german_schlager_classifier_fn():
-    """Return the ``GermanSchlagerClassifier`` singleton (lazy, §2.1 Pipeline).
+    """Gibt the ``GermanSchlagerClassifier`` singleton (lazy, §2.1 Pipeline) zurück.
 
     Alias wrapper around ``backend.core.german_schlager_classifier``.
     The canonical implementation lives in ``backend.core.genre_classifier``.
@@ -1483,7 +1489,7 @@ def get_german_schlager_classifier_fn():
 
 
 def get_harmonic_preservation_guard():
-    """Return the ``HarmonicPreservationGuard`` singleton (lazy).
+    """Gibt the ``HarmonicPreservationGuard`` singleton (lazy) zurück.
 
     Guards all spectral modifications against harmonic structure loss.
     Run ``guard.protect(audio, sr, fn)`` to wrap any processing function.
@@ -1501,7 +1507,7 @@ def get_harmonic_preservation_guard():
 
 
 def get_feedback_chain():
-    """Return the ``FeedbackChain`` singleton (lazy, §2.33 FeedbackChain-Rollback).
+    """Gibt the ``FeedbackChain`` singleton (lazy, §2.33 FeedbackChain-Rollback) zurück.
 
     Manages iterative quality improvement with automatic rollback when
     MOS degrades by more than 0.05 (§8.2 universelle Garantien).
@@ -1517,7 +1523,7 @@ def get_feedback_chain():
 
 
 def get_physical_ceiling_estimator():
-    """Return the ``PhysicalCeilingEstimator`` singleton (lazy).
+    """Gibt the ``PhysicalCeilingEstimator`` singleton (lazy) zurück.
 
     Estimates the theoretical maximum quality achievable for a given
     audio fragment given its material degradation state.
@@ -1537,7 +1543,7 @@ def get_physical_ceiling_estimator():
 
 
 def get_per_phase_musical_goals_gate():
-    """Return the ``PerPhaseMusicalGoalsGate`` singleton (lazy, §2.29 PMGG).
+    """Gibt the ``PerPhaseMusicalGoalsGate`` singleton (lazy, §2.29 PMGG) zurück.
 
     The PMGG wraps individual restoration phases and enforces Musical Goal
     regression checks with retry cascades (P1 4 retries, P2 4 retries,
@@ -1554,7 +1560,7 @@ def get_per_phase_musical_goals_gate():
 
 
 def get_emotional_arc_metric():
-    """Return the ``EmotionalArcPreservationMetric`` singleton (lazy, §8.3).
+    """Gibt the ``EmotionalArcPreservationMetric`` singleton (lazy, §8.3) zurück.
 
     Measures arousal/valence arc preservation (Pearson ≥ 0.85/0.80).
     Also exposes ``correct_emotional_arc(original, restored, sr)`` post-MDEM
@@ -1574,7 +1580,7 @@ def get_emotional_arc_metric():
 
 
 def get_micro_dynamics_em():
-    """Return the ``MicroDynamicsEnvelopeMorphing`` singleton (lazy, §8.3 MDEM).
+    """Gibt the ``MicroDynamicsEnvelopeMorphing`` singleton (lazy, §8.3 MDEM) zurück.
 
     400 ms LUFS-profile morphing: recovers micro-dynamic envelope lost
     during denoising/dereverb.  Gain limit: 4 dB (Restoration), 6 dB (Studio).
@@ -1590,7 +1596,7 @@ def get_micro_dynamics_em():
 
 
 def get_goal_applicability_filter():
-    """Return the ``GoalApplicabilityFilter`` singleton (lazy, §2.31).
+    """Gibt the ``GoalApplicabilityFilter`` singleton (lazy, §2.31) zurück.
 
     Determines which of the 14 Musical Goals are applicable for a given
     audio fragment based on material, era, and content type.
@@ -1608,7 +1614,7 @@ def get_goal_applicability_filter():
 
 
 def get_perceptual_salience_estimator():
-    """Return the ``PerceptualSalienceEstimator`` singleton (lazy, §9.1c).
+    """Gibt the ``PerceptualSalienceEstimator`` singleton (lazy, §9.1c) zurück.
 
     Annotates each detected defect with a psychoacoustic salience score
     (Fastl & Zwicker 2007).  Masked defects receive reduced severity:
@@ -1632,7 +1638,7 @@ def get_perceptual_salience_estimator():
 
 
 def get_startup_check_result():
-    """Return startup model-availability check result via bridge (never import core directly).
+    """Gibt startup model-availability check result via bridge (never import core directly) zurück.
 
     Returns the result object from ``backend.core.startup_model_check.get_startup_check_result``
     or ``None`` on import failure.
@@ -1662,7 +1668,7 @@ def run_pre_analysis(
     scan_progress_callback=None,
     store_in_bridge_cache: bool = True,
 ):
-    """Bridge re-export of backend.core.pre_analysis.run_pre_analysis.
+    """Verbindet re-export of backend.core.pre_analysis.run_pre_analysis.
 
     See that module for full documentation.
 
@@ -1698,7 +1704,7 @@ except Exception:  # pragma: no cover
 
 
 def get_load_audio_fn():
-    """Return ``load_audio_file`` from backend.file_import (lazy).
+    """Gibt ``load_audio_file`` from backend.file_import (lazy) zurück.
 
     The returned function signature::
 
@@ -1723,7 +1729,7 @@ def run_album_consistency_pass(
     sr: int = 48000,
     dry_run: bool = False,
 ) -> dict:
-    """Run post-batch album consistency pass over a list of restored output files.
+    """Führt aus: post-batch album consistency pass over a list of restored output files.
 
     Aligns LUFS (±3 dB max) and spectral tilt (±1.5 dB/oct max shelf) across
     songs that deviate more than the outlier threshold from the album median.
@@ -1790,7 +1796,5 @@ def get_pipeline_trace(result: Any) -> dict[str, Any]:
         summary["goal_fails"] = get_goal_fails(result)
         return summary
     except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).debug("get_pipeline_trace fehlgeschlagen: %s", e)
+        logger.debug("get_pipeline_trace fehlgeschlagen: %s", e)
         return {"error": str(e)}

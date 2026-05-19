@@ -1624,5 +1624,145 @@ class TestVQIShortSegmentFallback:
         assert result["vqi_tier"] == "world_class", f"Short-segment vqi_tier='{result['vqi_tier']}' statt 'world_class'"
 
 
+class TestVQIGenreWeights:
+    """Tests for genre-adaptive VQI weight selection (§0p, Mai 2026)."""
+
+    def test_all_genre_weight_rows_sum_to_one(self):
+        """Alle Genre-Gewichtstupel in _VQI_GENRE_WEIGHTS müssen exakt 1.0 ergeben."""
+        import gc
+
+        import backend.core.musical_goals.vocal_quality_index as vqi_mod
+
+        for genre, weights in vqi_mod._VQI_GENRE_WEIGHTS.items():
+            total = sum(weights)
+            assert abs(total - 1.0) < 1e-9, f"Genre '{genre}': Gewichte summieren zu {total:.10f}, nicht 1.0"
+        gc.collect(0)
+
+    def test_default_weights_sum_to_one(self):
+        """Default-Konstanten _W_* müssen weiterhin exakt 1.0 ergeben (normative Invariante)."""
+        import gc
+
+        import backend.core.musical_goals.vocal_quality_index as vqi_mod
+
+        total = (
+            vqi_mod._W_SINGER_ID
+            + vqi_mod._W_FORMANT
+            + vqi_mod._W_ARTICULATION
+            + vqi_mod._W_PROXIMITY
+            + vqi_mod._W_SIBILANCE
+        )
+        assert abs(total - 1.0) < 1e-9, f"Default-Gewichte summieren zu {total:.10f}, nicht 1.0"
+        gc.collect(0)
+
+    def test_jazz_uses_higher_singer_id_weight(self):
+        """Jazz-Genre muss singer_id-Gewicht 0.40 haben (Identität = Performance)."""
+        import backend.core.musical_goals.vocal_quality_index as vqi_mod
+
+        w = vqi_mod._get_vqi_weights("jazz")
+        assert w[0] == 0.40, f"Jazz singer_id weight: {w[0]} statt 0.40"
+
+    def test_opera_uses_higher_formant_weight(self):
+        """Opera-Genre muss formant-Gewicht 0.40 haben (klassische Technik)."""
+        import backend.core.musical_goals.vocal_quality_index as vqi_mod
+
+        w = vqi_mod._get_vqi_weights("opera")
+        assert w[1] == 0.40, f"Opera formant weight: {w[1]} statt 0.40"
+
+    def test_klassik_uses_higher_formant_weight(self):
+        """Klassik-Genre muss formant-Gewicht 0.40 haben."""
+        import backend.core.musical_goals.vocal_quality_index as vqi_mod
+
+        w = vqi_mod._get_vqi_weights("klassik")
+        assert w[1] == 0.40, f"Klassik formant weight: {w[1]} statt 0.40"
+
+    def test_pop_uses_higher_articulation_weight(self):
+        """Pop-Genre muss articulation-Gewicht 0.25 haben (kommerzielle Klarheit)."""
+        import backend.core.musical_goals.vocal_quality_index as vqi_mod
+
+        w = vqi_mod._get_vqi_weights("pop")
+        assert w[2] == 0.25, f"Pop articulation weight: {w[2]} statt 0.25"
+
+    def test_unknown_genre_returns_default_weights(self):
+        """Unbekanntes Genre → Default-Gewichte."""
+        import backend.core.musical_goals.vocal_quality_index as vqi_mod
+
+        w = vqi_mod._get_vqi_weights("unbekannt_xyz")
+        assert w == (
+            vqi_mod._W_SINGER_ID,
+            vqi_mod._W_FORMANT,
+            vqi_mod._W_ARTICULATION,
+            vqi_mod._W_PROXIMITY,
+            vqi_mod._W_SIBILANCE,
+        ), f"Unbekanntes Genre liefert nicht Default-Gewichte: {w}"
+
+    def test_none_genre_returns_default_weights(self):
+        """genre=None → Default-Gewichte."""
+        import backend.core.musical_goals.vocal_quality_index as vqi_mod
+
+        w = vqi_mod._get_vqi_weights(None)
+        assert w == (
+            vqi_mod._W_SINGER_ID,
+            vqi_mod._W_FORMANT,
+            vqi_mod._W_ARTICULATION,
+            vqi_mod._W_PROXIMITY,
+            vqi_mod._W_SIBILANCE,
+        )
+
+    def test_compute_vqi_with_jazz_genre_short_fallback(self):
+        """compute_vqi(genre='jazz') kurzes Signal → Short-Segment-Fallback greift, kein Crash."""
+        import gc
+
+        import numpy as np
+
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        sr = 48000
+        short = np.random.default_rng(42).random(int(sr * 0.2)).astype(np.float32)
+        result = compute_vqi(short, short, sr, genre="jazz")
+
+        assert "vqi" in result
+        assert result["vqi"] > 0.85, f"Jazz-Short-Fallback VQI={result['vqi']:.3f} zu niedrig"
+        assert result.get("genre_weights_used") is None, (
+            "Short-Segment-Fallback soll genre_weights_used=None (short-path) haben"
+        )
+        gc.collect(0)
+
+    def test_compute_vqi_returns_genre_weights_used_key(self):
+        """compute_vqi muss 'genre_weights_used' im Rückgabe-Dict enthalten."""
+        import gc
+
+        import numpy as np
+
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        sr = 48000
+        rng = np.random.default_rng(0)
+        audio = rng.random(sr * 2).astype(np.float32) * 0.1
+        result = compute_vqi(audio, audio, sr, genre="blues")
+
+        assert "genre_weights_used" in result, "Key 'genre_weights_used' fehlt im VQI-Rückgabe-Dict"
+        assert result["genre_weights_used"] == "blues", (
+            f"genre_weights_used='{result['genre_weights_used']}' statt 'blues'"
+        )
+        gc.collect(0)
+
+    def test_compute_vqi_no_genre_returns_none_genre_key(self):
+        """compute_vqi ohne genre → genre_weights_used=None."""
+        import gc
+
+        import numpy as np
+
+        from backend.core.musical_goals.vocal_quality_index import compute_vqi
+
+        sr = 48000
+        audio = np.random.default_rng(1).random(sr * 2).astype(np.float32) * 0.1
+        result = compute_vqi(audio, audio, sr)
+
+        assert result.get("genre_weights_used") is None, (
+            f"Ohne Genre erwartet None, bekam: {result.get('genre_weights_used')}"
+        )
+        gc.collect(0)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

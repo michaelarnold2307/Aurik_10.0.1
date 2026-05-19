@@ -1,5 +1,5 @@
 """
-phase_rotation.py - Phase Rotation/Alignment for AURIK 6.0
+phase_rotation.py – Phasendrehung/Ausrichtung für AURIK 6.0.
 
 Improves mono compatibility through phase alignment using all-pass filters.
 
@@ -38,7 +38,7 @@ class PhaseRotator:
 
     def __init__(self, target_correlation: float = 0.7, rotation_amount: float = 0.5):
         """
-        Initialize Phase Rotator.
+        Initialisiert Phase Rotator.
 
         Args:
             target_correlation: Target phase correlation (0.5-1.0)
@@ -49,7 +49,7 @@ class PhaseRotator:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict[str, Any]]:
         """
-        Apply phase rotation for mono compatibility.
+        Wendet an: phase rotation for mono compatibility.
 
         Args:
             audio: Input audio (must be stereo)
@@ -115,7 +115,7 @@ class PhaseRotator:
 
     def _rotate_phase(self, left: np.ndarray, right: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """
-        Apply phase rotation using all-pass filters.
+        Wendet an: phase rotation using all-pass filters.
 
         Strategy:
         - Rotate right channel forward (all-pass cascade)
@@ -134,7 +134,7 @@ class PhaseRotator:
 
     def _apply_allpass_cascade(self, signal_in: np.ndarray, sr: int, forward: bool = True) -> np.ndarray:
         """
-        Apply cascade of all-pass filters for phase rotation.
+        Wendet Kaskade von Allpass-Filtern zur Phasendrehung an.
 
         3-band approach with frequency-dependent rotation strength.
         """
@@ -154,7 +154,7 @@ class PhaseRotator:
         return low_shifted + mid_shifted + high_shifted
 
     def _extract_band(self, signal: np.ndarray, sr: int, low_freq: float, high_freq: float) -> np.ndarray:
-        """Extract frequency band using bandpass filter."""
+        """Extrahiert frequency band using bandpass filter."""
         nyquist = sr / 2
         low = max(low_freq / nyquist, 0.001)
         high = min(high_freq / nyquist, 0.999)
@@ -167,7 +167,7 @@ class PhaseRotator:
 
     def _allpass_filter(self, signal: np.ndarray, sr: int, center_freq: float, strength: float) -> np.ndarray:
         """
-        Apply first-order all-pass filter for phase rotation.
+        Wendet an: first-order all-pass filter for phase rotation.
 
         All-pass filter: H(z) = (a + z^-1) / (1 + a*z^-1)
         where a = (tan(π*fc/fs) - 1) / (tan(π*fc/fs) + 1)
@@ -190,7 +190,7 @@ class PhaseRotator:
 
     def _measure_phase_correlation(self, left: np.ndarray, right: np.ndarray) -> float:
         """
-        Measure phase correlation between L/R channels.
+        Misst phase correlation between L/R channels.
 
         Returns value between -1 (out of phase) and +1 (in phase).
         Target for mono compatibility: > 0.5
@@ -213,7 +213,7 @@ class PhaseRotator:
 
 
 def create_phase_rotator(target_correlation: float = 0.7, rotation_amount: float = 0.5) -> PhaseRotator:
-    """Factory function to create PhaseRotator instance."""
+    """Factory-Funktion zum Erstellen einer PhaseRotator-Instanz."""
     return PhaseRotator(target_correlation=target_correlation, rotation_amount=rotation_amount)
 
 

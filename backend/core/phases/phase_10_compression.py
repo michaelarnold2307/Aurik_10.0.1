@@ -134,7 +134,7 @@ class CompressionPhase(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive analysis windows for compression side-chains."""
+        """Berechnet adaptive analysis windows for compression side-chains."""
         _mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
         _qm = str(quality_mode or "balanced").lower().replace("-", "_")
         _rest = float(np.clip(restorability_score, 0.0, 100.0))
@@ -210,7 +210,7 @@ class CompressionPhase(PhaseInterface):
         self.band_names = ["bass", "low_mid", "mid_high", "high"]
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_10_compression",
             name="Compression v2.0 Professional",
@@ -229,7 +229,7 @@ class CompressionPhase(PhaseInterface):
     def process(
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.VINYL, **kwargs
     ) -> PhaseResult:
-        """Process audio with professional multi-band parallel compression."""
+        """Verarbeitet audio with professional multi-band parallel compression."""
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         audio, _p10_transposed = to_channels_last(audio)
@@ -392,7 +392,7 @@ class CompressionPhase(PhaseInterface):
         return bands
 
     def _combine_bands(self, bands: list[np.ndarray]) -> np.ndarray:
-        """Combine frequency bands back together."""
+        """Kombiniert frequency bands back together."""
         return sum(bands)
 
     def _compress_band(
@@ -408,7 +408,7 @@ class CompressionPhase(PhaseInterface):
         detection_mode: str,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Apply compression to a single band.
+        Wendet Kompression auf ein einzelnes Band an.
 
         Returns:
             (compressed_audio, gain_reduction_db_array)

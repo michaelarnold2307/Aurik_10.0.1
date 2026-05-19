@@ -54,7 +54,7 @@ class FormantTracker:
 
     def track(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """
-        Track formants over time using LPC analysis.
+        Verfolgt formants over time using LPC analysis.
 
         Parameters
         ----------
@@ -105,13 +105,13 @@ class FormantTracker:
 
     def _pre_emphasis(self, audio: np.ndarray, coeff: float = 0.97) -> np.ndarray:
         """
-        Apply pre-emphasis filter to boost high frequencies.
+        Wendet an: pre-emphasis filter to boost high frequencies.
         """
         return lfilter([1, -coeff], [1], audio)
 
     def _extract_frames(self, audio: np.ndarray, frame_length: int, hop_length: int) -> list[np.ndarray]:
         """
-        Extract overlapping frames from audio.
+        Extrahiert overlapping frames from audio.
         """
         frames = []
         for i in range(0, len(audio) - frame_length, hop_length):
@@ -124,7 +124,7 @@ class FormantTracker:
 
     def _analyze_frame(self, frame: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """
-        Analyze single frame for formants using LPC.
+        Analysiert einen einzelnen Frame auf Formanten mittels LPC.
 
         LPC (Linear Predictive Coding) models the vocal tract as an all-pole filter.
         The poles correspond to formant frequencies.
@@ -168,7 +168,7 @@ class FormantTracker:
 
     def _compute_lpc(self, frame: np.ndarray, order: int) -> np.ndarray:
         """
-        Compute LPC coefficients using autocorrelation method.
+        Berechnet LPC coefficients using autocorrelation method.
         """
         # Autocorrelation
         r = signal.correlate(frame, frame, mode="full", method="fft")
@@ -207,7 +207,7 @@ class FormantTracker:
 
     def _roots_to_formants(self, roots: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
         """
-        Convert LPC polynomial roots to formant frequencies and bandwidths.
+        Konvertiert LPC polynomial roots to formant frequencies and bandwidths.
         """
         # Keep only roots inside unit circle
         roots = roots[np.abs(roots) < 1.0]
@@ -236,7 +236,7 @@ class FormantTracker:
 
     def _smooth_trajectories(self, formant_freqs: np.ndarray, window_size: int = 5) -> np.ndarray:
         """
-        Smooth formant trajectories using median filter.
+        Glättet formant trajectories using median filter.
         """
         if len(formant_freqs) < window_size:
             return formant_freqs
@@ -272,7 +272,7 @@ class FormantCorrector:
         self, formant_freqs: np.ndarray, reference_formants: np.ndarray | None = None
     ) -> tuple[bool, dict]:
         """
-        Detect formant drift.
+        Erkennt formant drift.
 
         Parameters
         ----------
@@ -390,7 +390,7 @@ class FormantCorrector:
 
     def _apply_formant_shift_eq(self, audio: np.ndarray, sr: int, center_freq: float, shift_hz: float) -> np.ndarray:
         """
-        Apply EQ-based formant shift (approximation).
+        Wendet an: EQ-based formant shift (approximation).
         """
         # Target frequency
         target_freq = center_freq + shift_hz
@@ -410,7 +410,7 @@ class FormantCorrector:
         self, audio: np.ndarray, sr: int, freq: float, bandwidth: float, attenuation_db: float
     ) -> np.ndarray:
         """
-        Apply notch filter (attenuation).
+        Wendet an: notch filter (attenuation).
         """
         Q = freq / bandwidth
 
@@ -437,7 +437,7 @@ class FormantCorrector:
 
     def _apply_peak(self, audio: np.ndarray, sr: int, freq: float, bandwidth: float, gain_db: float) -> np.ndarray:
         """
-        Apply peak filter (boost).
+        Wendet an: peak filter (boost).
         """
         Q = freq / bandwidth
         A = 10 ** (gain_db / 40)
@@ -576,7 +576,7 @@ class SingersFormantEnhancer:
 
     def detect_singers_formant(self, formant_freqs: np.ndarray) -> tuple[bool, float]:
         """
-        Detect if singer's formant is present.
+        Erkennt if singer's formant is present.
 
         Parameters
         ----------
@@ -702,7 +702,7 @@ class SingersFormantEnhancer:
 
     def _apply_peak_eq(self, audio: np.ndarray, sr: int, freq: float, bandwidth: float, gain_db: float) -> np.ndarray:
         """
-        Apply peak EQ filter.
+        Wendet an: peak EQ filter.
         """
         Q = freq / bandwidth
         A = 10 ** (gain_db / 40)
@@ -727,7 +727,7 @@ class SingersFormantEnhancer:
 
 class FormantSystem:
     """
-    Unified API for formant tracking, correction, and enhancement.
+    Einheitliche API für Formant-Tracking, -Korrektur und -Verbesserung.
     """
 
     def __init__(self, n_formants: int = 5, correction_strength: float = 0.7, enhance_singers_formant: bool = True):
@@ -964,7 +964,7 @@ class FormantSystem:
 
 
 def _apply_peak_eq_frame(audio: np.ndarray, sr: int, freq: float, bandwidth: float, gain_db: float) -> np.ndarray:
-    """Apply a biquad peak EQ to a short audio frame (DSP helper).
+    """Wendet einen Biquad-Peak-EQ auf einen kurzen Audio-Frame an (DSP-Hilfsfunktion).
 
     Args:
         audio:     1-D float32 audio frame.
@@ -1064,7 +1064,7 @@ class VowelPhonemeFormantTargets:
 
     @classmethod
     def get_targets(cls, ipa_symbol: str, gender: str = "male") -> tuple[float, float, float] | None:
-        """Return canonical (F1, F2, F3) targets for an IPA vowel symbol.
+        """Gibt canonical (F1, F2, F3) targets for an IPA vowel symbol zurück.
 
         Args:
             ipa_symbol: IPA character (e.g. ``'i'``, ``'a'``, ``'ɛ'``).
@@ -1209,7 +1209,7 @@ class InstrumentFormantTargets:
 
     @classmethod
     def get_targets(cls, instrument: str) -> tuple[float, float, float, float, float, float] | None:
-        """Return canonical (F1, F2, F3, Q1, Q2, Q3) for an instrument string.
+        """Gibt canonical (F1, F2, F3, Q1, Q2, Q3) for an instrument string zurück.
 
         Args:
             instrument: Instrument type string, e.g. ``'guitar'``, ``'strings'``,
@@ -1222,7 +1222,7 @@ class InstrumentFormantTargets:
 
     @classmethod
     def all_instruments(cls) -> list[str]:
-        """Return sorted list of supported instrument type strings."""
+        """Gibt sorted list of supported instrument type strings zurück."""
         return sorted(cls._INSTRUMENT_TARGETS.keys())
 
 

@@ -8,16 +8,16 @@
   // ══════════════════════════════════════════════════════════════════════════
   // AURIK TEST-TASK-STRATEGIE (Feb 2026)
   //
-  // VS Code Test Explorer → NUR tests/unit/ (50 Dateien, ~600 Tests)
+  // VS Code Test Explorer → Smoke/Unit-Slice mit harter Kappe
   //   Konfiguriert in settings.json → python.testing.pytestArgs
-  //   Verhindert 5 200-Test-Pipe-Flood + ONNX-OOM-Absturz.
+  //   Verhindert JSON-RPC-Testevent-Flood + ONNX-OOM-Absturz.
   //
   // Vollsuite → Terminal-Tasks hier (Strg+Shift+B):
   //   Die Tasks laufen im integrierten Terminal, NICHT über den Extension-Host.
   //   Kein JSON-RPC-Protokoll, kein Pipe-Overhead, kein VS Code-Absturz.
   //
   // Empfohlene Reihenfolge für tägliche Entwicklung:
-  //   1. "Unit-Tests" (schnell, immer) → via VS Code Test Explorer oder Task
+  //   1. "Unit-Tests" (schnell, immer) → Task; Test Explorer nur Smoke-Slice
   //   2. "Integrations-Tests" (mittelschnell, nach Feature-Fertigstellung)
   //   3. "Vollsuite parallel" (langsam, vor Commit/PR) → ausschließlich Terminal
   // ══════════════════════════════════════════════════════════════════════════

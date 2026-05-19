@@ -32,7 +32,7 @@ AURIK_STANDARD_SR = 48000
 
 def _resample_audio(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
     """
-    Internal resampling using scipy.signal.resample_poly (high-quality, polyphase filtering).
+    Intern: resampling using scipy.signal.resample_poly (high-quality, polyphase filtering).
 
     Args:
         audio: Audio signal (mono)
@@ -77,7 +77,7 @@ class AudioResampler:
 
     def __init__(self, quality: str = "good"):
         """
-        Initialize resampler.
+        Initialisiert resampler.
 
         Args:
             quality: Quality preset (for compatibility, always uses high-quality scipy)
@@ -227,7 +227,7 @@ def process_with_resampling(
     **kwargs,
 ) -> tuple[np.ndarray, int]:
     """
-    Process audio with automatic resampling for components that need specific sample rates.
+    Verarbeitet audio with automatic resampling for components that need specific sample rates.
 
     Example: Wav2Vec2 needs 16 kHz, but AURIK works at 48 kHz internally.
 

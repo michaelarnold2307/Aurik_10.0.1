@@ -52,7 +52,7 @@ class DifferentiableEQ(nn.Module):
         self, frequency: torch.Tensor, gain_db: torch.Tensor, q: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute biquad filter coefficients for peaking EQ.
+        Berechnet biquad filter coefficients for peaking EQ.
 
         Returns:
             b_coeffs: Numerator coefficients [b0, b1, b2]
@@ -80,7 +80,7 @@ class DifferentiableEQ(nn.Module):
 
     def apply_biquad(self, audio: torch.Tensor, b_coeffs: torch.Tensor, a_coeffs: torch.Tensor) -> torch.Tensor:
         """
-        Apply biquad filter using time-domain convolution (differentiable).
+        Wendet Biquad-Filter via Zeitbereichsfaltung an (differenzierbar).
 
         Note: For efficiency, this uses a simplified implementation.
         Full IIR filtering would require custom CUDA kernels for backprop.
@@ -120,7 +120,7 @@ class DifferentiableEQ(nn.Module):
 
     def forward(self, audio: torch.Tensor) -> torch.Tensor:
         """
-        Apply parametric EQ to audio.
+        Wendet an: parametric EQ to audio.
 
         Args:
             audio: Input audio [batch, channels, samples]
@@ -168,7 +168,7 @@ class DifferentiableCompressor(nn.Module):
 
     def compute_gain_reduction(self, level_db: torch.Tensor) -> torch.Tensor:
         """
-        Compute gain reduction using smooth knee compression.
+        Berechnet gain reduction using smooth knee compression.
 
         Uses a smooth approximation instead of hard thresholding.
         """
@@ -216,7 +216,7 @@ class DifferentiableCompressor(nn.Module):
 
     def envelope_follower(self, audio: torch.Tensor) -> torch.Tensor:
         """
-        Smooth envelope follower with attack/release.
+        Glättet envelope follower with attack/release.
 
         Uses exponential moving average (differentiable).
         """
@@ -246,7 +246,7 @@ class DifferentiableCompressor(nn.Module):
 
     def forward(self, audio: torch.Tensor) -> torch.Tensor:
         """
-        Apply dynamic range compression.
+        Wendet an: dynamic range compression.
 
         Args:
             audio: Input audio [batch, channels, samples]
@@ -292,7 +292,7 @@ class DifferentiableNoiseGate(nn.Module):
 
     def forward(self, audio: torch.Tensor) -> torch.Tensor:
         """
-        Apply noise gate to audio.
+        Wendet an: noise gate to audio.
 
         Args:
             audio: Input audio [batch, channels, samples]
@@ -381,7 +381,7 @@ class E2EOptimizationFramework:
         logger.info("  Checkpoint dir: %s", self.checkpoint_dir)
 
     def setup_optimizer(self, learning_rate: float = 1e-4, weight_decay: float = 1e-5):
-        """Setup optimizer for training."""
+        """Richtet Optimizer für das Training ein."""
         self.optimizer = torch.optim.AdamW(
             self.trainable_modules.parameters(), lr=learning_rate, weight_decay=weight_decay
         )
@@ -389,7 +389,7 @@ class E2EOptimizationFramework:
         logger.info("Optimizer configured: AdamW(lr=%s, wd=%s)", learning_rate, weight_decay)
 
     def _require_optimizer(self) -> torch.optim.Optimizer:
-        """Return initialized optimizer or raise a clear error."""
+        """Gibt initialized optimizer or raise a clear error zurück."""
         if self.optimizer is None:
             raise RuntimeError("Optimizer not initialized. Call setup_optimizer() before training/checkpointing.")
         return self.optimizer
@@ -489,7 +489,7 @@ class E2EOptimizationFramework:
 
     def validate(self, dataloader: Any) -> dict[str, float]:
         """
-        Validate on validation set.
+        Validiert on validation set.
 
         Args:
             dataloader: Validation DataLoader
@@ -522,7 +522,7 @@ class E2EOptimizationFramework:
         return avg_losses
 
     def save_checkpoint(self, epoch: int, metrics: dict[str, float]):
-        """Save training checkpoint."""
+        """Speichert training checkpoint."""
         optimizer = self._require_optimizer()
         checkpoint = {
             "epoch": epoch,
@@ -537,7 +537,7 @@ class E2EOptimizationFramework:
         logger.info("Checkpoint saved: %s", checkpoint_path)
 
     def load_checkpoint(self, checkpoint_path: Path):
-        """Load training checkpoint."""
+        """Lädt training checkpoint."""
         checkpoint = torch.load(checkpoint_path, map_location=self.device)  # nosec B614 — interner Checkpoint aus models/
 
         self.trainable_modules.load_state_dict(checkpoint["model_state_dict"])

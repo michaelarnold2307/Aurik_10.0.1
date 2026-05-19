@@ -20,7 +20,7 @@ def get_goal_optimizer(
     get_context: Callable[[], dict[str, Any]] | None = None,
     feedback_callback: Callable[[dict[str, float]], None] | None = None,
 ) -> ContextAwareGoalOptimizer:
-    """Get or create ContextAwareGoalOptimizer singleton.
+    """Gibt zurück: or create ContextAwareGoalOptimizer singleton.
 
     Args:
         get_context: Context getter function (only used on first call)

@@ -65,7 +65,7 @@ class Message:
     reply_to: str | None = None  # For responses
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
+        """Konvertiert to dictionary."""
         return {
             "message_id": self.message_id,
             "message_type": self.message_type.value,
@@ -125,7 +125,7 @@ class ModuleCommunicationBus:
 
     def __init__(self, max_history_size: int = 1000):
         """
-        Initialize communication bus.
+        Initialisiert communication bus.
 
         Args:
             max_history_size: Maximum number of messages to keep in history
@@ -171,7 +171,7 @@ class ModuleCommunicationBus:
 
     def register_module(self, module_name: str) -> None:
         """
-        Register a module with the bus.
+        Registriert a module with the bus.
 
         Args:
             module_name: Name of the module
@@ -222,7 +222,7 @@ class ModuleCommunicationBus:
 
     def get_registered_modules(self) -> list[str]:
         """
-        Get list of registered modules.
+        Gibt zurück: list of registered modules.
 
         Returns:
             List of module names
@@ -234,7 +234,7 @@ class ModuleCommunicationBus:
 
     def subscribe(self, module_name: str, topic: str, callback: Callable[[Message], None]) -> None:
         """
-        Subscribe a module to a topic.
+        Abonniert a module to a topic.
 
         Args:
             module_name: Name of the subscribing module
@@ -286,7 +286,7 @@ class ModuleCommunicationBus:
 
     def get_subscribers(self, topic: str) -> list[str]:
         """
-        Get list of modules subscribed to a topic.
+        Gibt zurück: list of modules subscribed to a topic.
 
         Args:
             topic: Topic name
@@ -365,7 +365,7 @@ class ModuleCommunicationBus:
         priority: MessagePriority = MessagePriority.NORMAL,
     ) -> str:
         """
-        Send a direct message to a specific module.
+        Sendet a direct message to a specific module.
 
         Args:
             sender: Name of sending module
@@ -385,7 +385,7 @@ class ModuleCommunicationBus:
         self, sender: str, recipient: str, topic: str, payload: dict[str, Any], timeout: float = 5.0
     ) -> Message | None:
         """
-        Send a request and wait for response.
+        Sendet a request and wait for response.
 
         Args:
             sender: Name of sending module
@@ -434,7 +434,7 @@ class ModuleCommunicationBus:
 
     def respond(self, original_message: Message, payload: dict[str, Any]) -> str:
         """
-        Send a response to a request.
+        Sendet a response to a request.
 
         Args:
             original_message: Original request message
@@ -468,7 +468,7 @@ class ModuleCommunicationBus:
 
     def _send_message(self, message: Message) -> None:
         """
-        Send message to appropriate queues.
+        Sendet message to appropriate queues.
 
         Args:
             message: Message to send
@@ -546,7 +546,7 @@ class ModuleCommunicationBus:
 
     def get_statistics(self) -> dict[str, Any]:
         """
-        Get bus statistics.
+        Gibt zurück: bus statistics.
 
         Returns:
             Statistics dictionary
@@ -566,7 +566,7 @@ class ModuleCommunicationBus:
 
     def get_message_history(self, topic: str | None = None, limit: int = 100) -> list[Message]:
         """
-        Get message history.
+        Gibt zurück: message history.
 
         Args:
             topic: Optional topic filter
@@ -643,7 +643,7 @@ class CommunicationBusManager:
         self.logger = logging.getLogger(__name__)
 
     def get_bus(self) -> ModuleCommunicationBus:
-        """Get the global communication bus."""
+        """Gibt zurück: the global communication bus."""
         return self._bus
 
     def shutdown(self) -> None:
@@ -655,5 +655,5 @@ class CommunicationBusManager:
 
 
 def get_communication_bus() -> ModuleCommunicationBus:
-    """Get global communication bus (singleton)."""
+    """Gibt zurück: global communication bus (singleton)."""
     return CommunicationBusManager().get_bus()

@@ -58,7 +58,7 @@ class SalienceResult:
 
 
 class PerceptualSalienceEstimator:
-    """Estimates perceptual salience of detected defect events.
+    """Schätzt perceptual salience of detected defect events.
 
     Uses momentary loudness (ITU-R BS.1770-5, 400 ms windows) to determine
     whether a defect is perceptually masked by surrounding audio content.
@@ -285,7 +285,7 @@ class PerceptualSalienceEstimator:
         mono: np.ndarray,
         sr: int,
     ) -> np.ndarray:
-        """Compute momentary loudness profile (dBFS, 400 ms windows, 100 ms hop).
+        """Berechnet momentary loudness profile (dBFS, 400 ms windows, 100 ms hop).
 
         Returns array of shape (n_frames,) with loudness in dBFS per frame.
         """
@@ -306,7 +306,7 @@ class PerceptualSalienceEstimator:
         return loudness
 
     def _time_to_frame(self, t: float, sr: int) -> int:
-        """Convert time in seconds to loudness profile frame index."""
+        """Konvertiert time in seconds to loudness profile frame index."""
         hop_samples = max(1, int(self._HOP_S * sr))
         return max(0, int(t * sr / hop_samples))
 
@@ -318,7 +318,7 @@ class PerceptualSalienceEstimator:
         loc_start: float,
         loc_end: float,
     ) -> tuple[float, float, float, str]:
-        """Score a single defect event for perceptual salience.
+        """Bewertet a single defect event for perceptual salience.
 
         Returns (salience, local_lufs, context_lufs, masking_type).
         """
@@ -399,7 +399,7 @@ _lock = threading.Lock()
 
 
 def get_perceptual_salience_estimator() -> PerceptualSalienceEstimator:
-    """Return thread-safe singleton PerceptualSalienceEstimator."""
+    """Gibt thread-safe singleton PerceptualSalienceEstimator zurück."""
     global _instance
     if _instance is None:
         with _lock:

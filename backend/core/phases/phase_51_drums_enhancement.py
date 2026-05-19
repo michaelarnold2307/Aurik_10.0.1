@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 51: Drums/Percussion Enhancement v1.0 - Tier 1 ML-Hybrid
+Phase 51: Drums/Percussion Enhancement v1.0 - Tier 1 ML-Hybrid.
 Professional drums and percussion processing for instrumental restoration.
 
 Algorithm Overview:
@@ -165,7 +165,7 @@ class DrumsEnhancementV1(PhaseInterface):
 
     def __init__(self, sample_rate: int = 48000, **kwargs):
         """
-        Initialize Drums Enhancement Phase.
+        Initialisiert Drums Enhancement Phase.
 
         Args:
             sample_rate: Audio sample rate (Hz)
@@ -464,7 +464,7 @@ class DrumsEnhancementV1(PhaseInterface):
             )
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_51_drums_enhancement",
             name="Drums/Percussion Enhancement (Tier 1)",
@@ -483,7 +483,7 @@ class DrumsEnhancementV1(PhaseInterface):
         )
 
     def supports_material(self, material_type: MaterialType) -> bool:
-        """Check if material type is supported."""
+        """Prüft if material type is supported."""
         return material_type in self.ENHANCEMENT_CONFIG or material_type in [
             MaterialType.CD_DIGITAL,
             MaterialType.DAT,
@@ -494,11 +494,11 @@ class DrumsEnhancementV1(PhaseInterface):
         ]
 
     def estimate_time(self, audio_duration_seconds: float) -> float:
-        """Estimate processing time."""
+        """Schätzt processing time."""
         return audio_duration_seconds * 0.15  # 15% of audio duration
 
     def validate_input(self, audio: np.ndarray) -> tuple[bool, str | None]:
-        """Validate input audio."""
+        """Validiert input audio."""
         if audio.size == 0:
             return False, "Empty audio input"
         if not np.isfinite(audio).all():

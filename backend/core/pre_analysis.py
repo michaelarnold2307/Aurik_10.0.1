@@ -105,7 +105,7 @@ _run_lock = threading.Lock()
 
 
 def _to_mono_native(audio: np.ndarray) -> np.ndarray:
-    """Convert to mono without SR change; clip & nan-guard."""
+    """Konvertiert to mono without SR change; clip & nan-guard."""
     if audio.ndim == 2:
         # shape (N, 2) or (2, N)
         if audio.shape[0] < audio.shape[1]:
@@ -118,7 +118,7 @@ def _to_mono_native(audio: np.ndarray) -> np.ndarray:
 
 
 def _load_symbol(module_name: str, symbol_name: str) -> object:
-    """Load optional or heavy symbols lazily without inline import statements."""
+    """Lädt optional or heavy symbols lazily without inline import statements."""
     return getattr(import_module(module_name), symbol_name)
 
 
@@ -157,7 +157,7 @@ def run_pre_analysis(
     scan_progress_callback: Callable[[float], None] | None = None,
     store_in_bridge_cache: bool = True,
 ) -> PreAnalysisResult:
-    """Run all pre-restoration analyses in parallel and return a PreAnalysisResult.
+    """Führt aus: all pre-restoration analyses in parallel and return a PreAnalysisResult.
 
     This is the single authoritative entry point for all pre-restoration analysis.
     It replaces the four scattered frontend background threads.

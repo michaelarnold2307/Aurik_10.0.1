@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 
 def _load_audio(path: str) -> tuple[np.ndarray, int]:
-    """Load audio file → (mono float32 array, sample_rate).
+    """Lädt audio file → (mono float32 array, sample_rate).
 
     Cascade: soundfile → scipy.io.wavfile → synthetic silence (fallback).
     """
@@ -91,7 +91,7 @@ def _load_audio(path: str) -> tuple[np.ndarray, int]:
 
 
 def _extract_features(audio: np.ndarray, sr: int) -> dict[str, float]:
-    """Extract a compact feature set for profile matching.
+    """Extrahiert a compact feature set for profile matching.
 
     Returns
     -------
@@ -183,7 +183,7 @@ def _estimate_tempo_acf(audio: np.ndarray, sr: int) -> float:
 
 
 def _load_meta_config(path: str | None) -> dict:
-    """Load a YAML or JSON meta/profile config file.
+    """Lädt a YAML or JSON meta/profile config file.
 
     Returns an empty dict if *path* is None or loading fails.
     """

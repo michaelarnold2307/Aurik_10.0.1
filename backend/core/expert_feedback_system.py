@@ -19,17 +19,17 @@ class ExpertAggregate:
 
 
 class ExpertFeedbackSystem:
-    """Collects expert feedback and computes per-dimension averages."""
+    """Sammelt expert feedback and computes per-dimension averages."""
 
     def __init__(self) -> None:
         self._feedback: list[dict[str, float]] = []
 
     def add_feedback(self, expert: str, scores: dict[str, float]) -> None:
-        """Add *scores* from *expert*."""
+        """Fügt hinzu: *scores* from *expert*."""
         self._feedback.append(dict(scores))
 
     def aggregate(self) -> ExpertAggregate:
-        """Return mean score per dimension across all expert feedback entries."""
+        """Gibt mean score per dimension across all expert feedback entries zurück."""
         if not self._feedback:
             return ExpertAggregate()
         keys = self._feedback[0].keys()
@@ -46,7 +46,7 @@ _expert_feedback_system_lock = _threading.Lock()
 
 
 def get_expert_feedback_system() -> ExpertFeedbackSystem:
-    """Return the process-wide singleton ExpertFeedbackSystem instance."""
+    """Gibt the process-wide singleton ExpertFeedbackSystem instance zurück."""
     global _expert_feedback_system_instance
     if _expert_feedback_system_instance is None:
         with _expert_feedback_system_lock:

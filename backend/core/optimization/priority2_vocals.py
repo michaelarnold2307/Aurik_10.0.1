@@ -1,5 +1,5 @@
 """
-optimization/priority2_vocals.py — Selective vocal enhancement
+optimization/priority2_vocals.py – Selektive Vokal-Verbesserung.
 ===============================================================
 
 Detects vocal presence and consonants; applies targeted HF lift in vocal
@@ -12,7 +12,7 @@ import numpy as np
 
 
 class VocalPresenceDetector:
-    """Detects how much of the audio is vocal content (0 – 1).
+    """Erkennt how much of the audio is vocal content (0 – 1).
 
     Parameters
     ----------
@@ -30,7 +30,7 @@ class VocalPresenceDetector:
         self._presence_high_hz = 4000
 
     def detect(self, audio: np.ndarray, sr: int) -> float:
-        """Return vocal presence score in [0, 1].
+        """Gibt vocal presence score in [0, 1] zurück.
 
         Uses the ratio of energy in the vocal-band over total energy.
         A harmonic boost near F0 range + presence band biases the score
@@ -57,7 +57,7 @@ class VocalPresenceDetector:
 
 
 class ConsonantPreserver:
-    """Detects transient / consonant onset frames.
+    """Erkennt transient / consonant onset frames.
 
     Parameters
     ----------
@@ -69,7 +69,7 @@ class ConsonantPreserver:
         self.sr = sr
 
     def detect_consonants(self, audio: np.ndarray, sr: int) -> list[int]:
-        """Return sample indices of likely consonant onsets.
+        """Gibt sample indices of likely consonant onsets zurück.
 
         Uses a simple spectral flux energy detector.
         """

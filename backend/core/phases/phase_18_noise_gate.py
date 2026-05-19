@@ -249,7 +249,7 @@ class NoiseGate(PhaseInterface):
         self._silero_vad = None  # Lazy loading
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_18_noise_gate",
             name="Noise Gate v2 Professional",
@@ -266,7 +266,7 @@ class NoiseGate(PhaseInterface):
         )
 
     def _get_silero_vad(self):
-        """Lazy load Silero VAD plugin for ML-based voice activity detection."""
+        """Lädt beim ersten Zugriff: Silero VAD plugin for ML-based voice activity detection."""
         if self._silero_vad is None:
             try:
                 if _get_silero_plugin_18 is None:
@@ -315,7 +315,7 @@ class NoiseGate(PhaseInterface):
         **kwargs: Any,
     ) -> PhaseResult:
         """
-        Apply multi-band noise gate to audio.
+        Wendet an: multi-band noise gate to audio.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -703,7 +703,7 @@ class NoiseGate(PhaseInterface):
         }
 
     def _gate_channel(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Apply multi-band gating to a single channel with optional ML VAD."""
+        """Wendet an: multi-band gating to a single channel with optional ML VAD."""
         # Check if ML VAD should be used
         use_vad = is_phase_ml_enabled(18)
         vad_probabilities = None
@@ -802,7 +802,7 @@ class NoiseGate(PhaseInterface):
         return bands
 
     def _combine_bands(self, bands: list) -> np.ndarray:
-        """Combine frequency bands back into full-bandwidth signal."""
+        """Kombiniert frequency bands back into full-bandwidth signal."""
         # Simple summation (Linkwitz-Riley filters sum to flat response)
         return sum(bands)
 
@@ -818,7 +818,7 @@ class NoiseGate(PhaseInterface):
         masking_gain_floor: float,
         vad_probabilities: np.ndarray | None = None,
     ) -> np.ndarray:
-        """Apply gating to a single frequency band with optional VAD guidance.
+        """Wendet an: gating to a single frequency band with optional VAD guidance.
 
         Fully vectorised — no per-sample Python loops.
         """

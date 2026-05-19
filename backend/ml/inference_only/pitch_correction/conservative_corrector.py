@@ -81,7 +81,7 @@ class ConservativePitchCorrector:
         max_correction_cents: float = 50.0,  # Maximum correction amount
     ):
         """
-        Initialize conservative pitch corrector.
+        Initialisiert conservative pitch corrector.
 
         Args:
             sample_rate: Audio sample rate (Hz)
@@ -206,7 +206,7 @@ class ConservativePitchCorrector:
         self, pitch_analysis: PitchAnalysis, reference_pitch: np.ndarray | None = None
     ) -> CorrectionPlan:
         """
-        Generate a conservative correction plan.
+        Generiert a conservative correction plan.
 
         Only corrects obvious errors, estimates risk (DCS).
         """
@@ -264,7 +264,7 @@ class ConservativePitchCorrector:
 
     def _estimate_correction_risk(self, error: dict) -> float:
         """
-        Estimate risk (contribution to DCS) for a single correction.
+        Schätzt risk (contribution to DCS) for a single correction.
 
         Higher risk when:
         - Large correction needed
@@ -289,7 +289,7 @@ class ConservativePitchCorrector:
         self, audio: np.ndarray, pitch_analysis: PitchAnalysis, correction_plan: CorrectionPlan, dry_wet: float
     ) -> np.ndarray:
         """
-        Apply pitch correction with formant preservation.
+        Wendet an: pitch correction with formant preservation.
 
         Uses phase vocoder + formant shift compensation.
         """
@@ -371,7 +371,7 @@ class ConservativePitchCorrector:
 
     def can_correct_safely(self, audio: np.ndarray) -> dict:
         """
-        Check if pitch correction can be applied safely (without actually correcting).
+        Prüft if pitch correction can be applied safely (without actually correcting).
 
         Useful for pre-flight checks.
 

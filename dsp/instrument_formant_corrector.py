@@ -107,7 +107,7 @@ class InstrumentDriftResult:
 
 
 def _dtw_distance_and_path(seq_a: np.ndarray, seq_b: np.ndarray) -> tuple[float, list[tuple[int, int]]]:
-    """Compute DTW distance and warp path between two 1-D sequences.
+    """Berechnet DTW distance and warp path between two 1-D sequences.
 
     Uses a vectorized DP cost matrix (Sakoe & Chiba 1978).
     Both sequences are normalised to [0, 1] before comparison so that
@@ -209,7 +209,7 @@ def _peak_eq(audio: np.ndarray, sr: int, freq: float, bandwidth_hz: float, gain_
 
 
 class InstrumentFormantDriftCorrector:
-    """Detect and correct sustained formant drift in instrument recordings.
+    """Erkennt and correct sustained formant drift in instrument recordings.
 
     Instantiate via :func:`get_instrument_formant_drift_corrector` (singleton).
 
@@ -243,7 +243,7 @@ class InstrumentFormantDriftCorrector:
     # ── Internal: formant tracking ────────────────────────────────────────────
 
     def _track_f1(self, mono: np.ndarray, sr: int) -> np.ndarray:
-        """Return the F1 trajectory (shape: n_frames) for *mono* via LPC."""
+        """Gibt the F1 trajectory (shape: n_frames) for *mono* via LPC zurück."""
         try:
             tracker = self._get_tracker()
             formant_freqs, _ = tracker.track(mono, sr)
@@ -258,7 +258,7 @@ class InstrumentFormantDriftCorrector:
     # ── Internal: drift detection via DTW ─────────────────────────────────────
 
     def _detect_drift(self, f1_tracked: np.ndarray, f1_target: float) -> tuple[bool, np.ndarray, float, float, float]:
-        """Detect sustained drift in *f1_tracked* relative to *f1_target*.
+        """Erkennt sustained drift in *f1_tracked* relative to *f1_target*.
 
         Returns:
             (drift_detected, drift_frame_mask, mean_drift_hz,
@@ -318,7 +318,7 @@ class InstrumentFormantDriftCorrector:
         f2_target: float,
         drift_mask: np.ndarray,
     ) -> tuple[np.ndarray, int]:
-        """Apply per-frame peak-EQ nudge toward target F1/F2 for drifted frames.
+        """Wendet an: per-frame peak-EQ nudge toward target F1/F2 for drifted frames.
 
         Returns:
             (corrected_mono, n_frames_corrected)
@@ -376,7 +376,7 @@ class InstrumentFormantDriftCorrector:
         instrument: str = "guitar",
         correction_strength: float | None = None,
     ) -> InstrumentDriftResult:
-        """Detect and correct instrument formant drift.
+        """Erkennt and correct instrument formant drift.
 
         Args:
             audio:               Mono or stereo audio at 48 000 Hz.
@@ -508,7 +508,7 @@ _lock = threading.Lock()
 
 
 def get_instrument_formant_drift_corrector() -> InstrumentFormantDriftCorrector:
-    """Return the module-level singleton :class:`InstrumentFormantDriftCorrector`.
+    """Gibt the module-level singleton :class:`InstrumentFormantDriftCorrector` zurück.
 
     Thread-safe via double-checked locking (§3.2).
     """

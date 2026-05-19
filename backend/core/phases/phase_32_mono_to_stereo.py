@@ -1,5 +1,5 @@
 """
-Phase 32: Mono-to-Stereo Enhancement v2.0 (Professional)
+Phase 32: Mono-to-Stereo Enhancement v2.0 (Professional).
 Lauridsen-algorithm pseudo-stereo with advanced decorrelation.
 
 Algorithm (Professional-Grade):
@@ -146,7 +146,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive mono-detection profile (§2.56)."""
+        """Berechnet adaptive mono-detection profile (§2.56)."""
         mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         if restorability_score is None:
@@ -181,7 +181,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
 
     def process(self, audio: np.ndarray, sample_rate: int, material: MaterialType, **kwargs) -> PhaseResult:
         """
-        Apply professional-grade mono-to-stereo enhancement.
+        Wendet an: professional-grade mono-to-stereo enhancement.
 
         Args:
             audio: Stereo audio [samples, 2]
@@ -402,7 +402,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
 
     def _compute_lr_correlation(self, audio: np.ndarray) -> float:
         """
-        Compute L/R correlation (1.0 = identical, 0.0 = uncorrelated).
+        Berechnet L/R correlation (1.0 = identical, 0.0 = uncorrelated).
         """
         left = audio[:, 0]
         right = audio[:, 1]
@@ -468,7 +468,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
         self, band_mono: np.ndarray, sample_rate: int, width: float, haas_delay_ms: float, allpass_order: int
     ) -> np.ndarray:
         """
-        Generate pseudo-stereo for a single frequency band.
+        Generiert pseudo-stereo for a single frequency band.
 
         Uses:
         - Haas effect (inter-channel delay)
@@ -504,7 +504,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
 
     def _apply_cascaded_allpass(self, signal_in: np.ndarray, sample_rate: int, order: int, seed: int) -> np.ndarray:
         """
-        Apply cascaded all-pass filters for phase decorrelation.
+        Wendet kaskadierte Allpass-Filter zur Phasen-Dekorrelation an.
 
         Higher order = more decorrelation.
         """
@@ -639,7 +639,7 @@ class MonoToStereoPhaseV2(PhaseInterface):
         return compatibility_ratio > 0.6
 
     def get_metadata(self) -> PhaseMetadata:
-        """Get phase metadata."""
+        """Gibt zurück: phase metadata."""
         return PhaseMetadata(
             phase_id="phase_32_mono_to_stereo",
             name="Mono-to-Stereo Enhancement v2.0 (Professional)",

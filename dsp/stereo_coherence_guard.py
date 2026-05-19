@@ -61,7 +61,7 @@ class StereoCoherenceGuard:
 
     def process(self, audio: np.ndarray, sr: int) -> dict[str, Any]:
         """
-        Measure stereo coherence (cross-correlation).
+        Misst stereo coherence (cross-correlation).
         Returns metadata dict with correlation value and warning status.
         """
         self.log_contract()

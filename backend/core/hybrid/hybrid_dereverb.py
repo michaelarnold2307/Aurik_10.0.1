@@ -107,7 +107,7 @@ class HybridDereverb:
 
     def __init__(self, config: DereverbConfig | None = None) -> None:
         """
-        Initialize hybrid dereverb.
+        Initialisiert hybrid dereverb.
 
         Args:
             config: Dereverb configuration
@@ -159,7 +159,7 @@ class HybridDereverb:
 
     def dereverb(self, audio: np.ndarray, sample_rate: int = 48000) -> DereverbResult:
         """
-        Apply hybrid dereverb.
+        Wendet an: hybrid dereverb.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -243,7 +243,7 @@ class HybridDereverb:
         )
 
     def _has_sufficient_ml_headroom(self, audio: np.ndarray) -> bool:
-        """Return True when enough free RAM is available for ML dereverb.
+        """Gibt True when enough free RAM is available for ML dereverb zurück.
 
         The previous fixed 3 GB guard was too late for long stereo material:
         SGMSE+ could start with a few GB free and still push the whole VS Code
@@ -312,7 +312,7 @@ class HybridDereverb:
         return True
 
     def _determine_strategy(self, audio: np.ndarray, sample_rate: int) -> DereverbStrategy:
-        """Determine optimal dereverb strategy."""
+        """Bestimmt optimal dereverb strategy."""
         if self.config.strategy != DereverbStrategy.ADAPTIVE:
             return self.config.strategy
 
@@ -334,7 +334,7 @@ class HybridDereverb:
 
     def _apply_dsp_dereverb(self, audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, dict[str, Any]]:
         """
-        Apply DSP spectral gating dereverb.
+        Wendet an: DSP spectral gating dereverb.
 
         Uses existing DSP logic from phase_20_reverb_reduction.py.
         """
@@ -509,7 +509,7 @@ class HybridDereverb:
 
     def _estimate_reverb_level(self, audio: np.ndarray, sample_rate: int) -> float:
         """
-        Estimate reverb level in audio (0-1 scale).
+        Schätzt reverb level in audio (0-1 scale).
 
         Uses RT60-like analysis: measure decay time of energy envelope.
         """

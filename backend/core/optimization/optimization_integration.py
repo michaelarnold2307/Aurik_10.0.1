@@ -60,7 +60,7 @@ class OptimizationIntegration:
         device: str = "cpu",  # §9.5: Aurik 9 — ausschließlich CPU, kein CUDA/ROCm/Metal
     ) -> None:
         """
-        Initialize optimization integration.
+        Initialisiert optimization integration.
 
         Args:
             optimization_base_path: Base path to optimization results
@@ -94,7 +94,7 @@ class OptimizationIntegration:
         logger.info("  Phase 2-4: NAS, Ensemble, MOO, Uncertainty, Augmentation available")
 
     def _load_all_material_parameters(self) -> bool:
-        """Load optimized parameters for all available materials."""
+        """Lädt optimized parameters for all available materials."""
         material_types = ["vinyl", "tape_shellac", "tape_cassette", "tape_reel", "digital", "live", "mp3"]
 
         for material in material_types:
@@ -104,7 +104,7 @@ class OptimizationIntegration:
                 logger.info("  Loaded optimized parameters for: %s", material)
 
     def _load_material_parameters(self, material_type: str) -> dict[str, Any] | None:
-        """Load optimized parameters for specific material."""
+        """Lädt optimized parameters for specific material."""
         params_path = self.optimization_base_path / material_type / f"best_params_{material_type}.yaml"
 
         if not params_path.exists():
@@ -121,7 +121,7 @@ class OptimizationIntegration:
 
     def get_optimized_parameters(self, material_type: str, fallback_to_defaults: bool = True) -> dict[str, Any]:
         """
-        Get optimized parameters for material type.
+        Gibt zurück: optimized parameters for material type.
 
         Args:
             material_type: Material type (vinyl, tape_shellac, etc.)
@@ -148,7 +148,7 @@ class OptimizationIntegration:
         return {}
 
     def _get_default_parameters(self) -> dict[str, Any]:
-        """Get default parameter set."""
+        """Gibt zurück: default parameter set."""
         return {
             # DeepFilterNet
             "dfn_attenuation_limit": 6.0,
@@ -193,7 +193,7 @@ class OptimizationIntegration:
 
     def apply_optimized_parameters_to_context(self, context: dict[str, Any], material_type: str) -> dict[str, Any]:
         """
-        Apply optimized parameters to processing context.
+        Wendet an: optimized parameters to processing context.
 
         Args:
             context: Processing context dictionary
@@ -223,7 +223,7 @@ class OptimizationIntegration:
         return context
 
     def _update_deepfilternet_config(self, context: dict[str, Any], params: dict[str, Any]) -> None:
-        """Update DeepFilterNet configuration."""
+        """Aktualisiert DeepFilterNet configuration."""
         if "ml_config" not in context:
             context["ml_config"] = {}
 
@@ -238,7 +238,7 @@ class OptimizationIntegration:
         dfn_config["max_db_erb_thresh"] = params.get("dfn_max_db_erb_thresh", -10.0)
 
     def _update_demucs_config(self, context: dict[str, Any], params: dict[str, Any]) -> None:
-        """Update Demucs configuration."""
+        """Aktualisiert Demucs configuration."""
         if "ml_config" not in context:
             context["ml_config"] = {}
 
@@ -252,7 +252,7 @@ class OptimizationIntegration:
         demucs_config["split"] = params.get("demucs_split", True)
 
     def _update_eq_config(self, context: dict[str, Any], params: dict[str, Any]) -> None:
-        """Update EQ configuration."""
+        """Aktualisiert EQ configuration."""
         if "dsp_config" not in context:
             context["dsp_config"] = {}
 
@@ -267,7 +267,7 @@ class OptimizationIntegration:
         eq_config["presence_gain"] = params.get("eq_presence_gain", 0.0)
 
     def _update_compressor_config(self, context: dict[str, Any], params: dict[str, Any]):
-        """Update compressor configuration."""
+        """Aktualisiert compressor configuration."""
         if "dsp_config" not in context:
             context["dsp_config"] = {}
 
@@ -283,7 +283,7 @@ class OptimizationIntegration:
         comp_config["knee_db"] = params.get("comp_knee_db", 6.0)
 
     def _update_musical_goals_weights(self, context: dict[str, Any], params: dict[str, Any]) -> bool:
-        """Update musical goals weights."""
+        """Aktualisiert musical goals weights."""
         if "musical_goals" not in context:
             context["musical_goals"] = {}
 
@@ -303,7 +303,7 @@ class OptimizationIntegration:
         self, output_audio: np.ndarray, reference_audio: np.ndarray | None = None, return_details: bool = False
     ) -> float | tuple[float, dict[str, float]]:
         """
-        Compute perceptual quality score.
+        Berechnet perceptual quality score.
 
         Args:
             output_audio: Processed audio
@@ -440,7 +440,7 @@ class OptimizationIntegration:
         force_new: bool = False,
     ) -> AudioNASNetwork:
         """
-        Get or create Neural Architecture Search network for material type.
+        Gibt zurück: or create Neural Architecture Search network for material type.
 
         Args:
             material_type: Material type (vinyl, tape, etc.)
@@ -487,7 +487,7 @@ class OptimizationIntegration:
         output_dim: int = 1,
     ) -> AdvancedEnsemble:
         """
-        Create advanced ensemble from model members.
+        Erstellt advanced ensemble from model members.
 
         Args:
             members: List of model members
@@ -527,7 +527,7 @@ class OptimizationIntegration:
         self, material_type: str, population_size: int = 50, n_objectives: int = 3
     ) -> NSGAII:
         """
-        Get Multi-Objective Optimizer for material type.
+        Gibt zurück: Multi-Objective Optimizer for material type.
 
         Args:
             material_type: Material type
@@ -552,7 +552,7 @@ class OptimizationIntegration:
         force_new: bool = False,
     ) -> UncertaintyQuantifier:
         """
-        Get Uncertainty Quantifier for model.
+        Gibt zurück: Uncertainty Quantifier for model.
 
         Args:
             model: Neural network model
@@ -589,7 +589,7 @@ class OptimizationIntegration:
         force_new: bool = False,
     ) -> RandAugment | AutoAugment:
         """
-        Get or create data augmentation policy for material type.
+        Gibt zurück: or create data augmentation policy for material type.
 
         Args:
             material_type: Material type
@@ -639,7 +639,7 @@ def get_optimization_integration(
     optimization_base_path: Path | None = None, sr: int = 48000
 ) -> OptimizationIntegration:
     """
-    Get or create OptimizationIntegration singleton (Double-Checked Locking).
+    Gibt zurück: or create OptimizationIntegration singleton (Double-Checked Locking).
 
     Args:
         optimization_base_path: Base path to optimization results

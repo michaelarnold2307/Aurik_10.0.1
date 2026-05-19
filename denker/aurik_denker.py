@@ -118,7 +118,7 @@ _HEAVY_DEFECT_HINTS: frozenset[str] = frozenset(
 
 
 def _load_symbol(module_name: str, symbol_name: str) -> Any:
-    """Load a symbol lazily to avoid module-level circular imports."""
+    """Lädt a symbol lazily to avoid module-level circular imports."""
     return getattr(import_module(module_name), symbol_name)
 
 
@@ -137,7 +137,7 @@ def _normalize_goal_scores(raw_goals: Any) -> dict[str, float]:
 
 
 def _get_canonical_thresholds_for_mode(is_studio_2026: bool) -> dict[str, float]:
-    """Load PMGG goal thresholds lazily for the current mode."""
+    """Lädt PMGG goal thresholds lazily for the current mode."""
     threshold_fn = cast(
         Callable[..., dict[str, float]],
         _load_symbol("backend.core.per_phase_musical_goals_gate", "_get_canonical_thresholds"),
@@ -146,7 +146,7 @@ def _get_canonical_thresholds_for_mode(is_studio_2026: bool) -> dict[str, float]
 
 
 def _score_versa_mos(audio: np.ndarray, sr: int) -> Any:
-    """Run VERSA MOS via lazy import to keep optional plugin loading local."""
+    """Führt aus: VERSA MOS via lazy import to keep optional plugin loading local."""
     score_mos_fn = cast(Callable[[np.ndarray, int], Any], _load_symbol("plugins.versa_plugin", "score_mos"))
     return score_mos_fn(audio, sr)
 
@@ -190,6 +190,30 @@ def _probe_benign_digital_source(
     )
     benign, metrics = benign_probe(audio, sr, material_enum)
     return bool(benign), dict(metrics)
+
+
+def _compute_song_audio_fingerprint(audio: np.ndarray, sr: int) -> str:
+    """Berechnet the persistent strategy-cache song id through a lazy import."""
+    fingerprint_fn = cast(
+        Callable[[np.ndarray, int], str],
+        _load_symbol("backend.core.song_strategy_cache", "compute_audio_fingerprint"),
+    )
+    return str(fingerprint_fn(audio, sr))
+
+
+def _get_song_strategy_cache() -> Any:
+    """Gibt the strategy-cache singleton through a lazy import zurück."""
+    cache_fn = cast(Callable[[], Any], _load_symbol("backend.core.song_strategy_cache", "get_song_strategy_cache"))
+    return cache_fn()
+
+
+def _build_song_strategy_entry_from_result(**kwargs: Any) -> Any:
+    """Erstellt a strategy-cache entry through a lazy import."""
+    build_fn = cast(
+        Callable[..., Any],
+        _load_symbol("backend.core.song_strategy_cache", "build_strategy_entry_from_result"),
+    )
+    return build_fn(**kwargs)
 
 
 # ─── Ergebnis-Datenklasse ────────────────────────────────────────────────────
@@ -542,14 +566,14 @@ class AurikDenker:
 
     @classmethod
     def _material_mos_target(cls, material: str, chain_info: dict[str, Any] | None) -> tuple[str, float]:
-        """Returns resolved material key and its adaptive MOS target."""
+        """Gibt resolved material key and its adaptive MOS target zurück."""
         resolved = cls._resolve_excellence_material(material, chain_info)
         target = float(_MATERIAL_MOS_TARGETS.get(resolved, _MATERIAL_MOS_TARGETS["unknown"]))
         return resolved, target
 
     @staticmethod
     def _normalize_mode_name(mode: str | None) -> str:
-        """Normalizes user-facing mode aliases to canonical internal names."""
+        """Normalisiert user-facing mode aliases to canonical internal names."""
         normalized = str(mode or "quality").strip().lower().replace("_", "")
         aliases = {
             "studio 2026": "studio2026",
@@ -573,7 +597,7 @@ class AurikDenker:
         global_plan: Any,
         strategy_mode: str | None,
     ) -> tuple[str, str]:
-        """Selects the safest high-level mode for one-button/autopilot execution."""
+        """Wählt aus: the safest high-level mode for one-button/autopilot execution."""
         requested = cls._normalize_mode_name(requested_mode)
         strategy = cls._normalize_mode_name(strategy_mode)
         resolved_material = cls._resolve_excellence_material(material, chain_info)
@@ -737,6 +761,25 @@ class AurikDenker:
 
         strat_denker: Any = None  # M-2: hoisted — für _budget_ok()-Zugriff nach Stufe 5
         defekt: Any = None  # M-1/M-4: hoisted — für Stage-5-Flags
+
+        # §SSC-1 Song-Strategy-Cache: Fingerprint berechnen + Cache abfragen.
+        # Non-blocking: Fehler stoppen nie die Pipeline.
+        _ssc_song_id: str = ""
+        _ssc_warm_start: Any | None = None
+        try:
+            _ssc_song_id = _compute_song_audio_fingerprint(aktuelles_audio, sr)
+            _ssc_warm_start = _get_song_strategy_cache().get(_ssc_song_id, effective_mode)
+            if _ssc_warm_start is not None:
+                logger.info(
+                    "§SSC-1 Warm-Start: song_id=%s mode=%s HPI=%.3f OQS=%.1f (use_count=%d)",
+                    _ssc_song_id[:8],
+                    effective_mode,
+                    _ssc_warm_start.hpi_achieved,
+                    _ssc_warm_start.oqs_achieved,
+                    _ssc_warm_start.use_count,
+                )
+        except Exception as _ssc_exc:
+            logger.debug("§SSC-1 Cache-Lookup non-blocking: %s", _ssc_exc)
 
         def _budget_ok() -> bool:
             if no_rt_limit:
@@ -1932,6 +1975,32 @@ class AurikDenker:
             + f", Phasen={len(phases_executed)}"
         )
 
+        # §SSC-1 Song-Strategy-Cache: Strategie am Ende speichern (non-blocking).
+        # Erlaubt Warm-Start beim nächsten Durchlauf desselben Songs.
+        if _ssc_song_id and not _rest_rollback:
+            try:
+                # Phase-Deltas aus Metadata extrahieren (UV3-Phasen-Strength-History)
+                _ssc_phase_deltas: dict[str, float] = {}
+                if isinstance(_rest_metadata, dict):
+                    _pd = _rest_metadata.get("phase_deltas")
+                    if isinstance(_pd, dict):
+                        _ssc_phase_deltas = {k: float(v) for k, v in _pd.items() if isinstance(v, (int, float))}
+                _ssc_vqi = float(_rest_metadata.get("vqi", 0.0)) if isinstance(_rest_metadata, dict) else 0.0
+                _ssc_entry = _build_song_strategy_entry_from_result(
+                    song_id=_ssc_song_id,
+                    mode=effective_mode,
+                    phase_scores=_ssc_phase_deltas,
+                    hpi=float(quality_estimate),
+                    vqi=_ssc_vqi,
+                    oqs=float(_versa_mos * 20.0),  # VERSA MOS 0–5 → OQS-Proxy 0–100
+                    era=str(stage_notes.get("era", "")),
+                    genre=str(stage_notes.get("genre", "")),
+                    material=material,
+                )
+                _get_song_strategy_cache().store(_ssc_entry)
+            except Exception as _ssc_store_exc:
+                logger.debug("§SSC-1 Cache-Store non-blocking: %s", _ssc_store_exc)
+
         return AurikErgebnis(
             audio=aktuelles_audio,
             material=material,
@@ -2111,5 +2180,5 @@ def get_phase_interaction_denker() -> Any:
 
 
 def erstelle_globalplan(*args: Any, **kwargs: Any) -> Any:
-    """Lazy wrapper for the MusikalischerGlobalplan entry point."""
+    """Lazy-Wrapper für den MusikalischerGlobalplan-Einstiegspunkt."""
     return _load_symbol("backend.core.musikalischer_globalplan", "erstelle_globalplan")(*args, **kwargs)

@@ -18,10 +18,12 @@ Version: 8.0
 Datum: 7. Februar 2026
 """
 
+import csv
 import json
 import logging
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +74,7 @@ class AudioMetrics:
 
 @dataclass
 class ModuleLog:
-    """Log eines einzelnen Processing-Moduls."""
+    """Protokolliert eines einzelnen Processing-Moduls."""
 
     module_name: str
     metrics_pre: AudioMetrics | None = None
@@ -200,7 +202,7 @@ def compute_f0_stats(audio: np.ndarray, sr: int, fmin: float = 50.0, fmax: float
         return {"f0_mean": 0.0, "f0_std": 0.0, "f0_range": 0.0, "voiced_ratio": 0.0}
 
 
-def compute_hnr(audio: np.ndarray, sr: int, f0: np.ndarray | None = None) -> dict[str, float]:
+def compute_hnr(audio: np.ndarray, _sr: int, _f0: np.ndarray | None = None) -> dict[str, float]:
     """
     Berechnet Harmonic-to-Noise Ratio (HNR).
 
@@ -273,8 +275,6 @@ class PermanentAudioMonitor:
 
     def _compute_metrics(self, audio: np.ndarray, sr: int) -> AudioMetrics:
         """Berechnet alle Audio-Metriken."""
-        from datetime import datetime
-
         # Ensure mono
         if audio.ndim > 1:
             audio = librosa.to_mono(audio)
@@ -339,9 +339,10 @@ class PermanentAudioMonitor:
         self.metadata = metadata or {}
         self.baseline_metrics = self._compute_metrics(audio, sr)
         logger.info(
-            f"   ✅ Baseline captured: RMS={self.baseline_metrics.rms:.4f}, "
-            f"F0={self.baseline_metrics.f0_mean:.1f} Hz, "
-            f"HNR={self.baseline_metrics.hnr_mean:.1f} dB"
+            "   ✅ Baseline captured: RMS=%.4f, F0=%.1f Hz, HNR=%.1f dB",
+            self.baseline_metrics.rms,
+            self.baseline_metrics.f0_mean,
+            self.baseline_metrics.hnr_mean,
         )
 
     def start_module(self, module_name: str):
@@ -388,9 +389,11 @@ class PermanentAudioMonitor:
 
         self.module_logs.append(module_log)
         logger.info(
-            f"   ✅ Module {self.current_module} completed: "
-            f"{processing_time_ms:.1f}ms, confidence={confidence:.2f}, "
-            f"gate={'PASS' if quality_gate_passed else 'FAIL'}"
+            "   ✅ Module %s completed: %.1fms, confidence=%.2f, gate=%s",
+            self.current_module,
+            processing_time_ms,
+            confidence,
+            "PASS" if quality_gate_passed else "FAIL",
         )
 
         self.current_module = None
@@ -461,22 +464,20 @@ class PermanentAudioMonitor:
         )
 
         # Generate filename base
-        from datetime import datetime
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_base = f"audit_{timestamp}"
 
         # Export JSON (machine-readable)
         if "json" in formats:
             json_path = output_path / f"{file_base}.json"
-            with open(json_path, "w") as f:
+            with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(asdict(report), f, indent=2)
             logger.info("✅ Exported JSON audit: %s", json_path)
 
         # Export YAML (human-readable)
         if "yaml" in formats:
             yaml_path = output_path / f"{file_base}.yaml"
-            with open(yaml_path, "w") as f:
+            with open(yaml_path, "w", encoding="utf-8") as f:
                 yaml.dump(asdict(report), f, sort_keys=False, default_flow_style=False)
             logger.info("✅ Exported YAML audit: %s", yaml_path)
 
@@ -495,9 +496,7 @@ class PermanentAudioMonitor:
 
     def _export_csv(self, report: AuditReport, csv_path: Path):
         """Exportiert Report als CSV (simplified - nur Module Summary)."""
-        import csv
-
-        with open(csv_path, "w", newline="") as f:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
             # Header
@@ -546,13 +545,13 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     # Generate test signal
-    sr = 44100
-    duration = 2.0
-    t = np.linspace(0, duration, int(sr * duration))
-    audio = 0.5 * np.sin(2 * np.pi * 440 * t)  # 440 Hz sine wave
+    _sr = 44100
+    _duration = 2.0
+    _t = np.linspace(0, _duration, int(_sr * _duration))
+    _audio = 0.5 * np.sin(2 * np.pi * 440 * _t)  # 440 Hz sine wave
 
     # Add some noise
-    audio += 0.05 * np.random.randn(len(audio))
+    _audio += 0.05 * np.random.randn(len(_audio))
 
     logging.info("=" * 80)
     logging.info("PERMANENTAUDIOMONITOR TEST")
@@ -562,25 +561,25 @@ if __name__ == "__main__":
     monitor = PermanentAudioMonitor()
 
     # Capture baseline
-    monitor.capture_baseline(audio, sr, file_path="test_input.wav", metadata={"source": "test"})
+    monitor.capture_baseline(_audio, _sr, file_path="test_input.wav", metadata={"source": "test"})
 
     # Simulate Module 1: Denoiser
     monitor.start_module("adaptive_denoiser")
     time.sleep(0.05)  # Simulate processing
-    audio_denoised = audio * 0.95  # Simulate slight change
-    monitor.end_module(audio, audio_denoised, sr, confidence=0.92, quality_gate_passed=True)
+    audio_denoised = _audio * 0.95  # Simulate slight change
+    monitor.end_module(_audio, audio_denoised, _sr, confidence=0.92, quality_gate_passed=True)
 
     # Simulate Module 2: Voice Enhancer
     monitor.start_module("voice_enhancer")
     time.sleep(0.03)
     audio_enhanced = audio_denoised * 1.1  # Simulate enhancement
-    monitor.end_module(audio_denoised, audio_enhanced, sr, confidence=0.88, quality_gate_passed=True)
+    monitor.end_module(audio_denoised, audio_enhanced, _sr, confidence=0.88, quality_gate_passed=True)
 
     # Capture final
-    monitor.capture_final(audio_enhanced, sr)
+    monitor.capture_final(audio_enhanced, _sr)
 
     # Export report
-    monitor.export_audit_report(output_dir="/tmp/aurik_audits", formats=["json", "yaml", "csv"])
+    monitor.export_audit_report(output_dir="/tmp/aurik_audits", formats=["json", "yaml", "csv"])  # nosec B108
 
     logging.info("=" * 80)
     logging.info("✅ Test completed successfully!")

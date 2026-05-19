@@ -14,7 +14,7 @@ def compute_loudness(audio: np.ndarray) -> float:
 
 
 def safe_peak_amplitude(audio: np.ndarray) -> float:
-    """Return robust peak amplitude using 99.9th percentile.
+    """Gibt robust peak amplitude using 99.9th percentile zurück.
 
     A single impulse artifact (crackle, click) must not block gain
     normalization of the entire signal (§DSP Peak-Guard).

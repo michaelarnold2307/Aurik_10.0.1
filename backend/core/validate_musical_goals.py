@@ -18,7 +18,7 @@ import numpy as np
 
 
 class VoiceMatchChecker:
-    """Ensure processed vocal characteristics match the original.
+    """Stellt sicher: processed vocal characteristics match the original.
 
     Uses Pearson correlation of the amplitude envelope as a proxy.
     Threshold: correlation ≥ 0.70 → True.
@@ -28,7 +28,7 @@ class VoiceMatchChecker:
         self.threshold = threshold
 
     def check(self, original: np.ndarray, processed: np.ndarray) -> bool:
-        """Return True if original and processed are sufficiently correlated."""
+        """Gibt True if original and processed are sufficiently correlated zurück."""
         orig = np.asarray(original, dtype=np.float64).ravel()
         proc = np.asarray(processed, dtype=np.float64).ravel()
         n = min(len(orig), len(proc))
@@ -53,7 +53,7 @@ class VoiceMatchChecker:
 
 
 class FormantGuard:
-    """Ensure formant frequencies are preserved within tolerance.
+    """Stellt sicher: formant frequencies are preserved within tolerance.
 
     Accepts dicts with keys like ``f1_mean``, ``f2_mean``, …
     Default tolerance: 2 % relative deviation per formant.
@@ -67,7 +67,7 @@ class FormantGuard:
         original: dict[str, float],
         processed: dict[str, float],
     ) -> bool:
-        """Return True if all formant deviations are within tolerance."""
+        """Gibt True if all formant deviations are within tolerance zurück."""
         for key in original:
             if key not in processed:
                 continue
@@ -89,7 +89,7 @@ class FormantGuard:
 
 
 class MixBalanceChecker:
-    """Detect significant stem-level LUFS imbalances.
+    """Erkennt significant stem-level LUFS imbalances.
 
     Accepts dicts with keys ``vocals``, ``bass``, ``drums``, ``other``
     containing dBFS/LUFS values.  Returns True only when the processed mix
@@ -104,7 +104,7 @@ class MixBalanceChecker:
         original: dict[str, float],
         processed: dict[str, float],
     ) -> bool:
-        """Return True when all stems are within tolerance_db."""
+        """Gibt True when all stems are within tolerance_db zurück."""
         for key in original:
             if key not in processed:
                 continue
@@ -130,7 +130,7 @@ class PitchContourChecker:
         original: np.ndarray,
         processed: np.ndarray,
     ) -> bool:
-        """Return True if Pearson correlation of pitch arrays ≥ threshold."""
+        """Gibt True if Pearson correlation of pitch arrays ≥ threshold zurück."""
         orig = np.asarray(original, dtype=np.float64).ravel()
         proc = np.asarray(processed, dtype=np.float64).ravel()
         n = min(len(orig), len(proc))
@@ -167,11 +167,11 @@ class ArtifactChecker:
             self.minimum = minimum
 
         def check(self, scores: dict[str, float]) -> bool:
-            """Return True when all scores ≥ minimum."""
+            """Gibt True when all scores ≥ minimum zurück."""
             return all(float(v) >= self.minimum for v in scores.values())
 
     class ExzellenzChecker:
-        """Check overall excellence: quality_estimate ≥ 0.55 AND speedup ≥ 1.2×.
+        """Prüft overall excellence: quality_estimate ≥ 0.55 AND speedup ≥ 1.2×.
 
         Args:
             quality_threshold: Minimum quality_estimate (default 0.55).
@@ -187,7 +187,7 @@ class ArtifactChecker:
             self.speedup_threshold = speedup_threshold
 
         def check(self, quality_estimate: float, speedup: float) -> bool:
-            """Return True when both gates pass."""
+            """Gibt True when both gates pass zurück."""
             return float(quality_estimate) >= self.quality_threshold and float(speedup) >= self.speedup_threshold
 
 
@@ -199,7 +199,7 @@ def check_quality_gates(
     sr: int,
     scores: dict[str, float] | None = None,
 ) -> bool:
-    """Return True when audio passes basic quality gates."""
+    """Gibt True when audio passes basic quality gates zurück."""
     if not np.isfinite(audio).all():
         return False
     if np.max(np.abs(audio)) > 1.0:
@@ -219,5 +219,5 @@ _quality_gate_lock = _threading.Lock()
 
 
 def get_checker() -> ArtifactChecker:
-    """Return a shared ``ArtifactChecker`` instance."""
+    """Gibt a shared ``ArtifactChecker`` instance zurück."""
     return ArtifactChecker()

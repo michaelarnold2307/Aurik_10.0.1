@@ -13,7 +13,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class RumbleDetector(DefectDetector):
     """
-    Detects low-frequency rumble.
+    Erkennt low-frequency rumble.
 
     Common in vinyl recordings from turntable motor vibration,
     poor isolation, or warped records.
@@ -24,7 +24,7 @@ class RumbleDetector(DefectDetector):
         self.rumble_cutoff = rumble_cutoff
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.15, **kwargs) -> list[DefectInstance]:
-        """Detect low-frequency rumble, kontextbewusst."""
+        """Erkennt low-frequency rumble, kontextbewusst."""
         if audio.ndim == 2:
             audio = audio[:, 0]
         sos = butter(4, self.rumble_cutoff, btype="low", fs=sr, output="sos")

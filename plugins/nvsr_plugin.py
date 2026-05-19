@@ -1,13 +1,14 @@
-"""NVSR Plugin — Neural Vocoder Super Resolution (DSP-SBR Stub, §Spec-04).
+"""NVSR Plugin — productive SBR/NVSR adapter (§Spec-04).
 
 Zielbereich: 8–16 kHz Bandbreitenerweiterung.
-Methode:     Spectral Band Replication (SBR) + harmonische Oberton-Extrapolation.
+Methode:     Spectral Band Replication (SBR) + harmonic envelope extrapolation.
 Abgrenzung:  AudioSR (Diffusion) für 0–8 kHz (Shellac).
              NVSR (diese Datei) für 8–16 kHz (Vinyl, MP3-128kbps).
              Vorteil: deterministisch, kein Halluzinationsrisiko, 10–30× schneller.
 
-Future:      Wenn NVSR-ONNX-Modell (models/nvsr/nvsr.onnx) vorhanden,
-             wird automatisch auf DNN-Inferenz eskaliert (§SOTA-Matrix Mai 2026).
+Wenn ein lokales NVSR-ONNX-Modell (models/nvsr/nvsr.onnx) vorhanden ist,
+wird auf Modell-Inferenz eskaliert. Sonst ist SBR der produktive, deterministische
+Fallback für 8–16 kHz ohne Halluzinationsrisiko.
 
 §SOTA-Matrix:
     "SBR-Heuristik + NVSR: 8–16 kHz fehlt (MP3 128kbps): deterministisch, schneller,
@@ -96,7 +97,26 @@ class NvsrPlugin:
         self._onnx_available = False
         self._onnx_load_attempted = False
         self._onnx_lock = threading.Lock()
-        logger.info("NvsrPlugin: DSP-SBR-Instanz initialisiert (ONNX-Hook bereit für %s)", _NVSR_ONNX_PATH)
+        self._last_route_metadata: dict[str, Any] = {
+            "strategy": "uninitialized",
+            "capability_status": "unavailable",
+            "model_path": str(_NVSR_ONNX_PATH),
+            "model_loaded": False,
+        }
+        logger.info("NvsrPlugin: productive SBR/NVSR adapter initialized (model path=%s)", _NVSR_ONNX_PATH)
+
+    @property
+    def route_metadata(self) -> dict[str, Any]:
+        """Gibt metadata for the last processing route zurück."""
+        return dict(self._last_route_metadata)
+
+    def capability_status(self) -> str:
+        """Gibt local NVSR capability without running inference zurück."""
+        if self._onnx_available and self._onnx_session is not None:
+            return "sota_real"
+        if _NVSR_ONNX_PATH.exists():
+            return "sota_fallback"
+        return "dsp_productive"
 
     # ------------------------------------------------------------------
     # Public API
@@ -152,6 +172,13 @@ class NvsrPlugin:
 
         if effective_target <= _SBR_TARGET_LOW_HZ + 500.0:
             # Ziel bereits nah an Quelle → kein Gewinn
+            self._last_route_metadata = self._metadata(
+                strategy="passthrough",
+                target_hz=effective_target,
+                ceiling_hz=ceiling_hz,
+                strength=0.0,
+                hf_energy_added_db=0.0,
+            )
             return {
                 "audio": audio,
                 "strategy": "passthrough",
@@ -159,6 +186,7 @@ class NvsrPlugin:
                 "ceiling_hz": ceiling_hz,
                 "strength": 0.0,
                 "hf_energy_added_db": 0.0,
+                **self._last_route_metadata,
             }
 
         # Versuche ONNX-Eskalation wenn Modell vorhanden
@@ -172,6 +200,28 @@ class NvsrPlugin:
                 logger.warning("NvsrPlugin: ONNX-Fehler → DSP-Fallback: %s", _onnx_exc)
 
         return self._process_dsp_sbr(audio, sr, effective_target, strength, energy_bias_db, panns_singing)
+
+    def _metadata(
+        self,
+        *,
+        strategy: str,
+        target_hz: float,
+        ceiling_hz: float,
+        strength: float,
+        hf_energy_added_db: float,
+    ) -> dict[str, Any]:
+        """Erstellt JSON-safe route metadata."""
+        status = "sota_real" if strategy == "onnx" else self.capability_status()
+        return {
+            "strategy": strategy,
+            "capability_status": status,
+            "model_path": str(_NVSR_ONNX_PATH),
+            "model_loaded": bool(self._onnx_available and self._onnx_session is not None),
+            "target_hz": float(target_hz),
+            "ceiling_hz": float(ceiling_hz),
+            "strength": float(strength),
+            "hf_energy_added_db": float(hf_energy_added_db),
+        }
 
     # ------------------------------------------------------------------
     # DSP-SBR Kern
@@ -238,6 +288,13 @@ class NvsrPlugin:
         except Exception:
             pass
 
+        self._last_route_metadata = self._metadata(
+            strategy="dsp_sbr",
+            target_hz=target_hz,
+            ceiling_hz=target_hz,
+            strength=strength,
+            hf_energy_added_db=hf_added_db,
+        )
         return {
             "audio": result_audio,
             "strategy": "dsp_sbr",
@@ -245,6 +302,7 @@ class NvsrPlugin:
             "ceiling_hz": target_hz,
             "strength": strength,
             "hf_energy_added_db": hf_added_db,
+            **self._last_route_metadata,
         }
 
     def _process_channel_sbr(
@@ -372,9 +430,11 @@ class NvsrPlugin:
             try:
                 import onnxruntime as ort  # pylint: disable=import-outside-toplevel
 
+                from backend.core.ml_device_manager import get_ort_providers  # pylint: disable=import-outside-toplevel
+
                 self._onnx_session = ort.InferenceSession(
                     str(_NVSR_ONNX_PATH),
-                    providers=["CPUExecutionProvider"],
+                    providers=get_ort_providers("NVSR"),
                 )
                 self._onnx_available = True
                 logger.info("NvsrPlugin: ONNX-Modell geladen von %s", _NVSR_ONNX_PATH)
@@ -390,7 +450,51 @@ class NvsrPlugin:
         strength: float,
         energy_bias_db: float,
     ) -> dict[str, Any]:
-        """ONNX-Inferenz (Platzhalter für echte NVSR-Implementierung)."""
-        # Fallback auf DSP bis echtes NVSR-Modell verfügbar ist
-        logger.debug("NvsrPlugin: ONNX-Pfad aufgerufen — delegiere zu DSP-SBR")
-        return self._process_dsp_sbr(audio, sr, target_hz, strength, energy_bias_db, 0.0)
+        """Führt aus: a bundled NVSR ONNX waveform model and blend safely."""
+        if self._onnx_session is None:
+            raise RuntimeError("NVSR ONNX session not loaded")
+        session = self._onnx_session
+        inputs = session.get_inputs()
+        if not inputs:
+            raise RuntimeError("NVSR ONNX model has no inputs")
+        mono = audio if audio.ndim == 1 else audio.mean(axis=0)
+        mono = np.asarray(mono, dtype=np.float32)
+        rank = len(getattr(inputs[0], "shape", []) or [])
+        if rank >= 3:
+            model_input = mono[np.newaxis, np.newaxis, :].astype(np.float32)
+        elif rank == 2:
+            model_input = mono[np.newaxis, :].astype(np.float32)
+        else:
+            model_input = mono.astype(np.float32)
+        outputs = session.run(None, {inputs[0].name: model_input})
+        if not outputs:
+            raise RuntimeError("NVSR ONNX model returned no outputs")
+        out = np.asarray(outputs[0], dtype=np.float32).reshape(-1)
+        if len(out) > len(mono):
+            out = out[: len(mono)]
+        elif len(out) < len(mono):
+            out = np.pad(out, (0, len(mono) - len(out)), mode="constant")
+        out = np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)
+        if audio.ndim == 2 and audio.shape[0] == 2:
+            out_audio = np.stack([out, out], axis=0)
+        else:
+            out_audio = out
+
+        dsp_ref = self._process_dsp_sbr(audio, sr, target_hz, strength, energy_bias_db, 0.0)["audio"]
+        blended = np.clip((1.0 - strength) * np.asarray(dsp_ref, dtype=np.float32) + strength * out_audio, -1.0, 1.0)
+        self._last_route_metadata = self._metadata(
+            strategy="onnx",
+            target_hz=target_hz,
+            ceiling_hz=target_hz,
+            strength=strength,
+            hf_energy_added_db=0.0,
+        )
+        return {
+            "audio": blended.astype(np.float32),
+            "strategy": "onnx",
+            "target_hz": target_hz,
+            "ceiling_hz": target_hz,
+            "strength": strength,
+            "hf_energy_added_db": 0.0,
+            **self._last_route_metadata,
+        }

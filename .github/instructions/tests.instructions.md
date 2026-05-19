@@ -146,3 +146,30 @@ def test_phase_XX_no_regression(synthetic_audio, sr=48000):
 # ↔ PMGG.PHASE_GOAL_EXCLUSIONS[p] ∩ P1P2
 # bidirektional synchron — CI-Gate
 ```
+
+## Recovery-Phase-Dict — Disk-Validierung [RELEASE_MUST]
+
+Jede Änderung an `_GOAL_TO_RECOVERY_PHASES_RESTORATION` oder `_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS`
+in `calibration_matrix.py` muss durch diesen Test gesichert sein:
+
+```python
+def test_get_goal_recovery_phases_all_phase_ids_exist_on_disk():
+    """Alle Phase-IDs in den Recovery-Dicts müssen als phase_*.py auf Disk existieren.
+
+    Verhindert: Tippfehler, umbenannte Phasen, falsche IDs die alle strukturellen
+    Tests bestehen aber §GOAL_BASELINE_CHECK lautlos versagen lassen.
+    """
+    import pathlib
+    import backend.core.calibration_matrix as _cm
+    phases_dir = pathlib.Path(__file__).parent.parent.parent / "backend" / "core" / "phases"
+    valid_ids = {p.stem for p in phases_dir.glob("phase_*.py")}
+    # ... alle IDs aus beiden Dicts gegen valid_ids prüfen
+```
+
+**Verboten**: Phase-ID in einen der Recovery-Dicts eintragen, bevor die zugehörige
+`backend/core/phases/phase_XY_name.py` Datei existiert.
+
+**Verboten**: Phase-ID nach Umbenennung der Phase-Datei im Recovery-Dict nicht aktualisieren.
+
+**Sortierregel** [NORMATIV]: Phasen innerhalb einer Goal-Liste MÜSSEN §2.46-Carrier-Chain-Hierarchie
+einhalten (subtraktiv/mechanisch → additiv/digital, Stufen 1→6). Nicht nach Phasennummer sortieren.

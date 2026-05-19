@@ -90,7 +90,7 @@ class ModuleInfo:
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
+        """Konvertiert to dictionary."""
         return {
             "name": self.name,
             "state": self.state.value,
@@ -121,7 +121,7 @@ class SessionMetadata:
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
+        """Konvertiert to dictionary."""
         return asdict(self)
 
 
@@ -171,7 +171,7 @@ class ProcessingContext:
         storage_path: Path | None = None,
     ):
         """
-        Initialize Processing Context.
+        Initialisiert Processing Context.
 
         Args:
             session_id: Unique session identifier
@@ -209,7 +209,7 @@ class ProcessingContext:
 
     def set(self, key: str, value: Any) -> None:
         """
-        Set a value in the context.
+        Setzt a value in the context.
         Thread-safe operation.
 
         Args:
@@ -222,7 +222,7 @@ class ProcessingContext:
 
     def get(self, key: str, default: Any = None) -> Any:
         """
-        Get a value from the context.
+        Gibt zurück: a value from the context.
         Thread-safe operation.
 
         Args:
@@ -236,7 +236,7 @@ class ProcessingContext:
             return self._state.get(key, default)
 
     def has(self, key: str) -> bool:
-        """Check if key exists in context."""
+        """Prüft if key exists in context."""
         with self._lock:
             return key in self._state
 
@@ -248,7 +248,7 @@ class ProcessingContext:
                 self._trigger_event("state_changed", {"key": key, "deleted": True})
 
     def get_all(self) -> dict[str, Any]:
-        """Get all state as dictionary (copy)."""
+        """Gibt zurück: all state as dictionary (copy)."""
         with self._lock:
             return self._state.copy()
 
@@ -256,7 +256,7 @@ class ProcessingContext:
 
     def register_module(self, module_name: str, parameters: dict | None = None) -> None:
         """
-        Register a module in the context.
+        Registriert a module in the context.
 
         Args:
             module_name: Name of the module
@@ -270,7 +270,7 @@ class ProcessingContext:
 
     def set_module_state(self, module_name: str, state: ModuleState) -> None:
         """
-        Set module state.
+        Setzt module state.
 
         Args:
             module_name: Name of the module
@@ -375,7 +375,7 @@ class ProcessingContext:
 
     def get_module_info(self, module_name: str) -> ModuleInfo | None:
         """
-        Get module information.
+        Gibt zurück: module information.
 
         Args:
             module_name: Name of the module
@@ -387,17 +387,17 @@ class ProcessingContext:
             return self._modules.get(module_name)
 
     def get_all_modules(self) -> dict[str, ModuleInfo]:
-        """Get all module information (copy)."""
+        """Gibt zurück: all module information (copy)."""
         with self._lock:
             return self._modules.copy()
 
     def get_completed_modules(self) -> list[str]:
-        """Get list of completed module names."""
+        """Gibt zurück: list of completed module names."""
         with self._lock:
             return [name for name, info in self._modules.items() if info.state == ModuleState.COMPLETED]
 
     def get_failed_modules(self) -> list[str]:
-        """Get list of failed module names."""
+        """Gibt zurück: list of failed module names."""
         with self._lock:
             return [name for name, info in self._modules.items() if info.state == ModuleState.FAILED]
 
@@ -405,7 +405,7 @@ class ProcessingContext:
 
     def set_phase(self, phase: ProcessingPhase) -> None:
         """
-        Set current processing phase.
+        Setzt current processing phase.
 
         Args:
             phase: New phase
@@ -417,7 +417,7 @@ class ProcessingContext:
             logger.info("Phase changed: %s → %s", old_phase.value, phase.value)
 
     def get_phase(self) -> ProcessingPhase:
-        """Get current processing phase."""
+        """Gibt zurück: current processing phase."""
         with self._lock:
             return self._phase
 
@@ -425,7 +425,7 @@ class ProcessingContext:
 
     def add_listener(self, event_name: str, callback: Callable) -> None:
         """
-        Add event listener.
+        Fügt hinzu: event listener.
 
         Args:
             event_name: Name of the event
@@ -438,7 +438,7 @@ class ProcessingContext:
 
     def remove_listener(self, event_name: str, callback: Callable) -> None:
         """
-        Remove event listener.
+        Entfernt event listener.
 
         Args:
             event_name: Name of the event
@@ -450,7 +450,7 @@ class ProcessingContext:
 
     def _trigger_event(self, event_name: str, event_data: dict[str, Any]) -> None:
         """
-        Trigger event (internal).
+        Löst aus: event (internal).
 
         Args:
             event_name: Name of the event
@@ -470,7 +470,7 @@ class ProcessingContext:
         self.set("forensic_analysis", analysis)
 
     def get_forensic_analysis(self) -> Any | None:
-        """Get forensic analysis result."""
+        """Gibt zurück: forensic analysis result."""
         return self.get("forensic_analysis")
 
     def set_processing_chain(self, chain: Any) -> None:
@@ -478,17 +478,17 @@ class ProcessingContext:
         self.set("processing_chain", chain)
 
     def get_processing_chain(self) -> Any | None:
-        """Get processing chain."""
+        """Gibt zurück: processing chain."""
         return self.get("processing_chain")
 
     def set_audio_metadata(self, duration_sec: float, num_channels: int) -> None:
-        """Set audio metadata."""
+        """Setzt audio metadata."""
         with self._lock:
             self.metadata.audio_duration_sec = duration_sec
             self.metadata.num_channels = num_channels
 
     def add_tag(self, tag: str) -> None:
-        """Add a tag to the session."""
+        """Fügt hinzu: a tag to the session."""
         with self._lock:
             if tag not in self.metadata.tags:
                 self.metadata.tags.append(tag)
@@ -497,7 +497,7 @@ class ProcessingContext:
 
     def get_statistics(self) -> dict[str, Any]:
         """
-        Get processing statistics.
+        Gibt zurück: processing statistics.
 
         Returns:
             Statistics dictionary
@@ -532,7 +532,7 @@ class ProcessingContext:
 
     def get_summary(self) -> dict[str, Any]:
         """
-        Get comprehensive session summary.
+        Gibt zurück: comprehensive session summary.
 
         Returns:
             Summary dictionary
@@ -550,7 +550,7 @@ class ProcessingContext:
 
     def save(self, path: Path | None = None) -> Path:
         """
-        Save context to disk.
+        Speichert context to disk.
 
         Args:
             path: Optional custom path
@@ -573,7 +573,7 @@ class ProcessingContext:
     @classmethod
     def load(cls, path: Path) -> "ProcessingContext":
         """
-        Load context from disk.
+        Lädt context from disk.
 
         Args:
             path: Path to load from
@@ -635,7 +635,7 @@ class ProcessingContext:
 
     def has_module_type_processed(self, module_type: ModuleType) -> bool:
         """
-        Check if a module of this type has already been processed.
+        Prüft if a module of this type has already been processed.
 
         Args:
             module_type: Module type to check
@@ -650,7 +650,7 @@ class ProcessingContext:
 
     def get_processing_history(self, module_type: ModuleType) -> list[ModuleInfo]:
         """
-        Get processing history for a specific module type.
+        Gibt zurück: processing history for a specific module type.
 
         Args:
             module_type: Module type to query
@@ -665,7 +665,7 @@ class ProcessingContext:
 
     def get_accumulated_strength(self, module_type: ModuleType) -> float:
         """
-        Get total accumulated processing strength for a module type.
+        Gibt zurück: total accumulated processing strength for a module type.
 
         Args:
             module_type: Module type to query
@@ -679,7 +679,7 @@ class ProcessingContext:
 
     def check_over_processing_risk(self, module_type: ModuleType, proposed_strength: float) -> dict[str, Any]:
         """
-        Check if proposed processing would cause over-processing.
+        Prüft if proposed processing would cause over-processing.
 
         Over-processing thresholds:
         - DEESSER: > 2.0 cumulative strength
@@ -740,7 +740,7 @@ class ProcessingContext:
         self, module_type: ModuleType, base_strength: float, confidence: float, material_type: str | None = None
     ) -> dict[str, Any]:
         """
-        Get recommended processing strength based on context.
+        Gibt zurück: recommended processing strength based on context.
 
         Adjustments:
         - Confidence-based: Low confidence (<0.7) reduces strength by 30%
@@ -835,7 +835,7 @@ class ProcessingContext:
         parameters: dict | None = None,
     ) -> None:
         """
-        Register a module and its processing parameters.
+        Registriert a module and its processing parameters.
         Convenience method combining register_module with type/strength tracking.
 
         Args:
@@ -917,7 +917,7 @@ class ContextManager:
         self, session_id: str, sample_rate: int = 48000, processing_mode: str = "restoration", **kwargs
     ) -> ProcessingContext:
         """
-        Create a new processing context.
+        Erstellt a new processing context.
 
         Args:
             session_id: Unique session ID
@@ -943,7 +943,7 @@ class ContextManager:
 
     def get_context(self, session_id: str) -> ProcessingContext | None:
         """
-        Get existing context.
+        Gibt zurück: existing context.
 
         Args:
             session_id: Session ID
@@ -956,7 +956,7 @@ class ContextManager:
 
     def remove_context(self, session_id: str) -> None:
         """
-        Remove context.
+        Entfernt context.
 
         Args:
             session_id: Session ID
@@ -967,12 +967,12 @@ class ContextManager:
                 logger.info("Context removed: %s", session_id)
 
     def get_all_contexts(self) -> dict[str, ProcessingContext]:
-        """Get all contexts (copy)."""
+        """Gibt zurück: all contexts (copy)."""
         with self._context_lock:
             return self._contexts.copy()
 
     def clear_all(self) -> None:
-        """Clear all contexts."""
+        """Löscht all contexts."""
         with self._context_lock:
             self._contexts.clear()
             self.logger.info("All contexts cleared")
@@ -982,5 +982,5 @@ class ContextManager:
 
 
 def get_context_manager() -> ContextManager:
-    """Get global context manager (singleton)."""
+    """Gibt zurück: global context manager (singleton)."""
     return ContextManager()

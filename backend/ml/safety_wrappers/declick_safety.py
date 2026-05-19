@@ -37,7 +37,7 @@ from .safety_wrapper_template import (
 
 def detect_clicks(audio: np.ndarray, sr: int, threshold_db: float = -30.0) -> tuple[bool, int, list[int]]:
     """
-    Detect clicks in audio signal.
+    Erkennt clicks in audio signal.
 
     Clicks are sharp, broadband transients (often from vinyl, digital errors).
 
@@ -160,7 +160,7 @@ def classify_transient(audio: np.ndarray, position: int, sr: int, window_ms: flo
 
 def compute_transient_density(audio: np.ndarray, sr: int) -> float:
     """
-    Compute transient density (transients per second).
+    Berechnet transient density (transients per second).
 
     High density may indicate rhythmic music (drums).
 
@@ -198,7 +198,7 @@ def compute_transient_density(audio: np.ndarray, sr: int) -> float:
 
 def measure_attack_time(audio: np.ndarray, sr: int) -> float:
     """
-    Measure average attack time of transients.
+    Misst average attack time of transients.
 
     Faster attacks = more percussive (need preservation).
 
@@ -269,7 +269,7 @@ class DeClickSafety(BaseSafetyWrapper):
         max_transient_loss: float = 0.15,
     ):
         """
-        Initialize De-Click Safety Wrapper.
+        Initialisiert De-Click Safety Wrapper.
 
         Args:
             processor_func: De-clicking function (audio, sr, sensitivity) -> audio
@@ -292,7 +292,7 @@ class DeClickSafety(BaseSafetyWrapper):
         self.max_transient_loss = max_transient_loss
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for de-clicking."""
+        """Validiert pre-conditions for de-clicking."""
         # Basic audio validation
         is_valid, errors = validate_audio_basic(audio)
 
@@ -385,7 +385,7 @@ class DeClickSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions after de-clicking."""
+        """Validiert post-conditions after de-clicking."""
         issues = []
         side_effects = []
         metrics = {}
@@ -478,7 +478,7 @@ class DeClickSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute overall quality score."""
+        """Berechnet overall quality score."""
         scores = []
 
         # Click reduction effectiveness

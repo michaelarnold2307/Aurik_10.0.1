@@ -44,7 +44,7 @@ class SeverityLevel(Enum):
 
     @classmethod
     def from_score(cls, score: float) -> "SeverityLevel":
-        """Convert severity score (0.0-1.0) to level."""
+        """Konvertiert severity score (0.0-1.0) to level."""
         if score < 0.1:
             return cls.NONE
         elif score < 0.3:
@@ -122,15 +122,15 @@ class DefectReport:
     analysis_time: float  # seconds
 
     def get_defects_by_type(self, defect_type: DefectType) -> list[DefectInstance]:
-        """Get all defects of a specific type."""
+        """Gibt zurück: all defects of a specific type."""
         return [d for d in self.defects if d.type == defect_type]
 
     def get_critical_defects(self) -> list[DefectInstance]:
-        """Get all critical/severe defects."""
+        """Gibt zurück: all critical/severe defects."""
         return [d for d in self.defects if d.severity_level in (SeverityLevel.CRITICAL, SeverityLevel.SEVERE)]
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert report to dictionary for serialization."""
+        """Konvertiert report to dictionary for serialization."""
         return {
             "defects": [
                 {
@@ -208,7 +208,7 @@ class DefectDetector(ABC):
     @abstractmethod
     def detect(self, audio: np.ndarray, sr: int, **kwargs) -> list[DefectInstance]:
         """
-        Detect defects in audio.
+        Erkennt defects in audio.
 
         Args:
             audio: Audio array (n_samples,) or (n_samples, n_channels)
@@ -229,7 +229,7 @@ class DefectDetector(ABC):
         end_time: float | None = None,
         affected_channels: list[int] | None = None,
     ) -> DefectInstance:
-        """Helper to create DefectInstance with common fields."""
+        """Hilfsfunktion: to create DefectInstance with common fields."""
         return DefectInstance(
             type=self.defect_type,
             severity=np.clip(severity, 0.0, 1.0),

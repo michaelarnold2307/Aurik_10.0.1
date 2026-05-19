@@ -72,7 +72,7 @@ class ONNXInferenceSession:
         enable_profiling: bool = False,
     ):
         """
-        Initialize ONNX Runtime session.
+        Initialisiert ONNX Runtime session.
 
         Args:
             model_path: Path to ONNX model file
@@ -174,7 +174,7 @@ class ONNXInferenceSession:
 
     def run(self, inputs: dict[str, np.ndarray], profile: bool = False) -> list[np.ndarray]:
         """
-        Run ONNX inference.
+        Führt aus: ONNX inference.
 
         Args:
             inputs: Input tensors as {name: array}
@@ -202,7 +202,7 @@ class ONNXInferenceSession:
             raise
 
     def get_stats(self) -> dict[str, Any]:
-        """Get inference statistics."""
+        """Gibt zurück: inference statistics."""
         avg_time = self.total_inference_time / self.total_inferences if self.total_inferences > 0 else 0.0
 
         return {
@@ -214,7 +214,7 @@ class ONNXInferenceSession:
         }
 
     def reset_stats(self) -> None:
-        """Reset inference statistics."""
+        """Setzt zurück: inference statistics."""
         self.total_inferences = 0
         self.total_inference_time = 0.0
 
@@ -241,7 +241,7 @@ class OptimizedONNXModel:
         enable_warmup: bool = True,
     ):
         """
-        Initialize optimized ONNX model.
+        Initialisiert optimized ONNX model.
 
         Args:
             model_path: Path to ONNX model file
@@ -265,7 +265,7 @@ class OptimizedONNXModel:
 
     def process(self, audio: np.ndarray, sr: int | None = None) -> np.ndarray:
         """
-        Process audio through ONNX model.
+        Verarbeitet audio through ONNX model.
 
         Args:
             audio: Input audio array (1D or 2D)
@@ -294,7 +294,7 @@ class OptimizedONNXModel:
 
     def process_batch(self, audio_batch: list[np.ndarray], sr: int | None = None) -> list[np.ndarray]:
         """
-        Process batch of audio samples.
+        Verarbeitet batch of audio samples.
 
         Args:
             audio_batch: List of audio arrays
@@ -349,13 +349,13 @@ class OptimizedONNXModel:
         return output
 
     def get_stats(self) -> dict[str, Any]:
-        """Get model inference statistics."""
+        """Gibt zurück: model inference statistics."""
         stats = self.session.get_stats()
         stats.update({"model_type": self.model_type, "sample_rate": self.sample_rate, "status": self.status.value})
         return stats
 
     def reset_stats(self) -> None:
-        """Reset inference statistics."""
+        """Setzt zurück: inference statistics."""
         self.session.reset_stats()
 
     def __repr__(self) -> str:

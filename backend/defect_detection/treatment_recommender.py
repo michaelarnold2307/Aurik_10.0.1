@@ -97,7 +97,7 @@ class TreatmentRecommender:
         return unique_treatments
 
     def _generate_params(self, defect: DefectInstance) -> dict[str, Any]:
-        """Generate treatment parameters based on defect severity."""
+        """Generiert treatment parameters based on defect severity."""
         severity = defect.severity
 
         if defect.type == DefectType.CLIPPING:
@@ -209,7 +209,7 @@ class TreatmentRecommender:
 
     def _estimate_improvement(self, defect: DefectInstance) -> float:
         """
-        Estimate expected improvement (0.0 - 1.0) from treatment.
+        Schätzt expected improvement (0.0 - 1.0) from treatment.
 
         Based on:
         - Defect type (some are easier to fix)
@@ -244,7 +244,7 @@ class TreatmentRecommender:
         return min(improvement, 1.0)
 
     def _list_side_effects(self, defect_type: DefectType, severity: float) -> list[str]:
-        """List potential side effects of treatment."""
+        """Listet auf: potential side effects of treatment."""
         side_effects = []
 
         if defect_type == DefectType.CLIPPING:
@@ -278,7 +278,7 @@ class TreatmentRecommender:
         return side_effects
 
     def _requires_manual_check(self, defect: DefectInstance) -> bool:
-        """Determine if manual verification recommended."""
+        """Bestimmt if manual verification recommended."""
         # High severity defects should be checked
         if defect.severity > 0.8:
             return True
@@ -291,7 +291,7 @@ class TreatmentRecommender:
         return bool(defect.type == DefectType.DISTORTION and defect.severity > 0.5)
 
     def _create_no_treatment(self, defect: DefectInstance) -> TreatmentRecommendation:
-        """Create a placeholder for defects with no treatment."""
+        """Erstellt a placeholder for defects with no treatment."""
         return TreatmentRecommendation(
             method="manual_inspection",
             module_path="",

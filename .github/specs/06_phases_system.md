@@ -94,6 +94,9 @@ phase_63_intermodulation_reduction.py Intermodulations-Reduktion
                                     (Volterra-basierte IMD-Tilgung)
 phase_64_tape_splice_repair.py       Tape-Splice-Reparatur
                                     (Klick-, Pegel- und Phasendiskontinuität an Klebestellen)
+phase_65_vocal_naturalness_restoration.py  DSP-Vocal-Naturalness-Restaurierung
+                                    (HNR-Blend + Spektral-Tilt-Korrektur + Formant-Tilt-Korrektur;
+                                     nur Restoration, §0a-konform; kein ML, kein Enhancement)
 ```
 
 **Phase-58-Datenvertrag (bindend ab v9.10.100):**
@@ -655,6 +658,93 @@ Pol-Stabilisierung (|z| ≥ 0.995 → 0.994). 5 ms Boundary-Crossfade.
 **VERBOTEN**: `_interpolate_hybrid()` als Alias für `_interpolate_linear()`.
 
 > Vollständiger Algorithmus: Spec 04 §4.7a
+
+---
+
+## §7.10 [RELEASE_MUST] Phase_65 — DSP-Vocal-Naturalness-Restaurierung (Restoration, v9.12.0)
+
+> **Kontext**: `phase_42_vocal_enhancement` ist in Restoration-Modus per §0a Crossfire-Invariante
+> verboten (Stem-Enhancement = Halluzination). Dies hinterlässt eine Lücke: Nach aggressivem NR
+> (phase_03, phase_29) verlieren Vokale natürliche Wärme und HNR-Charakter. VQI sinkt auf
+> 0.70–0.74 → Recovery-Cascade, aber keine Recovery-Phase kann das Defizit schließen — alle
+> Vokal-Enhancement-Phasen sind Studio-Only. Phase_63 schließt diese Lücke durch einen
+> **ausschließlich subtraktiven/korrektiven DSP-Ansatz** ohne jede generative Komponente.
+
+### §7.10a Algorithmus — Drei Stufen
+
+**Stufe 1: Spektral-Tilt-Korrektur (Korrektiv, kein Enhancement)**
+
+```python
+# Vergleich Input-Spektral-Tilt (Pre-NR) vs. Output-Tilt (Post-NR):
+# NR neigt dazu, den Spektral-Tilt im 1–4 kHz-Bereich zu verändern (Resonanzboden dämpfen).
+# Korrektur: Shelving-EQ bringt Tilt zurück — nicht als Enhancement, sondern als Inversion.
+tilt_delta = estimate_spectral_tilt(pre_nr_audio) - estimate_spectral_tilt(post_nr_audio)
+# Nur Korrektur anwenden wenn delta > 1.5 dB (perceptuell relevant):
+if abs(tilt_delta) > 1.5:
+    audio = apply_spectral_tilt_correction(audio, tilt_delta, sr)
+    # Limit: max ±3.0 dB Shelving — kein Enhancement über pre_nr_tilt hinaus
+```
+
+**Stufe 2: HNR-Blend (Vokal-spezifisch, nur wenn `panns_singing ≥ 0.35`)**
+
+```python
+# Misst HNR Differenz pre_nr vs. post_nr:
+delta_hnr = compute_hnr(pre_nr_audio, sr) - compute_hnr(post_nr_audio, sr)
+if delta_hnr > 2.5:   # Mehr als 2.5 dB HNR-Verlust durch NR
+    blend = np.clip(delta_hnr / 10.0, 0.0, 0.35)  # Max 35 % Dry-Blend
+    audio = (1.0 - blend) * audio + blend * pre_nr_audio
+    # Kanonisch: apply_hnr_blend() aus §0p — NICHT neu implementieren
+```
+
+**Stufe 3: Formant-Tilt-Korrektur (F1–F4, nur wenn Formant-Shift > 1.5 dB)**
+
+```python
+# LPC-Formant-Tracking vor/nach NR:
+formants_pre  = track_lpc_formants(pre_nr_audio, sr, order=16)
+formants_post = track_lpc_formants(post_nr_audio, sr, order=16)
+for fn in range(4):
+    delta_db = formants_post[fn].energy_db - formants_pre[fn].energy_db
+    if abs(delta_db) > 1.5:
+        audio = apply_narrow_shelf(audio, sr,
+                                   center_hz=formants_post[fn].freq,
+                                   gain_db=np.clip(-delta_db, -2.5, +2.5),
+                                   q=6.0)
+# Limit: max ±2.5 dB pro Formant — §0p Formant-Integrität-Guard bleibt aktiv
+```
+
+### §7.10b Invarianten
+
+- **Familien-Taxonomie**: KORREKTIV (nicht ADDITIVE, nicht SUBTRAKTIV)
+- **§0a Crossfire-Invariante**: Nie in Studio-2026-Run (dort ist phase_42 richtig)
+- **Activation Gate**: `panns_singing ≥ 0.25` UND (`delta_hnr > 2.5` ODER `tilt_delta > 1.5`) — kein Eingriff wenn Vokal nach NR bereits natürlich klingt
+- **pre_nr_audio-Pflicht**: Phase_63 MUSS `pre_nr_audio` (Audio vor NR-Phasen) aus `restoration_context["pre_nr_checkpoint"]` beziehen — kein Pre-Pipeline-Input (wäre zu laut/verrauscht)
+- **Reihenfolge**: Phase_63 läuft **nach** allen NR-Phasen (phase_03, phase_29, phase_20) — als Korrektiv-Post-NR
+- **VQI-Check**: Nach Phase_63 MUSS `compute_vqi()` aufgerufen werden. Wenn VQI nach Phase_63 < VQI vor Phase_63: Rollback
+- **PMGG-Exclusions**: `{"natuerlichkeit", "brillanz", "tonal_center"}` — diese Goals werden absichtlich verändert; ausschließlich VQI ist relevante Metrik
+
+### §7.10c CAUSE_TO_PHASES-Mapping
+
+```python
+# CAUSES:
+"vocal_naturalness_loss" → definiert durch:
+    panns_singing ≥ 0.35
+    AND delta_hnr_after_nr > 2.5 dB  (DefectScanner muss pre/post-NR HNR vergleichen)
+    AND mode == "restoration"
+
+# CAUSE_TO_PHASES:
+"vocal_naturalness_loss": ["phase_65_vocal_naturalness_restoration"]
+```
+
+### §7.10d Reihenfolge in `_MATERIAL_PRIORITY_PHASES`
+
+Phase_63 läuft in Tier 4 (Post-NR, Pre-Enhancement):
+
+```
+... → phase_29 (NR) → phase_20 (Dereverb) → phase_65 (Vocal Naturalness) → phase_08 (Transient) → ...
+```
+
+> **Kreuzreferenz**: §0a (Crossfire-Invariante), §0p (HNR-Blend, VQI-Gate), §4.5 (MMSE-LSA),
+> Spec 09 §09.11 (VocalQuality Recovery-Phase-Mapping auf phase_65), copilot-instructions §0a
 
 ---
 

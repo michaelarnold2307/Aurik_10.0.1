@@ -1,5 +1,3 @@
-import logging
-
 """
 Unified Defect Detector
 =======================
@@ -8,6 +6,7 @@ Main orchestrator for audio defect detection.
 Runs all registered detectors and generates comprehensive report.
 """
 
+import logging
 import time
 
 import numpy as np
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 class UnifiedDefectDetector:
     """
-    Unified audio defect detection system.
+    Einheitliches Audio-Defekterkennungs-System.
 
     Orchestrates multiple defect detectors to provide:
     - Comprehensive defect analysis
@@ -124,7 +123,7 @@ class UnifiedDefectDetector:
         context: dict | None = None,
     ) -> DefectReport:
         """
-        Analyze audio for all defects.
+        Analysiert Audio auf alle Defekte.
 
         Args:
             audio: Audio array (n_samples,) or (n_samples, n_channels)
@@ -258,7 +257,7 @@ class UnifiedDefectDetector:
         return max(quality, 0.0)
 
     def _register_default_detectors(self):
-        """Register all default detectors."""
+        """Registriert all default detectors."""
         default_detectors = [
             ClippingDetector(),
             ClicksDetector(),
@@ -276,7 +275,7 @@ class UnifiedDefectDetector:
             self.registry.register(detector)
 
     def list_detectors(self) -> list[str]:
-        """List all registered detector names."""
+        """Listet alle registrierten Detektor-Namen auf."""
         return self.registry.list_names()
 
     def quick_scan(self, audio: np.ndarray, sr: int) -> dict:

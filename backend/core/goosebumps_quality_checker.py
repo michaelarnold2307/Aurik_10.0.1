@@ -95,7 +95,7 @@ class GoosebumpsResult:
 
 
 def _to_mono(audio: np.ndarray) -> np.ndarray:
-    """Convert to mono for analysis.
+    """Konvertiert to mono for analysis.
 
     Handles both (samples, channels) and (channels, samples) orientation by
     averaging over the axis with fewer elements (= the channels axis).
@@ -117,7 +117,7 @@ def _center_crop(audio: np.ndarray, sr: int, max_s: float) -> np.ndarray:
 
 
 def _onset_envelope(audio: np.ndarray, sr: int, hop: int = _ONSET_ENV_HOP) -> np.ndarray:
-    """Compute onset strength envelope via spectral flux (half-wave rectified)."""
+    """Berechnet onset strength envelope via spectral flux (half-wave rectified)."""
     n_fft = 2048
     hop_size = hop
     # Zero-pad to ensure clean STFT
@@ -146,7 +146,7 @@ def _onset_envelope(audio: np.ndarray, sr: int, hop: int = _ONSET_ENV_HOP) -> np
 
 
 def _measure_transient_integrity(original: np.ndarray, restored: np.ndarray, sr: int) -> tuple[float, dict[str, float]]:
-    """Measure transient preservation quality.
+    """Misst transient preservation quality.
 
     Combines:
     - Onset envelope correlation (how well transient shapes are preserved)
@@ -222,7 +222,7 @@ def _measure_transient_integrity(original: np.ndarray, restored: np.ndarray, sr:
 
 
 def _measure_micro_dynamics(original: np.ndarray, restored: np.ndarray, sr: int) -> tuple[float, dict[str, float]]:
-    """Measure micro-dynamics preservation via short-term LUFS profile correlation.
+    """Misst micro-dynamics preservation via short-term LUFS profile correlation.
 
     Uses 400ms RMS windows (matching MDEM specification) to compare the
     amplitude modulation patterns between original and restored audio.
@@ -288,7 +288,7 @@ def _measure_micro_dynamics(original: np.ndarray, restored: np.ndarray, sr: int)
 
 
 def _measure_clarity(original: np.ndarray, restored: np.ndarray, sr: int) -> tuple[float, dict[str, float]]:
-    """Measure clarity improvement — noise reduction without over-processing.
+    """Misst clarity improvement — noise reduction without over-processing.
 
     Combines:
     - Spectral flatness change (lower = more tonal/clear)
@@ -418,7 +418,7 @@ def _measure_clarity(original: np.ndarray, restored: np.ndarray, sr: int) -> tup
 
 
 def _measure_authenticity(original: np.ndarray, restored: np.ndarray, sr: int) -> tuple[float, dict[str, float]]:
-    """Measure timbral and tonal authenticity preservation.
+    """Misst timbral and tonal authenticity preservation.
 
     Combines:
     - MFCC correlation (timbre preservation)
@@ -524,7 +524,7 @@ def _measure_authenticity(original: np.ndarray, restored: np.ndarray, sr: int) -
 
 
 def _measure_artifact_penalty(original: np.ndarray, restored: np.ndarray, sr: int) -> tuple[float, dict[str, float]]:
-    """Detect processing artifacts introduced by restoration.
+    """Erkennt processing artifacts introduced by restoration.
 
     Measures:
     - Pre-echo / post-echo (spectral leakage from STFT processing)
@@ -728,7 +728,7 @@ _lock = threading.Lock()
 
 
 class GoosebumpsQualityChecker:
-    """Singleton wrapper for goosebumps quality assessment (§8.3 Spec).
+    """Singleton-Wrapper für Gänsehaut-Qualitätsbewertung (§8.3 Spec).
 
     Thread-safe, double-checked locking pattern as required by §3.x.
     """
@@ -740,7 +740,7 @@ class GoosebumpsQualityChecker:
         sr: int,
         musical_goal_scores: dict[str, float] | None = None,
     ) -> GoosebumpsResult:
-        """Measure goosebumps quality of restored audio vs. original."""
+        """Misst goosebumps quality of restored audio vs. original."""
         return measure_goosebumps(original, restored, sr, musical_goal_scores)
 
 

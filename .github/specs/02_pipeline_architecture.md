@@ -304,6 +304,12 @@ Audio-Eingang (mono/stereo, beliebige SR)
 [IntroducedArtifactDetector]  → ML_HALLUCINATION / NMF_RESIDUAL_CLICK / etc.
     ↓
 [FeedbackChain.run()]  → iteriert bis PQS-MOS konvergiert || max_iterations
+    │ Normative Konvergenz-Werte (§8.5, Spec 07 — Single Source of Truth):
+    │   MAX_ITERATIONS = 5
+    │   CONVERGENCE_DELTA = 0.02  (|mos_n - mos_n-1| < 0.02 → Exit, kein Rollback)
+    │   REGRESSION_DELTA  = 0.05  (|mos_n - mos_n-1| > 0.05 → sofortiger Rollback auf bestes Ergebnis)
+    │   FORCED_EXIT bei n >= MAX_ITERATIONS (kein Hänger möglich)
+    │ VERBOTEN: abweichende Werte in Implementierung (§8.5 ist normativ übergeordnet)
     ↓
 [TemporalQualityCoherenceMetric]  (bei Dateien ≥ 25 s)
     ↓
@@ -3593,6 +3599,483 @@ for phase_id in planned_phases:
 - **VERBOTEN**: Pipeline läuft nach `_mas_fully_achieved = True` weiter.
 - **VERBOTEN**: Phase ohne Pre/Post-Delta-Log (kein `_profiled_phase_call_with_delta()`-Aufruf).
 - `_mas_targets` = `SongGoalTargets.targets` aus `estimate_song_goal_targets()` (§0k, Spec 09 §09.11).
-- MAS-Targets sind ceiling-geclampt auf `PHYSICAL_CEILING[material]` (Spec 09 §09.11) — kein physikalisches Limit überschreiten.
+- MAS-Targets sind ceiling-geclampt auf `PHYSICAL_CEILING[material]` (Spec 09 §09.11) — kein physikalisches Limit überschreiben.
 
 > Spec 09 §09.11 für MAS-Formaldefinition + PHYSICAL_CEILING; §0k für normatives Prinzip
+
+---
+
+## §2.66 [RELEASE_MUST] SharedF0Context — Geteilte F0-Referenz für alle Phasen (v9.12.0)
+
+> **Konzeptuelle Kernlücke geschlossen**: Ohne SharedF0Context schätzt jede Phase die
+> Grundfrequenz unabhängig (CREPE oder PYIN). Das führt zu inkonsistenten F0-Karten über
+> die Pipeline — Phase_12 (Wow/Flutter) und Phase_42 (Vocal Enhancement) arbeiten
+> dann auf abweichenden F0-Spuren und können entgegengesetzte Korrekturen einführen.
+> Weltklasse erfordert eine einzige kanonische F0-Spur, auf die alle Phasen zugreifen.
+
+### §2.66a Berechnung (vor Phase-Ausführung)
+
+```python
+# Nach VocalFocusAnalyzer, vor GoalApplicabilityFilter:
+# Laufzeit-Budget: ≤ 5 s/min Audio (CREPE-tiny auf CPU)
+from plugins.crepe_pitch_tracker import get_crepe_pitch_tracker
+
+_f0_tracker = get_crepe_pitch_tracker()
+_f0_result = _f0_tracker.estimate(
+    audio=_pipeline_input_mono,  # Mono-Downmix für F0-Analyse
+    sr=sr,
+    hop_length_ms=10,            # 10 ms Hop (= 480 Samples @ 48 kHz)
+    model_size="tiny",           # tiny: 4.2 MB, akzeptable Genauigkeit, schnell
+    viterbi=True,                # Viterbi-Decoder für glatte F0-Kontur
+)
+# {
+#   "f0_hz":      np.ndarray,    # f₀ pro Frame [Hz], 0.0 = unvoiced
+#   "confidence": np.ndarray,    # Konfidenz [0, 1] pro Frame
+#   "voiced_flag":np.ndarray,    # bool-Maske voiced/unvoiced
+#   "hop_length": int,           # samples
+#   "times_s":    np.ndarray,    # Zeitpunkte [s]
+# }
+_restoration_context["shared_f0"] = _f0_result
+logger.info(
+    "shared_f0: voiced_ratio=%.2f%%, f0_range=[%.1f, %.1f] Hz",
+    _f0_result["voiced_flag"].mean() * 100,
+    _f0_result["f0_hz"][_f0_result["voiced_flag"]].min() if _f0_result["voiced_flag"].any() else 0.0,
+    _f0_result["f0_hz"][_f0_result["voiced_flag"]].max() if _f0_result["voiced_flag"].any() else 0.0,
+)
+```
+
+### §2.66b Zugriff durch Phasen
+
+```python
+# Jede Phase, die F0 benötigt, MUSS auf shared_f0 zugreifen:
+_shared_f0 = kwargs.get("shared_f0") or _restoration_context.get("shared_f0")
+if _shared_f0 is None:
+    # Fallback: eigene Schätzung (PYIN, ressourcenschonend)
+    logger.warning("phase=%s: shared_f0 not available — local F0 fallback", _phase_id)
+    _f0_hz = _estimate_f0_local(audio, sr)
+else:
+    _f0_hz = _shared_f0["f0_hz"]
+    _voiced = _shared_f0["voiced_flag"]
+```
+
+### §2.66c Phasen-Bindung (MUSS shared_f0 nutzen)
+
+| Phase | F0-Nutzung |
+| --- | --- |
+| `phase_12_wow_flutter` | Pitch-Warp-Referenz; Segmente mit voiced_flag=True |
+| `phase_29_tape_hiss` | Masking-Profil pro Voiced-Frame (Harmonik-Schutz) |
+| `phase_42_vocal_enhancement` | Formant-Extraktion relativ zu f₀ |
+| `phase_03_denoise` | Harmonik-Schutz: preserve bei voiced_flag=True |
+| `phase_55_diffusion_inpainting` | AR-Prior: f₀-konditioniertes Inpainting |
+
+**VERBOTEN**: Neue Phase, die F0 benötigt, schätzt F0 eigenständig ohne `shared_f0`-Fallback-Prüfung.
+
+### §2.66d Invarianten
+
+- `shared_f0` ist **read-only** für alle Phasen (kein Schreiben in `_restoration_context["shared_f0"]`).
+- F0-Schätzung läuft auf Mono-Downmix, auch bei Stereo-Material (L+R-Mittel).
+- Non-blocking: Exception in CREPE → `shared_f0 = None` → lokaler Fallback in betroffener Phase.
+- `voiced_ratio < 0.05`: Instrumentalstück — `shared_f0` leer befüllt, keine F0-abhängige Verarbeitung.
+
+---
+
+## §2.67 [RELEASE_MUST] DynamicArcProtection — Schutzmechanismus für den Dynamikbogen (v9.12.0)
+
+> **Konzeptuelle Kernlücke geschlossen**: Jede Phase kann lokal korrekt arbeiten und
+> trotzdem den Gesamt-Dynamikbogen des Titels flachdrücken. Akkumulierte Kompression
+> über 6–8 NR/EQ-Phasen macht aus einem emotionalen Titel mit Piano-Forte-Kontrast
+> eine gleichmäßige "Schachtel" ohne Drama. §2.35e (Spec 01) ist das Mess-Korrelat.
+
+### §2.67a Pre-Pipeline Envelope-Referenz
+
+```python
+# Unmittelbar nach Silence-Mask-Computation, vor allen Phasen:
+from backend.core.musical_goals.emotional_arc_metric import get_emotional_arc_metric
+
+_arc_metric = get_emotional_arc_metric()
+_arc_envelope_ref = _arc_metric.extract_loudness_envelope(
+    audio=_pipeline_input,
+    sr=sr,
+    window_ms=400,    # momentane LUFS, 400 ms Fenster (BS.1770-5)
+)
+_restoration_context["arc_envelope_ref"] = _arc_envelope_ref
+# {
+#   "lufs_curve":      np.ndarray,   # momentane LUFS pro Frame
+#   "klimax_segments": List[int],    # Top-5% Energie-Frame-Indizes
+#   "piano_segments":  List[int],    # Bottom-10% Energie-Frame-Indizes
+#   "dynamic_range":   float,        # Differenz max–min in LUFS
+# }
+```
+
+### §2.67b Post-Pipeline Check
+
+```python
+# In UV3._holisticperceptualgate(), nach allen Phasen:
+_arc_result = _arc_metric.measure_emotional_arc_preservation(
+    audio_orig=_pipeline_input,
+    audio_restored=_best_sig,
+    sr=sr,
+    arc_envelope_ref=_restoration_context["arc_envelope_ref"],
+)
+metadata["emotional_arc"] = _arc_result
+
+if _arc_result["emotional_arc_score"] < 0.80:
+    logger.warning(
+        "dynamic_arc_guard: arc_score=%.3f < 0.80 — triggering recovery_cascade",
+        _arc_result["emotional_arc_score"],
+    )
+    _recovery_cascade(reason="dynamic_arc_score_too_low", metadata=metadata)
+    # Non-blocking: kein Export-Stopp; beste bisherige Version exportieren
+```
+
+### §2.67c Phasen-Level-Arc-Guard
+
+```python
+# Nach jeder NR/Dynamik-Phase (phase_29, phase_03, phase_26, phase_35):
+_post_arc = _arc_metric.extract_loudness_envelope(_post_phase_audio, sr)
+_arc_correlation = np.corrcoef(
+    _restoration_context["arc_envelope_ref"]["lufs_curve"],
+    _post_arc["lufs_curve"]
+)[0, 1]
+
+if _arc_correlation < 0.80:
+    logger.warning("phase=%s: arc_correlation=%.3f < 0.80 — rollback phase", phase_id, _arc_correlation)
+    return _pre_phase_audio  # Phase-Level-Rollback
+```
+
+### §2.67d Invarianten
+
+- Envelope-Referenz wird **einmal** vor der Pipeline berechnet — niemals überschrieben.
+- Arc-Check ist **non-blocking** für den Export. Recovery-Kaskade gibt dem System die Chance,
+  sich selbst zu korrigieren (Stärke-Reduktion, Checkpoint-Rollback).
+- `arc_correlation ≥ 0.80` per Phase; `emotional_arc_score ≥ 0.88` nach Pipeline (Studio 2026: ≥ 0.90).
+- Gilt für Restoration UND Studio 2026 — der Dynamikbogen ist heilig in beiden Modi.
+- Laufzeit: ≤ 500 ms/min Audio (nur LUFS-Berechnung, kein ML).
+
+---
+
+## §2.68 [RELEASE_MUST] Structural Silence Isolation Protocol (SSIP) — v9.12.0
+
+> **Systemproblem**: Generative und inpainting-basierte Phasen erzeugen katastrophal laute
+> Artefakte in Stille-Zonen (Intro, Outro, Fade, Pre-Roll). Konventionelle Silence-Masken,
+> Gain-Guards und Post-Processing-Clips greifen nicht, weil das Problem **architekturell**
+> ist, nicht parametrisch. Dieser Abschnitt spezifiziert die drei Failure-Modes und ihre
+> kanonische Lösung auf Architektur-Ebene.
+
+### §2.68a Failure-Mode-Analyse (warum konventionelle Regeln versagen)
+
+**Failure Mode 1 — Gap-Detektor klassifiziert Stille-Musik-Grenze als Dropout**
+
+```
+Ursache:
+  Andere Phasen (NR, EQ, BW-Erweiterung) fügen kleine Artefakte in Stille-Zonen ein.
+  Die Kontrast-Bedingung im Gap-Detektor (pre_db > gap_db + 8.0 dB) trifft dann zu:
+  Musik  : −12 dBFS (hoch) vs. Stille+Artefakt : −55 dBFS → Kontrast = 43 dB ≥ 8 dB
+  → Gap-Detektor: "Dropout erkannt" → Inpainting generiert Musik in die Stille.
+
+Versagen der konventionellen Lösung:
+  Silence-Mask wird als repaired_gap_samples-Filter NACH Gap-Detektion angewendet.
+  Wenn aber die Gap-Grenzen durch verarbeitetes Audio (mit Artefakten) verschoben wurden,
+  ist der Overlap-Check unzuverlässig: Gap beginnt bei Sample X+100 statt X,
+  liegt außerhalb der Silence-Zone und wird nicht gefiltert.
+```
+
+**Failure Mode 2 — Modell-Kontext-Kontamination über Stille-Grenzen**
+
+```
+Ursache:
+  Diffusions- und AR-Inpainting-Modelle verwenden ein Kontext-Fenster (typisch 2–10 s).
+  Liegt eine Gap-Region innerhalb von 2 s einer Stille-Grenze, enthält das Kontext-Fenster
+  sowohl Musik als auch Stille. Das Modell generiert musikalische Kontinuität → füllt die
+  Stille mit generiertem Inhalt bei voller Musiklautstärke.
+
+Versagen der konventionellen Lösung:
+  Eine Post-Processing-Maske kann nur das Output-Signal kappen. Aber das Modell hat
+  bereits energie-dominante Inhalte erzeugt, die in benachbarte Zonen (±200 ms der
+  Stille-Grenze) "durchbluten" — weil ISTFT/Overlap-Add den generierten Inhalt
+  über Fenster-Grenzen hinaus verteilt.
+```
+
+**Failure Mode 3 — Silence-Mask-Null-Propagation**
+
+```
+Ursache:
+  silence_mask ist None wenn UV3 sie nicht explizit in kwargs["silence_mask"] oder
+  restoration_context["silence_mask"] injiziert. In diesem Fall überspringt phase_55
+  die gesamte Schutzlogik ohne Fehler oder Warnung. Keine Test-Assertion prüft das.
+
+Versagen der konventionellen Lösung:
+  Schwellwerte und Guards existieren, werden aber nie ausgeführt wenn silence_mask=None.
+  Kein Logging "silence_mask not available — all silence zones unprotected".
+```
+
+### §2.68b Kanonische Lösung — Hard Isolation Architecture
+
+**Prinzip**: Stille darf das Inpainting-Modell nie als Eingabe-Kontext erreichen.
+Isolation vor der Verarbeitung — kein Post-Processing.
+
+```python
+# backend/core/dsp/structural_silence_isolation.py
+# Singleton: get_structural_silence_isolator()
+
+class StructuralSilenceIsolator:
+    """
+    Architekturell trennt Stille von Audio-Inhalt vor jeder generativen Verarbeitung.
+
+    NICHT: Post-Processing-Maske (greift nicht bei Kontextkontamination).
+    SONDERN: Vorverarbeitungs-Isolation — das Modell sieht nur Audio-Segmente,
+             nie Stille, nie Stille-Musik-Grenzen.
+    """
+
+    # Silence-Schwellen — material-adaptiv (Singleton-Cache)
+    SILENCE_THRESHOLDS_DBFS = {
+        "shellac":    -22.0,
+        "vinyl":      -33.0,
+        "cassette":   -43.0,
+        "reel_tape":  -50.0,
+        "cd_digital": -57.0,
+        "unknown":    -45.0,
+    }
+
+    # Sicherheitspuffer: Gap darf nicht näher als CONTEXT_GUARD_MS an Stille sein
+    CONTEXT_GUARD_MS = 1500.0  # 1.5 s — typisches AR-Kontextfenster
+
+    def detect_structural_silence_zones(
+        self,
+        audio_original: np.ndarray,  # ORIGINAL, vor Verarbeitung
+        sr: int,
+        material_key: str = "unknown",
+    ) -> List[Tuple[int, int]]:
+        """
+        Erkennt strukturelle Stille aus dem ORIGINAL-Audio (vor allen Phasen).
+        Gibt (start_sample, end_sample)-Zonen zurück.
+
+        Bedingungen für "strukturelle Stille" (UND-Verknüpfung):
+        1. RMS < SILENCE_THRESHOLDS_DBFS[material_key] (200 ms-Fenster)
+        2. Dauer >= 300 ms (kürzere Pausen sind musikalische Pausen, keine Stille)
+        3. Zone muss am ANFANG oder ENDE des Signals liegen, ODER > 1000 ms dauern
+           (Mitte des Stücks: nur lange Pausen sind "strukturelle Stille")
+
+        WICHTIG: Aus dem ORIGINAL-Audio berechnen — niemals aus verarbeitetem Audio.
+        """
+        ...
+
+    def split_at_silence_boundaries(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        silence_zones: List[Tuple[int, int]],
+    ) -> List[Dict]:
+        """
+        Splittet Audio in Segmente, die KEINE Stille-Zonen enthalten.
+        Stille-Zonen werden als separate "silence"-Segmente zurückgegeben.
+
+        Returns: [
+            {"type": "audio",   "start": int, "end": int, "data": np.ndarray},
+            {"type": "silence", "start": int, "end": int, "data": np.ndarray},
+            ...
+        ]
+
+        Garantie: Kein "audio"-Segment enthält Stille aus silence_zones.
+        Garantie: Kein "audio"-Segment liegt näher als CONTEXT_GUARD_MS an Stille-Grenze.
+        → Gap-Detektor und Modell sehen niemals Stille als Nachbar.
+        """
+        ...
+
+    def reassemble_from_segments(
+        self,
+        segments: List[Dict],
+        original_silence_audio: np.ndarray,
+        n_samples_total: int,
+    ) -> np.ndarray:
+        """
+        Fügt verarbeitete Audio-Segmente und ORIGINAL-Stille-Daten zusammen.
+
+        Stille-Segmente: ORIGINAL-Daten (aus pre-Pipeline-Audio) — niemals verarbeitet.
+        Audio-Segmente: verarbeitete Daten aus dem Inpainting.
+
+        HARD RULE: In reassembliertem Output an Stille-Zonen-Positionen sind
+        AUSSCHLIESSLICH die Original-Samples zulässig. Keine Exception.
+        """
+        ...
+
+    def post_inpainting_silence_audit(
+        self,
+        audio_before_inpainting: np.ndarray,
+        audio_after_inpainting: np.ndarray,
+        silence_zones: List[Tuple[int, int]],
+        sr: int,
+    ) -> np.ndarray:
+        """
+        Post-Inpainting-Sicherheitsnetz (letzter Layer).
+
+        Für jede Stille-Zone:
+          1. Messe Energie in audio_after_inpainting
+          2. Messe Energie in audio_before_inpainting
+          3. Wenn after > before + 3 dB: HARD RESET — Original-Samples einsetzen
+             (kein Clipping, kein Mixing — vollständiger Reset auf original_audio)
+
+        Reset-Schwelle: +3 dB über Pre-Inpainting-Pegel (kein Gain-Creep erlaubt).
+        VERBOTEN: Clamp/Clip als Alternative zu Hard-Reset — Clamp erzeugt
+        Signalverzerrung; Hard-Reset reproduziert das Original exakt.
+
+        Returns: audio mit zurückgesetzten Stille-Zonen.
+        """
+        ...
+```
+
+### §2.68c Pflicht-Integration in Phase_55 und Phase_24
+
+```python
+# Pflicht-Pattern für JEDE generative/inpainting Phase:
+
+def _run_inpainting_with_ssip(audio, sr, silence_zones, inpainting_fn, **kwargs):
+    """
+    Wraps jede Inpainting-Funktion mit SSIP.
+    Muss in phase_55 und phase_24 verwendet werden — kein direkter Aufruf mehr.
+    """
+    _isolator = get_structural_silence_isolator()
+
+    # Layer 1: Isolation — Modell sieht keine Stille
+    segments = _isolator.split_at_silence_boundaries(audio, sr, silence_zones)
+
+    processed_segments = []
+    for seg in segments:
+        if seg["type"] == "silence":
+            # Stille: immer Original, niemals verarbeiten
+            processed_segments.append(seg)
+        else:
+            # Audio-Segment: Inpainting anwenden
+            processed_data = inpainting_fn(seg["data"], sr, **kwargs)
+            processed_segments.append({**seg, "data": processed_data})
+
+    # Layer 2: Reassembly — Stille-Zonen aus Original
+    result = _isolator.reassemble_from_segments(
+        processed_segments,
+        original_silence_audio=audio,  # Pre-Inpainting-Audio für Stille-Referenz
+        n_samples_total=audio.shape[-1],
+    )
+
+    # Layer 3: Post-Audit — letztes Sicherheitsnetz
+    result = _isolator.post_inpainting_silence_audit(
+        audio_before_inpainting=audio,
+        audio_after_inpainting=result,
+        silence_zones=silence_zones,
+        sr=sr,
+    )
+
+    return result
+```
+
+### §2.68d Null-Propagation-Guard (Failure Mode 3)
+
+```python
+# In phase_55 und phase_24: Pflicht-Assertion bei Stille-Zonen-Verfügbarkeit
+_silence_zones = _get_structural_silence_zones(kwargs, audio_original, sr, material_key)
+# _get_structural_silence_zones() ist nie None — berechnet eigenständig wenn nötig:
+
+def _get_structural_silence_zones(kwargs, audio_original, sr, material_key):
+    """MUSS immer gültige Stille-Zonen zurückgeben — niemals None oder leere Liste
+    ohne Berechnung."""
+    # Versuch 1: aus kwargs
+    silence_zones = kwargs.get("structural_silence_zones")
+    if silence_zones is not None:
+        return silence_zones
+
+    # Versuch 2: aus restoration_context
+    ctx = kwargs.get("restoration_context", {})
+    silence_zones = ctx.get("structural_silence_zones")
+    if silence_zones is not None:
+        return silence_zones
+
+    # Versuch 3: Eigenständig berechnen aus Original-Audio
+    # NIEMALS auf None zurückfallen — das deaktiviert den gesamten Schutz.
+    logger.warning(
+        "SSIP: structural_silence_zones nicht in context — "
+        "eigenständige Berechnung aus original_audio (Fallback, non-blocking)"
+    )
+    isolator = get_structural_silence_isolator()
+    return isolator.detect_structural_silence_zones(audio_original, sr, material_key)
+```
+
+### §2.68e UV3-Pflichten (Pre-Pipeline)
+
+```python
+# In UV3._execute_pipeline(), nach Silence-Mask-Berechnung:
+# structural_silence_zones wird EINMALIG aus ORIGINAL-Audio berechnet
+# und in _restoration_context injiziert.
+
+_ssip = get_structural_silence_isolator()
+_structural_silence_zones = _ssip.detect_structural_silence_zones(
+    audio_original=_pipeline_input,  # ORIGINAL vor allen Phasen
+    sr=sr,
+    material_key=material_type,
+)
+_restoration_context["structural_silence_zones"] = _structural_silence_zones
+logger.info(
+    "SSIP: %d strukturelle Stille-Zone(n) detektiert — "
+    "Inpainting-Isolation aktiv",
+    len(_structural_silence_zones),
+)
+
+# Wenn 0 Zonen: kein Fehler — Titel beginnt/endet mit Musik (kein Fade-In/Out)
+# VERBOTEN: silence_zones=None als Ergebnis — immer leere Liste [] als Default.
+```
+
+### §2.68f Invarianten (absolut, keine Phase-Override)
+
+1. **Isolation vor Verarbeitung**: Kein Inpainting-Modell darf Stille als Kontext erhalten.
+2. **Original-Stille ist sakrosankt**: Stille-Zonen im Export MÜSSEN bit-identisch mit dem Pre-Pipeline-Original sein (oder energie-äquivalent innerhalb ±0.5 dB).
+3. **Context-Guard**: Kein Gap darf innerhalb `CONTEXT_GUARD_MS` (1500 ms) einer strukturellen Stille-Zone verarbeitet werden — er wird als Boundary-Gap klassifiziert und mit `_conservative_boundary_fill` gefüllt (DSP, kein generatives Modell).
+4. **Hard-Reset, kein Clamp**: Wenn Stille-Zone Energie enthält → Reset auf Original-Samples. Clamp produziert Verzerrungsartefakte. Hard-Reset ist immer sicherer.
+5. **Material-adaptive Stille-Schwelle**: SILENCE_THRESHOLDS_DBFS pro material_key — Shellac hat anderen Rauschboden als CD.
+6. **Gilt für**: phase_55 (Diffusions-Inpainting) + phase_24 (Dropout-Repair) + jede zukünftige Phase mit generativer oder AR-basierter Lücken-Füllung.
+
+### §2.68g CI-Tests (Pflicht, [RELEASE_MUST])
+
+```python
+# tests/unit/test_structural_silence_isolation.py
+
+def test_ssip_no_energy_in_silence_zone_after_inpainting():
+    """Silence-Zone darf nach Inpainting nicht lauter als Original sein."""
+    # Synthetisches Audio: 1 s Stille + 3 s Musik + 1 s Stille
+    audio = np.concatenate([np.zeros(48000), np.random.randn(144000) * 0.3, np.zeros(48000)])
+    # Inpainting simulieren (worst case: füllt alles mit Energie)
+    noisy_inpainted = audio + np.random.randn(len(audio)) * 0.1
+
+    isolator = get_structural_silence_isolator()
+    zones = isolator.detect_structural_silence_zones(audio, 48000, "unknown")
+    result = isolator.post_inpainting_silence_audit(audio, noisy_inpainted, zones, 48000)
+
+    for start, end in zones:
+        energy_result = np.sqrt(np.mean(result[start:end] ** 2) + 1e-12)
+        energy_orig = np.sqrt(np.mean(audio[start:end] ** 2) + 1e-12)
+        assert energy_result <= energy_orig * 1.12  # max +1 dB Toleranz
+
+def test_ssip_null_propagation_guard():
+    """Ohne injizierte silence_zones MUSS eigenständige Berechnung erfolgen."""
+    audio = np.concatenate([np.zeros(48000), np.random.randn(144000) * 0.3, np.zeros(48000)])
+    zones = _get_structural_silence_zones({}, audio, 48000, "unknown")
+    assert zones is not None
+    assert len(zones) >= 1  # mindestens eine Zone muss gefunden werden
+
+def test_ssip_context_guard_ms():
+    """Gap näher als CONTEXT_GUARD_MS an Stille → kein generatives Inpainting."""
+    # Wird implizit durch split_at_silence_boundaries sichergestellt:
+    # Kein Audio-Segment enthält eine Gap-Region innerhalb CONTEXT_GUARD_MS von Stille.
+    ...
+
+def test_ssip_reassembly_bit_exact_silence():
+    """Stille-Zonen in Reassembly sind bit-identisch mit Original."""
+    audio = np.concatenate([np.zeros(48000), np.random.randn(144000) * 0.3, np.zeros(48000)])
+    isolator = get_structural_silence_isolator()
+    zones = isolator.detect_structural_silence_zones(audio, 48000, "unknown")
+    segments = isolator.split_at_silence_boundaries(audio, 48000, zones)
+    result = isolator.reassemble_from_segments(segments, audio, len(audio))
+
+    for start, end in zones:
+        np.testing.assert_array_equal(
+            result[start:end], audio[start:end],
+            err_msg=f"Stille-Zone [{start}:{end}] ist nicht bit-identisch nach Reassembly"
+        )
+```

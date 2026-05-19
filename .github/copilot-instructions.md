@@ -1,8 +1,8 @@
 # Aurik 9.x.x — KI-Programmierrichtlinien für GitHub Copilot
 
-> **Systemidentität**: Aurik 9.x.x ist der **weltweit talentierteste autonome Toningenieur aller Zeiten für die Restaurierung von Musik mit Gesang** — meisterhaft in der Restauration, Reparatur und Rekonstruktion gesanglicher Aufnahmen **aller Ären, Genres, Tonträgerketten und Tonträgerkettenkombinationen**. Kein Tonträger zu alt, kein Genre zu selten, keine Kombination aus Trägermedien zu komplex — Aurik beherrscht jeden Fall vollständig autonom. **Kein menschlicher Eingriff erforderlich, kein manueller Parameter, keine Nachkorrektur.** Stand: Mai 2026 — Version **9.12.0**
+> **Systemidentität**: Aurik 9.x.x ist ein **hybrider Toningenieur mit menschlichen Fähigkeiten und allen Vorteilen der maschinellen Verarbeitung** — entwickelt, um die **qualitativ hochwertigsten Restaurierungsergebnisse für Musik mit Gesang zu erzielen, die weltweit jemals automatisiert erzeugt wurden**. Meisterhaft in der Restauration, Reparatur und Rekonstruktion gesanglicher Aufnahmen **aller Ären, Genres, Tonträgerketten und Tonträgerkettenkombinationen** — kein Träger zu alt, kein Genre zu selten, keine Kombination zu komplex. Bei jeder Importdatei wird unter Berücksichtigung der Quelldatei und der physikalischen Grenzen das maximal mögliche Ergebnis erzielt. **Kein Nutzereingriff erforderlich, kein manueller Parameter, keine Nachkorrektur** — das musikalische Urteilsvermögen eines erfahrenen Toningenieurs ist systematisch in die Verarbeitungslogik eingebettet. Stand: Mai 2026 — Version **9.12.0**
 >
-> **instructions_version: 9.2** — SOTA-Science-Update Mai 2026: Ephraim-Malah MMSE-LSA für NR-Gain + Bark/ERB-Skalenklarheit + IMCRA/OMLSA-Noise-Estimation + PGHI-Parameter + Vocos-Option + RIAA-Zeitkonstanten-Spezifikation + MP3-Pre-Echo-Taxonomie + Digitale-Carrier-Reihenfolge + SBR/AudioSR-Entscheidungsbaum für BW-Erweiterung + VERSA-Metrik-Spezifikation + MERT-Implementierungsdetails + artifact_freedom-Komponenten-Vollspezifikation + emotional_arc-Präzisierung + Groove/Warmth/TonalCenter-Algorithmen + DNSMOS/SingMOS als Naturalness-Proxy + Era-spezifische Verarbeitungsrichtlinien + **Runde 2+3 Konsistenz-Audit** (VQI-Recovery-Trigger durchgängig, §0k _NEVER_SKIP, Studio-VQI-Schwelle 0.87 überall)
+> **instructions_version: 9.3** — SOTA-Science-Update Mai 2026: Ephraim-Malah MMSE-LSA für NR-Gain + Bark/ERB-Skalenklarheit + IMCRA/OMLSA-Noise-Estimation + PGHI-Parameter + Vocos-Option + RIAA-Zeitkonstanten-Spezifikation + MP3-Pre-Echo-Taxonomie + Digitale-Carrier-Reihenfolge + SBR/AudioSR-Entscheidungsbaum für BW-Erweiterung + VERSA-Metrik-Spezifikation + MERT-Implementierungsdetails + artifact_freedom-Komponenten-Vollspezifikation + emotional_arc-Präzisierung + Groove/Warmth/TonalCenter-Algorithmen + DNSMOS/SingMOS als Naturalness-Proxy + Era-spezifische Verarbeitungsrichtlinien + **Runde 2+3 Konsistenz-Audit** (VQI-Recovery-Trigger durchgängig, §0k _NEVER_SKIP, Studio-VQI-Schwelle 0.87 überall) + **§GOAL_BASELINE_CHECK [RELEASE_MUST] (v9.12.7)**: garantierter Goal-Recovery-Pfad vor Pipeline — schließt CAUSE_TO_PHASES-Lücke für undetektierte Goal-Defizite; `get_goal_recovery_phases()` in `calibration_matrix`
 >
 > Aktuelle Testzahl: **~11598 `def test_`-Funktionen** (436 Testdateien; alle grün)
 >
@@ -10,7 +10,7 @@
 
 ## §0 Oberstes Prinzip — Klangwahrheit (vor allen technischen Regeln)
 
-**Das Ziel jeder Restaurierung ist, dass der Hörer die Augen schließt und die originale Performance hört — nicht eine technisch korrekte Signalverarbeitung, und nicht eine „verbesserte“ Version.** Jede Entscheidung in Pipeline, Phase, Metrik und Export wird an diesem Maßstab gemessen. Dieser Satz ist ein bindendes Qualitätsziel; öffentliche Überlegenheits- oder Transparenz-Claims erfordern zusätzlich externe Evidenz.
+**Das Ziel jeder Restaurierung ist, dass der Hörer die Augen schließt und die originale Performance hört — nicht eine technisch korrekte Signalverarbeitung, und nicht eine „verbesserte" Version.** Jede Entscheidung in Pipeline, Phase, Metrik und Export wird an diesem Maßstab gemessen. Dieser Maßstab ist kein technischer Schwellwert — er ist das Urteil eines erfahrenen Toningenieurs, systematisch in die Verarbeitungslogik eingebettet.
 
 **Drei Leitprinzipien** (hierarchisch, bei Konflikt gilt die höhere Stufe):
 
@@ -22,7 +22,7 @@
 
 ### §0h [RELEASE_MUST] Music-Death-Shield — absolute Schutzregel (v9.12.0)
 
-**Kein Eingriff darf Musik zerstören. Dies gilt absolut für alle Materialtypen, alle Ären, alle Genres.**
+**Kein Eingriff darf Musik zerstören. Dies gilt absolut für alle Materialtypen, alle Ären, alle Genres. Und: Kein Eingriff darf in Stille-Zonen (Intro, Outro, Fade) Energie hinzufügen — Stille ist sakrosankt.**
 
 **Drei absolute Verbote** — jedes einzelne ist ein sofortiger Export-Stopp + vollständiger Rollback:
 
@@ -36,7 +36,7 @@
 Restaurations-Ziel: Kein hörbarer Eingriff. Gates: `OQS ≥ 80`, `timbral_fidelity ≥ 0.93` zum best_carrier_checkpoint, Musical Noise ≤ Trägerprofil, Frisson-Zonen vollständig erhalten. Für Vokal-Material zusätzlich: `VQI ≥ 0.82` (Restoration) / `VQI ≥ 0.87` (Studio 2026) — beide sind Recovery-Ziele; Unterschreitung löst `_recovery_cascade()` aus (kein harter Export-Stopp, `artifact_freedom < 0.95` bleibt primäres Veto). Aurik zeigt dem Hörer nie ein Ergebnis, das technisch besser aussieht aber schlechter klingt.
 
 ### §0g [RELEASE_MUST] Autonomes Entscheidungs-Doktrin
-**Aurik trifft alle Entscheidungen autonom.** Kaskade: Erkennen (MediumDetector+EraClassifier+DefectScanner+**VocalFocusAnalyzer**) → Planen (GPOptimizer+PhaseConductor) → Ausführen (UV3, Pre/Post-Messung) → Validieren (PMGG+CIG+AFG+**VQI-Gate**+HPI) → Exportieren (nur wenn HPI > 0 + artifact_freedom ≥ 0.95; VQI ≥ 0.82 bei `panns_singing ≥ 0.35` ist Recovery-Ziel — Unterschreitung → `_recovery_cascade()`, kein harter Export-Block). **VERBOTEN**: Hartkodierte song-spezifische Entscheidungen, Strength-Konstanten ohne `compute_adaptive_drift_tolerance()`.
+**Aurik trifft alle Entscheidungen autonom** — die Autonomie ist Ausdruck eingebetteten musikalischen Urteilsvermögens, kein Ersatz dafür. Kaskade: Erkennen (MediumDetector+EraClassifier+DefectScanner+**VocalFocusAnalyzer**) → Planen (GPOptimizer+PhaseConductor) → Ausführen (UV3, Pre/Post-Messung) → Validieren (PMGG+CIG+AFG+**VQI-Gate**+HPI) → Exportieren (nur wenn HPI > 0 + artifact_freedom ≥ 0.95; VQI ≥ 0.82 bei `panns_singing ≥ 0.35` ist Recovery-Ziel — Unterschreitung → `_recovery_cascade()`, kein harter Export-Block). **VERBOTEN**: Hartkodierte song-spezifische Entscheidungen, Strength-Konstanten ohne `compute_adaptive_drift_tolerance()`.
 
 
 ### §0j [RELEASE_MUST] KI-Modell-Limitation-Awareness
@@ -44,11 +44,11 @@ Kein ML-Modell kennt den spezifischen Song. Konsequenzen: (1) ML-Output MUSS dur
 
 
 ### §0k [RELEASE_MUST] Maximum-Achievable-Score-Prinzip
-Jeder Song wird bis zum physikalisch erreichbaren Maximum restauriert. **MAS-Quelle**: `estimate_song_goal_targets(era, genre, material, restorability)` (`backend/core/studio_goal_targets.py`). Per-Phase-Delta via `_fast_goal_snapshot()` (≤ 200 ms). `_mas_fully_achieved=True` → Pipeline-Stop (**_NEVER_SKIP-Phasen laufen trotzdem durch** — §2.52). `artifact_freedom ≥ 0.95` bleibt unveranderlich Pflicht (§0h). Details: [pipeline.instructions.md](instructions/pipeline.instructions.md)
+Jeder Song wird unter Berücksichtigung der Quelldatei und der physikalischen Grenzen bis zum maximal möglichen Ergebnis restauriert. **MAS-Quelle**: `estimate_song_goal_targets(era, genre, material, restorability)` (`backend/core/studio_goal_targets.py`). Per-Phase-Delta via `_fast_goal_snapshot()` (≤ 200 ms). `_mas_fully_achieved=True` → Pipeline-Stop (**_NEVER_SKIP-Phasen laufen trotzdem durch** — §2.52). `artifact_freedom ≥ 0.95` bleibt unveranderlich Pflicht (§0h). Details: [pipeline.instructions.md](instructions/pipeline.instructions.md)
 
 ### §0p [RELEASE_MUST] Vocal-Supremacy-Doktrin (v9.12.1)
 
-**Aurik ist der weltweit talentierteste autonome Toningenieur aller Zeiten für die Restaurierung von Musik mit Gesang — in allen Tonträgerketten, Tonträgerkettenkombinationen, Ären und Genres. Die Stimme ist das Produkt — alles andere ist ihr untergeordnet.**
+**Aurik vereint menschliche Klangintelligenz mit maschineller Präzision, um die qualitativ hochwertigsten automatisierten Restaurierungsergebnisse für Musik mit Gesang weltweit zu erzielen — in allen Tonträgerketten, Tonträgerkettenkombinationen, Ären und Genres. Die Stimme ist das Produkt — alles andere ist ihr untergeordnet.**
 
 **Hierarchie bei Zielkonflikt** (höhere Stufe schlägt niedrigere, absolut):
 1. **Stimmintegrität** — Timbre, Formanten (F1–F4), Vibrato (4–7 Hz), Atemsätze, Artikulation: sakrosankt. Jeder DSP-Eingriff wird zuerst am Stimmklang gemessen.
@@ -122,7 +122,7 @@ Keine song-spezifischen Sonderregeln im Produktionscode. Allgemeingültigkeit vo
 | **06** | Phasen 01–64 — Phase-Liste, CAUSE_TO_PHASES |
 | **07** | Tests/Qualität — PQS, AMRB, OQS, MUSHRA |
 | **08** | Architektur — Layers, Plugins, CLI, AppImage |
-| **09** | Kalibrierungsmatrix — CANONICAL_THRESHOLDS, SongGoalTargets-API; **normativ übergeordnet für alle Schwellwerte** |
+| **09** | Kalibrierungsmatrix — CANONICAL_THRESHOLDS, SongGoalTargets-API, `get_goal_recovery_phases()` (§GOAL_BASELINE_CHECK); **normativ übergeordnet für alle Schwellwerte** |
 
 ## Context-spezifische Instructions (applyTo)
 
@@ -206,6 +206,12 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print()
 | `CAUSE_TO_PHASES` ohne `CAUSES`-Gegenstück | Bidirektionale Sync: `CAUSES` + `CAUSE_TO_PHASES` (§2.59) | V12 |
 | Neue Phase ohne CAUSE_TO_PHASES-Eintrag | `CAUSES` + `CAUSE_TO_PHASES` bidirektional ergänzen — sonst findet `CausalDefectReasoner` die Phase nie | V12 |
 | §0a-verbotene Phase in `CAUSE_TO_PHASES` (z.B. `phase_35`, `phase_42`, `phase_21` in Restoration-Cause) | §0a-verbotene Phasen (`phase_21_exciter`, `phase_35_multiband_compression`, `phase_42_vocal_enhancement`) dürfen **nie** in `CAUSE_TO_PHASES` stehen — UV3-Guard blockiert sie zwar, aber der CausalDefectReasoner soll sie gar nicht erst vorschlagen (BUG-FIX v9.12.0 §0a) | — |
+| Duplikat-Schlüssel in `_MATERIAL_PRIORITY_PHASES`-Dict-Literal | Jeder Material-Key (`"tape"`, `"vinyl"`, …) darf nur **einmal** vorkommen — F601 überschreibt die erste Definition still; Regression-Test `TestMaterialPriorityPhasesNoDuplicateKeys` via AST-Parsing | V13 |
+| Generative/Inpainting-Phase ohne SSIP (Structural Silence Isolation Protocol) | `_run_inpainting_with_ssip()` aus `§2.68` Pflicht für phase_55 + phase_24 + jede neue generative Phase — direkter Inpainting-Aufruf ohne SSIP erzeugt katastrophale Pegelexplosionen in Stille-Zonen | V14 |
+| Inpainting-Gap-Detektion auf verarbeitetem Audio (nicht Original) | `_detect_gaps()` MUSS entweder auf ORIGINAL-Audio laufen ODER Stille-Zonen werden VOR Gap-Detektion aus dem Detektor-Input herausgezogen (zeroed) — nicht als Post-Filter. Gap-Detektor darf keine Energie aus Artefakten früherer Phasen als "Musik → Silence → Musik"-Muster misinterpretieren | V15 |
+| `structural_silence_zones=None` als gültiger Zustand in Inpainting-Phase | `_get_structural_silence_zones()` MUSS immer eine Liste zurückgeben (ggf. leer) und bei fehlenden kwargs eigenständig berechnen — `None` ist kein erlaubter Rückgabewert; fehlender Wert = KEIN Logging = unsichtbar deaktivierter Schutz | V16 |
+| Inpainting-Clamp/Clip als Ersatz für Hard-Reset in Stille-Zonen | `post_inpainting_silence_audit()` aus SSIP MUSS Hard-Reset auf Original-Samples verwenden, nicht `np.clip(result, -threshold, threshold)` — Clamp erzeugt Signalverzerrung, Hard-Reset reproduziert das Original exakt (§2.68d) | V17 |
+| Inpainting-Kontext-Fenster über Stille-Grenze hinaus | Gap innerhalb `CONTEXT_GUARD_MS=1500ms` einer strukturellen Stille-Zone → `_conservative_boundary_fill` (DSP), kein ML-Modell — Modell-Kontext darf Stille nicht als "zu füllende" Region sehen (§2.68f) | V18 |
 | Unabhängige ML-Reparatur für L/R + kanalweises Resampling zur Längenkorrektur | M/S- oder Linked-Stereo-Verarbeitung; deterministischer Strip/Crop/Pad ohne Time-Warp | — |
 | Additive/Enhancement-Phase (`phase_06`, `phase_07`, `phase_37`, `phase_38`, `phase_39`, `phase_26`) ohne `soft_saturation_severity`-Guard | `_sat_sev = float(np.clip(kwargs.get("soft_saturation_severity", 0.0), 0.0, 1.0))`; wenn `_sat_sev > 0.3`: `scale = clip(1 - (_sat_sev - 0.3) * 1.2, 0.16, 1.0)` → alle Gain/Strength/Drive-Parameter mit `scale` multiplizieren; `soft_saturation_preserve=True` → phasenspezifischer Hard-Cap (phase_38: 0.45; phase_07: 0.20; phase_37: 0.30; phase_39: 0.40; phase_26: 0.50) — Severity von UV3 via `_restoration_context["soft_saturation_severity"]` injiziert | §2.46g |
 | ADDITIVE Phase ohne `hallucination_guard.py` | `check_hallucination(pre, post)` aus `backend/core/dsp/hallucination_guard.py` nach jeder ADDITIVE-Phase; `spectral_novelty > 0.15` → Phase-Rollback (Restoration); `> 0.08` → Score-Penalty 0.3 | §2.46e |
@@ -220,6 +226,9 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print()
 | Phase ohne Pre/Post-Score-Delta | `_profiled_phase_call_with_delta()` Pflichtrahmen; Delta in `metadata["phase_deltas"][phase_id]` | §2.64 |
 | `_fast_goal_snapshot` auf Single-Segment | Multi-Segment-Mittelung (25 %/50 %/75 %): verhindert Akkord/Pausen-Frame-Kollaps | §2.64 |
 | Pipeline läuft nach `_mas_fully_achieved=True` weiter | MAS-Erreichung → Stop für alle weiteren Phasen **außer** `_NEVER_SKIP`-Phasen (phase_01/09/12/14/15/30/47 laufen weiter — §2.52) | §2.65 |
+| Musical Goal unter materialadaptivem Floor ohne Recovery-Pfad in `selected_phases` (DefectScanner hat keinen passenden Defect-Cause erkannt) | §GOAL_BASELINE_CHECK **vor** `_execute_pipeline()`: `_fast_goal_snapshot()` → goal < `get_material_floor() × 0.95` → `get_goal_recovery_phases(goal, is_studio_2026)` → primäre Phase in `selected_phases` einfügen — FeedbackChain-Blend allein kann kein Goal über Original-Niveau heben | §GOAL_BASELINE |
+| Phasen-ID in `_GOAL_TO_RECOVERY_PHASES_RESTORATION` oder `_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS` ohne Disk-Abgleich | Alle IDs MÜSSEN gegen `backend/core/phases/phase_*.py` geprüft werden — falscher Name besteht alle Strukturtests, §GOAL_BASELINE_CHECK fügt dann eine nicht-existente Phase in `selected_phases` ein → Recovery silently skipped; Guard: `test_get_goal_recovery_phases_all_phase_ids_exist_on_disk()` | §GOAL_BASELINE |
+| Recovery-Phase für ein Goal trägt zur **entgegengesetzten** Richtung des Goal-Defizits bei (`spatial_depth`-Inversion) | Beispiel: niedriger `spatial_depth`-Score → *zu wenig* Raumcues → Primärphase muss Cues **hinzufügen** (`phase_46_spatial_enhancement`); **VERBOTEN** ist `phase_49_advanced_dereverb` (entfernt Raumcues). Generell: Primärphase muss den Defizit-Vektor **invertieren**, nicht verstärken | §GOAL_BASELINE |
 | Gesangsmaterial ohne VQI-Messung exportiert | `result = compute_vqi(audio_orig, audio_restored, sr)` aus `vocal_quality_index`; `result["vqi"] < 0.72` → Recovery-Kaskade (kein harter Veto) | §2.35c |
 | `singer_identity_cosine` nach VQI nicht geprüft | `result.get("singer_identity_cosine", 0.85) < 0.92` → Rollback letzter Vokal-Phase; Gate deaktiviert bei `multi_singer=True` | §0p |
 | NR auf Gesang ohne HNR-Blend (`panns_singing ≥ 0.25`) | `apply_hnr_blend(pre, post, sr)` Pflicht nach DFN/SGMSE+/OMLSA — ΔHNR > 3 dB → Dry-Wet-Blend; klinischer Klang ist schlimmer als verbleibendes Rauschen | §0p |
@@ -230,13 +239,18 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print()
 | SOTA-Matrix-Update ohne §4.4a-Evaluations-Protokoll | `benchmarks/sota_eval.py` + alle 6 Kriterien + `CHANGELOG_HISTORY.md [SOTA-Update v9.x.y]` | §4.4a |
 | Phasen-Reihenfolge verletzt HARD_BEFORE-Constraints | `validate_phase_order()` aus `backend/core/phase_dag.py`; phase_03/06/29 VOR phase_07 | §7.5a |
 | AMRB-History nicht aktualisiert bei Major-Release (9.x.0) | `benchmarks/update_amrb_history.py`; OQS-Delta < −2.0 = Release-Blocker | §8.1.6 |
+| Pre-Echo mit generischem NR repariert (statt Pre-Echo-Detektor) | `get_pre_echo_detector().detect(audio, sr, material_key)` → `repair_region()` in phase_50; **VERBOTEN**: phase_03/phase_29 als Pre-Echo-Recovery (Pre-Echo = zeitlich-energetisches Prä-Masking-Artefakt, kein stationäres Rauschen — §4.11) | §4.11 |
+| VQI-Abfall nach NR ohne DSP-Korrektiv-Recovery (Restoration) | Wenn `VQI < 0.74` + `panns_singing ≥ 0.25` + Restoration-Modus: `phase_65_vocal_naturalness_restoration` triggern; **VERBOTEN**: phase_42_vocal_enhancement als Recovery in Restoration (§0a) — phase_65 ist der §0a-konforme Ersatz (HNR-Blend + Spektral-Tilt + Formant-Tilt) | §0a, Spec 06 §7.10 |
+| `get_material_floor()` in §GOAL_BASELINE_CHECK ohne Restorability-Skalierung | `get_effective_material_floor(material_type, goal_name, restorability_score)` verwenden (§09.12); `restorability < 30` → `metadata["degraded_restorability"] = True`; `get_material_floor()` bleibt für PMGG + UI + Tests unverändert | §09.12 |
+| `TransientEnergyMetric` fehlt nach subraktiver Phase (`transient_energie`-Goal) | `get_transient_energy_metric().measure_transient_energy(input, restored, sr)`; bei Score < `material_floor`: `_blend_onset_regions()` (Onset-selektiv, 5 ms Fenster); PHASE_GOAL_EXCLUSIONS für phase_18 + phase_26 ergänzen (§1.4.6) | §1.4.6 |
 
 > DSP-/Phase-spezifische VERBOTEN-Regeln (energy_bias, HNR-Guard, LPC-Ordnung, Passaggio, Timbral Coherence etc.): → [dsp.instructions.md](instructions/dsp.instructions.md) / [phases.instructions.md](instructions/phases.instructions.md)
 
 ### Sprachkonvention
 
 - **UI-Texte, Fehlermeldungen**: Deutsch (Ursache + Lösungsvorschlag)
-- **Code-Kommentare, Docstrings, Log-Meldungen**: Englisch
+- **Docstrings**: Deutsch
+- **Code-Kommentare, Log-Meldungen**: Englisch
 
 ### Test-Infrastruktur
 > Details: [tests.instructions.md](instructions/tests.instructions.md) — GC-Konventionen, Mock-Patterns, Budget-Tests, AMRB-Update, NaN-safe Correlation.
@@ -308,6 +322,8 @@ Mixed-Mode: Heavy-Plugins → GPU, DSP/Light → CPU. Linux: ROCm 6.x; Windows: 
 DCOffset → TDP(HPSS) → RestorabilityEstimator → SongCalibration → Era/Genre/Medium-Classifier →
 **VocalFocusAnalyzer** (PANNs-Singing ≥ 0.25 → VQI-Gate-Init + FormantTrack + FrissonDetect + RegisterDetect) →
 GoalApplicabilityFilter → DefectScanner(46) → CausalDefectReasoner → GPOptimizer →
+**§GOAL_BASELINE_CHECK** (`_fast_goal_snapshot` auf Input → goal < `get_material_floor()` × 0.95 → `get_goal_recovery_phases()` → `selected_phases` ergänzt; ≤200ms DSP-Proxy; §0a-guard; §2.45 minimal-intervention; non-blocking) →
+**§2.68 SSIP** (`detect_structural_silence_zones()` aus ORIGINAL-Audio → `_restoration_context["structural_silence_zones"]`; alle generativen Phasen erhalten Zones via kwargs; V14–V18 Linter-Guards) →
 Phasen(01–64) [mit §2.48 Interaktions-Guard + **§0p Vocal-Invarianten**] → FeedbackChain → PhysicalCeiling → MusicalGoalsChecker → MDEM →
 **HolisticPerceptualGate** (inkl. artifact_freedom §2.49 + **VQI-Gate §0p**) → RestorationResult
 > **Pipeline-Details** (§2.44–§2.65): [pipeline.instructions.md](instructions/pipeline.instructions.md)
@@ -345,14 +361,14 @@ Subtraktive Stufe 4 (NR) **vor** additiver Stufe 5 (Harmonik/BW-Erweiterung). �
 | Ära | Träger | Typische Defekte | Primäre Phasen | Verboten |
 |---|---|---|---|---|
 | 1900–1925 | Akustische Aufnahme (Trichter) | BW ≤ 3 kHz, hohes Oberflächenrauschen, kein Bass | phase_03, phase_06 (max 3 kHz!) | phase_07 (keine Harmonik-Ergänzung) |
-| 1925–1945 | Elektrische Aufnahme + Shellac | BW ≤ 7 kHz, SNR ~15 dB, H2/H4-Sättigung | phase_03, phase_06 (max 7 kHz), phase_09 | Rolloff ≤ 7 kHz **nicht** erweitern; H2/H4 bewahren |
+| 1925–1945 | Elektrische Aufnahme + Shellac | BW ≤ 7 kHz, SNR ~15 dB, H2/H4-Sättigung; AGC-Schaltung → Amplitude-Drift | phase_03, phase_06 (max 7 kHz), phase_09, **phase_40** (wenn AMPLITUDE_DRIFT ≥ 0.30) | Rolloff ≤ 7 kHz **nicht** erweitern; H2/H4 bewahren |
 | 1945–1960 | Vinyl 78rpm/LP, Mono/frühes Stereo | RIAA-Entzerrung, Knistern, Wow/Flutter | phase_04, phase_09, phase_12 | Stereo-Enhancement (Mono-Quelle) |
-| 1960–1975 | Vinyl LP, Analogband, frühes Stereo | Bandrauschen, Azimuth-Fehler, Wow/Flutter | phase_29, phase_25, phase_12 | Overdrive-NR (verwischt Recording-Ambience) |
-| 1975–1990 | Vinyl, Cassette (Dolby B/C), Analogband | Dolby-Sättigungsrauschen, Dropouts, HF-Verlust | phase_29, phase_24, phase_03 | Cassette: Dolby nur invertieren wenn NR-Schaltung aktiv war |
+| 1960–1975 | Vinyl LP, Analogband, frühes Stereo | Bandrauschen, Azimuth-Fehler, Wow/Flutter; Bandoxid-Drift (Temperatur/Feuchte) → Amplitude-Drift | phase_29, phase_25, phase_12, **phase_40** (wenn AMPLITUDE_DRIFT ≥ 0.30) | Overdrive-NR (verwischt Recording-Ambience) |
+| 1975–1990 | Vinyl, Cassette (Dolby B/C), Analogband | Dolby-Sättigungsrauschen, Dropouts, HF-Verlust; Dolby-AGC-Interaktion → Amplitude-Drift | phase_29, phase_24, phase_03, **phase_40** (wenn AMPLITUDE_DRIFT ≥ 0.30) | Cassette: Dolby nur invertieren wenn NR-Schaltung aktiv war |
 | 1985–2000 | CD, DAT, Early Digital | Quantisierungsrauschen (16 bit), Jitter | phase_31, phase_30 | EQ-Erweiterung (über CD-BW = Artefakt) |
 | 2000–2015 | MP3 (64–192 kbps), AAC | Pre-Echo, HF-Rolloff, psychoakust. Residue | phase_50, phase_23 | Aggressives NR auf MP3-Artefakte (Pre-Echo = kein Rauschen!) |
 | 2015+ | FLAC, MP3 320, Streaming | Selten Artefakte; ggf. Loudness-War-Clipping | phase_01, phase_47 | Fast Passthrough; keine Carrier-Inversion nötig |
 
 > Era-Erkennung: `EraClassifier.classify(audio, sr)` → era_decade, genre_label, carrier_chain
 
-*Stand: Mai 2026 — Aurik 9.12.0 — instructions_version 9.2*
+*Stand: Mai 2026 — Aurik 9.12.0 — instructions_version 9.3*

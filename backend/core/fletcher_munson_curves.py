@@ -233,7 +233,7 @@ class EqualLoudnessContour:
 
     def get_spl_at_frequency(self, freq_hz: float) -> float:
         """
-        Get SPL at specific frequency (interpolated).
+        Gibt zurück: SPL at specific frequency (interpolated).
 
         Args:
             freq_hz: Frequency in Hz
@@ -257,7 +257,7 @@ class EqualLoudnessContour:
 
     def get_relative_loudness_curve(self, reference_freq: float = 1000.0) -> np.ndarray:
         """
-        Get relative loudness curve (normalized to reference frequency).
+        Gibt zurück: relative loudness curve (normalized to reference frequency).
 
         Args:
             reference_freq: Reference frequency (default: 1 kHz)
@@ -316,7 +316,7 @@ class FletcherMunsonProcessor:
 
     def __init__(self, config: FletcherMunsonConfig | None = None):
         """
-        Initialize Fletcher-Munson processor.
+        Initialisiert Fletcher-Munson processor.
 
         Args:
             config: Configuration (uses defaults if None)
@@ -334,7 +334,7 @@ class FletcherMunsonProcessor:
 
     def get_contour(self, phon_level: int) -> EqualLoudnessContour:
         """
-        Get equal-loudness contour for specific phon level.
+        Gibt zurück: equal-loudness contour for specific phon level.
 
         Args:
             phon_level: Phon level (20, 40, 60, 80, 100)
@@ -374,7 +374,7 @@ class FletcherMunsonProcessor:
         self, frequencies: np.ndarray, target_phon: int | None = None, reference_phon: int | None = None
     ) -> np.ndarray:
         """
-        Get frequency-dependent correction curve in dB.
+        Gibt zurück: frequency-dependent correction curve in dB.
 
         This curve represents the EQ needed to compensate for equal-loudness effects.
 
@@ -421,7 +421,7 @@ class FletcherMunsonProcessor:
         self, audio: np.ndarray, sr: int, target_phon: int | None = None, reference_phon: int | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Apply Fletcher-Munson compensation to audio.
+        Wendet an: Fletcher-Munson compensation to audio.
 
         Args:
             audio: Input audio (mono)
@@ -476,7 +476,7 @@ def get_fletcher_munson_curve(frequencies: np.ndarray, target_phon: int = 60, re
 
 def apply_loudness_compensation(audio: np.ndarray, sr: int, listening_level: str = "normal") -> np.ndarray:
     """
-    Apply loudness compensation based on listening level.
+    Wendet an: loudness compensation based on listening level.
 
     Args:
         audio: Input audio

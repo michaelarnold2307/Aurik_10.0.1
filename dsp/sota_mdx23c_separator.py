@@ -1,11 +1,3 @@
-import os
-import sys
-from importlib.util import module_from_spec, spec_from_file_location
-from types import ModuleType
-from typing import Any
-
-import numpy as np
-
 """
 ---
 modul_name: SotaMDX23CSeparator
@@ -18,13 +10,22 @@ schwaechen: Modellabhängig, benötigt Modelle/Weights
 abhaengigkeiten: [numpy, torch, inference]
 ---
 """
+
+import os
+import sys
+from importlib.util import module_from_spec, spec_from_file_location
+from types import ModuleType
+from typing import Any
+
+import numpy as np
+
 MDX23C_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/mdx23c"))
 if MDX23C_PATH not in sys.path:
     sys.path.append(MDX23C_PATH)
 
 
 def _load_inference_module() -> ModuleType:
-    """Load MDX23C inference module from bundled model path."""
+    """Lädt MDX23C inference module from bundled model path."""
     inference_path = os.path.join(MDX23C_PATH, "inference.py")
     spec = spec_from_file_location("mdx23c_inference", inference_path)
     if spec is None or spec.loader is None:
@@ -36,7 +37,7 @@ def _load_inference_module() -> ModuleType:
 
 
 def _load_mdx23c_model_class() -> type[Any]:
-    """Resolve EnsembleDemucsMDXMusicSeparationModel without static unresolved import."""
+    """Löst auf: EnsembleDemucsMDXMusicSeparationModel without static unresolved import."""
     inference_module = _load_inference_module()
     model_class = getattr(inference_module, "EnsembleDemucsMDXMusicSeparationModel", None)
     if model_class is None:
@@ -45,6 +46,8 @@ def _load_mdx23c_model_class() -> type[Any]:
 
 
 class SotaMDX23CSeparator:
+    """SOTA-Musik-Quellenseparation auf Basis des MDX23C-Modells (EnsembleDemucsMDXMusicSeparationModel)."""
+
     def __init__(self, device="cpu"):
         options = {
             "cpu": device == "cpu",
@@ -54,11 +57,11 @@ class SotaMDX23CSeparator:
             "single_onnx": False,
         }
         model_class = _load_mdx23c_model_class()
-        self.model = model_class(options)
+        self.model = model_class(options)  # pylint: disable=not-callable
         self.device = device
 
     def separate(self, audio: np.ndarray, sr: int) -> dict:
-        # Erwartet: [2, N] für Stereo, ggf. expandieren
+        """Trennt Audio in Stems (vocals, accompaniment) mittels MDX23C-Modell."""
         if audio.ndim == 1:
             audio = np.stack([audio, audio], axis=0)
         elif audio.shape[0] != 2:

@@ -204,7 +204,7 @@ class WidthOptimizer:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Optimize stereo width.
+        Optimiert stereo width.
 
         Parameters
         ----------
@@ -504,7 +504,7 @@ class SpatialLocalizer:
 
 class SpatialEnhancementSystem:
     """
-    Unified API for Spatial Enhancement.
+    Einheitliche API für räumliche Klangverbesserung.
 
     Combines all spatial processing components into a single pipeline:
     1. Depth Enhancement

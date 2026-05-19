@@ -74,7 +74,7 @@ class AudioRegion:
         return self.end_sample - self.start_sample
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
+        """Konvertiert to dictionary."""
         return {
             "type": self.region_type.value,
             "start": self.start_sample,
@@ -248,7 +248,7 @@ class RegionDetector:
     def _merge_frames_to_regions(
         self, frame_types: list[tuple[RegionType, float]], hop_length: int, sr: int
     ) -> list[AudioRegion]:
-        """Merged consecutive frames of same type into regions."""
+        """Fasst aufeinanderfolgende Frames gleichen Typs zu Regionen zusammen."""
         if not frame_types:
             return []
 

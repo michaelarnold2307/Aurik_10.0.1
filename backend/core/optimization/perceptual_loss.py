@@ -68,7 +68,7 @@ class MultiResolutionSTFTLoss(nn.Module):
     def stft(
         self, audio: torch.Tensor, fft_size: int, hop_size: int, win_length: int, window: torch.Tensor
     ) -> torch.Tensor:
-        """Compute STFT."""
+        """Berechnet STFT."""
         # torch.stft expects [batch, samples] or [samples], so squeeze channel dimension
         audio_2d = audio.squeeze(1)  # [batch, channels, samples] -> [batch, samples]
         return torch.stft(
@@ -87,14 +87,14 @@ class MultiResolutionSTFTLoss(nn.Module):
         return torch.norm(target_mag - output_mag, p="fro") / (torch.norm(target_mag, p="fro") + self.epsilon)
 
     def log_magnitude_loss(self, output_mag: torch.Tensor, target_mag: torch.Tensor) -> torch.Tensor:
-        """Log magnitude loss."""
+        """Protokolliert magnitude loss."""
         log_output = torch.log(output_mag + self.epsilon)
         log_target = torch.log(target_mag + self.epsilon)
         return F.l1_loss(log_output, log_target)
 
     def forward(self, output: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """
-        Compute multi-resolution STFT loss.
+        Berechnet multi-resolution STFT loss.
 
         Args:
             output: Predicted audio [batch, channels, time]
@@ -182,7 +182,7 @@ class PANNsPerceptualLoss(nn.Module):
         self.distance_metric = distance_metric
 
     def extract_features(self, audio: torch.Tensor) -> dict[str, torch.Tensor]:
-        """Extract features from audio using PANNs."""
+        """Extrahiert features from audio using PANNs."""
         if not self.panns_available:
             # Fallback: Use spectral features
             return self._extract_spectral_features(audio)
@@ -224,7 +224,7 @@ class PANNsPerceptualLoss(nn.Module):
 
     def forward(self, output: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, dict[str, float]]:
         """
-        Compute PANNs-based perceptual loss.
+        Berechnet PANNs-based perceptual loss.
 
         Args:
             output: Predicted audio [batch, channels, time]
@@ -284,7 +284,7 @@ class PsychoacousticMaskingLoss(nn.Module):
         self.register_buffer("_stft_window", torch.hann_window(self.n_fft), persistent=False)
 
     def _compute_bark_boundaries(self) -> torch.Tensor:
-        """Compute Bark scale band boundaries."""
+        """Berechnet Bark scale band boundaries."""
         # Bark scale formula: z = 13 * arctan(0.00076 * f) + 3.5 * arctan((f / 7500)^2)
         # Simplified linear spacing for implementation
         max_freq = self.sr / 2
@@ -297,7 +297,7 @@ class PsychoacousticMaskingLoss(nn.Module):
 
     def compute_masking_threshold(self, magnitude: torch.Tensor) -> torch.Tensor:
         """
-        Compute psychoacoustic masking threshold.
+        Berechnet psychoacoustic masking threshold.
 
         Simplified version - full PEAQ implementation would be more complex.
         """
@@ -321,7 +321,7 @@ class PsychoacousticMaskingLoss(nn.Module):
 
     def forward(self, output: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, dict[str, float]]:
         """
-        Compute psychoacoustic masking loss.
+        Berechnet psychoacoustic masking loss.
 
         Args:
             output: Predicted audio [batch, channels, time]
@@ -409,7 +409,7 @@ class MusicalFeatureLoss(nn.Module):
         self.register_buffer("_timbral_stft_window", torch.hann_window(2048), persistent=False)
 
     def compute_harmonic_loss(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """Compute loss based on harmonic content preservation."""
+        """Berechnet loss based on harmonic content preservation."""
         # Simplified: Compare low-frequency energy ratios
         # Full implementation would use proper harmonic analysis
 
@@ -421,7 +421,7 @@ class MusicalFeatureLoss(nn.Module):
         return F.mse_loss(output_harmonic, target_harmonic)
 
     def compute_rhythmic_loss(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """Compute loss based on rhythmic consistency."""
+        """Berechnet loss based on rhythmic consistency."""
         # Compute onset envelope similarity
         # Simplified implementation
 
@@ -433,7 +433,7 @@ class MusicalFeatureLoss(nn.Module):
         return F.mse_loss(output_envelope, target_envelope)
 
     def compute_timbral_loss(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """Compute loss based on timbral characteristics."""
+        """Berechnet loss based on timbral characteristics."""
         # Compute spectral features
         # Simplified: Compare spectral centroids
 
@@ -473,7 +473,7 @@ class MusicalFeatureLoss(nn.Module):
 
     def forward(self, output: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, dict[str, float]]:
         """
-        Compute musical feature loss.
+        Berechnet musical feature loss.
 
         Args:
             output: Predicted audio [batch, channels, time]
@@ -555,7 +555,7 @@ class CombinedPerceptualLoss(nn.Module):
         self, output: torch.Tensor, target: torch.Tensor, return_details: bool = False
     ) -> torch.Tensor | tuple[torch.Tensor, dict[str, float]]:
         """
-        Compute combined perceptual loss.
+        Berechnet combined perceptual loss.
 
         Args:
             output: Predicted audio [batch, channels, time]

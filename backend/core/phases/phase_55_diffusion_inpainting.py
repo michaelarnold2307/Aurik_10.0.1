@@ -153,11 +153,11 @@ def _burg_ar_predict(context: np.ndarray, order: int, n_samples: int) -> np.ndar
 
     # Toeplitz-System lösen (Levinson-Durbin approx)
     try:
-        R = np.array([ac[abs(i)] for i in range(order)]).reshape(order, 1)
+        R = np.array([ac[abs(i)] for i in range(order)])
         Rmat = np.array([[ac[abs(i - j)] for j in range(order)] for i in range(order)])
         if np.linalg.matrix_rank(Rmat) < order:
             return np.zeros(n_samples)
-        ar_coeff = np.linalg.solve(Rmat, R).flatten()
+        ar_coeff = np.linalg.solve(Rmat, R)
     except np.linalg.LinAlgError:
         return np.zeros(n_samples)
 
@@ -467,8 +467,8 @@ def _try_cqtdiff_plus_plugin(audio: np.ndarray, start: int, end: int, sample_rat
         if _plugins_dir not in sys.path:
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
-        from backend.core.plugin_lifecycle_manager import (
-            get_plugin_lifecycle_manager as _get_plm55a,  # pylint: disable=import-outside-toplevel
+        from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+            get_plugin_lifecycle_manager as _get_plm55a,
         )
         from plugins.cqtdiff_plus_plugin import get_cqtdiff_plus  # pylint: disable=import-outside-toplevel
 
@@ -514,8 +514,8 @@ def _try_flow_matching_plugin(
 
         from flow_matching_plugin import inpaint_flow  # pylint: disable=import-outside-toplevel
 
-        from backend.core.plugin_lifecycle_manager import (
-            get_plugin_lifecycle_manager as _get_plm55b,  # pylint: disable=import-outside-toplevel
+        from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+            get_plugin_lifecycle_manager as _get_plm55b,
         )
 
         _plm55b = _get_plm55b()
@@ -559,8 +559,8 @@ def _try_diffwave_plugin(audio: np.ndarray, start: int, end: int, sample_rate: i
         if not hasattr(dw, "inpaint"):
             return None
 
-        from backend.core.plugin_lifecycle_manager import (
-            get_plugin_lifecycle_manager as _get_plm55c,  # pylint: disable=import-outside-toplevel
+        from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+            get_plugin_lifecycle_manager as _get_plm55c,
         )
 
         _plm55c = _get_plm55c()
@@ -596,14 +596,14 @@ def _try_consistency_model_inpainting(channel: np.ndarray, start: int, end: int,
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
         try:
-            from plugins.consistency_inpaint_plugin import (  # pylint: disable=import-outside-toplevel
+            from plugins.consistency_inpaint_plugin import (  # type: ignore[import]  # pylint: disable=import-outside-toplevel
                 get_consistency_inpaint_plugin,
             )
         except (ImportError, ModuleNotFoundError):
             return None
 
-        from backend.core.plugin_lifecycle_manager import (
-            get_plugin_lifecycle_manager as _get_plm55d,  # pylint: disable=import-outside-toplevel
+        from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+            get_plugin_lifecycle_manager as _get_plm55d,
         )
 
         cm = get_consistency_inpaint_plugin()
@@ -652,8 +652,8 @@ def _try_dac_token_inpainting(channel: np.ndarray, start: int, end: int, sample_
         if _os.path.abspath(_plugins_dir) not in sys.path:
             sys.path.insert(0, _os.path.abspath(_plugins_dir))
 
-        from backend.core.plugin_lifecycle_manager import (
-            get_plugin_lifecycle_manager as _get_plm55e,  # pylint: disable=import-outside-toplevel
+        from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+            get_plugin_lifecycle_manager as _get_plm55e,
         )
         from plugins.dac_plugin import get_dac_plugin  # pylint: disable=import-outside-toplevel
 
@@ -683,7 +683,7 @@ def _try_dac_token_inpainting(channel: np.ndarray, start: int, end: int, sample_
 
 
 def _is_ml_thrashing() -> bool:
-    """Return True when ML paths should be avoided due to active swap thrashing.
+    """Gibt True when ML paths should be avoided due to active swap thrashing zurück.
 
     Result is cached for 30 s to avoid log-spam from per-channel calls (BUG H).
     """
@@ -739,7 +739,7 @@ def _conservative_boundary_fill(channel: np.ndarray, start: int, end: int) -> np
 
 
 def _gap_candidate_is_damaging(candidate: np.ndarray, channel: np.ndarray, start: int, end: int) -> bool:
-    """Detect boundary/energy anomalies that indicate risky inpainting output."""
+    """Erkennt boundary/energy anomalies that indicate risky inpainting output."""
     gap_len = max(0, end - start)
     if gap_len <= 2 or len(candidate) == 0:
         return False
@@ -1176,8 +1176,8 @@ class DiffusionInpaintingPhase(PhaseInterface):
 
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
-            from backend.core.plugin_lifecycle_manager import (
-                get_plugin_lifecycle_manager as _get_plm_evict55,  # pylint: disable=import-outside-toplevel
+            from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                get_plugin_lifecycle_manager as _get_plm_evict55,
             )
 
             _get_plm_evict55().evict_for_phase("phase_55_diffusion_inpainting")
@@ -1236,6 +1236,54 @@ class DiffusionInpaintingPhase(PhaseInterface):
 
         # §11.7a: Bereits von RekonstruktionsDenker reparierte Gap-Regionen
         _repaired_gaps: list[tuple[int, int]] = kwargs.get("repaired_gap_samples", [])
+
+        # §2.68d [RELEASE_MUST] SSIP Null-Propagation-Guard: Stille-Zonen aus ORIGINAL-Audio.
+        # _get_structural_silence_zones() liefert immer eine Liste — niemals None.
+        _n_samp_p55_ssip = int(audio.shape[-1] if audio.ndim == 2 else len(audio))
+        _ssip_zones_p55: list[tuple[int, int]] = []
+        try:
+            from backend.core.dsp.structural_silence_isolation import (  # pylint: disable=import-outside-toplevel
+                _get_structural_silence_zones as _ssip_get_zones,
+            )
+
+            _mat_key_p55 = str(kwargs.get("material_type", "unknown") or "unknown").lower()
+            _ssip_zones_p55 = _ssip_get_zones(kwargs, audio, sample_rate, _mat_key_p55)
+            if _ssip_zones_p55:
+                _repaired_gaps = list(_repaired_gaps) + _ssip_zones_p55
+                logger.debug(
+                    "§2.68 SSIP phase_55: %d strukturelle Stille-Zone(n) als pre-repaired markiert",
+                    len(_ssip_zones_p55),
+                )
+        except Exception as _ssip_exc_p55:
+            logger.debug("SSIP phase_55 non-blocking: %s", _ssip_exc_p55)
+
+        # §silence-guarantee: gewollte Stille sind KEINE Gaps — Stille-Zonen zur
+        # pre-repaired-Liste hinzufügen, damit Inpainting sie vollständig überspringt.
+        _silence_mask_p55: np.ndarray | None = kwargs.get("silence_mask")
+        if _silence_mask_p55 is None:
+            _ctx_p55 = kwargs.get("restoration_context")
+            if isinstance(_ctx_p55, dict):
+                _silence_mask_p55 = _ctx_p55.get("silence_mask")
+        if isinstance(_silence_mask_p55, np.ndarray) and _silence_mask_p55.size > 1:
+            try:
+                _n_samp_p55 = int(audio.shape[-1] if audio.ndim == 2 else audio.shape[0])
+                _mask_mono_p55 = _silence_mask_p55.ravel()[:_n_samp_p55]
+                _is_sil_p55 = _mask_mono_p55 < 0.5
+                if np.any(_is_sil_p55):
+                    _padded_p55 = np.concatenate(([False], _is_sil_p55, [False])).astype(np.int8)
+                    _changes_p55 = np.diff(_padded_p55)
+                    _sil_starts_p55 = np.where(_changes_p55 == 1)[0].tolist()
+                    _sil_ends_p55 = np.where(_changes_p55 == -1)[0].tolist()
+                    _silence_zones_p55 = list(zip(_sil_starts_p55, _sil_ends_p55))
+                    _repaired_gaps = list(_repaired_gaps) + _silence_zones_p55
+                    logger.debug(
+                        "§silence-guarantee phase_55: %d Stille-Zone(n) als pre-repaired markiert"
+                        " — Diffusions-Inpainting überspringt sie",
+                        len(_silence_zones_p55),
+                    )
+            except Exception as _sil_exc_p55:
+                logger.debug("§silence-guarantee phase_55: non-blocking error: %s", _sil_exc_p55)
+
         _n_repaired_skipped = 0
         _damage_guard_hits = 0
         _thrash_guard_active = False
@@ -1322,14 +1370,31 @@ class DiffusionInpaintingPhase(PhaseInterface):
         repaired = np.nan_to_num(repaired, nan=0.0, posinf=0.0, neginf=0.0)
         repaired = np.clip(repaired, -1.0, 1.0)
 
+        # §2.68 SSIP Post-Inpainting-Audit: Hard-Reset in Stille-Zonen (letzter Layer, V17).
+        # VERBOTEN: np.clip als Ersatz — Hard-Reset reproduziert Original exakt.
+        if _ssip_zones_p55:
+            try:
+                from backend.core.dsp.structural_silence_isolation import (  # pylint: disable=import-outside-toplevel
+                    get_structural_silence_isolator as _get_ssip_audit55,
+                )
+
+                repaired = _get_ssip_audit55().post_inpainting_silence_audit(
+                    audio_before_inpainting=source_audio,
+                    audio_after_inpainting=repaired,
+                    silence_zones=_ssip_zones_p55,
+                    sr=sample_rate,
+                )
+            except Exception as _ssip_audit_exc:
+                logger.debug("SSIP post_inpainting_silence_audit phase_55 (non-blocking): %s", _ssip_audit_exc)
+
         # §2.46f NPA-Guard: Atemgeräusche/Vibrato in Lücken-Rändern nicht überschreiben.
         # §2.46e Hallucination-Guard: ML-Inpainting darf kein neues spektrales Material einbringen.
         try:
-            from backend.core.hallucination_guard import (
-                apply_hallucination_guard,  # pylint: disable=import-outside-toplevel
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _check_hg55,
             )
-            from backend.core.natural_performance_detector import (
-                get_natural_performance_detector,  # pylint: disable=import-outside-toplevel
+            from backend.core.natural_performance_detector import (  # pylint: disable=import-outside-toplevel
+                get_natural_performance_detector,
             )
 
             _mono55 = source_audio.mean(axis=0) if source_audio.ndim == 2 else source_audio
@@ -1352,8 +1417,8 @@ class DiffusionInpaintingPhase(PhaseInterface):
             # klassifiziert wurden dürfen nicht durch ML-Inpainting ersetzt werden —
             # Artikulation schlägt Lücken-Filling (§2.36 RELEASE_MUST).
             try:
-                from backend.core.lyrics_guided_enhancement import (
-                    LyricsGuidedEnhancement,  # pylint: disable=import-outside-toplevel
+                from backend.core.lyrics_guided_enhancement import (  # pylint: disable=import-outside-toplevel
+                    LyricsGuidedEnhancement,
                 )
 
                 _lge55 = LyricsGuidedEnhancement()
@@ -1377,19 +1442,25 @@ class DiffusionInpaintingPhase(PhaseInterface):
                     _bw_cap55 = float(_inpainting_profile.get("bw_cap_hz", 22050.0))
                     _mono_rep55 = repaired.mean(axis=0) if repaired.ndim == 2 else repaired
                     _mono_src55 = source_audio.mean(axis=0) if source_audio.ndim == 2 else source_audio
-                    _repaired_mono_h, _h_meta55 = apply_hallucination_guard(
-                        _mono_src55, _mono_rep55, sample_rate, _bw_cap55, _mode55
+                    _hg_result55 = _check_hg55(
+                        _mono_src55,
+                        _mono_rep55,
+                        sr=sample_rate,
+                        mode=_mode55,
+                        material_bw_ceiling_hz=_bw_cap55,
                     )
-                    _rollback55 = _h_meta55.get("hallucination_decision") == "rollback" or bool(
-                        _h_meta55.get("rollback", False)
-                    )
-                    if _rollback55:
+                    if _hg_result55.requires_rollback:
                         logger.debug(
-                            "§2.46e Phase55 Hallucination rollback: novelty=%.3f severity=%s",
-                            _h_meta55.get("novelty", 0.0),
-                            _h_meta55.get("hallucination_severity", "unknown"),
+                            "§2.46e Phase55 Hallucination rollback: spectral_novelty=%.3f",
+                            _hg_result55.spectral_novelty,
                         )
                         repaired = source_audio
+                    if _hg_result55.score_penalty > 0:
+                        logger.info(
+                            "§2.46e Phase55 score_penalty=%.1f (spectral_novelty=%.3f)",
+                            _hg_result55.score_penalty,
+                            _hg_result55.spectral_novelty,
+                        )
             except Exception as _hg55_exc:
                 logger.debug("§2.46e Phase55 Hallucination-Guard (non-blocking): %s", _hg55_exc)
         except Exception as _guard55_exc:

@@ -12,13 +12,13 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 
 class AliasingDetector(DefectDetector):
-    """Detects spectral fold-back artifacts caused by anti-aliasing failures."""
+    """Erkennt spectral fold-back artifacts caused by anti-aliasing failures."""
 
     def __init__(self):
         super().__init__(name="aliasing_detector", defect_type=DefectType.ALIASING)
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.15, **kwargs) -> list[DefectInstance]:
-        """Detect aliasing using upper-band energy and narrow-peak structure."""
+        """Erkennt aliasing using upper-band energy and narrow-peak structure."""
         if audio.ndim == 2:
             audio = audio[:, 0]
 

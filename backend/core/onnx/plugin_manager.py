@@ -55,7 +55,7 @@ class ONNXPluginManager:
         self, registry_path: str = "backend/core/onnx/model_registry.json", provider: ONNXProvider = ONNXProvider.CPU
     ):
         """
-        Initialize the ONNX Plugin Manager.
+        Initialisiert the ONNX Plugin Manager.
 
         Args:
             registry_path: Path to model_registry.json
@@ -86,7 +86,7 @@ class ONNXPluginManager:
 
     def get_available_models(self) -> list[str]:
         """
-        Get list of all available model IDs.
+        Gibt zurück: list of all available model IDs.
 
         Returns:
             List of model IDs
@@ -95,7 +95,7 @@ class ONNXPluginManager:
 
     def get_model_config(self, model_id: str) -> dict | None:
         """
-        Get configuration for a specific model.
+        Gibt zurück: configuration for a specific model.
 
         Args:
             model_id: Model identifier
@@ -107,7 +107,7 @@ class ONNXPluginManager:
 
     def load_model(self, model_id: str, use_quantized: bool = False, force_reload: bool = False) -> bool:
         """
-        Load an ONNX model from the registry.
+        Lädt an ONNX model from the registry.
 
         Args:
             model_id: Model identifier (e.g., "deepfilternet_v3_ii")
@@ -237,7 +237,7 @@ class ONNXPluginManager:
 
     def is_loaded(self, model_id: str) -> bool:
         """
-        Check if a model is loaded.
+        Prüft if a model is loaded.
 
         Args:
             model_id: Model identifier
@@ -249,7 +249,7 @@ class ONNXPluginManager:
 
     def process(self, model_id: str, audio: np.ndarray, **kwargs) -> np.ndarray | None:
         """
-        Process audio with a loaded model.
+        Verarbeitet audio with a loaded model.
 
         Args:
             model_id: Model identifier
@@ -282,7 +282,7 @@ class ONNXPluginManager:
 
     def get_statistics(self, model_id: str | None = None) -> dict:
         """
-        Get performance statistics.
+        Gibt zurück: performance statistics.
 
         Args:
             model_id: If provided, get stats for specific model. Otherwise, global stats.
@@ -315,7 +315,7 @@ class ONNXPluginManager:
 
     def get_fallback_history(self, model_id: str | None = None, limit: int = 10) -> list[dict]:
         """
-        Get fallback event history.
+        Gibt zurück: fallback event history.
 
         Args:
             model_id: Filter by model ID
@@ -342,7 +342,7 @@ class ONNXPluginManager:
 
     def load_all_models(self, use_quantized: bool = False) -> dict[str, bool]:
         """
-        Load all models from the registry.
+        Lädt all models from the registry.
 
         Args:
             use_quantized: If True, load INT8 quantized versions
@@ -377,7 +377,7 @@ class ONNXPluginManager:
 
     def get_model_info(self, model_id: str) -> dict | None:
         """
-        Get detailed information about a model.
+        Gibt zurück: detailed information about a model.
 
         Args:
             model_id: Model identifier

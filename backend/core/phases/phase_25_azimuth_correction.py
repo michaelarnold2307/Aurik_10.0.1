@@ -1,5 +1,5 @@
 """
-Phase 25: Azimuth Correction v2.0 (Professional)
+Phase 25: Azimuth Correction v2.0 (Professional).
 Multi-band phase alignment with HF restoration for tape head misalignment.
 
 Algorithm (Professional-Grade):
@@ -119,7 +119,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, int]:
-        """Compute adaptive azimuth profile (§2.54) with power-of-two window sizing."""
+        """Berechnet adaptive azimuth profile (§2.54) with power-of-two window sizing."""
         mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "restoration").lower().replace("-", "_")
         if restorability_score is None:
@@ -161,7 +161,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
 
     def process(self, audio: np.ndarray, sample_rate: int, material: MaterialType, **kwargs) -> PhaseResult:
         """
-        Apply professional-grade azimuth correction.
+        Wendet an: professional-grade azimuth correction.
 
         Args:
             audio: Stereo audio [samples, 2]
@@ -427,7 +427,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
 
     def _analyze_band_azimuth(self, band_audio: np.ndarray, sample_rate: int, band_index: int) -> BandAzimuthAnalysis:
         """
-        Analyze azimuth error for a single frequency band.
+        Analysiert den Azimutfehler für ein einzelnes Frequenzband.
 
         Uses cross-correlation to detect L/R phase shift.
         """
@@ -652,7 +652,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
 
     def _measure_hf_loss(self, left: np.ndarray, right: np.ndarray, sample_rate: int) -> float:
         """
-        Measure HF loss (indicator of azimuth error severity).
+        Misst HF loss (indicator of azimuth error severity).
 
         Azimuth errors cause destructive interference at HF,
         resulting in reduced HF energy in one or both channels.
@@ -686,7 +686,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         self, corrected_audio: np.ndarray, original_audio: np.ndarray, sample_rate: int, hf_loss_db: float
     ) -> np.ndarray:
         """
-        Restore HF content lost due to azimuth error.
+        Restauriert HF content lost due to azimuth error.
 
         Applies adaptive HF boost to compensate for destructive interference.
         """
@@ -730,7 +730,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         return sum(bands)
 
     def get_metadata(self) -> PhaseMetadata:
-        """Get phase metadata."""
+        """Gibt zurück: phase metadata."""
         return PhaseMetadata(
             phase_id="phase_25_azimuth_correction",
             name="Azimuth Correction v2.0 (Professional)",

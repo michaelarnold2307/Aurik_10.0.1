@@ -27,9 +27,15 @@ from typing import Any
 
 import numpy as np
 
-# Setup paths
+# Needed so direct script execution (python scripts/...) can resolve project packages.
 _WORKSPACE_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(_WORKSPACE_ROOT))
+if str(_WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_WORKSPACE_ROOT))
+
+# pylint: disable=wrong-import-position
+from backend.core.pre_analysis import run_pre_analysis
+from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+from backend.file_import import load_audio_file
 
 # Import Pegelexplosion-Detektor
 try:
@@ -60,6 +66,7 @@ class PhaseCheckpoint:
     pegelexplosion_cause: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize checkpoint data into a JSON-safe dictionary."""
         d = asdict(self)
         d["musical_goals"] = {
             k: float(v) if isinstance(v, (int, float)) else 0.0 for k, v in self.musical_goals.items()
@@ -151,30 +158,31 @@ class ContinuousDeepAnalyzer:
         _start_t = time.monotonic()
         self.logger.info("=" * 80)
         self.logger.info("AURIK 9 — KONTINUIERLICHE TIEFENANALYSE")
-        self.logger.info(f"Audio: {audio_path}")
-        self.logger.info(f"Mode: {mode}")
-        self.logger.info(f"SR: {sr} Hz")
+        self.logger.info("Audio: %s", audio_path)
+        self.logger.info("Mode: %s", mode)
+        self.logger.info("SR: %s Hz", sr)
         self.logger.info("=" * 80)
+
+        pre_transfer_chain: list[str] = []
+        pipeline_transfer_chain: list[str] = []
+        pre_primary_material: str | None = None
+        pre_era_decade: int | None = None
 
         # 1. Audio laden
         try:
-            from backend.file_import import load_audio_file
-
             result = load_audio_file(audio_path)
             if result is None or result.get("error"):
-                self.logger.error(f"✗ Audio-Import fehlgeschlagen: {result.get('error') if result else 'None'}")
+                self.logger.error("✗ Audio-Import fehlgeschlagen: %s", result.get("error") if result else "None")
                 return {"error": str(result.get("error") if result else "Unknown"), "checkpoints": []}
             audio = result["audio"]
             sr_imported = result["sr"]
-            self.logger.info(f"✓ Audio geladen: {len(audio) / sr_imported:.1f}s @ {sr_imported} Hz")
+            self.logger.info("✓ Audio geladen: %.1fs @ %d Hz", len(audio) / sr_imported, sr_imported)
         except Exception as e:
-            self.logger.error(f"✗ Audio-Import fehlgeschlagen: {e}")
+            self.logger.error("✗ Audio-Import fehlgeschlagen: %s", e)
             return {"error": str(e), "checkpoints": []}
 
         # 2. Pre-Analyse durchführen
         try:
-            from backend.core.pre_analysis import run_pre_analysis
-
             pre_result = run_pre_analysis(
                 audio,
                 sr_imported,
@@ -187,17 +195,22 @@ class ContinuousDeepAnalyzer:
             _era_label = getattr(pre_result.era, "decade", None) or getattr(pre_result.era, "year_estimate", None)
             _rest_score = getattr(pre_result.restorability, "restorability_score", None)
             _defect_count = len(getattr(pre_result.defects, "scores", {}) or {}) if pre_result.defects else 0
+
+            pre_primary_material = str(getattr(pre_result.medium, "primary_material", "") or "") or None
+            pre_transfer_chain = self._extract_transfer_chain_from_obj(getattr(pre_result, "medium", None))
+            _era_decade_raw = getattr(pre_result.era, "decade", None)
+            if isinstance(_era_decade_raw, (int, np.integer)):
+                pre_era_decade = int(_era_decade_raw)
             self.logger.info("✓ Pre-Analyse komplett:")
-            self.logger.info(f"  - Material: {_medium_label if _medium_label is not None else 'unknown'}")
-            self.logger.info(f"  - Era: {_era_label if _era_label is not None else 'unknown'}")
-            self.logger.info(
-                f"  - Restorability: {_rest_score:.1f}%"
-                if isinstance(_rest_score, (int, float))
-                else "  - Restorability: unknown"
-            )
-            self.logger.info(f"  - Defekte gefunden: {_defect_count}")
+            self.logger.info("  - Material: %s", _medium_label if _medium_label is not None else "unknown")
+            self.logger.info("  - Era: %s", _era_label if _era_label is not None else "unknown")
+            if isinstance(_rest_score, (int, float)):
+                self.logger.info("  - Restorability: %.1f%%", _rest_score)
+            else:
+                self.logger.info("  - Restorability: unknown")
+            self.logger.info("  - Defekte gefunden: %d", _defect_count)
         except Exception as e:
-            self.logger.warning(f"Pre-Analyse fehlgeschlagen (nicht kritisch): {e}")
+            self.logger.warning("Pre-Analyse fehlgeschlagen (nicht kritisch): %s", e)
             pre_result = None
 
         # 3. Restaurierung mit Monitoring durchführen
@@ -215,12 +228,10 @@ class ContinuousDeepAnalyzer:
         )
         _watchdog_thread.start()
         try:
-            from backend.core.unified_restorer_v3 import UnifiedRestorerV3
-
-            restorer = UnifiedRestorerV3(quality_mode="maximum", monitor_phases=True)
-
             # Restaurierung durchführen
             is_studio_2026 = mode == "studio_2026"
+            quality_mode = "studio_2026" if is_studio_2026 else "quality"
+            restorer = UnifiedRestorerV3(quality_mode=quality_mode, monitor_phases=True)
             restoration_result = restorer.restore(
                 audio=audio,
                 sample_rate=sr_imported,
@@ -238,8 +249,14 @@ class ContinuousDeepAnalyzer:
 
             self._collect_checkpoints_from_restore_result(restoration_result, pre_result)
 
-            _hpg = restoration_result.metadata.get("holistic_perceptual_gate", {}) or {}
-            _afg = restoration_result.metadata.get("artifact_freedom", {}) or {}
+            _meta = getattr(restoration_result, "metadata", {}) or {}
+            _hpg = _meta.get("holistic_perceptual_gate", {}) or {}
+            _afg = _meta.get("artifact_freedom", {}) or {}
+            pipeline_transfer_chain = self._extract_transfer_chain_from_obj(_meta)
+            if pre_era_decade is None:
+                _meta_era = self._extract_era_decade_from_obj(_meta)
+                if _meta_era is not None:
+                    pre_era_decade = _meta_era
             self.logger.info("✓ Restaurierung komplett (Dauer: %.1fs)", time.monotonic() - _start_t)
             self.logger.info("  - HPI: %s", _hpg.get("hpi", restoration_result.metadata.get("hpi_score", "N/A")))
             self.logger.info(
@@ -250,7 +267,7 @@ class ContinuousDeepAnalyzer:
             )
 
         except Exception as e:
-            self.logger.error(f"✗ Restaurierung fehlgeschlagen: {e}", exc_info=True)
+            self.logger.error("✗ Restaurierung fehlgeschlagen: %s", e, exc_info=True)
             self.anomalies_detected.append(f"Restoration failed: {e}")
         finally:
             _watchdog_stop.set()
@@ -262,6 +279,14 @@ class ContinuousDeepAnalyzer:
             "wall_time_s": time.monotonic() - _start_t,
             "audio_path": audio_path,
             "mode": mode,
+            "effective_quality_mode": getattr(getattr(restorer, "config", None), "mode", None).value
+            if "restorer" in locals() and getattr(getattr(restorer, "config", None), "mode", None) is not None
+            else None,
+            "effective_is_studio_2026": bool(restorer.is_studio_mode()) if "restorer" in locals() else None,
+            "pre_analysis_primary_material": pre_primary_material,
+            "pre_analysis_transfer_chain": list(pre_transfer_chain),
+            "pipeline_transfer_chain": list(pipeline_transfer_chain),
+            "era_decade": pre_era_decade,
             "checkpoints": [cp.to_dict() for cp in self.checkpoints],
             "final_musical_goals": dict(self._final_musical_goals),
             "anomalies": self.anomalies_detected,
@@ -269,9 +294,9 @@ class ContinuousDeepAnalyzer:
         }
 
         result_file = Path(output_dir) / f"analysis_{Path(audio_path).stem}_{mode}_{int(time.time())}.json"
-        with open(result_file, "w") as f:
+        with open(result_file, "w", encoding="utf-8") as f:
             json.dump(result_dict, f, indent=2, default=str)
-        self.logger.info(f"✓ Ergebnisse gespeichert: {result_file}")
+        self.logger.info("✓ Ergebnisse gespeichert: %s", result_file)
 
         return result_dict
 
@@ -336,7 +361,7 @@ class ContinuousDeepAnalyzer:
 
     def _check_anomalies_from_scores(
         self,
-        phase_id: str,
+        _phase_id: str,
         scores_before: dict[str, Any],
         scores_after: dict[str, Any],
         hpi: Any,
@@ -385,12 +410,63 @@ class ContinuousDeepAnalyzer:
                     return float(value)
         return None
 
+    @staticmethod
+    def _extract_transfer_chain_from_obj(data: Any) -> list[str]:
+        """Extract transfer chain from nested dict/object payloads."""
+        if data is None:
+            return []
+        if isinstance(data, dict):
+            direct = data.get("transfer_chain") or data.get("source_fidelity_transfer_chain")
+            if isinstance(direct, list):
+                return [str(item) for item in direct if isinstance(item, str) and item]
+            for value in data.values():
+                chain = ContinuousDeepAnalyzer._extract_transfer_chain_from_obj(value)
+                if chain:
+                    return chain
+            return []
+        direct = getattr(data, "transfer_chain", None) or getattr(data, "source_fidelity_transfer_chain", None)
+        if isinstance(direct, list):
+            return [str(item) for item in direct if isinstance(item, str) and item]
+        for attr in ("__dict__",):
+            nested = getattr(data, attr, None)
+            if isinstance(nested, dict):
+                chain = ContinuousDeepAnalyzer._extract_transfer_chain_from_obj(nested)
+                if chain:
+                    return chain
+        return []
+
+    @staticmethod
+    def _extract_era_decade_from_obj(data: Any) -> int | None:
+        """Extract era decade from nested dict/object payloads."""
+        if data is None:
+            return None
+        if isinstance(data, dict):
+            for key in ("era_decade", "decade"):
+                val = data.get(key)
+                if isinstance(val, (int, np.integer)):
+                    return int(val)
+            for value in data.values():
+                era_val = ContinuousDeepAnalyzer._extract_era_decade_from_obj(value)
+                if era_val is not None:
+                    return era_val
+            return None
+        for attr in ("era_decade", "decade"):
+            val = getattr(data, attr, None)
+            if isinstance(val, (int, np.integer)):
+                return int(val)
+        nested = getattr(data, "__dict__", None)
+        if isinstance(nested, dict):
+            return ContinuousDeepAnalyzer._extract_era_decade_from_obj(nested)
+        return None
+
     def _create_checkpoint(self, phase_id: str, restorer: Any, pre_result: Any) -> PhaseCheckpoint:
         """Erstellt einen Checkpoint nach einer Phase."""
         # Musical Goals auslesen
         goals: dict[str, float] = {}
-        if hasattr(restorer, "_musical_goals_results"):
-            goals = dict(restorer._musical_goals_results)
+        _restorer_state = vars(restorer) if hasattr(restorer, "__dict__") else {}
+        _goals_raw = _restorer_state.get("_musical_goals_results")
+        if isinstance(_goals_raw, dict):
+            goals = dict(_goals_raw)
 
         # HPI, AFG, etc. auslesen
         hpi = None
@@ -399,12 +475,12 @@ class ContinuousDeepAnalyzer:
         noise_db = None
         defects_left = None
 
-        if hasattr(restorer, "_hpi_score"):
-            hpi = float(restorer._hpi_score)
-        if hasattr(restorer, "_artifact_freedom_score"):
-            afg = float(restorer._artifact_freedom_score)
-        if hasattr(restorer, "_carrier_chain_recovery_ratio"):
-            ccr = float(restorer._carrier_chain_recovery_ratio)
+        if isinstance(_restorer_state.get("_hpi_score"), (int, float)):
+            hpi = float(_restorer_state["_hpi_score"])
+        if isinstance(_restorer_state.get("_artifact_freedom_score"), (int, float)):
+            afg = float(_restorer_state["_artifact_freedom_score"])
+        if isinstance(_restorer_state.get("_carrier_chain_recovery_ratio"), (int, float)):
+            ccr = float(_restorer_state["_carrier_chain_recovery_ratio"])
 
         # Anomalien prüfen
         anomalies = self._check_anomalies(phase_id, goals, hpi, afg, pre_result)
@@ -422,7 +498,7 @@ class ContinuousDeepAnalyzer:
         )
 
     def _check_anomalies(
-        self, phase_id: str, goals: dict[str, float], hpi: float | None, afg: float | None, pre_result: Any
+        self, _phase_id: str, goals: dict[str, float], hpi: float | None, afg: float | None, pre_result: Any
     ) -> list[str]:
         """Erkennt Anomalien in Phase-Ergebnissen."""
         anomalies: list[str] = []
@@ -453,19 +529,19 @@ class ContinuousDeepAnalyzer:
 
     def _print_checkpoint_summary(self, cp: PhaseCheckpoint) -> None:
         """Druckt Checkpoint als Tabelle."""
-        self.logger.info(f"\n  Phase: {cp.phase_id}")
+        self.logger.info("\n  Phase: %s", cp.phase_id)
         self.logger.info("  - Musical Goals: ", extra={"no_newline": True})
         for goal, score in list(cp.musical_goals.items())[:3]:
             status = "✓" if score >= 0.80 else "✗" if score < 0.50 else "~"
-            self.logger.info(f" {status}{goal}={score:.2f}", extra={"no_newline": True})
+            self.logger.info(" %s%s=%.2f", status, goal, score, extra={"no_newline": True})
         self.logger.info("")
         if cp.hpi_score is not None:
-            self.logger.info(f"  - HPI: {cp.hpi_score:.3f}")
+            self.logger.info("  - HPI: %.3f", cp.hpi_score)
         if cp.artifact_freedom is not None:
-            self.logger.info(f"  - AFG: {cp.artifact_freedom:.3f}")
+            self.logger.info("  - AFG: %.3f", cp.artifact_freedom)
         if cp.anomalies:
             for anom in cp.anomalies:
-                self.logger.info(f"  ⚠ ANOMALIE: {anom}")
+                self.logger.info("  ⚠ ANOMALIE: %s", anom)
 
     def _generate_summary(self) -> dict[str, Any]:
         """Generiert eine Zusammenfassung."""
@@ -495,6 +571,7 @@ class ContinuousDeepAnalyzer:
 
 
 def main():
+    """Parse CLI args, run continuous deep analysis, and return process exit code."""
     parser = argparse.ArgumentParser(description="Aurik 9 — Kontinuierliche Tiefenanalyse")
     parser.add_argument("--audio", type=str, default=None, help="Audio-Datei-Pfad")
     parser.add_argument(

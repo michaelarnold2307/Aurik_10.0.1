@@ -136,12 +136,12 @@ class ClickRemovalPhase(PhaseInterface):
     ML_SEVERITY_THRESHOLD = 0.6
 
     def __init__(self):
-        """Initialize Phase 1 Click Removal."""
+        """Initialisiert Phase 1 Click Removal."""
         self._deepfilternet_plugin = None
 
     def _get_deepfilternet_plugin(self):
         """
-        Lazy load DeepFilterNet v3 II Plugin.
+        Lädt DeepFilterNet v3 II Plugin beim ersten Zugriff.
 
         Returns:
             DeepFilterNet plugin or None if unavailable
@@ -182,7 +182,7 @@ class ClickRemovalPhase(PhaseInterface):
         quality_mode: str | None = "balanced",
         restorability: float = 50.0,
     ) -> dict:
-        """Compute material- and quality-adaptive profile for click removal (§2.56).
+        """Berechnet material- and quality-adaptive profile for click removal (§2.56).
 
         Returns a dict with keys:
           ml_severity_threshold  [0.35, 0.80]
@@ -542,7 +542,7 @@ class ClickRemovalPhase(PhaseInterface):
 
     def _repair_clicks_ml(self, audio: np.ndarray, sample_rate: int, clicks: list[dict[str, Any]]) -> bool:
         """
-        Repair severe clicks using DeepFilterNet v3 II.
+        Repariert severe clicks using DeepFilterNet v3 II.
 
         Strategy: Process entire audio with DeepFilterNet which excels
         at removing transient distortions while preserving musical content.

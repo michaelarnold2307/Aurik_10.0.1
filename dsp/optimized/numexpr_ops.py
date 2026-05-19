@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 
 def _ne_evaluate(expression: str, local_dict: dict[str, Any] | None = None) -> np.ndarray:
-    """Evaluate expression with numexpr when available, else numpy fallback."""
+    """Bewertet expression with numexpr when available, else numpy fallback."""
     if _NUMEXPR_AVAILABLE and ne is not None:
         return ne.evaluate(expression, local_dict=local_dict)
     safe_globals = {"__builtins__": {}, "np": np}
@@ -64,7 +64,7 @@ def _ne_evaluate(expression: str, local_dict: dict[str, Any] | None = None) -> n
             "sum": np.sum,
         }
     )
-    return np.asarray(eval(expression, safe_globals, safe_locals))
+    return np.asarray(eval(expression, safe_globals, safe_locals))  # nosec B307  # pylint: disable=eval-used
 
 
 class OptimizedDSP:
@@ -77,7 +77,7 @@ class OptimizedDSP:
 
     def __init__(self, num_threads: int | None = None):
         """
-        Initialize optimized DSP processor.
+        Initialisiert optimized DSP processor.
 
         Args:
             num_threads: Number of threads for NumExpr (default: auto)
@@ -93,7 +93,7 @@ class OptimizedDSP:
 
     def spectral_gate(self, spectrum: np.ndarray, threshold: float, slope: float = 1.0) -> np.ndarray:
         """
-        Apply spectral gating with NumExpr (2× faster).
+        Wendet an: spectral gating with NumExpr (2× faster).
 
         Args:
             spectrum: Complex spectrum array
@@ -132,7 +132,7 @@ class OptimizedDSP:
 
     def spectral_gate_db(self, spectrum: np.ndarray, threshold_db: float, slope: float = 1.0) -> np.ndarray:
         """
-        Apply spectral gating with dB threshold (2× faster).
+        Wendet an: spectral gating with dB threshold (2× faster).
 
         Args:
             spectrum: Complex spectrum array
@@ -163,7 +163,7 @@ class OptimizedDSP:
 
     def soft_threshold(self, audio: np.ndarray, threshold: float) -> np.ndarray:
         """
-        Apply soft thresholding (2× faster).
+        Wendet an: soft thresholding (2× faster).
 
         Soft thresholding: shrink values toward zero by threshold amount.
 
@@ -192,7 +192,7 @@ class OptimizedDSP:
 
     def hard_threshold(self, audio: np.ndarray, threshold: float) -> np.ndarray:
         """
-        Apply hard thresholding (2× faster).
+        Wendet an: hard thresholding (2× faster).
 
         Hard thresholding: set values below threshold to zero.
 
@@ -213,7 +213,7 @@ class OptimizedDSP:
 
     def noise_floor_estimation(self, magnitude_spectrum: np.ndarray, percentile: float = 10.0) -> float:
         """
-        Estimate noise floor from magnitude spectrum (2× faster).
+        Schätzt noise floor from magnitude spectrum (2× faster).
 
         Args:
             magnitude_spectrum: Magnitude spectrum (n_frames, n_bins)
@@ -270,7 +270,7 @@ class OptimizedDSP:
 
     def rms_multiband(self, audio: np.ndarray, n_bands: int = 3) -> np.ndarray:
         """
-        Compute RMS energy in multiple bands (2× faster).
+        Berechnet RMS energy in multiple bands (2× faster).
 
         Args:
             audio: Input audio (n_samples,)
@@ -299,7 +299,7 @@ class OptimizedDSP:
         self, audio: np.ndarray, threshold: float, ratio: float, knee_width: float = 0.0
     ) -> np.ndarray:
         """
-        Apply dynamic range compression (2× faster).
+        Wendet an: dynamic range compression (2× faster).
 
         Args:
             audio: Input audio
@@ -362,7 +362,7 @@ class OptimizedDSP:
 
     def spectral_smoothing(self, spectrum: np.ndarray, window_size: int = 5) -> np.ndarray:
         """
-        Smooth spectrum using moving average (2× faster for operations).
+        Glättet spectrum using moving average (2× faster for operations).
 
         Args:
             spectrum: Input spectrum (n_bins,) or (n_frames, n_bins)
@@ -373,7 +373,7 @@ class OptimizedDSP:
         """
         # Use scipy or numpy convolve for the actual smoothing
         # But use NumExpr for normalization
-        from scipy.ndimage import uniform_filter1d
+        from scipy.ndimage import uniform_filter1d  # pylint: disable=import-outside-toplevel
 
         if spectrum.ndim == 1:
             smoothed = uniform_filter1d(spectrum, window_size)
@@ -384,7 +384,7 @@ class OptimizedDSP:
 
     def get_statistics(self) -> dict:
         """
-        Get NumExpr configuration and statistics.
+        Gibt zurück: NumExpr configuration and statistics.
 
         Returns:
             Dictionary with NumExpr settings

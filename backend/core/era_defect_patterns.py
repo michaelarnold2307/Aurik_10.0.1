@@ -431,7 +431,7 @@ _MATERIAL_ONLY_PRIORS: dict[str, dict[str, DefectPrior]] = {
 
 
 def _nearest_era(era_decade: int, available: list[int]) -> int:
-    """Return closest available era key to era_decade."""
+    """Gibt closest available era key to era_decade zurück."""
     return min(available, key=lambda d: abs(d - era_decade))
 
 
@@ -439,7 +439,7 @@ def get_era_material_defect_priors(
     era_decade: int | None,
     material_type: str,
 ) -> dict[str, tuple[float, float]]:
-    """Return defect severity priors for a given era × material combination.
+    """Gibt defect severity priors for a given era × material combination zurück.
 
     The returned dict maps each known defect name to a
     ``(severity_prior, probability)`` tuple suitable for direct use as a
@@ -509,7 +509,7 @@ def get_high_probability_defects(
     material_type: str,
     probability_threshold: float = 0.60,
 ) -> list[str]:
-    """Return defect names with probability ≥ threshold for quick prioritisation.
+    """Gibt defect names with probability ≥ threshold for quick prioritisation zurück.
 
     Args:
         era_decade:            Recording decade.
@@ -527,7 +527,7 @@ def get_severity_adjustment_factors(
     era_decade: int | None,
     material_type: str,
 ) -> dict[str, float]:
-    """Return per-defect severity multipliers for DefectScanner calibration.
+    """Gibt per-defect severity multipliers for DefectScanner calibration zurück.
 
     A severity multiplier > 1.0 means the DefectScanner should lower its
     detection threshold (more sensitive) — because this defect is historically

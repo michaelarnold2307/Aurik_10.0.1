@@ -52,7 +52,7 @@ _instance: RmvpePlugin | None = None
 
 
 def _estimate_tonal_reference_hz(mono_16k: np.ndarray) -> tuple[float | None, float]:
-    """Estimate dominant tonal reference frequency from magnitude spectrum.
+    """Schätzt dominant tonal reference frequency from magnitude spectrum.
 
     Returns:
         (f_ref_hz | None, confidence_ratio)

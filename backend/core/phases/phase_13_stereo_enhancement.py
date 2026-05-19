@@ -1,5 +1,5 @@
 """
-Phase 13: Stereo Enhancement v2.0 (Professional)
+Phase 13: Stereo Enhancement v2.0 (Professional).
 Multi-band correlation-based stereo imaging with psychoacoustic width control.
 
 Algorithm (Professional-Grade):
@@ -132,7 +132,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
 
     def process(self, audio: np.ndarray, sample_rate: int, material: MaterialType, **kwargs) -> PhaseResult:
         """
-        Apply professional-grade stereo enhancement.
+        Wendet an: professional-grade stereo enhancement.
 
         Args:
             audio: Input audio (must be stereo: [samples, 2])
@@ -456,7 +456,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
 
     def _apply_haas_delay(self, sig: np.ndarray, delay_samples: int) -> np.ndarray:
         """
-        Apply Haas effect delay for spaciousness.
+        Wendet an: Haas effect delay for spaciousness.
 
         Haas effect (precedence effect): 5-35ms delays create spatial impression
         without perceiving as echo.
@@ -474,7 +474,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
 
     def _apply_allpass_decorrelation(self, sig: np.ndarray, sample_rate: int, order: int) -> np.ndarray:
         """
-        Apply all-pass filters for phase decorrelation.
+        Wendet Allpass-Filter zur Phasen-Dekorrelation an.
 
         All-pass filters change phase but not magnitude, creating spaciousness
         without tonal coloration.
@@ -517,7 +517,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
 
     def _measure_stereo_width(self, audio: np.ndarray) -> float:
         """
-        Measure stereo width as Side/Mid energy ratio.
+        Misst stereo width as Side/Mid energy ratio.
 
         Width = RMS(Side) / RMS(Mid)
         - 0.0 = pure mono
@@ -538,7 +538,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
 
     def _measure_correlation(self, audio: np.ndarray) -> float:
         """
-        Measure L/R correlation coefficient.
+        Misst L/R correlation coefficient.
 
         Correlation = cov(L, R) / (std(L) * std(R))
         - 1.0 = perfect correlation (mono)
@@ -573,7 +573,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         return blended
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_13_stereo_enhancement",
             name="Stereo Enhancement v2.0 (Professional)",

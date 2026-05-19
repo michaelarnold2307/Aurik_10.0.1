@@ -67,7 +67,7 @@ class MTEFResult:
 
 
 def _hilbert_envelope(audio: np.ndarray) -> np.ndarray:
-    """Compute instantaneous amplitude envelope via Hilbert transform.
+    """Berechnet instantaneous amplitude envelope via Hilbert transform.
 
     Uses scipy.signal.hilbert on the analytic signal. For very long audio
     (>10 min at 48 kHz), processes in chunks to limit memory.
@@ -104,7 +104,7 @@ def _hilbert_envelope(audio: np.ndarray) -> np.ndarray:
 
 
 def _smooth_envelope(env: np.ndarray, sr: int, window_s: float) -> np.ndarray:
-    """Smooth envelope with a Hanning window of given duration."""
+    """Glättet envelope with a Hanning window of given duration."""
     win_samples = max(3, int(window_s * sr) | 1)  # ensure odd
     kernel = np.hanning(win_samples).astype(np.float32)
     kernel /= kernel.sum()
@@ -113,7 +113,7 @@ def _smooth_envelope(env: np.ndarray, sr: int, window_s: float) -> np.ndarray:
 
 
 def _frame_pearson(env_orig: np.ndarray, env_rest: np.ndarray, sr: int, window_s: float) -> float:
-    """Compute Pearson correlation between two envelopes at a given scale."""
+    """Berechnet Pearson correlation between two envelopes at a given scale."""
     # Smooth both envelopes at the target scale
     s_orig = _smooth_envelope(env_orig, sr, window_s)
     s_rest = _smooth_envelope(env_rest, sr, window_s)
@@ -143,7 +143,7 @@ def measure(
     restored: np.ndarray,
     sr: int = 48000,
 ) -> MTEFResult:
-    """Measure micro-temporal envelope fidelity between original and restored.
+    """Misst micro-temporal envelope fidelity between original and restored.
 
     Args:
         original: Original audio (mono or stereo).
@@ -192,7 +192,7 @@ def morph(
     *,
     mode: str = "restoration",
 ) -> tuple[np.ndarray, MTEFResult]:
-    """Measure and correct micro-temporal envelope fidelity.
+    """Misst and correct micro-temporal envelope fidelity.
 
     When fidelity drops below threshold, applies proportional envelope
     morphing at each scale to recover the original's temporal dynamics.
@@ -293,7 +293,7 @@ def morph(
 
 
 class MicroTemporalEnvelopeFidelity:
-    """Singleton wrapper for MTEF measure/morph operations."""
+    """Singleton-Wrapper für MTEF-Mess-/Morph-Operationen."""
 
     def measure(self, original: np.ndarray, restored: np.ndarray, sr: int = 48000) -> MTEFResult:
         return measure(original, restored, sr)

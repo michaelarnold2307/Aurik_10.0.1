@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 class _DictAccess:
-    """Mixin: makes dataclass instances behave like dicts for backward compatibility.
+    """Mixin: Lässt Dataclass-Instanzen wie Dicts verhalten (Rückwärtskompatibilität).
 
     Enables both typed attribute access (``result.warmth_detected``) and legacy
     dict-style access (``result["warmth_detected"]``, ``"key" in result``).
@@ -129,7 +129,7 @@ class AuthenticityMetricsResult(_DictAccess):
 
 class FingerNoiseDetector:
     """
-    Detects and measures finger noise on acoustic guitar strings.
+    Erkennt and measures finger noise on acoustic guitar strings.
 
     Finger noise: Sliding/squeaking sounds from fingers moving on strings.
     - Frequency range: 2-6 kHz (harmonically rich)
@@ -145,7 +145,7 @@ class FingerNoiseDetector:
 
     def __init__(self, sensitivity: float = 0.7, freq_range: tuple[float, float] = (2000.0, 6000.0)):
         """
-        Initialize Finger Noise Detector.
+        Initialisiert Finger Noise Detector.
 
         Parameters
         ----------
@@ -161,7 +161,7 @@ class FingerNoiseDetector:
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> FingerNoiseResult:
         """
-        Detect finger noise events in audio.
+        Erkennt finger noise events in audio.
 
         Parameters
         ----------
@@ -230,7 +230,7 @@ class FingerNoiseDetector:
 
 class BowNoiseDetector:
     """
-    Detects and measures bow noise on string instruments.
+    Erkennt and measures bow noise on string instruments.
 
     Bow noise: Rosin/bow scraping, raspy texture from bow-string interaction.
     - Frequency range: Broadband 1-8 kHz (textural noise)
@@ -246,7 +246,7 @@ class BowNoiseDetector:
 
     def __init__(self, sensitivity: float = 0.6, freq_range: tuple[float, float] = (1000.0, 8000.0)):
         """
-        Initialize Bow Noise Detector.
+        Initialisiert Bow Noise Detector.
 
         Parameters
         ----------
@@ -262,7 +262,7 @@ class BowNoiseDetector:
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> BowNoiseResult:
         """
-        Detect bow noise in audio.
+        Erkennt bow noise in audio.
 
         Parameters
         ----------
@@ -319,7 +319,7 @@ class BowNoiseDetector:
 
 class PedalNoiseDetector:
     """
-    Detects and measures piano pedal mechanical sounds.
+    Erkennt and measures piano pedal mechanical sounds.
 
     Pedal noise: Sustain pedal clicks/thuds from mechanical operation.
     - Frequency range: 80-400 Hz (low, dull clicks)
@@ -335,7 +335,7 @@ class PedalNoiseDetector:
 
     def __init__(self, sensitivity: float = 0.7, freq_range: tuple[float, float] = (80.0, 400.0)):
         """
-        Initialize Pedal Noise Detector.
+        Initialisiert Pedal Noise Detector.
 
         Parameters
         ----------
@@ -351,7 +351,7 @@ class PedalNoiseDetector:
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> PedalNoiseResult:
         """
-        Detect pedal noise events in audio.
+        Erkennt pedal noise events in audio.
 
         Parameters
         ----------
@@ -429,7 +429,7 @@ class BrushTextureDetector:
 
     def __init__(self, sensitivity: float = 0.65, freq_range: tuple[float, float] = (3000.0, 10000.0)):
         """
-        Initialize Brush Texture Detector.
+        Initialisiert Brush Texture Detector.
 
         Parameters
         ----------
@@ -445,7 +445,7 @@ class BrushTextureDetector:
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> BrushTextureResult:
         """
-        Detect brush texture in audio.
+        Erkennt brush texture in audio.
 
         Parameters
         ----------
@@ -530,7 +530,7 @@ class VinylCharacterDetector:
 
     def __init__(self, sensitivity: float = 0.75, thd_threshold: float = 0.05):  # 5% THD
         """
-        Initialize Vinyl Character Detector.
+        Initialisiert Vinyl Character Detector.
 
         Parameters
         ----------
@@ -546,7 +546,7 @@ class VinylCharacterDetector:
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> VinylCharacterResult:
         """
-        Detect vinyl character (warmth vs defects) in audio.
+        Erkennt vinyl character (warmth vs defects) in audio.
 
         Parameters
         ----------
@@ -633,7 +633,7 @@ class VinylCharacterDetector:
 
 class AuthenticityMetricsExtended:
     """
-    Unified API for genre-specific authenticity detection.
+    Einheitliche API für genrespezifische Authentizitätserkennung.
 
     Combines all 5 detectors for comprehensive analysis:
     - FingerNoiseDetector
@@ -644,7 +644,7 @@ class AuthenticityMetricsExtended:
     """
 
     def __init__(self):
-        """Initialize all detectors with default parameters."""
+        """Initialisiert all detectors with default parameters."""
         self.finger_noise_detector = FingerNoiseDetector()
         self.bow_noise_detector = BowNoiseDetector()
         self.pedal_noise_detector = PedalNoiseDetector()
@@ -653,7 +653,7 @@ class AuthenticityMetricsExtended:
 
     def analyze(self, audio: np.ndarray, sample_rate: int) -> AuthenticityMetricsResult:
         """
-        Analyze audio for all genre-specific authenticity metrics.
+        Analysiert Audio auf alle genrespezifischen Authentizitätsmetriken.
 
         Parameters
         ----------

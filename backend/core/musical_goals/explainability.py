@@ -131,7 +131,7 @@ class GoalExplanation:
 
 class GoalExplainer:
     """
-    Generates user-friendly explanations of Musical Goals achievement.
+    Generiert user-friendly explanations of Musical Goals achievement.
 
     This system provides transparency into how processing affected goals:
     1. Step attribution: Which steps improved/degraded which goals
@@ -159,7 +159,7 @@ class GoalExplainer:
 
     def __init__(self, checker: MusicalGoalsChecker | None = None) -> None:
         """
-        Initialize goal explainer.
+        Initialisiert goal explainer.
 
         Args:
             checker: Optional MusicalGoalsChecker instance
@@ -279,7 +279,7 @@ class GoalExplainer:
 
     def generate_explanation(self) -> GoalExplanation:
         """
-        Generate comprehensive explanation of Musical Goals achievement.
+        Generiert comprehensive explanation of Musical Goals achievement.
 
         Returns:
             GoalExplanation with all details
@@ -340,7 +340,7 @@ class GoalExplainer:
         )
 
     def _build_goal_trajectories(self, mode_config) -> dict[str, GoalTrajectory]:
-        """Build trajectory for each goal."""
+        """Erstellt trajectory for each goal."""
         trajectories = {}
 
         # Get all goal names
@@ -450,7 +450,7 @@ class GoalExplainer:
         change_type: GoalChangeType,
         achieved: bool,
     ) -> str:
-        """Generate user-friendly trajectory explanation."""
+        """Generiert user-friendly trajectory explanation."""
         display_name = self.goal_display_names.get(goal_name, goal_name.title())
 
         delta = final - initial
@@ -486,7 +486,7 @@ class GoalExplainer:
     def _explain_step_impact(
         self, step_name: str, goal_changes: dict[str, float], positive: list[str], negative: list[str]
     ) -> str:
-        """Generate user-friendly step impact explanation."""
+        """Generiert user-friendly step impact explanation."""
         display_name = self.step_descriptions.get(step_name.lower(), step_name)
 
         explanation = f"{display_name}:"
@@ -516,7 +516,7 @@ class GoalExplainer:
         return explanation
 
     def _generate_summary(self, achieved: list[str], failed: list[str], trajectories: dict[str, GoalTrajectory]) -> str:
-        """Generate high-level summary."""
+        """Generiert high-level summary."""
         total = len(achieved) + len(failed)
 
         summary = f"Musical Goals Achievement: {len(achieved)}/{total} goals achieved\n\n"
@@ -547,7 +547,7 @@ class GoalExplainer:
     def _generate_recommendations(
         self, failed: list[str], trajectories: dict[str, GoalTrajectory], step_impacts: list[ProcessingStepImpact]
     ) -> list[str]:
-        """Generate actionable recommendations."""
+        """Generiert actionable recommendations."""
         recommendations = []
 
         if len(failed) == 0:
@@ -613,7 +613,7 @@ class GoalExplainer:
         self, original: np.ndarray, processed: np.ndarray, sr: int, mode: ProcessingMode = ProcessingMode.RESTORATION
     ) -> str:
         """
-        Simple one-shot explanation without step tracking.
+        Einfaches one-shot explanation without step tracking.
 
         Args:
             original: Original audio

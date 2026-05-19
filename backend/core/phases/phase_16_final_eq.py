@@ -130,7 +130,7 @@ class FinalEQ(PhaseInterface):
         self.name = "Final EQ v2 Professional"
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_16_final_eq",
             name="Final EQ v2 Professional",
@@ -150,7 +150,7 @@ class FinalEQ(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply multi-band linear-phase EQ to audio.
+        Wendet an: multi-band linear-phase EQ to audio.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -273,7 +273,7 @@ class FinalEQ(PhaseInterface):
         )
 
     def _eq_channel(self, audio: np.ndarray, sample_rate: int, config: dict[str, dict[str, Any]]) -> np.ndarray:
-        """Apply EQ to a single channel."""
+        """Wendet an: EQ to a single channel."""
         # **GUARD: Short-Audio-Buffer (§2.47, §0 Primum non nocere)**
         MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
         if len(audio) < MIN_AUDIO_SAMPLES:
@@ -300,7 +300,7 @@ class FinalEQ(PhaseInterface):
         return eq_audio
 
     def _apply_shelf(self, audio: np.ndarray, sample_rate: int, freq: float, gain_db: float, q: float) -> np.ndarray:
-        """Apply shelving filter (low-shelf if freq < 500, else high-shelf)."""
+        """Wendet an: shelving filter (low-shelf if freq < 500, else high-shelf)."""
         # Determine shelf type
         is_lowshelf = freq < 500
 
@@ -339,7 +339,7 @@ class FinalEQ(PhaseInterface):
         return filtered
 
     def _apply_bell(self, audio: np.ndarray, sample_rate: int, freq: float, gain_db: float, q: float) -> np.ndarray:
-        """Apply bell (peaking) filter using IIR."""
+        """Wendet Bell-(Peaking)-Filter mittels IIR an."""
         # Design peaking filter
         w0 = 2 * np.pi * freq / sample_rate
         alpha = np.sin(w0) / (2 * q)

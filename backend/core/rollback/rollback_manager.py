@@ -84,7 +84,7 @@ class RollbackManager:
 
     def __init__(self, max_snapshots: int = 5):
         """
-        Initialize Rollback Manager.
+        Initialisiert Rollback Manager.
 
         Args:
             max_snapshots: Maximum number of snapshots to keep (default: 5)
@@ -97,7 +97,7 @@ class RollbackManager:
         self, name: str, audio: np.ndarray, sr: int, musical_goals: dict[str, float], metadata: dict | None = None
     ):
         """
-        Create a snapshot of current audio state.
+        Erstellt a snapshot of current audio state.
 
         Args:
             name: Snapshot name (e.g., 'original', 'after_noise_reduction')
@@ -132,7 +132,7 @@ class RollbackManager:
 
     def get_snapshot(self, name: str) -> AudioSnapshot | None:
         """
-        Get snapshot by name.
+        Gibt zurück: snapshot by name.
 
         Args:
             name: Snapshot name
@@ -223,7 +223,7 @@ class RollbackManager:
 
     def list_snapshots(self) -> list[dict]:
         """
-        List all available snapshots.
+        Listet auf: all available snapshots.
 
         Returns:
             List of snapshot summaries
@@ -242,7 +242,7 @@ class RollbackManager:
 
     def get_rollback_history(self) -> list[dict]:
         """
-        Get history of all rollback decisions.
+        Gibt zurück: history of all rollback decisions.
 
         Returns:
             List of rollback decisions
@@ -259,13 +259,13 @@ class RollbackManager:
         ]
 
     def clear_snapshots(self):
-        """Clear all snapshots (use with caution!)."""
+        """Löscht all snapshots (use with caution!)."""
         count = len(self.snapshots)
         self.snapshots = []
         logger.warning("Cleared all %s snapshots", count)
 
     def clear_history(self):
-        """Clear rollback history."""
+        """Löscht rollback history."""
         count = len(self.rollback_history)
         self.rollback_history = []
         logger.info("Cleared rollback history (%s entries)", count)

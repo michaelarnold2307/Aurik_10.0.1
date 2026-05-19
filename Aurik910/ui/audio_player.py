@@ -233,7 +233,7 @@ class StreamingAudioPlayer:
             self._stop_after_fade = False
 
     def invalidate_cache(self) -> None:
-        """Clear the resample cache (call after loading a new file)."""
+        """Löscht the resample cache (call after loading a new file)."""
         self._resample_cache.clear()
 
     def shutdown(self) -> None:
@@ -385,7 +385,7 @@ class StreamingAudioPlayer:
         self._buf = prepared  # LAST — makes (buf, pos) visible atomically
 
     def _ensure_stream(self) -> bool:
-        """Create output stream if not yet open.  Lock MUST be held."""
+        """Erstellt output stream if not yet open.  Lock MUST be held."""
         if self._stream is not None:
             try:
                 if self._stream.active or not self._stream.closed:
@@ -492,7 +492,7 @@ _instance_lock = threading.Lock()
 
 
 def get_streaming_player() -> StreamingAudioPlayer:
-    """Return the global ``StreamingAudioPlayer`` singleton (thread-safe)."""
+    """Gibt the global ``StreamingAudioPlayer`` singleton (thread-safe) zurück."""
     global _instance
     if _instance is None:
         with _instance_lock:

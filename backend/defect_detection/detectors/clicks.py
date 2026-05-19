@@ -12,7 +12,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class ClicksDetector(DefectDetector):
     """
-    Detects clicks and pops in audio.
+    Erkennt clicks and pops in audio.
 
     Clicks are short-duration transient disturbances (< 5ms).
     Common in vinyl recordings, digital errors, electrical interference.
@@ -23,7 +23,7 @@ class ClicksDetector(DefectDetector):
         self.threshold_percentile = threshold_percentile
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.15, **kwargs) -> list[DefectInstance]:
-        """Detect clicks/pops in audio, kontextbewusst."""
+        """Erkennt clicks/pops in audio, kontextbewusst."""
         if audio.ndim == 2:
             audio = audio[:, 0]  # Analyze first channel
         diff = np.abs(np.diff(audio))

@@ -1,4 +1,4 @@
-"""Runtime environment selection for developer launches.
+"""Laufzeitumgebungs-Auswahl für Entwickler-Starts.
 
 Chooses the ROCm virtual environment only when the interpreter can actually
 provide both PyTorch ROCm and ONNX Runtime ROCm execution providers. Otherwise

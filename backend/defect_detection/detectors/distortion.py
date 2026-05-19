@@ -13,7 +13,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class DistortionDetector(DefectDetector):
     """
-    Detects harmonic distortion.
+    Erkennt harmonic distortion.
 
     Measures Total Harmonic Distortion (THD) by analyzing
     ratio of harmonic energy to fundamental energy.
@@ -23,7 +23,7 @@ class DistortionDetector(DefectDetector):
         super().__init__(name="distortion_detector", defect_type=DefectType.DISTORTION)
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.15, **kwargs) -> list[DefectInstance]:
-        """Detect harmonic distortion, kontextbewusst."""
+        """Erkennt harmonic distortion, kontextbewusst."""
         if audio.ndim == 2:
             audio = audio[:, 0]
         freqs, psd = welch(audio, sr, nperseg=min(4096, len(audio) // 4))

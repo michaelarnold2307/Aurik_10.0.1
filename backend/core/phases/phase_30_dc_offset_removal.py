@@ -146,7 +146,7 @@ class DCOffsetRemoval(PhaseInterface):
         self.name = "DC Offset Removal v2 Professional"
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_30_dc_offset_removal",
             name="DC Offset Removal v2 Professional",
@@ -166,7 +166,7 @@ class DCOffsetRemoval(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.VINYL, **kwargs
     ) -> PhaseResult:
         """
-        Process audio to remove DC offset and rumble.
+        Verarbeitet audio to remove DC offset and rumble.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -286,7 +286,7 @@ class DCOffsetRemoval(PhaseInterface):
         )
 
     def _remove_dc_and_rumble(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
-        """Remove DC offset conservatively from a single channel."""
+        """Entfernt DC offset conservatively from a single channel."""
         cutoff_hz = config["cutoff_hz"]
         filter_order = config["filter_order"]
         filter_type = config["filter_type"]
@@ -395,7 +395,7 @@ class DCOffsetRemoval(PhaseInterface):
         return np.clip(proc.astype(np.float32), -1.0, 1.0), out_delta_db, makeup_db
 
     def _measure_subsonic_energy(self, audio: np.ndarray, sample_rate: int, cutoff_hz: float) -> float:
-        """Measure RMS energy in subsonic band (<cutoff_hz)."""
+        """Misst RMS energy in subsonic band (<cutoff_hz)."""
         # Extract subsonic band
         if audio.ndim == 2:
             audio = audio[:, 0]  # Use first channel for measurement

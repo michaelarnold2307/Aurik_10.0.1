@@ -1,5 +1,5 @@
 """
-Phase 33: Stereo Width Limiter v2.0 (Professional)
+Phase 33: Stereo Width Limiter v2.0 (Professional).
 Psychoacoustic width control with transient-aware limiting.
 
 Algorithm (Professional-Grade):
@@ -144,7 +144,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive width-limiter runtime profile (§2.56)."""
+        """Berechnet adaptive width-limiter runtime profile (§2.56)."""
         mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         if restorability_score is None:
@@ -189,7 +189,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
 
     def process(self, audio: np.ndarray, sample_rate: int, material: MaterialType, **kwargs) -> PhaseResult:
         """
-        Apply professional-grade stereo width limiting.
+        Wendet an: professional-grade stereo width limiting.
 
         Args:
             audio: Stereo audio [samples, 2]
@@ -351,7 +351,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         )
 
     def _ms_decode(self, audio: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Decode L/R to Mid/Side."""
+        """Dekodiert L/R to Mid/Side."""
         left, right = stereo_channel_view(audio)
 
         mid = (left + right) * 0.5
@@ -360,7 +360,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         return mid, side
 
     def _ms_encode(self, mid: np.ndarray, side: np.ndarray, template: np.ndarray) -> np.ndarray:
-        """Encode Mid/Side to L/R."""
+        """Kodiert Mid/Side to L/R."""
         left = mid + side
         right = mid - side
 
@@ -411,7 +411,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
 
     def _detect_transients(self, mid: np.ndarray, sample_rate: int) -> np.ndarray:
         """
-        Detect transients in mid signal.
+        Erkennt transients in mid signal.
 
         Returns:
             Boolean mask (True = transient)
@@ -455,7 +455,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         band_index: int,
     ) -> tuple[np.ndarray, dict[str, Any]]:
         """
-        Limit width in a single frequency band.
+        Begrenzt width in a single frequency band.
 
         Uses:
         - Correlation-based width measurement
@@ -553,7 +553,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
 
     def _measure_overall_width(self, audio: np.ndarray) -> float:
         """
-        Measure overall stereo width (S/M ratio).
+        Misst overall stereo width (S/M ratio).
 
         For pure side signals (mid ≈ 0), use L/R correlation as fallback.
         """
@@ -602,7 +602,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
 
     def _check_mono_compatibility(self, audio: np.ndarray) -> float:
         """
-        Check mono compatibility (1.0 = perfect, 0.0 = phase cancellation).
+        Prüft mono compatibility (1.0 = perfect, 0.0 = phase cancellation).
 
         Compares stereo energy vs mono fold-down energy.
         """
@@ -618,7 +618,7 @@ class StereoWidthLimiterPhaseV2(PhaseInterface):
         return compatibility
 
     def get_metadata(self) -> PhaseMetadata:
-        """Get phase metadata."""
+        """Gibt zurück: phase metadata."""
         return PhaseMetadata(
             phase_id="phase_33_stereo_width_limiter",
             name="Stereo Width Limiter v2.0 (Professional)",

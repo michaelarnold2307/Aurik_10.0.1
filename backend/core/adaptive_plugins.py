@@ -432,7 +432,7 @@ class LanguageNet:
     # ------------------------------------------------------------------
     @staticmethod
     def _compute_mfcc_mean(mono: np.ndarray, sr: int) -> "np.ndarray | None":
-        """Compute mean MFCC over voiced frames (librosa or DCT fallback)."""
+        """Berechnet mean MFCC over voiced frames (librosa or DCT fallback)."""
         n_mfcc = 13
         if _LIBROSA_OK:
             try:

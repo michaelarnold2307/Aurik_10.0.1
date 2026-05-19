@@ -134,7 +134,7 @@ class ContextAwareAnalyzer:
     """
 
     def __init__(self):
-        """Initialize context analyzer."""
+        """Initialisiert context analyzer."""
         logger.info("ContextAwareAnalyzer initialized (genre-agnostic)")
 
     def analyze(
@@ -143,7 +143,7 @@ class ContextAwareAnalyzer:
         sr: int,
     ) -> AudioContext:
         """
-        Analyze audio context from intrinsic features.
+        Analysiert den Audio-Kontext aus intrinsischen Merkmalen.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -202,7 +202,7 @@ class ContextAwareAnalyzer:
         sr: int,
     ) -> tuple[VocalDensity, float]:
         """
-        Analyze vocal vs instrumental content.
+        Analysiert Vokal- vs. Instrumental-Inhalt.
 
         Uses spectral characteristics typical of vocal vs instrumental:
         - Vocals: 80-1000 Hz fundamentals, strong 1-4kHz presence
@@ -246,7 +246,7 @@ class ContextAwareAnalyzer:
         audio: np.ndarray,
     ) -> tuple[DynamicProfile, float]:
         """
-        Analyze dynamic range characteristics.
+        Analysiert Dynamikbereichseigenschaften.
 
         Crest factor = 20*log10(peak/RMS)
         """
@@ -275,7 +275,7 @@ class ContextAwareAnalyzer:
         sr: int,
     ) -> tuple[SpectralProfile, dict[str, float]]:
         """
-        Analyze spectral distribution.
+        Analysiert die spektrale Verteilung.
         """
         # Compute spectrum
         spectrum = np.abs(np.fft.rfft(audio))
@@ -333,7 +333,7 @@ class ContextAwareAnalyzer:
         sr: int,
     ) -> tuple[TemporalCharacter, dict[str, float]]:
         """
-        Analyze temporal/rhythmic characteristics.
+        Analysiert temporale/rhythmische Eigenschaften.
         """
         # Zero crossing rate (transient indicator)
         zero_crossings = np.sum(np.abs(np.diff(np.sign(audio))))
@@ -383,7 +383,7 @@ class ContextAwareAnalyzer:
         sr: int,
     ) -> float:
         """
-        Estimate harmonic-to-noise ratio.
+        Schätzt harmonic-to-noise ratio.
 
         Higher HNR = more musical/pitched content
         Lower HNR = more noisy/unpitched content

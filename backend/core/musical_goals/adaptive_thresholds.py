@@ -169,7 +169,7 @@ class AdaptiveThresholdsManager:
 
     def __init__(self, profiles_path: Path | None = None) -> None:
         """
-        Initialize Adaptive Thresholds Manager.
+        Initialisiert Adaptive Thresholds Manager.
 
         Args:
             profiles_path: Optional path to custom profiles JSON
@@ -190,7 +190,7 @@ class AdaptiveThresholdsManager:
         custom_adjustments: dict[str, float] | None = None,
     ) -> dict[str, float]:
         """
-        Returns context-specific thresholds.
+        Gibt context-specific thresholds zurück.
 
         Args:
             genre: Genre name ('classical', 'jazz', 'rock', etc.)
@@ -237,7 +237,7 @@ class AdaptiveThresholdsManager:
         return thresholds
 
     def _apply_adjustments(self, thresholds: dict[str, float], adjustments: dict[str, float], context: str):
-        """Apply adjustments to thresholds."""
+        """Wendet Schwellwert-Anpassungen an."""
         for goal, adjustment in adjustments.items():
             if goal in thresholds:
                 thresholds[goal] += adjustment
@@ -281,7 +281,7 @@ class AdaptiveThresholdsManager:
         applies_to: dict[str, Any] | None = None,
     ) -> ThresholdProfile:
         """
-        Create custom threshold profile.
+        Erstellt custom threshold profile.
 
         Args:
             name: Profile name
@@ -311,7 +311,7 @@ class AdaptiveThresholdsManager:
         return profile
 
     def save_custom_profiles(self, path: Path | None = None):
-        """Save custom profiles to JSON file."""
+        """Speichert custom profiles to JSON file."""
         save_path = path or self.profiles_path or Path("data/threshold_profiles.json")
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -332,7 +332,7 @@ class AdaptiveThresholdsManager:
         logger.info("Saved %s custom profiles to %s", len(profiles_data), save_path)
 
     def _load_custom_profiles(self):
-        """Load custom profiles from JSON file."""
+        """Lädt custom profiles from JSON file."""
         path = self.profiles_path
         if path is None or not path.exists():
             return
@@ -352,15 +352,15 @@ class AdaptiveThresholdsManager:
         logger.info("Loaded %s custom profiles", len(profiles_data))
 
     def get_all_genres(self) -> list[str]:
-        """Get list of all supported genres."""
+        """Gibt zurück: list of all supported genres."""
         return sorted(self.GENRE_ADJUSTMENTS.keys())
 
     def get_all_medium_types(self) -> list[str]:
-        """Get list of all supported medium types."""
+        """Gibt zurück: list of all supported medium types."""
         return sorted(self.MEDIUM_ADJUSTMENTS.keys())
 
     def get_all_instruments(self) -> list[str]:
-        """Get list of all supported instrument focuses."""
+        """Gibt zurück: list of all supported instrument focuses."""
         return sorted(self.INSTRUMENT_ADJUSTMENTS.keys())
 
     def compare_profiles(self, profile1: dict[str, Any], profile2: dict[str, Any]) -> dict[str, float]:
@@ -384,7 +384,7 @@ class AdaptiveThresholdsManager:
         return differences
 
     def get_statistics(self) -> dict[str, Any]:
-        """Get calibration statistics."""
+        """Gibt zurück: calibration statistics."""
         return {
             "calibration_count": self.calibration_count,
             "custom_profiles": len(self.custom_profiles),

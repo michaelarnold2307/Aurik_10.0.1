@@ -189,7 +189,7 @@ class AlbumConsistencyPass:
 
     @staticmethod
     def _apply_gain(audio: np.ndarray, gain_db: float) -> np.ndarray:
-        """Apply a simple linear gain (dB), then peak-safe clip."""
+        """Wendet einfachen linearen Gain (dB) an, dann Peak-sicheres Clipping."""
         if abs(gain_db) < 0.01:
             return audio
         g = float(10.0 ** (gain_db / 20.0))
@@ -227,7 +227,7 @@ class AlbumConsistencyPass:
         return np.array([[b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0]])
 
     def _apply_tilt_correction(self, audio: np.ndarray, tilt_correction_db: float, sr: int) -> np.ndarray:
-        """Apply high-shelf correction to compensate spectral tilt deviation."""
+        """Wendet an: high-shelf correction to compensate spectral tilt deviation."""
         if abs(tilt_correction_db) < 0.05:
             return audio
         sos = self._build_shelf_sos(tilt_correction_db, _TILT_SHELF_FREQ_HZ, sr)
@@ -259,7 +259,7 @@ class AlbumConsistencyPass:
         sr_list: list[int],
         file_paths: list[str],
     ) -> AlbumConsistencyReport:
-        """Measure per-song metrics and compute album-level correction targets.
+        """Misst per-song metrics and compute album-level correction targets.
 
         Args:
             audio_list:  Restored audio arrays (one per song).
@@ -364,7 +364,7 @@ class AlbumConsistencyPass:
         sr: int,
         profile: SongConsistencyProfile,
     ) -> tuple[np.ndarray, dict[str, Any]]:
-        """Apply album corrections to a single song.
+        """Wendet Album-Korrekturen auf einen einzelnen Song an.
 
         Returns:
             (corrected_audio, correction_metadata)

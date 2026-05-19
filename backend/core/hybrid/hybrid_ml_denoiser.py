@@ -98,7 +98,7 @@ class HybridMLDenoiser:
 
     def __init__(self, config: DenoiseConfig | None = None):
         """
-        Initialize hybrid denoiser.
+        Initialisiert hybrid denoiser.
 
         Args:
             config: Denoising configuration (default: HYBRID strategy)
@@ -113,7 +113,7 @@ class HybridMLDenoiser:
 
     @property
     def resemble(self) -> ResembleEnhancePlugin:
-        """Return the module-level Resemble Enhance singleton (avoids reloading 722 MB per batch file)."""
+        """Gibt the module-level Resemble Enhance singleton (avoids reloading 722 MB per batch file) zurück."""
         if self._resemble is None:
             try:
                 self._resemble = get_resemble_enhance_plugin()
@@ -207,7 +207,7 @@ class HybridMLDenoiser:
         )
 
     def _determine_strategy(self, audio: np.ndarray, sample_rate: int) -> DenoiseStrategy:
-        """Determine optimal denoising strategy."""
+        """Bestimmt optimal denoising strategy."""
         if self.config.strategy != DenoiseStrategy.ADAPTIVE:
             return self.config.strategy
 
@@ -230,7 +230,7 @@ class HybridMLDenoiser:
     def _apply_omlsa(
         self, audio: np.ndarray, sample_rate: int, noise_profile: np.ndarray | None = None
     ) -> tuple[np.ndarray, dict[str, Any]]:
-        """Apply OMLSA spectral subtraction."""
+        """Wendet an: OMLSA spectral subtraction."""
         import scipy.signal as signal
 
         metadata = {}
@@ -301,7 +301,7 @@ class HybridMLDenoiser:
         return audio_clean, metadata
 
     def _apply_resemble(self, audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, dict[str, Any]]:
-        """Apply Resemble Enhance ML refinement."""
+        """Wendet an: Resemble Enhance ML refinement."""
         import soundfile as sf
 
         metadata = {}
@@ -359,7 +359,7 @@ class HybridMLDenoiser:
                 os.remove(output_path)
 
     def _has_sufficient_ml_headroom(self, audio: np.ndarray, sample_rate: int) -> bool:
-        """Return True when enough free RAM is available for Resemble denoise.
+        """Gibt True when enough free RAM is available for Resemble denoise zurück.
 
         The previous guard only compared current free RAM to raw audio size and
         still allowed plugin loading plus temp-file IO to push the VS Code cgroup
@@ -424,7 +424,7 @@ class HybridMLDenoiser:
         return True
 
     def _estimate_noise_level(self, audio: np.ndarray) -> float:
-        """Estimate noise level in audio (0-1 scale)."""
+        """Schätzt noise level in audio (0-1 scale)."""
         # Simple noise estimation: RMS of high-frequency content
         if audio.ndim == 2:
             audio = np.mean(audio, axis=0)
@@ -450,7 +450,7 @@ class HybridMLDenoiser:
 
     def _estimate_quality(self, audio: np.ndarray, sample_rate: int) -> float:
         """
-        Estimate audio quality (0-1 scale).
+        Schätzt audio quality (0-1 scale).
 
         Simple heuristic:
         - SNR estimation

@@ -82,7 +82,7 @@ class FallbackManager:
 
     def __init__(self, log_fallbacks: bool = True, max_fallback_history: int = 100):
         """
-        Initialize fallback manager.
+        Initialisiert fallback manager.
 
         Args:
             log_fallbacks: Log fallback events
@@ -153,7 +153,7 @@ class FallbackManager:
 
     def is_fallback_active(self, model_name: str) -> bool:
         """
-        Check if model is currently in fallback mode.
+        Prüft if model is currently in fallback mode.
 
         Args:
             model_name: Name of model to check
@@ -165,7 +165,7 @@ class FallbackManager:
 
     def get_fallback_reason(self, model_name: str) -> FallbackReason | None:
         """
-        Get reason for active fallback.
+        Gibt zurück: reason for active fallback.
 
         Args:
             model_name: Name of model
@@ -179,7 +179,7 @@ class FallbackManager:
 
     def health_check_onnx(self, model_name: str, onnx_inference_func: Callable, test_input: Any) -> bool:
         """
-        Perform health check on ONNX model.
+        Führt durch: health check on ONNX model.
 
         Attempts inference with test input to verify model is working.
 
@@ -212,7 +212,7 @@ class FallbackManager:
             return False
 
     def get_stats(self) -> dict[str, Any]:
-        """Get fallback statistics."""
+        """Gibt zurück: fallback statistics."""
         return {
             "total_fallbacks": self.stats.total_fallbacks,
             "active_fallbacks": self.stats.active_fallbacks,
@@ -224,7 +224,7 @@ class FallbackManager:
 
     def get_fallback_history(self, model_name: str | None = None, limit: int = 10) -> list[FallbackEvent]:
         """
-        Get recent fallback events.
+        Gibt zurück: recent fallback events.
 
         Args:
             model_name: Filter by model name (optional)
@@ -241,7 +241,7 @@ class FallbackManager:
         return history[-limit:]
 
     def print_summary(self) -> None:
-        """Print fallback summary."""
+        """Gibt aus: fallback summary."""
         logger.debug("\n" + "=" * 60)
         logger.debug("FALLBACK MANAGER SUMMARY")
         logger.debug("=" * 60)
@@ -268,7 +268,7 @@ class FallbackManager:
         logger.debug("=" * 60)
 
     def reset_stats(self) -> None:
-        """Reset all statistics."""
+        """Setzt zurück: all statistics."""
         self.stats = FallbackStats()
         self.fallback_history.clear()
         self.active_fallbacks.clear()
@@ -302,7 +302,7 @@ class ONNXModelWithFallback:
         onnx_enabled: bool = True,
     ):
         """
-        Initialize model with fallback.
+        Initialisiert model with fallback.
 
         Args:
             name: Model name
@@ -324,7 +324,7 @@ class ONNXModelWithFallback:
 
     def process(self, audio: Any, **kwargs) -> Any:
         """
-        Process audio with automatic fallback.
+        Verarbeitet audio with automatic fallback.
 
         Args:
             audio: Input audio
@@ -355,12 +355,12 @@ class ONNXModelWithFallback:
             return self._process_pytorch(audio, **kwargs)
 
     def _process_pytorch(self, audio: Any, **kwargs) -> Any:
-        """Process with PyTorch model."""
+        """Verarbeitet with PyTorch model."""
         self.pytorch_inference_count += 1
         return self.pytorch_model.process(audio, **kwargs)
 
     def get_stats(self) -> dict[str, Any]:
-        """Get processing statistics."""
+        """Gibt zurück: processing statistics."""
         return {
             "name": self.name,
             "total_inferences": self.inference_count,

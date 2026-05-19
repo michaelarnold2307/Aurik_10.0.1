@@ -83,7 +83,7 @@ class IntroducedArtifactDetector:
 
     @staticmethod
     def _sanitize_audio(audio: np.ndarray) -> np.ndarray:
-        """Convert input to finite float32 safely without overflow warnings."""
+        """Konvertiert input to finite float32 safely without overflow warnings."""
         arr64 = np.asarray(audio, dtype=np.float64)
         arr64 = np.nan_to_num(arr64, nan=0.0, posinf=0.0, neginf=0.0)
         return np.clip(arr64, -1.0, 1.0).astype(np.float32, copy=False)

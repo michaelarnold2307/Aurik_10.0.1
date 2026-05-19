@@ -43,7 +43,7 @@ _logger = logging.getLogger(__name__)
 
 
 def _match_lengths(*arrays):
-    """Ensure all arrays have the same length (trim to minimum)."""
+    """Stellt sicher: all arrays have the same length (trim to minimum)."""
     min_len = min(len(arr) for arr in arrays)
     return tuple(arr[:min_len] for arr in arrays)
 
@@ -110,7 +110,7 @@ class HammerNoiseReducer:
         _logger.debug("HammerNoiseReducer audit: %s sr=%s", report, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         result = audio.copy()
         noise_reduced_db = 0.0
 
@@ -268,7 +268,7 @@ class PedalNoiseReducer:
         _logger.debug("PedalNoiseReducer audit: %s sr=%s", report, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Pedal noise is typically low-frequency (10-80 Hz)
         sos_pedal = butter(4, [10, 80], btype="band", fs=sr, output="sos")
         pedal_band = sosfilt(sos_pedal, audio)
@@ -397,7 +397,7 @@ class KeyClickReducer:
         _logger.debug("KeyClickReducer audit: %s sr=%s", report, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Key clicks are high-frequency (4-10 kHz)
         nyquist = sr / 2
         click_low = min(4000, nyquist * 0.7)
@@ -541,7 +541,7 @@ class TonalBalanceEnhancer:
         _logger.debug("TonalBalanceEnhancer audit: %s sr=%s", report, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Bass register (27-250 Hz, A0-B3)
         sos_bass = butter(4, [27, 250], btype="band", fs=sr, output="sos")
         bass_band = sosfilt(sos_bass, audio)
@@ -595,7 +595,7 @@ class TonalBalanceEnhancer:
 
 class PianoRestorationSystem:
     """
-    Unified API for Piano/Keys Restoration.
+    Einheitliche API für Klavier/Tasten-Restaurierung.
 
     Combines all piano processing components into a single pipeline:
     1. Hammer Noise Reduction

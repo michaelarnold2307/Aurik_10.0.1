@@ -46,7 +46,7 @@ class AutoEQ:
         logging.info(asdict(self.contract))
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Apply 3-band parametric EQ with Linkwitz-Riley LR4 crossovers.
+        """Wendet 3-Band-Parametrik-EQ mit Linkwitz-Riley-LR4-Crossovern an.
 
         Uses proper LR4 crossover filters for flat-summing band splitting
         (no comb-filtering artifacts from naive band mixing).

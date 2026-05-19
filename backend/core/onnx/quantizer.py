@@ -65,7 +65,7 @@ class ModelQuantizer:
 
     def __init__(self, config: QuantizationConfig | None = None):
         """
-        Initialize model quantizer.
+        Initialisiert model quantizer.
 
         Args:
             config: Quantization configuration
@@ -165,7 +165,7 @@ class ModelQuantizer:
 
     def _validate_quality(self, original_path: Path, quantized_path: Path) -> bool:
         """
-        Validate quantized model quality.
+        Validiert quantized model quality.
 
         Compares outputs on random audio samples to ensure
         quantization doesn't degrade quality significantly.
@@ -284,7 +284,7 @@ class ModelQuantizer:
 
     def estimate_speedup(self, model_path: Path, quantized_path: Path, num_runs: int = 10) -> float:
         """
-        Estimate speedup from quantization.
+        Schätzt speedup from quantization.
 
         Args:
             model_path: Original FP32 model
@@ -339,11 +339,11 @@ class ModelQuantizer:
             return 1.0
 
     def get_stats(self) -> dict[str, Any]:
-        """Get quantization statistics."""
+        """Gibt zurück: quantization statistics."""
         return self.quantization_stats.copy()
 
     def reset_stats(self) -> None:
-        """Reset quantization statistics."""
+        """Setzt zurück: quantization statistics."""
         self.quantization_stats = {
             "total_quantizations": 0,
             "successful_quantizations": 0,

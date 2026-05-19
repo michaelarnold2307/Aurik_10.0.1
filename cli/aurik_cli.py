@@ -18,7 +18,7 @@ _VALID_MODES = {"Restoration", "Studio 2026"}
 
 
 def _load_audio(path: str) -> tuple[np.ndarray, int]:
-    """Load audio file via canonical bridge import cascade."""
+    """Lädt audio file via canonical bridge import cascade."""
     try:
         load_audio_file = get_load_audio_fn()
         loaded = load_audio_file(path, target_sr=None, mono=False, do_carrier_analysis=False)
@@ -176,6 +176,7 @@ def process_audio(input_path: str, output_path: str, verbose: bool = True, mode:
             mode=mode,
             no_rt_limit=True,
             input_path=input_path,
+            output_path=output_path,
             pre_analysis_result=pre,
         )
     except Exception as exc:
@@ -306,6 +307,10 @@ def process_audio(input_path: str, output_path: str, verbose: bool = True, mode:
 
     try:
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        # §0h NaN/Inf-Guard + Clipping — Frontend-Parität (export_guard); verhindert
+        # korrupte Audiodateien bei numerischen Fehlern in ML-Plugins.
+        restored = np.nan_to_num(restored, nan=0.0, posinf=0.0, neginf=0.0)
+        restored = np.clip(restored, -1.0, 1.0)
         sf.write(output_path, restored, _TARGET_SR, subtype="PCM_24")
     except Exception as exc:
         logger.error("Fehler beim Speichern der Audiodatei: %s", exc)

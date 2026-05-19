@@ -80,7 +80,7 @@ class TapeSaturation(PhaseInterface):
         quality_mode: str,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive runtime profile for tape saturation."""
+        """Berechnet adaptive runtime profile for tape saturation."""
         mat = str(material_type or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         rest = float(np.clip(restorability_score, 0.0, 100.0))
@@ -211,7 +211,7 @@ class TapeSaturation(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.VINYL, **kwargs
     ) -> PhaseResult:
         """
-        Apply tape saturation.
+        Wendet an: tape saturation.
 
         Args:
             audio: Audio samples (mono or stereo)
@@ -433,7 +433,7 @@ class TapeSaturation(PhaseInterface):
 
     @staticmethod
     def _peak_envelope(audio: np.ndarray, attack_ms: float, release_ms: float, sr: int) -> np.ndarray:
-        """Compute peak-follower envelope with separate attack/release time constants.
+        """Berechnet peak-follower envelope with separate attack/release time constants.
 
         Real magnetic tape does not saturate uniformly: loud transients compress
         harder than quiet passages because the oxide approaches saturation faster
@@ -638,7 +638,7 @@ class TapeSaturation(PhaseInterface):
 
     def _estimate_thd(self, original: np.ndarray, processed: np.ndarray) -> float:
         """
-        Estimate THD (Total Harmonic Distortion) as RMS difference.
+        Schätzt THD (Total Harmonic Distortion) as RMS difference.
         """
         if original.ndim == 2:
             original = np.mean(original, axis=1)
@@ -662,7 +662,7 @@ class TapeSaturation(PhaseInterface):
 
     def _measure_harmonic_content(self, audio: np.ndarray, sample_rate: int) -> float:
         """
-        Measure harmonic content (energy in harmonic band).
+        Misst harmonic content (energy in harmonic band).
         """
         if audio.ndim == 2:
             audio = np.mean(audio, axis=1)

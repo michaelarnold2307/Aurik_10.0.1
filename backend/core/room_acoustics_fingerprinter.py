@@ -103,7 +103,7 @@ def compute_room_acoustics_fingerprint(
     era_decade: int | None = None,
     venue_hint: str | None = None,
 ) -> dict[str, object]:
-    """Compute a room acoustics fingerprint from audio signal.
+    """Berechnet a room acoustics fingerprint from audio signal.
 
     Args:
         audio:       Input audio (any shape — mono channel used for estimation).

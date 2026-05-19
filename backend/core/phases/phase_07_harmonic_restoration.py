@@ -347,7 +347,7 @@ class HarmonicRestorationPhase(PhaseInterface):
         quality_mode: str,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive blend limits for DDSP harmonic fill (§2.54).
+        """Berechnet adaptive blend limits for DDSP harmonic fill (§2.54).
 
         Output ranges are intentionally bounded to avoid over-processing and to
         stay stable across materials and runtime modes.
@@ -665,7 +665,7 @@ class HarmonicRestorationPhase(PhaseInterface):
         # Shellac ≤ 8 kHz, Vinyl ≤ 16 kHz, WaxCyl ≤ 5 kHz.
         _BW_CEILING_07: dict[str, float] = {
             "shellac": 8000.0,
-            "wax_cylinder": 5000.0,
+            "wax_cylinder": 3000.0,  # §ERA 1900-1925 Sekundär-Guard (v9.12.9)
             "vinyl": 16000.0,
             "reel_tape": 18000.0,
             "cassette": 15000.0,
@@ -700,7 +700,7 @@ class HarmonicRestorationPhase(PhaseInterface):
 
         # §2.46e Hallucination-Guard: Harmonik-Rekonstruktion kann HF-Halluzinationen erzeugen
         try:
-            from backend.core.hallucination_guard import apply_hallucination_guard
+            from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg07
 
             _mono_07 = (
                 restored.mean(axis=0)
@@ -714,25 +714,31 @@ class HarmonicRestorationPhase(PhaseInterface):
             )
             _BW_CEILINGS_07 = {
                 "shellac": 8000.0,
-                "wax_cylinder": 5000.0,
+                "wax_cylinder": 3000.0,  # §ERA 1900-1925 Sekundär-Guard (v9.12.9)
                 "vinyl": 16000.0,
                 "reel_tape": 18000.0,
                 "cassette": 15000.0,
             }
             _bw_ceiling_07 = _BW_CEILINGS_07.get(str(material_type).lower().replace(" ", "_"))
-            _, _hg_meta_07 = apply_hallucination_guard(
+            _hg_result07 = _check_hg07(
                 _audio_mono_07.astype(np.float32),
                 _mono_07.astype(np.float32),
                 sr=sample_rate,
                 material_bw_ceiling_hz=_bw_ceiling_07,
-                mode="restoration",  # phase_07 ist immer restorative
+                mode="restoration",
             )
-            if _hg_meta_07.get("hallucination_decision") == "rollback":
+            if _hg_result07.requires_rollback:
                 logger.warning(
-                    "§2.46e phase_07 Hallucination-Guard rollback: %s",
-                    _hg_meta_07.get("hallucination_severity"),
+                    "§2.46e phase_07 Hallucination-Guard rollback: spectral_novelty=%.3f",
+                    _hg_result07.spectral_novelty,
                 )
                 restored = audio.copy()
+            if _hg_result07.score_penalty > 0:
+                logger.info(
+                    "§2.46e phase_07 score_penalty=%.1f (spectral_novelty=%.3f)",
+                    _hg_result07.score_penalty,
+                    _hg_result07.spectral_novelty,
+                )
         except Exception as _hg07_exc:
             logger.debug("§2.46e phase_07 Hallucination-Guard (non-blocking): %s", _hg07_exc)
 
@@ -911,7 +917,7 @@ class HarmonicRestorationPhase(PhaseInterface):
 
     def _analyze_missing_harmonics(self, audio: np.ndarray, _params: dict[str, Any]) -> list[int]:
         """
-        Analyze which harmonics are missing via spectral analysis.
+        Analysiert fehlende Obertöne mittels Spektralanalyse.
 
         Returns:
             List of missing harmonic orders (e.g., [2, 3, 5])
@@ -1001,7 +1007,7 @@ class HarmonicRestorationPhase(PhaseInterface):
     def _detect_multi_pitch_f0s_with_analysis(
         self, mono: np.ndarray, n_max: int = 4
     ) -> list[tuple[float, float, list[int]]]:
-        """Detect up to *n_max* pitch fundamentals via harmonic salience and
+        """Erkennt up to *n_max* pitch fundamentals via harmonic salience and.
         identify missing overtone orders for each.
 
         Algorithm:
@@ -1083,7 +1089,7 @@ class HarmonicRestorationPhase(PhaseInterface):
         f0_info: list[tuple[float, float, list[int]]],
         params: dict[str, Any],
     ) -> np.ndarray:
-        """Additive synthesis of missing harmonic overtones (I - Salience Multi-Pitch).
+        """Additive Synthese fehlender harmonischer Obertöne (I – Salience Multi-Pitch).
 
         For each (f0, salience, [missing_orders]) triple, sinusoidal partials
         are synthesised filling 50 % of the gap between measured bin energy
@@ -1146,7 +1152,7 @@ class HarmonicRestorationPhase(PhaseInterface):
 
     def _apply_saturation_professional(self, audio: np.ndarray, params: dict[str, Any]) -> np.ndarray:
         """
-        Apply professional saturation modeling.
+        Wendet an: professional saturation modeling.
 
         Modes:
         - tube: Triode curve (even harmonics)
@@ -1259,13 +1265,13 @@ class HarmonicRestorationPhase(PhaseInterface):
         # y = x - (1/3) * x^3 (soft clipping)
         saturated = audio - (odd_ratio / 3.0) * (audio**3)
 
-        # Hard limit at ±1.5
-        saturated = np.clip(saturated, -1.5, 1.5)
+        # Hard limit at ±1.0 — verhindert Übersteuerungsartefakte (§0h)
+        saturated = np.clip(saturated, -1.0, 1.0)
 
         return np.asarray(saturated)
 
     def _transformer_saturation(self, audio: np.ndarray) -> np.ndarray:
-        """Transformer saturation (symmetric, balanced harmonics) with ADAA.
+        """Transformatorsättigung (symmetrisch, ausgewogene Harmonik) mit ADAA.
 
         Symmetric tanh processed via 1st-order ADAA (Parker et al. 2019)
         to suppress aliased harmonics above Nyquist.
@@ -1277,7 +1283,7 @@ class HarmonicRestorationPhase(PhaseInterface):
 
     def _extract_harmonics(self, saturated: np.ndarray, original: np.ndarray, params: dict[str, Any]) -> np.ndarray:
         """
-        Extract only the generated harmonics (difference signal).
+        Extrahiert only the generated harmonics (difference signal).
 
         Then filter to target frequency range.
         """
@@ -1311,7 +1317,7 @@ class HarmonicRestorationPhase(PhaseInterface):
 
     def _measure_hf_energy(self, audio: np.ndarray, freq_range: list[int]) -> float:
         """
-        Measure RMS energy in frequency range.
+        Misst RMS energy in frequency range.
         """
         # Convert to mono
         mono = np.mean(audio, axis=1) if audio.ndim == 2 else audio
@@ -1361,7 +1367,7 @@ class HarmonicRestorationPhase(PhaseInterface):
         sample_rate: int,
         strength: float = 1.0,
     ) -> np.ndarray:
-        """Apply a console EQ curve (frequency-gain breakpoints) via STFT/ISTFT.
+        """Wendet eine Konsolen-EQ-Kurve (Frequenz-Gain-Stützpunkte) via STFT/ISTFT an.
 
         Interpolates the breakpoints logarithmically across FFT bins and
         multiplies the magnitude by the resulting gain mask.  ``strength`` scales
@@ -1416,7 +1422,7 @@ class HarmonicRestorationPhase(PhaseInterface):
 
     @staticmethod
     def _measure_h2_ratio(audio: np.ndarray, sample_rate: int) -> float:
-        """Estimate H2/H1 amplitude ratio via multi-frame FFT averaging.
+        """Schätzt H2/H1 amplitude ratio via multi-frame FFT averaging.
 
         Averages over up to 8 non-overlapping 2048-sample frames from the
         middle 60 % of the signal.  Returns 0.0 on any failure (non-blocking).

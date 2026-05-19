@@ -39,7 +39,7 @@ def detect_hum(
     audio: np.ndarray, sr: int, fundamental_hz: float | None = None
 ) -> tuple[bool, float, float, list[float]]:
     """
-    Detect electrical hum in audio signal.
+    Erkennt electrical hum in audio signal.
 
     Hum characteristics:
     - Tonal (pure sine waves)
@@ -118,7 +118,7 @@ def detect_hum(
 
 def check_bass_content(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     """
-    Check if audio has significant musical bass content (<100 Hz).
+    Prüft if audio has significant musical bass content (<100 Hz).
 
     Important to distinguish from hum.
 
@@ -151,7 +151,7 @@ def check_bass_content(audio: np.ndarray, sr: int) -> tuple[bool, float]:
 
 def detect_comb_filtering(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     """
-    Detect comb filtering artifacts.
+    Erkennt comb filtering artifacts.
 
     Comb filtering creates spectral notches at regular intervals.
     Can be introduced by aggressive notch filtering.
@@ -210,7 +210,7 @@ def detect_comb_filtering(audio: np.ndarray, sr: int) -> tuple[bool, float]:
 
 def measure_harmonic_series_strength(audio: np.ndarray, sr: int) -> float:
     """
-    Measure strength of harmonic series in audio.
+    Misst strength of harmonic series in audio.
 
     Musical sounds have strong harmonic series.
     Hum also has harmonics but different pattern.
@@ -254,7 +254,7 @@ def measure_harmonic_series_strength(audio: np.ndarray, sr: int) -> float:
 
 def check_phase_coherence(audio: np.ndarray) -> float:
     """
-    Check phase coherence (for stereo signals).
+    Prüft phase coherence (for stereo signals).
 
     De-humming should preserve phase relationships.
 
@@ -320,7 +320,7 @@ class DeHumSafety(BaseSafetyWrapper):
         max_bass_loss: float = 0.15,
     ):
         """
-        Initialize De-Hum Safety Wrapper.
+        Initialisiert De-Hum Safety Wrapper.
 
         Args:
             processor_func: De-humming function (audio, sr, fundamental_hz) -> audio
@@ -343,7 +343,7 @@ class DeHumSafety(BaseSafetyWrapper):
         self.max_bass_loss = max_bass_loss
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for de-humming."""
+        """Validiert pre-conditions for de-humming."""
         # Basic audio validation
         is_valid, errors = validate_audio_basic(audio)
 
@@ -418,7 +418,7 @@ class DeHumSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions after de-humming."""
+        """Validiert post-conditions after de-humming."""
         issues = []
         side_effects = []
         metrics = {}
@@ -515,7 +515,7 @@ class DeHumSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute overall quality score."""
+        """Berechnet overall quality score."""
         scores = []
 
         # Hum reduction effectiveness

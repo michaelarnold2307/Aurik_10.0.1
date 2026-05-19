@@ -63,7 +63,7 @@ class BatchJobResult:
         return self.success_count / self.total_files
 
     def summary(self) -> str:
-        """Generate human-readable summary."""
+        """Generiert human-readable summary."""
         return (
             f"Batch Complete: {self.success_count}/{self.total_files} succeeded, "
             f"{self.failed_count} failed, {self.skipped_count} skipped "
@@ -110,7 +110,7 @@ class BatchProcessor:
 
     def process_batch(self, config: BatchJobConfig) -> BatchJobResult:
         """
-        Process a batch of audio files.
+        Verarbeitet a batch of audio files.
 
         Parameters:
         -----------
@@ -165,7 +165,7 @@ class BatchProcessor:
         )
 
     def _process_sequential(self, config: BatchJobConfig) -> list[dict]:
-        """Process files sequentially."""
+        """Verarbeitet files sequentially."""
         results = []
 
         for idx, input_file in enumerate(config.input_files, 1):
@@ -188,7 +188,7 @@ class BatchProcessor:
         return results
 
     def _process_parallel(self, config: BatchJobConfig) -> list[dict]:
-        """Process files in parallel."""
+        """Verarbeitet files in parallel."""
         try:
             from joblib import Parallel, delayed
 
@@ -211,7 +211,7 @@ class BatchProcessor:
             return self._process_sequential(config)
 
     def _process_single_file(self, input_file: Path, config: BatchJobConfig) -> dict:
-        """Process a single file."""
+        """Verarbeitet a single file."""
         result = {
             "input_path": str(input_file),
             "output_path": None,
@@ -331,7 +331,7 @@ class UndoRedoManager:
 
     def save_state(self, input_path: Path, output_path: Path, settings: dict, description: str = "Processing"):
         """
-        Save current state for undo.
+        Speichert current state for undo.
 
         Creates a backup of the file before processing.
         """
@@ -371,11 +371,11 @@ class UndoRedoManager:
             old_state.cleanup()
 
     def can_undo(self) -> bool:
-        """Check if undo is available."""
+        """Prüft if undo is available."""
         return len(self.undo_stack) > 0
 
     def can_redo(self) -> bool:
-        """Check if redo is available."""
+        """Prüft if redo is available."""
         return len(self.redo_stack) > 0
 
     def undo(self) -> ProcessingState | None:
@@ -431,15 +431,15 @@ class UndoRedoManager:
         return state
 
     def get_undo_history(self) -> list[str]:
-        """Get list of undo descriptions."""
+        """Gibt zurück: list of undo descriptions."""
         return [state.description for state in reversed(self.undo_stack)]
 
     def get_redo_history(self) -> list[str]:
-        """Get list of redo descriptions."""
+        """Gibt zurück: list of redo descriptions."""
         return [state.description for state in self.redo_stack]
 
     def _clear_redo_stack(self):
-        """Clear redo stack and cleanup backups."""
+        """Löscht redo stack and cleanup backups."""
         for state in self.redo_stack:
             state.cleanup()
         self.redo_stack.clear()
@@ -499,7 +499,7 @@ class WorkflowSessionManager:
 
     def create_session(self, name: str, description: str = "") -> str:
         """
-        Create new session.
+        Erstellt new session.
 
         Returns:
         --------
@@ -519,7 +519,7 @@ class WorkflowSessionManager:
 
     def load_session(self, session_id: str) -> bool:
         """
-        Load existing session.
+        Lädt existing session.
 
         Returns:
         --------
@@ -536,7 +536,7 @@ class WorkflowSessionManager:
     def add_processed_file(
         self, input_path: Path, output_path: Path, settings: dict, success: bool = True, error: str | None = None
     ):
-        """Add processed file to current session."""
+        """Fügt hinzu: processed file to current session."""
         if self.backend_manager and self.current_session_id:
             try:
                 from backend.core.session.session_manager import ProcessedFile
@@ -559,7 +559,7 @@ class WorkflowSessionManager:
                 logger.error(f"Failed to add file to session: {e}")
 
     def get_recent_sessions(self, limit: int = 10) -> list[dict]:
-        """Get list of recent sessions."""
+        """Gibt zurück: list of recent sessions."""
         if self.backend_manager:
             return self.backend_manager.get_recent_sessions(n=limit)
         return []
@@ -590,7 +590,7 @@ class WorkflowSessionManager:
 
 class WorkflowManager:
     """
-    Unified workflow manager combining all workflow features.
+    Einheitlicher Workflow-Manager mit allen Workflow-Funktionen.
 
     Provides single entry point for:
     - Batch processing (GAP #26)
@@ -637,15 +637,15 @@ class WorkflowManager:
 
     # Session methods
     def create_session(self, name: str, description: str = "") -> str:
-        """Create new processing session."""
+        """Erstellt new processing session."""
         return self.session_manager.create_session(name, description)
 
     def load_session(self, session_id: str) -> bool:
-        """Load existing session."""
+        """Lädt existing session."""
         return self.session_manager.load_session(session_id)
 
     def get_recent_sessions(self, limit: int = 10) -> list[dict]:
-        """Get recent sessions."""
+        """Gibt zurück: recent sessions."""
         return self.session_manager.get_recent_sessions(limit)
 
     def export_current_session(self, export_path: Path) -> bool:
@@ -657,7 +657,7 @@ class WorkflowManager:
     # Batch processing methods
     def process_batch(self, config: BatchJobConfig, enable_undo: bool = True) -> BatchJobResult:
         """
-        Process batch of files with optional undo support.
+        Verarbeitet batch of files with optional undo support.
 
         Parameters:
         -----------
@@ -706,19 +706,19 @@ class WorkflowManager:
         return state is not None
 
     def can_undo(self) -> bool:
-        """Check if undo is available."""
+        """Prüft if undo is available."""
         return self.undo_manager.can_undo()
 
     def can_redo(self) -> bool:
-        """Check if redo is available."""
+        """Prüft if redo is available."""
         return self.undo_manager.can_redo()
 
     def get_undo_history(self) -> list[str]:
-        """Get undo history."""
+        """Gibt zurück: undo history."""
         return self.undo_manager.get_undo_history()
 
     def get_redo_history(self) -> list[str]:
-        """Get redo history."""
+        """Gibt zurück: redo history."""
         return self.undo_manager.get_redo_history()
 
     # Cleanup

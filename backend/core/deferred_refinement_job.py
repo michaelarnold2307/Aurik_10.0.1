@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DeferredRefinementJob:
-    """Captures all information needed to re-run deferred phases with no RT limit.
+    """Speichert alle Informationen zum erneuten Ausführen zurückgestellter Phasen ohne RT-Limit.
 
     Created by BatchProcessingThread when RestorationResult.deferred_phases is
     non-empty, passed to MLRefinementThread for Stufe-2 processing.

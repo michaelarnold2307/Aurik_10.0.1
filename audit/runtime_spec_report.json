@@ -30,55 +30,55 @@
       "title": "MediumDetector im Lauf nicht mehrfach aktiv"
     },
     {
-      "evidence": "artifact_freedom=0.950",
+      "evidence": "Kein Final-AFG-Eintrag",
       "id": "artifact_gate",
-      "passed": true,
+      "passed": false,
       "required": true,
       "title": "\u00a72.49 Artifact-Freedom Gate erf\u00fcllt"
     },
     {
-      "evidence": "HPI-Eintrag vorhanden",
+      "evidence": "Kein HPI-Eintrag im Lauf",
       "id": "hpi_gate",
-      "passed": true,
+      "passed": false,
       "required": true,
       "title": "\u00a72.44 HPI-Gate protokolliert"
     },
     {
-      "evidence": "Joy-Index-Signal gefunden",
+      "evidence": "Kein joy_runtime_index/Freude-Signal im Log",
       "id": "exp_joy_runtime",
-      "passed": true,
+      "passed": false,
       "required": true,
       "title": "\u00a72.53 joy_runtime_index propagiert"
     },
     {
-      "evidence": "Auto-Improve-Signal gefunden",
+      "evidence": "Kein auto_improvement_recommendations-Signal im Log",
       "id": "exp_auto_improve",
-      "passed": true,
+      "passed": false,
       "required": true,
       "title": "\u00a72.53 auto_improvement_recommendations propagiert"
     },
     {
-      "evidence": "cluster_policy gefunden",
+      "evidence": "Kein cluster_policy-Signal im Log",
       "id": "exp_cluster_policy",
-      "passed": true,
+      "passed": false,
       "required": true,
       "title": "\u00a72.53 cluster_policy propagiert"
     },
     {
-      "evidence": "Exzellenz-API-Hinweis gefunden",
+      "evidence": "Kein expliziter Exzellenz-API-Hinweis im Log (inconclusive)",
       "id": "exzellenz_api_contract",
-      "passed": true,
+      "passed": false,
       "required": false,
       "title": "\u00a72.53a Exzellenz-API-Pfad erkennbar"
     }
   ],
-  "compliance_ok": true,
+  "compliance_ok": false,
   "frontend_log": "logs/aurik_frontend.out",
   "latest_run_window": {
-    "end_line": 4163,
-    "start_line": 2898
+    "end_line": 25882,
+    "start_line": 25876
   },
-  "required_passed": 9,
+  "required_passed": 4,
   "required_total": 9,
-  "timestamp": "2026-04-14T19:05:28.503549"
+  "timestamp": "2026-05-17T11:25:19.401060"
 }

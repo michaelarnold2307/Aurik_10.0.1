@@ -37,7 +37,7 @@ from .safety_wrapper_template import (
 
 def detect_sibilance(audio: np.ndarray, sr: int) -> tuple[bool, float, dict[str, float]]:
     """
-    Detect sibilance in audio.
+    Erkennt sibilance in audio.
 
     Sibilants (s, sh, ch, z) are concentrated in 4-10 kHz range.
 
@@ -144,7 +144,7 @@ def classify_vocal_profile(audio: np.ndarray, sr: int) -> tuple[str, float]:
 
 def measure_consonant_clarity(audio: np.ndarray, sr: int) -> float:
     """
-    Measure consonant clarity (high-frequency transient energy).
+    Misst consonant clarity (high-frequency transient energy).
 
     Consonants have sharp transients in 2-8 kHz range.
 
@@ -180,7 +180,7 @@ def measure_consonant_clarity(audio: np.ndarray, sr: int) -> float:
 
 def compute_intelligibility_score(audio: np.ndarray, sr: int) -> float:
     """
-    Compute speech intelligibility score.
+    Berechnet speech intelligibility score.
 
     Based on energy distribution across critical bands for speech.
 
@@ -258,7 +258,7 @@ class DeEsserSafety(BaseSafetyWrapper):
         min_intelligibility: float = 0.4,
     ):
         """
-        Initialize De-Esser Safety Wrapper.
+        Initialisiert De-Esser Safety Wrapper.
 
         Args:
             processor_func: De-essing function (audio, sr, profile, depth_db) -> audio
@@ -281,7 +281,7 @@ class DeEsserSafety(BaseSafetyWrapper):
         self.min_intelligibility = min_intelligibility
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for de-essing."""
+        """Validiert pre-conditions for de-essing."""
         # Basic audio validation
         is_valid, errors = validate_audio_basic(audio)
 
@@ -363,7 +363,7 @@ class DeEsserSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions after de-essing."""
+        """Validiert post-conditions after de-essing."""
         issues = []
         side_effects = []
         metrics = {}
@@ -447,7 +447,7 @@ class DeEsserSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute overall quality score."""
+        """Berechnet overall quality score."""
         scores = []
 
         # Sibilance reduction effectiveness

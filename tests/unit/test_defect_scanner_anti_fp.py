@@ -193,6 +193,27 @@ class TestCompressionArtifactsAntiFP:
         assert score.severity > 0.0
 
 
+class TestReverbExcessSilenceHandling:
+    """Reverb detector must not produce false positives on silence layouts."""
+
+    def test_leading_silence_does_not_inflate_reverb(self):
+        """Leading silence must not inflate score vs. same signal without leading silence."""
+        sc = _scanner()
+        lead = np.zeros(int(0.5 * SR), dtype=np.float32)
+        prog = _sine(440.0, 0.3, duration=2.5)
+        score_ref = sc._detect_reverb_excess(prog)
+        score_with_lead = sc._detect_reverb_excess(np.concatenate([lead, prog]).astype(np.float32))
+        assert score_with_lead.severity <= score_ref.severity + 0.05
+
+    def test_near_silence_returns_zero_reverb(self):
+        """Near-silent tails must be guarded and return zero severity."""
+        sc = _scanner()
+        audio = np.zeros(int(3.0 * SR), dtype=np.float32)
+        score = sc._detect_reverb_excess(audio)
+        assert score.severity == 0.0
+        assert bool(score.metadata.get("silence_guarded", False))
+
+
 # ============================================================
 # RIAA_CURVE_ERROR — Medium-Gate (§6.3 Medium-Filter)
 # ============================================================

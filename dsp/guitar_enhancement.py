@@ -42,7 +42,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 def _match_lengths(*arrays):
-    """Ensure all arrays have the same length (trim to minimum)."""
+    """Stellt sicher: all arrays have the same length (trim to minimum)."""
     min_len = min(len(arr) for arr in arrays)
     return tuple(arr[:min_len] for arr in arrays)
 
@@ -108,7 +108,7 @@ class PickAttackEnhancer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # String transients are typically 2-6 kHz for guitars
         nyquist = sr / 2
         low_f = min(2000, nyquist * 0.25)
@@ -253,7 +253,7 @@ class StringResonanceEnhancer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         result = audio.copy()
 
         # Fundamental frequency range for guitars (82 Hz = E2 to ~400 Hz)
@@ -377,7 +377,7 @@ class FretNoiseReducer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Fret noise is typically 2-8 kHz with harsh characteristics
         nyquist = sr / 2
         low_f = min(2000, nyquist * 0.25)
@@ -534,7 +534,7 @@ class AcousticBodyResonance:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Body resonance range (100-300 Hz)
         sos_body = butter(4, [100, 300], btype="band", fs=sr, output="sos")
         body_band = sosfilt(sos_body, audio)
@@ -600,7 +600,7 @@ class AcousticBodyResonance:
 
 class GuitarEnhancementSystem:
     """
-    Unified API for Guitar/String Enhancement.
+    Einheitliche API für Gitarren-/Saiten-Verbesserung.
 
     Combines all guitar processing components into a single pipeline:
     1. Pick Attack Enhancement

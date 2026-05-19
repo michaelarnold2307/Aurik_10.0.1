@@ -147,7 +147,7 @@ class NoiseBurstRemover:
         return processed
 
     def _process_mono(self, audio: np.ndarray, threshold_db: float) -> np.ndarray:
-        """Process single channel"""
+        """Verarbeitet single channel."""
         # Step 1: Detect noise bursts
         burst_regions = self._detect_bursts(audio, threshold_db)
 
@@ -175,7 +175,7 @@ class NoiseBurstRemover:
 
     def _detect_bursts(self, audio: np.ndarray, threshold_db: float) -> list[tuple[int, int]]:
         """
-        Detect transient noise bursts using local RMS analysis
+        Erkennt transient noise bursts using local RMS analysis.
 
         Returns:
             List of (start, end) tuples marking burst regions
@@ -244,7 +244,7 @@ class NoiseBurstRemover:
         self, audio: np.ndarray, burst_regions: list[tuple[int, int]]
     ) -> list[tuple[int, int]]:
         """
-        Filter out likely musical transients (drum hits, piano attacks)
+        Filtert out likely musical transients (drum hits, piano attacks).
         using spectral characteristics
         """
         filtered_regions = []
@@ -294,7 +294,7 @@ class NoiseBurstRemover:
 
     def _remove_burst(self, audio: np.ndarray, start: int, end: int) -> tuple[np.ndarray, float]:
         """
-        Remove a single burst using spectral smoothing
+        Entfernt a single burst using spectral smoothing.
 
         Returns:
             (cleaned_audio, reduction_db)
@@ -370,7 +370,7 @@ class NoiseBurstRemover:
         return audio, reduction_db
 
     def get_metrics(self) -> dict[str, Any]:
-        """Return processing metrics"""
+        """Gibt processing metrics zurück."""
         return {
             "bursts_detected": self.bursts_detected,
             "bursts_removed": self.bursts_removed,

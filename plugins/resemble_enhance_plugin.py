@@ -188,7 +188,7 @@ class ResembleEnhancePlugin:
             return _wiener(mono, _SR)
 
     def _onnx_single(self, mono: np.ndarray, win: np.ndarray, nf: int) -> np.ndarray:
-        """Process a single audio chunk through ONNX (original algorithm)."""
+        """Verarbeitet a single audio chunk through ONNX (original algorithm)."""
         # Capture session reference locally to avoid race condition with PLM eviction
         session = self._session
         if session is None:

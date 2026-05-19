@@ -47,6 +47,7 @@ import threading
 from dataclasses import dataclass, field
 
 import numpy as np
+from scipy.signal import butter, decimate, hilbert, sosfilt
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ class SpectralFingerprint:
         )
 
     def as_dict(self) -> dict:
+        """Gibt alle Spektral-Fingerabdruck-Felder als Dictionary zurück."""
         return {
             "rolloff_95_hz": self.rolloff_95_hz,
             "rolloff_95_percent_hz": self.rolloff_95_hz,
@@ -146,6 +148,7 @@ class TransferChain:
     reasoning: str = ""
 
     def __len__(self) -> int:
+        """Gibt die Anzahl der Stufen in der Transferkette zurück."""
         return len(self.chain)
 
 
@@ -183,16 +186,19 @@ class MediumDetectionResult:
     """Geschätzte Bandgeschwindigkeit in ips (1.875/3.75/7.5/15/30). None bei Nicht-Tape."""
 
     riaa_curve_type: str = "unknown"
-    """Erkannter EQ-Kurventyp: 'riaa'|'nab'|'columbia'|'aes'|'capitol'|'london'|'ccir'|'unknown_prestandard'|'unknown'."""
+    """Erkannter EQ-Kurventyp:
+    'riaa'|'nab'|'columbia'|'aes'|'capitol'|'london'|'ccir'|'unknown_prestandard'|'unknown'."""
 
     riaa_curve_confidence: float = 0.0
     """Konfidenz der RIAA/EQ-Kurven-Erkennung ∈ [0, 1]. ≥ 0.70 = aktiv."""
 
     @property
     def chain_label(self) -> str:
+        """Gibt die Transferkette als lesbaren String zurück (z. B. 'vinyl → mp3_low')."""
         return " → ".join(self.transfer_chain) if self.transfer_chain else "unknown"
 
     def as_dict(self) -> dict:
+        """Gibt alle Erkennungsergebnis-Felder als Dictionary zurück."""
         return {
             "transfer_chain": self.transfer_chain,
             "medium_confidences": self.medium_confidences,
@@ -239,6 +245,7 @@ class MediumDetector:
     _SECONDARY_ANALOG_MIN: float = 0.08  # Mindest-Posterior für 2. Analog-Stufe
     _MAX_ANALOG_CHAIN_DEPTH: int = 4  # inkl. Primärquelle; erlaubt 3+ Transfer-Layer
     _SAME_ORDER_ANALOG_MIN: float = 0.22  # konservativer Guard für gleichrangige Analog-Stufen
+    _ANALOG_CHAIN_MP3_HIGH_MIN_BW_HZ: float = 18_000.0  # unterhalb: mp3_high bei Analogkette unplausibel
 
     # Analog-Materialtypen — können als Primärquelle in Ketten vorkommen
     _ANALOG_MATERIALS: frozenset[str] = frozenset(
@@ -774,8 +781,6 @@ class MediumDetector:
 
         # ── 2. Wow/Flutter-Index ────────────────────────────────────────
         try:
-            from scipy.signal import hilbert
-
             frame_size = int(0.1 * sr)  # 100 ms
             pitches = []
             for start in range(0, n - frame_size, frame_size):
@@ -934,7 +939,7 @@ class MediumDetector:
 
     @staticmethod
     def _rotation_periodicity(mono: np.ndarray, sr: int) -> tuple[float, float]:
-        """Detect turntable/disc rotation periodicity via autocorrelation.
+        """Erkennt turntable/disc rotation periodicity via autocorrelation.
 
         Returns (rotation_hz, rotation_strength).
         Vinyl: 33⅓ RPM → 0.556 Hz, 45 RPM → 0.750 Hz, 78 RPM → 1.300 Hz.
@@ -942,8 +947,6 @@ class MediumDetector:
         n = len(mono)
         if n < sr * 4:  # need ≥ 4 s for sub-Hz periodicity
             return 0.0, 0.0
-
-        from scipy.signal import decimate
 
         # Envelope via RMS in 50 ms windows
         win_samples = max(1, int(sr * 0.05))
@@ -986,7 +989,7 @@ class MediumDetector:
 
     @staticmethod
     def _infrasonic_rms(mono: np.ndarray, sr: int) -> float:
-        """Measure infrasonic energy (< 20 Hz), strong in vinyl due to warp/eccentricity."""
+        """Misst infrasonic energy (< 20 Hz), strong in vinyl due to warp/eccentricity."""
         n = len(mono)
         fft_n = min(n, 131072)
         spec = np.abs(np.fft.rfft(mono[:fft_n], n=fft_n))
@@ -1101,7 +1104,7 @@ class MediumDetector:
 
     @staticmethod
     def _crackle_density(mono: np.ndarray, sr: int) -> float:
-        """Estimate impulsive crackle density as normalized event ratio [0, 1].
+        """Schätzt impulsive crackle density as normalized event ratio [0, 1].
 
         Applies a stochasticity filter (Cox & Lewis 1966): genuine vinyl crackle
         follows a Poisson process (CV of inter-event intervals ≈ 1.0).  MDCT-codec
@@ -1116,8 +1119,6 @@ class MediumDetector:
         duration_s = n / max(sr, 1)
         if duration_s < 0.5:
             return 0.0
-
-        from scipy.signal import butter, sosfilt
 
         sos = butter(4, 2000.0, btype="high", fs=sr, output="sos")
         hp = sosfilt(sos, mono.astype(np.float64))
@@ -1165,8 +1166,8 @@ class MediumDetector:
         return float(n_events / max(float(n), 1.0))
 
     @staticmethod
-    def _snr(mono: np.ndarray, sr: int) -> float:
-        """Estimate SNR in dB via signal vs noise-floor percentile."""
+    def _snr(mono: np.ndarray, sr: int) -> float:  # pylint: disable=unused-argument
+        """Schätzt SNR in dB via signal vs noise-floor percentile."""
         n = len(mono)
         win = min(2048, n)
         hop = max(1, n // 200)
@@ -1186,7 +1187,7 @@ class MediumDetector:
 
     @staticmethod
     def _noise_color(mono: np.ndarray, sr: int) -> float:
-        """Estimate noise colour as spectral tilt (0=white, 1=pink, 2=brown/red).
+        """Schätzt noise colour as spectral tilt (0=white, 1=pink, 2=brown/red).
 
         Uses 5th-percentile frames (noise floor) spectral slope.
         """
@@ -1225,7 +1226,7 @@ class MediumDetector:
     _MIN_ROTATION_ANALYSIS_DURATION_S: float = 6.0
 
     def _bayesian_score(self, fp: SpectralFingerprint, duration_s: float = 0.0) -> dict[str, float]:
-        """Compute posterior probabilities for all 16 material types via Gaussian log-likelihood.
+        """Berechnet posterior probabilities for all 16 material types via Gaussian log-likelihood.
 
         Args:
             fp:         Spectral fingerprint of the audio.
@@ -1342,7 +1343,11 @@ class MediumDetector:
                 ".wma",
             }
         )
-        _ext_lower = file_ext.lower()
+        _ext_lower = str(file_ext or "").strip().lower()
+        # Accept both "mp3" and ".mp3" to keep detector behavior consistent
+        # across direct calls and pipeline paths.
+        if _ext_lower and not _ext_lower.startswith("."):
+            _ext_lower = f".{_ext_lower}"
         if _ext_lower in _DIGITAL_FILE_EXTS:
             _adjusted: dict[str, float] = {
                 mat: (0.0 if mat in self._ANALOG_MATERIALS else score) for mat, score in posteriors.items()
@@ -1391,11 +1396,6 @@ class MediumDetector:
         if _analog_zeroed and best_analog is None:
             _physical_analog_sources = self._infer_analog_source_from_fingerprint(fp)
             if _physical_analog_sources:
-                _cand_analog, _cand_conf = _physical_analog_sources[0]
-                # For digital container formats, analog-primary override is only valid
-                # when physical evidence is strong. Weak analog hints are common in
-                # lossy codec material and must not dominate primary-material routing.
-                #
                 # §2.46a: Codec-adaptive thresholds — multi-generation transfers
                 # (vinyl→cassette→MP3) attenuate analog fingerprints through each
                 # transfer stage. Fixed thresholds miss genuine analog origins when
@@ -1411,36 +1411,50 @@ class MediumDetector:
                     or fp.wow_flutter_index >= _pa_wow_thresh
                     or (fp.infrasonic_rms >= _pa_infra_thresh and fp.crackle_density >= _pa_crackle_thresh)
                 )
+                # §6.7e [RELEASE_MUST] Multi-Kandidaten-Gate (v9.12.x):
+                # Iteriere ALLE physischen Analog-Quellen (_MEDIUM_ORDER-sortiert = ältester Träger
+                # zuerst). Das letzte Gate-Positiv = closest-to-codec = Primary.  Dies behandelt
+                # multi-generation Ketten (z.B. vinyl→kassette→mp3) korrekt: Vinyl verliert sein
+                # Infrasonic-Profil durch den Kassetten-HPF, nur Kassette überlebt das Gate.
                 # §2.46a: Primär-Gate: conf >= codec-adaptiver Schwellwert UND physikalisches Feature.
-                # Fallback-Gate: innere Analyse (_infer_analog_source_from_fingerprint) hat bereits
-                # adaptive Schwellen angewandt und einen Kandidaten geliefert. Wenn rotation_strength
-                # >= 0.30 (klare Plattenspieler-Periodizität, Copeland 2008) UND conf >= inneres
-                # Minimum (0.20), ist der analoge Ursprung physikalisch plausibel — auch wenn conf
-                # unterhalb des codec-adaptiven Floors liegt (Multi-Gen-Dämpfung).
-                _strong_physical_analog = (_cand_conf >= _pa_conf_thresh and _feature_ok) or (
-                    _cand_conf >= 0.20 and fp.rotation_strength >= 0.30
-                )
-                if _strong_physical_analog:
-                    best_analog, best_analog_score = _cand_analog, _cand_conf
-                    logger.info(
-                        "MediumDetector: physical-feature analog inference — "
-                        "primary=%s (conf=%.3f) chain=%s "
-                        "[crackle=%.4f infrasonic=%.4f rotation=%.3f wow_flutter=%.3f]",
-                        best_analog,
-                        best_analog_score,
-                        [m for m, _ in _physical_analog_sources],
-                        fp.crackle_density,
-                        fp.infrasonic_rms,
-                        fp.rotation_strength,
-                        fp.wow_flutter_index,
+                # Fallback-Gate A (Vinyl): rotation_strength >= 0.30 (Plattenspieler-Periodizität,
+                # Copeland 2008) UND conf >= 0.20 UND Infrasonic-Bestätigung vorhanden.
+                # Fallback-Gate B (Kassette): BW-Rolloff ~12–15 kHz ist kein Codec-Artefakt.
+                for _cand_analog, _cand_conf in _physical_analog_sources:
+                    _strong_physical_analog = (
+                        (_cand_conf >= _pa_conf_thresh and _feature_ok)
+                        or (
+                            _cand_conf >= 0.20
+                            and fp.rotation_strength >= 0.30
+                            and fp.infrasonic_rms >= 0.008  # Infrasonic-Guard: kein Falsch-Positiv
+                        )
+                        or (
+                            _cand_analog == "cassette" and _cand_conf >= 0.35  # BW-Kassetten-Evidenz
+                        )
                     )
-                else:
+                    if _strong_physical_analog:
+                        best_analog, best_analog_score = _cand_analog, _cand_conf
+                        logger.info(
+                            "MediumDetector: physical-feature analog inference — "
+                            "primary=%s (conf=%.3f) chain=%s "
+                            "[crackle=%.4f infrasonic=%.4f rotation=%.3f wow_flutter=%.3f]",
+                            best_analog,
+                            best_analog_score,
+                            [m for m, _ in _physical_analog_sources],
+                            fp.crackle_density,
+                            fp.infrasonic_rms,
+                            fp.rotation_strength,
+                            fp.wow_flutter_index,
+                        )
+                        # Kein break — wir überschreiben mit jedem späteren Gate-Positiv.
+                        # Letzter Treffer in _MEDIUM_ORDER-Reihenfolge = closest-to-codec.
+
+                if best_analog is None:
                     logger.info(
                         "MediumDetector: weak physical analog evidence suppressed for digital file_ext=%s "
-                        "(cand=%s conf=%.3f rotation=%.3f wow=%.3f)",
+                        "(all %d sources failed gate; rotation=%.3f wow=%.3f)",
                         _ext_lower,
-                        _cand_analog,
-                        _cand_conf,
+                        len(_physical_analog_sources),
                         fp.rotation_strength,
                         fp.wow_flutter_index,
                     )
@@ -1524,7 +1538,7 @@ class MediumDetector:
                     _candidate_scores[mat2] = float(score2)
                     _candidate_sources[mat2] = "posterior"
 
-                for phys_mat, phys_conf in _physical_analog_sources[1:]:
+                for phys_mat, phys_conf in _physical_analog_sources:
                     if phys_mat == best_analog:
                         continue
                     _prev = _candidate_scores.get(phys_mat)
@@ -1536,6 +1550,49 @@ class MediumDetector:
 
                 _analog_depth = 1
                 _last_order = self._MEDIUM_ORDER.get(best_analog, 0)
+
+                # §6.7f [RELEASE_MUST] Vorläufer-Analog-Stufen voranstellen (v9.12.x):
+                # Träger mit _MEDIUM_ORDER < best_analog_order (z.B. vinyl vor cassette)
+                # werden VOR best_analog in die Chain eingefügt — nicht angehängt.
+                # Gate: Vorläufer müssen dieselben physikalischen Kriterien erfüllen wie
+                # der Primary-Gate (_strong_physical_analog) — verhindert, dass reine
+                # rotation_strength-Evidenz (musikalische Phrasierungsperiodizität) Vinyl
+                # fälschlich als Vorläufer einfügt.
+                _best_order = self._MEDIUM_ORDER.get(best_analog, 0)
+                _preceding = []
+                for _pre_mat, _pre_conf in _candidate_scores.copy().items():
+                    if self._MEDIUM_ORDER.get(_pre_mat, 99) >= _best_order:
+                        continue
+                    if _pre_conf < self._SECONDARY_ANALOG_MIN:
+                        continue
+                    # Dieselbe Gate-Logik wie für Primary — plus relaxiertes Vinyl-durch-Kassette-Gate:
+                    # Kassetten-HPF dämpft Vinyl-Rumble; beide Features müssen schwach vorhanden sein.
+                    # Unterschied zu direkter Kassette: Rillenrauschen (crackle) überlebt den Transfer.
+                    _pre_strong = (
+                        (_pre_conf >= _pa_conf_thresh and _feature_ok)
+                        or (_pre_conf >= 0.20 and fp.rotation_strength >= 0.30 and fp.infrasonic_rms >= 0.008)
+                        or (_pre_mat == "cassette" and _pre_conf >= 0.35)
+                        or (
+                            # Vinyl-Vorläufer durch Kassetten-Transfer: Rillenrauschen bleibt erhalten,
+                            # Rumble wird teilweise durch Kassetten-HPF gefiltert → niedrigere Schwellen.
+                            _pre_mat == "vinyl"
+                            and _pre_conf >= 0.18
+                            and fp.crackle_density >= 0.002  # Rillenrauschen überlebt Kassetten-Transfer
+                            and fp.infrasonic_rms >= 0.004  # Schwaches Residual trotz Kassetten-HPF
+                        )
+                    )
+                    if _pre_strong:
+                        _preceding.append((_pre_mat, _pre_conf))
+                _preceding.sort(key=lambda x: self._MEDIUM_ORDER.get(x[0], 99))
+                _ins = len(chain) - 1  # Position vor best_analog
+                for _pre_mat, _pre_conf in _preceding:
+                    chain.insert(_ins, _pre_mat)
+                    chain_confidences.insert(_ins, _pre_conf)
+                    evidence.insert(_ins, f"Vorläufer-Analog-Stufe (physical): {_pre_mat} (conf={_pre_conf:.3f})")
+                    _ins += 1
+                    _analog_depth += 1
+                    del _candidate_scores[_pre_mat]  # forward-Schleife nochmals hinzufügen verhindern
+
                 for mat2 in sorted(
                     _candidate_scores,
                     key=lambda _m: (self._MEDIUM_ORDER.get(_m, 99), -_candidate_scores[_m]),
@@ -1588,6 +1645,22 @@ class MediumDetector:
                 else:
                     codec_name = "mp3_high"
                     codec_conf = 0.35
+
+                # Conservative guard for analog transfer chains:
+                # If an analog source stage is present but HF bandwidth is limited,
+                # classify codec stage as mp3_low instead of mp3_high.
+                _analog_chain_present = any(_m in self._ANALOG_MATERIALS for _m in chain)
+                if (
+                    _analog_chain_present
+                    and codec_name == "mp3_high"
+                    and fp.effective_bandwidth_hz < self._ANALOG_CHAIN_MP3_HIGH_MIN_BW_HZ
+                ):
+                    codec_name = "mp3_low"
+                    codec_conf = max(float(codec_conf), 0.40)
+                    evidence.append(
+                        "Codec-Guard: Analogkette + begrenzte HF-Bandbreite "
+                        f"({fp.effective_bandwidth_hz:.0f} Hz) → mp3_low"
+                    )
                 if codec_name not in chain:
                     chain.append(codec_name)
                     chain_confidences.append(codec_conf)
@@ -1626,6 +1699,14 @@ class MediumDetector:
         chain_confidences = _normalized_confidences
 
         primary = chain[0]
+        # §6.1b [RELEASE_MUST] Letzter-Analog-Träger-Primärprinzip (v9.12.x):
+        # Für Mehrstufenketten (vinyl→cassette→mp3_low) ist der letzte analoge Träger
+        # der primäre MaterialType-Prior für DefectScanner/CausalDefectReasoner,
+        # da er die dominanten Degradationsartefakte trägt.
+        # Beispiel: vinyl→cassette→mp3_low → primary = "cassette"
+        _analog_in_chain = [m for m in chain if m in self._ANALOG_MATERIALS]
+        if _analog_in_chain:
+            primary = _analog_in_chain[-1]
         is_multi = len(chain) > 1
         # Weakest-link principle: a transfer chain is only as confident as its
         # least certain component.  Using sum() caused multi-link chains (e.g.
@@ -1634,7 +1715,7 @@ class MediumDetector:
 
         # ── ClassificationResult für Passthrough bauen ───────────────
         try:
-            from backend.core.medium_classifier import ClassificationResult
+            from backend.core.medium_classifier import ClassificationResult  # pylint: disable=import-outside-toplevel
 
             classification_result = ClassificationResult(
                 material=primary,
@@ -1679,7 +1760,9 @@ class MediumDetector:
         _tape_types = {"tape", "reel_tape", "wire_recording"}
         if primary in _tape_types or any(m in _tape_types for m in chain):
             try:
-                from backend.core.dolby_nr_detector import get_dolby_nr_detector as _get_dolby
+                from backend.core.dolby_nr_detector import (  # pylint: disable=import-outside-toplevel
+                    get_dolby_nr_detector as _get_dolby,
+                )
 
                 _dolby_det = _get_dolby().detect(audio, sr, material_type=primary)
                 if _dolby_det.detected:
@@ -1699,6 +1782,37 @@ class MediumDetector:
             except Exception as exc:
                 logger.debug("MediumDetector: Dolby NR detection skipped (%s)", exc)
 
+        # §6.6 RIAA-Kurven-Klassifikation für Disc-Materialien (vinyl/shellac/lacquer_disc)
+        _disc_types = {"vinyl", "shellac", "lacquer_disc"}
+        if primary in _disc_types or any(m in _disc_types for m in chain):
+            try:
+                from backend.core.dsp.riaa_curve_classifier import (  # pylint: disable=import-outside-toplevel
+                    get_riaa_curve_classifier as _get_riaa_clf,
+                )
+
+                _era_decade: int | None = None
+                if hasattr(result, "bayesian_scores") and isinstance(result.bayesian_scores, dict):
+                    _era_decade = result.bayesian_scores.get("era_decade")
+                _riaa_curve, _riaa_conf = _get_riaa_clf().classify_with_confidence(audio, sr, era_decade=_era_decade)
+                result.riaa_curve_type = _riaa_curve
+                result.riaa_curve_confidence = _riaa_conf
+                if _riaa_conf >= 0.70:
+                    result.evidence.append(f"RIAA curve detected: {_riaa_curve} ({_riaa_conf:.0%} konfident)")
+                    logger.info(
+                        "MediumDetector: RIAA curve=%s conf=%.2f material=%s",
+                        _riaa_curve,
+                        _riaa_conf,
+                        primary,
+                    )
+                else:
+                    logger.debug(
+                        "MediumDetector: RIAA curve low confidence=%s conf=%.2f → unknown",
+                        _riaa_curve,
+                        _riaa_conf,
+                    )
+            except Exception as exc:
+                logger.debug("MediumDetector: RIAA curve classification skipped (%s)", exc)
+
         return result
 
     # ── Hilfsmethoden ────────────────────────────────────────────────────
@@ -1712,14 +1826,14 @@ class MediumDetector:
         This method ensures all keys leaving detect() are spec-compliant.
 
         Mapping (spec §6.1 kanonisch):
-            cassette         → tape           (Compact Cassette Typ I/II/IV)
             reel_wire        → wire_recording (Drahtband 1940–1955)
             cassette_digital → dat            (Digitalkassette; DAT-Pfad)
             vhs_audio        → tape           (VHS-Tonspur)
             composite        → composite (unchanged — caller must use transfer_chain[0])
+            cassette         → cassette (kept as-is — MediumDetectionResult.primary_material
+                               uses last-analog logic; DefectScanner handles "cassette" nativ)
         """
         _KEY_MAP: dict[str, str] = {
-            "cassette": "tape",
             "reel_wire": "wire_recording",
             "cassette_digital": "dat",
             "vhs_audio": "tape",
@@ -1752,7 +1866,7 @@ _lock = threading.Lock()
 
 def get_medium_detector() -> MediumDetector:
     """Thread-sicherer Singleton-Accessor (Double-Checked Locking, §3.2)."""
-    global _instance
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:

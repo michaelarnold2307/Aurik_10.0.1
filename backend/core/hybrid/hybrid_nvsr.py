@@ -96,7 +96,7 @@ class HybridNVSR:
         self._ml_guard_events: list[dict[str, Any]] = []
 
     def _init_audiosr(self) -> None:
-        """Initialize AudioSR plugin lazily when needed."""
+        """Initialisiert AudioSR plugin lazily when needed."""
         try:
             from plugins.audiosr_plugin import AudioSRPlugin
 
@@ -107,7 +107,7 @@ class HybridNVSR:
             self.audiosr_plugin = None
 
     def _has_sufficient_ml_headroom(self, audio: np.ndarray, sample_rate: int, phase_id: str) -> bool:
-        """Return True when enough physical RAM is available for AudioSR stage."""
+        """Gibt True when enough physical RAM is available for AudioSR stage zurück."""
         try:
             import gc
 
@@ -173,7 +173,7 @@ class HybridNVSR:
         return True
 
     def _get_audiosr_plugin(self, audio: np.ndarray, sample_rate: int, phase_id: str) -> Any:
-        """Return AudioSR plugin only when guard allows ML stage."""
+        """Gibt AudioSR plugin only when guard allows ML stage zurück."""
         if not self._has_sufficient_ml_headroom(audio, sample_rate, phase_id):
             return None
         if self.audiosr_plugin is None:
@@ -188,7 +188,7 @@ class HybridNVSR:
         material_type: str = "unknown",
     ) -> NVSRResult:
         """
-        Main entry point for bandwidth restoration.
+        Haupt-entry point for bandwidth restoration.
 
         Args:
             audio: Input audio (may be low-bandwidth)
@@ -234,7 +234,7 @@ class HybridNVSR:
 
     def _detect_bandwidth(self, audio: np.ndarray, sample_rate: int) -> float:
         """
-        Detect the effective bandwidth of the audio signal.
+        Erkennt the effective bandwidth of the audio signal.
 
         Returns frequency (Hz) where energy drops below -40 dB.
         """
@@ -276,7 +276,7 @@ class HybridNVSR:
         )
 
     def _apply_audiosr_only(self, audio: np.ndarray, sample_rate: int, detected_bandwidth: float) -> NVSRResult:
-        """AudioSR-only path"""
+        """AudioSR-only path."""
         plugin = self._get_audiosr_plugin(audio, sample_rate, "phase_06_frequency_restoration")
         if plugin is None:
             logger.warning("AudioSR not available, falling back to DSP")
@@ -418,7 +418,7 @@ class HybridNVSR:
 
     def _run_audiosr(self, audio: np.ndarray, sample_rate: int, plugin: Any) -> np.ndarray:
         """
-        Run AudioSR neural super-resolution via array-based plugin API.
+        Führt aus: AudioSR neural super-resolution via array-based plugin API.
 
         AudioSRPlugin.process() accepts [samples] or [channels, samples] and
         handles resampling, NaN-guards and target_sr internally.
@@ -447,7 +447,7 @@ class HybridNVSR:
         self, audio_a: np.ndarray, audio_b: np.ndarray, sample_rate: int, crossover_freq: float, blend_ratio: float
     ) -> np.ndarray:
         """
-        Blend two audio signals with crossover frequency.
+        Mischt two audio signals with crossover frequency.
 
         Args:
             audio_a: Base audio (DSP)
@@ -492,7 +492,7 @@ class HybridNVSR:
 
 def create_nvsr_config(quality_mode: str = "balanced", material_type: str = "unknown") -> NVSRConfig:
     """
-    Create NVSR config based on quality mode and material type.
+    Erstellt NVSR config based on quality mode and material type.
 
     Args:
         quality_mode: 'fast', 'balanced', 'quality', 'maximum', 'restoration', or 'studio_2026'

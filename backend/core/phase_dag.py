@@ -173,6 +173,80 @@ def _normalize_phase_id(phase_id: str) -> str:
     return phase_id
 
 
+def _phase_num(pid: str) -> int:
+    """Extrahiert die Phasennummer aus einer Phase-ID (Tiebreaker für Sortierung)."""
+    try:
+        return int(pid.split("_")[1])
+    except Exception:
+        return 999
+
+
+def sort_phases_by_dag(phase_list: list[str]) -> list[str]:
+    """Sortiert phase_list in topologisch korrekter Reihenfolge gemäß HARD_BEFORE-Constraints.
+
+    Verwendet Kahn's Algorithmus. Phasen ohne aktive Constraints werden nach ihrer
+    numerischen Phasen-ID (stabiler Tiebreaker) sortiert — entspricht der Designreihenfolge.
+
+    Args:
+        phase_list: Beliebige Reihenfolge von Phase-IDs (kurz- oder langform).
+
+    Returns:
+        Phasen in gültiger Ausführungsreihenfolge (alle aktiven HARD_BEFORE-Constraints erfüllt).
+        Falls ein Zyklus erkannt wird (sollte nie passieren), wird numerischer Sort-Fallback genutzt.
+    """
+    if len(phase_list) <= 1:
+        return list(phase_list)
+
+    # Normierung: original → normalized, normalized → first-seen-original
+    norm_map: dict[str, str] = {}  # orig → normalized
+    norm_to_orig: dict[str, str] = {}  # normalized → orig (first occurrence)
+    for orig in phase_list:
+        norm = _normalize_phase_id(orig)
+        norm_map[orig] = norm
+        if norm not in norm_to_orig:
+            norm_to_orig[norm] = orig
+
+    active_norms: set[str] = set(norm_map.values())
+
+    # Adjazenzliste und Eingangsgrad für aktive Phasen
+    in_degree: dict[str, int] = dict.fromkeys(active_norms, 0)
+    edges: dict[str, list[str]] = {n: [] for n in active_norms}
+
+    for c in HARD_BEFORE_CONSTRAINTS:
+        b = _normalize_phase_id(c.before)
+        a = _normalize_phase_id(c.after)
+        if b in active_norms and a in active_norms and a not in edges[b]:
+            edges[b].append(a)
+            in_degree[a] += 1
+
+    # Kahn's BFS — Startknoten mit Eingangsgrad 0, numerisch sortiert (Tiebreaker)
+    def _orig_num(norm: str) -> int:
+        return _phase_num(norm_to_orig.get(norm, norm))
+
+    ready: list[str] = sorted([n for n, d in in_degree.items() if d == 0], key=_orig_num)
+    result: list[str] = []
+
+    while ready:
+        node = ready.pop(0)
+        result.append(norm_to_orig.get(node, node))
+        new_ready: list[str] = []
+        for neighbor in edges[node]:
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                new_ready.append(neighbor)
+        if new_ready:
+            ready = sorted(ready + new_ready, key=_orig_num)
+
+    if len(result) < len(phase_list):
+        logger.warning(
+            "sort_phases_by_dag: Zyklus in Phase-DAG erkannt — Fallback auf numerische Sortierung. Verbleibend: %s",
+            [norm_to_orig.get(n, n) for n in active_norms if n not in {norm_map[r] for r in result}],
+        )
+        return sorted(phase_list, key=_phase_num)
+
+    return result
+
+
 def validate_phase_order(phase_list: list[str]) -> list[str]:
     """Prüft eine geordnete Phase-Liste gegen HARD_BEFORE-Constraints.
 

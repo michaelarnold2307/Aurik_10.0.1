@@ -455,7 +455,7 @@ def measure_quality_improvement(
     original: np.ndarray, processed: np.ndarray, sample_rate: int = 44100
 ) -> dict[str, float]:
     """
-    Measure quality improvement from processing.
+    Misst quality improvement from processing.
 
     Args:
         original: Original audio

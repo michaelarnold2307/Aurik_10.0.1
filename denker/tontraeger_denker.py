@@ -118,7 +118,7 @@ class TontraegerDenker:
     # ------------------------------------------------------------------
 
     def _get_detector(self) -> Any:
-        """Return the MediumDetector instance, initializing it lazily."""
+        """Gibt the MediumDetector instance, initializing it lazily zurück."""
         if not self._loaded:
             with self._detector_lock:
                 if not self._loaded:

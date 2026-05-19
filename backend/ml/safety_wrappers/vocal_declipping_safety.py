@@ -38,7 +38,7 @@ from .safety_wrapper_template import (
 
 def detect_clipping(audio: np.ndarray, threshold: float = 0.99) -> tuple[bool, float, dict[str, Any]]:
     """
-    Detect clipping in audio signal.
+    Erkennt clipping in audio signal.
 
     Args:
         audio: Input audio
@@ -103,7 +103,7 @@ def detect_clipping(audio: np.ndarray, threshold: float = 0.99) -> tuple[bool, f
 
 def estimate_thd(audio: np.ndarray, sr: int, fundamental_hz: float | None = None) -> float:
     """
-    Estimate Total Harmonic Distortion (THD).
+    Schätzt Total Harmonic Distortion (THD).
 
     Higher THD indicates more distortion (clipping, overdrive, etc.)
 
@@ -167,7 +167,7 @@ def estimate_thd(audio: np.ndarray, sr: int, fundamental_hz: float | None = None
 
 def detect_harmonic_structure(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     """
-    Detect if audio has clear harmonic structure (periodic signal).
+    Erkennt if audio has clear harmonic structure (periodic signal).
 
     Voices have harmonic structure. Clipping can destroy it.
 
@@ -217,7 +217,7 @@ def detect_harmonic_structure(audio: np.ndarray, sr: int) -> tuple[bool, float]:
 
 def compute_crest_factor(audio: np.ndarray) -> float:
     """
-    Compute crest factor (peak-to-RMS ratio).
+    Berechnet crest factor (peak-to-RMS ratio).
 
     Clipped audio has low crest factor.
     Natural voice has high crest factor (15-20 dB).
@@ -266,7 +266,7 @@ class VocalDeclippingSafety(BaseSafetyWrapper):
         max_thd_increase: float = 0.1,
     ):
         """
-        Initialize Vocal Declipping Safety Wrapper.
+        Initialisiert Vocal Declipping Safety Wrapper.
 
         Args:
             processor_func: Declipping function (audio, sr, severity) -> audio
@@ -289,7 +289,7 @@ class VocalDeclippingSafety(BaseSafetyWrapper):
         self.max_thd_increase = max_thd_increase
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for declipping."""
+        """Validiert pre-conditions for declipping."""
         # Basic audio validation
         is_valid, errors = validate_audio_basic(audio)
 
@@ -370,7 +370,7 @@ class VocalDeclippingSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions after declipping."""
+        """Validiert post-conditions after declipping."""
         issues = []
         side_effects = []
         metrics = {}
@@ -479,7 +479,7 @@ class VocalDeclippingSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute overall quality score."""
+        """Berechnet overall quality score."""
         scores = []
 
         # Clipping reduction effectiveness

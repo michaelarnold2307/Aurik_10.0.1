@@ -100,7 +100,7 @@ class BrassHarmonicsEnhancer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Brass formant range (500-2000 Hz)
         nyquist = sr / 2
         low_f = min(500, nyquist * 0.25)
@@ -222,7 +222,7 @@ class BreathAttackPreserver:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Breath attacks have high-frequency content (6-12 kHz)
         nyquist = sr / 2
         low_f = min(6000, nyquist * 0.25)
@@ -341,7 +341,7 @@ class ValveClickReducer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Valve clicks are typically 1-4 kHz
         sos_valve = butter(4, [1000, 4000], btype="band", fs=sr, output="sos")
         valve_band = sosfilt(sos_valve, audio)
@@ -461,7 +461,7 @@ class ResonanceEnhancer:
             return self._process_channel(audio, sr)
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
-        """Process single channel."""
+        """Verarbeitet einen einzelnen Kanal."""
         # Bell resonance (300-800 Hz)
         sos_bell = butter(4, [300, 800], btype="band", fs=sr, output="sos")
         bell_band = sosfilt(sos_bell, audio)
@@ -513,7 +513,7 @@ class ResonanceEnhancer:
 
 class BrassEnhancementSystem:
     """
-    Unified API for Brass/Wind Enhancement.
+    Einheitliche API für Blechbläser-/Blasinstrument-Verbesserung.
 
     Combines all brass processing components into a single pipeline:
     1. Brass Harmonics Enhancement

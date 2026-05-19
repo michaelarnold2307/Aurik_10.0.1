@@ -192,7 +192,7 @@ class TruePeakLimiterPhase(PhaseInterface):
     # ------------------------------------------------------------------
 
     def _compute_gain_curve(self, audio: np.ndarray, sample_rate: int, ceiling: float) -> np.ndarray:
-        """Compute per-sample gain reduction curve for True-Peak limiting.
+        """Berechnet per-sample gain reduction curve for True-Peak limiting.
 
         Separated from _limit_channel so that stereo processing can derive
         a single linked gain curve from the combined peak of both channels

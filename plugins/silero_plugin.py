@@ -110,7 +110,7 @@ class SileroPlugin:
         return mask16[: len(mono)]
 
     def _vad_mask_single_call(self, mono16: np.ndarray) -> np.ndarray:
-        """Run ONNX model once on entire audio and derive per-sample bool mask."""
+        """Führt aus: ONNX model once on entire audio and derive per-sample bool mask."""
         _plm = None
         try:
             from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager

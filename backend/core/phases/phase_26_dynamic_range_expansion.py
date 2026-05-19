@@ -141,7 +141,7 @@ class DynamicRangeExpansion(PhaseInterface):
         quality_mode: str | None,
         restorability_score: float,
     ) -> dict[str, float]:
-        """Compute adaptive expansion profile (§2.56, §6.2b)."""
+        """Berechnet adaptive expansion profile (§2.56, §6.2b)."""
         mat = str(material or "unknown").lower().replace("-", "_").replace(" ", "_")
         qm = str(quality_mode or "balanced").lower().replace("-", "_")
         if restorability_score is None:
@@ -176,7 +176,7 @@ class DynamicRangeExpansion(PhaseInterface):
         return {"max_expansion_db": max_expansion_db}
 
     def get_metadata(self) -> PhaseMetadata:
-        """Return phase metadata."""
+        """Gibt phase metadata zurück."""
         return PhaseMetadata(
             phase_id="phase_26_dynamic_range_expansion",
             name="Dynamic Range Expansion v2 Professional",
@@ -197,7 +197,7 @@ class DynamicRangeExpansion(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
-        Apply dynamic range expansion to audio.
+        Wendet an: dynamic range expansion to audio.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -361,7 +361,7 @@ class DynamicRangeExpansion(PhaseInterface):
 
         # §2.46e Hallucination-Guard: DR-Expansion kann neue spektrale Energie einführen
         try:
-            from backend.core.hallucination_guard import apply_hallucination_guard  # pylint: disable=import-outside-toplevel  # noqa: I001
+            from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg26  # pylint: disable=import-outside-toplevel  # noqa: I001
 
             _mono_26 = (
                 expanded_audio.mean(axis=0)
@@ -374,18 +374,24 @@ class DynamicRangeExpansion(PhaseInterface):
                 else (audio.mean(axis=1) if audio.ndim == 2 else audio)
             )
             _mode_26 = str(kwargs.get("processing_mode", kwargs.get("mode", "restoration"))).lower()
-            _, _hg_meta_26 = apply_hallucination_guard(
+            _hg_result26 = _check_hg26(
                 _audio_mono_26.astype(np.float32),
                 _mono_26.astype(np.float32),
                 sr=sample_rate,
                 mode="restoration" if "studio" not in _mode_26 else "studio_2026",
             )
-            if _hg_meta_26.get("hallucination_decision") == "rollback":
+            if _hg_result26.requires_rollback:
                 logger.warning(
-                    "§2.46e phase_26 Hallucination-Guard rollback: %s",
-                    _hg_meta_26.get("hallucination_severity"),
+                    "§2.46e phase_26 Hallucination-Guard rollback: spectral_novelty=%.3f",
+                    _hg_result26.spectral_novelty,
                 )
                 expanded_audio = audio.copy()
+            if _hg_result26.score_penalty > 0:
+                logger.info(
+                    "§2.46e phase_26 score_penalty=%.1f (spectral_novelty=%.3f)",
+                    _hg_result26.score_penalty,
+                    _hg_result26.spectral_novelty,
+                )
         except Exception as _hg26_exc:
             logger.debug("§2.46e phase_26 Hallucination-Guard (non-blocking): %s", _hg26_exc)
 
@@ -412,7 +418,7 @@ class DynamicRangeExpansion(PhaseInterface):
         )
 
     def _expand_channel(self, audio: np.ndarray, sample_rate: int, config: dict[str, float]) -> np.ndarray:
-        """Expand a single audio channel using multi-band processing."""
+        """Erweitert a single audio channel using multi-band processing."""
         # Create filter bank
         bands = self._split_into_bands(audio, sample_rate)
 
@@ -460,7 +466,7 @@ class DynamicRangeExpansion(PhaseInterface):
 
     def _expand_band(self, band: np.ndarray, sample_rate: int, config: dict[str, float]) -> np.ndarray:
         """
-        Apply expansion to a single band — fully vectorized.
+        Wendet an: expansion to a single band — fully vectorized.
 
         Replaces O(N) Python for-loop with numpy vectorized operations
         for ~100× speedup on typical audio (10M+ samples).
@@ -518,7 +524,7 @@ class DynamicRangeExpansion(PhaseInterface):
         return expanded_band
 
     def _compute_rms_envelope(self, audio: np.ndarray, window_samples: int) -> np.ndarray:
-        """Compute RMS envelope."""
+        """Berechnet RMS envelope."""
         audio_squared = audio**2
         # Use uniform filter for efficiency
         from scipy.ndimage import uniform_filter1d  # pylint: disable=import-outside-toplevel
@@ -528,7 +534,7 @@ class DynamicRangeExpansion(PhaseInterface):
 
     def _smooth_gain(self, gain_db: np.ndarray, sample_rate: int, attack_ms: float, release_ms: float) -> np.ndarray:
         """
-        Apply attack/release smoothing to gain — 16× downsampled.
+        Wendet Attack/Release-Glättung auf Gain an – 16-fach unterabgetastet.
 
         Uses block-max downsampling to preserve peak gain values while
         reducing the sequential IIR loop from N to N/16 iterations.
@@ -581,13 +587,13 @@ class DynamicRangeExpansion(PhaseInterface):
         return smoothed
 
     def _combine_bands(self, bands: list) -> np.ndarray:
-        """Combine frequency bands."""
+        """Kombiniert frequency bands."""
         # Simple sum (Linkwitz-Riley crossovers maintain flat magnitude response)
         combined = sum(bands)
         return combined
 
     def _measure_dynamic_range(self, audio: np.ndarray) -> float:
-        """Measure dynamic range (dB)."""
+        """Misst dynamic range (dB)."""
         if audio.ndim == 2:
             audio = audio[:, 0]  # Use left channel
 

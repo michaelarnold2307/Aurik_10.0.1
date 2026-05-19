@@ -396,6 +396,39 @@ class SpectralRepairPhase(PhaseInterface):
         if _rolloff_protection_hz > 0.0:
             _hf_protected_bin_start = max(0, int(_rolloff_protection_hz * 0.85 / _bin_hz))
 
+        # §4.11 Pre-Echo Repair: MUSS vor generischer STFT-Reparatur laufen.
+        # Pre-Echo ist kein stationäres Rauschen — frame-selektive Spektral-Dämpfung
+        # im Prä-Masking-Fenster (Spec 04 §4.11, Fastl & Zwicker 2007 §7.2).
+        _pre_echo_events_50 = list(kwargs.get("pre_echo_events", []))
+        if _pre_echo_events_50:
+            try:
+                from backend.core.dsp.pre_echo_detector import (
+                    get_pre_echo_detector as _get_ped50,  # pylint: disable=import-outside-toplevel
+                )
+
+                _ped50 = _get_ped50()
+                _audio_pre_pre_echo = audio.copy()
+                for _evt50 in _pre_echo_events_50:
+                    audio = _ped50.repair_region(audio, _evt50, sample_rate)
+                logger.info(
+                    "Phase50 §4.11 pre_echo_repair: n_events=%d, material=%s",
+                    len(_pre_echo_events_50),
+                    _mat_str_50,
+                )
+                # §2.46e Sicherheits-Guard: kein Over-Processing durch Pre-Echo-Repair
+                _pre_echo_diff_rms = float(
+                    np.sqrt(np.mean((audio.astype(np.float64) - _audio_pre_pre_echo.astype(np.float64)) ** 2) + 1e-12)
+                )
+                _pre_echo_sig_rms = float(np.sqrt(np.mean(_audio_pre_pre_echo.astype(np.float64) ** 2) + 1e-12))
+                if _pre_echo_diff_rms > _pre_echo_sig_rms * 0.25:
+                    logger.warning(
+                        "Phase50 pre_echo_repair over-processing guard: diff_rms/sig_rms=%.3f > 0.25, rollback",
+                        _pre_echo_diff_rms / _pre_echo_sig_rms,
+                    )
+                    audio = _audio_pre_pre_echo
+            except Exception as _ped50_exc:
+                logger.debug("Phase50 §4.11 pre_echo_repair non-blocking: %s", _ped50_exc)
+
         n_channels = 1 if audio.ndim == 1 else audio.shape[1]
         is_stereo = audio.ndim == 2
         total_bins = 0
@@ -462,7 +495,7 @@ class SpectralRepairPhase(PhaseInterface):
         # §2.46e Hallucination-Guard: Additive Spectral-Reparatur kann Energie über Ceiling hinzufügen
         try:
             # pylint: disable-next=import-outside-toplevel
-            from backend.core.hallucination_guard import apply_hallucination_guard
+            from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg50
 
             _material_50 = kwargs.get("material_type", "unknown")
             _mono_50 = (
@@ -482,18 +515,24 @@ class SpectralRepairPhase(PhaseInterface):
                 "reel_tape": 18000.0,
                 "cassette": 15000.0,
             }.get(str(_material_50).lower().replace(" ", "_"))
-            _, _hg_meta_50 = apply_hallucination_guard(
+            _hg_result50 = _check_hg50(
                 _audio_mono_50.astype(np.float32),
                 _mono_50.astype(np.float32),
                 sr=sample_rate,
                 material_bw_ceiling_hz=_bw_ceiling_50,
-                mode="restoration",  # phase_50 ist immer restorative
+                mode="restoration",
             )
-            if _hg_meta_50.get("hallucination_decision") == "rollback":
+            if _hg_result50.requires_rollback:
                 logger.warning(
-                    "§2.46e phase_50 Hallucination-Guard rollback: %s", _hg_meta_50.get("hallucination_severity")
+                    "§2.46e phase_50 Hallucination-Guard rollback: spectral_novelty=%.3f", _hg_result50.spectral_novelty
                 )
                 repaired_audio = audio.copy()
+            if _hg_result50.score_penalty > 0:
+                logger.info(
+                    "§2.46e phase_50 score_penalty=%.1f (spectral_novelty=%.3f)",
+                    _hg_result50.score_penalty,
+                    _hg_result50.spectral_novelty,
+                )
         except Exception as _hg50_exc:
             logger.debug("§2.46e phase_50 Hallucination-Guard (non-blocking): %s", _hg50_exc)
 

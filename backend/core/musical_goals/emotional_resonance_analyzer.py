@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class EmotionalResonanceAnalysis:
-    """Analyse-Report der emotionalen Resonanz"""
+    """Analyse-Report der emotionalen Resonanz."""
 
     vocal_warmth: float  # 0.0-1.0
     dynamic_expression: float  # 0.0-1.0
@@ -96,7 +96,7 @@ class EmotionalResonanceAnalyzer:
 
     def analyze(self, audio: np.ndarray, sr: int) -> EmotionalResonanceAnalysis:
         """
-        Analysiert emotionale Resonanz
+        Analysiert emotionale Resonanz.
 
         Args:
             audio: Input audio (mono oder stereo)

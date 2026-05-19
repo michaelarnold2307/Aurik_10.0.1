@@ -13,7 +13,7 @@ from backend.defect_detection.base import DefectDetector, DefectInstance, Defect
 
 class BroadbandNoiseDetector(DefectDetector):
     """
-    Detects broadband background noise.
+    Erkennt broadband background noise.
 
     Analyzes spectral flatness and SNR to estimate noise floor.
     """
@@ -22,7 +22,7 @@ class BroadbandNoiseDetector(DefectDetector):
         super().__init__(name="noise_detector", defect_type=DefectType.BROADBAND_NOISE)
 
     def detect(self, audio: np.ndarray, sr: int, tolerance: float = 0.1, **kwargs) -> list[DefectInstance]:
-        """Detect broadband noise, kontextbewusst."""
+        """Erkennt broadband noise, kontextbewusst."""
         if audio.ndim == 2:
             audio = audio[:, 0]
         _freqs, psd = welch(audio, sr, nperseg=min(2048, len(audio) // 4))

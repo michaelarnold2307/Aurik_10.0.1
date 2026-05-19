@@ -31,7 +31,7 @@ _lock = threading.Lock()
 def get_stem_merger(
     spectral_weight: float = 0.7, phase_align: bool = True, loudness_match: bool = True
 ) -> MergeStemsSOTA:
-    """Get or create MergeStemsSOTA singleton.
+    """Gibt zurück: or create MergeStemsSOTA singleton.
 
     Args:
         spectral_weight: Spectral weighting factor (only used on first call)

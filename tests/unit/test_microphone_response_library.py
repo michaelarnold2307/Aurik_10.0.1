@@ -57,13 +57,13 @@ class TestMicrophoneResponseLibraryImport:
 
 class TestGetProfile:
     def test_shellac_1930_jazz_returns_profile(self):
-        from backend.core.microphone_response_library import get_microphone_response_library
+        from backend.core.microphone_response_library import MicrophoneProfile, get_microphone_response_library
 
         lib = get_microphone_response_library()
         profile = lib.get_profile(era_decade=1930, genre_label="jazz", material_type="shellac")
         assert profile is not None
-        assert isinstance(profile, dict)
-        assert "id" in profile
+        assert isinstance(profile, MicrophoneProfile)
+        assert profile.profile_id != "" or profile.name != ""
 
     def test_vinyl_1960_rock_returns_profile(self):
         from backend.core.microphone_response_library import get_microphone_response_library
@@ -78,9 +78,11 @@ class TestGetProfile:
 
         lib = get_microphone_response_library()
         profile = lib.get_profile(era_decade=2010, genre_label="electronic", material_type="cd")
+        from backend.core.microphone_response_library import MicrophoneProfile
+
         # Kann None sein wenn kein Match, aber soll keinen Crash verursachen
         # (Profile haben Ärabereich bis ~1970s/1980s)
-        assert profile is None or isinstance(profile, dict)
+        assert profile is None or isinstance(profile, MicrophoneProfile)
 
     def test_era_scoring_prefers_closer_decade(self):
         """1930er Profil wird für 1935 bevorzugt, nicht 1960er."""

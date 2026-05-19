@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_aurik_mode(aurik_mode: str | None) -> str:
-    """Normalize external mode aliases to canonical values."""
+    """Normalisiert external mode aliases to canonical values."""
     _m = str(aurik_mode or "restoration").strip().lower().replace("_", "").replace(" ", "")
     if _m in {"studio2026", "studio", "highendstudio", "maximum"}:
         return "studio2026"
@@ -122,7 +122,7 @@ class IntegratedVocalTimeline:
     studio_strategy: str
 
     def get_processing_at_time(self, timestamp: float) -> IntegratedVocalSegment | None:
-        """Get processing information at specific timestamp."""
+        """Gibt zurück: processing information at specific timestamp."""
         for segment in self.segments:
             if segment.start_time <= timestamp < segment.end_time:
                 return segment
@@ -143,7 +143,7 @@ class IntegratedVocalTimeline:
 
 class IntegratedVocalProcessor:
     """
-    Combines lyrics-guided processing with semantic understanding
+    Kombiniert lyrics-guided processing with semantic understanding.
     for comprehensive vocal enhancement.
 
     This processor:
@@ -154,7 +154,7 @@ class IntegratedVocalProcessor:
     """
 
     def __init__(self):
-        """Initialize integrated processor."""
+        """Initialisiert integrated processor."""
         self.lyrics_aligner = LyricsAligner(use_whisper=True, use_mfa=True)
         self.content_processor = ContentAwareProcessor()
         self.semantic_analyzer = SemanticAudioAnalyzer()
@@ -170,7 +170,7 @@ class IntegratedVocalProcessor:
         provided_lyrics: str | None = None,
     ) -> "IntegratedVocalTimeline":
         """
-        Create integrated vocal processing timeline.
+        Erstellt integrated vocal processing timeline.
 
         Args:
             audio: Input audio (mono or stereo)
@@ -355,7 +355,7 @@ class IntegratedVocalProcessor:
         timestamp: float,
         segments: list[ContentSegment],
     ) -> ContentSegment | None:
-        """Find content segment at given timestamp."""
+        """Findet das Inhaltssegment beim gegebenen Zeitstempel."""
         for seg in segments:
             if seg.start_time <= timestamp < seg.end_time:
                 return seg
@@ -368,7 +368,7 @@ class IntegratedVocalProcessor:
         semantic_profile: SemanticProfile,
         aurik_mode: str,
     ) -> VocalProcessingMode:
-        """Determine processing mode for word."""
+        """Bestimmt processing mode for word."""
         # Check phoneme types
         has_sibilants = any(p.phoneme_type == "sibilant" for p in word.phonemes)
         has_plosives = any(p.phoneme_type == "plosive" for p in word.phonemes)
@@ -394,7 +394,7 @@ class IntegratedVocalProcessor:
         phonemes: list[PhonemeAlignment],
         semantic_profile: SemanticProfile,
     ) -> float:
-        """Compute de-essing amount based on sibilant content."""
+        """Berechnet de-essing amount based on sibilant content."""
         sibilant_count = sum(1 for p in phonemes if p.phoneme_type == "sibilant")
 
         if sibilant_count == 0:
@@ -415,7 +415,7 @@ class IntegratedVocalProcessor:
         phonemes: list[PhonemeAlignment],
         semantic_profile: SemanticProfile,
     ) -> float:
-        """Compute transient preservation amount."""
+        """Berechnet transient preservation amount."""
         # Count plosives (strong transients)
         plosive_count = sum(1 for p in phonemes if p.phoneme_type == "plosive")
 
@@ -438,7 +438,7 @@ class IntegratedVocalProcessor:
         semantic_profile: SemanticProfile,
         aurik_mode: str,
     ) -> float:
-        """Compute clarity enhancement amount."""
+        """Berechnet clarity enhancement amount."""
         # Base enhancement
         if aurik_mode == "restoration":
             base_enhancement = 0.3
@@ -461,7 +461,7 @@ class IntegratedVocalProcessor:
         content_seg: ContentSegment | None,
         aurik_mode: str,
     ) -> str:
-        """Determine how to handle breath sounds."""
+        """Bestimmt how to handle breath sounds."""
         if content_seg and content_seg.content_type == ContentType.BREATH:
             if aurik_mode == "restoration":
                 return "preserve"
@@ -476,7 +476,7 @@ class IntegratedVocalProcessor:
         semantic_profile: SemanticProfile,
         aurik_mode: str,
     ) -> dict[str, float]:
-        """Compute global processing parameters."""
+        """Berechnet global processing parameters."""
         # Average sibilant reduction across all vocal segments
         vocal_segments = [s for s in segments if s.content_type == ContentType.VOCAL]
 
@@ -518,7 +518,7 @@ class IntegratedVocalProcessor:
         segments: list[IntegratedVocalSegment],
         semantic_profile: SemanticProfile,
     ) -> str:
-        """Generate restoration strategy description."""
+        """Generiert restoration strategy description."""
         vocal_count = sum(1 for s in segments if s.content_type == ContentType.VOCAL)
         sibilant_count = sum(1 for s in segments for p in s.phonemes if p.phoneme_type == "sibilant")
 
@@ -536,7 +536,7 @@ class IntegratedVocalProcessor:
         segments: list[IntegratedVocalSegment],
         semantic_profile: SemanticProfile,
     ) -> str:
-        """Generate studio strategy description."""
+        """Generiert studio strategy description."""
         vocal_count = sum(1 for s in segments if s.content_type == ContentType.VOCAL)
 
         return (

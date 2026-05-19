@@ -45,7 +45,7 @@ class QualityFeedbackLoop:
 
     def __init__(self, target_naturalness: float = 0.80, max_iterations: int = 2, min_improvement: float = 0.02):
         """
-        Initialize feedback loop.
+        Initialisiert feedback loop.
 
         Args:
             target_naturalness: Target naturalness score (0-1)
@@ -61,7 +61,7 @@ class QualityFeedbackLoop:
         self, phase: PhaseInterface, audio: np.ndarray, sample_rate: int = 44100, **kwargs
     ) -> PhaseResult:
         """
-        Process audio with iterative quality feedback.
+        Verarbeitet audio with iterative quality feedback.
 
         Args:
             phase: Phase to process with
@@ -284,7 +284,7 @@ class QualityGating:
 
     def __init__(self, min_expected_improvement: float = 0.05):
         """
-        Initialize quality gating.
+        Initialisiert quality gating.
 
         Args:
             min_expected_improvement: Minimum improvement to process (0-1)

@@ -1,5 +1,5 @@
 """
-Optimized DSP Module for AURIK v8
+Optimiertes DSP-Modul für AURIK v8.
 ==================================
 
 High-performance DSP operations using:

@@ -26,7 +26,7 @@ logger = setup_logger(__name__)
 
 class PhonemeCategory(Enum):
     """
-    Main phoneme categories.
+    Haupt-phoneme categories.
 
     Categories are organized by articulation manner for consonants
     and height/backness for vowels.
@@ -307,7 +307,7 @@ class PhonemeClassifier:
     }
 
     def __init__(self):
-        """Initialize phoneme classifier."""
+        """Initialisiert phoneme classifier."""
         logger.info("PhonemeClassifier initialized with %s phoneme mappings", len(self._PHONEME_MAPPINGS))
 
     def classify(self, phoneme: str) -> PhonemeCategory:
@@ -330,7 +330,7 @@ class PhonemeClassifier:
 
     def classify_detailed(self, phoneme: str) -> PhonemeInfo:
         """
-        Get detailed phoneme classification.
+        Gibt zurück: detailed phoneme classification.
 
         Args:
             phoneme: IPA phoneme symbol
@@ -381,12 +381,12 @@ class PhonemeClassifier:
         )
 
     def is_vowel(self, phoneme: str) -> bool:
-        """Check if phoneme is a vowel."""
+        """Prüft if phoneme is a vowel."""
         category = self.classify(phoneme)
         return category in [PhonemeCategory.VOWEL_CLOSE, PhonemeCategory.VOWEL_MID, PhonemeCategory.VOWEL_OPEN]
 
     def is_consonant(self, phoneme: str) -> bool:
-        """Check if phoneme is a consonant."""
+        """Prüft if phoneme is a consonant."""
         return not self.is_vowel(phoneme) and self.classify(phoneme) not in [
             PhonemeCategory.SILENCE,
             PhonemeCategory.BREATH,
@@ -394,7 +394,7 @@ class PhonemeClassifier:
         ]
 
     def is_sibilant(self, phoneme: str) -> bool:
-        """Check if phoneme is a sibilant."""
+        """Prüft if phoneme is a sibilant."""
         category = self.classify(phoneme)
         return category in [
             PhonemeCategory.SIBILANT_ALVEOLAR,
@@ -403,13 +403,13 @@ class PhonemeClassifier:
         ]
 
     def is_voiced(self, phoneme: str) -> bool:
-        """Check if phoneme is voiced."""
+        """Prüft if phoneme is voiced."""
         phoneme = phoneme.strip().lower()
         return phoneme in self._VOICED_PHONEMES
 
     def get_sibilant_type(self, phoneme: str) -> SibilantType | None:
         """
-        Get detailed sibilant type.
+        Gibt zurück: detailed sibilant type.
 
         Args:
             phoneme: IPA phoneme symbol
@@ -422,7 +422,7 @@ class PhonemeClassifier:
 
     def get_place(self, phoneme: str) -> ArticulationPlace | None:
         """
-        Get articulation place for consonant.
+        Gibt zurück: articulation place for consonant.
 
         Args:
             phoneme: IPA phoneme symbol
@@ -435,7 +435,7 @@ class PhonemeClassifier:
 
     def get_frequency_center(self, phoneme: str) -> float | None:
         """
-        Get typical spectral center frequency for sibilant.
+        Gibt zurück: typical spectral center frequency for sibilant.
 
         Args:
             phoneme: IPA phoneme symbol
@@ -467,12 +467,12 @@ class PhonemeClassifier:
         return frequency_map.get(sibilant_type)
 
     def get_supported_phonemes(self) -> set[str]:
-        """Get set of all supported IPA phonemes."""
+        """Gibt zurück: set of all supported IPA phonemes."""
         return set(self._PHONEME_MAPPINGS.keys())
 
     def get_statistics(self) -> dict[str, int]:
         """
-        Get classifier statistics.
+        Gibt zurück: classifier statistics.
 
         Returns:
             Dictionary with counts:

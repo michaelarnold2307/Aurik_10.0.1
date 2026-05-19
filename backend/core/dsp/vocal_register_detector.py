@@ -41,6 +41,19 @@ _ENERGY_BIAS_CHEST = -6.0
 _ENERGY_BIAS_FRY_WHISPER = -9.0
 _ENERGY_BIAS_FALSETTO = -4.5  # Falsetto: zwischen Kopf (-3) und Fry (-9)
 
+# Kanonisches Register→Energy-Bias-Mapping — einzige Quelle der Wahrheit (§0j / §0p).
+# Importierbar von allen DSP-/Plugin-Modulen; nie lokal duplizieren.
+REGISTER_BIAS: dict[str, float] = {
+    "chest": _ENERGY_BIAS_CHEST,  # −6.0 dB
+    "head": _ENERGY_BIAS_HEAD,  # −3.0 dB
+    "falsetto": _ENERGY_BIAS_FALSETTO,  # −4.5 dB
+    "fry_whisper": _ENERGY_BIAS_FRY_WHISPER,  # −9.0 dB  (kombiniertes Detektor-Label)
+    "passaggio": _ENERGY_BIAS_HEAD,  # −3.0 dB  (Mittelwert Brust/Kopf, §0p)
+    "fry": -12.0,  # −12.0 dB (eigenständiges Fry-Label, §0p)
+    "whisper": -15.0,  # −15.0 dB (maximaler Schutz, §0p)
+    "unknown": _ENERGY_BIAS_CHEST,  # −6.0 dB  (Fallback)
+}
+
 
 def _spectral_flatness(mono: np.ndarray, sr: int) -> float:
     """Mittlere spektrale Flachheit (Wiener-Entropie, [0,1])."""
@@ -187,6 +200,7 @@ class _VocalRegisterCache:
         self._cache: dict[int, tuple[str, float]] = {}  # id(audio) → result
 
     def get_or_compute(self, audio: np.ndarray, sr: int, panns_singing: float) -> tuple[str, float]:
+        """Gibt cached register detection for the audio object or compute it zurück."""
         key = id(audio)
         with self._lock:
             if key in self._cache:
@@ -477,9 +491,13 @@ def detect_multi_singer(
             hss_residual = hss.copy()
             hss_residual[suppress_mask] = 0.0
 
-            # Zweiter Peak: muss signifikant sein (>40% des ersten)
+            # §Gap9 v9.12.8: Zweiter Peak: muss signifikant sein (>55% des ersten).
+            # Schwellwert-Anhebung von 0.40 → 0.55: Hintergrundchor typischerweise
+            # 40–55% Energie des Solisten → löst kein Multi-Singer-Gate mehr aus.
+            # Nur echte Duette / gleichberechtigte Chöre (> 55%) deaktivieren das
+            # singer_identity_cosine-Gate (§0p VQI-Gate).
             second_peak = float(np.max(hss_residual))
-            if second_peak > 0.40 * float(hss[best_idx]):
+            if second_peak > 0.55 * float(hss[best_idx]):
                 multi_f0_frame_count += 1
 
         if total_voiced_frames < 5:

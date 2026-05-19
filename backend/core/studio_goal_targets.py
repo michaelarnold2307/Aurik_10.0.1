@@ -220,7 +220,7 @@ def estimate_song_goal_targets(
     material_type: object = None,
     transfer_chain: list[str] | None = None,
 ) -> SongGoalTargets:
-    """Estimate per-song targets for all goals.
+    """Schätzt per-song targets for all goals.
 
     Formula:
         target = clip(

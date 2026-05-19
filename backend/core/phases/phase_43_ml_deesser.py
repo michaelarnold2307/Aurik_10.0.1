@@ -234,7 +234,7 @@ def _deess_channel(
 
 
 def _band_rms(audio: np.ndarray, sr: int, low_hz: float, high_hz: float) -> float:
-    """Return RMS in a frequency band (zero-phase when possible)."""
+    """Gibt RMS in a frequency band (zero-phase when possible) zurück."""
     mono = safe_to_mono(audio) if audio.ndim == 2 else audio
     mono = np.nan_to_num(mono.astype(np.float64), nan=0.0, posinf=0.0, neginf=0.0)
     nyq = sr / 2.0
@@ -249,7 +249,7 @@ def _band_rms(audio: np.ndarray, sr: int, low_hz: float, high_hz: float) -> floa
 
 
 def _overall_rms(audio: np.ndarray) -> float:
-    """Return overall RMS for mono or stereo."""
+    """Gibt overall RMS for mono or stereo zurück."""
     x = np.nan_to_num(audio.astype(np.float64), nan=0.0, posinf=0.0, neginf=0.0)
     return float(np.sqrt(np.mean(x**2) + 1e-12))
 
@@ -414,6 +414,32 @@ class AdaptiveDeEsserPhase(PhaseInterface):
         nyquist = sample_rate / 2.0
         freq_high = min(freq_high, nyquist * 0.98)
         freq_low = min(freq_low, freq_high * 0.90)
+
+        # §Lücke4 Sibilance-Pathology-Klassifikation — vor Haupt-DSP
+        # NATURAL: kein De-Essing (strength → 0), MASKED_HISS: nur NR-Pfad,
+        # DISTORTED: Reparatur-Pfad (volle strength erlaubt).
+        try:
+            from backend.core.dsp.sibilance_pathology import (  # pylint: disable=import-outside-toplevel
+                classify_sibilance_pathology,
+                get_sibilance_pathology_summary,
+            )
+
+            _sib_segs = classify_sibilance_pathology(audio, sr=sample_rate, f0_hz=0.0)
+            _sib_summary = get_sibilance_pathology_summary(_sib_segs)
+            if _sib_summary.get("dominant_type") == "NATURAL" and _sib_summary.get("natural_fraction", 0.0) > 0.70:
+                # Überwiegend natürliche Sibilanz → kein De-Essing
+                strength_cap = min(strength_cap, 0.05)
+                logger.debug(
+                    "Phase 43 §Lücke4: dominant=NATURAL natural_frac=%.2f → strength_cap=%.2f",
+                    _sib_summary.get("natural_fraction", 0.0),
+                    strength_cap,
+                )
+            elif _sib_summary.get("dominant_type") == "MASKED_HISS":
+                # Hiss-überlagerte Sibilanz → sehr konservatives De-Essing
+                strength_cap = min(strength_cap, 0.30)
+                logger.debug("Phase 43 §Lücke4: dominant=MASKED_HISS → strength_cap=%.2f", strength_cap)
+        except Exception as _sib_exc:
+            logger.debug("Phase 43 §Lücke4 Sibilance-Pathology: fallback — %s", _sib_exc)
 
         x = audio.astype(np.float64)
 

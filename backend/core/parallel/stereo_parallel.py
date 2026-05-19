@@ -75,7 +75,7 @@ class StereoParallelProcessor:
 
     def __init__(self, max_workers: int = 2, enable_parallel: bool = True, timeout: float | None = None):
         """
-        Initialize stereo parallel processor.
+        Initialisiert stereo parallel processor.
 
         Args:
             max_workers: Number of parallel workers (default: 2 for L/R)
@@ -91,7 +91,7 @@ class StereoParallelProcessor:
         self, left: np.ndarray, right: np.ndarray, sr: int, process_func: Callable[[np.ndarray, int], np.ndarray]
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Process stereo audio in parallel.
+        Verarbeitet stereo audio in parallel.
 
         Processes left and right channels simultaneously using separate threads,
         providing ~1.8× speedup compared to sequential processing.
@@ -168,7 +168,7 @@ class StereoParallelProcessor:
         self, audio: np.ndarray, sr: int, process_func: Callable[[np.ndarray, int], np.ndarray], channel: ChannelType
     ) -> ProcessingResult:
         """
-        Process a single audio channel.
+        Verarbeitet a single audio channel.
 
         Args:
             audio: Audio data
@@ -217,7 +217,7 @@ class StereoParallelProcessor:
         self, left: np.ndarray, right: np.ndarray, sr: int, process_func: Callable[[np.ndarray, int], np.ndarray]
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Process channels sequentially (fallback mode).
+        Verarbeitet channels sequentially (fallback mode).
 
         Args:
             left: Left channel audio
@@ -242,7 +242,7 @@ class StereoParallelProcessor:
         return result_left.audio, result_right.audio
 
     def _update_stats(self, total_time: float, result_left: ProcessingResult, result_right: ProcessingResult):
-        """Update processing statistics."""
+        """Aktualisiert processing statistics."""
         self._processing_stats["total_processed"] += 1
 
         # Calculate speedup (theoretical max = 2×, practical ~1.8×)
@@ -255,7 +255,7 @@ class StereoParallelProcessor:
 
     def get_average_speedup(self) -> float:
         """
-        Get average parallel speedup.
+        Gibt zurück: average parallel speedup.
 
         Returns:
             Average speedup factor (expected ~1.8×)
@@ -267,7 +267,7 @@ class StereoParallelProcessor:
 
     def get_stats(self) -> dict[str, Any]:
         """
-        Get processing statistics.
+        Gibt zurück: processing statistics.
 
         Returns:
             Dictionary with processing stats
@@ -280,7 +280,7 @@ class StereoParallelProcessor:
         }
 
     def reset_stats(self):
-        """Reset processing statistics."""
+        """Setzt zurück: processing statistics."""
         self._processing_stats = {"total_processed": 0, "parallel_speedup": [], "errors": []}
 
 
@@ -299,7 +299,7 @@ class StereoProcessingPipeline:
 
     def __init__(self, pipeline: Any, enable_parallel: bool = True, max_workers: int = 2):
         """
-        Initialize stereo processing pipeline.
+        Initialisiert stereo processing pipeline.
 
         Args:
             pipeline: Processing pipeline with process() method
@@ -311,7 +311,7 @@ class StereoProcessingPipeline:
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Process audio (mono or stereo).
+        Verarbeitet audio (mono or stereo).
 
         Automatically detects stereo audio and processes in parallel.
         Mono audio is passed through to the original pipeline.
@@ -344,5 +344,5 @@ class StereoProcessingPipeline:
             raise ValueError(f"Invalid audio shape: {audio.shape}")
 
     def get_stats(self) -> dict[str, Any]:
-        """Get processing statistics."""
+        """Gibt zurück: processing statistics."""
         return self.processor.get_stats()

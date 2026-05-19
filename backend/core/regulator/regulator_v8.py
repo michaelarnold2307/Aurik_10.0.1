@@ -115,7 +115,7 @@ class RegulatorV8:
     }
 
     def __init__(self):
-        """Initialize Regulator."""
+        """Initialisiert Regulator."""
         self.stats = {
             "allow_count": 0,
             "adjust_down_count": 0,
@@ -287,7 +287,7 @@ class RegulatorV8:
         return decision
 
     def _make_hard_stop_decision(self, violations: list[str], severities: dict[str, float]) -> RegulatorDecision:
-        """Create hard stop decision."""
+        """Erstellt hard stop decision."""
         return RegulatorDecision(
             decision=DecisionType.HARD_STOP,
             allowed=False,
@@ -312,7 +312,7 @@ class RegulatorV8:
         current_parameters: dict[str, float],
         severity: str,
     ) -> RegulatorDecision:
-        """Create adjust down decision with parameter modifications."""
+        """Erstellt adjust down decision with parameter modifications."""
         # Get adjustment multipliers
         multipliers = self.ADJUSTMENT_STRATEGIES[severity]
 
@@ -353,7 +353,7 @@ class RegulatorV8:
         )
 
     def _make_allow_decision(self) -> RegulatorDecision:
-        """Create allow decision."""
+        """Erstellt allow decision."""
         return RegulatorDecision(
             decision=DecisionType.ALLOW,
             allowed=True,
@@ -363,11 +363,11 @@ class RegulatorV8:
         )
 
     def get_statistics(self) -> dict[str, int]:
-        """Get regulator decision statistics."""
+        """Gibt zurück: regulator decision statistics."""
         return self.stats.copy()
 
     def reset_statistics(self):
-        """Reset regulator statistics."""
+        """Setzt zurück: regulator statistics."""
         self.stats = {
             "allow_count": 0,
             "adjust_down_count": 0,

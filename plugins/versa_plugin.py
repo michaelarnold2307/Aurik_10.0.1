@@ -111,7 +111,7 @@ class VersaPlugin:
 
     @staticmethod
     def _vocal_confidence(audio: np.ndarray, sr: int) -> float:
-        """Returns vocal confidence [0, 1] from PANNs for SingMOS gating."""
+        """Gibt vocal confidence [0, 1] from PANNs for SingMOS gating zurück."""
         try:
             from plugins.panns_plugin import get_panns_plugin
 

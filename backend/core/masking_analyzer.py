@@ -108,12 +108,12 @@ class MaskingProfile:
 
     @property
     def shape(self) -> tuple[int, int]:
-        """Returns (freq_bins, time_frames)."""
+        """Gibt (freq_bins, time_frames) zurück."""
         return self.masking_threshold_db.shape
 
     def get_audible_mask(self, threshold_db: float = 0.0) -> np.ndarray:
         """
-        Get binary mask of audible components (signal > masking threshold).
+        Gibt zurück: binary mask of audible components (signal > masking threshold).
 
         Args:
             threshold_db: Additional threshold in dB
@@ -125,7 +125,7 @@ class MaskingProfile:
 
     def get_masked_components_ratio(self) -> float:
         """
-        Get ratio of masked components (inaudible).
+        Gibt zurück: ratio of masked components (inaudible).
 
         Returns:
             Ratio of masked components (0-1)
@@ -188,7 +188,7 @@ class MaskingAnalyzer:
 
     def __init__(self, config: MaskingConfig | None = None):
         """
-        Initialize masking analyzer.
+        Initialisiert masking analyzer.
 
         Args:
             config: Masking configuration (uses defaults if None)
@@ -201,7 +201,7 @@ class MaskingAnalyzer:
 
     def analyze(self, audio: np.ndarray, sr: int) -> MaskingProfile:
         """
-        Analyze audio and compute masking profile.
+        Analysiert Audio und berechnet das Maskierungsprofil.
 
         Args:
             audio: Input audio (mono)
@@ -256,7 +256,7 @@ class MaskingAnalyzer:
 
     def _compute_absolute_threshold(self, frequencies: np.ndarray) -> np.ndarray:
         """
-        Compute absolute threshold of hearing for frequency bins.
+        Berechnet absolute threshold of hearing for frequency bins.
 
         Args:
             frequencies: Frequency bins in Hz
@@ -275,7 +275,7 @@ class MaskingAnalyzer:
 
     def _compute_simultaneous_masking(self, power_db: np.ndarray, frequencies: np.ndarray, sr: int) -> np.ndarray:
         """
-        Compute simultaneous (frequency) masking threshold.
+        Berechnet simultaneous (frequency) masking threshold.
 
         Uses simplified spreading function.
 
@@ -343,7 +343,7 @@ class MaskingAnalyzer:
 
     def _compute_temporal_masking(self, power_db: np.ndarray, times: np.ndarray, sr: int) -> np.ndarray:
         """
-        Compute temporal (pre/post) masking threshold.
+        Berechnet temporal (pre/post) masking threshold.
 
         Args:
             power_db: Signal power in dB (freq, time)
@@ -396,7 +396,7 @@ class MaskingAnalyzer:
         self, audio: np.ndarray, sr: int, profile: MaskingProfile | None = None, threshold_db: float = 0.0
     ) -> np.ndarray:
         """
-        Remove masked (inaudible) components from audio.
+        Entfernt masked (inaudible) components from audio.
 
         Args:
             audio: Input audio
@@ -440,7 +440,7 @@ class MaskingAnalyzer:
 
     def compute_smr(self, audio: np.ndarray, sr: int) -> float:
         """
-        Compute Signal-to-Mask Ratio (SMR) for audio.
+        Berechnet Signal-to-Mask Ratio (SMR) for audio.
 
         SMR indicates how much of the signal is audible above masking.
         Higher SMR = more audible content.

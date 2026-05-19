@@ -89,7 +89,7 @@ class AirPresenceEnhancer:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict[str, float]]:
         """
-        Apply Air & Presence enhancement
+        Wendet Air- und Präsenz-Verbesserung an.
 
         Parameters
         ----------
@@ -131,7 +131,7 @@ class AirPresenceEnhancer:
 
     def _process_channel(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
-        Process single channel
+        Verarbeitet single channel.
 
         Parameters
         ----------
@@ -174,7 +174,7 @@ class AirPresenceEnhancer:
 
     def _apply_high_shelf(self, audio: np.ndarray, sr: int, freq: float, gain_db: float, q: float) -> np.ndarray:
         """
-        Apply High-Shelf EQ
+        Wendet an: High-Shelf EQ.
 
         Parameters
         ----------
@@ -221,7 +221,7 @@ class AirPresenceEnhancer:
 
     def _apply_bell(self, audio: np.ndarray, sr: int, freq: float, gain_db: float, q: float) -> np.ndarray:
         """
-        Apply Bell (Peaking) EQ
+        Wendet Bell-(Peaking)-EQ an.
 
         Parameters
         ----------
@@ -263,7 +263,7 @@ class AirPresenceEnhancer:
 
     def _apply_micro_reverb(self, audio: np.ndarray, sr: int, mix: float) -> np.ndarray:
         """
-        Apply Micro-Reverb (<50ms) for "Space"
+        Wendet an: Micro-Reverb (<50ms) for "Space.
 
         Simple early reflections simulation.
 
@@ -307,7 +307,7 @@ class AirPresenceEnhancer:
 
     def _generate_report(self, original: np.ndarray, enhanced: np.ndarray, sr: int) -> dict[str, float]:
         """
-        Generate processing report
+        Generiert processing report.
 
         Parameters
         ----------

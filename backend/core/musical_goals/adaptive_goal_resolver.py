@@ -38,7 +38,7 @@ GOAL_ALIASES: dict[str, tuple[str, ...]] = {
 
 
 def resolve_adaptive_goal_thresholds(adaptive_goals_payload: Any) -> dict[str, float]:
-    """Extract canonical adaptive thresholds for all 14 musical goals from mixed payloads.
+    """Extrahiert canonical adaptive thresholds for all 14 musical goals from mixed payloads.
 
     Supported payload shapes:
     - ``tuple`` / ``list``: e.g. the 3-tuple returned by

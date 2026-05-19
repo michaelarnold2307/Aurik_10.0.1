@@ -150,13 +150,13 @@ class HumRemovalPhase(PhaseInterface):
     }
 
     def __init__(self):
-        """Initialize Phase 2 Hum Removal."""
+        """Initialisiert Phase 2 Hum Removal."""
         self._deepfilternet_plugin = None
         self.sample_rate = 48000  # Default, will be updated in process()
 
     def _get_deepfilternet_plugin(self):
         """
-        Lazy load DeepFilterNet v3 II Plugin.
+        Lädt DeepFilterNet v3 II Plugin beim ersten Zugriff.
 
         Returns:
             DeepFilterNet plugin or None if unavailable
@@ -197,7 +197,7 @@ class HumRemovalPhase(PhaseInterface):
         quality_mode: str | None = "balanced",
         restorability: float = 50.0,
     ) -> dict:
-        """Compute material-adaptive hum-removal profile (§2.56)."""
+        """Berechnet material-adaptive hum-removal profile (§2.56)."""
         _material = str(material or "unknown").lower()
         _base_max_drop: dict[str, float] = {
             "shellac": 4.2,
@@ -497,7 +497,7 @@ class HumRemovalPhase(PhaseInterface):
 
     def _detect_multi_fundamental(self, audio: np.ndarray, params: dict[str, Any]) -> list[int]:
         """
-        Detect multiple fundamental hum frequencies (50 Hz, 60 Hz, or both).
+        Erkennt multiple fundamental hum frequencies (50 Hz, 60 Hz, or both).
 
         Returns:
             List of detected fundamental frequencies
@@ -623,7 +623,7 @@ class HumRemovalPhase(PhaseInterface):
         self, audio: np.ndarray, fundamental: int, max_harmonics: int, threshold_db: float
     ) -> list[float]:
         """
-        Track present harmonics of a fundamental frequency.
+        Verfolgt present harmonics of a fundamental frequency.
 
         Returns:
             List of harmonic frequencies (only those actually present)
@@ -667,7 +667,7 @@ class HumRemovalPhase(PhaseInterface):
         self, audio: np.ndarray, harmonic_data: list[dict], params: dict[str, Any]
     ) -> tuple[np.ndarray, dict[str, Any]]:
         """
-        Apply adaptive comb filters with side-chain detection.
+        Wendet adaptive Kammfilter mit Sidechain-Erkennung an.
 
         Returns:
             (filtered_audio, statistics)
@@ -717,7 +717,7 @@ class HumRemovalPhase(PhaseInterface):
 
     def _apply_notch_filter(self, audio: np.ndarray, freq: float, q_factor: float) -> np.ndarray:
         """
-        Apply phase-linear notch filter at specified frequency.
+        Wendet an: phase-linear notch filter at specified frequency.
 
         Uses filtfilt for zero-phase filtering (preserve transients).
         """
@@ -742,7 +742,7 @@ class HumRemovalPhase(PhaseInterface):
 
     def _detect_musical_content(self, audio: np.ndarray, freq: float) -> bool:
         """
-        Detect if frequency band contains musical content (not just hum).
+        Erkennt if frequency band contains musical content (not just hum).
 
         Musical content has:
         - Time-varying amplitude (not constant like hum)
@@ -780,12 +780,12 @@ class HumRemovalPhase(PhaseInterface):
         return False
 
     def _measure_band_energy(self, spectrum: np.ndarray, freqs: np.ndarray, freq_low: float, freq_high: float) -> float:
-        """Measure energy in frequency band."""
+        """Misst energy in frequency band."""
         mask = (freqs >= freq_low) & (freqs <= freq_high)
         return np.sum(spectrum[mask] ** 2)
 
     def _measure_hum_at_freq(self, audio: np.ndarray, freq: float) -> float:
-        """Measure hum energy at specific frequency (±2 Hz)."""
+        """Misst hum energy at specific frequency (±2 Hz)."""
         # Short FFT
         fft_size = min(len(audio), int(2 * self.sample_rate))
         freqs = np.fft.rfftfreq(fft_size, 1 / self.sample_rate)

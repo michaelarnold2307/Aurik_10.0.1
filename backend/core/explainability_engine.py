@@ -9,7 +9,7 @@ from __future__ import annotations
 
 
 class ExplainabilityEngine:
-    """Generates German explanation strings for audio restoration phases."""
+    """Generiert German explanation strings for audio restoration phases."""
 
     def explain(
         self,
@@ -17,7 +17,7 @@ class ExplainabilityEngine:
         context: dict,
         metrics: dict,
     ) -> str:
-        """Return a German explanation for a restoration phase.
+        """Gibt a German explanation for a restoration phase zurück.
 
         Args:
             phase:   Name of the applied phase (e.g. "declicking", "denoising").
@@ -70,7 +70,7 @@ _explainability_engine_lock = _threading.Lock()
 
 
 def get_explainability_engine() -> ExplainabilityEngine:
-    """Return the process-wide singleton ExplainabilityEngine instance."""
+    """Gibt the process-wide singleton ExplainabilityEngine instance zurück."""
     global _explainability_engine_instance
     if _explainability_engine_instance is None:
         with _explainability_engine_lock:

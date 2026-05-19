@@ -54,7 +54,7 @@ _MIN_BOUNDARY_GAP_S: float = 0.20  # merge boundaries closer than this
 
 
 def detect_phrase_boundaries(audio: np.ndarray, sr: int) -> list[int]:
-    """Detect phrase boundaries as sample indices.
+    """Erkennt phrase boundaries as sample indices.
 
     Args:
         audio: Input audio (mono or stereo, any length).
@@ -119,7 +119,7 @@ def apply_phrase_boundary_taper(
     sr: int,
     taper_ms: float = 20.0,
 ) -> np.ndarray:
-    """Build a per-sample modulation envelope [0, 1] that fades to 0 at boundaries.
+    """Erstellt a per-sample modulation envelope [0, 1] that fades to 0 at boundaries.
 
     Use this envelope to blend dry/wet:
         output = dry + (wet - dry) * mod_env[:, np.newaxis]  # stereo

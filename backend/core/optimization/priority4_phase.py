@@ -1,5 +1,5 @@
 """
-optimization/priority4_phase.py — Multiband phase coherence enhancer
+optimization/priority4_phase.py – Mehrband-Phasenkohärenz-Verbesserer.
 =====================================================================
 
 Applies linear-phase FIR filtering per frequency band to improve
@@ -70,7 +70,7 @@ class MultibandPhaseCoherenceEnhancer:
         high_hz: float,
         numtaps: int = 101,
     ) -> np.ndarray:
-        """Extract a band using a linear-phase FIR bandpass filter.
+        """Extrahiert a band using a linear-phase FIR bandpass filter.
 
         Parameters
         ----------

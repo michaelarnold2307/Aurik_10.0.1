@@ -125,7 +125,7 @@ class BasicPitchPlugin:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
 
     def analyze(self, audio: np.ndarray, sr: int, max_polyphony: int = _DEFAULT_MAX_POLYPHONY) -> BasicPitchResult:
-        """Estimate polyphonic pitches.
+        """Schätzt polyphonic pitches.
 
         Args:
             audio: Mono or stereo PCM array.
@@ -152,7 +152,7 @@ class BasicPitchPlugin:
         return self._analyze_dsp(audio, sr, max_polyphony)
 
     def _analyze_onnx(self, audio: np.ndarray, sr: int, max_polyphony: int) -> BasicPitchResult:
-        """Run ONNX and decode top-K pitch bins per frame.
+        """Führt aus: ONNX and decode top-K pitch bins per frame.
 
         Decoder strategy is resilient to model variant differences:
         - Finds a 2D/3D output tensor with pitch-like bins.
@@ -188,7 +188,7 @@ class BasicPitchPlugin:
             out_names = [o.name for o in session.get_outputs()]
 
             def _run_chunk(chunk: np.ndarray) -> tuple[np.ndarray, int]:
-                """Run ONNX on a single fixed-length chunk; return (probs [T,BINS], bins)."""
+                """Führt aus: ONNX on a single fixed-length chunk; return (probs [T,BINS], bins)."""
                 model_in = chunk[np.newaxis, :] if chunk.ndim == 1 else chunk.reshape(1, -1)
                 model_in = model_in.astype(np.float32)
                 if expected_rank == 3 and model_in.ndim == 2:
@@ -379,7 +379,7 @@ def _select_pitch_tensor(outputs: list[np.ndarray]) -> np.ndarray | None:
 
 
 def _to_time_bins(arr: np.ndarray) -> np.ndarray:
-    """Convert arbitrary 2D/3D output to [T, BINS]."""
+    """Konvertiert arbitrary 2D/3D output to [T, BINS]."""
     a = np.asarray(arr)
     if a.ndim == 2:
         # [T, B] or [B, T]

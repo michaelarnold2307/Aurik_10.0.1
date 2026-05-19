@@ -195,7 +195,7 @@ def _to_mono(audio: npt.NDArray[Any], sr: int) -> npt.NDArray[np.float32]:  # py
 
 
 def _rms_dbfs(segment: npt.NDArray[np.float32]) -> float:
-    """Compute RMS level in dBFS. Returns -∞ for silent segments."""
+    """Berechnet RMS level in dBFS. Returns -∞ for silent segments."""
     rms = float(np.sqrt(np.mean(segment.astype(np.float64) ** 2)))
     if rms < 1e-12:
         return -120.0
@@ -404,7 +404,7 @@ def _detect_vibrato_zones(
 
 
 def _merge_overlapping_zones_vibrato(zones: list[VibratoZone]) -> list[VibratoZone]:
-    """Merge adjacent/overlapping VibratoZones."""
+    """Führt zusammen: adjacent/overlapping VibratoZones."""
     if not zones:
         return zones
     sorted_zones = sorted(zones, key=lambda z: z.start_sample)

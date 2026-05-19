@@ -55,7 +55,7 @@ class HybridVocalSeparator:
         device: str | None = None,
     ):
         """
-        Initialize hybrid separator
+        Initialisiert hybrid separator.
 
         Args:
             fusion_strategy: How to combine model outputs
@@ -321,7 +321,7 @@ class HybridVocalSeparator:
 
     def _compute_separation_quality(self, vocals: np.ndarray, instrumental: np.ndarray) -> float:
         """
-        Compute separation quality score
+        Berechnet separation quality score.
 
         Higher score = better separation
 

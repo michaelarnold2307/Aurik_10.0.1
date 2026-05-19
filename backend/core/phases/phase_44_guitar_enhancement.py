@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_formant_system_guitar():
-    """Return the cached guitar formant system instance when available."""
+    """Gibt the cached guitar formant system instance when available zurück."""
     if _FormantSystemCls is None:
         return None
     if _FORMANT_SYSTEM_GUITAR is None:

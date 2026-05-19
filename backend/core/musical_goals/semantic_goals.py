@@ -31,7 +31,7 @@ torch = None  # type: ignore[assignment]
 
 
 def _load_torch() -> bool:
-    """Load optional torch dependency only on ML inference paths."""
+    """Lädt optional torch dependency only on ML inference paths."""
     global torch
     if torch is not None:
         return True
@@ -98,7 +98,7 @@ class GoalProfile:
 
     def apply_to_base_goals(self, base_goals: dict[str, float]) -> dict[str, float]:
         """
-        Apply profile adjustments to base goals.
+        Wendet an: profile adjustments to base goals.
 
         Args:
             base_goals: Base goal values
@@ -157,12 +157,12 @@ class InstrumentProfileLibrary:
     }
 
     def __init__(self) -> None:
-        """Initialize instrument profile library"""
+        """Initialisiert instrument profile library."""
         self.profiles: dict[InstrumentCategory, GoalProfile] = {}
         self._initialize_profiles()
 
     def _initialize_profiles(self) -> None:
-        """Initialize all instrument category profiles"""
+        """Initialisiert all instrument category profiles."""
 
         # VOCALS: Prioritize Natürlichkeit, Emotionalität, Transparenz
         self.profiles[InstrumentCategory.VOCALS] = GoalProfile(
@@ -414,7 +414,7 @@ class InstrumentProfileLibrary:
 
     def get_profile(self, category: InstrumentCategory) -> GoalProfile:
         """
-        Get goal profile for instrument category.
+        Gibt zurück: goal profile for instrument category.
 
         Args:
             category: Instrument category
@@ -433,12 +433,12 @@ class SegmentProfileLibrary:
     """
 
     def __init__(self) -> None:
-        """Initialize segment profile library"""
+        """Initialisiert segment profile library."""
         self.profiles: dict[SegmentType, GoalProfile] = {}
         self._initialize_profiles()
 
     def _initialize_profiles(self) -> None:
-        """Initialize all segment type profiles"""
+        """Initialisiert all segment type profiles."""
 
         # INTRO: Build anticipation, clarity important
         self.profiles[SegmentType.INTRO] = GoalProfile(
@@ -642,7 +642,7 @@ class SegmentProfileLibrary:
 
     def get_profile(self, segment: SegmentType) -> GoalProfile:
         """
-        Get goal profile for segment type.
+        Gibt zurück: goal profile for segment type.
 
         Args:
             segment: Segment type
@@ -663,7 +663,7 @@ class SemanticGoalsEngine:
 
     def __init__(self, instrument_detector_path: Path | None = None, structure_analyzer_path: Path | None = None):
         """
-        Initialize semantic goals engine.
+        Initialisiert semantic goals engine.
 
         Args:
             instrument_detector_path: Path to MERT model
@@ -680,7 +680,7 @@ class SemanticGoalsEngine:
 
     def _load_instrument_detector(self, model_path: Path | None) -> Any | None:
         """
-        Load instrument detection model (MERT-v1-330M).
+        Lädt instrument detection model (MERT-v1-330M).
 
         Args:
             model_path: Path to model
@@ -711,7 +711,7 @@ class SemanticGoalsEngine:
 
     def _load_structure_analyzer(self, model_path: Path | None) -> Any | None:
         """
-        Load structure analysis model (madmom).
+        Lädt structure analysis model (madmom).
 
         Args:
             model_path: Path to model
@@ -732,7 +732,7 @@ class SemanticGoalsEngine:
         self, audio: np.ndarray, sr: int = 44100
     ) -> tuple[InstrumentCategory, list[InstrumentCategory], float]:
         """
-        Detect instruments in audio.
+        Erkennt instruments in audio.
 
         Args:
             audio: Audio data
@@ -808,7 +808,7 @@ class SemanticGoalsEngine:
 
     def analyze_structure(self, audio: np.ndarray, sr: int = 44100) -> list[tuple[float, float, SegmentType]]:
         """
-        Analyze music structure and detect segments.
+        Analysiert die Musikstruktur und erkennt Segmente.
 
         Args:
             audio: Audio data
@@ -864,7 +864,7 @@ class SemanticGoalsEngine:
 
     def get_semantic_context(self, audio: np.ndarray, sr: int = 44100, timestamp: float = 0.0) -> SemanticContext:
         """
-        Get semantic context for given audio and timestamp.
+        Gibt zurück: semantic context for given audio and timestamp.
 
         Args:
             audio: Audio data
@@ -941,12 +941,12 @@ class SemanticGoalsEngine:
 
 
 def get_instrument_profile(instrument: InstrumentCategory) -> GoalProfile:
-    """Get goal profile for instrument category"""
+    """Gibt zurück: goal profile for instrument category."""
     lib = InstrumentProfileLibrary()
     return lib.get_profile(instrument)
 
 
 def get_segment_profile(segment: SegmentType) -> GoalProfile:
-    """Get goal profile for segment type"""
+    """Gibt zurück: goal profile for segment type."""
     lib = SegmentProfileLibrary()
     return lib.get_profile(segment)

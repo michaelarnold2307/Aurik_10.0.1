@@ -144,7 +144,7 @@ class MushraSession:
         include_anchor: bool = True,
         seed: int | None = None,
     ) -> list[StimulusEntry]:
-        """Create randomized panel order for one listener."""
+        """Erstellt randomized panel order for one listener."""
         rng = random.Random(seed)
         panel: list[StimulusEntry] = [
             StimulusEntry(stimulus_id=c, display_name=c, kind="condition") for c in conditions
@@ -170,14 +170,14 @@ class MushraSession:
 
     @staticmethod
     def validate_listener_ratings(ratings: dict[str, float]) -> dict[str, float]:
-        """Clamp listener scores to MUSHRA range [0, 100]."""
+        """Begrenzt listener scores to MUSHRA range [0, 100]."""
         out: dict[str, float] = {}
         for k, v in ratings.items():
             out[k] = float(np.clip(float(v), 0.0, 100.0))
         return out
 
     def evaluate_listener(self, listener_id: str, ratings: dict[str, float]) -> ListenerResult:
-        """Evaluate one listener with hidden-reference/anchor reliability checks."""
+        """Bewertet one listener with hidden-reference/anchor reliability checks."""
         clamped = self.validate_listener_ratings(ratings)
         hidden_ref = clamped.get("__hidden_reference__", 0.0)
         anchor = clamped.get("__anchor__", 100.0)
@@ -239,7 +239,7 @@ class MushraSession:
         n_listeners: int = 8,
         seed: int = 42,
     ) -> MushraSessionReport:
-        """Run an automated formal MUSHRA-like session for CI and benchmark usage.
+        """Führt aus: an automated formal MUSHRA-like session for CI and benchmark usage.
 
         Notes:
         - Uses objective MUSHRA scores as per-condition center values.

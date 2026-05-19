@@ -62,7 +62,7 @@ class QualityMetricsManager:
 
     def __init__(self, enable_all: bool = True):
         """
-        Initialize Quality Metrics Manager.
+        Initialisiert Quality Metrics Manager.
 
         Args:
             enable_all: Wenn False, Plugins lazy initialisieren
@@ -75,7 +75,7 @@ class QualityMetricsManager:
             self._init_plugins()
 
     def _init_plugins(self):
-        """Initialize all plugins."""
+        """Initialisiert all plugins."""
         try:
             if _VERSA_IMPORT_OK and _get_versa_plugin_fn is not None:
                 self._versa = _get_versa_plugin_fn()

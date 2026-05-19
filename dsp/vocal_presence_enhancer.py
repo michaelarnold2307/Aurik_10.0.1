@@ -112,7 +112,7 @@ class HarmonicEnhancer:
 
     def _detect_fundamental(self, audio: np.ndarray, sr: int) -> float:
         """
-        Detect fundamental frequency using autocorrelation.
+        Erkennt fundamental frequency using autocorrelation.
         """
         # Find peaks in expected lag range
         min_lag = int(sr / self.fundamental_range[1])
@@ -138,7 +138,7 @@ class HarmonicEnhancer:
 
     def _boost_harmonic(self, audio: np.ndarray, sr: int, freq: float, gain_db: float) -> np.ndarray:
         """
-        Apply subtle boost to specific harmonic frequency.
+        Wendet an: subtle boost to specific harmonic frequency.
         """
         # Narrow bandwidth (5% of frequency)
         bandwidth = freq * 0.05
@@ -165,7 +165,7 @@ class HarmonicEnhancer:
 
 class AirBandProcessor:
     """
-    Processes "air band" (12-20 kHz) for clarity and openness.
+    Verarbeitet "air band" (12-20 kHz) for clarity and openness.
     """
 
     def __init__(self, frequency_hz: float = 15000.0, gain_db: float = 2.5, smooth: bool = True):
@@ -185,7 +185,7 @@ class AirBandProcessor:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Process air band for clarity.
+        Verarbeitet air band for clarity.
 
         Parameters
         ----------
@@ -237,7 +237,7 @@ class AirBandProcessor:
 
     def _apply_high_shelf(self, audio: np.ndarray, sr: int, freq: float, gain_db: float) -> np.ndarray:
         """
-        Apply high-shelf filter.
+        Wendet an: high-shelf filter.
         """
         A = 10 ** (gain_db / 40)
         w0 = 2 * np.pi * freq / sr
@@ -261,7 +261,7 @@ class AirBandProcessor:
 
     def _apply_air_peak(self, audio: np.ndarray, sr: int, freq: float, gain_db: float) -> np.ndarray:
         """
-        Apply peak EQ at air band frequency.
+        Wendet an: peak EQ at air band frequency.
         """
         bandwidth = 4000  # Wide bandwidth for natural sound
         Q = freq / bandwidth
@@ -356,7 +356,7 @@ class BroadcastClarityEnhancer:
 
     def _apply_presence_eq(self, audio: np.ndarray, sr: int, freq: float, Q: float, gain_db: float) -> np.ndarray:
         """
-        Apply presence EQ boost.
+        Wendet an: presence EQ boost.
         """
         A = 10 ** (gain_db / 40)
         w0 = 2 * np.pi * freq / sr
@@ -378,7 +378,7 @@ class BroadcastClarityEnhancer:
 
     def _measure_presence(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure energy in presence band (3-8 kHz).
+        Misst energy in presence band (3-8 kHz).
         """
         # Bandpass filter
         nyquist = sr / 2
@@ -413,7 +413,7 @@ class VocalSaturation:
 
     def process(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, dict]:
         """
-        Apply subtle saturation.
+        Wendet an: subtle saturation.
 
         Parameters
         ----------
@@ -472,7 +472,7 @@ class VocalSaturation:
 
     def _measure_thd(self, audio: np.ndarray, sr: int) -> float:
         """
-        Measure Total Harmonic Distortion (simplified).
+        Misst Total Harmonic Distortion (simplified).
         """
         # FFT
         n_fft = len(audio)
@@ -492,7 +492,7 @@ class VocalSaturation:
 
 class VocalPresenceEnhancer:
     """
-    Unified API for vocal presence enhancement.
+    Einheitliche API für Vokal-Präsenz-Verbesserung.
     """
 
     def __init__(

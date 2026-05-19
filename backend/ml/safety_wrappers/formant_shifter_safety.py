@@ -38,7 +38,7 @@ from .safety_wrapper_template import (
 
 def detect_formants_lpc(audio: np.ndarray, sr: int, n_formants: int = 5) -> np.ndarray:
     """
-    Detect formants using Linear Predictive Coding (LPC).
+    Erkennt formants using Linear Predictive Coding (LPC).
 
     Args:
         audio: Input audio (mono)
@@ -86,7 +86,7 @@ def detect_formants_lpc(audio: np.ndarray, sr: int, n_formants: int = 5) -> np.n
 
 
 def _lpc_autocorr(signal: np.ndarray, order: int) -> np.ndarray:
-    """Compute LPC coefficients using autocorrelation method."""
+    """Berechnet LPC coefficients using autocorrelation method."""
     # Compute autocorrelation — FFT-based O(N log N)
     from backend.core.core_utils import fft_autocorr
 
@@ -108,7 +108,7 @@ def _lpc_autocorr(signal: np.ndarray, order: int) -> np.ndarray:
 
 def compute_formant_dispersion(formants: np.ndarray) -> float:
     """
-    Compute formant dispersion (spacing between formants).
+    Berechnet formant dispersion (spacing between formants).
     Higher dispersion = clearer formant structure.
 
     Args:
@@ -140,7 +140,7 @@ def compute_formant_dispersion(formants: np.ndarray) -> float:
 
 def detect_voice_presence(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     """
-    Detect if audio contains voice/vocals.
+    Erkennt if audio contains voice/vocals.
 
     Args:
         audio: Input audio
@@ -182,7 +182,7 @@ def detect_voice_presence(audio: np.ndarray, sr: int) -> tuple[bool, float]:
 
 def detect_singers_formant(audio: np.ndarray, sr: int) -> tuple[bool, float]:
     """
-    Detect Singer's Formant (2.8-3.5 kHz resonance).
+    Erkennt Singer's Formant (2.8-3.5 kHz resonance).
     Important for trained singers - must be preserved.
 
     Args:
@@ -252,7 +252,7 @@ class FormantShifterSafety(BaseSafetyWrapper):
         min_voice_confidence: float = 0.6,
     ):
         """
-        Initialize Formant Shifter Safety Wrapper.
+        Initialisiert Formant Shifter Safety Wrapper.
 
         Args:
             processor_func: Formant shifting function (audio, sr, shift_hz) -> audio
@@ -275,7 +275,7 @@ class FormantShifterSafety(BaseSafetyWrapper):
         self.min_voice_confidence = min_voice_confidence
 
     def _validate_pre_conditions(self, audio: np.ndarray, sr: int, **params) -> PreCheckResult:
-        """Validate pre-conditions for formant shifting."""
+        """Validiert pre-conditions for formant shifting."""
         # Basic audio validation
         is_valid, errors = validate_audio_basic(audio)
 
@@ -353,7 +353,7 @@ class FormantShifterSafety(BaseSafetyWrapper):
     def _validate_post_conditions(
         self, original: np.ndarray, processed: np.ndarray, sr: int, **params
     ) -> PostCheckResult:
-        """Validate post-conditions after formant shifting."""
+        """Validiert post-conditions after formant shifting."""
         issues = []
         side_effects = []
         metrics = {}
@@ -442,7 +442,7 @@ class FormantShifterSafety(BaseSafetyWrapper):
     def _compute_quality_score(
         self, original: np.ndarray, processed: np.ndarray, sr: int, post_check: PostCheckResult
     ) -> float:
-        """Compute overall quality score."""
+        """Berechnet overall quality score."""
         scores = []
 
         # Voice preservation

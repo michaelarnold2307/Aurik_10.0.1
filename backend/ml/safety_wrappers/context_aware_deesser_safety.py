@@ -35,17 +35,17 @@ try:
     )
 
     def compute_energy_ratio(before: np.ndarray, after: np.ndarray) -> float:
-        """Compute energy ratio in dB."""
+        """Berechnet energy ratio in dB."""
         return float(_compute_energy_ratio_impl(before, after))
 
     def compute_correlation(before: np.ndarray, after: np.ndarray) -> float:
-        """Compute correlation between before/after."""
+        """Berechnet correlation between before/after."""
         return float(_compute_correlation_impl(before, after))
 
 except ImportError:
     # Fallback implementations
     def compute_energy_ratio(before: np.ndarray, after: np.ndarray) -> float:
-        """Compute energy ratio in dB."""
+        """Berechnet energy ratio in dB."""
         energy_before = np.sum(before**2)
         energy_after = np.sum(after**2)
         if energy_before == 0:
@@ -56,7 +56,7 @@ except ImportError:
         return float(10 * np.log10(ratio))
 
     def compute_correlation(before: np.ndarray, after: np.ndarray) -> float:
-        """Compute correlation between before/after."""
+        """Berechnet correlation between before/after."""
         # Ensure same length
         min_len = min(len(before), len(after))
         before = before[:min_len]
@@ -98,7 +98,7 @@ def detect_phoneme_based_sibilance(
     sr: int,
 ) -> tuple[bool, float, dict[str, Any]]:
     """
-    Detect sibilance using phoneme detection.
+    Erkennt sibilance using phoneme detection.
 
     Args:
         audio: Input audio (mono or stereo)
@@ -197,7 +197,7 @@ def _detect_frequency_based_sibilance(
 
 def measure_intelligibility(audio: np.ndarray, sr: int) -> float:
     """
-    Measure speech intelligibility using spectral balance.
+    Misst speech intelligibility using spectral balance.
 
     Rough approximation based on:
     - Mid-frequency energy (1-4 kHz) - vowels, formants
