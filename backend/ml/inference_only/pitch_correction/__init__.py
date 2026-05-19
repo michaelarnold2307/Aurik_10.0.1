@@ -28,4 +28,4 @@ from .pitch_detector import CREPEPitchDetector
 
 __all__ = ["CREPEPitchDetector", "ConservativePitchCorrector"]
 
-__version__ = "8.2.0"
+__version__ = "9.12.8"

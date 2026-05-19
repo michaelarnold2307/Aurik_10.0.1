@@ -207,6 +207,6 @@ __all__ = [
 ]
 
 # Version info
-__version__ = "9.0.0"
-__author__ = "Aurik 9.0 Development Team"
-__date__ = "2026-02-15"
+__version__ = "9.12.8"
+__author__ = "Aurik 9.12 Development Team"
+__date__ = "2026-05-19"

@@ -36,7 +36,7 @@ _RES = Path(__file__).parent.parent / "resources"
 try:
     from Aurik910 import __version__ as _VERSION  # type: ignore[attr-defined]
 except Exception:
-    _VERSION = "9.11.14"
+    _VERSION = "9.12.8"
 
 
 class AurikSplashScreen(QWidget):

@@ -208,7 +208,7 @@ class ExcellenceBenchmark:
     """
 
     MATERIALS = ["auto", "vinyl", "tape", "shellac", "broadcast"]
-    _AURIK_VERSION = "9.6.0"
+    _AURIK_VERSION = "9.12.8"
 
     def __init__(self, sample_rate: int = _SR) -> None:
         self.sample_rate = sample_rate
