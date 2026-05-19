@@ -283,6 +283,18 @@ Zusätzlich zur Song-Selbstkalibrierung sind folgende Tests verpflichtend:
 Telemetrie oder PMGG/CIG-Exclusions betreffen, dürfen ohne diese Testklassen
 nicht als release-fähig gelten.
 
+### §8.3.2b [RELEASE_MUST] Canonical Contract Drift Gate — Testpflicht
+
+Jede Änderung an GUI, CLI, Batch, REST-Legacy, Bridge, Import, Denker-Einstieg oder Export MUSS durch einen schnellen Contract-Drift-Gate abgesichert sein. Der Test darf statisch sein, muss aber folgende Klassen blockieren:
+
+- Release-Pfade ohne `get_load_audio_fn()` / `run_pre_analysis()` / `AurikDenker.denke()`.
+- Exportpfade ohne `export_guard()` + `validate_export_quality()` + `build_export_quality_gate_payload()` oder ohne `AudioExporter`/atomic-WAV-Fallback.
+- Direkte `UnifiedRestorerV3.restore()`-Bypässe in GUI/CLI/Batch-Releasepfaden.
+- Nicht markierte REST-/Server-Altpfade mit direktem Audio-Write.
+- Neue CLI/GUI-Argumente, die mehr Nutzerentscheidungen als `Restoration` / `Studio 2026` einführen.
+
+Kanonischer Testanker: `tests/normative/test_canonical_contract_drift_gate.py`.
+
 ### §8.3.2a Era-/VFA-/GP-Prior-Regressionspflicht [RELEASE_MUST]
 
 Jede Änderung an Vokal-Gates, VFA-Zonen, GP-Priors oder RecordingChainProfiler-Integration MUSS fokussierte Unit-Tests enthalten:

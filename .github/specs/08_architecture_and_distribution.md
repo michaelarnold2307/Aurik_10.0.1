@@ -43,6 +43,21 @@ result = denker.denke(audio, sr, mode="quality")
 result = denker.denke(audio, sr, mode="quality", no_rt_limit=True)
 ```
 
+### §11.1b [RELEASE_MUST] Canonical Contract Drift Gate
+
+Alle Release-fähigen Oberflächen müssen denselben Aurik-Vertrag ausführen. Es darf keine funktional ähnliche Parallelwelt mit eigenem Import, eigener Voranalyse, eigenem Modus-Mapping, eigener Pipeline-Instanz oder eigenem Export entstehen.
+
+**Kanonische Kette:**
+
+1. Audio laden: `backend.api.bridge.get_load_audio_fn()`.
+2. Voranalyse: `backend.api.bridge.run_pre_analysis()` genau einmal pro Datei, Ergebnis an den Denker weiterreichen.
+3. Pipeline: `get_aurik_denker_instance().denke(...)` oder Bridge-äquivalenter Singleton-Accessor; kein direkter `UnifiedRestorerV3.restore()`-Bypass in UI/CLI/Batch-Releasepfaden.
+4. Modus: Nutzeroberfläche bietet exakt `Restoration` und `Studio 2026`; interne Aliasbildung muss deterministisch auf `restoration` / `studio2026` führen.
+5. Export: `export_guard()` vor Schreiboperation, `validate_export_quality()` / `build_export_quality_gate_payload()` vor Statusentscheidung, `AudioExporter` als Primärpfad, atomic WAV-Fallback nur mit `PCM_24`.
+6. Telemetrie: `degradation_status`, `fail_reason`, `fail_reasons`, `quality_gate_payload` oder äquivalente Bridge-Metadata muss erhalten bleiben.
+
+**Legacy-Regel:** Server-/REST-/Experimentpfade gehören nicht zum Desktop-Releasepfad. Wenn sie im Repository verbleiben, müssen sie als `LEGACY_NON_RELEASE` markiert sein. Ohne diese Markierung müssen sie denselben Bridge-Vertrag erfüllen.
+
 ### §11.1a [RELEASE_MUST] Bridge-Experience-Insights-Kontrakt (v9.11.1)
 
 `backend/api/bridge.py` MUSS eine stabile Extraktionsfunktion bereitstellen:

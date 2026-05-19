@@ -1,15 +1,24 @@
 """
-FastAPI Batch Processing Endpunkte mit Multi-Batch-Support
-Migriert von Flask (Port 5000) zu FastAPI (Port 8000) mit Batch-IDs
+LEGACY_NON_RELEASE: FastAPI Batch Processing Endpunkte mit Multi-Batch-Support.
+
+Dieser Serverpfad ist nicht Teil des Desktop-/AppImage-Releasepfads. Release-fähige
+GUI/CLI/Batch-Flows müssen den Canonical Contract über backend.api.bridge nutzen.
+Migriert von Flask (Port 5000) zu FastAPI (Port 8000) mit Batch-IDs.
 """
 
+import json
 import logging
 import threading
 import uuid
 from pathlib import Path
 from typing import Any
 
+import numpy as _np
+import soundfile as _sf
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
+
+from backend.file_import import load_audio_file
+from denker.aurik_denker import get_aurik_denker
 
 # Setup Router
 router = APIRouter(prefix="/batch", tags=["batch"])
@@ -34,12 +43,6 @@ def batch_worker(batch_id: str, input_files: list[str]):
     und nicht-installiertes openai-whisper benötigte.
     """
     try:
-        import numpy as _np
-        import soundfile as _sf
-
-        from backend.file_import import load_audio_file
-        from denker.aurik_denker import get_aurik_denker
-
         denker = get_aurik_denker()
 
         with batch_lock:
@@ -65,10 +68,8 @@ def batch_worker(batch_id: str, input_files: list[str]):
 
                 _sf.write(str(out_path), result.audio, result.sample_rate)
 
-                import json
-
                 audit_path = out_path.with_suffix(".json")
-                with open(audit_path, "w") as f:
+                with open(audit_path, "w", encoding="utf-8") as f:
                     json.dump(
                         {
                             "filename": fname,
@@ -251,9 +252,7 @@ async def batch_audit(batch_id: str):
         for f in AUDIO_OUT_DIR.iterdir():
             if f.is_file() and f.suffix == ".json" and "_audit" not in f.name:
                 try:
-                    import json
-
-                    with open(f) as fp:
+                    with open(f, encoding="utf-8") as fp:
                         audit_data = json.load(fp)
                         audits.append({"filename": f.name, "data": audit_data})
                 except Exception as e:

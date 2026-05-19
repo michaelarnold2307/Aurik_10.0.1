@@ -152,6 +152,23 @@ Keine song-spezifischen Sonderregeln im Produktionscode. Allgemeingültigkeit vo
 - Pflicht-Einstieg: `AurikDenker.denke(audio, sr, mode, progress_callback)` — kein UI-Bypass
 - Bei fehlgeschlagenem Qualitäts-Gate: verpflichtende Recovery-Kaskade bis zum maximal umsetzbaren sicheren Ergebnis; Export nur mit transparentem Status (`recovered`/`degraded`) und vollständigem Fail-Reason.
 
+## [RELEASE_MUST] Canonical Contract Drift Gate
+
+**Aurik darf keine Parallelpfade neben dem kanonischen Restaurierungsvertrag aufbauen.** Jede Release-fähige Oberfläche (GUI, CLI, Batch-Desktoppfad, Export) MUSS dieselben Bridge-/Denker-/Exporter-Verträge nutzen; kleine Abweichungen in Import, Modus-Mapping, Export, Quality-Gate oder Kanalorientierung gelten als Release-Bug.
+
+Pflichtkette für alle Release-Pfade:
+
+```text
+Audio-Import  → backend.api.bridge.get_load_audio_fn()
+Voranalyse    → backend.api.bridge.run_pre_analysis() genau einmal pro Datei
+Pipeline      → get_aurik_denker_instance().denke(...)
+Modus         → exakt Restoration oder Studio 2026 / intern restoration|studio2026
+Export        → export_guard() + validate_export_quality() + AudioExporter/Fallback-atomic-WAV
+Telemetry     → metadata mit fail_reason / degradation_status / quality_gate_payload
+```
+
+**VERBOTEN in Release-Pfaden:** direkter `sf.read(path)`, direkter `librosa.load(path)`, direkter `UnifiedRestorerV3.restore()`-Bypass, eigener Export ohne `export_guard()`, eigene Quality-Gate-Schwellen ohne Bridge-Payload, nicht dokumentierte Legacy-Serverpfade. Legacy-/REST-Dateien sind nur zulässig, wenn sie klar als `LEGACY_NON_RELEASE` markiert sind und nicht als Desktop-Release-Einstieg beworben werden.
+
 ## Pfad-Mapping (verbindlich)
 
 | Logischer Pfad | Physischer Pfad |
