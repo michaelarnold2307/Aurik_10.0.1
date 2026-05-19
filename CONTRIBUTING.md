@@ -1,4 +1,4 @@
-# Contributing to Aurik 9.10.77c
+# Contributing to Aurik 9.12.8
 
 Thank you for your interest in contributing to Aurik 9! This document provides guidelines and instructions for contributing to this project.
 
@@ -58,15 +58,15 @@ python start_aurik_90.py
 ```
 Aurik_Standalone/
 ├── core/                    # Core processing engine
-│   ├── phases/             # 56 processing phases (Phase 01–56)
+│   ├── phases/             # 64 processing phases (Phase 01–64)
 │   ├── unified_restorer_v3.py  # Main pipeline orchestrator
-│   ├── defect_scanner.py   # Defect detection (24 DefectTypes)
+│   ├── defect_scanner.py   # Defect detection (46 DefectTypes)
 │   └── musical_goals/      # 14 perceptual quality goals
 ├── dsp/                     # DSP algorithms (OMLSA, NMF-β, PGHI, …)
 ├── plugins/                 # ML plugins (ONNX/local, all with DSP fallback)
 ├── denker/                  # Cognitive orchestration layer
 ├── backend/                 # API and backend utilities
-├── tests/                   # Test suite (7747+ unit tests)
+├── tests/                   # Test suite (~11598 unit tests)
 ├── docs/                    # Documentation
 ├── Aurik910/                # GUI (PyQt5-based, frameless dark-theme)
 ├── models/                  # ML model weights (not tracked in Git)

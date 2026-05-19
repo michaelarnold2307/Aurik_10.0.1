@@ -1,10 +1,7 @@
-# Third-party model documentation vendors external markdown styles (HTML, heading levels, badges).
-# Exclude vendored model docs from project markdownlint checks.
-
 models/**
 
-# Ignore package manager dependencies.
 node_modules/**
 
-# Ignore non-markdown config files picked up by glob.
 .markdownlintignore
+
+LICENSE

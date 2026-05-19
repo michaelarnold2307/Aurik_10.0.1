@@ -4,14 +4,14 @@
 
 | Version | Status                       |
 |---------|------------------------------|
-| 9.10.x  | ✅ Unterstützt (aktiv)       |
-| < 9.10  | ❌ Keine Sicherheits-Updates |
+| 9.12.x  | ✅ Unterstützt (aktiv)       |
+| < 9.12  | ❌ Keine Sicherheits-Updates |
 
 ## Sicherheitslücken melden
 
 **Bitte melde Sicherheitslücken NICHT als öffentliches GitHub-Issue.**
 
-Sende stattdessen eine E-Mail an das Sicherheitsteam mit:
+Sende stattdessen eine E-Mail an **[michael.arnold2307@gmail.com](mailto:michael.arnold2307@gmail.com)** mit:
 
 - Beschreibung der Schwachstelle
 - Schritte zur Reproduktion

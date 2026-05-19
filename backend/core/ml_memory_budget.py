@@ -399,9 +399,9 @@ def _attempt_quality_preserving_pressure_recovery(model_name: str, size_gb: floa
 
     for attempt in range(1, attempts + 1):
         try:
-            from backend.core.plugin_lifecycle_manager import (
-                evict_stale_plugins,  # pylint: disable=import-outside-toplevel
-            )
+            # pylint: disable=import-outside-toplevel
+            from backend.core.plugin_lifecycle_manager import evict_stale_plugins
+            # pylint: enable=import-outside-toplevel
 
             evicted = int(evict_stale_plugins(required_mb=required_mb))
         except Exception as _exc:
