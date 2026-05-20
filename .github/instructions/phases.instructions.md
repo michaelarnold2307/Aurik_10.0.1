@@ -103,13 +103,28 @@ _RESTORATION_FORBIDDEN = {
 from backend.core.dsp.physical_ceiling import _MATERIAL_BW_CEILING_HZ, _MATERIAL_DR_CEILING_DB
 
 # BW-Erweiterung (phase_06/07/23):
-max_freq = _MATERIAL_BW_CEILING_HZ[material]  # Shellac ≤ 8kHz, Vinyl ≤ 16kHz
+max_freq = _MATERIAL_BW_CEILING_HZ[material]  # Shellac ≤ 8kHz, Vinyl ≤ 16kHz, Cassette ≤ 12kHz, Tape ≤ 15kHz
 # Keine Harmonik/Energie über max_freq hinzufügen
 
 # DR-Expansion (phase_26):
-max_dr = _MATERIAL_DR_CEILING_DB[material]  # Vinyl ≤ 70dB, Shellac ≤ 45dB
+max_dr = _MATERIAL_DR_CEILING_DB[material]  # Vinyl ≤ 70dB, Shellac ≤ 45dB, Cassette ≤ 62dB
 # Expansion über Ceiling = Artefakt → sofortiger Rollback
 ```
+
+## Phase 23 — BW-Ceiling-First-Invariante (v9.12.9)
+
+Generative/Inpainting-Phasen (phase_23) MÜSSEN `_apply_material_bw_ceiling()` **VOR** dem HallucinationGuard aufrufen:
+
+```python
+# RICHTIG: Ceiling zuerst, dann Guard
+audio_out, ceiling_applied, ceiling_hz = cls._apply_material_bw_ceiling(audio_out, sr, material_type, mode)
+halluc_result = check_hallucination(pre_audio, audio_out, sr, mode,
+                                    material_bw_ceiling_hz=ceiling_hz)
+# VERBOTEN: Ceiling nur innerhalb des Guards — Output wurde bereits über Ceiling synthetisiert
+```
+
+Cassette-spezifisch: `_material_bw_ceiling_hz("cassette") == 12000.0` (IEC 60094-1 Type I).
+Kanonischer Wert ist konsistent in `tonal_reference_profile.py`, `goal_applicability_filter.py` und `phase_23._material_bw_ceiling_hz()`.
 
 ## §2.63 Boundary-Mechanismus (STFT/ML-Phasen)
 

@@ -506,7 +506,7 @@ QSvgRenderer = QtSvg.QSvgRenderer
 try:
     from Aurik910 import __version__ as _AURIK_VERSION
 except Exception:
-    _AURIK_VERSION = "9.12.8"
+    _AURIK_VERSION = "9.12.9-hotfix.2"
 
 # SVG-Phasen-Icons (2.5D mystisch-profi)
 try:
@@ -13479,7 +13479,8 @@ class ModernMainWindow(QMainWindow):
 
             if _preanalysis_pending and _p >= 99.8:
                 _finalizing_text = "⏳ Analyse wird finalisiert …"
-                _bar.setRange(0, 0)
+                _bar.setRange(0, 10000)
+                _bar.setValue(10000)
                 _bar.setFormat(_finalizing_text)
                 if hasattr(self, "status_text"):
                     self.status_text.setText(_finalizing_text)
@@ -18656,7 +18657,7 @@ class ModernMainWindow(QMainWindow):
         ww.set_inpainting_user_override_callback(self._on_inpainting_user_override)
 
         # Set up cycling QTimer if not present
-        if not hasattr(self, "_inpainting_zoom_timer"):
+        if getattr(self, "_inpainting_zoom_timer", None) is None:
             self._inpainting_zoom_timer = QTimer(self)
             self._inpainting_zoom_timer.timeout.connect(self._inpainting_zoom_tick)
         self._inpainting_zoom_timer.stop()
@@ -18703,8 +18704,10 @@ class ModernMainWindow(QMainWindow):
 
     def _inpainting_zoom_tick(self) -> None:
         """Advance to the next dropout gap in the inpainting tour."""
+        timer = getattr(self, "_inpainting_zoom_timer", None)
         if not getattr(self, "_inpainting_zoom_active", False):
-            self._inpainting_zoom_timer.stop()
+            if timer is not None:
+                timer.stop()
             return
         # User paused the tour via manual zoom — check if timeout-resume desired
         if getattr(self, "_inpainting_user_override", False):
@@ -18719,7 +18722,8 @@ class ModernMainWindow(QMainWindow):
             self._inpainting_location_idx = 0
         self._inpainting_zoom_to(self._inpainting_location_idx)
         _dwell_ms = self._inpainting_dwell_ms(self._inpainting_location_idx)
-        self._inpainting_zoom_timer.setInterval(_dwell_ms)
+        if timer is not None:
+            timer.setInterval(_dwell_ms)
 
     def _on_inpainting_user_override(self) -> None:
         """Called when the user manually zooms/pans during inpainting — pauses the tour."""
@@ -18731,8 +18735,9 @@ class ModernMainWindow(QMainWindow):
         if not getattr(self, "_inpainting_zoom_active", False):
             return
         self._inpainting_zoom_active = False
-        if hasattr(self, "_inpainting_zoom_timer"):
-            self._inpainting_zoom_timer.stop()
+        timer = getattr(self, "_inpainting_zoom_timer", None)
+        if timer is not None:
+            timer.stop()
         ww = getattr(self, "waveform_widget", None)
         if ww is not None:
             # Remove override callback

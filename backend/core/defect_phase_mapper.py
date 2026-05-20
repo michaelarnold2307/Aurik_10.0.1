@@ -1590,6 +1590,22 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_24_dropout_repair": 0.55,  # oxide flaking dropouts need careful fill
         "phase_12_wow_flutter_fix": 0.75,  # capstan flutter is real but ML phase has no retry
     },
+    # CASSETTE — compact cassette defects must be corrected, not treated as generic tape.
+    "cassette": {
+        "phase_29_tape_hiss_reduction": 0.90,  # cassette hiss/Dolby residue is prominent
+        "phase_59_modulation_noise_reduction": 0.80,  # Dolby/dbx breathing and modulation noise
+        "phase_12_wow_flutter_fix": 0.85,  # capstan instability is a primary cassette defect
+        "phase_24_dropout_repair": 0.70,  # oxide/head-contact dropouts are audible defects
+        "phase_25_azimuth_correction": 0.80,  # cassette head azimuth drift is common
+        "phase_04_eq_correction": 0.60,  # Dolby/EQ mismatch correction
+        "phase_03_denoise": 0.70,
+        "phase_06_frequency_restoration": 0.35,  # do not invent air above cassette ceiling
+        "phase_07_harmonic_restoration": 0.35,
+        "phase_20_reverb_reduction": 0.25,  # do not chase authentic room tone
+        "phase_49_advanced_dereverb": 0.25,
+        "phase_18_noise_gate": 0.15,  # gating cassette hiss creates pumping/echo illusion
+        "phase_39_air_band_enhancement": 0.20,
+    },
     # REEL_TAPE — higher quality, print-through focus
     "reel_tape": {
         "phase_29_tape_hiss_reduction": 0.80,

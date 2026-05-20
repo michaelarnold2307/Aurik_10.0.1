@@ -2656,6 +2656,15 @@ class TestPhase65VqiRecoveryTrigger:
             "§H4: UV3 prüft VQI < 0.74 Schwelle nicht — "
             "VERBOTEN-Regel 'VQI-Abfall nach NR ohne DSP-Korrektiv-Recovery' verletzt."
         )
+        assert "compute_vocal_max_alignment" in src, (
+            "§0p: UV3 muss VQI-Recovery prozentual am maximal erreichbaren Vocal-Ziel ausrichten."
+        )
+        assert "vocal_max_alignment_percent" in src, (
+            "§0p: UV3 muss den prozentualen Abstand zum Vocal-Maximum in Metadata/Fail-Reasons tragen."
+        )
+        assert "_p65_vqi_deficit = max(0.74 - _vqi_score, _vqi_max_target - _vqi_score, 0.0)" in src, (
+            "§0p: Phase_65-Stärke muss proportional zum Maximum-Defizit skaliert werden."
+        )
 
 
 class TestChoirVqiGateZeroPanns:

@@ -378,6 +378,24 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         # tonal_center: Wow/Flutter (~0.3% WRMS) beeinträchtigt Tonstabilität; ceiling ~0.869
         # Formula: (0.869-0.95)/0.27 = -0.30
         "tonal_center": -0.30,
+        # §09.2 Ergänzende Tape-Biases (v9.12.9 Kalibrierungslücke §GOAL_BASELINE_CHECK):
+        # transparenz: Kassetten-/Bandhiss reduziert Spektralklarheit stärker als Vinyl (-0.10).
+        # Physikalisches Ceiling Kassette ~0.776 (Type-I) → bias = (0.776-0.82)/0.27 = -0.163 ≈ -0.15
+        "transparenz": -0.15,
+        # transient_energie: Kassetten-Hiss + Dropouts maskieren Onset-Energie; Ziel blieb
+        # bisher auf kanonisch 0.80 (CD-Niveau) — zu hoch für Tape/Kassette → unnötige
+        # Recovery-Phasen in §GOAL_BASELINE_CHECK.
+        # Physikalisches Ceiling Kassette ~0.746 → bias = (0.746-0.80)/0.27 = -0.200
+        "transient_energie": -0.20,
+        # §09.2 Realmesspflichtige Ergänzung (v9.12.9 Echtmessung 2026-05-20):
+        # emotionalitaet: Kassetten-AGC-Kompressionsschaltkreis reduziert dynamische Modulation;
+        # 12-kHz-BW-Ceiling (IEC 60094-1 Type I) begrenzt tonale Bandbreite für Arousal-Messungen.
+        # Echtmessung Original-Kassette (Elke Best, 1970er, Schlager, measure_all() mit panns=0.7):
+        #   Original = 0.782. Canon = 0.840. Kappa_min = 0.27.
+        #   Physikalisches Ceiling ~0.781 → bias = (0.781-0.840)/0.27 = -0.219 ≈ -0.22.
+        # Ohne diesen Bias löst §GOAL_BASELINE_CHECK fälschlicherweise Recovery-Phasen aus,
+        # da das Original das Floor physikalisch nicht erreichen kann.
+        "emotionalitaet": -0.22,
     },
     # Digital (CD, DAT, Streaming) — near-lossless; natuerlichkeit at full canonical floor 0.90
     "digital": {

@@ -382,7 +382,7 @@ class VerbotenlLinter(ast.NodeVisitor):
         self._check_sosfilt_scope(node)
         self.generic_visit(node)
 
-    visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]
+    visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]  # noqa: N815
 
     def visit_Call(self, node: ast.Call) -> None:
         self._check_corrcoef(node)
@@ -512,9 +512,7 @@ def _check_cause_to_phases_sync(filepath: Path) -> list[Violation]:
                 if isinstance(t, ast.Name) and t.id == "CAUSES":
                     if isinstance(node.value, ast.List):
                         causes = [
-                            e.value
-                            for e in node.value.elts
-                            if isinstance(e, ast.Constant) and isinstance(e.value, str)
+                            e.value for e in node.value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)
                         ]
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name) and node.target.id == "CAUSE_TO_PHASES":

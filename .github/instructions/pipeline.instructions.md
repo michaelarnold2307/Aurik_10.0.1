@@ -4,6 +4,30 @@ applyTo: "backend/core/unified_restorer_v3.py"
 
 # UV3 — Pipeline-Regeln (normativ, Aurik 9.12.x)
 
+## §2.31 Material-Phase-Initialstärken — Transfer-Chain-Aware [RELEASE_MUST v9.12.9]
+
+**Problem**: Wenn `_restoration_context["transfer_chain"]` mehrere Stufen enthält (z.B. `["vinyl", "cassette"]`), darf nur die **strengste** Schwächungsstufe über alle Kettenglieder die Initialstärke einer Phase bestimmen.
+
+```python
+# KANONISCH — UV3 restore(), §2.31:
+_mat_val = canonical_material_key(material_type)            # primäres Material
+_chain_mat_vals = [canonical_material_key(s) for s in _cal_transfer_chain or []]
+_material_factor_keys = list(dict.fromkeys([_mat_val] + _chain_mat_vals))
+
+for _pid in all_phase_ids:
+    _mat_s = min(_get_mat_strength(_fk, _pid) for _fk in _material_factor_keys)
+    _material_phase_initial_strengths[_pid] = _mat_s
+
+# VERBOTEN: nur _mat_val prüfen, Chain-Stufen ignorieren
+# → Cassette-Material erbt dann Vinyl-Defaults → HF-Halluzination
+
+# Logging:
+logger.info("§2.31 Material-Phase-Initialstärken: %d Phasen für material=%s chain=%s",
+            len(_material_phase_initial_strengths), _mat_val, _material_factor_keys)
+```
+
+**INVARIANTE**: `_MATERIAL_PHASE_FACTORS` in `defect_phase_mapper.py` MUSS für jeden möglichen Chain-Materialschlüssel einen Eintrag haben. Fehlt ein Key, fällt `_get_mat_strength()` auf Generic-Defaults zurück → zu hohe Stärke für restriktive Materialien.
+
 ## §2.44 Holistic Perceptual Index (HPI) — letztes Export-Gate
 
 ```python

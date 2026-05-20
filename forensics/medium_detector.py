@@ -1393,6 +1393,11 @@ class MediumDetector:
         # Dateien noch nachweisbar.  Diese Features werden genutzt, um den analogen
         # Ursprungsträger unabhängig vom Bayesian-Scoring zu rekonstruieren.
         _physical_analog_sources: list[tuple[str, float]] = []
+        # Default-Fallback für §6.7f Vorläufer-Gate (falls _pa_conf_thresh durch den
+        # physical-inference-Pfad nicht gesetzt wurde — z.B. wenn best_analog direkt
+        # via Bayesian-Posterior gefunden wurde und _analog_zeroed=False).
+        _pa_conf_thresh: float = 0.40
+        _feature_ok: bool = True
         if _analog_zeroed and best_analog is None:
             _physical_analog_sources = self._infer_analog_source_from_fingerprint(fp)
             if _physical_analog_sources:

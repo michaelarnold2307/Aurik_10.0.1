@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -52,10 +53,10 @@ def test_cli_export_helper_uses_audio_exporter_and_quality_payload(monkeypatch, 
     """CLI-Export muss AudioExporter, Export-Guard und Gate-Payload wie das Frontend nutzen."""
     from cli import aurik_cli
 
-    calls: dict[str, object] = {}
+    calls: dict[str, Any] = {}
 
     class FakeAudioExporter:
-        FORMATS = {".wav": {}}
+        FORMATS: ClassVar[dict[str, dict[str, Any]]] = {".wav": {}}
 
         def export(self, audio, sr, output_path, **kwargs):
             calls["audio"] = np.asarray(audio)
