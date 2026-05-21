@@ -78,9 +78,9 @@ CRITERION_NAMES = [
 SUPPORTED_MODELS: dict[str, str] = {
     "DeepFilterNetV3": "plugins.deepfilternet_v3_ii_plugin",
     "AudioSR": "plugins.audiosr_plugin",
-    "SGMSE+": "plugins.sgmse_plus_plugin",
-    "MelBandRoformer": "plugins.melbandroformer_plugin",
-    "VERSA": "backend.core.versa_mos",
+    "SGMSE+": "plugins.sgmse_plugin",
+    "MelBandRoformer": "plugins.bs_roformer_plugin",
+    "VERSA": "plugins.versa_plugin",
     "ResembleEnhance": "plugins.resemble_enhance_plugin",
 }
 

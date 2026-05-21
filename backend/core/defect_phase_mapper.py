@@ -347,6 +347,9 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         secondary_phases=[
             "phase_18_noise_gate",  # Tiefe Rauschpegel in Pausen beseitigen
             "phase_16_final_eq",  # HF-Shaping nach Denoising
+            "phase_58_lyrics_guided_enhancement",  # §2.36 PFLICHT: Phonem-Boundary-Schutz bei HF-NR auf Vokal
+            "phase_65_vocal_naturalness_restoration",  # §7.10 VQI-Korrektiv nach NR
+            # (Restoration only, panns_singing-Gate intern)
         ],
         description=(
             "Hochfrequenz-Rauschreduktion via spektraler Subtraktion + Wiener-Filter. "
@@ -569,8 +572,8 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
     DefectType.PRINT_THROUGH: PhaseAssignment(
         defect_type=DefectType.PRINT_THROUGH,
         primary_phases=[
-            "phase_01_click_removal",  # Pre-Echo als kurzer Impuls vor Einsatz behandeln
-            "phase_23_spectral_repair",  # Spektrale Unterdrückung des Geist-Signals
+            "phase_57_print_through_reduction",  # Bidirektionale LMS-Adaptive Subtraction (Pre+Post-Echo getrennt)
+            "phase_23_spectral_repair",  # Spektrale Unterdrückung verbleibender Ghost-Signalanteile
         ],
         secondary_phases=[
             "phase_18_noise_gate",  # Abklingphase des Pre-Echos per Gate unterdrücken
@@ -818,19 +821,18 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         defect_type=DefectType.ALIASING,
         primary_phases=[
             "phase_23_spectral_repair",
-            "phase_03_denoise",
         ],
         secondary_phases=[
             "phase_50_spectral_repair",
         ],
         description=(
             "Reduziert Aliasing-Spiegelfrequenzen aus fehlerhafter Digitalisierung "
-            "durch spektrale Glättung und selektive HF-Bereinigung."
+            "durch spektrale Chirurgie. NR ist kontraindiziert — Spiegelfrequenzen sind "
+            "kohärente Signalspiegelungen, kein Rauschen (§4.11, V30)."
         ),
         config_delta={
             "enable_spectral_repair": True,
             "spectral_repair_strength": 0.55,
-            "denoise_strength": 0.25,
             "declip_strength": 0.0,
         },
     ),
@@ -924,6 +926,7 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         ],
         secondary_phases=[
             "phase_43_ml_deesser",  # ML-De-Esser: Phonem-selektive Harshness-Reduktion
+            "phase_58_lyrics_guided_enhancement",  # §2.36 PFLICHT: Phonem-Alignment → De-Essing konsonant-selektiv
             "phase_03_denoise",  # Restgeräusche nach Vokal-Verarbeitung
         ],
         description=(
@@ -997,6 +1000,7 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         ],
         secondary_phases=[
             "phase_29_tape_hiss_reduction",
+            "phase_65_vocal_naturalness_restoration",  # §7.10 VQI-Korrektiv bei signaladaptivem Rauschen
         ],
         description=(
             "Reduziert signalmoduliertes Rauschen in Bandmaterial über adaptives Spektral-Gating plus "
@@ -1220,6 +1224,9 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         ],
         secondary_phases=[
             "phase_07_harmonic_restoration",
+            "phase_58_lyrics_guided_enhancement",  # §2.36 PFLICHT: Phonem-Alignment
+            # nach Mehrfach-NR (Konsonanten-Schutz)
+            "phase_65_vocal_naturalness_restoration",  # §7.10 VQI-Korrektiv nach Mehrfach-NR (Formant-Tilt)
         ],
         description=(
             "Adressiert Mehrgenerationen-Verluste (Rauschen, Bandbreite, Spektral-Glättung) durch kombinierte "
@@ -1323,18 +1330,19 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
     DefectType.NR_BREATHING_ARTIFACT: PhaseAssignment(
         defect_type=DefectType.NR_BREATHING_ARTIFACT,
         primary_phases=[
-            "phase_03_denoise",
-            "phase_29_tape_hiss_reduction",
-        ],
-        secondary_phases=[
+            "phase_54_transparent_dynamics",
             "phase_08_transient_preservation",
         ],
+        secondary_phases=[
+            "phase_58_lyrics_guided_enhancement",  # §2.36 PFLICHT: Phonem-Boundary-Schutz nach Dynamics
+            "phase_65_vocal_naturalness_restoration",  # §7.10 VQI-Korrektiv: Naturalness nach Envelope-Fix
+        ],
         description=(
-            "Entfernt Pumpen- und Atemgeräusche aus falsch eingestellten oder deaktivierten NR-Systemen "
-            "(Dolby B/C/S, dbx). Reduzierte Stärke zur Vermeidung von Artefakten."
+            "Korrigiert NR-Pumpen/Atmen (Dolby B/C/S, dbx) durch Envelope-Re-Smoothing (gain_smooth_ms). "
+            "KEIN phase_03/phase_29 \u2014 weiteres NR auf NR-Artefakt verst\u00e4rkt das Pumpen (\u00a74.11, V28)."
         ),
         config_delta={
-            "denoise_strength": 0.25,
+            "gain_smooth_ms": 200.0,
             "preserve_analog_character": True,
         },
     ),
@@ -1386,16 +1394,16 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
     DefectType.OVERLOAD_DISTORTION: PhaseAssignment(
         defect_type=DefectType.OVERLOAD_DISTORTION,
         primary_phases=[
-            "phase_63_intermodulation_reduction",
+            "phase_09_crackle_removal",
             "phase_23_spectral_repair",
         ],
         secondary_phases=[
-            "phase_09_crackle_removal",
-            "phase_47_phase_correction",
+            "phase_14_phase_correction",
         ],
         description=(
-            "Reduziert analoge Übersteuerungsverzerrung (H3/H5 Harmonische). "
-            "IMD-Reduktion und spektrale Reparatur der verzerrten Obertöne."
+            "Reduziert analoge Überlastungsverzerrung (H2/H3/H5 Harmonische). "
+            "phase_09 für asymmetrische Wellenformreparatur, phase_23 für harmonische Klirr-Produkte. "
+            "KEIN phase_63 — Harmonische ≠ Intermodulationsprodukte (§4.11, V29)."
         ),
         config_delta={
             "denoise_strength": 0.10,

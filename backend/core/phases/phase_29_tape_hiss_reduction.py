@@ -1705,8 +1705,8 @@ class TapeHissReductionPhase(PhaseInterface):
 
     def _estimate_noise_floor(self, band_signal: np.ndarray) -> float:
         """
-        Legacy-Methode (10th-Percentile RMS) \u2014 nur als R\u00fcckw\u00e4rtskompatibilit\u00e4ts-Alias.
-        Primitivere Sch\u00e4tzung; STFT-OMLSA via _process_channel_omlsa ist prim\u00e4r.
+        Legacy-Methode (10th-Percentile RMS) \u2014 nur als R\u00fcckwärtskompatibilitäts-Alias.
+        Primitivere Schätzung; STFT-OMLSA via _process_channel_omlsa ist primär.
         """
         # Compute short-term RMS (10ms windows)
         window_samples = int(0.01 * self.sample_rate)

@@ -1348,6 +1348,10 @@ _GOAL_TO_RECOVERY_PHASES_RESTORATION: dict[str, list[str]] = {
         # add inter-aural cues and stereo field width.
         # NEVER phase_49 as primary: dereverb REMOVES reverb
         # which REDUCES spatial depth — causal inversion!
+        # §0p/§2.46e CONSTRAINT: phase_46 darf in Restoration NICHT bei Vokalmaterial
+        # (panns_singing ≥ 0.25) injiziert werden — Delay-Reflexionen werden als Echo
+        # wahrgenommen. §GOAL_BASELINE_CHECK und _select_phases() kennen dieses Constraint.
+        # Bei Vocal-Sperre: Fallback auf phase_06 (HF/HRTF-Cues).
         "phase_06_frequency_restoration",  # HF > 8 kHz carries HRTF / air cues — the dominant
         # perceptual carrier of perceived spatial depth
     ],

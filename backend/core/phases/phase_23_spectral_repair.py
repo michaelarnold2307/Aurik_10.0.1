@@ -69,6 +69,7 @@ from backend.core.plugin_lifecycle_manager import (
     get_plugin_lifecycle_manager,
 )
 from backend.core.quality_mode import QualityModeConfig, is_phase_ml_enabled, log_mode_decision
+from plugins.apollo_plugin import get_apollo as _get_apollo
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
@@ -669,10 +670,6 @@ class SpectralRepair(PhaseInterface):
             _plm23 = None
             if not _apollo_swap_blocked:
                 try:
-                    from plugins.apollo_plugin import (
-                        get_apollo as _get_apollo,  # pylint: disable=import-outside-toplevel
-                    )
-
                     try:
                         _plm23 = get_plugin_lifecycle_manager()
                         _plm23.set_active("Apollo", True)  # §4.6b: protect from eviction during inference

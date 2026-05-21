@@ -69,9 +69,21 @@ else:
         from backend.api.bridge import get_deferred_refinement_job_class as _get_drj_class
 
         DeferredRefinementJob = _get_drj_class()
-    except Exception:
-        # Bridge unavailable — MLRefinementThread remains non-functional (no direct core bypass).
-        DeferredRefinementJob = None  # type: ignore[assignment,misc]
+    except Exception as _bridge_exc:
+        # Bridge unavailable: direkter Core-Fallback auf dieselbe kanonische Dataclass.
+        # Kein Non-Functional-Zustand, aber weiterhin kein alternativer Legacy-Pfad.
+        try:
+            from backend.core.deferred_refinement_job import DeferredRefinementJob as _DeferredRefinementJob
+
+            DeferredRefinementJob = _DeferredRefinementJob
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "MLRefinementThread: Bridge-Import fehlgeschlagen (%s), "
+                "nutze direkten DeferredRefinementJob-Core-Fallback",
+                _bridge_exc,
+            )
+        except Exception:
+            DeferredRefinementJob = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +130,8 @@ class MLRefinementThread(QThread):
                 logger.info("KMV Stufe 2 nicht gestartet: nur %.1f GB RAM frei (< 4 GB)", avail_gb)
                 return False
         except Exception:
-            pass  # psutil not available → proceed without check
+            logger.debug("KMV should_start: psutil nicht verfuegbar, RAM-Check uebersprungen", exc_info=True)
+            # psutil not available -> proceed without check
         return True
 
     # ------------------------------------------------------------------
@@ -134,11 +147,11 @@ class MLRefinementThread(QThread):
         try:
             self.setPriority(QThread.LowPriority)
         except Exception:
-            pass
+            logger.debug("KMV Stufe 2: QThread-Prioritaet konnte nicht gesetzt werden", exc_info=True)
         try:
             os.nice(10)
         except Exception:
-            pass
+            logger.debug("KMV Stufe 2: os.nice(10) nicht anwendbar", exc_info=True)
 
         self.refinement_started.emit(output_path, job.n_deferred)
         logger.info(
@@ -253,7 +266,7 @@ class MLRefinementThread(QThread):
                 try:
                     Path(_tmp_path).unlink(missing_ok=True)
                 except Exception:
-                    pass
+                    logger.debug("KMV Stufe 2: Temp-Datei konnte nicht entfernt werden: %s", _tmp_path, exc_info=True)
                 self.refinement_cancelled.emit(output_path)
                 return
 
@@ -262,7 +275,7 @@ class MLRefinementThread(QThread):
                 _r.refinement_complete = True
                 _r.stufe2_quality_estimate = float(_stufe2_quality)
             except Exception:
-                pass
+                logger.debug("KMV Stufe 2: Result-Metadaten konnten nicht gesetzt werden", exc_info=True)
 
             elapsed = time.perf_counter() - t0
             logger.info(
@@ -293,7 +306,7 @@ class MLRefinementThread(QThread):
                 try:
                     job._audio_original = None
                 except Exception:
-                    pass
+                    logger.debug("KMV Stufe 2: Fallback-Freigabe von job._audio_original fehlgeschlagen", exc_info=True)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────
@@ -343,7 +356,7 @@ def _write_audio(audio: np.ndarray, sr: int, path: str) -> None:
         sf.write(path, mono_or_stereo, sr, subtype="FLOAT")
         return
     except Exception:
-        pass
+        logger.debug("KMV _write_audio: soundfile write fehlgeschlagen, nutze scipy-Fallback", exc_info=True)
     import numpy as _np
     import scipy.io.wavfile as _wf
 

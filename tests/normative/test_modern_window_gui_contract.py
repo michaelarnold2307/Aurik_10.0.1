@@ -144,12 +144,12 @@ def test_preventive_metadata_visibility_contract_in_quality_banner() -> None:
 
     # Frontend must keep phase-local prevention telemetry visible in post-run UI.
     assert '"preventive_actions": []' in src
-    assert 'phase31_damage_shield_applied' in src
-    assert 'phase31_stereo_delay_corrected' in src
-    assert 'loudness_makeup_db' in src
-    assert 'def _build_quality_banner_sections(' in src
-    assert 'preventive_actions: list[str]' in src
-    assert '🛡️  Präventionsschutz:' in src
+    assert "phase31_damage_shield_applied" in src
+    assert "phase31_stereo_delay_corrected" in src
+    assert "loudness_makeup_db" in src
+    assert "def _build_quality_banner_sections(" in src
+    assert "preventive_actions: list[str]" in src
+    assert "🛡️  Präventionsschutz:" in src
 
 
 @pytest.mark.normative
@@ -158,5 +158,44 @@ def test_preventive_actions_callsite_contract_in_quality_pipeline() -> None:
 
     # Separate contract: extraction + callsite forwarding must stay intact.
     assert 'preventive_actions: list[str] = _ctx["preventive_actions"]' in src
-    assert 'self.prognose_widget.set_preventive_actions(preventive_actions)' in src
-    assert 'preventive_actions=preventive_actions' in src
+    assert "self.prognose_widget.set_preventive_actions(preventive_actions)" in src
+    assert "preventive_actions=preventive_actions" in src
+
+
+@pytest.mark.normative
+def test_bridge_unavailable_warning_is_one_shot_and_sets_runtime_health_state() -> None:
+    src = _read_gui_source()
+    assert 'if bool(getattr(self, "_bridge_unavailable_warning_shown", False)):' in src
+    assert "self._bridge_unavailable_warning_shown = True" in src
+    assert 'self._runtime_health_state = "bridge_unavailable"' in src
+
+
+@pytest.mark.normative
+def test_runtime_original_fallback_detection_uses_structured_metadata_signals() -> None:
+    src = _read_gui_source()
+    assert "def _detect_runtime_original_fallback_reason(restoration_result) -> str:" in src
+    assert 'metadata = getattr(restoration_result, "metadata", {}) or {}' in src
+    assert 'stage_notes = getattr(restoration_result, "stage_notes", {}) or {}' in src
+    assert "export_quality_gate_failed" in src
+    assert "export_blocked_by_quality_gate" in src
+    assert "RUNTIME_ORIGINAL_FALLBACK" in src
+
+
+@pytest.mark.normative
+def test_warnings_are_gated_by_non_sota_status_in_quality_ui() -> None:
+    src = _read_gui_source()
+    assert '"is_sota_run": True' in src
+    assert '"sota_warning_reason": ""' in src
+    assert "if not is_sota_run:" in src
+    assert "Nicht-SOTA-Ausführung" in src
+    assert (
+        'has_problem = (not is_sota_run) and (degradation_status in {"blocked", "critical_degraded", "degraded"})'
+        in src
+    )
+
+
+@pytest.mark.normative
+def test_musiclover_sota_metadata_forwarding_in_export_path() -> None:
+    src = _read_gui_source()
+    assert "quality_gate_musiclover_all_sota_real" in src
+    assert "quality_gate_musiclover_sota_reason" in src

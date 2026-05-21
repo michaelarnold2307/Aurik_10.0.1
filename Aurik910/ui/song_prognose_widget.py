@@ -12,9 +12,9 @@ import logging
 from typing import Any
 
 import numpy as np
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QFont, QPainter, QPen
-from PyQt5.QtWidgets import (
+from PyQt5.QtCore import Qt  # pylint: disable=no-name-in-module
+from PyQt5.QtGui import QColor, QFont, QPainter, QPen  # pylint: disable=no-name-in-module
+from PyQt5.QtWidgets import (  # pylint: disable=no-name-in-module
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -68,11 +68,13 @@ class _ScoreDial(QWidget):
         self.setFixedSize(80, 80)
 
     def set_score(self, score: float, color: str) -> None:
+        """Setzt Score und Farbe des Kreisindikators und triggert Repaint."""
         self._score = float(np.clip(score, 0.0, 100.0))
         self._color = color
         self.update()
 
     def paintEvent(self, _event: Any) -> None:  # type: ignore[override]
+        """Zeichnet den ringförmigen Score-Indikator inklusive Zahlenwert."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -342,6 +344,9 @@ class SongPrognoseWidget(QWidget):
         self._decade: int | None = None
         self._genre: str = ""
         self._result_obj: Any = None
+        self._pill_by_key: dict[str, _DefectPill] = {}
+        self._detected_scores: dict[str, float] = {}
+        self._detected_locations: dict[str, list] = {}
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -584,9 +589,9 @@ class SongPrognoseWidget(QWidget):
         self._clear_defect_pills()
         self._defect_placeholder.setText("— Scan läuft nach dem Start …")
         self._defect_placeholder.setVisible(True)
-        self._pill_by_key: dict[str, _DefectPill] = {}
-        self._detected_scores: dict[str, float] = {}
-        self._detected_locations: dict[str, list] = {}
+        self._pill_by_key = {}
+        self._detected_scores = {}
+        self._detected_locations = {}
 
     def update_material(self, material_key: str, confidence: float) -> None:
         """Aktualisiert material row. Call from GUI thread after MediumClassifier."""

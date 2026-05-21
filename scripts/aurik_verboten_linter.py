@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aurik VERBOTEN-Linter — prüft die Top-10 normativ verbotenen Anti-Patterns.
+"""Aurik VERBOTEN-Linter — prüft die Top-18 normativ verbotenen Anti-Patterns.
 
 Verwendung:
     python scripts/aurik_verboten_linter.py [pfad ...]
@@ -12,13 +12,23 @@ Exit-Codes:
     1 = ERROR-Verstöße gefunden (oder --strict + Warnings)
 
 Regel-Level:
-    ERROR  (blockiert CI): V01, V03, V04, V05, V06, V07, V08, V09, V10, V12
+    ERROR  (blockiert CI): V01, V03, V04, V05, V06, V07, V08, V09, V10, V12, V13, V14, V16
     WARNING (nur angezeigt): V02 — np.max(np.abs()) Heuristik hat false-positive-Rate
                              V11 — sosfilt() Konservativ-Detektor, prüfen ob Ergebnis addiert wird
+                             V15, V17, V18 — runtime-semantische Regeln, nur WARNING
 
 V12 — CAUSE_TO_PHASES/CAUSES Bidirektional-Sync (§2.59):
     Wird nicht per AST sondern als Modul-Level-Check in scan_causal_reasoner_sync() geprüft.
     Aufruf: python scripts/aurik_verboten_linter.py --include-module-checks
+
+V13 — Duplikat-Schlüssel in _MATERIAL_PRIORITY_PHASES-Dict (§V13):
+    AST-Parsing des Dict-Literals — jeder Material-Key darf nur einmal vorkommen.
+
+V14 — Generative/Inpainting-Phase ohne SSIP (§2.68 V14):
+    phase_55 + phase_24 + jede neue generative Phase müssen _run_inpainting_with_ssip() aufrufen.
+
+V16 — structural_silence_zones=None als Default-Argument (§2.68 V16):
+    _get_structural_silence_zones() muss immer Liste zurückgeben; None = unsichtbar deaktivierter Schutz.
 """
 
 from __future__ import annotations
@@ -37,6 +47,8 @@ from pathlib import Path
 
 @dataclass
 class Violation:
+    """Repräsentiert eine erkannte VERBOTEN-Regel-Verletzung."""
+
     file: Path
     line: int
     col: int
@@ -47,6 +59,8 @@ class Violation:
 
 @dataclass
 class Rule:
+    """Definiert eine VERBOTEN-Linter-Regel mit ID und Beschreibung."""
+
     id: str
     description: str
 
@@ -71,11 +85,26 @@ RULES = {
         "V12",
         "CAUSE_TO_PHASES/CAUSES Bidirektional-Sync verletzt (§2.59) — orphaned key oder fehlender CAUSES-Eintrag",
     ),
+    "V13": Rule(
+        "V13",
+        "Duplikat-Schlüssel in _MATERIAL_PRIORITY_PHASES-Dict-Literal — F601 überschreibt ersten Eintrag still",
+    ),
+    "V14": Rule(
+        "V14",
+        "Generative/Inpainting-Phase (phase_24/55) ohne _run_inpainting_with_ssip() — V14 SSIP-Pflicht (§2.68)",
+    ),
+    "V16": Rule(
+        "V16",
+        "structural_silence_zones=None als Default-Argument — None ist kein erlaubter Rückgabewert (§2.68 V16)",
+    ),
 }
 
 # V02 ist Warning-Level: Heuristik hat false-positive-Rate bei Analyse/Telemetrie-Kontext.
 # V11 ist Warning-Level: sosfilt-Detektor ist konservativ (flag: immer prüfen, nicht immer ERROR).
 # V12 ist ERROR-Level: CAUSE_TO_PHASES/CAUSES-Sync wird via Modul-Level-Check geprüft (nicht AST).
+# V13 ist ERROR-Level: Duplikat-Dict-Key überschreibt ersten Eintrag still — nicht tolerierbar.
+# V14 ist ERROR-Level: Inpainting ohne SSIP führt zu katastrophalen Pegelexplosionen in Stille.
+# V16 ist ERROR-Level: structural_silence_zones=None bedeutet deaktivierter Stille-Schutz.
 # Alle anderen Regeln sind ERROR-Level (blockieren CI).
 WARNING_RULES: frozenset[str] = frozenset({"V02", "V11"})
 ERROR_RULES: frozenset[str] = frozenset(RULES) - WARNING_RULES
@@ -87,6 +116,8 @@ ERROR_RULES: frozenset[str] = frozenset(RULES) - WARNING_RULES
 
 
 class VerbotenlLinter(ast.NodeVisitor):
+    """AST-Checker f\u00fcr Top-18 VERBOTEN Anti-Patterns (V01–V11 AST-basiert)."""
+
     def __init__(self, filepath: Path, source_lines: list[str]) -> None:
         self.filepath = filepath
         self.source_lines = source_lines
@@ -374,7 +405,8 @@ class VerbotenlLinter(ast.NodeVisitor):
                     self._add(
                         assign_node,
                         "V11",
-                        f"sosfilt result '{var}' (L{defline}) addiert/subtrahiert mit Audio (L{stmt_lineno}) → sosfiltfilt verwenden (§2.51, V11)",
+                        f"sosfilt result '{var}' (L{defline}) addiert/subtrahiert mit Audio"
+                        f" (L{stmt_lineno}) → sosfiltfilt verwenden (§2.51, V11)",
                     )
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -385,6 +417,7 @@ class VerbotenlLinter(ast.NodeVisitor):
     visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]  # noqa: N815
 
     def visit_Call(self, node: ast.Call) -> None:
+        """Besucht Call-Knoten und prüft auf V01–V08, V10 Verletzungen."""
         self._check_corrcoef(node)
         self._check_npmax_abs(node)
         self._check_stft_boundary(node)
@@ -564,11 +597,197 @@ def _check_cause_to_phases_sync(filepath: Path) -> list[Violation]:
 
 
 # ---------------------------------------------------------------------------
+# V13: Duplikat-Schlüssel in _MATERIAL_PRIORITY_PHASES-Dict (Modul-Level)
+# ---------------------------------------------------------------------------
+
+
+def _check_material_priority_phases_duplicates(filepath: Path) -> list[Violation]:
+    """V13: Prüft _MATERIAL_PRIORITY_PHASES auf doppelte Dict-Keys in defect_phase_mapper.py.
+
+    F601-Fehler: Python überschreibt den ersten Wert still — der Duplikat-Eintrag gewinnt.
+    """
+    if filepath.name != "defect_phase_mapper.py":
+        return []
+    try:
+        source = filepath.read_text(encoding="utf-8", errors="replace")
+        tree = ast.parse(source, filename=str(filepath))
+    except (OSError, SyntaxError):
+        return []
+
+    lines = source.splitlines()
+    violations: list[Violation] = []
+
+    for node in ast.walk(tree):
+        # Both Assign and AnnAssign supported
+        target_name: str | None = None
+        dict_node: ast.Dict | None = None
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id == "_MATERIAL_PRIORITY_PHASES":
+                    target_name = t.id
+            if target_name and isinstance(node.value, ast.Dict):
+                dict_node = node.value
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and node.target.id == "_MATERIAL_PRIORITY_PHASES":
+                target_name = node.target.id
+                if node.value and isinstance(node.value, ast.Dict):
+                    dict_node = node.value
+        if dict_node is None:
+            continue
+        seen: dict[str, int] = {}
+        for key in dict_node.keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                k = key.value
+                lineno = key.lineno
+                if k in seen:
+                    snippet = lines[lineno - 1].rstrip() if 0 < lineno <= len(lines) else ""
+                    violations.append(
+                        Violation(
+                            filepath,
+                            lineno,
+                            0,
+                            "V13",
+                            f"_MATERIAL_PRIORITY_PHASES: Duplikat-Key '{k}' (erster Eintrag"
+                            f" Zeile {seen[k]} wird still überschrieben)",
+                            snippet,
+                        )
+                    )
+                else:
+                    seen[k] = lineno
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
+# V14: Generative/Inpainting-Phase ohne SSIP-Aufruf (Modul-Level)
+# ---------------------------------------------------------------------------
+
+_INPAINTING_PHASE_PATTERNS = ("phase_24", "phase_55")
+# Kanonischer SSIP-Wrapper ODER direkte SSIP-Bausteine (beide Patterns sind §2.68-konform)
+_SSIP_ACCEPTED_NAMES = frozenset(
+    {
+        "_run_inpainting_with_ssip",  # kanonischer Wrapper (bevorzugt)
+        "_get_structural_silence_zones",  # direkter SSIP-Baustein (inline-Impl.)
+        "structural_silence_isolation",  # Modul-Import (impliziert SSIP-Nutzung)
+        "get_structural_silence_isolator",  # Singleton-Zugriff
+        "post_inpainting_silence_audit",  # SSIP Post-Audit (§2.68d)
+    }
+)
+
+
+def _check_inpainting_ssip_guard(filepath: Path) -> list[Violation]:
+    """V14: phase_24_*.py / phase_55_*.py müssen _run_inpainting_with_ssip() aufrufen (§2.68 V14)."""
+    stem = filepath.stem
+    if not any(stem.startswith(pat) for pat in _INPAINTING_PHASE_PATTERNS):
+        return []
+    try:
+        source = filepath.read_text(encoding="utf-8", errors="replace")
+        tree = ast.parse(source, filename=str(filepath))
+    except (OSError, SyntaxError):
+        return []
+
+    # Prüfen ob einer der akzeptierten SSIP-Pattern vorkommt
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id in _SSIP_ACCEPTED_NAMES:
+            return []
+        if isinstance(node, ast.Attribute) and node.attr in _SSIP_ACCEPTED_NAMES:
+            return []
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if any(name in node.value for name in _SSIP_ACCEPTED_NAMES):
+                return []
+
+    return [
+        Violation(
+            filepath,
+            1,
+            0,
+            "V14",
+            f"Inpainting-Phase '{filepath.name}' enthält keinen SSIP-Aufruf "
+            f"({', '.join(sorted(_SSIP_ACCEPTED_NAMES))}) "
+            "(§2.68 SSIP-Pflicht für phase_24 + phase_55 — kein Stille-Schutz = Pegelexplosion)",
+            "",
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# V16: structural_silence_zones=None als Default-Kwarg (AST-Klassen-Methode)
+# ---------------------------------------------------------------------------
+
+
+class _V16SilenceZonesNoneChecker(ast.NodeVisitor):
+    """Flags any function/method that has `structural_silence_zones=None` as default argument.
+
+    None is not a valid return value for _get_structural_silence_zones() — it silently
+    disables the SSIP protection layer (§2.68 V16).
+
+    Scope: Phase-Dateien (phase_*.py), UV3 (unified_restorer*.py), Inpainting-Code.
+    Explizit ausgenommen: Telemetrie/Tracer/Test-Dateien.
+    """
+
+    # Files where structural_silence_zones=None is legitimately just metadata/tracing
+    _EXCLUDE_PATTERNS = ("tracer", "test_", "_test", "audit_", "benchmark", "monitoring")
+
+    def __init__(self, filepath: Path, source_lines: list[str]) -> None:
+        self.filepath = filepath
+        self.source_lines = source_lines
+        self.violations: list[Violation] = []
+        # Only check phase files, UV3 and inpainting modules
+        stem = filepath.stem
+        self._active = (
+            stem.startswith("phase_") or "unified_restorer" in stem or "inpainting" in stem or "ssip" in stem
+        ) and not any(pat in stem for pat in self._EXCLUDE_PATTERNS)
+
+    def _check_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        if not self._active:
+            return
+        args = node.args
+        # For positional args: defaults align to the right
+        pos_with_defaults = list(zip(args.args[len(args.args) - len(args.defaults) :], args.defaults))
+        kw_with_defaults = [
+            (arg, default) for arg, default in zip(args.kwonlyargs, args.kw_defaults) if default is not None
+        ]
+        for arg, default in pos_with_defaults + kw_with_defaults:
+            if arg.arg == "structural_silence_zones" and isinstance(default, ast.Constant) and default.value is None:
+                lineno = arg.lineno
+                snippet = self.source_lines[lineno - 1].rstrip() if 0 < lineno <= len(self.source_lines) else ""
+                self.violations.append(
+                    Violation(
+                        self.filepath,
+                        lineno,
+                        arg.col_offset,
+                        "V16",
+                        f"Funktion '{node.name}': `structural_silence_zones=None` als Default — "
+                        "None ist kein erlaubter Wert (§2.68 V16); immer leere Liste [] als Default verwenden",
+                        snippet,
+                    )
+                )
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Besucht FunctionDef-Knoten und prüft auf V16 strukturelle Stille-Zonen."""
+        self._check_func(node)
+        self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Besucht AsyncFunctionDef-Knoten und prüft auf V16 strukturelle Stille-Zonen."""
+        self._check_func(node)
+        self.generic_visit(node)
+
+
+# ---------------------------------------------------------------------------
 # Datei scannen
 # ---------------------------------------------------------------------------
 
 
 def scan_file(filepath: Path) -> list[Violation]:
+    """Scannt eine Python-Datei auf VERBOTEN Anti-Patterns (V01–V16).
+
+    Args:
+        filepath: Zu scannende Datei.
+
+    Returns:
+        Liste von gefundenen Violations.
+    """
     try:
         source = filepath.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -580,11 +799,27 @@ def scan_file(filepath: Path) -> list[Violation]:
         return []
     checker = VerbotenlLinter(filepath, lines)
     checker.visit(tree)
-    # V12: Modul-Level-Check nur auf causal_defect_reasoner.py
-    return checker.violations + _check_cause_to_phases_sync(filepath)
+    # V16: structural_silence_zones=None als Default
+    v16_checker = _V16SilenceZonesNoneChecker(filepath, lines)
+    v16_checker.visit(tree)
+    # Modul-Level-Checks
+    module_violations = (
+        _check_cause_to_phases_sync(filepath)  # V12
+        + _check_material_priority_phases_duplicates(filepath)  # V13
+        + _check_inpainting_ssip_guard(filepath)  # V14
+    )
+    return checker.violations + v16_checker.violations + module_violations
 
 
 def collect_py_files(paths: Iterable[Path]) -> list[Path]:
+    """Sammelt alle .py-Dateien aus gegebenen Pfaden (rekursiv bei Verzeichnissen).
+
+    Args:
+        paths: Iterierbare von Datei- oder Verzeichnispfaden.
+
+    Returns:
+        Liste aller gefundenen .py-Dateien.
+    """
     files: list[Path] = []
     for p in paths:
         if p.is_file() and p.suffix == ".py":
@@ -600,6 +835,14 @@ def collect_py_files(paths: Iterable[Path]) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Haupteinstiegspunkt für VERBOTEN-Linter. Scannt backend/ und plugins/ auf Violations.
+
+    Args:
+        argv: Kommandozeilen-Argumente (['--strict'] aktiviert Warnings als Fehler).
+
+    Returns:
+        0 bei keine ERROR-Verletzungen, 1 bei Violations gefunden.
+    """
     if argv is None:
         argv = sys.argv[1:]
 

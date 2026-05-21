@@ -91,6 +91,8 @@ class RestorationConfig:
     enable_phase_utility_scoring: bool = False  # off by default; enable via config or --utility-scoring
     # §11.7a Studio-2026 flag — activates Stem-Sep, Matchering, Vocos, higher quality targets
     studio_2026: bool = False
+    # §2.56b Rollout-Schalter für phasenspezifische Strength-Oracles (off/pilot/all).
+    phase_strength_oracle_rollout: str = "all"
 
     def __post_init__(self) -> None:
         """Normalisiert and validate critical runtime options."""
@@ -640,7 +642,7 @@ class UnifiedRestorerV3:
             if _cached_score is not None and np.isfinite(float(_cached_score)):
                 return float(_cached_score), "cached", cached_result
         except Exception:
-            pass
+            logger.debug("_resolve_pmgg_restorability_score: cached restorability_score ungueltig", exc_info=True)
 
         try:
             _estimated_result = estimator_fn(
@@ -977,7 +979,9 @@ class UnifiedRestorerV3:
                 if vals:
                     return float(np.mean(vals))
         except Exception:
-            pass
+            logger.debug(
+                "_fc_defect_severity_mean: defect_result.scores konnte nicht ausgewertet werden", exc_info=True
+            )
         return 0.0
 
     @staticmethod
@@ -1003,7 +1007,7 @@ class UnifiedRestorerV3:
                     # Normierung: (mos - 0.5) / 5.0 → [0.0, 1.0]
                     return float(np.clip((_mos - 0.5) / 5.0, 0.0, 1.0))
             except Exception:
-                pass
+                logger.debug("_resolve_studio_pqs_improvement: pqs_mos ungueltig", exc_info=True)
 
             if not any(r.get("error_code") == "PQS_INVALID_STUDIO" for r in fail_reasons):
                 fail_reasons.append(
@@ -1414,10 +1418,17 @@ class UnifiedRestorerV3:
             or genre_key in UnifiedRestorerV3._VOCAL_GENRE_KEYS  # type: ignore[attr-defined]
             or any(vg in genre_key for vg in ("schlager", "chanson", "vocal", "folk", "gospel", "lied"))
         )
-        if schlager_like and confidence >= 0.10:
-            # Vocal genres: floor to 0.35 only when some vocal signal was detected
-            # (confidence ≥ 0.10). If PANNs finds no vocal signal at all, we trust
-            # the signal measurement over the genre label to avoid false VQI gates.
+        if schlager_like and (is_schlager or confidence >= 0.10):
+            # §0p v9.12.12: Für is_schlager=True (Klassifizierer-Ergebnis) gilt der
+            # 0.35-Floor OHNE Mindestschwelle. PANNs unter-detektiert Gesang auf
+            # degradiertem Analogmaterial systematisch: Cassette-SNR < 15 dB, Intro-
+            # Segment ohne Gesang, Tape-Rauschen — führen alle zu confidence=0.0
+            # trotz 80-90% Vokalanteil. is_schlager=True ist zuverlässiger als
+            # rohes PANNs-Singing bei degradiertem Material. Die frühere Bedingung
+            # "confidence >= 0.10" deaktivierte den Vokalschutz vollständig bei
+            # leerem Pre-Analysis-Segment (Intro-only). Für reine Genre-Keyword-
+            # Treffer (ohne is_schlager=True) bleibt die 0.10-Schwelle als
+            # False-Positive-Schutz erhalten.
             confidence = max(confidence, 0.35)
 
         return float(np.clip(confidence, 0.0, 1.0))
@@ -2052,6 +2063,33 @@ class UnifiedRestorerV3:
         if len(parts) >= 2 and parts[0] == "phase" and parts[1].isdigit():
             return f"phase_{parts[1]}"
         return None
+
+    @staticmethod
+    def _should_preserve_specific_transport_material(
+        current_material: MaterialType | None,
+        gp_material: str | None,
+        mc_result: Any | None,
+    ) -> bool:
+        """Verhindert, dass ein spezifisches Transport-Material durch generisches Tape ersetzt wird.
+
+        Wissenschaftliche Begründung: Wenn der MediumDetector eine physisch messbare
+        Kette mit Kassette erkennt (z. B. vinyl→cassette→mp3_low), ist "cassette"
+        informationsreicher als das Oberlabel "tape". Ein Downcast auf "tape" löscht
+        transport-spezifische Physik (Capstan/Pinch-Roller) und verschlechtert die
+        nachfolgenden Schwellwert-/Phasenentscheidungen.
+        """
+        _cur = str(getattr(current_material, "value", current_material) or "").lower()
+        _gp = str(gp_material or "").strip().lower()
+        if _cur != "cassette" or _gp != "tape":
+            return False
+
+        _mc_conf = float(getattr(mc_result, "confidence", 0.0)) if mc_result is not None else 0.0
+        _is_multi_gen = bool(getattr(mc_result, "is_multi_generation", False)) if mc_result is not None else False
+        _chain_raw = getattr(mc_result, "transfer_chain", []) if mc_result is not None else []
+        _chain = [str(x).lower() for x in (_chain_raw if isinstance(_chain_raw, list) else []) if str(x).strip()]
+        _has_cassette_stage = "cassette" in _chain
+
+        return bool(_has_cassette_stage or _is_multi_gen or _mc_conf >= 0.35)
 
     @classmethod
     def _phase_has_musical_budget_priority(cls, phase_id: str) -> bool:
@@ -4233,6 +4271,65 @@ class UnifiedRestorerV3:
         "phase_64_tape_splice_repair": "reconstruction_inpainting",
     }
 
+    # §2.56b Kontrollierter Rollout: Pilot nur auf stabilen, gut abgesicherten
+    # Kernphasen. Vollausbau erfolgt ueber rollout_mode="all".
+    _PHASE_STRENGTH_ORACLE_PILOT_PHASES: frozenset[str] = frozenset(
+        {
+            "phase_03_denoise",
+            "phase_04_eq_correction",
+            "phase_05_rumble_filter",
+            "phase_08_transient_preservation",
+            "phase_09_crackle_removal",
+            "phase_10_compression",
+            "phase_12_wow_flutter_fix",
+            "phase_14_phase_correction",
+            "phase_19_de_esser",
+            "phase_29_tape_hiss_reduction",
+        }
+    )
+    _PHASE_STRENGTH_ORACLE_ROLLOUT_MODES: frozenset[str] = frozenset({"off", "pilot", "all"})
+
+    @staticmethod
+    def _normalize_phase_strength_oracle_rollout_mode(raw_mode: Any) -> str:
+        """Normalisiert Rollout-Modus für Strength-Oracles auf off/pilot/all."""
+        _raw = str(raw_mode or "").strip().lower().replace("-", "_")
+        _aliases = {
+            "off": "off",
+            "0": "off",
+            "false": "off",
+            "disabled": "off",
+            "none": "off",
+            "pilot": "pilot",
+            "1": "all",
+            "true": "all",
+            "enabled": "all",
+            "full": "all",
+            "all": "all",
+        }
+        _norm = _aliases.get(_raw, "all")
+        if _norm not in UnifiedRestorerV3._PHASE_STRENGTH_ORACLE_ROLLOUT_MODES:
+            return "all"
+        return _norm
+
+    def _resolve_phase_strength_oracle_rollout_mode(self, kwargs: dict[str, Any]) -> str:
+        """Ermittelt den aktiven Strength-Oracle-Rollout-Modus mit sicherem Default."""
+        _mode = kwargs.get("phase_strength_oracle_rollout")
+        if _mode is None:
+            _mode = getattr(self, "_restoration_context", {}).get("phase_strength_oracle_rollout")
+        if _mode is None:
+            _mode = getattr(getattr(self, "config", None), "phase_strength_oracle_rollout", None)
+        return UnifiedRestorerV3._normalize_phase_strength_oracle_rollout_mode(_mode)
+
+    @classmethod
+    def _is_phase_strength_oracle_enabled_for_phase(cls, phase_id: str, rollout_mode: str) -> bool:
+        """Prüft, ob das Strength-Orakel für eine Phase im aktuellen Rollout aktiv ist."""
+        _mode = cls._normalize_phase_strength_oracle_rollout_mode(rollout_mode)
+        if _mode == "off":
+            return False
+        if _mode == "pilot":
+            return phase_id in cls._PHASE_STRENGTH_ORACLE_PILOT_PHASES
+        return phase_id in cls._PHASE_INTERVENTION_CLASS
+
     _INTERVENTION_CLASS_DEFAULTS: dict[str, dict[str, Any]] = {
         "general": {
             "enable_loudness": True,
@@ -4628,6 +4725,38 @@ class UnifiedRestorerV3:
             if len(filtered_members) >= 2:
                 active[name] = tuple(phase_id for phase_id in selected if phase_id in filtered_members)
         return active
+
+    def _validate_selected_phase_ids(
+        self,
+        selected_phases: list[str] | tuple[str, ...],
+        *,
+        context: str,
+    ) -> tuple[list[str], list[str]]:
+        """Validiert ausgewählte Phasen gegen Registry/Aliase und entfernt unbekannte IDs."""
+        _known = set(self.phase_metadata.keys())
+        _aliases = dict(getattr(self, "_PHASE_ALIASES", {}))
+        _resolved: list[str] = []
+        _invalid: list[str] = []
+        _seen: set[str] = set()
+
+        for _pid in list(selected_phases or []):
+            _canonical = _aliases.get(_pid, _pid)
+            if _canonical not in _known:
+                _invalid.append(_pid)
+                continue
+            if _canonical in _seen:
+                continue
+            _seen.add(_canonical)
+            _resolved.append(_canonical)
+
+        if _invalid:
+            logger.error(
+                "§PHASE_ID_VALIDATE %s: %d unbekannte Phase-ID(s) entfernt: %s",
+                context,
+                len(_invalid),
+                _invalid,
+            )
+        return _resolved, _invalid
 
     def _get_phase(self, phase_id: str) -> PhaseInterface | None:
         """Lädt und instanziiert eine Phase nur bei Bedarf (Lazy Loading).
@@ -5386,12 +5515,25 @@ class UnifiedRestorerV3:
                             from backend.core.defect_scanner import MaterialType as _MatType
 
                             _gp_mat_type = _MatType(_gp_material)
-                            _classified_material = _gp_mat_type
-                            logger.info(
-                                "§Dach GlobalPlan-Prior: MediumClassifier material→%s (Chunk-Konfidenz=%.2f)",
+                            if UnifiedRestorerV3._should_preserve_specific_transport_material(
+                                _classified_material,
                                 _gp_material,
-                                _chunk_mc_conf,
-                            )
+                                _mc_result,
+                            ):
+                                logger.info(
+                                    "§Dach GlobalPlan-Prior: spezifisches Material beibehalten"
+                                    " (MC=%s, GP=%s, chunk_conf=%.2f)",
+                                    str(getattr(_classified_material, "value", _classified_material)),
+                                    _gp_material,
+                                    _chunk_mc_conf,
+                                )
+                            else:
+                                _classified_material = _gp_mat_type
+                                logger.info(
+                                    "§Dach GlobalPlan-Prior: MediumClassifier material→%s (Chunk-Konfidenz=%.2f)",
+                                    _gp_material,
+                                    _chunk_mc_conf,
+                                )
                         except Exception as _gp_mat_exc:
                             logger.debug(
                                 "GlobalPlan MaterialType-Override fehlgeschlagen: %s — Chunk-Ergebnis behalten",
@@ -5758,6 +5900,8 @@ class UnifiedRestorerV3:
             # §0: Spatial/Stereo-Phasen müssen im Restoration-Mode konservativ arbeiten
             # (kein künstlicher Hall, keine Gesang-Distanzierung) — §0 Primum non nocere.
             "is_studio_mode": _is_studio_26,
+            # §V25 WBG: Kumulativer Wärmeband-Verlust (200–800 Hz), initialisiert pro Run.
+            "warmth_band_loss_db": 0.0,
             # §HF-Tracking: Kumulativer HF-Gain-Zähler — initialisiert auf 0.0 pro Run.
             # phase_39-Guard liest diesen Wert; war bisher dead code (UV3 hat nie gesetzt).
             "hf_cumulative_gain_db": 0.0,
@@ -6264,36 +6408,54 @@ class UnifiedRestorerV3:
         try:
             from backend.core.transient_decoupled_processor import get_transient_decoupled_processor
 
-            _tdp_proc = get_transient_decoupled_processor()
-            _tdp_audio_percussive, _tdp_audio_harmonic = _tdp_proc.separate(audio, sample_rate)
-            _tdp_percussive = _tdp_audio_percussive.copy()  # Original-Transienten sichern
-            audio = _tdp_audio_harmonic  # Pipeline ab jetzt auf harm. Anteil
-            # §LAG_PROBE_0C: NACH TDP-Separation (harm. Anteil)
-            # HPSS-Harmonic hat starke Tonal-Struktur am Anfang — GCC-PHAT erste 5s erzeugt
-            # False-Positives. Mittleres 5s-Fenster (wie STCG) vermeidet diese Ambiguität.
-            if audio.ndim == 2:
-                try:
-                    from backend.file_import import _estimate_interchannel_lag_samples as _gcc_lag
+            # §2.27-vocal-bypass: Bei Vokalmaterial (panns_singing ≥ 0.25) wird TDP
+            # vollständig übersprungen. HPSS klassifiziert Vokal-Konsonanten (Plosive
+            # b/p/d/t/k, Frikative s/sch/f/ch, Atemanschläge) als "percussive" — diese
+            # Segmente bypassen dann alle Restaurierungsphasen und erzeugen beim
+            # OLA-Rekombinations-Crossfade "Kratzen" an jedem Silbengrenzpunkt.
+            # Bei Bypass: audio bleibt vollständig im harmonischen Pfad, kein
+            # percussiver Anteil = keine Rekombination = keine Kratzen-Artefakte.
+            _tdp_vocal_bypass = float(getattr(self, "_panns_singing", 0.0)) >= 0.25
+            if _tdp_vocal_bypass:
+                logger.info(
+                    "§2.27 TDP: Vocal-Bypass aktiv (panns_singing=%.2f ≥ 0.25) — "
+                    "HPSS-Trennung übersprungen, Vokal-Konsonanten bleiben im Hauptpfad",
+                    float(getattr(self, "_panns_singing", 0.0)),
+                )
+                # _tdp_percussive = None, _tdp_harmonic_ready = False → keine Rekombination
+            else:
+                _tdp_proc = get_transient_decoupled_processor()
 
-                    _lp0c_n = audio.shape[1]
-                    _lp0c_w = int(sample_rate * 5.0)
-                    _lp0c_s = max(0, _lp0c_n // 2 - _lp0c_w // 2)
-                    _lp0c_e = min(_lp0c_n, _lp0c_s + _lp0c_w)
-                    _lp0c_win = audio[:, _lp0c_s:_lp0c_e]
-                    _lp0c_lag = _gcc_lag(_lp0c_win, sample_rate)
-                    logger.info(
-                        "LAG_PROBE 0C/after_tdp_separation: lag=%d samples (%.1f ms)",
-                        _lp0c_lag,
-                        _lp0c_lag / sample_rate * 1000,
-                    )
-                except Exception as _lp0c_exc:
-                    logger.debug("LAG_PROBE_0C fehlgeschlagen: %s", _lp0c_exc)
-            _tdp_harmonic_ready = True
-            logger.info(
-                "§2.27 TDP: Percussive/Harmonic getrennt (perc_rms=%.4f harm_rms=%.4f)",
-                float(np.sqrt(np.mean(_tdp_audio_percussive**2))),
-                float(np.sqrt(np.mean(_tdp_audio_harmonic**2))),
-            )
+            if not _tdp_vocal_bypass:
+                _tdp_audio_percussive, _tdp_audio_harmonic = _tdp_proc.separate(audio, sample_rate)
+                _tdp_percussive = _tdp_audio_percussive.copy()  # Original-Transienten sichern
+                audio = _tdp_audio_harmonic  # Pipeline ab jetzt auf harm. Anteil
+                # §LAG_PROBE_0C: NACH TDP-Separation (harm. Anteil)
+                # HPSS-Harmonic hat starke Tonal-Struktur am Anfang — GCC-PHAT erste 5s erzeugt
+                # False-Positives. Mittleres 5s-Fenster (wie STCG) vermeidet diese Ambiguität.
+                if audio.ndim == 2:
+                    try:
+                        from backend.file_import import _estimate_interchannel_lag_samples as _gcc_lag
+
+                        _lp0c_n = audio.shape[1]
+                        _lp0c_w = int(sample_rate * 5.0)
+                        _lp0c_s = max(0, _lp0c_n // 2 - _lp0c_w // 2)
+                        _lp0c_e = min(_lp0c_n, _lp0c_s + _lp0c_w)
+                        _lp0c_win = audio[:, _lp0c_s:_lp0c_e]
+                        _lp0c_lag = _gcc_lag(_lp0c_win, sample_rate)
+                        logger.info(
+                            "LAG_PROBE 0C/after_tdp_separation: lag=%d samples (%.1f ms)",
+                            _lp0c_lag,
+                            _lp0c_lag / sample_rate * 1000,
+                        )
+                    except Exception as _lp0c_exc:
+                        logger.debug("LAG_PROBE_0C fehlgeschlagen: %s", _lp0c_exc)
+                _tdp_harmonic_ready = True
+                logger.info(
+                    "§2.27 TDP: Percussive/Harmonic getrennt (perc_rms=%.4f harm_rms=%.4f)",
+                    float(np.sqrt(np.mean(_tdp_audio_percussive**2))),
+                    float(np.sqrt(np.mean(_tdp_audio_harmonic**2))),
+                )
         except Exception as _tdp_sep_exc:
             logger.debug("TransientDecoupledProcessor nicht verfügbar: %s", _tdp_sep_exc)
 
@@ -6978,7 +7140,10 @@ class UnifiedRestorerV3:
                 if _qb is not None and hasattr(_qb, "dynamic_range_db"):
                     _sgi_dyn_db = float(_qb.dynamic_range_db)
             except Exception:
-                pass
+                logger.debug(
+                    "Song-Goal-Importance: dynamic_range_db konnte nicht aus _quality_before gelesen werden",
+                    exc_info=True,
+                )
             _sgi_bpm: float | None = None
             if _schlager_result is not None and hasattr(_schlager_result, "bpm"):
                 _bpm_raw = getattr(_schlager_result, "bpm", None)
@@ -7467,13 +7632,15 @@ class UnifiedRestorerV3:
                     self._phase_metadata_accumulator["dag_sorted_before_execution"] = True
             _dag_violations = _validate_phase_order(selected_phases)
             if _dag_violations:
-                logger.warning(
-                    "§7.5a Phase-DAG: %d HARD_BEFORE-Verletzung(en): %s",
+                # §7.5a Transienter Zwischenzustand: §GOAL_BASELINE-Sort (Sort2) korrigiert noch
+                # ausstehende Verletzungen. Finale Validierung erfolgt nach Sort2 als WARNING.
+                logger.debug(
+                    "§7.5a Phase-DAG (Zwischenzustand vor §GOAL_BASELINE): %d Verletzung(en) — Sort2 korrigiert: %s",
                     len(_dag_violations),
                     "; ".join(_dag_violations[:3]),
                 )
                 if isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
-                    self._phase_metadata_accumulator["dag_violations"] = _dag_violations
+                    self._phase_metadata_accumulator["dag_violations_intermediate"] = _dag_violations
             else:
                 logger.debug("§7.5a Phase-DAG: keine Reihenfolge-Verletzungen")
         except Exception as _dag_exc:
@@ -8244,6 +8411,13 @@ class UnifiedRestorerV3:
         else:
             self._restoration_context.setdefault("stem_nr_done", False)
 
+        try:
+            _fallback_teamwork_profile = self._initialize_fallback_teamwork_controller()
+            if isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
+                self._phase_metadata_accumulator["fallback_teamwork_controller"] = dict(_fallback_teamwork_profile)
+        except Exception as _ftc_init_exc:
+            logger.debug("Fallback-Teamwork-Controller Init non-blocking: %s", _ftc_init_exc)
+
         # §GOAL_BASELINE_CHECK [RELEASE_MUST] (v9.12.13): Pre-pipeline goal-deficit recovery.
         # Measures all 15 goal proxies on the input audio using _fast_goal_snapshot() (DSP-only,
         # ≤200ms). For any applicable goal that is measurably below its effective target
@@ -8301,6 +8475,25 @@ class UnifiedRestorerV3:
                         _gbc_candidates = _get_grp(_gbc_goal, is_studio_2026=_gbc_is_studio)
                         for _gbc_phase in _gbc_candidates:
                             if _gbc_phase not in _gbc_selected_set:
+                                # §0p/§2.46e: phase_46 erzeugt Delay-basierte Raumanteile,
+                                # die bei Gesang als Echo wahrgenommen werden. In Restoration
+                                # nur zulässig wenn keine Vokalpräsenz und kein Reverb-Exzess.
+                                if _gbc_phase == "phase_46_spatial_enhancement" and not _gbc_is_studio:
+                                    _gbc_p46_panns = float(getattr(self, "_panns_singing", 0.0))
+                                    # reverb_excess aus DefectScanner-Ergebnissen lesen,
+                                    # nicht aus dem Goal-Proxy-Snapshot (_gbc_snapshot enthält
+                                    # nur Musical-Goal-Scores, kein "reverb_excess"-Schlüssel).
+                                    _gbc_defect_sev = (self._restoration_context or {}).get("defect_severities") or {}
+                                    _gbc_p46_reverb = float(_gbc_defect_sev.get("reverb_excess", 0.0))
+                                    if _gbc_p46_panns >= 0.25 or _gbc_p46_reverb > 0.20:
+                                        logger.info(
+                                            "§GOAL_BASELINE phase_46 skip: vocal/reverb guard "
+                                            "(panns=%.2f reverb=%.2f) — spatial_depth deficit "
+                                            "handled via phase_06 instead",
+                                            _gbc_p46_panns,
+                                            _gbc_p46_reverb,
+                                        )
+                                        continue  # nächsten Kandidaten probieren (phase_06)
                                 selected_phases.append(_gbc_phase)
                                 _gbc_selected_set.add(_gbc_phase)
                                 _gbc_added.append(
@@ -8337,10 +8530,41 @@ class UnifiedRestorerV3:
 
                     selected_phases = _sort_dag(selected_phases)
                     logger.debug("§7.5a DAG-Sort: %d Phasen topologisch geordnet", len(selected_phases))
+                    # §7.5a [RELEASE_MUST] Finale DAG-Validierung nach §GOAL_BASELINE-Sort —
+                    # dies ist der endgültige Ausführungsplan; Verletzungen hier sind echte Fehler.
+                    try:
+                        from backend.core.phase_dag import validate_phase_order as _validate_final
+
+                        _final_dag_violations = _validate_final(selected_phases)
+                        if _final_dag_violations:
+                            logger.warning(
+                                "§7.5a Phase-DAG FINAL: %d HARD_BEFORE-Verletzung(en) im Ausführungsplan: %s",
+                                len(_final_dag_violations),
+                                "; ".join(_final_dag_violations[:3]),
+                            )
+                            if isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
+                                self._phase_metadata_accumulator["dag_violations_final"] = _final_dag_violations
+                        else:
+                            logger.debug("§7.5a Phase-DAG FINAL: keine Reihenfolge-Verletzungen")
+                    except Exception as _vf_exc:
+                        logger.debug("§7.5a DAG-Finale-Validierung non-blocking: %s", _vf_exc)
                 except Exception as _dag_sort_exc:
                     logger.debug("§7.5a DAG-Sort non-blocking: %s", _dag_sort_exc)
         except Exception as _gbc_exc:
             logger.debug("§GOAL_BASELINE non-blocking: %s", _gbc_exc)
+
+        selected_phases, _invalid_selected_phases = self._validate_selected_phase_ids(
+            selected_phases,
+            context="restore_pre_execute",
+        )
+        if _invalid_selected_phases:
+            self._warnings.append(
+                "Ungültige Phase-ID(s) im Ausführungsplan entfernt: " + ", ".join(_invalid_selected_phases)
+            )
+            if isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
+                self._phase_metadata_accumulator["invalid_selected_phases"] = list(_invalid_selected_phases)
+            if isinstance(getattr(self, "_restoration_context", None), dict):
+                self._restoration_context["invalid_selected_phases"] = list(_invalid_selected_phases)
 
         try:
             _phase_quiet_edge_profile = UnifiedRestorerV3._compute_quiet_edge_prevention_profile(
@@ -8613,6 +8837,17 @@ class UnifiedRestorerV3:
                 # Iterationen auf 1 reduzieren (verhindert Artefaktakkumulation bei
                 # hochwertigem Material, Ephraim & Malah 1984).
                 _fc_max_iter = 5  # v9.15-B3: aligned with PMGG 5-retry strategy
+                _ftc_profile_fc = getattr(self, "_restoration_context", {}).get("fallback_teamwork_controller")
+                if isinstance(_ftc_profile_fc, dict):
+                    _ftc_boost = int(_ftc_profile_fc.get("feedback_chain_iteration_boost", 0) or 0)
+                    if _ftc_boost > 0:
+                        _fc_max_iter = min(_fc_max_iter + _ftc_boost, 9)
+                        logger.info(
+                            "FallbackTeamwork FC-boost: events=%d boost=+%d → max_iter=%d",
+                            int(_ftc_profile_fc.get("event_count", 0) or 0),
+                            _ftc_boost,
+                            _fc_max_iter,
+                        )
                 # §G4: Boost FeedbackChain iterations when phase loop had significant
                 # conflicts — PMGG log shows how many phases ended in "best_effort" (= no
                 # fully-passing strength found). More conflicts → more FC iterations needed
@@ -9967,16 +10202,34 @@ class UnifiedRestorerV3:
                 material_type=_ccr_mat_val,
                 panns_singing=float(self._restoration_context.get("panns_singing", 0.0)),
             )
+            # §1.2 Teamwork-Invariante [RELEASE_MUST]: Pipeline-Ende MUSS den vollen
+            # 15-Ziel-Vektor (effective thresholds) auswerten. Kein Goal darf durch
+            # fehlenden Score stillschweigend aus der Endentscheidung herausfallen.
+            _goal_vector_keys = sorted(_effective_goal_thresholds.keys())
+            _missing_goal_scores = [k for k in _goal_vector_keys if k not in _musical_goal_scores]
+            if _missing_goal_scores:
+                logger.warning(
+                    "🎯 Goal-Vektor unvollständig: %d Ziel(e) fehlen in measure_all() → default score=0.0 (%s)",
+                    len(_missing_goal_scores),
+                    ", ".join(_missing_goal_scores),
+                )
+                for _missing_goal in _missing_goal_scores:
+                    _musical_goal_scores[_missing_goal] = 0.0
+
             _musical_goals_passed = {
                 k: (
                     True
                     if k not in _applicable_goal_names
                     else float(_musical_goal_scores.get(k, 0.0)) >= _effective_goal_thresholds.get(k, 0.85)
                 )
-                for k in _musical_goal_scores
+                for k in _goal_vector_keys
             }
             _musical_excellence_score = sum(_musical_goal_scores.values()) / max(len(_musical_goal_scores), 1)
-            _mg_violations = [k for k, p in _musical_goals_passed.items() if not p and k in _applicable_goal_names]
+            _mg_violations = [
+                k
+                for k, p in _musical_goals_passed.items()
+                if (k in _goal_vector_keys and k in _applicable_goal_names and not p)
+            ]
 
             # §GOAL_MONITOR [RELEASE_MUST] Structured per-goal scorecard for goal_monitor.py.
             # Logs ALL 15 goals with score, effective threshold, gap, and pass/fail status
@@ -10028,7 +10281,7 @@ class UnifiedRestorerV3:
                 logger.warning(
                     "🎵 Musical Goals Verletzungen (%d/%d): %s — autonome End-Gate-Recovery aktiv",
                     len(_mg_violations),
-                    len(_musical_goal_scores),
+                    len(_goal_vector_keys),
                     ", ".join(_mg_violations),
                 )
 
@@ -10383,7 +10636,7 @@ class UnifiedRestorerV3:
             else:
                 logger.info(
                     "🎵 Musical Goals: alle %d Ziele erfüllt (Ø %.3f)",
-                    len(_musical_goal_scores),
+                    len(_goal_vector_keys),
                     _musical_excellence_score,
                 )
         except Exception as _mg_exc:
@@ -10939,7 +11192,12 @@ class UnifiedRestorerV3:
                 measure_emotional_arc,
             )
 
-            _arc_post_mdem = measure_emotional_arc(original_audio_for_goals, restored_audio, sample_rate)
+            _arc_post_mdem = measure_emotional_arc(
+                original_audio_for_goals,
+                restored_audio,
+                sample_rate,
+                frisson_zones=_frisson_zones,  # §2.44: Frisson ×2.0 auch bei der Entscheidungsmessung
+            )
             if (
                 _arc_post_mdem is not None
                 and not _arc_post_mdem.skipped
@@ -11027,12 +11285,65 @@ class UnifiedRestorerV3:
             _pwg_thr = 2.0
             _pwg_win = max(2048, int(1.0 * float(sample_rate)))
             _pwg_hop = max(512, int(0.25 * float(sample_rate)))
+
+            def _pwg_to_mono_time(_arr: np.ndarray) -> np.ndarray:
+                """Liefert ein 1D-Monosignal entlang der Zeitachse (layout-robust)."""
+                _sig = np.asarray(_arr, dtype=np.float32)
+                if _sig.ndim <= 1:
+                    return _sig.reshape(-1)
+                if _sig.shape[0] <= 2 and _sig.shape[1] > 2:
+                    return np.mean(_sig, axis=0, dtype=np.float32)
+                if _sig.shape[1] <= 2 and _sig.shape[0] > 2:
+                    return np.mean(_sig, axis=1, dtype=np.float32)
+                if _sig.shape[0] >= _sig.shape[1]:
+                    return np.mean(_sig, axis=1, dtype=np.float32)
+                return np.mean(_sig, axis=0, dtype=np.float32)
+
+            def _pwg_apply_time_gain(_arr: np.ndarray, _gain: np.ndarray, _n: int) -> np.ndarray:
+                """Wendet sample-genauen Gain entlang der Zeitachse auf Mono/Stereo an."""
+                _sig = np.asarray(_arr, dtype=np.float32).copy()
+                if _sig.ndim <= 1:
+                    _sig[:_n] *= _gain[:_n]
+                    return _sig
+                if _sig.shape[0] <= 2 and _sig.shape[1] >= _n:
+                    _sig[:, :_n] *= _gain[:_n][None, :]
+                    return _sig
+                if _sig.shape[1] <= 2 and _sig.shape[0] >= _n:
+                    _sig[:_n, :] *= _gain[:_n][:, None]
+                    return _sig
+                if _sig.shape[0] >= _sig.shape[1]:
+                    _sig[:_n, :] *= _gain[:_n][:, None]
+                else:
+                    _sig[:, :_n] *= _gain[:_n][None, :]
+                return _sig
+
+            def _pwg_hard_reset_regions(_cand: np.ndarray, _ref: np.ndarray, _mask: np.ndarray, _n: int) -> np.ndarray:
+                """Setzt kritische Fenster exakt auf Referenz zurueck (nur Attenuation)."""
+                _out = np.asarray(_cand, dtype=np.float32).copy()
+                _refa = np.asarray(_ref, dtype=np.float32)
+                if _out.ndim <= 1:
+                    _out[:_n][_mask[:_n]] = _refa[:_n][_mask[:_n]]
+                    return _out
+                if _out.shape[0] <= 2 and _out.shape[1] >= _n:
+                    _out[:, :_n][:, _mask[:_n]] = _refa[:, :_n][:, _mask[:_n]]
+                    return _out
+                if _out.shape[1] <= 2 and _out.shape[0] >= _n:
+                    _out[:_n, :][_mask[:_n], :] = _refa[:_n, :][_mask[:_n], :]
+                    return _out
+                if _out.shape[0] >= _out.shape[1]:
+                    _out[:_n, :][_mask[:_n], :] = _refa[:_n, :][_mask[:_n], :]
+                else:
+                    _out[:, :_n][:, _mask[:_n]] = _refa[:, :_n][:, _mask[:_n]]
+                return _out
+
             _pwg_ref = np.asarray(original_audio_for_goals, dtype=np.float32)
             _pwg_cand = np.asarray(restored_audio, dtype=np.float32)
-            _pwg_n = int(min(_pwg_ref.shape[-1], _pwg_cand.shape[-1]))
+            _pwg_rm = _pwg_to_mono_time(_pwg_ref)
+            _pwg_cm = _pwg_to_mono_time(_pwg_cand)
+            _pwg_n = int(min(_pwg_rm.shape[0], _pwg_cm.shape[0]))
             if _pwg_n > 2048:
-                _pwg_rm = np.mean(_pwg_ref[..., :_pwg_n], axis=0) if _pwg_ref.ndim == 2 else _pwg_ref[:_pwg_n]
-                _pwg_cm = np.mean(_pwg_cand[..., :_pwg_n], axis=0) if _pwg_cand.ndim == 2 else _pwg_cand[:_pwg_n]
+                _pwg_rm = _pwg_rm[:_pwg_n]
+                _pwg_cm = _pwg_cm[:_pwg_n]
                 _pwg_nf = max(1, (_pwg_n - _pwg_win) // _pwg_hop + 1)
                 _pwg_rdb = np.empty(_pwg_nf, dtype=np.float64)
                 _pwg_cdb = np.empty(_pwg_nf, dtype=np.float64)
@@ -11062,29 +11373,42 @@ class UnifiedRestorerV3:
                             + (1.0 - (_pwg_aa if _pwg_t < _pwg_p else _pwg_ar)) * _pwg_t
                         )
                     _pwg_gl = np.power(10.0, np.minimum(_pwg_sm, 0.0) / 20.0, dtype=np.float32)
-                    _pwg_fixed = (
-                        restored_audio[..., :_pwg_n] * _pwg_gl[None, :]
-                        if restored_audio.ndim == 2
-                        else restored_audio[:_pwg_n] * _pwg_gl
+                    restored_audio = _pwg_apply_time_gain(restored_audio, _pwg_gl, _pwg_n)
+
+                    # Zweite Fangschicht: falls nach Gain noch Explosionsfenster > +2 dB bleiben,
+                    # harte Ruecksetzung auf Original in diesen Zeitbereichen.
+                    _pwg_post = _pwg_to_mono_time(restored_audio)[:_pwg_n]
+                    _pwg_post_db = np.empty(_pwg_nf, dtype=np.float64)
+                    for _pk in range(_pwg_nf):
+                        _ps, _pe = _pk * _pwg_hop, min(_pk * _pwg_hop + _pwg_win, _pwg_n)
+                        _pwg_post_db[_pk] = 20.0 * np.log10(
+                            float(np.sqrt(np.mean(_pwg_post[_ps:_pe] ** 2) + 1e-12)) + 1e-12
+                        )
+                    _pwg_residual = (_pwg_rdb <= _pwg_qdbfs) & ((_pwg_post_db - _pwg_rdb) > _pwg_thr)
+                    if np.any(_pwg_residual):
+                        _pwg_res_mask = np.zeros(_pwg_n, dtype=bool)
+                        for _pk in np.where(_pwg_residual)[0]:
+                            _ps, _pe = _pk * _pwg_hop, min(_pk * _pwg_hop + _pwg_win, _pwg_n)
+                            _pwg_res_mask[_ps:_pe] = True
+                        restored_audio = _pwg_hard_reset_regions(
+                            restored_audio,
+                            original_audio_for_goals,
+                            _pwg_res_mask,
+                            _pwg_n,
+                        )
+
+                    restored_audio = np.clip(
+                        np.nan_to_num(restored_audio, nan=0.0, posinf=0.0, neginf=0.0),
+                        -1.0,
+                        1.0,
                     )
-                    _pwg_fixed = np.clip(np.nan_to_num(_pwg_fixed, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
-                    if restored_audio.ndim == 2:
-                        restored_audio = (
-                            np.concatenate([_pwg_fixed, restored_audio[:, _pwg_n:]], axis=1)
-                            if restored_audio.shape[-1] > _pwg_n
-                            else _pwg_fixed
-                        )
-                    else:
-                        restored_audio = (
-                            np.concatenate([_pwg_fixed, restored_audio[_pwg_n:]])
-                            if len(restored_audio) > _pwg_n
-                            else _pwg_fixed
-                        )
                     logger.warning(
-                        "§2.30c Pre-WPG quiet-zone guard: %d explosions vs original reference (att=%.1f dB mat=%s)",
+                        "§2.30c Pre-WPG quiet-zone guard: %d explosions vs original reference "
+                        "(att=%.1f dB mat=%s, residual_reset=%d)",
                         int(np.sum(_pwg_expl)),
                         float(np.min(_pwg_gdb_f[_pwg_gdb_f < 0.0])) if np.any(_pwg_gdb_f < 0.0) else 0.0,
                         _pwg_mat_key,
+                        int(np.sum(_pwg_residual)) if "_pwg_residual" in locals() else 0,
                     )
         except Exception as _pre_wpg_exc:
             logger.debug("§2.30c Pre-WPG quiet-zone guard non-blocking: %s", _pre_wpg_exc)
@@ -11398,6 +11722,16 @@ class UnifiedRestorerV3:
             if _emotional_arc_result is not None
             else 1.0
         )
+        _carrier_chain_recovery_ratio = float(getattr(self, "_carrier_chain_recovery_ratio", 0.0) or 0.0)
+        _hpi_reference_audio = None
+        if _carrier_chain_recovery_ratio > 0.15:
+            _candidate_reference_audio = getattr(self, "_best_carrier_checkpoint", None)
+            if (
+                _candidate_reference_audio is not None
+                and hasattr(_candidate_reference_audio, "shape")
+                and _candidate_reference_audio.shape == restored_audio.shape
+            ):
+                _hpi_reference_audio = _candidate_reference_audio
 
         # §4.7 [RELEASE_MUST] Noise-Texture-Coherence End-of-Pipeline Guard
         _noise_texture_result = None
@@ -11645,6 +11979,7 @@ class UnifiedRestorerV3:
                     era_bin=_hpi_era,
                     vqi=_vqi_for_hpi,
                     panns_singing=_panns_singing_for_hpi,
+                    reference_audio=_hpi_reference_audio,
                 )
             if not _hpi_result.passed:
                 _fail_reasons.append(
@@ -11700,9 +12035,16 @@ class UnifiedRestorerV3:
                         1.0,
                     )
                 else:
+                    restored_audio = np.clip(
+                        np.nan_to_num(
+                            np.asarray(original_audio_for_goals, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
+                        ),
+                        -1.0,
+                        1.0,
+                    )
                     logger.warning(
                         "§2.44 HPI-Rollback: kein kompatibler Checkpoint verfügbar "
-                        "(HPI=%.4f) — Export mit Pipeline-Ausgang (Fallback)",
+                        "(HPI=%.4f) — fail-closed auf Original",
                         _hpi_result.hpi,
                     )
             else:
@@ -11724,7 +12066,13 @@ class UnifiedRestorerV3:
                     )
 
                     _af_save = float(getattr(_hpi_result, "artifact_freedom", 0.0))
-                    if float(_hpi_result.hpi) > 0.0 and _af_save >= 0.95:
+                    _is_vocal_prior_hpi = bool(self._restoration_context.get("vocal_material_prior", False))
+                    if (
+                        float(_hpi_result.hpi) > 0.0
+                        and _af_save >= 0.95
+                        and _panns_singing_for_hpi < 0.35
+                        and not _is_vocal_prior_hpi
+                    ):
                         # §2.70 Phase-Params aus bestem Pareto-Vorschlag extrahieren.
                         # _pareto_proposals ist im selben Methoden-Scope verfügbar.
                         _rm_phase_params: dict = {}
@@ -11738,6 +12086,42 @@ class UnifiedRestorerV3:
                                     }
                         except Exception:  # pylint: disable=broad-except
                             pass
+                        _voice_events = getattr(self, "_restoration_context", {}).get("voice_guard_events", [])
+                        _voice_outcome = UnifiedRestorerV3._build_voice_guard_outcome_payload(
+                            _voice_events,
+                            _hpi_result,
+                        )
+                        _voice_coalitions = None
+                        _meta_acc = getattr(self, "_phase_metadata_accumulator", None)
+                        if isinstance(_meta_acc, dict):
+                            _voice_coalitions = _meta_acc.get("phase_coalitions")
+                        _voice_coalition_payload = UnifiedRestorerV3._build_voice_guard_coalition_payload(
+                            _voice_events,
+                            _voice_coalitions if isinstance(_voice_coalitions, dict) else None,
+                            (
+                                getattr(self, "_phase_team_context", {}).get("executed_phase_ids", [])
+                                if isinstance(getattr(self, "_phase_team_context", None), dict)
+                                else []
+                            ),
+                            _voice_outcome,
+                        )
+                        _voice_causal_payload = UnifiedRestorerV3._build_voice_guard_causal_credit_payload(
+                            getattr(self, "_phase_deltas", {}),
+                            _voice_outcome,
+                        )
+                        _voice_counterfactual_payload = UnifiedRestorerV3._build_voice_guard_counterfactual_payload(
+                            _voice_coalition_payload,
+                            _voice_causal_payload,
+                            _voice_outcome,
+                        )
+                        _rm_phase_params = UnifiedRestorerV3._derive_voice_guard_learning_from_events(
+                            _voice_events,
+                            _rm_phase_params,
+                            outcome_payload=_voice_outcome,
+                            coalition_payload=_voice_coalition_payload,
+                            causal_payload=_voice_causal_payload,
+                            counterfactual_payload=_voice_counterfactual_payload,
+                        )
                         _get_rm_save().save_result(
                             key=(_rm_era_key, _rm_material_key, _rm_cluster_hash),
                             phase_params=_rm_phase_params,
@@ -11752,8 +12136,21 @@ class UnifiedRestorerV3:
                 except Exception as _rm_save_exc:
                     logger.debug("RestorationMemory.save_result non-blocking: %s", _rm_save_exc)
         except Exception as _hpi_exc:
+            _fail_reasons.append(
+                {
+                    "component": "HolisticPerceptualGate",
+                    "error_code": "HPI_EXCEPTION",
+                    "severity": "failed",
+                    "detail": str(_hpi_exc),
+                }
+            )
+            restored_audio = np.clip(
+                np.nan_to_num(np.asarray(original_audio_for_goals, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0),
+                -1.0,
+                1.0,
+            )
             logger.warning(
-                "§2.44 HolisticPerceptualGate-Exception (Gate inaktiv, Export im degrade-Modus): %s",
+                "§2.44 HolisticPerceptualGate-Exception — fail-closed auf Original: %s",
                 _hpi_exc,
                 exc_info=True,
             )
@@ -11775,9 +12172,13 @@ class UnifiedRestorerV3:
             logger.debug("§SFT finalize non-blocking: %s", _sft_fin_exc)
 
         if _hpi_result is None:
+            restored_audio = np.clip(
+                np.nan_to_num(np.asarray(original_audio_for_goals, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0),
+                -1.0,
+                1.0,
+            )
             logger.warning(
-                "§2.44 HPI(unavailable) — HolisticPerceptualGate lieferte kein Ergebnis; "
-                "Export läuft im degrade-Modus mit vorhandenen Sicherheitsgates"
+                "§2.44 HPI(unavailable) — HolisticPerceptualGate lieferte kein Ergebnis; fail-closed auf Original"
             )
 
         # §MultiSinger [RELEASE_MUST]: detect multi-singer before singer_identity_cosine gate
@@ -12034,6 +12435,80 @@ class UnifiedRestorerV3:
         except Exception as _smp_exc:
             logger.debug("§G4 SingMOS Gate non-blocking: %s", _smp_exc)
 
+        # §2.44/§2.35c: Finale HPI-Neubewertung nach VQI-/SingMOS-bedingten Rollbacks.
+        # Dadurch basiert das Export-Gate auf dem tatsächlich finalen Audiozustand.
+        try:
+            from backend.core.holistic_perceptual_gate import get_holistic_gate as _get_hg_final
+
+            _hg_final = _get_hg_final()
+            _vqi_for_hpi_final = float((self._phase_metadata_accumulator or {}).get("vqi", 1.0))
+            _panns_singing_final = float(getattr(self, "_panns_singing", 0.0))
+            if self.is_studio_mode():
+                _pqs_impr_final = self._resolve_studio_pqs_improvement(_pqs_result, _fail_reasons)
+                _hpi_result_final = _hg_final.evaluate_studio(
+                    original_audio_for_goals,
+                    restored_audio,
+                    sample_rate,
+                    pqs_improvement=_pqs_impr_final,
+                    artifact_freedom=_artifact_freedom_for_hpi,
+                    emotional_arc_score=_emotional_arc_for_hpi,
+                    vqi=_vqi_for_hpi_final,
+                    panns_singing=_panns_singing_final,
+                )
+            else:
+                _hpi_result_final = _hg_final.evaluate_restoration(
+                    original_audio_for_goals,
+                    restored_audio,
+                    sample_rate,
+                    artifact_freedom=_artifact_freedom_for_hpi,
+                    emotional_arc_score=_emotional_arc_for_hpi,
+                    restorability_score=_hpi_restorability,
+                    genre=_hpi_genre,
+                    material=_hpi_material,
+                    era_bin=_hpi_era,
+                    vqi=_vqi_for_hpi_final,
+                    panns_singing=_panns_singing_final,
+                    reference_audio=_hpi_reference_audio,
+                )
+            _hpi_result = _hpi_result_final
+            if not _hpi_result_final.passed:
+                _fail_reasons.append(
+                    {
+                        "component": "HolisticPerceptualGate",
+                        "error_code": "HPI_FAIL_FINAL",
+                        "severity": "failed",
+                        "hpi": _hpi_result_final.hpi,
+                        "artifact_freedom": _hpi_result_final.artifact_freedom,
+                        "reference_mode": getattr(_hpi_result_final, "reference_mode", "degraded_input"),
+                    }
+                )
+                _rollback_target_final = getattr(self, "_hpi_best_rollback_audio", None)
+                if _rollback_target_final is None:
+                    _rollback_target_final = getattr(self, "_best_carrier_checkpoint", None)
+                if _rollback_target_final is None:
+                    _rollback_target_final = original_audio_for_goals
+                if _rollback_target_final is not None and _rollback_target_final.shape == restored_audio.shape:
+                    restored_audio = np.clip(
+                        np.nan_to_num(_rollback_target_final, nan=0.0, posinf=0.0, neginf=0.0),
+                        -1.0,
+                        1.0,
+                    )
+                    logger.warning(
+                        "§2.44 Final-HPI-Rollback: HPI=%.4f — zurück auf sicheren Checkpoint",
+                        _hpi_result_final.hpi,
+                    )
+                else:
+                    restored_audio = np.clip(
+                        np.nan_to_num(
+                            np.asarray(original_audio_for_goals, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
+                        ),
+                        -1.0,
+                        1.0,
+                    )
+                    logger.warning("§2.44 Final-HPI-Rollback: kein kompatibler Checkpoint — fail-closed auf Original")
+        except Exception as _hpi_final_exc:
+            logger.debug("§2.44 finale HPI-Neubewertung non-blocking: %s", _hpi_final_exc)
+
         # §2.49 Export-Gate: artifact_freedom < 0.95 → rollback + fail_reason
         # [RELEASE_MUST] "Kein Artefakt-behafteter Export" (§2.49 Invariante).
         # Rollback-Kaskade (identisch §2.44):
@@ -12072,9 +12547,16 @@ class UnifiedRestorerV3:
                     1.0,
                 )
             else:
+                restored_audio = np.clip(
+                    np.nan_to_num(
+                        np.asarray(original_audio_for_goals, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
+                    ),
+                    -1.0,
+                    1.0,
+                )
                 logger.warning(
                     "§2.49 Export-Gate: artifact_freedom=%.3f < 0.95 — "
-                    "kein kompatibler Rollback-Checkpoint (Primum non nocere: Export trotzdem)",
+                    "kein kompatibler Rollback-Checkpoint (fail-closed auf Original)",
                     _artifact_freedom_for_hpi,
                 )
 
@@ -12242,7 +12724,7 @@ class UnifiedRestorerV3:
             _degradation_status = _phfr_2(_fail_reasons).value
             _primary_fail_reason = _prfr_2(_fail_reasons)
         except Exception:
-            pass
+            logger.debug("PipelineHealthState-Recompute nach HPI/AFG fehlgeschlagen", exc_info=True)
 
         _top_defects_pre = [
             {"type": s.defect_type.value, "severity": s.severity} for s in defect_result.get_top_defects(5)
@@ -12869,6 +13351,24 @@ class UnifiedRestorerV3:
         except Exception as _final_quiet_exc:
             logger.debug("§2.45a Final quiet-edge clamp skipped (non-blocking): %s", _final_quiet_exc)
 
+        # §V23 [RELEASE_MUST] Mono-Kompatibilitätsprüfung (§MKI) — pre-export.
+        # Nur bei Stereo-Vokal-Material (panns_singing ≥ 0.25).
+        # Phasenlöschung > 3 dB im 300–5000 Hz Band → WARNING + metadata-Flag (kein Veto).
+        try:
+            _v23_panns = float(getattr(self, "_panns_singing", 0.0) or 0.0)
+            if _v23_panns >= 0.25 and restored_audio.ndim == 2:
+                from backend.core.dsp.stereo_guard import check_mono_compatibility as _v23_check
+
+                _v23_result = _v23_check(restored_audio, sample_rate)
+                if not _v23_result.ok:
+                    logger.warning(
+                        "§V23 Mono-Kompatibilität: Phasenlöschung=%.1f dB > 3.0 dB → "
+                        "metadata[mono_compatibility_warning]=True",
+                        _v23_result.phase_cancellation_db,
+                    )
+        except Exception as _v23_exc:
+            logger.debug("§V23 MKI pre-export non-blocking: %s", _v23_exc)
+
         _phase_meta_acc = getattr(self, "_phase_metadata_accumulator", {})
         _phase_meta_dicts = {pid: data for pid, data in _phase_meta_acc.items() if isinstance(data, dict)}
         result = RestorationResult(
@@ -12893,6 +13393,9 @@ class UnifiedRestorerV3:
                 "fail_reason": _primary_fail_reason,
                 "ml_guard_events": list(getattr(self, "_pipeline_ml_guard_events", [])),
                 "ml_fallbacks_used": list(getattr(self, "_ml_fallbacks_used", [])),  # §2.47 [RELEASE_MUST]
+                "fallback_teamwork_controller": (self._phase_metadata_accumulator or {}).get(
+                    "fallback_teamwork_controller"
+                ),
                 "material_defect_consistency_warnings": list(
                     getattr(self, "_material_defect_consistency_warnings", [])
                 ),  # §2.47 Cross-Check Material-Erkennung ↔ Defektprofil
@@ -17827,9 +18330,12 @@ class UnifiedRestorerV3:
             selected.append("phase_06_frequency_restoration")  # Treppen-Artefakte glätten
 
         # Jitter-Artefakte (D/A-Wandler-Zeitfehler — CD, DAT, Streaming)
+        # §4.11 Jitter ≠ Wow/Flutter: Zeitfehler im DAC erzeugen phasenmodulierte
+        # Intermodulationsprodukte — keine mechanische Geschwindigkeitsschwankung.
+        # phase_12 (PSOLA) ist kontraindiziert; phase_14 korrigiert digitale Phasenfehler. (V27)
         if sev(DefectType.JITTER_ARTIFACTS) > 0.15:
-            selected.append("phase_12_wow_flutter_fix")  # Zeitachsen-Trägeheit
-            selected.append("phase_23_spectral_repair")  # Spektrale Jitter-Spuren
+            selected.append("phase_14_phase_correction")  # §4.11 digitale Phasenkorrektur (kein PSOLA)
+            selected.append("phase_23_spectral_repair")  # Spektrale Jitter-IM-Produkte
 
         # RIAA-Entzerrungsfehler (Shellac/früher Vinyl: AES/NAB/FFRR — §6.3, §7.2)
         # Medium-Gate: RIAA nur für Disc-Medien (Vinyl/Shellac/Lacquer/Wax/Unknown)
@@ -17847,11 +18353,13 @@ class UnifiedRestorerV3:
             selected.append("phase_07_harmonic_restoration")  # Obertöne durch Entzerrungs-Kette verloren
 
         # Aliasing (AA-Filter-Artefakte bei Digitalisierung — §6.3, §7.2)
+        # §4.11 Aliasing ≠ Rauschen: Spiegelfrequenzen sind kohärente Signalspiegelungen —
+        # phase_03 (DeepFilterNet NR) kann kohärente Mirrorfrequenzen nicht von Musik trennen,
+        # entfernt dabei Musikanteile in der Nähe der Alias-Frequenzen. (V30)
         if sev(DefectType.ALIASING) > 0.15:
-            selected.append("phase_03_denoise")  # Spiegelfrequenzen dämpfen
-            selected.append("phase_23_spectral_repair")  # Spektrale Aliasing-Spuren beseitigen
+            selected.append("phase_23_spectral_repair")  # §4.11 Alias-Chirurgie (spektrale Inpainting)
         if sev(DefectType.ALIASING) > 0.35:
-            selected.append("phase_50_spectral_repair")  # Zweiter Spektral-Pass
+            selected.append("phase_50_spectral_repair")  # Zweiter Spektral-Pass (schweres Aliasing)
 
         # Bias-Fehler (falscher Vormagnetisierungsstrom bei Bandaufnahme — §6.3, §7.2)
         if sev(DefectType.BIAS_ERROR) > 0.12:
@@ -17913,6 +18421,25 @@ class UnifiedRestorerV3:
             selected.append("phase_23_spectral_repair")  # §6.3 — Codec-Pre-Echo
             selected.append("phase_50_spectral_repair")
             selected.append("phase_08_transient_preservation")
+            # §4.11 pre_echo_events: Detektor auf Original-Audio — phase_50 nutzt sie für
+            # frame-selektive Spektral-Dämpfung im Prä-Masking-Fenster (Spec 04 §4.11).
+            # Non-blocking: Exception → leere Liste, phase_50 läuft ohne Event-Guide weiter.
+            try:
+                from backend.core.dsp.pre_echo_detector import (  # pylint: disable=import-outside-toplevel
+                    get_pre_echo_detector as _get_ped_uv3,
+                )
+
+                _ped_uv3 = _get_ped_uv3()
+                _mat_key_ped = str(getattr(material, "value", material) or "unknown").strip().lower()
+                _pre_echo_evts_uv3 = _ped_uv3.detect(audio, sr, _mat_key_ped)
+                if isinstance(getattr(self, "_restoration_context", None), dict):
+                    self._restoration_context["pre_echo_events"] = _pre_echo_evts_uv3
+                logger.info(
+                    "§4.11 pre_echo_events: %d Event(s) detektiert — an phase_50 übergeben",
+                    len(_pre_echo_evts_uv3),
+                )
+            except Exception as _ped_uv3_exc:
+                logger.debug("§4.11 pre_echo_events non-blocking: %s", _ped_uv3_exc)
 
         # Sibilanz (Zischlaut-Überbetonung > 6 kHz — severity-priorisiert, nicht nur PANNs-Gate)
         # Vibrato-Guard: Bei operatischem/klassischem Vibrato (4–7 Hz) erzeugen Gesangs-Obertöne
@@ -18329,7 +18856,7 @@ class UnifiedRestorerV3:
                 "transparenz": ["phase_23_spectral_repair"],
                 "waerme": ["phase_07_harmonic_restoration"],
                 "micro_dynamics": ["phase_26_dynamic_range_expansion"],
-                "spatial_depth": ["phase_48_stereo_imaging"],
+                "spatial_depth": ["phase_48_stereo_width_enhancer"],
             }
             _GOAL_GAP_THRESHOLD = 1.4
             _selected_set_18 = set(selected)
@@ -18368,6 +18895,12 @@ class UnifiedRestorerV3:
         # Bandbreitenerweiterung bei Verlusten
         if sev(DefectType.BANDWIDTH_LOSS) > 0.20 or sev(DefectType.COMPRESSION_ARTIFACTS) > 0.30:
             selected.append("phase_06_frequency_restoration")
+
+        # Kompressionsartefakte enthalten häufig spektrale Block-/Pumping-Residuen,
+        # die mit reiner Dynamikexpansion (phase_26) nicht vollständig verschwinden.
+        # Daher zusätzlicher spektraler Reparatur-Pass bereits im Tier-2-Pfad.
+        if sev(DefectType.COMPRESSION_ARTIFACTS) > 0.25:
+            selected.append("phase_23_spectral_repair")
 
         # Oberton-Restaurierung (tiefergehend)
         if sev(DefectType.BANDWIDTH_LOSS) > 0.30:
@@ -18559,6 +19092,7 @@ class UnifiedRestorerV3:
                     MaterialType.STREAMING,
                 ]
                 or sev(DefectType.DYNAMIC_COMPRESSION_EXCESS) > 0.20
+                or sev(DefectType.COMPRESSION_ARTIFACTS) > 0.25
             ):
                 selected.append("phase_54_transparent_dynamics")
 
@@ -18601,7 +19135,19 @@ class UnifiedRestorerV3:
             )
 
         # Spatial-Enhancement (Raumklang)
-        selected.append("phase_46_spatial_enhancement")
+        # Kein pauschales Anhängen: bei Vokalpräsenz oder Reverb-Exzess würde Phase 46
+        # künstliche Raumanteile verstärken und als Echo wahrgenommen werden.
+        _p46_vocal_active = bool(_lge_vocal_active)
+        _p46_reverb_excess = sev(DefectType.REVERB_EXCESS) > 0.20
+        if self.is_studio_mode() or (not _p46_vocal_active and not _p46_reverb_excess):
+            selected.append("phase_46_spatial_enhancement")
+        else:
+            logger.info(
+                "Phase46-Selektionsguard: übersprungen (studio=%s vocal_active=%s reverb_excess=%.2f)",
+                self.is_studio_mode(),
+                _p46_vocal_active,
+                float(sev(DefectType.REVERB_EXCESS)),
+            )
 
         # ════════════════════════════════════
         # TIER 6 — Finalisierung (immer, kanonische Reihenfolge §1.4)
@@ -19254,6 +19800,192 @@ class UnifiedRestorerV3:
 
         return filtered_phases, skip_reasons
 
+    def _initialize_fallback_teamwork_controller(self) -> dict[str, Any]:
+        """Initialisiert den zentralen Fallback-Teamwork-Controller für den aktuellen Lauf."""
+        if not isinstance(getattr(self, "_restoration_context", None), dict):
+            self._restoration_context = {}
+
+        _rctx = self._restoration_context
+        _report = _rctx.get("model_capability_report")
+        if not isinstance(_report, dict):
+            _report = {}
+        _summary = _report.get("summary")
+        if not isinstance(_summary, dict):
+            _summary = {}
+
+        _all_sota_real = bool(_summary.get("all_sota_real", True))
+        _degraded_caps_raw = _summary.get("degraded_capabilities", [])
+        _degraded_caps = [str(_cap) for _cap in _degraded_caps_raw] if isinstance(_degraded_caps_raw, list) else []
+
+        _status = (
+            str(
+                _rctx.get("vocal_restoration_capability_status")
+                or _summary.get("vocal_restoration_status")
+                or "unknown"
+            )
+            .strip()
+            .lower()
+        )
+
+        _slr = _rctx.get("stem_level_restorer")
+        _slr_fallback = False
+        if isinstance(_slr, dict):
+            _slr_fallback = bool(_slr.get("fallback_reason") or _slr.get("rollback_reason"))
+            if _slr.get("success") is False:
+                _slr_fallback = True
+
+        _base_risk = 0.0
+        if not _all_sota_real:
+            _base_risk += 0.22
+        if _degraded_caps:
+            _base_risk += float(np.clip(0.05 * len(_degraded_caps), 0.0, 0.18))
+        if _status in {"sota_fallback", "degraded", "unsupported", "unavailable"}:
+            _base_risk += 0.12
+        if _slr_fallback:
+            _base_risk += 0.10
+
+        _base_scalar = float(np.clip(1.0 - _base_risk, 0.72, 1.0))
+        _profile: dict[str, Any] = {
+            "version": 1,
+            "all_sota_real": _all_sota_real,
+            "vocal_status": _status,
+            "degraded_capabilities": list(_degraded_caps),
+            "stem_fallback": bool(_slr_fallback),
+            "base_risk": float(np.clip(_base_risk, 0.0, 1.0)),
+            "event_count": 0,
+            "cumulative_risk": 0.0,
+            "phase_risk_map": {},
+            "recent_events": [],
+            "global_strength_scalar": _base_scalar,
+            "subtractive_scalar": float(np.clip(_base_scalar + 0.06, 0.74, 1.0)),
+            "additive_scalar": float(np.clip(_base_scalar - 0.08, 0.58, 1.0)),
+            "semantic_scalar": float(np.clip(_base_scalar - 0.12, 0.52, 1.0)),
+            "feedback_chain_iteration_boost": 0,
+            "gate_tightening": 1.0,
+            "metric_confidence_penalty": 0.0,
+            "last_update_phase": None,
+        }
+
+        _rctx["fallback_teamwork_controller"] = _profile
+        _rctx["fallback_teamwork_enabled"] = True
+        _rctx["fallback_teamwork_scalar"] = float(_profile["global_strength_scalar"])
+        _rctx["fallback_metric_confidence_penalty"] = float(_profile["metric_confidence_penalty"])
+        _rctx["fallback_gate_tightening"] = float(_profile["gate_tightening"])
+
+        self._global_conservative_scalar = float(
+            np.clip(min(float(getattr(self, "_global_conservative_scalar", 1.0)), _base_scalar), 0.72, 1.0)
+        )
+        return _profile
+
+    def _update_fallback_teamwork_controller_from_event(self, event: dict[str, Any], phase_id: str) -> None:
+        """Aktualisiert den Fallback-Teamwork-Controller in-loop aus ML-Guard-Events."""
+        if not isinstance(event, dict):
+            return
+        if not isinstance(getattr(self, "_restoration_context", None), dict):
+            self._restoration_context = {}
+
+        _rctx = self._restoration_context
+        _profile = _rctx.get("fallback_teamwork_controller")
+        if not isinstance(_profile, dict):
+            _profile = self._initialize_fallback_teamwork_controller()
+
+        _reason = str(event.get("reason", "") or "").strip().lower()
+        _fallback = str(event.get("fallback", "") or "").strip().lower()
+        _model = str(event.get("model", "") or "").strip().lower()
+
+        _risk = 0.06
+        if any(_token in _reason for _token in ("oom", "memory", "cuda", "vram")):
+            _risk += 0.16
+        if any(_token in _reason for _token in ("timeout", "wall_time", "deadline")):
+            _risk += 0.10
+        if "rollback" in _reason:
+            _risk += 0.07
+        if _fallback:
+            _risk += 0.08
+        if "dsp" in _fallback:
+            _risk += 0.04
+        if "cpu" in _fallback:
+            _risk += 0.03
+        if any(_token in _model for _token in ("miipher", "sgmse", "deepfilter")):
+            _risk += 0.03
+
+        _channels = int(float(event.get("channels", 0) or 0))
+        _duration_s = float(event.get("duration_s", 0.0) or 0.0)
+        _required = float(event.get("required_gb", 0.0) or 0.0)
+        _available = float(event.get("available_gb", 0.0) or 0.0)
+
+        _channel_factor = float(np.clip(1.0 + 0.05 * max(_channels - 1, 0), 1.0, 1.20))
+        _duration_factor = float(np.clip(1.0 + (_duration_s / 180.0), 1.0, 1.25))
+        _headroom_factor = 1.0
+        if _required > 0.0 and _available >= 0.0:
+            _gap = max(_required - _available, 0.0)
+            _headroom_factor = float(np.clip(1.0 + (_gap / max(_required, 1e-6)), 1.0, 1.30))
+
+        _event_risk = float(np.clip(_risk * _channel_factor * _duration_factor * _headroom_factor, 0.05, 0.45))
+
+        _prev_count = int(_profile.get("event_count", 0) or 0)
+        _profile["event_count"] = _prev_count + 1
+        _profile["cumulative_risk"] = float(
+            np.clip(float(_profile.get("cumulative_risk", 0.0) or 0.0) + _event_risk * 0.45, 0.0, 1.5)
+        )
+
+        _phase_risk_map = _profile.get("phase_risk_map")
+        if not isinstance(_phase_risk_map, dict):
+            _phase_risk_map = {}
+        _phase_key = str(phase_id or event.get("phase_id", "") or "")
+        if _phase_key:
+            _phase_risk_map[_phase_key] = float(max(float(_phase_risk_map.get(_phase_key, 0.0) or 0.0), _event_risk))
+        _profile["phase_risk_map"] = _phase_risk_map
+
+        _recent_events = _profile.get("recent_events")
+        if not isinstance(_recent_events, list):
+            _recent_events = []
+        _recent_events.append(
+            {
+                "phase_id": _phase_key,
+                "model": _model,
+                "reason": _reason,
+                "fallback": _fallback,
+                "event_risk": _event_risk,
+            }
+        )
+        if len(_recent_events) > 64:
+            _recent_events = _recent_events[-64:]
+        _profile["recent_events"] = _recent_events
+
+        _base_scalar = float(_profile.get("global_strength_scalar", _profile.get("base_strength_scalar", 1.0)) or 1.0)
+        _base_floor = float(np.clip(1.0 - float(_profile.get("base_risk", 0.0) or 0.0), 0.72, 1.0))
+        _pressure = float(np.clip(float(_profile.get("cumulative_risk", 0.0) or 0.0) / 1.5, 0.0, 1.0))
+        _event_scalar = float(np.clip(1.0 - 0.28 * _pressure, 0.70, 1.0))
+        _global_scalar = float(np.clip(min(_base_scalar, _base_floor, _event_scalar), 0.70, 1.0))
+
+        _profile["global_strength_scalar"] = _global_scalar
+        _profile["subtractive_scalar"] = float(np.clip(_global_scalar + 0.06, 0.74, 1.0))
+        _profile["additive_scalar"] = float(np.clip(_global_scalar - 0.08, 0.58, 1.0))
+        _profile["semantic_scalar"] = float(np.clip(_global_scalar - 0.12, 0.52, 1.0))
+        _profile["feedback_chain_iteration_boost"] = int(np.clip(int(_profile["event_count"]) // 2, 0, 3))
+        _profile["gate_tightening"] = float(np.clip(1.0 + 0.25 * _pressure, 1.0, 1.35))
+        _profile["metric_confidence_penalty"] = float(np.clip(0.12 * _pressure, 0.0, 0.15))
+        _profile["last_update_phase"] = _phase_key or None
+
+        _rctx["fallback_teamwork_controller"] = _profile
+        _rctx["fallback_teamwork_scalar"] = float(_profile["global_strength_scalar"])
+        _rctx["fallback_metric_confidence_penalty"] = float(_profile["metric_confidence_penalty"])
+        _rctx["fallback_gate_tightening"] = float(_profile["gate_tightening"])
+
+        self._global_conservative_scalar = float(
+            np.clip(min(float(getattr(self, "_global_conservative_scalar", 1.0)), _global_scalar), 0.70, 1.0)
+        )
+
+        logger.info(
+            "FallbackTeamwork update: phase=%s risk=%.3f events=%d scalar=%.3f gate=%.3f",
+            _phase_key or "unknown",
+            _event_risk,
+            int(_profile["event_count"]),
+            _global_scalar,
+            float(_profile["gate_tightening"]),
+        )
+
     def _prepare_profiled_phase_context(self, phase, kwargs: dict) -> tuple[Any, str, bool, bool, Any, Any, Any]:
         """Inject phase-level context before profiled execution."""
         phase_metadata = phase.get_metadata()
@@ -19322,6 +20054,351 @@ class UnifiedRestorerV3:
             song_goal_weights,
             rest_ctx,
         )
+
+    @staticmethod
+    def _derive_voice_guard_learning_from_events(
+        events: Any,
+        base_phase_params: dict[str, float] | None,
+        outcome_payload: dict[str, Any] | None = None,
+        coalition_payload: dict[str, Any] | None = None,
+        causal_payload: dict[str, Any] | None = None,
+        counterfactual_payload: dict[str, Any] | None = None,
+    ) -> dict[str, float]:
+        """Leitet aus Voice-Guard-Events konservative Prior-Updates für den nächsten Lauf ab."""
+        if not isinstance(base_phase_params, dict):
+            return {}
+
+        adjusted: dict[str, float] = {
+            key: float(value) for key, value in base_phase_params.items() if isinstance(value, (int, float))
+        }
+        if not adjusted:
+            return {}
+
+        if not isinstance(events, list):
+            return adjusted
+
+        risks: list[float] = []
+        phase_ids: set[str] = set()
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            try:
+                risk = float(event.get("voice_guard_risk", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if risk <= 0.0:
+                continue
+            risks.append(float(np.clip(risk, 0.0, 1.0)))
+            phase_ids.add(str(event.get("phase_id", "") or ""))
+
+        if not risks:
+            return adjusted
+
+        if isinstance(outcome_payload, dict) and not bool(outcome_payload.get("learn_enabled", False)):
+            adjusted["_voice_guard_learning_applied"] = 0.0
+            adjusted["_voice_guard_learn_block_reason"] = str(outcome_payload.get("reason", "outcome_blocked"))
+            return adjusted
+
+        mean_risk = float(np.mean(risks))
+        peak_risk = float(max(risks))
+        # Höheres Risiko => konservativerer Prior für strength/boost/ratio-Parameter.
+        scale = float(np.clip(1.0 - (0.35 * mean_risk + 0.20 * peak_risk), 0.55, 1.0))
+        coalition_factor = 1.0
+        if isinstance(coalition_payload, dict):
+            _cf = coalition_payload.get("coalition_learning_factor")
+            if isinstance(_cf, (int, float)):
+                coalition_factor = float(np.clip(float(_cf), 0.80, 1.0))
+        causal_factor = 1.0
+        if isinstance(causal_payload, dict):
+            _cc = causal_payload.get("causal_credit_confidence")
+            if isinstance(_cc, (int, float)):
+                causal_factor = float(np.clip(1.0 - 0.15 * float(_cc), 0.85, 1.0))
+        counterfactual_factor = 1.0
+        if isinstance(counterfactual_payload, dict):
+            _cf_conf = counterfactual_payload.get("counterfactual_confidence")
+            if isinstance(_cf_conf, (int, float)):
+                counterfactual_factor = float(np.clip(1.0 - 0.10 * float(_cf_conf), 0.90, 1.0))
+        scale = float(np.clip(scale * coalition_factor * causal_factor * counterfactual_factor, 0.55, 1.0))
+        for key, value in list(adjusted.items()):
+            lower_key = str(key).lower()
+            if any(token in lower_key for token in ("strength", "boost", "ratio")):
+                adjusted[key] = float(value * scale)
+
+        adjusted["_voice_guard_mean_risk"] = mean_risk
+        adjusted["_voice_guard_peak_risk"] = peak_risk
+        adjusted["_voice_guard_event_count"] = float(len(risks))
+        adjusted["_voice_guard_phase_count"] = float(len([p for p in phase_ids if p]))
+        adjusted["_voice_guard_learning_scale"] = scale
+        adjusted["_voice_guard_coalition_factor"] = float(coalition_factor)
+        adjusted["_voice_guard_causal_factor"] = float(causal_factor)
+        adjusted["_voice_guard_counterfactual_factor"] = float(counterfactual_factor)
+        adjusted["_voice_guard_learning_applied"] = 1.0
+        if isinstance(outcome_payload, dict):
+            for _okey in ("vqi_delta", "artifact_delta", "hpi_score"):
+                _oval = outcome_payload.get(_okey)
+                if isinstance(_oval, (int, float)):
+                    adjusted[f"_voice_guard_outcome_{_okey}"] = float(_oval)
+        if isinstance(coalition_payload, dict):
+            for _ckey in ("dominant_coalition_event_ratio", "dominant_coalition_event_count"):
+                _cval = coalition_payload.get(_ckey)
+                if isinstance(_cval, (int, float)):
+                    adjusted[f"_voice_guard_{_ckey}"] = float(_cval)
+        if isinstance(causal_payload, dict):
+            _cc = causal_payload.get("causal_credit_confidence")
+            if isinstance(_cc, (int, float)):
+                adjusted["_causal_credit_confidence"] = float(_cc)
+            _dc = causal_payload.get("dominant_coalition_credit")
+            if isinstance(_dc, (int, float)):
+                adjusted["_causal_dominant_coalition_credit"] = float(_dc)
+            _dcn = causal_payload.get("dominant_coalition")
+            if isinstance(_dcn, str) and _dcn:
+                adjusted["_causal_dominant_coalition"] = _dcn
+            _cc_map = causal_payload.get("coalition_credit_map")
+            if isinstance(_cc_map, dict):
+                for _name, _score in _cc_map.items():
+                    if isinstance(_score, (int, float)):
+                        adjusted[f"_coalition_credit_{str(_name)}"] = float(_score)
+        if isinstance(counterfactual_payload, dict):
+            for _fkey in ("counterfactual_confidence", "dominant_drop_estimate", "counterfactual_alignment"):
+                _fval = counterfactual_payload.get(_fkey)
+                if isinstance(_fval, (int, float)):
+                    adjusted[f"_counterfactual_{_fkey}"] = float(_fval)
+            _dom_name = counterfactual_payload.get("dominant_coalition")
+            if isinstance(_dom_name, str) and _dom_name:
+                adjusted["_counterfactual_dominant_coalition"] = _dom_name
+        return adjusted
+
+    @staticmethod
+    def _build_voice_guard_outcome_payload(events: Any, hpi_result: Any) -> dict[str, Any]:
+        """Berechnet lernrelevante Outcome-Metriken aus Endresultat und Voice-Guard-Baselines."""
+        out: dict[str, Any] = {
+            "learn_enabled": True,
+            "reason": "ok",
+            "vqi_delta": 0.0,
+            "artifact_delta": 0.0,
+            "hpi_score": 0.0,
+        }
+
+        _hpi_score = float(getattr(hpi_result, "hpi", 0.0) or 0.0)
+        _artifact_now = float(getattr(hpi_result, "artifact_freedom", 0.0) or 0.0)
+        _vqi_now_raw = getattr(hpi_result, "vqi", None)
+        _vqi_now = float(_vqi_now_raw) if isinstance(_vqi_now_raw, (int, float)) else None
+
+        out["hpi_score"] = _hpi_score
+        if _hpi_score <= 0.0 or _artifact_now < 0.95:
+            out["learn_enabled"] = False
+            out["reason"] = "hpi_or_artifact_gate"
+            return out
+
+        if not isinstance(events, list):
+            return out
+
+        _vqi_base_vals: list[float] = []
+        _artifact_base_vals: list[float] = []
+        for _ev in events:
+            if not isinstance(_ev, dict):
+                continue
+            _vqi_base = _ev.get("vqi")
+            if isinstance(_vqi_base, (int, float)):
+                _vqi_base_vals.append(float(_vqi_base))
+            _artifact_base = _ev.get("artifact_freedom")
+            if isinstance(_artifact_base, (int, float)):
+                _artifact_base_vals.append(float(_artifact_base))
+
+        if _vqi_now is not None and _vqi_base_vals:
+            _vqi_base_mean = float(np.mean(_vqi_base_vals))
+            out["vqi_delta"] = _vqi_now - _vqi_base_mean
+            if out["vqi_delta"] < -0.01:
+                out["learn_enabled"] = False
+                out["reason"] = "vqi_regression"
+
+        if _artifact_base_vals:
+            _artifact_base_mean = float(np.mean(_artifact_base_vals))
+            out["artifact_delta"] = _artifact_now - _artifact_base_mean
+            if out["artifact_delta"] < -0.005:
+                out["learn_enabled"] = False
+                out["reason"] = "artifact_regression"
+
+        return out
+
+    @staticmethod
+    def _build_voice_guard_coalition_payload(
+        events: Any,
+        phase_coalitions: dict[str, Any] | None,
+        executed_phase_ids: Any,
+        outcome_payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Berechnet outcome-gewichtete Koalitions-Lernsignale aus Voice-Guard-Events."""
+        out: dict[str, Any] = {
+            "coalition_learning_factor": 1.0,
+            "dominant_coalition_event_ratio": 0.0,
+            "dominant_coalition_event_count": 0.0,
+        }
+
+        if not (isinstance(events, list) and isinstance(phase_coalitions, dict) and phase_coalitions):
+            return out
+        if isinstance(outcome_payload, dict) and not bool(outcome_payload.get("learn_enabled", False)):
+            return out
+
+        executed_ids = {
+            str(pid)
+            for pid in (executed_phase_ids if isinstance(executed_phase_ids, (list, tuple, set)) else [])
+            if str(pid)
+        }
+        phase_to_coalition: dict[str, str] = {}
+        for coalition_name, members in phase_coalitions.items():
+            if not isinstance(members, (list, tuple)):
+                continue
+            for phase_id in members:
+                _pid = str(phase_id)
+                if _pid:
+                    phase_to_coalition[_pid] = str(coalition_name)
+
+        coalition_counts: dict[str, int] = {}
+        used_events = 0
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            try:
+                risk = float(event.get("voice_guard_risk", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if risk <= 0.0:
+                continue
+            phase_id = str(event.get("phase_id", "") or "")
+            if not phase_id:
+                continue
+            if executed_ids and phase_id not in executed_ids:
+                continue
+            coalition = phase_to_coalition.get(phase_id)
+            if not coalition:
+                continue
+            coalition_counts[coalition] = coalition_counts.get(coalition, 0) + 1
+            used_events += 1
+
+        if used_events <= 0 or not coalition_counts:
+            return out
+
+        dominant_count = int(max(coalition_counts.values()))
+        dominant_ratio = float(dominant_count / max(used_events, 1))
+        out["dominant_coalition_event_ratio"] = dominant_ratio
+        out["dominant_coalition_event_count"] = float(dominant_count)
+
+        _vqi_delta = float((outcome_payload or {}).get("vqi_delta", 0.0) or 0.0)
+        _artifact_delta = float((outcome_payload or {}).get("artifact_delta", 0.0) or 0.0)
+        outcome_gain = float(np.clip((_vqi_delta * 4.0) + (_artifact_delta * 8.0), 0.0, 1.0))
+
+        if dominant_count >= 2 and dominant_ratio >= 0.5:
+            coalition_penalty = (0.10 + 0.12 * outcome_gain) * dominant_ratio
+            out["coalition_learning_factor"] = float(np.clip(1.0 - coalition_penalty, 0.80, 1.0))
+        return out
+
+    @staticmethod
+    def _build_voice_guard_causal_credit_payload(
+        phase_deltas: Any,
+        outcome_payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Berechnet kausale Koalitions-Credits aus §2.67-Deltas für GP-Warmstarting."""
+        out: dict[str, Any] = {
+            "causal_credit_confidence": 0.0,
+            "dominant_coalition": "",
+            "dominant_coalition_credit": 0.0,
+            "coalition_credit_map": {},
+        }
+        if not (isinstance(phase_deltas, dict) and phase_deltas):
+            return out
+        if isinstance(outcome_payload, dict) and not bool(outcome_payload.get("learn_enabled", False)):
+            return out
+
+        _goal_weights = {
+            "artikulation": 1.30,
+            "natuerlichkeit": 1.20,
+            "authentizitaet": 1.20,
+            "micro_dynamics": 1.10,
+            "transparenz": 1.00,
+            "emotionalitaet": 1.00,
+        }
+        _coalition_scores: dict[str, float] = {}
+        _w_sum = float(sum(_goal_weights.values()))
+
+        for _pid, _entry in phase_deltas.items():
+            if not (isinstance(_pid, str) and _pid.startswith("coalition:") and isinstance(_entry, dict)):
+                continue
+            _name = _pid.split(":", 1)[1].strip()
+            if not _name:
+                continue
+            _delta = _entry.get("delta")
+            if not isinstance(_delta, dict):
+                continue
+            _score = 0.0
+            for _g, _w in _goal_weights.items():
+                _gv = _delta.get(_g)
+                if isinstance(_gv, (int, float)):
+                    _score += max(0.0, float(_gv)) * float(_w)
+            _coalition_scores[_name] = float(np.clip(_score / max(_w_sum, 1e-6), 0.0, 1.0))
+
+        if not _coalition_scores:
+            return out
+
+        _dom_name = max(_coalition_scores, key=_coalition_scores.get)
+        _dom_score = float(_coalition_scores[_dom_name])
+        _vqi_gain = float((outcome_payload or {}).get("vqi_delta", 0.0) or 0.0)
+        _artifact_gain = float((outcome_payload or {}).get("artifact_delta", 0.0) or 0.0)
+        _hpi_score = float((outcome_payload or {}).get("hpi_score", 0.0) or 0.0)
+        _outcome_gain = float(np.clip((_vqi_gain * 4.0) + (_artifact_gain * 8.0), 0.0, 1.0))
+        _confidence = float(np.clip((0.55 * _dom_score) + (0.25 * _outcome_gain) + (0.20 * _hpi_score), 0.0, 1.0))
+
+        out["causal_credit_confidence"] = _confidence
+        out["dominant_coalition"] = _dom_name
+        out["dominant_coalition_credit"] = _dom_score
+        out["coalition_credit_map"] = _coalition_scores
+        return out
+
+    @staticmethod
+    def _build_voice_guard_counterfactual_payload(
+        coalition_payload: dict[str, Any] | None,
+        causal_payload: dict[str, Any] | None,
+        outcome_payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Schätzt per Mini-Replay den Einfluss der Top-1-Koalition ohne teuren Zweitlauf."""
+        out: dict[str, Any] = {
+            "counterfactual_confidence": 0.0,
+            "dominant_drop_estimate": 0.0,
+            "counterfactual_alignment": 0.0,
+            "dominant_coalition": "",
+        }
+        if isinstance(outcome_payload, dict) and not bool(outcome_payload.get("learn_enabled", False)):
+            return out
+        if not isinstance(causal_payload, dict):
+            return out
+
+        _dom_name = causal_payload.get("dominant_coalition")
+        _dom_credit = causal_payload.get("dominant_coalition_credit")
+        _cc_conf = causal_payload.get("causal_credit_confidence")
+        if not (isinstance(_dom_name, str) and _dom_name and isinstance(_dom_credit, (int, float))):
+            return out
+
+        _dom_ratio = 0.0
+        if isinstance(coalition_payload, dict):
+            _ratio = coalition_payload.get("dominant_coalition_event_ratio")
+            if isinstance(_ratio, (int, float)):
+                _dom_ratio = float(np.clip(float(_ratio), 0.0, 1.0))
+
+        _vqi_gain = float((outcome_payload or {}).get("vqi_delta", 0.0) or 0.0)
+        _artifact_gain = float((outcome_payload or {}).get("artifact_delta", 0.0) or 0.0)
+        _hpi_gain = float((outcome_payload or {}).get("hpi_score", 0.0) or 0.0)
+        _outcome_strength = float(np.clip((_vqi_gain * 4.0) + (_artifact_gain * 8.0) + (0.25 * _hpi_gain), 0.0, 1.0))
+
+        _drop_est = float(np.clip(float(_dom_credit) * (0.5 + 0.5 * _dom_ratio), 0.0, 1.0))
+        _alignment = float(np.clip(_drop_est * _outcome_strength, 0.0, 1.0))
+        _cc = float(np.clip(float(_cc_conf) if isinstance(_cc_conf, (int, float)) else 0.0, 0.0, 1.0))
+        _cf_conf = float(np.clip((0.60 * _alignment) + (0.40 * _cc), 0.0, 1.0))
+
+        out["counterfactual_confidence"] = _cf_conf
+        out["dominant_drop_estimate"] = _drop_est
+        out["counterfactual_alignment"] = _alignment
+        out["dominant_coalition"] = _dom_name
+        return out
 
     def _prepare_profiled_phase_runtime_context(
         self,
@@ -19561,6 +20638,59 @@ class UnifiedRestorerV3:
                     _sev_wet_dry,
                 )
 
+            _fallback_profile = kwargs.get("fallback_teamwork_controller")
+            if not isinstance(_fallback_profile, dict):
+                _fallback_profile = getattr(self, "_restoration_context", {}).get("fallback_teamwork_controller")
+            if isinstance(_fallback_profile, dict) and int(_fallback_profile.get("event_count", 0) or 0) > 0:
+                _subtractive_families = {
+                    "subtractive_cleanup",
+                    "harmonic_noise_control",
+                    "spectral_restoration",
+                    "reconstruction_inpainting",
+                    "time_pitch_transport",
+                    "distortion_repair",
+                }
+                _enhancement_families = {
+                    "harmonic_reconstruction",
+                    "harmonic_enhancement",
+                    "tonal_enhancement",
+                    "source_enhancement",
+                    "stereo_enhancement",
+                    "stereo_generation",
+                    "semantic_guidance",
+                }
+                if _phase_family in _subtractive_families:
+                    _fallback_scalar = float(_fallback_profile.get("subtractive_scalar", 1.0) or 1.0)
+                elif _phase_family in _enhancement_families:
+                    _fallback_scalar = float(_fallback_profile.get("additive_scalar", 1.0) or 1.0)
+                else:
+                    _fallback_scalar = float(_fallback_profile.get("semantic_scalar", 1.0) or 1.0)
+
+                _phase_risk_map = _fallback_profile.get("phase_risk_map")
+                _phase_risk = 0.0
+                if isinstance(_phase_risk_map, dict):
+                    _phase_risk = float(_phase_risk_map.get(phase_metadata.phase_id, 0.0) or 0.0)
+                if _phase_risk > 0.0:
+                    _fallback_scalar = float(np.clip(_fallback_scalar * (1.0 - 0.20 * _phase_risk), 0.50, 1.0))
+
+                _fallback_scalar = float(np.clip(_fallback_scalar, 0.50, 1.0))
+                kwargs["fallback_teamwork_scalar"] = _fallback_scalar
+                kwargs["fallback_gate_tightening"] = float(_fallback_profile.get("gate_tightening", 1.0) or 1.0)
+                kwargs["fallback_metric_confidence_penalty"] = float(
+                    _fallback_profile.get("metric_confidence_penalty", 0.0) or 0.0
+                )
+                _sev_wet_dry = float(np.clip(_sev_wet_dry * _fallback_scalar, 0.12, 1.0))
+                if (not strength_explicit) and isinstance(kwargs.get("strength"), (int, float)):
+                    kwargs["strength"] = float(np.clip(float(kwargs["strength"]) * _fallback_scalar, 0.0, 1.0))
+                logger.info(
+                    "FallbackTeamworkRuntime %s: family=%s scalar=%.3f phase_risk=%.3f wet_dry=%.3f",
+                    phase_metadata.phase_id,
+                    _phase_family,
+                    _fallback_scalar,
+                    _phase_risk,
+                    _sev_wet_dry,
+                )
+
         _rctx = self._restoration_context
         kwargs.setdefault("frisson_zones", _rctx.get("frisson_zones", []))
         kwargs.setdefault("passaggio_zones", _rctx.get("passaggio_zones", []))
@@ -19614,6 +20744,151 @@ class UnifiedRestorerV3:
                         _s_raw,
                         _s_stable,
                     )
+
+        # §2.56b Per-Phase Strength-Oracle mit kontrolliertem Rollout (off/pilot/all).
+        _oracle_rollout_mode = self._resolve_phase_strength_oracle_rollout_mode(kwargs)
+        _oracle_enabled_for_phase = UnifiedRestorerV3._is_phase_strength_oracle_enabled_for_phase(
+            phase_metadata.phase_id,
+            _oracle_rollout_mode,
+        )
+        kwargs["phase_strength_oracle_rollout_mode"] = _oracle_rollout_mode
+        kwargs["phase_strength_oracle_enabled_for_phase"] = bool(_oracle_enabled_for_phase)
+        if _oracle_enabled_for_phase and isinstance(kwargs.get("strength"), (int, float)):
+            try:
+                from backend.core.dsp.phase_strength_oracle import (
+                    resolve_phase_strength_oracle,
+                )
+
+                _goal_targets_orc = (
+                    getattr(self, "_pmgg_ceiling_capped_targets", None)
+                    or getattr(self, "_song_goal_targets", None)
+                    or {}
+                )
+                _goal_gaps_orc: dict[str, float] = {}
+                _chain_orc_raw = (
+                    kwargs.get("transfer_chain")
+                    or getattr(kwargs.get("cached_medium_result"), "transfer_chain", None)
+                    or getattr(self, "_restoration_context", {}).get("transfer_chain")
+                )
+                _transfer_chain_orc = [str(s).strip().lower() for s in (_chain_orc_raw or []) if str(s).strip()]
+                _chain_conf_orc = kwargs.get("material_confidence")
+                if not isinstance(_chain_conf_orc, (int, float)):
+                    _chain_conf_orc = getattr(kwargs.get("cached_medium_result"), "confidence", None)
+                if not isinstance(_chain_conf_orc, (int, float)):
+                    _chain_conf_orc = getattr(self, "_restoration_context", {}).get("material_confidence")
+
+                _voice_guard_orc: dict[str, Any] = {}
+                _voice_src = kwargs.get("vocal_guard_metrics")
+                if not isinstance(_voice_src, dict):
+                    _voice_src = kwargs.get("vocal_quality_check")
+                if not isinstance(_voice_src, dict):
+                    _voice_src = getattr(self, "_restoration_context", {}).get("vocal_quality_check")
+                if isinstance(_voice_src, dict):
+                    for _k in (
+                        "vqi",
+                        "vqi_score",
+                        "formant_integrity",
+                        "formant_fidelity",
+                        "vibrato_depth_preserved",
+                        "vibrato_ok",
+                        "micro_dynamic_correlation",
+                        "micro_dynamics_corr",
+                    ):
+                        if _k in _voice_src:
+                            _voice_guard_orc[_k] = _voice_src.get(_k)
+
+                if isinstance(_goal_targets_orc, dict) and _goal_targets_orc:
+                    _sr_orc = int(kwargs.get("sample_rate", 48000) or 48000)
+                    _mat_orc = str(
+                        getattr(kwargs.get("material_type") or kwargs.get("material"), "value", kwargs.get("material"))
+                        or getattr(self, "_restoration_context", {}).get("primary_material", "unknown")
+                    ).lower()
+                    _snap_orc = UnifiedRestorerV3._fast_goal_snapshot(audio, _sr_orc, _mat_orc)
+                    for _g_orc, _t_orc in _goal_targets_orc.items():
+                        if not math.isfinite(float(_t_orc)):
+                            continue
+                        _goal_gaps_orc[str(_g_orc)] = max(0.0, float(_t_orc) - float(_snap_orc.get(str(_g_orc), 0.0)))
+
+                _oracle_profile = resolve_phase_strength_oracle(
+                    phase_id=phase_metadata.phase_id,
+                    phase_family=self._PHASE_INTERVENTION_CLASS.get(phase_metadata.phase_id, "general"),
+                    current_strength=float(kwargs.get("strength", 1.0) or 1.0),
+                    goal_gaps=_goal_gaps_orc,
+                    goal_weights=(
+                        song_goal_weights if isinstance(song_goal_weights, dict) else kwargs.get("song_goal_weights")
+                    ),
+                    defect_scores=kwargs.get("defect_scores"),
+                    locality_factor=float(kwargs.get("phase_locality_factor", 1.0) or 1.0),
+                    restorability_score=float(rest_ctx if isinstance(rest_ctx, (int, float)) else 50.0),
+                    material_key=str(
+                        getattr(kwargs.get("material_type") or kwargs.get("material"), "value", kwargs.get("material"))
+                        or "unknown"
+                    ).lower(),
+                    song_calibration_profile=song_calibration if isinstance(song_calibration, dict) else None,
+                    panns_singing=float(getattr(self, "_panns_singing", 0.0)),
+                    vocal_guard_metrics=_voice_guard_orc,
+                    transfer_chain=_transfer_chain_orc,
+                    chain_confidence=float(_chain_conf_orc) if isinstance(_chain_conf_orc, (int, float)) else None,
+                )
+
+                kwargs["phase_strength_oracle_profile"] = _oracle_profile.to_dict()
+                kwargs["phase_strength_oracle_class"] = _oracle_profile.oracle_class
+                _voice_guard_risk = float(_oracle_profile.hard_caps.get("voice_guard_risk", 0.0) or 0.0)
+                kwargs["phase_voice_guard_risk"] = _voice_guard_risk
+                kwargs["phase_voice_guard_damped"] = bool(_voice_guard_risk > 0.0)
+
+                if _voice_guard_risk > 0.0:
+                    _rest_ctx_orc = getattr(self, "_restoration_context", None)
+                    if isinstance(_rest_ctx_orc, dict):
+                        _events = _rest_ctx_orc.setdefault("voice_guard_events", [])
+                        if isinstance(_events, list):
+                            _event_payload = {
+                                "phase_id": str(phase_metadata.phase_id),
+                                "oracle_class": str(_oracle_profile.oracle_class),
+                                "voice_guard_risk": _voice_guard_risk,
+                                "strength": float(kwargs.get("strength", 0.0) or 0.0),
+                                "wet_mix": float(_oracle_profile.wet_mix),
+                            }
+                            for _mk in (
+                                "vqi",
+                                "vqi_score",
+                                "formant_integrity",
+                                "formant_fidelity",
+                                "vibrato_depth_preserved",
+                                "vibrato_ok",
+                                "micro_dynamic_correlation",
+                                "micro_dynamics_corr",
+                                "artifact_freedom",
+                            ):
+                                _mv = _voice_guard_orc.get(_mk)
+                                if isinstance(_mv, bool) or isinstance(_mv, (int, float)):
+                                    _event_payload[_mk] = float(_mv)
+                            _events.append(_event_payload)
+
+                if not strength_explicit:
+                    kwargs["strength"] = float(np.clip(_oracle_profile.control_strength, 0.0, 1.0))
+
+                _sev_wet_dry = float(np.clip(_sev_wet_dry * float(_oracle_profile.wet_mix), 0.12, 1.0))
+
+                # Kontrollparameter nur ergänzen, wenn nicht explizit vorgegeben.
+                if _oracle_profile.threshold_db is not None and "threshold_db" not in kwargs:
+                    kwargs["threshold_db"] = float(_oracle_profile.threshold_db)
+                if _oracle_profile.ratio is not None and "ratio" not in kwargs:
+                    kwargs["ratio"] = float(_oracle_profile.ratio)
+                if _oracle_profile.drive is not None and "drive" not in kwargs:
+                    kwargs["drive"] = float(_oracle_profile.drive)
+
+                logger.debug(
+                    "§2.56b StrengthOracle %s: class=%s strength=%.3f wet=%.3f gaps=%d chain=%.3f",
+                    phase_metadata.phase_id,
+                    _oracle_profile.oracle_class,
+                    float(kwargs.get("strength", 0.0) or 0.0),
+                    _oracle_profile.wet_mix,
+                    len(_goal_gaps_orc),
+                    float(_oracle_profile.hard_caps.get("chain_factor", 1.0)),
+                )
+            except Exception as _oracle_exc:
+                logger.debug("§2.56b StrengthOracle non-blocking (%s): %s", phase_metadata.phase_id, _oracle_exc)
 
         if (
             (not self.is_studio_mode())
@@ -19697,7 +20972,7 @@ class UnifiedRestorerV3:
 
         return _sev_wet_dry
 
-    def _profiled_phase_call(self, phase, audio: np.ndarray, **kwargs):
+    def _profiled_phase_call(self, phase, audio: np.ndarray, **kwargs):  # pyright: ignore[reportGeneralTypeIssues]
         """Führt eine Phase mit Zeit- und (optional) Speicherprofiling aus.
 
         Wenn self._active_global_plan gesetzt ist, werden phasenspezifische
@@ -19756,7 +21031,7 @@ class UnifiedRestorerV3:
                             _mono_last[0] = _mapped
                         _root_cb(_mapped, lbl, elapsed)
                     except Exception:
-                        pass
+                        logger.debug("Sub-Progress-Callback Mapping fehlgeschlagen", exc_info=True)
 
                 return _sub_progress
 
@@ -20372,6 +21647,236 @@ class UnifiedRestorerV3:
             except Exception as _pmg_exc:
                 logger.debug("Generic masking clamp non-blocking for %s: %s", phase_metadata.phase_id, _pmg_exc)
 
+        # §V19–V26 [RELEASE_MUST] Weltklasse-Qualitätsregeln — Post-Phase-Guards (v9.5)
+        # Alle Guards: non-blocking (Exception → logger.debug, kein Absturz). Reihenfolge
+        # ist normativ: erst NR-Guards (V19/V21), dann Dynamik-Guards (V20), dann
+        # Additive-Guards (V22), dann Spektral-Guards (V24/V25/V26).
+        if hasattr(result, "audio") and isinstance(result.audio, np.ndarray) and result.audio.shape == audio.shape:
+            _sr_guards = int(kwargs.get("sample_rate", 48000) or 48000)
+            _mat_guards_raw = kwargs.get("material_type") or kwargs.get("material")
+            _mat_guards = str(getattr(_mat_guards_raw, "value", _mat_guards_raw) or "unknown").lower()
+            _pid_guards = phase_metadata.phase_id
+
+            # §V19 Noise-Textur-Invariante (§NTI) — nach NR-Phasen.
+            # Residualrauschen muss Materialklasse treu bleiben (keine Whitening-Artefakte).
+            # Überschreitung > 0.25 → WARNING + Strength × 0.5 (non-blocking).
+            _V19_NR_PHASES: frozenset[str] = frozenset(
+                {
+                    "phase_03_denoise",
+                    "phase_18_noise_gate",
+                    "phase_20_reverb_reduction",
+                    "phase_28_surface_noise_profiling",
+                    "phase_29_tape_hiss_reduction",
+                    "phase_49_advanced_dereverb",
+                }
+            )
+            if _pid_guards in _V19_NR_PHASES:
+                try:
+                    from backend.core.dsp.noise_texture_guard import (
+                        compute_noise_texture_distance as _ntg_dist,
+                    )
+
+                    _ntg_residual = (audio - result.audio).astype(np.float32)
+                    _ntg_dist_val = _ntg_dist(_ntg_residual, _mat_guards, _sr_guards)
+                    if _ntg_dist_val > 0.25:
+                        # Strength × 0.5 via Wet-Blend (50 % dry/wet)
+                        _ntg_wet = float(np.clip(0.5 - (_ntg_dist_val - 0.25), 0.1, 0.5))
+                        result.audio = np.clip(
+                            (_ntg_wet * result.audio + (1.0 - _ntg_wet) * audio).astype(np.float32),
+                            -1.0,
+                            1.0,
+                        )
+                        logger.warning(
+                            "§V19 NTI: %s noise_texture_distance=%.2f > 0.25 → nr_strength×%.2f (mat=%s)",
+                            _pid_guards,
+                            _ntg_dist_val,
+                            _ntg_wet * 2.0,
+                            _mat_guards,
+                        )
+                    if hasattr(result, "metadata") and isinstance(result.metadata, dict):
+                        result.metadata["noise_texture_distance"] = round(float(_ntg_dist_val), 3)
+                except Exception as _v19_exc:
+                    logger.debug("§V19 NTI non-blocking: %s", _v19_exc)
+
+            # §V21 Mindestrauschboden (§MNF) — nach NR-Phasen auf analogem Material.
+            # Pause-Zonen sollen nie auf digitale Stille fallen; materialkonformer Rauschboden.
+            _ANALOG_MATERIALS: frozenset[str] = frozenset(
+                {
+                    "shellac",
+                    "wax_cylinder",
+                    "lacquer_disc",
+                    "wire_recording",
+                    "reel_tape",
+                    "tape",
+                    "vinyl",
+                    "cassette",
+                }
+            )
+            if _pid_guards in _V19_NR_PHASES and _mat_guards in _ANALOG_MATERIALS:
+                try:
+                    from backend.core.dsp.noise_floor_guard import apply_noise_floor_minimum as _nfg_apply
+
+                    result.audio = _nfg_apply(result.audio, _sr_guards, _mat_guards)
+                    logger.debug("§V21 MNF: %s Rauschboden angehoben (mat=%s)", _pid_guards, _mat_guards)
+                except Exception as _v21_exc:
+                    logger.debug("§V21 MNF non-blocking: %s", _v21_exc)
+
+            # §V20 Mikrodynamik-Korrelations-Guard (§MKK) — NR/Dynamics auf Vokal-Material.
+            # Voiced-Frame-Mikrodynamik muss durch NR nicht degradiert werden (corr ≥ 0.97).
+            _V20_PHASES: frozenset[str] = frozenset(
+                {
+                    "phase_03_denoise",
+                    "phase_18_noise_gate",
+                    "phase_20_reverb_reduction",
+                    "phase_26_dynamic_range_compression",
+                    "phase_29_tape_hiss_reduction",
+                    "phase_49_advanced_dereverb",
+                    "phase_54_transparent_dynamics",
+                }
+            )
+            if _pid_guards in _V20_PHASES:
+                try:
+                    _v20_panns = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)) or 0.0)
+                    if _v20_panns >= 0.25:
+                        from backend.core.dsp.mikrodynamik_guard import frame_energy_correlation as _mkk_corr
+
+                        _mkk_corr_val = _mkk_corr(audio, result.audio, _sr_guards, frame_ms=10.0)
+                        if _mkk_corr_val < 0.97:
+                            _mkk_wet = float(np.clip((_mkk_corr_val - 0.90) / 0.07, 0.0, 1.0))
+                            result.audio = np.clip(
+                                (_mkk_wet * result.audio + (1.0 - _mkk_wet) * audio).astype(np.float32),
+                                -1.0,
+                                1.0,
+                            )
+                            logger.info(
+                                "§V20 MKK: %s corr=%.3f < 0.97 auf Voiced-Frames → wet=%.2f",
+                                _pid_guards,
+                                _mkk_corr_val,
+                                _mkk_wet,
+                            )
+                        if hasattr(result, "metadata") and isinstance(result.metadata, dict):
+                            result.metadata["mikrodynamik_correlation"] = round(float(_mkk_corr_val), 4)
+                except Exception as _v20_exc:
+                    logger.debug("§V20 MKK non-blocking: %s", _v20_exc)
+
+            # §V22 Pre-Echo-Prevention (§PEP) — nach additiven ML-Phasen.
+            # Transient-Onsets dürfen nicht zeitlich verschoben werden (Pre-Echo ≤ ±2 ms).
+            _V22_ADDITIVE_PHASES: frozenset[str] = frozenset(
+                {
+                    "phase_06_frequency_restoration",
+                    "phase_07_harmonic_restoration",
+                    "phase_23_spectral_super_resolution",
+                    "phase_38_brilliance_enhancer",
+                }
+            )
+            if _pid_guards in _V22_ADDITIVE_PHASES:
+                try:
+                    from backend.core.dsp.transient_guard import detect_transient_shifts as _tsg_detect
+
+                    _tsg_result = _tsg_detect(audio, result.audio, _sr_guards)
+                    if not _tsg_result.ok and _tsg_result.blend_reduction > 0.0:
+                        _tsg_wet = float(np.clip(1.0 - _tsg_result.blend_reduction / 2.0, 0.3, 1.0))
+                        result.audio = np.clip(
+                            (_tsg_wet * result.audio + (1.0 - _tsg_wet) * audio).astype(np.float32),
+                            -1.0,
+                            1.0,
+                        )
+                    if hasattr(result, "metadata") and isinstance(result.metadata, dict):
+                        result.metadata["onset_shift_ms"] = _tsg_result.max_shift_ms
+                        result.metadata["onset_shift_ok"] = _tsg_result.ok
+                except Exception as _v22_exc:
+                    logger.debug("§V22 PEP non-blocking: %s", _v22_exc)
+
+            # §V24 Spektralfarbe-Korrelation (§SCK) — nach EQ/NR-Phasen.
+            # 1/3-Oktav-Profil (200–8000 Hz) muss erhalten bleiben (corr ≥ 0.97).
+            # Unterschreitung → Wet-Blend 70/30 (Phase-Strength − 30 %).
+            _V24_EQ_NR_PHASES: frozenset[str] = frozenset(
+                {
+                    "phase_03_denoise",
+                    "phase_04_eq_correction",
+                    "phase_16_final_eq",
+                    "phase_18_noise_gate",
+                    "phase_20_reverb_reduction",
+                    "phase_28_surface_noise_profiling",
+                    "phase_29_tape_hiss_reduction",
+                    "phase_49_advanced_dereverb",
+                }
+            )
+            if _pid_guards in _V24_EQ_NR_PHASES:
+                try:
+                    from backend.core.dsp.spectral_color_guard import (
+                        check_spectral_color_preservation as _sck_check,
+                    )
+
+                    _sck_result = _sck_check(audio, result.audio, _sr_guards)
+                    if not _sck_result.ok:
+                        # Phase-Strength − 30 %: 70 % wet / 30 % dry
+                        result.audio = np.clip(
+                            (0.70 * result.audio + 0.30 * audio).astype(np.float32),
+                            -1.0,
+                            1.0,
+                        )
+                    if hasattr(result, "metadata") and isinstance(result.metadata, dict):
+                        result.metadata["spectral_color_correlation"] = _sck_result.correlation
+                        result.metadata["spectral_color_ok"] = _sck_result.ok
+                except Exception as _v24_exc:
+                    logger.debug("§V24 SCK non-blocking: %s", _v24_exc)
+
+            # §V25 Wärmeband-Guard (§WBG) — jede Phase, kumulativer Verlust-Tracker.
+            # 200–800 Hz darf kumulativ nicht > 2.5 dB gedämpft werden.
+            # Überschreitung → warmth_blend = 1 − loss_db / 5.0 für diese und folgende Phasen.
+            try:
+                from backend.core.dsp.warmth_guard import measure_warmth_band_delta as _wbg_measure
+
+                _wbg_cum = float(getattr(self, "_restoration_context", {}).get("warmth_band_loss_db", 0.0) or 0.0)
+                _wbg_result = _wbg_measure(audio, result.audio, _sr_guards, cumulative_loss_db=_wbg_cum)
+                # Kumulativen Verlust aktualisieren
+                _wbg_new_cum = _wbg_cum + _wbg_result.loss_db
+                _rctx_wbg = getattr(self, "_restoration_context", None)
+                if isinstance(_rctx_wbg, dict):
+                    _rctx_wbg["warmth_band_loss_db"] = float(_wbg_new_cum)
+                # Wenn kumulativer Verlust > 2.5 dB → Warmth-Blend anwenden
+                if _wbg_cum > 2.5 and _wbg_result.warmth_blend_factor < 1.0:
+                    _wbg_blend = _wbg_result.warmth_blend_factor
+                    result.audio = np.clip(
+                        (_wbg_blend * result.audio + (1.0 - _wbg_blend) * audio).astype(np.float32),
+                        -1.0,
+                        1.0,
+                    )
+                    logger.info(
+                        "§V25 WBG: %s warmth_cum=%.2f dB > 2.5 dB → blend=%.2f",
+                        _pid_guards,
+                        _wbg_cum,
+                        _wbg_blend,
+                    )
+                if hasattr(result, "metadata") and isinstance(result.metadata, dict):
+                    result.metadata["warmth_band_loss_db"] = round(_wbg_result.loss_db, 3)
+                    result.metadata["warmth_band_loss_cumulative_db"] = round(float(_wbg_new_cum), 3)
+            except Exception as _v25_exc:
+                logger.debug("§V25 WBG non-blocking: %s", _v25_exc)
+
+            # §V26 Onset-Protection-Guard (§ATI) — nach NR/EQ-Phasen.
+            # Transient-Onset-Fenster (0–20 ms nach Onset) max. 1.5 dB Energiedelta.
+            # Schützt Punch + Artikulation aller Phoneme (§2.77).
+            _V26_PHASES: frozenset[str] = frozenset(
+                {
+                    "phase_03_denoise",
+                    "phase_04_eq_correction",
+                    "phase_16_final_eq",
+                    "phase_18_noise_gate",
+                    "phase_20_reverb_reduction",
+                    "phase_28_surface_noise_profiling",
+                    "phase_29_tape_hiss_reduction",
+                }
+            )
+            if _pid_guards in _V26_PHASES:
+                try:
+                    from backend.core.dsp.onset_guard import apply_onset_protection_mask as _ogm_apply
+
+                    result.audio = _ogm_apply(audio, result.audio, None, max_delta_db=1.5)
+                except Exception as _v26_exc:
+                    logger.debug("§V26 ATI non-blocking: %s", _v26_exc)
+
         t1 = time.perf_counter()
         mem1 = memory_usage(-1, interval=0.01, timeout=1) if _phase_mem_profiling else [0]
         elapsed = t1 - t0
@@ -20564,13 +22069,14 @@ class UnifiedRestorerV3:
                     phase_id=phase_metadata.phase_id,
                     sr=int(kwargs.get("sample_rate", 48000) or 48000),
                 )
-                if not _tc_result.ok:
+                if not _tc_result.ok or _tc_result.gain_step_db > 1.5:
                     _tc_meta = getattr(self, "_phase_metadata_accumulator", None)
                     if isinstance(_tc_meta, dict):
                         _tc_meta.setdefault("temporal_continuity", {})[phase_metadata.phase_id] = {
                             "variance_ratio": round(_tc_result.variance_ratio, 3),
                             "ok": _tc_result.ok,
                             "critical": _tc_result.critical,
+                            "gain_step_db": round(_tc_result.gain_step_db, 3),
                         }
         except Exception as _tc_exc:
             logger.debug("§2.69 TemporalContinuityGuard non-blocking: %s", _tc_exc)
@@ -21051,7 +22557,7 @@ class UnifiedRestorerV3:
                     try:
                         _sub_cb(_frac, _label, _elapsed)
                     except Exception:
-                        pass
+                        logger.debug("PMGG-Heartbeat-Subprogress fehlgeschlagen (%s)", phase_id, exc_info=True)
 
             _thread = threading.Thread(
                 target=_heartbeat_run,
@@ -21109,6 +22615,10 @@ class UnifiedRestorerV3:
                             continue
                         _ml_guard_event_keys.add(_key)
                         pipeline_ml_guard_events.append(_event_norm)
+                        try:
+                            self._update_fallback_teamwork_controller_from_event(_event_norm, phase_id)
+                        except Exception as _ftc_upd_exc:
+                            logger.debug("Fallback-Teamwork-Controller Update non-blocking: %s", _ftc_upd_exc)
 
                 _deferred_hint = payload.get("deferred_for_kmv", [])
                 if isinstance(_deferred_hint, list):
@@ -22772,7 +24282,9 @@ class UnifiedRestorerV3:
                     try:
                         _mat_str_248 = str(getattr(material_type, "value", material_type)).lower()
                     except Exception:
-                        pass
+                        logger.debug(
+                            "§2.48 InteractionGuard: material_type konnte nicht normalisiert werden", exc_info=True
+                        )
                     _baseline_goals_248 = _mg_checker_248.measure_all(
                         current_audio, sample_rate, material_type=_mat_str_248
                     )
@@ -22787,7 +24299,9 @@ class UnifiedRestorerV3:
                             if _sev_vals:
                                 _defect_sev_mean_248 = float(np.mean(_sev_vals))
                     except Exception:
-                        pass
+                        logger.debug(
+                            "§2.48 InteractionGuard: defect severity mean konnte nicht berechnet werden", exc_info=True
+                        )
                     # §2.54: Count carrier-repair phases in the selected plan
                     _carrier_prefixes_248 = (
                         "phase_01",
@@ -23712,6 +25226,12 @@ class UnifiedRestorerV3:
                                         "hf_cumulative_gain_db": float(
                                             getattr(self, "_restoration_context", {}).get("hf_cumulative_gain_db", 0.0)
                                         ),
+                                        # §4.11 Pre-Echo-Repair: detektierte Events aus Phase-Selektion.
+                                        # phase_50 nutzt sie für frame-selektive Spektral-Dämpfung
+                                        # im Prä-Masking-Fenster (kein stationäres Rauschen — Spec 04 §4.11).
+                                        "pre_echo_events": list(
+                                            getattr(self, "_restoration_context", {}).get("pre_echo_events") or []
+                                        ),
                                         "song_goal_weights": getattr(
                                             self, "_song_goal_weights", None
                                         ),  # §2.56 phase-local adaptive guards (phase_20/49/55)
@@ -24185,7 +25705,39 @@ class UnifiedRestorerV3:
                             from backend.core.phase_defect_verifier import get_phase_defect_verifier as _get_pdv
 
                             _pdv_ref = _afg_phase_input if _afg_phase_input is not None else _pdv_pre_phase
-                            _audio_pdv_result = _get_pdv().check(phase_id, _pdv_ref, current_audio, sample_rate)
+                            _pdv_mat = str(getattr(material_type, "value", material_type) or "unknown").lower()
+                            _pdv_goal_before = UnifiedRestorerV3._fast_goal_snapshot(
+                                _pdv_ref,
+                                sample_rate,
+                                _pdv_mat,
+                            )
+                            _pdv_goal_after = UnifiedRestorerV3._fast_goal_snapshot(
+                                current_audio,
+                                sample_rate,
+                                _pdv_mat,
+                            )
+                            _pdv_goal_targets = (
+                                dict(self._pmgg_ceiling_capped_targets)
+                                if isinstance(getattr(self, "_pmgg_ceiling_capped_targets", None), dict)
+                                and self._pmgg_ceiling_capped_targets
+                                else (
+                                    dict(self._song_goal_targets)
+                                    if isinstance(getattr(self, "_song_goal_targets", None), dict)
+                                    and self._song_goal_targets
+                                    else {}
+                                )
+                            )
+                            _audio_pdv_result = _get_pdv().check(
+                                phase_id,
+                                _pdv_ref,
+                                current_audio,
+                                sample_rate,
+                                goal_before=_pdv_goal_before,
+                                goal_after=_pdv_goal_after,
+                                goal_targets=_pdv_goal_targets,
+                                goal_weights=getattr(self, "_song_goal_weights", None),
+                                material_type=_pdv_mat,
+                            )
                             if _audio_pdv_result is not current_audio:
                                 # Rollback triggered: revert executed entry so it's not counted as success.
                                 # The phase ran but actively worsened its target — log as skipped.
@@ -25222,6 +26774,15 @@ class UnifiedRestorerV3:
             )
 
         self._pipeline_ml_guard_events = list(pipeline_ml_guard_events)
+        try:
+            _ftc_profile_end = getattr(self, "_restoration_context", {}).get("fallback_teamwork_controller")
+            if isinstance(_ftc_profile_end, dict) and isinstance(
+                getattr(self, "_phase_metadata_accumulator", None),
+                dict,
+            ):
+                self._phase_metadata_accumulator["fallback_teamwork_controller"] = dict(_ftc_profile_end)
+        except Exception as _ftc_end_exc:
+            logger.debug("Fallback-Teamwork-Controller finalize non-blocking: %s", _ftc_end_exc)
 
         # §2.47 [RELEASE_MUST] ml_fallbacks_used: aggregate from ML-guard events (OOM-triggered fallbacks)
         _ml_fallbacks_used: list[dict[str, str]] = []
