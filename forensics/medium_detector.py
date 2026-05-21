@@ -1314,7 +1314,10 @@ class MediumDetector:
             classification_result für Downstream-Passthrough.
         """
         if sr != 48000:
-            logger.debug("MediumDetector: SR=%d (erwartet 48000), arbeite trotzdem weiter", sr)
+            logger.debug(
+                "MediumDetector: native Analyse-SR=%d Hz (kein 48-kHz-Zwang im Voranalysepfad)",
+                sr,
+            )
 
         fp = self._compute_fingerprint(audio, sr)
         # Pass audio duration for rotation_strength masking in short clips (§2.47 §0c)

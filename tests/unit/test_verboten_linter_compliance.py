@@ -23,7 +23,6 @@ import sys
 import textwrap
 from pathlib import Path
 
-
 _ROOT = Path(__file__).resolve().parents[2]
 _LINTER = _ROOT / "scripts" / "aurik_verboten_linter.py"
 _PYTHON = sys.executable
@@ -262,6 +261,52 @@ class TestVerbotenLinterExtendedRules:
         violations = _linter.scan_file(file_path)
         assert any(v.rule == "V32" for v in violations)
 
+    def test_v32_detects_annassign_exclusions_dict(self, tmp_path: Path) -> None:
+        file_path = tmp_path / "cumulative_interaction_guard.py"
+        file_path.write_text(
+            textwrap.dedent(
+                """
+                _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, list[str]] = {
+                    "phase_29": ["authentizitaet"],
+                    "phase_03": ["natuerlichkeit"],
+                }
+
+                CRITICAL_PAIRS = [
+                    (frozenset({"phase_29_tape_hiss_reduction", "phase_03_denoise"}), "transparenz", "x", -0.04),
+                ]
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        import scripts.aurik_verboten_linter as _linter
+
+        violations = _linter.scan_file(file_path)
+        assert any(v.rule == "V32" for v in violations)
+
+    def test_v32_detects_tuple_exclusions_without_transparenz(self, tmp_path: Path) -> None:
+        file_path = tmp_path / "cumulative_interaction_guard.py"
+        file_path.write_text(
+            textwrap.dedent(
+                """
+                _PHASE_SPECIFIC_DRIFT_EXCLUSIONS = {
+                    "phase_29": ("authentizitaet",),
+                    "phase_03": ("natuerlichkeit",),
+                }
+
+                CRITICAL_PAIRS = [
+                    (frozenset({"phase_29_tape_hiss_reduction", "phase_03_denoise"}), "transparenz", "x", -0.04),
+                ]
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        import scripts.aurik_verboten_linter as _linter
+
+        violations = _linter.scan_file(file_path)
+        assert any(v.rule == "V32" for v in violations)
+
     def test_v33_flags_phase_material_dict_missing_cassette(self, tmp_path: Path) -> None:
         phases_dir = tmp_path / "phases"
         phases_dir.mkdir()
@@ -291,3 +336,77 @@ class TestVerbotenLinterExtendedRules:
 
         violations = _linter.scan_file(file_path)
         assert any(v.rule == "V33" for v in violations)
+
+    def test_v33_flags_annassign_material_dict_missing_cassette(self, tmp_path: Path) -> None:
+        phases_dir = tmp_path / "phases"
+        phases_dir.mkdir()
+        file_path = phases_dir / "phase_40_gain_tracking.py"
+        file_path.write_text(
+            textwrap.dedent(
+                """
+                from backend.core.defect_scanner import MaterialType
+
+                class GainTracking:
+                    DETECTION_THRESHOLD: dict[MaterialType, float] = {
+                        MaterialType.TAPE: 0.3,
+                        MaterialType.VINYL: 0.5,
+                        MaterialType.SHELLAC: 0.7,
+                    }
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        import scripts.aurik_verboten_linter as _linter
+
+        violations = _linter.scan_file(file_path)
+        assert any(v.rule == "V33" for v in violations)
+
+    def test_v33_ignores_non_tracked_material_dict_names(self, tmp_path: Path) -> None:
+        phases_dir = tmp_path / "phases"
+        phases_dir.mkdir()
+        file_path = phases_dir / "phase_11_custom.py"
+        file_path.write_text(
+            textwrap.dedent(
+                """
+                from backend.core.defect_scanner import MaterialType
+
+                class CustomPhase:
+                    MATERIAL_WEIGHTS = {
+                        MaterialType.TAPE: 0.9,
+                        MaterialType.VINYL: 0.8,
+                        MaterialType.SHELLAC: 0.7,
+                    }
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        import scripts.aurik_verboten_linter as _linter
+
+        violations = _linter.scan_file(file_path)
+        assert not any(v.rule == "V33" for v in violations)
+
+    def test_v33_ignores_non_carrier_material_dicts(self, tmp_path: Path) -> None:
+        phases_dir = tmp_path / "phases"
+        phases_dir.mkdir()
+        file_path = phases_dir / "phase_41_digital_only.py"
+        file_path.write_text(
+            textwrap.dedent(
+                """
+                from backend.core.defect_scanner import MaterialType
+
+                class DigitalOnly:
+                    CORRECTION_STRENGTH = {
+                        MaterialType.CD_DIGITAL: 0.3,
+                        MaterialType.STREAMING: 0.2,
+                    }
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        import scripts.aurik_verboten_linter as _linter
+
+        violations = _linter.scan_file(file_path)
+        assert not any(v.rule == "V33" for v in violations)

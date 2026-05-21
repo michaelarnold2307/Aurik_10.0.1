@@ -135,6 +135,19 @@ def test_cli_export_helper_applies_mono_guard_and_forwards_musiclover_metadata(m
             "recovery_attempted": False,
             "best_possible_reached": False,
             "fallback_quality_floor": {"status": "passed"},
+            "worldclass_composite_gate": {
+                "wcs": 0.86,
+                "threshold": 0.85,
+                "profile": "instrumental",
+                "artifact_veto": False,
+                "passed": True,
+            },
+            "threshold_evidence": {
+                "worldclass_composite_gate": {
+                    "source_class": "C",
+                    "revalidate_by": "2026-09-30",
+                }
+            },
             "musiclover": {
                 "vocal_integrity": {"vqi": 0.87, "singer_identity_cosine": 0.95},
                 "temporal_risk": {"hotspot_count": 2},
@@ -176,3 +189,9 @@ def test_cli_export_helper_applies_mono_guard_and_forwards_musiclover_metadata(m
     assert md["quality_gate_musiclover_mono_warning"] == "True"
     assert md["quality_gate_musiclover_all_sota_real"] == "False"
     assert md["quality_gate_musiclover_sota_reason"] == "sota_fallback"
+    assert md["quality_gate_worldclass_score"] == "0.86"
+    assert md["quality_gate_worldclass_threshold"] == "0.85"
+    assert md["quality_gate_worldclass_passed"] == "True"
+    assert md["quality_gate_worldclass_profile"] == "instrumental"
+    assert md["quality_gate_evidence_worldclass_source_class"] == "C"
+    assert md["quality_gate_evidence_worldclass_revalidate_by"] == "2026-09-30"

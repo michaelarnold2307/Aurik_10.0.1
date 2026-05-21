@@ -82,3 +82,45 @@ Umsetzungsprotokoll fuer die naechste PR-Serie:
 
 - `docs/WORLDCLASS_CLASS_C_REVALIDATION_PROTOCOL_2026-05-20.md`
 - `docs/WORLDCLASS_SOTA_IMPLEMENTATION_MATRIX_2026-05-20.md`
+
+## Aktivierungspaket 2026-05-21 (wissenschaftlich maximal, vokalfokussiert)
+
+Normative Verankerung erfolgt in:
+
+- `.github/specs/07_quality_and_tests.md` via `§8.6 Worldclass Hybrid-Engineer Protocol`
+
+Damit wird der Weltspitzen-Anspruch von einer reinen Zielbeschreibung in ein
+release-faehiges Mess- und Gate-System ueberfuehrt.
+
+### AP-1: Human-Talent-Emulation-Vektor produktiv fuehren
+
+- 12-dim Vektor (`hybrid_engineer_vector`) pro Run in Metadata persistieren
+- Kontrakt: alle Schluessel vorhanden, normierte Werte, deterministische Berechnung
+- Pflichtauswertung je Material/Era auf UAT-Matrix
+
+### AP-2: WCS-Composite in Gates integrieren
+
+- WCS als zusaetzliches End-Gate mit material-/modusbezogenen Minima
+- Konfliktauflosung strikt nach Vocal-Supremacy-Hierarchie
+- Kein Override fuer `artifact_freedom < 0.95`
+
+### AP-3: Evidenzklassen A/B/C operationalisieren
+
+- Jeder Gate-Schwellwert erhaelt `source_class`, `source_ref`, `validated_on`
+- Klasse-C-Werte verpflichtend mit `revalidate_by`
+- Build-Blocker fuer fehlende Evidenzmetadaten in neuen Schwellwerten
+
+### AP-4: Weltspitzen-Testmatrix
+
+- Normative Tests fuer HTEV-Contract, WCS-Gate, Evidence-Metadata
+- Real-Audio-Gate auf Gesangsmaterial als Pflicht fuer Kernpatches
+- Ergebnisaggregation je Materialklasse mit 5/95-Perzentil, nicht nur Mittelwert
+
+### Definition of Ready fuer wissenschaftliche Patches
+
+Ein Patch gilt erst dann als wissenschaftlich freigabefaehig, wenn alle Punkte vorliegen:
+
+1. Quellenklassifikation A/B/C fuer jede neue Schwelle
+2. Messprotokoll (Daten, Szenarien, Auswertung) reproduzierbar dokumentiert
+3. Mindestens ein Regressionstest pro neue Invariante
+4. Kein Konflikt mit Vocal-Supremacy und Artifact-Freedom-Veto

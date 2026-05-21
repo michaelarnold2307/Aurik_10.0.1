@@ -219,6 +219,33 @@ class TestBridgeExperienceInsights:
         assert qg["best_possible_reached"] is True
         assert qg["fallback_quality_floor_status"] == "recovered"
 
+    def test_get_experience_insights_propagates_worldclass_and_threshold_evidence(self):
+        """Bridge insights must carry WCS gate and threshold evidence fields."""
+        from backend.api.bridge import get_experience_insights
+
+        class MockResult:
+            metadata = {
+                "worldclass_composite_gate": {
+                    "wcs": 0.89,
+                    "threshold": 0.88,
+                    "profile": "vocal",
+                    "artifact_veto": False,
+                    "passed": True,
+                },
+                "threshold_evidence": {
+                    "worldclass_composite_gate": {
+                        "source_class": "C",
+                        "source_ref": "Spec §8.6b WCS initial calibration",
+                    }
+                },
+            }
+
+        result = get_experience_insights(MockResult())
+        assert "threshold_evidence" in result
+        assert result["quality_gate"]["worldclass_composite_gate"]["passed"] is True
+        assert result["quality_gate"]["worldclass_composite_gate"]["profile"] == "vocal"
+        assert result["threshold_evidence"]["worldclass_composite_gate"]["source_class"] == "C"
+
     def test_build_export_quality_gate_payload_includes_fqf_flags(self):
         """Bridge must emit export_workflow-compatible quality_gate payload."""
         from backend.api.bridge import build_export_quality_gate_payload
@@ -327,6 +354,34 @@ class TestBridgeExperienceInsights:
         assert ml["mastering"]["chroma_correlation"] == 0.93
         assert ml["decision_trace"]["all_sota_real"] is False
         assert ml["decision_trace"]["vocal_restoration_capability_status"] == "sota_fallback"
+
+    def test_build_export_quality_gate_payload_propagates_worldclass_and_threshold_evidence(self):
+        """Export payload must include WCS gate and threshold evidence from metadata."""
+        from backend.api.bridge import build_export_quality_gate_payload
+
+        class MockResult:
+            quality_estimate = 0.88
+            metadata = {
+                "degradation_status": "ok",
+                "worldclass_composite_gate": {
+                    "wcs": 0.87,
+                    "threshold": 0.85,
+                    "profile": "instrumental",
+                    "artifact_veto": False,
+                    "passed": True,
+                },
+                "threshold_evidence": {
+                    "hpi_gate": {
+                        "source_class": "B",
+                        "source_ref": "Spec §2.44 holistic perceptual index",
+                    }
+                },
+            }
+
+        payload = build_export_quality_gate_payload(MockResult())
+        assert payload["worldclass_composite_gate"]["passed"] is True
+        assert payload["worldclass_composite_gate"]["profile"] == "instrumental"
+        assert payload["threshold_evidence"]["hpi_gate"]["source_class"] == "B"
 
 
 # ---------------------------------------------------------------------------

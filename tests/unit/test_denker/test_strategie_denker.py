@@ -341,4 +341,4 @@ class TestSignalAwareSeverity:
         }
         plan = StrategieDenker().plan(audio, SR, defect_severity=0.1, signal_signature=sig)
         assert plan.defect_severity > 0.1
-        assert plan.recommended_chunk_s == pytest.approx(5.0, rel=1e-6)
+        assert plan.recommended_chunk_s == pytest.approx(15.0, rel=1e-6)

@@ -34,6 +34,7 @@ V16 — structural_silence_zones=None als Default-Argument (§2.68 V16):
 from __future__ import annotations
 
 import ast
+import re
 import sys
 import textwrap
 from collections.abc import Iterable
@@ -99,15 +100,18 @@ RULES = {
     ),
     "V27": Rule(
         "V27",
-        "JITTER_ARTIFACTS darf nicht mit phase_12_wow_flutter_fix behandelt werden (§4.11 — digitale IM-Produkte, kein PSOLA-Kandidat)",
+        "JITTER_ARTIFACTS darf nicht mit phase_12_wow_flutter_fix behandelt werden "
+        "(§4.11 — digitale IM-Produkte, kein PSOLA-Kandidat)",
     ),
     "V28": Rule(
         "V28",
-        "NR_BREATHING_ARTIFACT darf nicht mit phase_03_denoise oder phase_29_tape_hiss_reduction behandelt werden (§4.11)",
+        "NR_BREATHING_ARTIFACT darf nicht mit phase_03_denoise oder "
+        "phase_29_tape_hiss_reduction behandelt werden (§4.11)",
     ),
     "V29": Rule(
         "V29",
-        "OVERLOAD_DISTORTION darf nicht mit phase_63_intermodulation_reduction behandelt werden (Harmonische ≠ IMD, §4.11)",
+        "OVERLOAD_DISTORTION darf nicht mit phase_63_intermodulation_reduction "
+        "behandelt werden (Harmonische ≠ IMD, §4.11)",
     ),
     "V30": Rule(
         "V30",
@@ -115,15 +119,18 @@ RULES = {
     ),
     "V31": Rule(
         "V31",
-        "ROOM_MODE_RESONANCE darf nicht allein auf phase_05_rumble_filter ohne phase_04_eq_correction abgebildet werden (§4.11)",
+        "ROOM_MODE_RESONANCE darf nicht allein auf phase_05_rumble_filter "
+        "ohne phase_04_eq_correction abgebildet werden (§4.11)",
     ),
     "V32": Rule(
         "V32",
-        "Subtraktive Carrier-NR-Phase in transparenz-CRITICAL_PAIR braucht transparenz in _PHASE_SPECIFIC_DRIFT_EXCLUSIONS (§2.44/§2.55)",
+        "Subtraktive Carrier-NR-Phase in transparenz-CRITICAL_PAIR braucht "
+        "transparenz in _PHASE_SPECIFIC_DRIFT_EXCLUSIONS (§2.44/§2.55)",
     ),
     "V33": Rule(
         "V33",
-        "MaterialType-keyed Phase-Dict ohne MaterialType.CASSETTE — neuer Materialtyp darf nicht still auf Vinyl/Tape-Fallback fallen",
+        "MaterialType-keyed Phase-Dict ohne MaterialType.CASSETTE — "
+        "neuer Materialtyp darf nicht still auf Vinyl/Tape-Fallback fallen",
     ),
 }
 
@@ -741,25 +748,56 @@ def _check_inpainting_ssip_guard(filepath: Path) -> list[Violation]:
 
 def _extract_string_list_dict_entry(source: str, dict_name: str, key_name: str) -> tuple[list[str], int] | None:
     """Extrahiert aus einem Dict-Literal den String-Listen-Wert für einen konkreten Key."""
+
+    def _extract_string_items(value_node: ast.AST) -> list[str] | None:
+        container_node: ast.AST | None = None
+        if isinstance(value_node, (ast.List, ast.Tuple, ast.Set)):
+            container_node = value_node
+        elif (
+            isinstance(value_node, ast.Call)
+            and isinstance(value_node.func, ast.Name)
+            and value_node.func.id == "frozenset"
+            and value_node.args
+            and isinstance(value_node.args[0], (ast.List, ast.Tuple, ast.Set))
+        ):
+            container_node = value_node.args[0]
+
+        if container_node is None:
+            return None
+
+        if isinstance(container_node, (ast.List, ast.Tuple, ast.Set)):
+            return [
+                elt.value for elt in container_node.elts if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+            ]
+        return None
+
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return None
 
     for node in ast.walk(tree):
+        dict_value: ast.Dict | None = None
+        target_names: list[str] = []
         if isinstance(node, ast.Assign):
-            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
-            if dict_name in targets and isinstance(node.value, ast.Dict):
-                for key_node, value_node in zip(node.value.keys, node.value.values):
-                    if not (isinstance(key_node, ast.Constant) and key_node.value == key_name):
-                        continue
-                    if isinstance(value_node, ast.List):
-                        items = [
-                            elt.value
-                            for elt in value_node.elts
-                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                        ]
-                        return items, getattr(value_node, "lineno", getattr(key_node, "lineno", 1))
+            target_names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if isinstance(node.value, ast.Dict):
+                dict_value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                target_names = [node.target.id]
+            if node.value and isinstance(node.value, ast.Dict):
+                dict_value = node.value
+
+        if dict_name not in target_names or dict_value is None:
+            continue
+
+        for key_node, value_node in zip(dict_value.keys, dict_value.values):
+            if not (isinstance(key_node, ast.Constant) and key_node.value == key_name):
+                continue
+            items = _extract_string_items(value_node)
+            if items is not None:
+                return items, getattr(value_node, "lineno", getattr(key_node, "lineno", 1))
     return None
 
 
@@ -776,14 +814,33 @@ def _extract_materialtype_dict_entries(source: str) -> list[tuple[str, list[str]
         return []
 
     entries: list[tuple[str, list[str], int]] = []
+
+    def _target_names_from_assign_node(assign_node: ast.AST) -> list[str]:
+        if isinstance(assign_node, ast.Assign):
+            return [target.id for target in assign_node.targets if isinstance(target, ast.Name)]
+        if isinstance(assign_node, ast.AnnAssign) and isinstance(assign_node.target, ast.Name):
+            return [assign_node.target.id]
+        return []
+
+    def _dict_value_from_assign_node(assign_node: ast.AST) -> ast.Dict | None:
+        value_node = None
+        if isinstance(assign_node, (ast.Assign, ast.AnnAssign)):
+            value_node = assign_node.value
+        if isinstance(value_node, ast.Dict):
+            return value_node
+        return None
+
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
-        target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
-        if not target_names or not isinstance(node.value, ast.Dict):
+
+        target_names = _target_names_from_assign_node(node)
+        dict_node = _dict_value_from_assign_node(node)
+        if not target_names or dict_node is None:
             continue
+
         material_keys: list[str] = []
-        for key_node in node.value.keys:
+        for key_node in dict_node.keys:
             if not (
                 isinstance(key_node, ast.Attribute)
                 and isinstance(key_node.value, ast.Name)
@@ -792,8 +849,9 @@ def _extract_materialtype_dict_entries(source: str) -> list[tuple[str, list[str]
                 material_keys = []
                 break
             material_keys.append(key_node.attr)
+
         if material_keys:
-            lineno = getattr(node.value, "lineno", getattr(node, "lineno", 1))
+            lineno = getattr(dict_node, "lineno", getattr(node, "lineno", 1))
             for target_name in target_names:
                 entries.append((target_name, material_keys, lineno))
     return entries
@@ -853,11 +911,11 @@ def _check_forbidden_defect_mappings(filepath: Path) -> list[Violation]:
                 )
 
     if filepath.name == "defect_phase_mapper.py":
-        import re
 
         def _extract_defect_mapper_block(defect_name: str) -> tuple[str, int] | None:
             pattern = re.compile(
-                rf"DefectType\.{defect_name}\s*:\s*PhaseAssignment\((?P<body>[\s\S]*?)\n\s*\),\n\s*(?=DefectType\.|}}\s*$|$)",
+                rf"DefectType\.{defect_name}\s*:\s*PhaseAssignment\((?P<body>[\s\S]*?)"
+                r"\n\s*\),\n\s*(?=DefectType\.|}\s*$|$)",
                 re.IGNORECASE,
             )
             match = pattern.search(source)
@@ -937,7 +995,6 @@ def _check_transparenz_exclusion_for_subtractive_noise_phases(filepath: Path) ->
         if entry is None:
             continue
         exclusions, lineno = entry
-        f'frozenset({{"{concrete}"'
         if concrete == "phase_29_tape_hiss_reduction":
             pair_present = concrete in source and '"transparenz"' in source and "phase_03_denoise" in source
         else:
@@ -983,7 +1040,7 @@ def _check_phase_materialtype_dict_completeness(filepath: Path) -> list[Violatio
         if dict_name not in tracked_dict_names:
             continue
         key_set = set(material_keys)
-        if not (key_set & carrier_anchor_keys):
+        if not key_set & carrier_anchor_keys:
             continue
         if "CASSETTE" in key_set:
             continue

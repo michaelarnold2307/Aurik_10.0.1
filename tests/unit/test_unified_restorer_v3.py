@@ -511,6 +511,20 @@ class TestPreventFirstQuietEdges:
 
         assert float(profile["vocal_presence"]) >= 0.82
 
+    def test_40h2_build_song_calibration_profile_preserves_latched_vocal_confidence(self):
+        profile = UnifiedRestorerV3._build_song_calibration_profile(
+            material_type=MaterialType.TAPE,
+            mode=QualityMode.QUALITY,
+            restorability_score=60.0,
+            input_snr_db=22.0,
+            max_defect_severity=0.35,
+            pipeline_confidence=0.8,
+            panns_tags={"Singing voice": 0.0, "Vocals": 0.17, "Music": 0.88},
+            panns_vocals_confidence=0.35,
+        )
+
+        assert float(profile["vocal_presence"]) >= 0.35
+
     def test_40i_autosetup_policy_caps_vocal_enhancement_for_vocal_material(self):
         profile = {
             "family_scalars": {"dynamics_eq": 1.0, "vocal": 1.0, "reconstruction": 1.0},

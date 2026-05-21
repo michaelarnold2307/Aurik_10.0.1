@@ -204,6 +204,32 @@ _HF_ADDITIVE_PHASE_CONTRIB_DB: dict[str, float] = {
     "phase_38_presence_boost": 2.0,  # Presence-Boost 2–8 kHz: +upper_gain_db × 0.5
 }
 
+# §8.6 [RELEASE_MUST] Worldclass Hybrid-Engineer Protocol
+_WORLDCLASS_VECTOR_KEYS: tuple[str, ...] = (
+    "vocal_identity_preservation",
+    "formant_integrity",
+    "vibrato_depth_preservation",
+    "breath_naturalness",
+    "micro_dynamic_correlation",
+    "transient_articulation",
+    "stereo_scene_stability",
+    "noise_texture_authenticity",
+    "spectral_color_preservation",
+    "emotional_arc_preservation",
+    "artifact_freedom",
+    "goal_team_balance",
+)
+
+_WORLDCLASS_WCS_WEIGHTS: dict[str, float] = {
+    "artifact_freedom": 0.30,
+    "vocal_identity_preservation": 0.20,
+    "formant_integrity": 0.15,
+    "micro_dynamic_correlation": 0.10,
+    "emotional_arc_preservation": 0.10,
+    "spectral_color_preservation": 0.10,
+    "stereo_scene_stability": 0.05,
+}
+
 
 def _get_noise_texture_rollback_threshold(material_key: str) -> float:
     """Gibt material-adaptive noise texture rollback threshold (§8.5A) zurück."""
@@ -1086,6 +1112,66 @@ class UnifiedRestorerV3:
         }
 
     @staticmethod
+    def _build_hybrid_engineer_vector(metrics: dict[str, Any] | None = None) -> dict[str, float]:
+        """Erzeugt den §8.6a Human-Talent-Emulation-Vektor (HTEV)."""
+        _src = metrics or {}
+        _out: dict[str, float] = {}
+        for _k in _WORLDCLASS_VECTOR_KEYS:
+            _v = _src.get(_k, 1.0)
+            try:
+                _vf = float(_v)
+            except Exception:
+                _vf = 1.0
+            if not math.isfinite(_vf):
+                _vf = 1.0
+            _out[_k] = float(np.clip(_vf, 0.0, 1.0))
+        return _out
+
+    @staticmethod
+    def _compute_worldclass_composite_score(vector: dict[str, float]) -> float:
+        """Berechnet den §8.6b WCS aus dem HTEV-Vektor."""
+        _score = 0.0
+        for _metric, _weight in _WORLDCLASS_WCS_WEIGHTS.items():
+            _score += float(_weight) * float(np.clip(float(vector.get(_metric, 1.0)), 0.0, 1.0))
+        return float(np.clip(_score, 0.0, 1.0))
+
+    @staticmethod
+    def _evaluate_worldclass_composite_gate(
+        vector: dict[str, float],
+        panns_singing: float,
+        is_studio_mode: bool,
+        artifact_freedom: float,
+    ) -> dict[str, Any]:
+        """Bewertet §8.6b WCS-Gate inkl. Artifact-Veto-Invariante."""
+        _v = UnifiedRestorerV3._build_hybrid_engineer_vector(vector)
+        _wcs = UnifiedRestorerV3._compute_worldclass_composite_score(_v)
+        _panns = float(np.clip(float(panns_singing), 0.0, 1.0))
+        _af = float(np.clip(float(artifact_freedom), 0.0, 1.0))
+
+        if _panns >= 0.35:
+            _threshold = 0.91 if bool(is_studio_mode) else 0.88
+            _profile = "vocal"
+        else:
+            _threshold = 0.85
+            _profile = "instrumental"
+
+        _artifact_veto = _af < 0.95
+        _wcs_pass = _wcs >= _threshold
+        _passed = bool((not _artifact_veto) and _wcs_pass)
+
+        return {
+            "wcs": float(_wcs),
+            "threshold": float(_threshold),
+            "profile": _profile,
+            "panns_singing": _panns,
+            "artifact_freedom": _af,
+            "artifact_veto": bool(_artifact_veto),
+            "wcs_pass": bool(_wcs_pass),
+            "passed": bool(_passed),
+            "weights": dict(_WORLDCLASS_WCS_WEIGHTS),
+        }
+
+    @staticmethod
     def _is_benign_digital_source(
         audio: np.ndarray,
         sample_rate: int,
@@ -1445,6 +1531,7 @@ class UnifiedRestorerV3:
         era_decade: int | None = None,
         defect_scores: dict[str, float] | None = None,
         panns_tags: dict[str, float] | None = None,
+        panns_vocals_confidence: float | None = None,
         spectral_fingerprint: dict[str, float] | None = None,
         transfer_chain: list[str] | None = None,
         is_schlager: bool = False,
@@ -1589,6 +1676,14 @@ class UnifiedRestorerV3:
                 _panns_vocal_boost = float(np.clip(0.90 + 0.22 * _vocal_prob, 0.90, 1.10))
             if _inst_prob >= 0.35:
                 _panns_instrument_boost = float(np.clip(0.90 + 0.22 * _inst_prob, 0.90, 1.10))
+
+        # §0p Stability-Guard: do not downshift to instrumental logic when a prior
+        # vocal confidence from early analysis/VFA already established singing presence.
+        if panns_vocals_confidence is not None:
+            try:
+                _vocal_prob = max(_vocal_prob, float(np.clip(float(panns_vocals_confidence), 0.0, 1.0)))
+            except (TypeError, ValueError):
+                pass
 
         _genre_norm = str(genre_label or "").strip().lower()
         _frisson_sensitivity = 0.0
@@ -7022,6 +7117,7 @@ class UnifiedRestorerV3:
             era_decade=getattr(_era_result, "decade", None) if _era_result is not None else None,
             defect_scores=_cal_defect_sev if _cal_defect_sev else None,
             panns_tags=_panns_conf,  # from defect_result.metadata (already extracted above)
+            panns_vocals_confidence=float(getattr(self, "_panns_singing", 0.0)),
             spectral_fingerprint=_cal_sf if _cal_sf else None,
             transfer_chain=_cal_transfer_chain,
             is_schlager=_cal_is_schlager,
@@ -7092,6 +7188,7 @@ class UnifiedRestorerV3:
                 self._restoration_context["panns_tags"] = _panns_conf
                 _panns_vocal_max = self._compute_vocal_presence_confidence(
                     _panns_conf,
+                    panns_vocals_confidence=float(getattr(self, "_panns_singing", 0.0)),
                     is_schlager=bool(self._restoration_context.get("is_schlager", False)),
                     genre_label=str(self._restoration_context.get("genre_label", "")),
                 )
@@ -7100,6 +7197,13 @@ class UnifiedRestorerV3:
                 # _NR_PHASES_HNR prüft kwargs.get("panns_singing") — ohne diesen Key
                 # in _restoration_context feuert apply_hnr_blend nie bei Vokal-Material.
                 self._restoration_context["panns_singing"] = _panns_vocal_max
+            else:
+                # §0p Durchreichungs-Invariante: auch ohne verfügbare panns_tags muss
+                # der latched Vocal-Wert im Kontext stehen, sonst fallen Phasen auf
+                # default 0.0 zurück und laufen fälschlich im Instrumental-Pfad.
+                _latched_vocal = float(getattr(self, "_panns_singing", 0.0))
+                self._restoration_context["panns_vocals_confidence"] = _latched_vocal
+                self._restoration_context["panns_singing"] = _latched_vocal
         # [RELEASE_MUST] Lücke-G-Fix v9.10.100: assert global_scalar ∈ [0.50, 1.50]
         _gs_assert = float(self._song_calibration_profile.get("global_scalar", 1.0))
         assert 0.50 <= _gs_assert <= 1.50, (
@@ -13369,6 +13473,78 @@ class UnifiedRestorerV3:
         except Exception as _v23_exc:
             logger.debug("§V23 MKI pre-export non-blocking: %s", _v23_exc)
 
+        # §8.6 [RELEASE_MUST] Worldclass Hybrid-Engineer Vector + WCS-Gate
+        _phase_meta_acc_world = self._phase_metadata_accumulator or {}
+        _goal_total = len(_musical_goals_passed or {})
+        _goal_ok = sum(1 for _g_ok in (_musical_goals_passed or {}).values() if bool(_g_ok))
+        _goal_balance = float(_goal_ok / max(_goal_total, 1))
+        _stereo_scene_stability = 1.0
+        if isinstance(_stereo_safety_guard, dict):
+            if bool(_stereo_safety_guard.get("hard_fail", False)):
+                _stereo_scene_stability = 0.0
+            elif bool(_stereo_safety_guard.get("warning", False)):
+                _stereo_scene_stability = 0.70
+
+        _wcs_vector_input = {
+            "vocal_identity_preservation": _phase_meta_acc_world.get("singer_identity_cosine", 1.0),
+            "formant_integrity": _phase_meta_acc_world.get(
+                "formant_integrity",
+                _phase_meta_acc_world.get("formant_fidelity", 1.0),
+            ),
+            "vibrato_depth_preservation": _phase_meta_acc_world.get(
+                "vibrato_depth_preservation",
+                _phase_meta_acc_world.get("vibrato_depth_preserved", 1.0),
+            ),
+            "breath_naturalness": _phase_meta_acc_world.get("breath_naturalness", 1.0),
+            "micro_dynamic_correlation": _phase_meta_acc_world.get(
+                "micro_dynamic_correlation",
+                _phase_meta_acc_world.get("micro_dynamics_corr", 1.0),
+            ),
+            "transient_articulation": _phase_meta_acc_world.get("transient_articulation", 1.0),
+            "stereo_scene_stability": _stereo_scene_stability,
+            "noise_texture_authenticity": (
+                float(getattr(_noise_texture_result, "coherence", 1.0)) if _noise_texture_result is not None else 1.0
+            ),
+            "spectral_color_preservation": _phase_meta_acc_world.get(
+                "spectral_color_preservation",
+                _phase_meta_acc_world.get("spectral_color_corr", 1.0),
+            ),
+            "emotional_arc_preservation": _emotional_arc_for_hpi,
+            "artifact_freedom": _artifact_freedom_for_hpi,
+            "goal_team_balance": _goal_balance,
+        }
+        _hybrid_engineer_vector = UnifiedRestorerV3._build_hybrid_engineer_vector(_wcs_vector_input)
+        _worldclass_composite_gate = UnifiedRestorerV3._evaluate_worldclass_composite_gate(
+            vector=_hybrid_engineer_vector,
+            panns_singing=float(getattr(self, "_panns_singing", 0.0) or 0.0),
+            is_studio_mode=self.is_studio_mode(),
+            artifact_freedom=_artifact_freedom_for_hpi,
+        )
+        if not bool(_worldclass_composite_gate.get("passed", True)):
+            _fail_reasons.append(
+                {
+                    "component": "WorldclassCompositeGate",
+                    "error_code": "WCS_FAIL",
+                    "severity": "degraded",
+                    "wcs": float(_worldclass_composite_gate.get("wcs", 0.0)),
+                    "threshold": float(_worldclass_composite_gate.get("threshold", 0.0)),
+                    "artifact_veto": bool(_worldclass_composite_gate.get("artifact_veto", False)),
+                }
+            )
+            try:
+                from backend.core.pipeline_health_state import (
+                    pipeline_health_from_fail_reasons as _phfr_wcs,
+                )
+                from backend.core.pipeline_health_state import (
+                    primary_fail_reason_from_fail_reasons as _prfr_wcs,
+                )
+
+                _degradation_status = _phfr_wcs(_fail_reasons).value
+                _primary_fail_reason = _prfr_wcs(_fail_reasons)
+            except Exception:
+                _degradation_status = "degraded"
+                _primary_fail_reason = "WCS_FAIL"
+
         _phase_meta_acc = getattr(self, "_phase_metadata_accumulator", {})
         _phase_meta_dicts = {pid: data for pid, data in _phase_meta_acc.items() if isinstance(data, dict)}
         result = RestorationResult(
@@ -13578,6 +13754,34 @@ class UnifiedRestorerV3:
                 "stereo_safety_guard": _stereo_safety_guard,
                 # §0d [RELEASE_MUST] Carrier-Chain-Recovery (Pflichtfeld)
                 "carrier_chain_recovery_ratio": getattr(self, "_carrier_chain_recovery_ratio", 0.0),
+                # §8.6a [RELEASE_MUST] Human-Talent-Emulation-Vektor (HTEV)
+                "hybrid_engineer_vector": dict(_hybrid_engineer_vector),
+                # §8.6b [RELEASE_MUST] Worldclass Composite Gate
+                "worldclass_composite_gate": dict(_worldclass_composite_gate),
+                # §8.6c [RELEASE_MUST] Evidenzklassen für Gate-Schwellen
+                "threshold_evidence": {
+                    "artifact_freedom_gate": {
+                        "source_class": "A",
+                        "source_ref": "Spec §2.49 / §0h artifact_freedom >= 0.95",
+                        "validated_on": "2026-05-21",
+                    },
+                    "vqi_gate": {
+                        "source_class": "B",
+                        "source_ref": "Spec §0p / §2.35c vocal quality index",
+                        "validated_on": "2026-05-21",
+                    },
+                    "hpi_gate": {
+                        "source_class": "B",
+                        "source_ref": "Spec §2.44 holistic perceptual index",
+                        "validated_on": "2026-05-21",
+                    },
+                    "worldclass_composite_gate": {
+                        "source_class": "C",
+                        "source_ref": "Spec §8.6b WCS initial calibration",
+                        "validated_on": "2026-05-21",
+                        "revalidate_by": "2026-09-30",
+                    },
+                },
                 "carrier_chain_recovery": {
                     "ratio": getattr(self, "_carrier_chain_recovery_ratio", 0.0),
                     "last_carrier_phase": getattr(self, "_last_carrier_phase_id", None),
@@ -20861,7 +21065,7 @@ class UnifiedRestorerV3:
                                 "artifact_freedom",
                             ):
                                 _mv = _voice_guard_orc.get(_mk)
-                                if isinstance(_mv, bool) or isinstance(_mv, (int, float)):
+                                if isinstance(_mv, (bool, int, float)):
                                     _event_payload[_mk] = float(_mv)
                             _events.append(_event_payload)
 
@@ -25269,6 +25473,44 @@ class UnifiedRestorerV3:
                                     _pmgg_hb_stop.set()
                                 if _pmgg_hb_thread is not None:
                                     _pmgg_hb_thread.join(timeout=0.3)
+
+                            # PMGG-Trace: phasenlokale Qualitäts-Proxys für Deep-Analyzer.
+                            # Ohne diese Felder fallen Checkpoints auf finale Globalwerte zurück,
+                            # wodurch HPI/AFG-Min/Max künstlich identisch werden.
+                            try:
+                                _phase_hpi_components = []
+                                for _k in (
+                                    "natuerlichkeit",
+                                    "authentizitaet",
+                                    "timbre_authentizitaet",
+                                    "transparenz",
+                                ):
+                                    _v = _pmgg_scores_curr.get(_k)
+                                    if isinstance(_v, (int, float)):
+                                        _phase_hpi_components.append(float(_v))
+                                if _phase_hpi_components:
+                                    _phase_hpi_proxy = float(np.clip(np.mean(_phase_hpi_components), 0.0, 1.0))
+                                    if isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
+                                        _vqi_local = self._phase_metadata_accumulator.get("vqi")
+                                        _panns_local = float(getattr(self, "_panns_singing", 0.0))
+                                        if isinstance(_vqi_local, (int, float)) and _panns_local >= 0.35:
+                                            _phase_hpi_proxy *= float(np.clip(float(_vqi_local), 0.0, 1.0))
+                                    _pmgg_entry.metadata["phase_hpi_proxy"] = round(
+                                        float(np.clip(_phase_hpi_proxy, 0.0, 1.0)),
+                                        4,
+                                    )
+
+                                _phase_goal_deltas = []
+                                for _g, _after in (_pmgg_scores_curr or {}).items():
+                                    _before = (_pmgg_scores_before_phase or {}).get(_g)
+                                    if isinstance(_before, (int, float)) and isinstance(_after, (int, float)):
+                                        _phase_goal_deltas.append(float(_after) - float(_before))
+                                _worst_delta = min(_phase_goal_deltas) if _phase_goal_deltas else 0.0
+                                _phase_afg_proxy = float(np.clip(1.0 + min(0.0, _worst_delta), 0.0, 1.0))
+                                _pmgg_entry.metadata["phase_artifact_freedom_proxy"] = round(_phase_afg_proxy, 4)
+                            except Exception as _pmgg_proxy_exc:
+                                logger.debug("PMGG proxy metric capture failed for %s: %s", phase_id, _pmgg_proxy_exc)
+
                             _pmgg_log_entries.append(_pmgg_entry)
                             _collect_guard_payload(_phase_for_exec, phase_id)
                             # §3.1 NaN-Guard: revert to pre-phase audio if NaN produced

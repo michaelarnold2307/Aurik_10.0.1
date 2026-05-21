@@ -199,3 +199,60 @@ def test_musiclover_sota_metadata_forwarding_in_export_path() -> None:
     src = _read_gui_source()
     assert "quality_gate_musiclover_all_sota_real" in src
     assert "quality_gate_musiclover_sota_reason" in src
+
+
+@pytest.mark.normative
+def test_worldclass_gate_and_threshold_evidence_are_visible_in_quality_banner() -> None:
+    src = _read_gui_source()
+    assert '"_xp_threshold_evidence": {}' in src
+    assert 'ctx["_xp_threshold_evidence"] = dict(_te_raw)' in src
+    assert "xp_threshold_evidence: dict" in src
+    assert 'qg_wcs = xp_quality_gate.get("worldclass_composite_gate", {})' in src
+    assert "🏁  Worldclass-Gate:" in src
+    assert "📚  Gate-Evidenz:" in src
+
+
+@pytest.mark.normative
+def test_worldclass_and_evidence_are_forwarded_in_export_metadata() -> None:
+    src = _read_gui_source()
+    assert "quality_gate_worldclass_score" in src
+    assert "quality_gate_worldclass_threshold" in src
+    assert "quality_gate_worldclass_passed" in src
+    assert "quality_gate_worldclass_profile" in src
+    assert "quality_gate_worldclass_artifact_veto" in src
+    assert "quality_gate_evidence_worldclass_source_class" in src
+    assert "quality_gate_evidence_worldclass_revalidate_by" in src
+
+
+@pytest.mark.normative
+def test_waveform_phase_animation_has_generic_fallback_and_progress_binding() -> None:
+    src = _read_gui_source()
+    assert "generic fallback" in src.lower()
+    assert '_generic_key = f"generic:phase_' in src
+    assert (
+        "self.batch_thread.phase_progress.connect(lambda v: self.waveform_widget.set_stage_progress(v / 10000.0))"
+        in src
+    )
+    assert (
+        "self.batch_thread.phase_progress.connect(lambda v: self.waveform_widget_rest_ab.set_stage_progress(v / 10000.0))"
+        in src
+    )
+
+
+@pytest.mark.normative
+def test_phase_step_label_has_no_audio_callback_fallback() -> None:
+    src = _read_gui_source()
+    assert "if _cur_pct >= 20:" in src
+    assert "self._pending_step_info = label" in src
+    assert "Fallback: some phases do not emit an audio snapshot callback." in src
+    assert "self._phase_step_label.setText(label)" in src
+    assert "self._phase_step_label.setVisible(True)" in src
+
+
+@pytest.mark.normative
+def test_waveform_stage_and_scan_are_mirrored_to_rest_ab_widget() -> None:
+    src = _read_gui_source()
+    assert "self.waveform_widget_rest_ab.set_scan_pos(frac)" in src
+    assert "self.waveform_widget_rest_ab.set_active_stage(phase_text)" in src
+    assert "self.waveform_widget_rest_ab.set_scan_pos(-1.0)" in src
+    assert "self.waveform_widget_rest_ab.clear_stage()" in src

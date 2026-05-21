@@ -293,6 +293,19 @@ def _export_audio_frontend_parity(
     _ml_temporal = _ml_payload.get("temporal_risk", {}) if isinstance(_ml_payload, dict) else {}
     _ml_goals = _ml_payload.get("musical_goals", {}) if isinstance(_ml_payload, dict) else {}
     _ml_decision = _ml_payload.get("decision_trace", {}) if isinstance(_ml_payload, dict) else {}
+    _wcs_payload = (
+        eq_payload.get("worldclass_composite_gate", {})
+        if isinstance(eq_payload.get("worldclass_composite_gate", {}), dict)
+        else {}
+    )
+    _evidence_payload = (
+        eq_payload.get("threshold_evidence", {}) if isinstance(eq_payload.get("threshold_evidence", {}), dict) else {}
+    )
+    _wcs_evidence = (
+        _evidence_payload.get("worldclass_composite_gate", {})
+        if isinstance(_evidence_payload.get("worldclass_composite_gate", {}), dict)
+        else {}
+    )
     _ml_mono_softened = False
 
     # Music-Lover Exportschutz: leichte Mid/Side-Softening-Korrektur bei Mono-Risikoflag.
@@ -344,6 +357,13 @@ def _export_audio_frontend_parity(
         "quality_gate_threshold_level_drop_db": str(
             float((eq_payload.get("thresholds", {}) or {}).get("level_drop_db", 0.0) or 0.0)
         ),
+        "quality_gate_worldclass_score": str(float(_wcs_payload.get("wcs", 0.0) or 0.0)),
+        "quality_gate_worldclass_threshold": str(float(_wcs_payload.get("threshold", 0.0) or 0.0)),
+        "quality_gate_worldclass_passed": str(bool(_wcs_payload.get("passed", False))),
+        "quality_gate_worldclass_profile": str(_wcs_payload.get("profile", "") or ""),
+        "quality_gate_worldclass_artifact_veto": str(bool(_wcs_payload.get("artifact_veto", False))),
+        "quality_gate_evidence_worldclass_source_class": str(_wcs_evidence.get("source_class", "") or ""),
+        "quality_gate_evidence_worldclass_revalidate_by": str(_wcs_evidence.get("revalidate_by", "") or ""),
         "quality_gate_musiclover_vqi": str(float(_ml_vocal.get("vqi", 0.0) or 0.0)),
         "quality_gate_musiclover_sid": str(float(_ml_vocal.get("singer_identity_cosine", 0.0) or 0.0)),
         "quality_gate_musiclover_temporal_hotspots": str(int(_ml_temporal.get("hotspot_count", 0) or 0)),

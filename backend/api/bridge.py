@@ -237,6 +237,7 @@ class _MediumDetectorImportStub:
         self.reason = str(reason or "medium_detector_import_failed")
 
     def detect(self, audio, sr: int, file_ext: str = ""):
+        """Wirft fail-closed, weil MediumDetector im aktuellen Lauf nicht importierbar war."""
         raise RuntimeError(
             "MediumDetector nicht verfügbar; legacy fallback ist deaktiviert "
             f"(sr={int(sr)}, file_ext='{str(file_ext)}', reason='{self.reason}')"
@@ -967,6 +968,10 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
     _primary_error_code = ""
     if _fail_reasons and isinstance(_fail_reasons[0], dict):
         _primary_error_code = str(_fail_reasons[0].get("error_code", "") or "")
+    _wcs_gate = (
+        _meta.get("worldclass_composite_gate") if isinstance(_meta.get("worldclass_composite_gate"), dict) else {}
+    )
+    _threshold_evidence = _meta.get("threshold_evidence") if isinstance(_meta.get("threshold_evidence"), dict) else {}
 
     _tone = "focus"
     if _degradation_status in {"blocked", "critical_degraded", "degraded"}:
@@ -1049,7 +1054,15 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
                 "transient_ratio": _safe01(_exp_signature.get("transient_ratio", 0.0)),
                 "micro_dynamic_db": _safe_float(_exp_signature.get("micro_dynamic_db", 0.0), 0.0),
             },
+            "worldclass_composite_gate": {
+                "wcs": _safe01(_wcs_gate.get("wcs", 0.0)),
+                "threshold": _safe01(_wcs_gate.get("threshold", 0.0)),
+                "profile": str(_wcs_gate.get("profile", "") or ""),
+                "artifact_veto": bool(_wcs_gate.get("artifact_veto", False)),
+                "passed": bool(_wcs_gate.get("passed", False)),
+            },
         },
+        "threshold_evidence": dict(_threshold_evidence) if _threshold_evidence else {},
         "user_guidance": {
             "tone": _tone,
             "headline": _headline,
@@ -1500,6 +1513,8 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
     if _vocal_cap_status and _vocal_cap_status != "sota_real":
         _all_sota_real = False
     _degraded_caps = _mcg_summary.get("degraded_capabilities") if isinstance(_mcg_summary, dict) else []
+    _wcs_gate = meta.get("worldclass_composite_gate") if isinstance(meta.get("worldclass_composite_gate"), dict) else {}
+    _threshold_evidence = meta.get("threshold_evidence") if isinstance(meta.get("threshold_evidence"), dict) else {}
 
     return {
         "passed": bool(passed),
@@ -1523,6 +1538,14 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
             "transient_ratio": float(export_gate_signal_signature.get("transient_ratio", 0.0) or 0.0),
             "micro_dynamic_db": float(export_gate_signal_signature.get("micro_dynamic_db", 0.0) or 0.0),
         },
+        "worldclass_composite_gate": {
+            "wcs": float(np.clip(float(_wcs_gate.get("wcs", 0.0) or 0.0), 0.0, 1.0)),
+            "threshold": float(np.clip(float(_wcs_gate.get("threshold", 0.0) or 0.0), 0.0, 1.0)),
+            "profile": str(_wcs_gate.get("profile", "") or ""),
+            "artifact_veto": bool(_wcs_gate.get("artifact_veto", False)),
+            "passed": bool(_wcs_gate.get("passed", False)),
+        },
+        "threshold_evidence": dict(_threshold_evidence) if _threshold_evidence else {},
         "musiclover": {
             "vocal_integrity": {
                 "vqi": _vqi_val,
