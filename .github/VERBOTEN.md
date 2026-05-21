@@ -1,6 +1,6 @@
 # Aurik 9 — Vollständige VERBOTEN-Tabelle
 
-> **Normative Quelle** für alle `[V01–V12]`-Linter-Regeln in `scripts/aurik_verboten_linter.py`.
+> **Normative Quelle** für alle `[V01–V33]`-Linter-Regeln in `scripts/aurik_verboten_linter.py`.
 > Top-10 häufigste Regressions-Ursachen → [`.github/copilot-instructions.md`](copilot-instructions.md)
 >
 > Inhalt: Grundregeln (Teil A) + Anti-Patterns mit Produktions-Evidenz (Teil B)

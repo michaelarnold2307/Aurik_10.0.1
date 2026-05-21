@@ -74,6 +74,7 @@ class PhaseCorrection(PhaseInterface):
         MaterialType.SHELLAC: 0.60,  # was 0.80 — reduced: avoid over-processing analogue stereo
         MaterialType.VINYL: 0.45,  # was 0.70 — false-positive rate too high for modern pop on vinyl
         MaterialType.TAPE: 0.60,  # was 0.85 — head misalignment needs correction but gently
+        MaterialType.CASSETTE: 0.60,  # Compact cassette shares tape-head alignment physics; explicit key avoids vinyl fallback.
         MaterialType.CD_DIGITAL: 0.25,  # Minimal (production errors only)
         MaterialType.STREAMING: 0.15,  # Very minimal
     }

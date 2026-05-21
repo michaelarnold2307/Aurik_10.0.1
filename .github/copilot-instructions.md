@@ -234,7 +234,7 @@ logger.info("phase=%s score=%.2f", phase, score)  # kein print()
 
 ### VERBOTEN — Häufigste Anti-Patterns (Top-10)
 
-> Vollständige Tabelle (~100 Einträge, Linter-Referenz V01–V12): [`VERBOTEN.md`](VERBOTEN.md)
+> Vollständige Tabelle (~100 Einträge, Linter-Referenz V01–V33): [`VERBOTEN.md`](VERBOTEN.md)
 
 | Verboten | Richtig | Linter |
 |---|---|---|

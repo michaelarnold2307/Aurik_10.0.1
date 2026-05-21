@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aurik VERBOTEN-Linter — prüft die Top-18 normativ verbotenen Anti-Patterns.
+"""Aurik VERBOTEN-Linter — prüft normativ verbotene Anti-Patterns (V01–V33).
 
 Verwendung:
     python scripts/aurik_verboten_linter.py [pfad ...]
@@ -97,6 +97,34 @@ RULES = {
         "V16",
         "structural_silence_zones=None als Default-Argument — None ist kein erlaubter Rückgabewert (§2.68 V16)",
     ),
+    "V27": Rule(
+        "V27",
+        "JITTER_ARTIFACTS darf nicht mit phase_12_wow_flutter_fix behandelt werden (§4.11 — digitale IM-Produkte, kein PSOLA-Kandidat)",
+    ),
+    "V28": Rule(
+        "V28",
+        "NR_BREATHING_ARTIFACT darf nicht mit phase_03_denoise oder phase_29_tape_hiss_reduction behandelt werden (§4.11)",
+    ),
+    "V29": Rule(
+        "V29",
+        "OVERLOAD_DISTORTION darf nicht mit phase_63_intermodulation_reduction behandelt werden (Harmonische ≠ IMD, §4.11)",
+    ),
+    "V30": Rule(
+        "V30",
+        "ALIASING darf nicht mit phase_03_denoise behandelt werden (kohärente Spiegelfrequenzen ≠ Rauschen, §4.11)",
+    ),
+    "V31": Rule(
+        "V31",
+        "ROOM_MODE_RESONANCE darf nicht allein auf phase_05_rumble_filter ohne phase_04_eq_correction abgebildet werden (§4.11)",
+    ),
+    "V32": Rule(
+        "V32",
+        "Subtraktive Carrier-NR-Phase in transparenz-CRITICAL_PAIR braucht transparenz in _PHASE_SPECIFIC_DRIFT_EXCLUSIONS (§2.44/§2.55)",
+    ),
+    "V33": Rule(
+        "V33",
+        "MaterialType-keyed Phase-Dict ohne MaterialType.CASSETTE — neuer Materialtyp darf nicht still auf Vinyl/Tape-Fallback fallen",
+    ),
 }
 
 # V02 ist Warning-Level: Heuristik hat false-positive-Rate bei Analyse/Telemetrie-Kontext.
@@ -105,8 +133,9 @@ RULES = {
 # V13 ist ERROR-Level: Duplikat-Dict-Key überschreibt ersten Eintrag still — nicht tolerierbar.
 # V14 ist ERROR-Level: Inpainting ohne SSIP führt zu katastrophalen Pegelexplosionen in Stille.
 # V16 ist ERROR-Level: structural_silence_zones=None bedeutet deaktivierter Stille-Schutz.
+# V31 ist WARNING-Level: room-mode mapping ohne notch-EQ ist gefährlich, aber bewusst konservativ.
 # Alle anderen Regeln sind ERROR-Level (blockieren CI).
-WARNING_RULES: frozenset[str] = frozenset({"V02", "V11"})
+WARNING_RULES: frozenset[str] = frozenset({"V02", "V11", "V31"})
 ERROR_RULES: frozenset[str] = frozenset(RULES) - WARNING_RULES
 
 
@@ -116,7 +145,7 @@ ERROR_RULES: frozenset[str] = frozenset(RULES) - WARNING_RULES
 
 
 class VerbotenlLinter(ast.NodeVisitor):
-    """AST-Checker f\u00fcr Top-18 VERBOTEN Anti-Patterns (V01–V11 AST-basiert)."""
+    """AST-Checker für VERBOTEN-Regeln (aktuell V01–V11 AST-basiert)."""
 
     def __init__(self, filepath: Path, source_lines: list[str]) -> None:
         self.filepath = filepath
@@ -710,6 +739,269 @@ def _check_inpainting_ssip_guard(filepath: Path) -> list[Violation]:
     ]
 
 
+def _extract_string_list_dict_entry(source: str, dict_name: str, key_name: str) -> tuple[list[str], int] | None:
+    """Extrahiert aus einem Dict-Literal den String-Listen-Wert für einen konkreten Key."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if dict_name in targets and isinstance(node.value, ast.Dict):
+                for key_node, value_node in zip(node.value.keys, node.value.values):
+                    if not (isinstance(key_node, ast.Constant) and key_node.value == key_name):
+                        continue
+                    if isinstance(value_node, ast.List):
+                        items = [
+                            elt.value
+                            for elt in value_node.elts
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                        ]
+                        return items, getattr(value_node, "lineno", getattr(key_node, "lineno", 1))
+    return None
+
+
+def _extract_materialtype_dict_entries(source: str) -> list[tuple[str, list[str], int]]:
+    """Extrahiert konservativ MaterialType-keyed Dict-Literale aus Phase-Dateien.
+
+    Bewusst eng: nur benannte Dict-Attribute/Variablen, deren Keys direkte MaterialType.<X>
+    Konstanten sind. Das dient V33 in einer konservativen Erststufe, ohne beliebige
+    Hilfsdicts oder verschachtelte Runtime-Objekte zu flaggen.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    entries: list[tuple[str, list[str], int]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+        if not target_names or not isinstance(node.value, ast.Dict):
+            continue
+        material_keys: list[str] = []
+        for key_node in node.value.keys:
+            if not (
+                isinstance(key_node, ast.Attribute)
+                and isinstance(key_node.value, ast.Name)
+                and key_node.value.id == "MaterialType"
+            ):
+                material_keys = []
+                break
+            material_keys.append(key_node.attr)
+        if material_keys:
+            lineno = getattr(node.value, "lineno", getattr(node, "lineno", 1))
+            for target_name in target_names:
+                entries.append((target_name, material_keys, lineno))
+    return entries
+
+
+def _check_forbidden_defect_mappings(filepath: Path) -> list[Violation]:
+    """Prüft V27–V31 auf verbotene Defekt→Phase-Mappings in Reasoner/Mapper-Dateien."""
+    if filepath.name not in {"causal_defect_reasoner.py", "defect_phase_mapper.py"}:
+        return []
+    try:
+        source = filepath.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = source.splitlines()
+    violations: list[Violation] = []
+
+    if filepath.name == "causal_defect_reasoner.py":
+        cause_to_phases = {
+            "jitter_artifacts": ("V27", {"phase_12_wow_flutter_fix"}),
+            "nr_breathing_artifact": ("V28", {"phase_03_denoise", "phase_29_tape_hiss_reduction"}),
+            "overload_distortion": ("V29", {"phase_63_intermodulation_reduction"}),
+            "aliasing": ("V30", {"phase_03_denoise"}),
+        }
+        for cause_name, (rule_id, forbidden) in cause_to_phases.items():
+            entry = _extract_string_list_dict_entry(source, "CAUSE_TO_PHASES", cause_name)
+            if entry is None:
+                continue
+            phases, lineno = entry
+            hits = sorted(set(phases) & forbidden)
+            if hits:
+                snippet = lines[lineno - 1].rstrip() if 0 < lineno <= len(lines) else ""
+                violations.append(
+                    Violation(
+                        filepath,
+                        lineno,
+                        0,
+                        rule_id,
+                        f"{cause_name} mapped auf verbotene Phase(n): {', '.join(hits)}",
+                        snippet,
+                    )
+                )
+
+        room_entry = _extract_string_list_dict_entry(source, "CAUSE_TO_PHASES", "room_mode_resonance")
+        if room_entry is not None:
+            phases, lineno = room_entry
+            if "phase_05_rumble_filter" in phases and "phase_04_eq_correction" not in phases:
+                snippet = lines[lineno - 1].rstrip() if 0 < lineno <= len(lines) else ""
+                violations.append(
+                    Violation(
+                        filepath,
+                        lineno,
+                        0,
+                        "V31",
+                        "room_mode_resonance nutzt phase_05_rumble_filter ohne phase_04_eq_correction",
+                        snippet,
+                    )
+                )
+
+    if filepath.name == "defect_phase_mapper.py":
+        import re
+
+        def _extract_defect_mapper_block(defect_name: str) -> tuple[str, int] | None:
+            pattern = re.compile(
+                rf"DefectType\.{defect_name}\s*:\s*PhaseAssignment\((?P<body>[\s\S]*?)\n\s*\),\n\s*(?=DefectType\.|}}\s*$|$)",
+                re.IGNORECASE,
+            )
+            match = pattern.search(source)
+            if not match:
+                return None
+            lineno = source[: match.start()].count("\n") + 1
+            return match.group("body"), lineno
+
+        forbidden_patterns = {
+            "V27": ("JITTER_ARTIFACTS", r"phase_12_wow_flutter_fix"),
+            "V28": ("NR_BREATHING_ARTIFACT", r"phase_03_denoise|phase_29_tape_hiss_reduction"),
+            "V29": ("OVERLOAD_DISTORTION", r"phase_63_intermodulation_reduction"),
+            "V30": ("ALIASING", r"phase_03_denoise"),
+        }
+
+        for rule_id, (defect_name, pattern) in forbidden_patterns.items():
+            defect_block = _extract_defect_mapper_block(defect_name)
+            if defect_block is None:
+                continue
+            block_text, lineno = defect_block
+            match = re.search(pattern, block_text, re.IGNORECASE)
+            if not match:
+                continue
+            snippet = lines[lineno - 1].rstrip() if 0 < lineno <= len(lines) else ""
+            violations.append(
+                Violation(
+                    filepath,
+                    lineno,
+                    0,
+                    rule_id,
+                    f"{filepath.name} enthält verbotene Mapping-Logik für {rule_id}",
+                    snippet,
+                )
+            )
+
+        room_block = _extract_defect_mapper_block("ROOM_MODE_RESONANCE")
+        if room_block is not None:
+            body, lineno = room_block
+            room_match = re.search(r"primary_phases\s*=\s*\[(?P<body>[\s\S]{0,400}?)\]", body, re.IGNORECASE)
+            if room_match is None:
+                return violations
+            body = room_match.group("body")
+            if "phase_05_rumble_filter" in body and "phase_04_eq_correction" not in body:
+                snippet = lines[lineno - 1].rstrip() if 0 < lineno <= len(lines) else ""
+                violations.append(
+                    Violation(
+                        filepath,
+                        lineno,
+                        0,
+                        "V31",
+                        "ROOM_MODE_RESONANCE primary_phases enthält phase_05_rumble_filter ohne phase_04_eq_correction",
+                        snippet,
+                    )
+                )
+
+    return violations
+
+
+def _check_transparenz_exclusion_for_subtractive_noise_phases(filepath: Path) -> list[Violation]:
+    """Prüft V32 in cumulative_interaction_guard.py für Carrier-NR-Phasen mit transparenz-Paaren."""
+    if filepath.name != "cumulative_interaction_guard.py":
+        return []
+    try:
+        source = filepath.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = source.splitlines()
+    violations: list[Violation] = []
+
+    phase_prefixes = {
+        "phase_03": "phase_03_denoise",
+        "phase_29": "phase_29_tape_hiss_reduction",
+    }
+
+    for prefix, concrete in phase_prefixes.items():
+        entry = _extract_string_list_dict_entry(source, "_PHASE_SPECIFIC_DRIFT_EXCLUSIONS", prefix)
+        if entry is None:
+            continue
+        exclusions, lineno = entry
+        f'frozenset({{"{concrete}"'
+        if concrete == "phase_29_tape_hiss_reduction":
+            pair_present = concrete in source and '"transparenz"' in source and "phase_03_denoise" in source
+        else:
+            pair_present = concrete in source and '"transparenz"' in source and "phase_29_tape_hiss_reduction" in source
+        if pair_present and "transparenz" not in exclusions:
+            snippet = lines[lineno - 1].rstrip() if 0 < lineno <= len(lines) else ""
+            violations.append(
+                Violation(
+                    filepath,
+                    lineno,
+                    0,
+                    "V32",
+                    f"{prefix} fehlt transparenz in _PHASE_SPECIFIC_DRIFT_EXCLUSIONS trotz transparenz-CRITICAL_PAIR",
+                    snippet,
+                )
+            )
+
+    return violations
+
+
+def _check_phase_materialtype_dict_completeness(filepath: Path) -> list[Violation]:
+    """Prüft konservativ V33 auf bekannte Material-Dict-Konstanten in phase_*.py.
+
+    Erste Ausbaustufe: Wenn ein typisches Material-Parameter-Dict in einer Phase direkt
+    mit MaterialType-Keys deklariert wird und analoge/Carrier-Materialien abbildet,
+    muss MaterialType.CASSETTE explizit vorhanden sein. Genau dieser Ausfall führte zur
+    bestätigten phase_12-Regression; weitere Materialien bleiben vorerst bewusst aus dem
+    Check heraus, um Bestands-False-Positives zu vermeiden.
+    """
+    if not (filepath.parent.name == "phases" and filepath.name.startswith("phase_") and filepath.suffix == ".py"):
+        return []
+    try:
+        source = filepath.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = source.splitlines()
+    violations: list[Violation] = []
+
+    tracked_dict_names = {"DETECTION_THRESHOLD", "CORRECTION_STRENGTH"}
+    carrier_anchor_keys = {"TAPE", "VINYL", "SHELLAC", "REEL_TAPE"}
+
+    for dict_name, material_keys, lineno in _extract_materialtype_dict_entries(source):
+        if dict_name not in tracked_dict_names:
+            continue
+        key_set = set(material_keys)
+        if not (key_set & carrier_anchor_keys):
+            continue
+        if "CASSETTE" in key_set:
+            continue
+        snippet = lines[lineno - 1].rstrip() if 0 < lineno <= len(lines) else ""
+        violations.append(
+            Violation(
+                filepath,
+                lineno,
+                0,
+                "V33",
+                f"{dict_name} nutzt MaterialType-Keys ({', '.join(sorted(key_set))}) ohne MaterialType.CASSETTE",
+                snippet,
+            )
+        )
+
+    return violations
+
+
 # ---------------------------------------------------------------------------
 # V16: structural_silence_zones=None als Default-Kwarg (AST-Klassen-Methode)
 # ---------------------------------------------------------------------------
@@ -780,7 +1072,7 @@ class _V16SilenceZonesNoneChecker(ast.NodeVisitor):
 
 
 def scan_file(filepath: Path) -> list[Violation]:
-    """Scannt eine Python-Datei auf VERBOTEN Anti-Patterns (V01–V16).
+    """Scannt eine Python-Datei auf implementierte VERBOTEN Anti-Patterns.
 
     Args:
         filepath: Zu scannende Datei.
@@ -807,6 +1099,9 @@ def scan_file(filepath: Path) -> list[Violation]:
         _check_cause_to_phases_sync(filepath)  # V12
         + _check_material_priority_phases_duplicates(filepath)  # V13
         + _check_inpainting_ssip_guard(filepath)  # V14
+        + _check_forbidden_defect_mappings(filepath)  # V27–V31
+        + _check_transparenz_exclusion_for_subtractive_noise_phases(filepath)  # V32
+        + _check_phase_materialtype_dict_completeness(filepath)  # V33
     )
     return checker.violations + v16_checker.violations + module_violations
 

@@ -90,6 +90,7 @@ class StereoBalancePhaseV2(PhaseInterface):
     # Material-adaptive correction strength per band [Bass, Mid, High]
     CORRECTION_STRENGTH = {
         MaterialType.TAPE: [0.95, 0.90, 0.85],  # Aggressive (azimuth errors)
+        MaterialType.CASSETTE: [0.95, 0.90, 0.85],  # Cassette shares tape transport + head-balance mechanics.
         MaterialType.VINYL: [0.90, 0.80, 0.70],  # Moderate-High (cartridge imbalance)
         MaterialType.SHELLAC: [0.60, 0.50, 0.40],  # Gentle (often mono/pseudo-stereo)
         MaterialType.CD_DIGITAL: [0.85, 0.70, 0.60],  # Moderate (recording/mastering errors)
@@ -99,6 +100,11 @@ class StereoBalancePhaseV2(PhaseInterface):
     # Imbalance detection threshold (dB) per band
     DETECTION_THRESHOLD = {
         MaterialType.TAPE: [0.8, 1.0, 1.5],  # Bass most critical
+        MaterialType.CASSETTE: [
+            0.8,
+            1.0,
+            1.5,
+        ],  # Same transport/head-balance class as tape; explicit threshold avoids silent fallback.
         MaterialType.VINYL: [1.0, 1.5, 2.0],
         MaterialType.SHELLAC: [2.5, 3.0, 4.0],  # More tolerant
         MaterialType.CD_DIGITAL: [0.3, 0.5, 1.0],  # Digital should be precise
