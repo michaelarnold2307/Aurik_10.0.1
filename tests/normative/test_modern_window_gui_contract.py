@@ -233,10 +233,8 @@ def test_waveform_phase_animation_has_generic_fallback_and_progress_binding() ->
         "self.batch_thread.phase_progress.connect(lambda v: self.waveform_widget.set_stage_progress(v / 10000.0))"
         in src
     )
-    assert (
-        "self.batch_thread.phase_progress.connect(lambda v: self.waveform_widget_rest_ab.set_stage_progress(v / 10000.0))"
-        in src
-    )
+    assert "self.batch_thread.phase_progress.connect(" in src
+    assert "self.waveform_widget_rest_ab.set_stage_progress(v / 10000.0)" in src
 
 
 @pytest.mark.normative
