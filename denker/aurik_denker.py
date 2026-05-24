@@ -615,6 +615,130 @@ class AurikDenker:
         return normalized
 
     @staticmethod
+    def _extract_phase_delta_value(entry: Any) -> float | None:
+        """Extrahiert robust einen numerischen Delta-Wert aus heterogenen phase_deltas-Formaten."""
+        if isinstance(entry, (int, float)) and math.isfinite(float(entry)):
+            return float(entry)
+        if isinstance(entry, dict):
+            for key in ("overall_delta", "delta", "score_delta", "mos_delta", "goal_delta"):
+                raw = entry.get(key)
+                if isinstance(raw, (int, float)) and math.isfinite(float(raw)):
+                    return float(raw)
+        return None
+
+    @classmethod
+    def _collect_improvement_opportunities(
+        cls,
+        *,
+        musical_goals: dict[str, float],
+        rest_metadata: dict[str, Any],
+        material: str,
+        chain_info: dict[str, Any] | None,
+        restorability_score: float,
+        is_studio_2026: bool,
+    ) -> dict[str, Any]:
+        """Leitet nach jedem Lauf konkrete Qualitäts-Upgrade-Chancen aus Telemetrie ab."""
+        opportunities: dict[str, Any] = {
+            "material": cls._resolve_excellence_material(material, chain_info),
+            "restorability_score": float(np.clip(restorability_score, 0.0, 100.0)),
+            "goal_gaps": [],
+            "regressive_phases": [],
+        }
+
+        if not isinstance(musical_goals, dict) or not musical_goals:
+            opportunities["summary"] = {
+                "high_priority_goal_count": 0,
+                "regressive_phase_count": 0,
+                "top_goal": "",
+            }
+            return opportunities
+
+        try:
+            floor_fn = cast(
+                Callable[..., float],
+                _load_symbol("backend.core.calibration_matrix", "get_effective_material_floor"),
+            )
+            recovery_fn = cast(
+                Callable[..., list[str]],
+                _load_symbol("backend.core.calibration_matrix", "get_goal_recovery_phases"),
+            )
+            canonical_targets = _get_canonical_thresholds_for_mode(is_studio_2026)
+        except Exception as exc:
+            logger.debug("AurikDenker: opportunity mining setup unavailable: %s", exc)
+            opportunities["summary"] = {
+                "high_priority_goal_count": 0,
+                "regressive_phase_count": 0,
+                "top_goal": "",
+            }
+            return opportunities
+
+        material_key = str(opportunities["material"])
+        goal_gaps: list[dict[str, Any]] = []
+        for goal, raw_score in musical_goals.items():
+            if not isinstance(raw_score, (int, float)):
+                continue
+            score = float(raw_score)
+            if not math.isfinite(score):
+                continue
+
+            floor_target = float(
+                floor_fn(
+                    material_type=material_key,
+                    goal=goal,
+                    restorability_score=float(np.clip(restorability_score, 0.0, 100.0)),
+                )
+            )
+            canonical_target = float(canonical_targets.get(goal, floor_target))
+            gap_floor = float(max(0.0, floor_target - score))
+            gap_canonical = float(max(0.0, canonical_target - score))
+            if gap_floor <= 0.0 and gap_canonical <= 0.0:
+                continue
+
+            priority = "high" if gap_floor > 0.0 else "medium"
+            recommended = recovery_fn(goal=goal, is_studio_2026=is_studio_2026)
+            goal_gaps.append(
+                {
+                    "goal": str(goal),
+                    "score": float(round(score, 4)),
+                    "target_floor": float(round(floor_target, 4)),
+                    "target_canonical": float(round(canonical_target, 4)),
+                    "gap_to_floor": float(round(gap_floor, 4)),
+                    "gap_to_canonical": float(round(gap_canonical, 4)),
+                    "priority": priority,
+                    "recommended_phases": [str(p) for p in recommended[:3]],
+                }
+            )
+
+        goal_gaps.sort(
+            key=lambda item: (
+                0 if str(item.get("priority", "")).lower() == "high" else 1,
+                -float(item.get("gap_to_floor", 0.0)),
+                -float(item.get("gap_to_canonical", 0.0)),
+            )
+        )
+
+        regressive: list[dict[str, Any]] = []
+        phase_deltas = rest_metadata.get("phase_deltas") if isinstance(rest_metadata, dict) else None
+        if isinstance(phase_deltas, dict):
+            for phase_id, entry in phase_deltas.items():
+                delta = cls._extract_phase_delta_value(entry)
+                if delta is None or delta >= -0.001:
+                    continue
+                regressive.append({"phase": str(phase_id), "delta": float(round(delta, 6))})
+            regressive.sort(key=lambda item: float(item.get("delta", 0.0)))
+
+        opportunities["goal_gaps"] = goal_gaps[:5]
+        opportunities["regressive_phases"] = regressive[:5]
+        opportunities["summary"] = {
+            "high_priority_goal_count": int(
+                sum(1 for item in goal_gaps if str(item.get("priority", "")).lower() == "high")
+            ),
+            "regressive_phase_count": int(len(regressive)),
+            "top_goal": str(goal_gaps[0]["goal"]) if goal_gaps else "",
+        }
+        return opportunities
+
+    @staticmethod
     def _compute_signal_intelligence_signature(audio: np.ndarray, sr: int) -> dict[str, float]:
         """Berechnet robuste, leichtgewichtige Signal-Indikatoren für Risikoentscheidungen."""
         arr = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -2280,6 +2404,40 @@ class AurikDenker:
                 _mos_deficit_ratio = min(1.0, max(0.0, (_mos_target - _versa_mos) / _mos_target))
                 _qe_penalty = 1.0 - 0.46 * _mos_deficit_ratio  # [0.54 .. 1.0]
                 quality_estimate = min(float(quality_estimate), float(quality_estimate) * _qe_penalty)
+
+        _restorability_score = float(
+            np.clip(
+                float(getattr(cached_restorability_result, "restorability_score", 65.0) or 65.0),
+                0.0,
+                100.0,
+            )
+        )
+        _improvement_opportunities = self._collect_improvement_opportunities(
+            musical_goals=musical_goals,
+            rest_metadata=_rest_metadata,
+            material=material,
+            chain_info=chain_info,
+            restorability_score=_restorability_score,
+            is_studio_2026=(effective_mode == "studio2026"),
+        )
+        _opp_summary = _improvement_opportunities.get("summary") if isinstance(_improvement_opportunities, dict) else {}
+        if isinstance(_opp_summary, dict):
+            stage_notes["improvement_opportunities"] = {
+                "top_goal": str(_opp_summary.get("top_goal", "")),
+                "high_priority_goal_count": int(_opp_summary.get("high_priority_goal_count", 0) or 0),
+                "regressive_phase_count": int(_opp_summary.get("regressive_phase_count", 0) or 0),
+            }
+            if int(_opp_summary.get("high_priority_goal_count", 0) or 0) > 0:
+                warnings.append(
+                    "Verbesserungspotenzial erkannt: mindestens ein Goal liegt unter materialadaptivem Ziel."
+                )
+            logger.info(
+                "AurikDenker: Verbesserungs-Scan: top_goal=%s, high_priority=%d, regressive_phases=%d",
+                str(_opp_summary.get("top_goal", "")),
+                int(_opp_summary.get("high_priority_goal_count", 0) or 0),
+                int(_opp_summary.get("regressive_phase_count", 0) or 0),
+            )
+        _rest_metadata["improvement_opportunities"] = _improvement_opportunities
 
         # Finale NaN/Inf-Bereinigung und Clip
         aktuelles_audio = np.nan_to_num(aktuelles_audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)

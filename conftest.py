@@ -17,8 +17,9 @@ VS Code-Volltest-Stabilität (Anti-OOM + Anti-Pipe-Flood):
     VS Code vscode_pytest schickt fuer JEDEN der 5 200+ Tests eine eigene JSON-RPC-
     Nachricht ueber TEST_RUN_PIPE. Bei 5 200 Nachrichten laeuft der Extension-Host-
     Puffer voll → VS Code friert ein oder stuerzt ab.
-    FIX: settings.json beschraenkt Test Explorer auf tests/unit/ (50 Dateien, ~600
-    Tests). Vollsuite laeuft ausschliesslich ueber Terminal-Tasks (tasks.json).
+    FIX: settings.json beschraenkt Test Explorer auf einen echten Smoke-Slice
+    mit wenigen Dateien und weit unter der Host-Grenze. Vollsuite laeuft
+    ausschliesslich ueber Terminal-Tasks (tasks.json).
 
   URSACHE 2 — ONNX-Singleton-OOM:
     Plugin-Singletons halten ONNX-Sessions (37-250 MB/Plugin). Nach ~267 Dateien
@@ -37,6 +38,14 @@ import sys as _sys
 import warnings as _warnings
 
 import pytest
+
+# Trio-Hinweis tritt in VS-Code-/pytest-Umgebungen mit eigenem excepthook auf
+# und ist für unsere Testausführung nicht handlungsrelevant.
+_warnings.filterwarnings(
+    "ignore",
+    message=r"You seem to already have a custom sys\.excepthook handler installed\..*",
+    category=RuntimeWarning,
+)
 
 # Muss VOR dem ersten numpy-Import gesetzt werden.
 os.environ.setdefault("OMP_NUM_THREADS", "1")

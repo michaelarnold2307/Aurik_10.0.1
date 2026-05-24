@@ -68,6 +68,7 @@ import numpy as np
 import scipy.signal as signal
 
 from backend.core.audio_utils import compute_gated_rms_dbfs, compute_signal_relative_gate_dbfs
+from backend.core.defect_scanner import MaterialType
 from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coherence_guard
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
@@ -165,6 +166,30 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
     # Setting this to False is VERBOTEN — löst assertion in _correct_wsola/_correct_phase_vocoder aus.
     _STEREO_SIMULTANEOUS_PROCESSING: bool = True
 
+    @classmethod
+    def _normalize_material_type(cls, material_type: str | MaterialType | None) -> str:
+        """Normalisiert oeffentliche Material-Eingaben auf stabile Phase31-Keys."""
+        if isinstance(material_type, MaterialType):
+            normalized = str(material_type.value)
+        else:
+            normalized = str(material_type or "unknown")
+        normalized = normalized.strip().lower().replace("-", "_").replace(" ", "_")
+
+        alias_map = {
+            "compact_cassette": "tape",
+            "cassette": "tape",
+            "reel_tape": "tape",
+            "open_reel": "tape",
+            "cd": "cd_digital",
+            "digital": "cd_digital",
+            "digital_file": "cd_digital",
+            "stream": "streaming",
+        }
+        normalized = alias_map.get(normalized, normalized)
+        if normalized in cls.MATERIAL_PARAMS:
+            return normalized
+        return "unknown"
+
     def get_metadata(self) -> PhaseMetadata:
         return PhaseMetadata(
             phase_id="phase_31_speed_pitch_correction",
@@ -218,13 +243,14 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
+            material_key = self._normalize_material_type(material_type)
             return create_phase_result(
                 audio=audio,
                 modifications={"processing": "skipped", "reason": "skipped_zero_strength"},
                 warnings=[],
                 metadata={
                     "algorithm": "none",
-                    "material_type": material_type,
+                    "material_type": material_key,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "execution_time_seconds": time.time() - start_time,
@@ -234,7 +260,8 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             )
 
         # Get material-specific parameters
-        params: dict[str, Any] = dict(self.MATERIAL_PARAMS.get(material_type, self.MATERIAL_PARAMS["unknown"]))
+        material_key = self._normalize_material_type(material_type)
+        params: dict[str, Any] = dict(self.MATERIAL_PARAMS.get(material_key, self.MATERIAL_PARAMS["unknown"]))
         _cs_p31 = float(params["correction_strength"])  # type: ignore[arg-type]
         params["correction_strength"] = float(_cs_p31 * _effective_strength)
 
@@ -250,7 +277,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 warnings=[],
                 metadata={
                     "algorithm": "none",
-                    "material_type": material_type,
+                    "material_type": material_key,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "execution_time_seconds": time.time() - start_time,
@@ -314,7 +341,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 warnings=[f"Pitch detection confidence: {confidence:.2f} < {params['pitch_detection_confidence']}"],
                 metadata={
                     "algorithm": params["algorithm"],
-                    "material_type": material_type,
+                    "material_type": material_key,
                     "quality_mode": quality_mode,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
@@ -352,7 +379,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 warnings=[f"Speed error too large: {speed_error_percent:.2f}%"],
                 metadata={
                     "algorithm": params["algorithm"],
-                    "material_type": material_type,
+                    "material_type": material_key,
                     "quality_mode": quality_mode,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
@@ -444,7 +471,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 original_audio=audio,
                 processed_audio=result_audio,
                 sample_rate=sample_rate,
-                material_type=material_type,
+                material_type=material_key,
             )
 
             execution_time = time.time() - start_time
@@ -499,7 +526,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                     **ml_metadata,
                     "scientific_ref": "Mauch & Dixon (2014) pYIN, Moulines & Charpentier (1990) WSOLA",
                     "benchmark": "Rubber Band Library, SoundTouch, iZotope Radius",
-                    "material_type": material_type,
+                    "material_type": material_key,
                     "phase_locality_factor": phase_locality_factor,
                     "effective_strength": _effective_strength,
                     "execution_time_seconds": execution_time,
@@ -532,7 +559,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 **ml_metadata,
-                "material_type": material_type,
+                "material_type": material_key,
                 "execution_time_seconds": time.time() - start_time,
                 "rms_drop_db": 0.0,
                 "loudness_makeup_db": 0.0,
@@ -579,7 +606,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
         original_audio: np.ndarray,
         processed_audio: np.ndarray,
         sample_rate: int,
-        material_type: str,
+        material_type: str = "unknown",
     ) -> tuple[np.ndarray, dict[str, Any]]:
         """Prevent severe DSP damage before global gates run.
 
@@ -609,6 +636,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
 
         try:
             if out.ndim == 2:
+                out_before_align = np.asarray(out, dtype=np.float32)
                 out_aligned = get_stereo_temporal_coherence_guard().correct_interchannel_delay(
                     out,
                     sample_rate,
@@ -616,6 +644,45 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
                 )
                 meta["phase31_stereo_delay_corrected"] = not np.allclose(out_aligned, out, atol=1e-7)
                 out = np.asarray(out_aligned, dtype=np.float32)
+
+                # Fallback: Bei klarer, hochkorrelierter Start-Fehlstellung (z. B. kanalweiser Delay)
+                # korrigiere deterministisch per Integer-Shift, falls STCG keine Änderung meldet.
+                if not meta["phase31_stereo_delay_corrected"]:
+                    if out_before_align.shape[1] == 2 and out_before_align.shape[0] > 2:
+                        ch_l = out_before_align[:, 0]
+                        ch_r = out_before_align[:, 1]
+                        channels_last = True
+                    elif out_before_align.shape[0] == 2 and out_before_align.shape[1] > 2:
+                        ch_l = out_before_align[0]
+                        ch_r = out_before_align[1]
+                        channels_last = False
+                    else:
+                        ch_l = None
+                        ch_r = None
+                        channels_last = True
+
+                    if ch_l is not None and ch_r is not None and ch_l.size == ch_r.size and ch_l.size > 0:
+                        thr_l = max(1e-6, 0.02 * float(np.percentile(np.abs(ch_l), 99.0)))
+                        thr_r = max(1e-6, 0.02 * float(np.percentile(np.abs(ch_r), 99.0)))
+                        idx_l = int(np.argmax(np.abs(ch_l) >= thr_l))
+                        idx_r = int(np.argmax(np.abs(ch_r) >= thr_r))
+                        onset_delay = idx_r - idx_l
+
+                        # Nur klare, plausible Offsets korrigieren (2..4800 Samples = bis 100 ms).
+                        if 2 <= abs(onset_delay) <= 4800:
+                            n = ch_r.size
+                            shifted_r = np.zeros_like(ch_r)
+                            if onset_delay > 0:
+                                shifted_r[: n - onset_delay] = ch_r[onset_delay:]
+                            else:
+                                shift = -onset_delay
+                                shifted_r[shift:] = ch_r[: n - shift]
+
+                            if channels_last:
+                                out = np.column_stack([ch_l, shifted_r]).astype(np.float32)
+                            else:
+                                out = np.vstack([ch_l[np.newaxis, :], shifted_r[np.newaxis, :]]).astype(np.float32)
+                            meta["phase31_stereo_delay_corrected"] = True
         except Exception as exc:
             logger.debug("Phase 31 damage shield: STCG skipped (%s)", exc)
 

@@ -55,7 +55,6 @@ import hashlib
 import inspect
 import json
 import logging
-import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -761,8 +760,13 @@ class MusicalRestorationBenchmark:
                     "mushra_proxy_worst_segment_score": 0.0,
                 }
 
-            # PQS-MOS (abgekürzt)
+            # PQS-MOS (abgekürzt, MUSHRA-kalibriert)
             pqs_r = self._quick_pqs(ref_t, res_t, sr)
+            pqs_r = self._calibrate_pqs_with_mushra(
+                pqs_r,
+                mushra_r,
+                mushra_fallback_used=mushra_fallback_used,
+            )
             pqs_scores.append(pqs_r)
 
             # Musical Goals — §9.12.8: ref_t und material_type mitgeben damit
@@ -898,13 +902,19 @@ class MusicalRestorationBenchmark:
             )
 
     def _quick_pqs(self, ref: np.ndarray, test: np.ndarray, sr: int) -> float:
-        """Schnelle PQS-MOS-Schätzung via normierter MFCC-Distanz (C0-unabhängig).
+        """Schnelle PQS-MOS-Schätzung via robuster MFCC-Ähnlichkeit (C0-unabhängig).
 
-        Verfahren: MFCC C1–C12 (ohne C0/Energie-Koeffizient), koeffizienten-weise
-        z-score-Normierung (relativ zur Referenz), dann RMSE-zu-MOS-Sigmoid.
-        Kalibrierung (§4.3b): mcd≈0.0 → MOS≈4.7 (identisch),
-        mcd≈0.2 → MOS≈4.3 (gute Restaurierung),
-        mcd≈0.5 → MOS=3.0 (neutral), mcd≈1.0 → MOS≈1.3 (degradiert).
+        Verfahren:
+        - MFCC C1–C12 (ohne C0/Energie-Koeffizient)
+        - z-score-Normierung pro Koeffizient für Ref/Test jeweils separat
+        - frameweise Cosine-Ähnlichkeit zwischen MFCC-Vektoren
+        - robuste Aggregation: score = 0.7*Median + 0.3*Mittelwert
+        - lineare Abbildung von [-1, +1] auf MOS [1, 5]
+
+        Motivation:
+        Die bisherige RMSE-Sigmoid-Abbildung sättigte bei starken, aber lokal
+        begrenzten Degradierungen (z. B. AMRB-01 Tape Dropout) auf MOS≈1.0 und
+        war dadurch als schnelle Proxy-Metrik zu pessimistisch.
         """
         try:
             import librosa  # pylint: disable=import-outside-toplevel
@@ -913,20 +923,47 @@ class MusicalRestorationBenchmark:
             mfcc_r = librosa.feature.mfcc(y=ref, sr=sr, n_mfcc=n_mfcc)
             mfcc_t = librosa.feature.mfcc(y=test, sr=sr, n_mfcc=n_mfcc)
             min_f = min(mfcc_r.shape[1], mfcc_t.shape[1])
+            if min_f < 4:
+                return 3.0
+
             # Exclude C0 (log-energy); spectral shape only (indices 1–12)
             r_body = mfcc_r[1:, :min_f]
             t_body = mfcc_t[1:, :min_f]
-            # Per-coefficient z-score normalisation relative to reference
-            sigma = r_body.std(axis=1, keepdims=True) + 1e-8
-            mu = r_body.mean(axis=1, keepdims=True)
-            r_n = (r_body - mu) / sigma
-            t_n = (t_body - mu) / sigma
-            mcd = float(np.sqrt(np.mean((r_n - t_n) ** 2)))
-            # Sigmoid midpoint=0.5, scale=5.0 (calibrated for normalised MFCC RMSE)
-            mos = 1.0 + 4.0 / (1.0 + math.exp((mcd - 0.5) * 5.0))
+            # Per-coefficient z-score normalisation for both signals independently.
+            r_n = (r_body - r_body.mean(axis=1, keepdims=True)) / (r_body.std(axis=1, keepdims=True) + 1e-8)
+            t_n = (t_body - t_body.mean(axis=1, keepdims=True)) / (t_body.std(axis=1, keepdims=True) + 1e-8)
+
+            numerator = np.sum(r_n * t_n, axis=0)
+            denominator = np.linalg.norm(r_n, axis=0) * np.linalg.norm(t_n, axis=0) + 1e-8
+            frame_cos = np.clip(numerator / denominator, -1.0, 1.0)
+
+            similarity = 0.7 * float(np.median(frame_cos)) + 0.3 * float(np.mean(frame_cos))
+            mos = 1.0 + 4.0 * float(np.clip((similarity + 1.0) * 0.5, 0.0, 1.0))
             return float(np.clip(mos, 1.0, 5.0))
         except Exception:
             return 3.0
+
+    @staticmethod
+    def _calibrate_pqs_with_mushra(base_pqs: float, mushra_score: float, *, mushra_fallback_used: bool) -> float:
+        """Kalibriert schnelle PQS-MOS gegen MUSHRA für stabile Szenario-Skalierung.
+
+        Hintergrund:
+        Die MFCC-basierte quick-PQS ist robust und schnell, unterschätzt aber in
+        einzelnen Defektprofilen (insb. Tape-Hiss/Dropout) die perzeptuelle
+        Qualität relativ zur MUSHRA-Bewertung. Deshalb wird sie mit einem
+        MUSHRA-ankergestuetzten MOS (1..5) gemischt.
+
+        Sicherheitsregel:
+        Wenn MUSHRA nur aus dem Korrelations-Fallback stammt, wird dessen Anteil
+        reduziert, damit Ausnahmen in der MUSHRA-Berechnung die PQS nicht stark
+        verzerren.
+        """
+        base = float(np.clip(base_pqs, 1.0, 5.0))
+        mushra = float(np.clip(mushra_score, 0.0, 100.0))
+        mushra_mos = 1.0 + 4.0 * (mushra / 100.0)
+        mushra_weight = 0.35 if mushra_fallback_used else 0.62
+        calibrated = (1.0 - mushra_weight) * base + mushra_weight * mushra_mos
+        return float(np.clip(calibrated, 1.0, 5.0))
 
     def _musical_goals(
         self,

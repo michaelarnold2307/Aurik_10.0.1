@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aurik 9.12.9-hotfix.1 — Startskript mit venv-Python (.venv_aurik, Python 3.10.12)
+# Aurik 9.12.10 — Startskript mit venv-Python (.venv_aurik, Python 3.10.12)
 # GPU-Modus: ROCm-venv auf ext4 (~/.local/share/aurik/venv_rocm) + /dev/kfd vorhanden
 # Verwendung: ./run_aurik.sh [Argumente]
 #   AURIK_FORCE_CPU=1  ./run_aurik.sh  — erzwingt CPU-only (deaktiviert ROCm)
@@ -12,8 +12,65 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_CPU="$SCRIPT_DIR/.venv_aurik/bin/python"
 # ROCm-venv liegt auf ext4 (Home), nicht auf dem FUSE/NTFS-Workspace-Laufwerk
 VENV_ROCM="$HOME/.local/share/aurik/venv_rocm/bin/python"
+PIP_ROCM="$HOME/.local/share/aurik/venv_rocm/bin/pip"
 PID_FILE="$SCRIPT_DIR/temp_repro/aurik_gui.pid"
 LOG_FILE="$SCRIPT_DIR/logs/aurik_frontend.out"
+
+check_rocm_torchaudio_abi() {
+    "$VENV_ROCM" - <<'PY'
+import sys
+
+try:
+    import torch
+except Exception as exc:
+    print(f"ROCM_STACK_ERR torch import failed: {exc}")
+    raise SystemExit(10)
+
+try:
+    import torchaudio
+except Exception as exc:
+    print(f"ROCM_STACK_ERR torchaudio import failed: {exc}")
+    raise SystemExit(11)
+
+torch_ver = str(getattr(torch, "__version__", ""))
+audio_ver = str(getattr(torchaudio, "__version__", ""))
+torch_build = torch_ver.split("+", 1)[1] if "+" in torch_ver else ""
+audio_build = audio_ver.split("+", 1)[1] if "+" in audio_ver else ""
+
+if torch_build and audio_build and torch_build != audio_build:
+    print(
+        "ROCM_STACK_ERR build mismatch: "
+        f"torch={torch_ver} torchaudio={audio_ver}"
+    )
+    raise SystemExit(12)
+
+print(f"ROCM_STACK_OK torch={torch_ver} torchaudio={audio_ver}")
+PY
+}
+
+repair_rocm_torchaudio() {
+    if [[ ! -x "$PIP_ROCM" ]]; then
+        echo "ROCM_STACK_ERR pip im ROCm-venv fehlt: $PIP_ROCM" >&2
+        return 1
+    fi
+
+    local torch_version rocm_tag
+    torch_version="$($VENV_ROCM - <<'PY'
+import torch
+print(getattr(torch, "__version__", ""))
+PY
+)"
+
+    if [[ -z "$torch_version" || "$torch_version" != *+rocm* ]]; then
+        echo "ROCM_STACK_ERR keine ROCm-Torch-Version erkannt: $torch_version" >&2
+        return 1
+    fi
+
+    rocm_tag="${torch_version#*+}"
+    echo "ROCM_STACK_REPAIR installiere torchaudio==$torch_version via $rocm_tag ..."
+    "$PIP_ROCM" install --upgrade --index-url "https://download.pytorch.org/whl/$rocm_tag" \
+        "torchaudio==$torch_version"
+}
 
 # GPU-Erkennung: ROCm-venv (ext4) + KFD-Device vorhanden und nicht explizit deaktiviert
 if [[ "${AURIK_FORCE_CPU:-0}" != "1" && -x "$VENV_ROCM" && -e "/dev/kfd" ]]; then
@@ -27,6 +84,31 @@ if [[ "${AURIK_FORCE_CPU:-0}" != "1" && -x "$VENV_ROCM" && -e "/dev/kfd" ]]; the
     fi
     # .pth-Bridge: aurik_bridge.pth im ROCm-venv-Site-Packages verweist auf venv_aurik-Pakete.
     # .pth-Dateien werden NACH den eigenen Site-Packages geladen → ROCm-torch hat Vorrang.
+    set +e
+    check_rocm_torchaudio_abi
+    _rocm_stack_rc=$?
+    set -e
+    if [[ "$_rocm_stack_rc" -ne 0 ]]; then
+        echo "Warnung: ROCm-Audio-Stack inkonsistent (torch/torchaudio), rc=${_rocm_stack_rc}." >&2
+        if [[ "${AURIK_DISABLE_TORCHAUDIO_AUTO_REPAIR:-0}" != "1" ]] && repair_rocm_torchaudio; then
+            set +e
+            check_rocm_torchaudio_abi
+            _rocm_stack_rc=$?
+            set -e
+        fi
+        if [[ "$_rocm_stack_rc" -eq 0 ]]; then
+            echo "ROCM_STACK_REPAIR erfolgreich." >&2
+        elif [[ "$_rocm_stack_rc" -eq 11 || "$_rocm_stack_rc" -eq 12 ]]; then
+            echo "Warnung: torchaudio bleibt defekt/inkompatibel; GPU bleibt AKTIV, torchaudio-abhängige Phasen fallen auf CPU/DSP zurück." >&2
+            echo "Hinweis: Für erneuten Reparaturversuch AURIK_DISABLE_TORCHAUDIO_AUTO_REPAIR=0 setzen." >&2
+            export AURIK_TORCHAUDIO_DEGRADED=1
+            _GPU_MODE="ROCm (AMD GPU, torchaudio degraded → selective CPU/DSP fallback)"
+        else
+            echo "Warnung: ROCm-Basisstack defekt (torch nicht nutzbar). Fallback auf CPU-venv." >&2
+            VENV_PYTHON="$VENV_CPU"
+            _GPU_MODE="CPU-only (ROCm-Stack defekt)"
+        fi
+    fi
 else
     VENV_PYTHON="$VENV_CPU"
     _GPU_MODE="CPU-only"

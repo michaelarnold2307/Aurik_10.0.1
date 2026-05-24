@@ -9,6 +9,7 @@ NaN/Inf-Invariante, Shape-Korrektheit, Bounds und Edge-Cases.
 
 from __future__ import annotations
 
+import inspect
 import math
 import types
 from dataclasses import fields
@@ -157,6 +158,158 @@ class TestStrengthOracleRollout:
         phase_id = "phase_03_denoise"
         assert UnifiedRestorerV3._is_phase_strength_oracle_enabled_for_phase(phase_id, "off") is False
         assert UnifiedRestorerV3._is_phase_strength_oracle_enabled_for_phase(phase_id, "all") is True
+
+
+class TestCentralGateArchitecture:
+    def test_40zzh_compile_hard_phase_constraints_removes_restoration_forbidden(self):
+        selected = [
+            "phase_03_denoise",
+            "phase_21_exciter",
+            "phase_42_vocal_enhancement",
+            "phase_40_loudness_normalization",
+        ]
+
+        filtered, report = UnifiedRestorerV3._compile_hard_phase_constraints(
+            selected,
+            is_studio_2026=False,
+            pass_through_mode=False,
+        )
+
+        assert "phase_21_exciter" not in filtered
+        assert "phase_42_vocal_enhancement" not in filtered
+        assert "phase_03_denoise" in filtered
+        assert "section_0a_crossfire" in list(report.get("applied_rules") or [])
+
+    def test_40zzi_compile_hard_phase_constraints_pass_through_allowlist(self):
+        selected = [
+            "phase_03_denoise",
+            "phase_30_dc_offset_removal",
+            "phase_40_loudness_normalization",
+            "phase_47_truepeak_limiter",
+        ]
+
+        filtered, report = UnifiedRestorerV3._compile_hard_phase_constraints(
+            selected,
+            is_studio_2026=False,
+            pass_through_mode=True,
+        )
+
+        assert filtered == [
+            "phase_30_dc_offset_removal",
+            "phase_40_loudness_normalization",
+            "phase_47_truepeak_limiter",
+        ]
+        assert "section_8_2_pass_through" in list(report.get("applied_rules") or [])
+
+    def test_40zzj_classify_quality_gate_events_returns_a_b_c_classes(self):
+        payload = UnifiedRestorerV3._classify_quality_gate_events(
+            artifact_freedom=0.93,
+            panns_singing=0.72,
+            mode="restoration",
+            vqi_score=0.68,
+            vqi_floor=0.72,
+            singer_identity_cosine=0.89,
+            multi_singer=False,
+        )
+
+        assert payload["hard_veto"] is True
+        assert "artifact_freedom_veto" in payload["hard_reasons"]
+        assert "vqi_below_material_floor" in payload["recovery_triggers"]
+        assert "singer_identity_below_threshold" in payload["recovery_triggers"]
+        assert "vqi_below_mode_target" in payload["advisories"]
+
+
+class TestQuietZoneReintroductionShield:
+    def test_40zzn_phase34_passthrough_after_phase29_quiet_zone_alarm(self, monkeypatch):
+        restorer = UnifiedRestorerV3(
+            RestorationConfig(enable_performance_guard=False),
+            monitor_phases=False,
+        )
+
+        phase_meta = types.SimpleNamespace(phase_id="phase_34_mid_side_processing")
+
+        monkeypatch.setattr(
+            restorer,
+            "_prepare_profiled_phase_context",
+            lambda _phase, _kwargs: (phase_meta, phase_meta.phase_id, False, False, {}, {}, {}),
+        )
+        monkeypatch.setattr(
+            restorer,
+            "_prepare_profiled_phase_runtime_context",
+            lambda *_args, **_kwargs: 1.0,
+        )
+
+        class _DummyPhase:
+            def process(self, audio, **_kwargs):
+                return types.SimpleNamespace(
+                    audio=(audio * 0.5).astype(np.float32),
+                    metadata={},
+                    warnings=[],
+                )
+
+        restorer._phase29_quiet_zone_guard_triggered = True
+        restorer._phase29_quiet_zone_max_delta_db = 20.0
+        restorer._phase29_quiet_zone_limited_frames = 42
+        restorer._restoration_context = {"primary_material": "cassette"}
+
+        inp = _stereo(0.25).astype(np.float32)
+        out = restorer._profiled_phase_call(
+            _DummyPhase(),
+            inp,
+            sample_rate=SR,
+            material_type="cassette",
+            panns_singing=0.0,
+        )
+
+        assert hasattr(out, "audio")
+        assert np.allclose(out.audio, inp, atol=1e-7)
+        assert isinstance(out.metadata, dict)
+        assert out.metadata.get("quiet_zone_reintroduction_shield") == "passthrough"
+
+    def test_40zzk_recovery_state_machine_transitions_to_degraded_export(self):
+        payload = UnifiedRestorerV3._resolve_recovery_state_machine(
+            quality_gate_registry={
+                "hard_veto": True,
+                "hard_reasons": ["artifact_freedom_veto"],
+                "recovery_triggers": ["vqi_below_material_floor"],
+                "advisories": [],
+            },
+            fail_reasons=[{"severity": "failed", "error_code": "ARTIFACT_FREEDOM_VETO"}],
+            fallback_quality_floor={"triggered": True, "status": "recovered"},
+            degradation_status="degraded",
+        )
+
+        assert payload["state"] == "DEGRADED_EXPORT"
+        assert payload["conflict_free"] is True
+        trace_states = [str(t.get("state")) for t in payload.get("trace", [])]
+        assert "RUN" in trace_states
+        assert "SOFT_REWEIGHT" in trace_states
+        assert "ROLLBACK" in trace_states
+        assert "FALLBACK" in trace_states
+        assert trace_states[-1] == "DEGRADED_EXPORT"
+
+    def test_40zzl_recovery_state_machine_detects_semantic_conflicts(self):
+        payload = UnifiedRestorerV3._resolve_recovery_state_machine(
+            quality_gate_registry={
+                "hard_veto": True,
+                "hard_reasons": ["same_trigger"],
+                "recovery_triggers": ["same_trigger"],
+                "advisories": [],
+            },
+            fail_reasons=[],
+            fallback_quality_floor={},
+            degradation_status="ok",
+        )
+
+        assert payload["conflict_free"] is False
+        assert payload["semantic_conflicts"] == ["same_trigger"]
+
+    def test_40zzm_v22_guard_covers_current_phase_ids(self):
+        """§V22 muss auf aktuelle Phasen-IDs greifen (kein Alias-Drift)."""
+        src = inspect.getsource(_uv3_mod.UnifiedRestorerV3._profiled_phase_call)
+        assert "phase_23_spectral_repair" in src
+        assert "phase_24_dropout_repair" in src
+        assert "phase_38_presence_boost" in src
 
 
 class TestSpecUpgradeMetadata:
@@ -1805,6 +1958,7 @@ class TestSongCalibrationProfile:
         )
 
         assert profile["material"] == MaterialType.TAPE.value
+        assert profile["material_canonical"] == MaterialType.TAPE.value
         assert profile["mode"] == QualityMode.QUALITY.value
         assert "global_scalar" in profile
         assert "family_scalars" in profile
@@ -1819,6 +1973,49 @@ class TestSongCalibrationProfile:
             "instrument",
             "general",
         }
+
+    def test_68a_build_song_calibration_profile_preserves_specific_cassette_material(self):
+        profile = UnifiedRestorerV3._build_song_calibration_profile(
+            material_type=MaterialType.CASSETTE,
+            mode=QualityMode.QUALITY,
+            restorability_score=62.0,
+            input_snr_db=24.0,
+            max_defect_severity=0.45,
+            pipeline_confidence=0.71,
+        )
+
+        assert profile["material"] == MaterialType.CASSETTE.value
+        assert profile["material_canonical"] == MaterialType.TAPE.value
+
+    def test_68b_resolve_post_scan_material_type_keeps_specific_cassette(self):
+        mc_result = types.SimpleNamespace(
+            confidence=0.41,
+            is_multi_generation=True,
+            transfer_chain=["vinyl", "cassette", "mp3_low"],
+        )
+
+        material = UnifiedRestorerV3._resolve_post_scan_material_type(
+            MaterialType.CASSETTE,
+            MaterialType.TAPE,
+            mc_result,
+        )
+
+        assert material == MaterialType.CASSETTE
+
+    def test_68c_resolve_post_scan_material_type_keeps_scanner_material_without_specific_evidence(self):
+        mc_result = types.SimpleNamespace(
+            confidence=0.20,
+            is_multi_generation=False,
+            transfer_chain=["vinyl"],
+        )
+
+        material = UnifiedRestorerV3._resolve_post_scan_material_type(
+            MaterialType.VINYL,
+            MaterialType.TAPE,
+            mc_result,
+        )
+
+        assert material == MaterialType.TAPE
 
     def test_69_song_calibration_global_scalar_is_bounded(self):
         """[RELEASE_MUST] Lücke-G-Fix v9.10.100: global_scalar ∈ [0.50, 1.50]."""

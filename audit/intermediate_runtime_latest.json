@@ -1,0 +1,39 @@
+{
+  "event_id": "run_warning",
+  "event_index": 45,
+  "log_line": "[2026-05-24 18:53:25,446] WARNING backend.core.plugin_lifecycle_manager: PLM: Swap-Druck kritisch (85 %) \u2014 erzwinge Eviction inaktiver Plugins (RAM=58 %, frei=13611 MB)",
+  "runtime": {
+    "compliance_ok": false,
+    "exit_code": 1,
+    "required_passed": 7,
+    "required_total": 13,
+    "stderr": "",
+    "stdout": "Runtime-Spec-Report: /media/michael/Software 4TB/Aurik_Standalone/audit/runtime_spec_report_live.json\nRequired checks: 7/13 | compliance_ok=False\n[REQ][PASS] entry_denker: AurikDenker.denke() gestartet gefunden\n[REQ][FAIL] run_completed: Kein AurikDenker-Abschluss im Run-Window\n[REQ][PASS] mode_contract: mode=restoration/studio_2026 vorhanden\n[REQ][PASS] preanalysis_handover: Cached Defect/PreAnalysis im Lauf genutzt\n[REQ][PASS] medium_detect_single: \ud83d\udd0d MediumDetector fresh_count=0 (cached ignoriert)\n[REQ][FAIL] artifact_gate: Kein Final-AFG-Eintrag\n[REQ][FAIL] hpi_gate: Kein HPI-Eintrag im Lauf\n[REQ][FAIL] exp_joy_runtime: Kein joy_runtime_index/Freude-Signal im Log\n[REQ][FAIL] exp_auto_improve: Kein auto_improvement_recommendations-Signal im Log\n[REQ][FAIL] exp_cluster_policy: Kein cluster_policy-Signal im Log\n[REQ][PASS] dag_final_clean: Finale DAG-Validierung vorhanden, keine HARD_BEFORE-Verletzung\n[REQ][PASS] phase12_effective_when_started: Phase 12 ohne low-confidence Skip ausgef\u00fchrt\n[REQ][PASS] material_specificity_guard: Kein cassette\u2192tape Downcast im Lauf\n[OPT][FAIL] exzellenz_api_contract: Kein expliziter Exzellenz-API-Hinweis im Log (inconclusive)"
+  },
+  "severity": "warning",
+  "spec_gaps": [
+    {
+      "evidence": "[2026-05-24 18:53:25,446] WARNING backend.core.plugin_lifecycle_manager: PLM: Swap-Druck kritisch (85 %) \u2014 erzwinge Eviction inaktiver Plugins (RAM=58 %, frei=13611 MB)",
+      "gap_id": "micro_delta_warning",
+      "recommended_action": "Mikro-Delta sofort analysieren und run-lokal korrigieren (keine Warnung unbehandelt lassen).",
+      "severity": "high"
+    }
+  ],
+  "timestamp": "2026-05-24T18:53:25.701534",
+  "worldclass_trend": {
+    "critical_gap_count": 0,
+    "high_gap_count": 1,
+    "on_worldclass_path": false,
+    "runtime_compliance_ok": false,
+    "trajectory": {
+      "intervention_rejected_count": 0,
+      "intervention_rejected_rate": 0.0,
+      "phases_ok": 17,
+      "phases_started": 18,
+      "pmmg_regressive_count": 0,
+      "pmmg_regressive_rate": 0.0,
+      "pmmg_total_count": 0,
+      "status": "at_risk"
+    }
+  }
+}

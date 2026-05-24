@@ -412,6 +412,28 @@ class MidSideProcessing(PhaseInterface):
                 metrics={"mid_change_db": 0.0, "side_change_db": 0.0, "mono_compatibility": 1.0},
             )
 
+        # Phase 34 ist eine Stereo-Phase. Bei Mono-Input wird bewusst pass-through
+        # gefahren, um künstliche Pseudo-Stereo-Artefakte und Template-Fehler zu vermeiden.
+        if audio.ndim == 1:
+            mono_audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+            mono_audio = np.clip(mono_audio, -1.0, 1.0)
+            return PhaseResult(
+                success=True,
+                audio=mono_audio.astype(audio.dtype),
+                execution_time_seconds=time.time() - start_time,
+                metadata={
+                    "phase": "34_mid_side_processing_v2_professional",
+                    "material": material.value,
+                    "processing": "bypassed_mono_input",
+                    "mid_side_profile": mid_side_profile,
+                    "phase_locality_factor": phase_locality_factor,
+                    "effective_strength": _effective_strength,
+                    "rms_drop_db": 0.0,
+                    "loudness_makeup_db": 0.0,
+                },
+                metrics={"mid_change_db": 0.0, "side_change_db": 0.0, "mono_compatibility": 1.0},
+            )
+
         metadata = {
             "phase": "34_mid_side_processing_v2_professional",
             "material": material.value,
@@ -584,6 +606,9 @@ class MidSideProcessing(PhaseInterface):
 
     def _ms_encode(self, mid: np.ndarray, side: np.ndarray, template: np.ndarray) -> np.ndarray:
         """Kodiert Mid/Side to L/R."""
+        if template.ndim == 1:
+            # Mono-Zielsignal: L/R-Encoder auf Mid kollabieren, keine Stereo-Template-Erwartung.
+            return np.asarray(mid, dtype=template.dtype)
         left = mid + side
         right = mid - side
         return stereo_like(left, right, template)

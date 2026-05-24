@@ -12,6 +12,7 @@
 
 PYTHON := .venv_aurik/bin/python
 PYMODULE := $(PYTHON) -m
+PYTEST_CLEAN := ./scripts/pytest_clean.sh
 
 # Robuste Terminal-Capability-Defaults (wichtig fuer Snap/VS-Code-Subprozesse)
 TERM ?= xterm-256color
@@ -29,7 +30,7 @@ YELLOW := \033[0;33m
 RED := \033[0;31m
 RESET := \033[0m
 
-.PHONY: help fmt lint typecheck quality compliance compliance-full test clean pre-commit-install \
+.PHONY: help fmt lint typecheck quality compliance compliance-full test test-clean test-spec-gate test-spec-gate-core test-amrb-gate test-competitive-gate clean pre-commit-install \
         black isort autoflake ruff flake8 pylint mypy bandit
 
 # ---------------------------------------------------------------------------
@@ -43,6 +44,11 @@ help:
 	@echo "  $(YELLOW)make typecheck$(RESET)        — Statische Typprüfung (mypy)"
 	@echo "  $(YELLOW)make quality$(RESET)          — Vollständiger Qualitäts-Check"
 	@echo "  $(YELLOW)make test$(RESET)             — Unit-Tests"
+	@echo "  $(YELLOW)make test-clean$(RESET)       — Unit-Tests via clean pytest wrapper"
+	@echo "  $(YELLOW)make test-spec-gate$(RESET)   — Integration+Normative ungefiltert (inkl. heavy/gui)"
+	@echo "  $(YELLOW)make test-spec-gate-core$(RESET) — Spec-Gate ohne AMRB-Langläufer"
+	@echo "  $(YELLOW)make test-amrb-gate$(RESET)   — AMRB-Langläufer separat"
+	@echo "  $(YELLOW)make test-competitive-gate$(RESET) — Competitive-Langläufer separat"
 	@echo "  $(YELLOW)make test-all$(RESET)         — Alle Tests inkl. Integration"
 	@echo "  $(YELLOW)make clean$(RESET)            — Temporäre Dateien löschen"
 	@echo "  $(YELLOW)make pre-commit-install$(RESET) — Pre-commit-Hooks installieren"
@@ -174,21 +180,54 @@ quality:
 # ---------------------------------------------------------------------------
 test:
 	@echo "$(YELLOW)⚙ Unit-Tests...$(RESET)"
-	$(PYMODULE) pytest tests/unit \
+	$(PYTEST_CLEAN) tests/unit \
 		-p no:xdist \
 		--override-ini="addopts=--strict-markers --import-mode=importlib" \
 		--timeout=30 --tb=short -q --disable-warnings --no-header
 
+test-clean: test
+
+test-spec-gate:
+	@echo "$(YELLOW)⚙ Full Spec Gate (integration + normative, ungefiltert)...$(RESET)"
+	$(PYTEST_CLEAN) tests/integration tests/normative \
+		-p no:xdist \
+		--run-heavy-tests --run-gui-tests \
+		--override-ini="addopts=--strict-markers --import-mode=importlib" \
+		--timeout=90 --tb=line -q --disable-warnings --no-header --maxfail=5
+
+test-spec-gate-core:
+	@echo "$(YELLOW)⚙ Spec Gate Core (ohne AMRB/Competitive-Langläufer)...$(RESET)"
+	$(PYTEST_CLEAN) tests/integration tests/normative \
+		-p no:xdist \
+		--run-heavy-tests --run-gui-tests \
+		-m "not amrb and not competitive" \
+		--override-ini="addopts=--strict-markers --import-mode=importlib" \
+		--timeout=90 --tb=line -q --disable-warnings --no-header --maxfail=5
+
+test-amrb-gate:
+	@echo "$(YELLOW)⚙ AMRB Gate (langlaufend, separat)...$(RESET)"
+	QT_QPA_PLATFORM=offscreen $(PYTEST_CLEAN) tests/normative/test_amrb_ci_gate.py \
+		-p no:xdist \
+		--run-heavy-tests --run-gui-tests \
+		--timeout=600 --tb=short -q --disable-warnings --no-header --maxfail=1
+
+test-competitive-gate:
+	@echo "$(YELLOW)⚙ Competitive Gate (langlaufend, separat)...$(RESET)"
+	AURIK_COMPETITIVE_BENCHMARK_TIMEOUT_S=180 QT_QPA_PLATFORM=offscreen $(PYTEST_CLEAN) tests/normative/test_competitive_ci_gate.py \
+		-p no:xdist \
+		--run-heavy-tests --run-gui-tests \
+		--timeout=1200 --tb=short -q --disable-warnings --no-header --maxfail=1
+
 test-all:
 	@echo "$(YELLOW)⚙ Alle Tests (2 Worker)...$(RESET)"
-	$(PYMODULE) pytest tests \
+	$(PYTEST_CLEAN) tests \
 		-n 2 --dist=loadfile \
 		--override-ini="addopts=--strict-markers --import-mode=importlib" \
 		--timeout=60 --tb=short -q --disable-warnings --no-header --maxfail=5
 
 test-coverage:
 	@echo "$(YELLOW)⚙ Tests mit Coverage...$(RESET)"
-	$(PYMODULE) pytest tests/unit \
+	$(PYTEST_CLEAN) tests/unit \
 		--cov=core --cov=dsp --cov=plugins --cov=backend --cov=denker \
 		--cov-report=html:reports/coverage \
 		--cov-report=term-missing \

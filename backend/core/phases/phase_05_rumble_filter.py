@@ -328,6 +328,9 @@ class RumbleFilterPhase(PhaseInterface):
         # Step 1: Detect rumble (energy analysis)
         has_rumble, rumble_energy_ratio, rumble_freqs = self._detect_rumble_professional(audio, params)
 
+        # Referenz-Lautheit vor HPF-Eingriff (für kontrollierten Guard).
+        _rms_in_db_05_ref = self._rms_dbfs_gated(np.asarray(audio, dtype=np.float32))
+
         if not has_rumble:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -398,15 +401,38 @@ class RumbleFilterPhase(PhaseInterface):
             filtered = (audio + _effective_strength * (filtered - audio)).astype(audio.dtype)
             filtered = np.clip(filtered, -1.0, 1.0)
 
-        # §2.45a: Phase_05 ist ein Hochpassfilter — Energieverlust durch Rumble-Entfernung
-        # ist BEABSICHTIGT und darf NICHT per Makeup-Gain kompensiert werden.
-        # Grund: _rms_in_db_05_ref enthält Rumpelenergie (sub-30 Hz), _rms_out_db_05 nicht →
-        # scheinbarer RMS-Drop → Guard feuert → boosted Fadeout/Intro-Frames → Pegelexplosion.
-        # Das ist ein logischer Widerspruch: HP-Filter + Makeup-Gain kämpfen gegeneinander.
-        # Der UV3-Cumulative-Guard (§2.45a-IV) überwacht den Gesamtpegel auf Pipeline-Ebene.
         _rms_out_db_05 = self._rms_dbfs_gated(np.asarray(filtered, dtype=np.float32))
-        _rms_drop_05 = 0.0  # not comparable: input has rumble energy, output does not
-        _makeup_05 = 0.0  # No per-phase makeup gain for HPF — UV3 handles level at pipeline level
+        _rms_drop_05 = float(_rms_out_db_05 - _rms_in_db_05_ref)
+
+        # Kontrollierter Loudness-Guard: nur musikalische Frames, nie Stille boosten.
+        _quality_mode_05 = str(kwargs.get("quality_mode", kwargs.get("mode", "balanced"))).lower()
+        _restorability_05 = float(kwargs.get("restorability_score", 50.0))
+        _profile_05 = self._compute_rumble_filter_profile(material_type, _quality_mode_05, _restorability_05)
+        _max_drop_db_05 = float(_profile_05.get("max_rms_drop_db", 2.5))
+        _allowed_drop_05 = -_max_drop_db_05
+        _makeup_05 = 0.0
+        if _rms_drop_05 < _allowed_drop_05:
+            _needed_makeup_db_05 = float(min(3.0, _allowed_drop_05 - _rms_drop_05))
+
+            # Headroom-Guard per 99.9%-Peak (V08-konform, kein max-peak).
+            _peak99_05 = float(np.percentile(np.abs(filtered), 99.9)) if np.size(filtered) > 0 else 0.0
+            _headroom_db_05 = float(20.0 * np.log10(0.98 / max(_peak99_05, 1e-6)))
+            _applied_makeup_db_05 = float(np.clip(min(_needed_makeup_db_05, _headroom_db_05), 0.0, 3.0))
+
+            if _applied_makeup_db_05 > 0.0:
+                _gain_05 = float(10.0 ** (_applied_makeup_db_05 / 20.0))
+                filtered = self._musical_gain_envelope(
+                    np.asarray(filtered, dtype=np.float32),
+                    _gain_05,
+                    gate_dbfs=-50.0,
+                    crossfade_ms=10.0,
+                    sr=self.sample_rate,
+                )
+                filtered = np.nan_to_num(filtered, nan=0.0, posinf=0.0, neginf=0.0)
+                filtered = np.clip(filtered, -1.0, 1.0)
+                _makeup_05 = _applied_makeup_db_05
+                _rms_out_db_05 = self._rms_dbfs_gated(np.asarray(filtered, dtype=np.float32))
+                _rms_drop_05 = float(_rms_out_db_05 - _rms_in_db_05_ref)
 
         return create_phase_result(
             audio=_restore_layout_05(filtered),

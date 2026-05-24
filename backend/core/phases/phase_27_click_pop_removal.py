@@ -53,6 +53,16 @@ from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, Phase
 logger = logging.getLogger(__name__)
 
 
+def _get_phase27_lge():
+    """LGE-Resolver als stabiler Patch-/Accessor-Punkt fuer Phase 27."""
+    return get_lyrics_guided_enhancement()
+
+
+def _get_phase27_npd():
+    """NPA-Resolver als stabiler Patch-/Accessor-Punkt fuer Phase 27."""
+    return get_natural_performance_detector()
+
+
 class ClickPopRemoval(PhaseInterface):
     """
     Professional Click/Pop Removal with Statistical Feature Extraction.
@@ -317,7 +327,7 @@ class ClickPopRemoval(PhaseInterface):
             n_samples27 = _mono27.shape[0]
             # §2.36 Phonem-Schutz
             try:
-                _lge27 = get_lyrics_guided_enhancement()
+                _lge27 = _get_phase27_lge()
                 _phon_mask27 = _lge27.get_phoneme_mask(_orig27, sample_rate, hop_length=512)
                 if _phon_mask27 is not None and len(_phon_mask27) > 0:
                     hop27 = 512
@@ -334,9 +344,7 @@ class ClickPopRemoval(PhaseInterface):
             # §2.46f NPA-Guard
             try:
                 _npa_mask27 = (
-                    get_natural_performance_detector()
-                    .detect(_orig27, sample_rate)
-                    .get_protected_mask(n_samples27, sample_rate)
+                    _get_phase27_npd().detect(_orig27, sample_rate).get_protected_mask(n_samples27, sample_rate)
                 )
                 if _npa_mask27 is not None and _npa_mask27.any():
                     if cleaned_audio.ndim == 2:

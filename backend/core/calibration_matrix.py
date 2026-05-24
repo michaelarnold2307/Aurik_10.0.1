@@ -6,6 +6,8 @@ and are safe to call from gates and target estimators.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 
@@ -830,9 +832,11 @@ RESTORABILITY_SCALE_MIN: float = 0.72
 
 def get_effective_material_floor(
     material_type: str,
-    goal_name: str,
-    restorability_score: float,
+    goal_name: str | None = None,
+    goal: str | None = None,
+    restorability_score: float = 100.0,
     is_studio_2026: bool = False,
+    **kwargs: Any,
 ) -> float:
     """Gibt restorability-skalierten Floor für §GOAL_BASELINE_CHECK zurück.
 
@@ -852,13 +856,18 @@ def get_effective_material_floor(
     Args:
         material_type:      e.g. "shellac", "vinyl", "mp3_low"
         goal_name:          Kanonischer Goal-Schlüssel, e.g. "brillanz"
+        goal:               Expliziter Alias für goal_name (Legacy-Callsites)
+        kwargs["goal"]:     Rueckwaertskompatibler Alias fuer goal_name
         restorability_score: 0–100
         is_studio_2026:     Modus-Flag
 
     Returns:
         float: Effektiver Floor ∈ [0.20, 0.99]
     """
-    floor_base = get_material_floor(material_type, goal_name, is_studio_2026=is_studio_2026)
+    _goal_key = str(goal_name or goal or kwargs.get("goal") or "").strip()
+    if not _goal_key:
+        _goal_key = "natuerlichkeit"
+    floor_base = get_material_floor(material_type, _goal_key, is_studio_2026=is_studio_2026)
     scale = max(RESTORABILITY_SCALE_MIN, float(np.clip(float(restorability_score) / 100.0, 0.0, 1.0)))
     return float(np.clip(floor_base * scale, 0.20, 0.99))
 

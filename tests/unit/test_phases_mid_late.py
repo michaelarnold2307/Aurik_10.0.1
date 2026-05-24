@@ -1703,6 +1703,43 @@ class TestPhase42VocalEnhancement:
         assert model_name == "bs_roformer_fake"
         assert abs(confidence - 0.77) < 1e-6
 
+    def test_stem_separation_uses_demucs_native_before_mdx(self, monkeypatch):
+        class _FakeDemucs:
+            _session = object()
+
+            def separate_vocals(self, audio, sr, prefer_mdx23c=True):
+                assert sr == SR
+                assert prefer_mdx23c is False
+                a = np.asarray(audio, dtype=np.float32)
+                return a * 0.55, a * 0.45
+
+        class _VM:
+            available = 6 * 1024**3
+
+        import backend.core.phases.phase_42_vocal_enhancement as mod42
+
+        def _boom_mdx():
+            raise AssertionError("mdx23c should not be called when native demucs is available")
+
+        monkeypatch.setattr(
+            mod42.psutil if hasattr(mod42, "psutil") else __import__("psutil"), "virtual_memory", lambda: _VM()
+        )
+        monkeypatch.setattr(
+            "plugins.bs_roformer_plugin.get_bs_roformer", lambda: (_ for _ in ()).throw(RuntimeError("no roformer"))
+        )
+        monkeypatch.setattr("plugins.demucs_v4_plugin.get_demucs_plugin", lambda: _FakeDemucs())
+        monkeypatch.setattr("plugins.mdx23c_plugin.get_mdx23c_plugin", _boom_mdx)
+
+        short_stereo = np.tile(np.array([[0.1, 0.05]], dtype=np.float32), (SR * 2, 1))
+        stems = self.phase._try_stem_separation(short_stereo, SR, material="live")
+
+        assert stems is not None
+        vocals_out, instr_out, confidence, model_name = stems
+        assert vocals_out.shape == short_stereo.shape
+        assert instr_out.shape == short_stereo.shape
+        assert model_name == "demucs_v4_htdemucs"
+        assert abs(confidence - 0.60) < 1e-6
+
 
 # ===========================================================================
 # Phase 43 – Adaptive De-Esser

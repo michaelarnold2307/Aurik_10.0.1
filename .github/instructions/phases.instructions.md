@@ -262,13 +262,23 @@ frisson_zones = get_frisson_detector().detect(original_audio, sr)
 from backend.core.musical_goals.vocal_quality_index import compute_vqi
 
 if panns_singing >= 0.35:  # kanonischer Name: panns_singing (≠ panns_singing_confidence)
-    # audio_orig=audio_in: Phase-Eingang als Referenz (per-Phase-Degradierungs-Check)
-    # 1.0 = keine Degradierung durch Phase; < 0.95 = > 5 % VQI-Regression → Rollback
+    # audio_orig=audio_in: Phase-Eingang als Referenz (lokaler Degradierungs-Check)
+    # Nur lokale Regression pruefen, keine globale Exportentscheidung in der Phase.
     result_after = compute_vqi(audio_orig=audio_in, audio_restored=audio_out, sr=sr)
     vqi_after = result_after["vqi"]
-    if vqi_after < 0.95:  # VERBOTEN: vqi_before verwenden — ist in Phase-Scope nicht definiert
-        return audio_in  # Rollback (per-Phase-VQI-Regression ≥ 0.05)
+    if (1.0 - float(vqi_after)) > 0.05:
+        return audio_in  # lokaler Rollback bei starker VQI-Regression
+
+    metadata["vqi_phase_after"] = float(vqi_after)
+    metadata["phase_decision_scope"] = "local_only"
+    metadata["final_authority"] = "UV3"
 ```
+
+Normative Abgrenzung:
+
+- Die globale Einordnung als Hard-Veto, Recovery-Trigger oder Advisory erfolgt
+  ausschliesslich in UV3 (`quality_gate_registry`, `recovery_state_machine`).
+- Phasen duerfen keine globale A/B/C-Klassifikation setzen oder uebersteuern.
 
 ## Passaggio-Glättung
 

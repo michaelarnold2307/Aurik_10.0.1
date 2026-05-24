@@ -35,8 +35,43 @@ MEM_GB="${AURIK_MEM_GB:-8}"
 MEM_BYTES=$(( MEM_GB * 1024 * 1024 * 1024 ))
 MEM_MB=$(( MEM_GB * 1024 ))
 MEM_KB=$(( MEM_GB * 1024 * 1024 ))
+SWAP_MB="${AURIK_SWAP_MB:-2048}"
 LOG_FILE="${AURIK_LOG_FILE:-${SCRIPT_DIR}/logs/pytest_safe.log}"
 RSS_LIMIT_MB="${AURIK_TEST_RSS_LIMIT_MB:-$(( MEM_GB * 1024 * 85 / 100 ))}"
+STREAM_MODE_RAW="${AURIK_STREAM_TO_TERMINAL:-auto}"
+STREAM_TO_TERMINAL="0"
+TERMINAL_LINE_BUDGET="${AURIK_TERMINAL_LINE_BUDGET:-400}"
+TERMINAL_PROGRESS_EVERY="${AURIK_TERMINAL_PROGRESS_EVERY:-2000}"
+
+# Auto-Modus: In VS-Code-Terminals standardmaessig quiet (stabil), ausserhalb live.
+_IN_VSCODE_TERMINAL=0
+if [[ "${TERM_PROGRAM:-}" == "vscode" || -n "${VSCODE_PID:-}" || -n "${VSCODE_IPC_HOOK_CLI:-}" ]]; then
+    _IN_VSCODE_TERMINAL=1
+fi
+
+case "${STREAM_MODE_RAW,,}" in
+    1|true|yes|on|live)
+        STREAM_TO_TERMINAL="1"
+        ;;
+    0|false|no|off|quiet)
+        STREAM_TO_TERMINAL="0"
+        ;;
+    auto|"")
+        if [[ "$_IN_VSCODE_TERMINAL" -eq 1 ]]; then
+            STREAM_TO_TERMINAL="0"
+        else
+            STREAM_TO_TERMINAL="1"
+        fi
+        ;;
+    *)
+        echo "[safe-runner] Warnung: Unbekannter Wert fuer AURIK_STREAM_TO_TERMINAL='${STREAM_MODE_RAW}', nutze auto." >&2
+        if [[ "$_IN_VSCODE_TERMINAL" -eq 1 ]]; then
+            STREAM_TO_TERMINAL="0"
+        else
+            STREAM_TO_TERMINAL="1"
+        fi
+        ;;
+esac
 
 # Robuste Terminal-Capability-Umgebung fuer Snap/VS-Code-Subprozesse
 export TERM="${TERM:-xterm-256color}"
@@ -51,10 +86,64 @@ mkdir -p "$(dirname "$LOG_FILE")"
 echo "══════════════════════════════════════════════════════"
 echo " Aurik Safe Test Runner"
 echo " Speicher-Cap : ${MEM_GB} GB"
+echo " Swap-Cap     : ${SWAP_MB} MB"
 echo " RSS-Watchdog : ${RSS_LIMIT_MB} MB"
 echo " Log          : ${LOG_FILE}"
+echo " Terminal-Budget: ${TERMINAL_LINE_BUDGET} Zeilen (live)"
+if [[ "$STREAM_TO_TERMINAL" == "1" ]]; then
+    if [[ "${STREAM_MODE_RAW,,}" == "auto" || -z "$STREAM_MODE_RAW" ]]; then
+        echo " Terminal-I/O : live (auto)"
+    else
+        echo " Terminal-I/O : live (erzwungen)"
+    fi
+else
+    if [[ "${STREAM_MODE_RAW,,}" == "auto" || -z "$STREAM_MODE_RAW" ]]; then
+        echo " Terminal-I/O : quiet (auto fuer VS Code; Details im Log)"
+    else
+        echo " Terminal-I/O : quiet (erzwungen; Details im Log)"
+    fi
+fi
 echo " Argumente    : $*"
 echo "══════════════════════════════════════════════════════"
+
+_print_quiet_summary() {
+    local rc="$1"
+    if [[ "$rc" -eq 0 ]]; then
+        local summary
+        summary="$(grep -E "=+ .* in [0-9.]+s|[0-9]+ passed" "$LOG_FILE" | tail -n 1 || true)"
+        if [[ -n "$summary" ]]; then
+            echo "[safe-runner] Erfolg: ${summary}"
+        else
+            echo "[safe-runner] Erfolg (Details: ${LOG_FILE})"
+        fi
+    else
+        echo "[safe-runner] Fehler (Exit ${rc}). Letzte 120 Log-Zeilen:" >&2
+        tail -n 120 "$LOG_FILE" >&2 || true
+    fi
+}
+
+_stream_with_budget() {
+    awk -v max_lines="$TERMINAL_LINE_BUDGET" -v progress_every="$TERMINAL_PROGRESS_EVERY" -v log_file="$LOG_FILE" '
+        {
+            if (NR <= max_lines) {
+                print $0;
+                next;
+            }
+            if (NR == max_lines + 1) {
+                printf("[safe-runner] Terminal-Budget erreicht (%d Zeilen). Weitere Ausgabe wird unterdrueckt; Log laeuft weiter: %s\n", max_lines, log_file);
+                next;
+            }
+            if (progress_every > 0 && (NR % progress_every) == 0) {
+                printf("[safe-runner] ...%d Zeilen verarbeitet (Terminal-Ausgabe gedrosselt)...\n", NR);
+            }
+        }
+        END {
+            if (NR > max_lines) {
+                printf("[safe-runner] Terminal-Drossel aktiv: %d/%d Zeilen angezeigt. Vollstaendiges Log: %s\n", max_lines, NR, log_file);
+            }
+        }
+    '
+}
 
 # ── Methode 1: systemd-run (beste Isolation via cgroup) ──────────────────────
 # Erstellt eine eigene cgroup mit hartem Speicher-Limit. Der Python-Prozess
@@ -69,28 +158,52 @@ if command -v systemd-run &>/dev/null; then
 fi
 
 if [[ "$_SYSTEMD_OK" -eq 1 ]]; then
-    echo "[safe-runner] Methode: systemd-run cgroup (MemoryMax=${MEM_GB}G)"
+    echo "[safe-runner] Methode: systemd-run cgroup (MemoryMax=${MEM_GB}G, MemorySwapMax=${SWAP_MB}M)"
     set +e
-    systemd-run \
-        --user \
-        --scope \
-        --collect \
-        --quiet \
-        --setenv=TERM="$TERM" \
-        --setenv=TERMINFO="$TERMINFO" \
-        --setenv=TERMINFO_DIRS="$TERMINFO_DIRS" \
-        -p "MemoryMax=${MEM_GB}G" \
-        -p "MemorySwapMax=512M" \
-        -p "CPUWeight=50" \
-        -p "TasksMax=512" \
-        -- \
-        "$PYTHON" -m pytest "$@" \
-        --override-ini="addopts=--strict-markers --import-mode=importlib" \
-        -p no:xdist \
-        --disable-warnings \
-        --no-header \
-        2>&1 | tee "$LOG_FILE"
-    _rc=${PIPESTATUS[0]}
+    if [[ "$STREAM_TO_TERMINAL" == "1" ]]; then
+        systemd-run \
+            --user \
+            --scope \
+            --collect \
+            --quiet \
+            --setenv=TERM="$TERM" \
+            --setenv=TERMINFO="$TERMINFO" \
+            --setenv=TERMINFO_DIRS="$TERMINFO_DIRS" \
+            -p "MemoryMax=${MEM_GB}G" \
+            -p "MemorySwapMax=${SWAP_MB}M" \
+            -p "CPUWeight=50" \
+            -p "TasksMax=512" \
+            -- \
+            "$PYTHON" -m pytest "$@" \
+            --override-ini="addopts=--strict-markers --import-mode=importlib" \
+            -p no:xdist \
+            --disable-warnings \
+            --no-header \
+            2>&1 | tee "$LOG_FILE" | _stream_with_budget
+        _rc=${PIPESTATUS[0]}
+    else
+        systemd-run \
+            --user \
+            --scope \
+            --collect \
+            --quiet \
+            --setenv=TERM="$TERM" \
+            --setenv=TERMINFO="$TERMINFO" \
+            --setenv=TERMINFO_DIRS="$TERMINFO_DIRS" \
+            -p "MemoryMax=${MEM_GB}G" \
+            -p "MemorySwapMax=${SWAP_MB}M" \
+            -p "CPUWeight=50" \
+            -p "TasksMax=512" \
+            -- \
+            "$PYTHON" -m pytest "$@" \
+            --override-ini="addopts=--strict-markers --import-mode=importlib" \
+            -p no:xdist \
+            --disable-warnings \
+            --no-header \
+            > "$LOG_FILE" 2>&1
+        _rc=$?
+        _print_quiet_summary "$_rc"
+    fi
     set -e
     exit "$_rc"
 fi
@@ -103,13 +216,30 @@ echo "[safe-runner] Methode: setsid + ulimit -v ${MEM_MB}M"
 
 (
     # Eigene Session → eigene Prozessgruppe → kein Signal-Forwarding zu VS Code
-    exec setsid bash -c "
-        ulimit -v $MEM_KB 2>/dev/null || true
-        ulimit -m $MEM_KB 2>/dev/null || true
-        exec '$PYTHON' -m pytest \"\$@\" \
-            --override-ini='addopts=--strict-markers --import-mode=importlib' \
-            -p no:xdist \
-            --disable-warnings \
-            --no-header
-    " -- "$@" 2>&1 | tee "$LOG_FILE"
+    if [[ "$STREAM_TO_TERMINAL" == "1" ]]; then
+        exec setsid bash -c "
+            ulimit -v $MEM_KB 2>/dev/null || true
+            ulimit -m $MEM_KB 2>/dev/null || true
+            exec '$PYTHON' -m pytest \"\$@\" \
+                --override-ini='addopts=--strict-markers --import-mode=importlib' \
+                -p no:xdist \
+                --disable-warnings \
+                --no-header
+            " -- "$@" 2>&1 | tee "$LOG_FILE" | _stream_with_budget
+    else
+        set +e
+        setsid bash -c "
+            ulimit -v $MEM_KB 2>/dev/null || true
+            ulimit -m $MEM_KB 2>/dev/null || true
+            exec '$PYTHON' -m pytest \"\$@\" \
+                --override-ini='addopts=--strict-markers --import-mode=importlib' \
+                -p no:xdist \
+                --disable-warnings \
+                --no-header
+        " -- "$@" > "$LOG_FILE" 2>&1
+        _rc=$?
+        set -e
+        _print_quiet_summary "$_rc"
+        exit "$_rc"
+    fi
 )

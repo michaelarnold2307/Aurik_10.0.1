@@ -25,6 +25,7 @@ Module invariants (§3.x compliant):
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from dataclasses import dataclass, field
 
@@ -189,11 +190,24 @@ class PerceptualSalienceEstimator:
                 mono = np.nan_to_num(np.asarray(mono, dtype=np.float64), nan=0.0)
 
                 # ERB masking is expensive (3 FFTs per annotation).
-                # Cap at _ERB_MAX_ANNOTATIONS representative samples to bound scan time.
+                # Quality-first default: keep full budget for maximum detection fidelity.
+                # Reduced budgets are opt-in only via env var to avoid hidden quality drift.
                 # Strategy: take up to _ERB_PER_TYPE highest-salience annotations per
                 # defect type so all types are represented, then fill remaining budget
                 # with remaining annotations sorted by broadband salience descending.
-                _ERB_MAX_ANNOTATIONS = 500
+                _duration_s = float(len(mono)) / float(max(1, sr))
+                _erb_budget_mode = str(os.getenv("AURIK_ERB_BUDGET_MODE", "quality")).strip().lower()
+                if _erb_budget_mode in {"fast", "balanced"}:
+                    if _duration_s >= 300.0:
+                        _ERB_MAX_ANNOTATIONS = 180
+                    elif _duration_s >= 180.0:
+                        _ERB_MAX_ANNOTATIONS = 260
+                    elif _duration_s >= 90.0:
+                        _ERB_MAX_ANNOTATIONS = 360
+                    else:
+                        _ERB_MAX_ANNOTATIONS = 500
+                else:
+                    _ERB_MAX_ANNOTATIONS = 500
                 _ERB_PER_TYPE = 20
                 all_anns = salience_result.annotations
                 if len(all_anns) > _ERB_MAX_ANNOTATIONS:
@@ -215,10 +229,12 @@ class PerceptualSalienceEstimator:
                     _selected.extend(_remaining[: max(0, _ERB_MAX_ANNOTATIONS - len(_selected))])
                     erb_anns = _selected
                     logger.debug(
-                        "ERB masking: capped %d → %d annotations (budget=%d)",
+                        "ERB masking: capped %d → %d annotations (budget=%d, duration=%.1fs, mode=%s)",
                         len(all_anns),
                         len(erb_anns),
                         _ERB_MAX_ANNOTATIONS,
+                        _duration_s,
+                        _erb_budget_mode,
                     )
                 else:
                     erb_anns = all_anns

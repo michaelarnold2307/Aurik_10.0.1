@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 from backend.core.defect_scanner import MaterialType
 from backend.core.phases.phase_23_spectral_repair import SpectralRepair
 
@@ -68,3 +70,37 @@ def test_cassette_bw_ceiling_is_material_adaptive() -> None:
     assert SpectralRepair._material_bw_ceiling_hz(MaterialType.CASSETTE) == 12000.0
     assert SpectralRepair._material_bw_ceiling_hz(MaterialType.TAPE) == 15000.0
     assert SpectralRepair._material_bw_ceiling_hz(MaterialType.REEL_TAPE) == 18000.0
+
+
+def test_phase23_uses_npd_singleton_accessor(monkeypatch) -> None:
+    phase = SpectralRepair()
+    audio = np.random.uniform(-0.02, 0.02, 48_000).astype(np.float32)
+    calls = {"count": 0}
+
+    class _NpdResultStub:
+        success = False
+
+        def get_protected_mask(self, _n_samples, _sr):
+            return np.zeros(_n_samples, dtype=bool)
+
+    class _NpdStub:
+        def detect(self, _audio, _sr):
+            calls["count"] += 1
+            return _NpdResultStub()
+
+    monkeypatch.setattr(
+        "backend.core.phases.phase_23_spectral_repair._get_phase23_npd",
+        lambda: _NpdStub(),
+    )
+
+    result = phase.process(
+        audio,
+        48_000,
+        material=MaterialType.VINYL,
+        quality_mode="balanced",
+        restorability_score=60.0,
+        strength=0.4,
+    )
+
+    assert result.success
+    assert calls["count"] >= 1

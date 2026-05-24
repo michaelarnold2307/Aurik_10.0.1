@@ -21,7 +21,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 _lock = threading.Lock()
-_inst: DemucsV4Plugin | None = None
+_inst_holder: list[DemucsV4Plugin | None] = [None]
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _MODEL_PATH = os.path.join(_ROOT, "models", "demucs", "htdemucs_6s.onnx")
@@ -51,7 +51,7 @@ class DemucsV4Plugin:
             logger.warning("Demucs-Modell fehlt: %s — DSP-Fallback aktiv.", self._model_path)
             return
         # §EXP-GUARD: Manifest-Check — experimental=true → kein ONNX-Load, DSP-Fallback
-        import json as _json
+        import json as _json  # pylint: disable=import-outside-toplevel
 
         _manifest_path = os.path.join(os.path.dirname(__file__), "..", "models", "manifest.json")
         try:
@@ -68,14 +68,18 @@ class DemucsV4Plugin:
         except Exception as _exc:
             logger.debug("Operation failed (non-critical): %s", _exc)  # Manifest nicht lesbar → normaler Load
         try:
-            import onnxruntime as ort
+            import onnxruntime as ort  # pylint: disable=import-outside-toplevel
 
             try:
-                from backend.core.ml_memory_budget import try_allocate as _try_alloc
+                from backend.core.ml_memory_budget import (  # pylint: disable=import-outside-toplevel
+                    try_allocate as _try_alloc,
+                )
 
                 if not _try_alloc("DemucsV4", size_gb=0.12):
                     try:
-                        from backend.core.ml_memory_budget import release as _rel2
+                        from backend.core.ml_memory_budget import (  # pylint: disable=import-outside-toplevel
+                            release as _rel2,
+                        )
 
                         _rel2("DemucsV4")
                     except Exception:
@@ -89,7 +93,9 @@ class DemucsV4Plugin:
             opts = ort.SessionOptions()
             opts.inter_op_num_threads = 2
             try:
-                from backend.core.ml_device_manager import get_ort_providers as _get_prov
+                from backend.core.ml_device_manager import (  # pylint: disable=import-outside-toplevel
+                    get_ort_providers as _get_prov,
+                )
 
                 _providers = _get_prov("DemucsV4")
             except Exception:
@@ -97,7 +103,9 @@ class DemucsV4Plugin:
             self._session = ort.InferenceSession(self._model_path, sess_options=opts, providers=_providers)
             logger.info("Demucs htdemucs_6s ONNX geladen: %s", self._model_path)
             try:
-                from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
+                from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                    register_plugin as _reg_plm,
+                )
 
                 _reg_plm("DemucsV4", size_gb=0.12, unload_fn=lambda s=self: setattr(s, "_session", None))
             except Exception as _exc:
@@ -105,7 +113,9 @@ class DemucsV4Plugin:
         except Exception as exc:
             logger.warning("Demucs ONNX-Ladefehler: %s — DSP-Fallback aktiv.", exc)
             try:
-                from backend.core.ml_memory_budget import release as _rel
+                from backend.core.ml_memory_budget import (  # pylint: disable=import-outside-toplevel
+                    release as _rel,
+                )
 
                 _rel("DemucsV4")
             except Exception as _exc:
@@ -113,7 +123,7 @@ class DemucsV4Plugin:
 
     # ── Public API ───────────────────────────────────────────────────────────
 
-    def separate(self, audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:
+    def separate(self, audio: np.ndarray, sr: int, prefer_mdx23c: bool = True) -> dict[str, np.ndarray]:
         """Stem-Separation: gibt Dict stem→audio zurück (selbe SR wie Eingang).
 
         Args:
@@ -123,7 +133,9 @@ class DemucsV4Plugin:
         Returns:
             Dict mit Schlüsseln "vocals", "drums", "bass", "other", "guitar", "piano".
 
-        Priority: MDX23C (Kim_Vocal_2) → HTDemucs 6s ONNX → HPSS-DSP-Fallback.
+        Priority:
+            - prefer_mdx23c=True: MDX23C (Kim_Vocal_2) → HTDemucs 6s ONNX → HPSS-DSP
+            - prefer_mdx23c=False: HTDemucs 6s ONNX → HPSS-DSP
         """
         assert sr == 48000, f"SR muss 48000 Hz sein, erhalten: {sr}"
         audio = np.nan_to_num(audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -139,22 +151,27 @@ class DemucsV4Plugin:
         elif audio.ndim == 2 and audio.shape[1] != 2:
             audio = np.stack([audio[0], audio[0]], axis=0)  # (C, N) unexpected → duplicate ch0
 
-        # Primary: MDX23C (Kim_Vocal_2) — production-grade vocal separation (§4.4 spec)
-        try:
-            from plugins.mdx23c_plugin import separate_stems as _mdx_stems
+        # Optional Primary: MDX23C (Kim_Vocal_2) — production-grade vocal separation (§4.4 spec)
+        if prefer_mdx23c:
+            try:
+                from plugins.mdx23c_plugin import (  # pylint: disable=import-outside-toplevel
+                    separate_stems as _mdx_stems,
+                )
 
-            mdx_result = _mdx_stems(audio, sr)
-            if mdx_result and "vocals" in mdx_result:
-                logger.info("DemucsV4: MDX23C primary path used (Kim_Vocal_2).")
-                return mdx_result
-        except Exception as exc:
-            logger.warning("DemucsV4: MDX23C primary failed (%s) — HTDemucs/HPSS fallback.", exc)
+                mdx_result = _mdx_stems(audio, sr)
+                if mdx_result and "vocals" in mdx_result:
+                    logger.info("DemucsV4: MDX23C primary path used (Kim_Vocal_2).")
+                    return mdx_result
+            except Exception as exc:
+                logger.warning("DemucsV4: MDX23C primary failed (%s) — HTDemucs/HPSS fallback.", exc)
 
         # Fallback 1: HTDemucs 6s ONNX (if loaded)
         if self._session is not None:
             _plm_dmu = None
             try:
-                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm_fn
+                from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                    get_plugin_lifecycle_manager as _get_plm_fn,
+                )
 
                 _plm_dmu = _get_plm_fn()
                 _plm_dmu.set_active("DemucsV4", True)
@@ -172,9 +189,14 @@ class DemucsV4Plugin:
         # Fallback 2: HPSS-DSP
         return self._hpss_fallback(audio, sr)
 
-    def separate_vocals(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
+    def separate_vocals(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        prefer_mdx23c: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Gibt (vocals, instruments) zurück (Shortcut für 2-Stem-Betrieb)."""
-        stems = self.separate(audio, sr)
+        stems = self.separate(audio, sr, prefer_mdx23c=prefer_mdx23c)
         vocals = stems.get("vocals", audio)
         non_vocals = ["drums", "bass", "other", "guitar", "piano"]
         inst_arrays = [stems[k] for k in non_vocals if k in stems]
@@ -190,7 +212,7 @@ class DemucsV4Plugin:
     def _resample(self, audio: np.ndarray, sr_from: int, sr_to: int) -> np.ndarray:
         if sr_from == sr_to:
             return audio
-        from scipy.signal import resample_poly
+        from scipy.signal import resample_poly  # pylint: disable=import-outside-toplevel
 
         g = math.gcd(sr_from, sr_to)
         up, down = sr_to // g, sr_from // g
@@ -275,10 +297,10 @@ class DemucsV4Plugin:
         return {k: v[:n_orig] for k, v in out_stems.items()}
 
     @staticmethod
-    def _hpss_fallback(audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:
+    def _hpss_fallback(audio: np.ndarray, _sr: int) -> dict[str, np.ndarray]:
         """HPSS-basierter Stem-Fallback bei fehlendem Modell."""
         try:
-            import librosa
+            import librosa  # pylint: disable=import-outside-toplevel
 
             mono = audio[:, 0] if audio.ndim == 2 else audio
             H, P = librosa.effects.hpss(mono)
@@ -307,12 +329,11 @@ class DemucsV4Plugin:
 
 def get_demucs_plugin() -> DemucsV4Plugin:
     """Thread-sicherer Singleton (Double-Checked Locking)."""
-    global _inst
-    if _inst is None:
+    if _inst_holder[0] is None:
         with _lock:
-            if _inst is None:
-                _inst = DemucsV4Plugin()
-    return _inst
+            if _inst_holder[0] is None:
+                _inst_holder[0] = DemucsV4Plugin()
+    return _inst_holder[0]
 
 
 def separate_stems(audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:

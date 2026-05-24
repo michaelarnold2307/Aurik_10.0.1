@@ -152,15 +152,18 @@ class StemLevelRestorer:
     ) -> StemLevelRestorerResult:
         """Intern: stem-level restoration logic."""
         _audio = np.asarray(audio, dtype=np.float32)
+        _ctx = dict(ctx or {})
+        if "active_ml_plugins" not in _ctx:
+            _ctx["active_ml_plugins"] = self._resolve_active_ml_plugins(_ctx)
 
         # §0j register-adaptive energy_bias — kanonisches Mapping aus vocal_register_detector
         from backend.core.dsp.vocal_register_detector import (
             REGISTER_BIAS as _REGISTER_BIAS,
         )
 
-        _vsp_reg = str((ctx.get("vocal_style_profile") or {}).get("register", "chest")).lower()
+        _vsp_reg = str((_ctx.get("vocal_style_profile") or {}).get("register", "chest")).lower()
         _vocal_energy_bias = _REGISTER_BIAS.get(_vsp_reg, -6.0)
-        _multi_singer = bool(ctx.get("multi_singer", False))
+        _multi_singer = bool(_ctx.get("multi_singer", False))
         if _multi_singer:
             logger.debug("§SLR-1 multi_singer=True detected; HNR-blend kept per-stem")
         logger.debug(
@@ -171,7 +174,7 @@ class StemLevelRestorer:
         )
 
         # §SLR-1a: Stem separation via SOTA router (BS-RoFormer → Demucs → MDX23C → DSP).
-        _vocal_stem, _instr_stem, _separation_model = self._separate_stems(_audio, sample_rate, panns_singing, ctx)
+        _vocal_stem, _instr_stem, _separation_model = self._separate_stems(_audio, sample_rate, panns_singing, _ctx)
 
         _vocal_out = _vocal_stem.copy()
         _instr_out = _instr_stem.copy()
@@ -268,6 +271,29 @@ class StemLevelRestorer:
             vocal_nr_model=_vocal_nr_model,
             instrumental_nr_model=_instrumental_nr_model,
         )
+
+    @staticmethod
+    def _resolve_active_ml_plugins(ctx: dict | None = None) -> int:
+        """Ermittelt aktive ML-Plugin-Anzahl aus Kontext oder PluginLifecycleManager."""
+        try:
+            if isinstance(ctx, dict) and "active_ml_plugins" in ctx:
+                return int(max(0, int(ctx.get("active_ml_plugins", 0))))
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+        try:
+            from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                get_plugin_lifecycle_manager,
+            )
+
+            _plm = get_plugin_lifecycle_manager()
+            _entries = getattr(_plm, "_entries", {})
+            if isinstance(_entries, dict):
+                return int(sum(1 for _entry in _entries.values() if bool(getattr(_entry, "active", False))))
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+        return 0
 
     # -----------------------------------------------------------------------
     # Stem separation

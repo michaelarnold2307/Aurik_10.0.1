@@ -14,6 +14,7 @@ mit kurzen processEvents()-Schleifen gesteuert — kein QPropertyAnimation nöti
 """
 
 import math
+import re
 from pathlib import Path
 
 from PyQt5.QtCore import QPointF, QRectF, Qt, QTimer  # pylint: disable=no-name-in-module
@@ -36,7 +37,16 @@ _RES = Path(__file__).parent.parent / "resources"
 try:
     from Aurik910 import __version__ as _VERSION  # type: ignore[attr-defined]
 except Exception:
-    _VERSION = "9.12.10"
+    _VERSION = "unknown"
+    try:
+        _root = Path(__file__).resolve().parents[2]
+        _pyproject = _root / "pyproject.toml"
+        _content = _pyproject.read_text(encoding="utf-8")
+        _match = re.search(r'^version\s*=\s*"([^"]+)"', _content, re.MULTILINE)
+        if _match:
+            _VERSION = _match.group(1)
+    except Exception:
+        pass
 
 
 class AurikSplashScreen(QWidget):

@@ -205,6 +205,22 @@ Bei jedem Release-Bump MUSS die sichtbare Frontend-Version konsistent mit der Pa
 Release-Regel: Ein neuer Versionsstand gilt erst als fertig, wenn alle vier Pfade denselben
 Wert anzeigen bzw. aus derselben Quelle ableiten. Abweichungen sind Release-Blocker.
 
+## [RELEASE_MUST] ROCm-TorchAudio-ABI-Invariante
+
+Der GUI-Launcher `run_aurik.sh` MUSS vor dem Start im ROCm-Modus den nativen Audio-Stack
+validieren: `torch` und `torchaudio` muessen im selben Build-Track laufen
+(`2.x.y+rocmA.B` auf beiden Paketen) und ohne Symbolfehler importierbar sein.
+
+- Pflicht-Preflight: `import torch` + `import torchaudio` + Build-Tag-Gleichheit.
+- Pflicht-Reparatur: Bei Mismatch `torchaudio==torch.__version__` aus dem passenden
+    PyTorch-ROCm-Index installieren.
+- Pflicht-Fallback: Wenn Reparatur scheitert und nur `torchaudio` betroffen ist,
+    ROCm/GPU aktiv lassen und ausschließlich `torchaudio`-abhängige Phasen selektiv
+    auf CPU/DSP fallbacken; globaler CPU-Fallback nur wenn `torch` selbst im ROCm-
+    Interpreter nicht nutzbar ist.
+- VERBOTEN: Pauschales Deaktivieren der GPU-Beschleunigung wegen reinem
+    `torchaudio`-Defekt.
+
 ## Pfad-Mapping (verbindlich)
 
 | Logischer Pfad | Physischer Pfad |

@@ -972,6 +972,24 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
         _meta.get("worldclass_composite_gate") if isinstance(_meta.get("worldclass_composite_gate"), dict) else {}
     )
     _threshold_evidence = _meta.get("threshold_evidence") if isinstance(_meta.get("threshold_evidence"), dict) else {}
+    _qe_threshold = _safe_float(_exp_thresholds.get("quality_estimate", 0.0), 0.0)
+    _root_cause = str(_primary_fail_reason or "").strip()
+    _root_cause_l = _root_cause.lower()
+    _pipeline_like_failure = (
+        _root_cause_l.startswith("pipeline_blocked:")
+        or "pipeline-fehler" in _root_cause_l
+        or "pipeline_fehler" in _root_cause_l
+        or "unexpected keyword argument" in _root_cause_l
+        or "missing 1 required positional argument" in _root_cause_l
+    )
+    _failure_class = "none"
+    if _degradation_status in {"blocked", "critical_degraded", "degraded"}:
+        if _pipeline_like_failure or (_qe_threshold <= 0.0001 and bool(_root_cause)):
+            _failure_class = "technical_failure"
+        else:
+            _failure_class = "quality_failure"
+    if _root_cause_l.startswith("pipeline_blocked:"):
+        _root_cause = _root_cause.split(":", 1)[1].strip() or _root_cause
 
     _tone = "focus"
     if _degradation_status in {"blocked", "critical_degraded", "degraded"}:
@@ -1036,6 +1054,8 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
             "passed": bool(_degradation_status == "ok"),
             "degradation_status": str(_degradation_status),
             "primary_fail_reason": str(_primary_fail_reason or ""),
+            "root_cause": str(_root_cause),
+            "failure_class": str(_failure_class),
             "primary_error_code": str(_primary_error_code),
             "required_gates": ["musical_goals", "pqs", "oqs", "fallback_quality_floor"],
             "recovery_attempted": bool(_fqf_attempts > 0),
@@ -1045,7 +1065,7 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
             "material": str(_exp_material),
             "preserve_signal": float(_exp_preserve_signal),
             "thresholds": {
-                "quality_estimate": _safe_float(_exp_thresholds.get("quality_estimate", 0.0), 0.0),
+                "quality_estimate": _qe_threshold,
                 "level_drop_db": _safe_float(_exp_thresholds.get("level_drop_db", 0.0), 0.0),
             },
             "signal_signature": {
@@ -1515,10 +1535,30 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
     _degraded_caps = _mcg_summary.get("degraded_capabilities") if isinstance(_mcg_summary, dict) else []
     _wcs_gate = meta.get("worldclass_composite_gate") if isinstance(meta.get("worldclass_composite_gate"), dict) else {}
     _threshold_evidence = meta.get("threshold_evidence") if isinstance(meta.get("threshold_evidence"), dict) else {}
+    _qe_threshold = float(export_gate_thresholds.get("quality_estimate", 0.0) or 0.0)
+    _root_cause = str(primary_fail_reason or "").strip()
+    _root_cause_l = _root_cause.lower()
+    _pipeline_like_failure = (
+        _root_cause_l.startswith("pipeline_blocked:")
+        or "pipeline-fehler" in _root_cause_l
+        or "pipeline_fehler" in _root_cause_l
+        or "unexpected keyword argument" in _root_cause_l
+        or "missing 1 required positional argument" in _root_cause_l
+    )
+    _failure_class = "none"
+    if degradation_status in {"blocked", "critical_degraded", "degraded"}:
+        if _pipeline_like_failure or (_qe_threshold <= 0.0001 and bool(_root_cause)):
+            _failure_class = "technical_failure"
+        else:
+            _failure_class = "quality_failure"
+    if _root_cause_l.startswith("pipeline_blocked:"):
+        _root_cause = _root_cause.split(":", 1)[1].strip() or _root_cause
 
     return {
         "passed": bool(passed),
         "fail_reason": primary_fail_reason,
+        "root_cause": _root_cause,
+        "failure_class": _failure_class,
         "fail_reasons": list(fail_reasons),
         "required_gates": ["musical_goals", "pqs", "oqs", "fallback_quality_floor"],
         "recovery_attempted": bool(fqf_attempts > 0),
@@ -1529,7 +1569,7 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
         "material": export_gate_material,
         "preserve_signal": export_gate_preserve_signal,
         "thresholds": {
-            "quality_estimate": float(export_gate_thresholds.get("quality_estimate", 0.0) or 0.0),
+            "quality_estimate": _qe_threshold,
             "level_drop_db": float(export_gate_thresholds.get("level_drop_db", 0.0) or 0.0),
         },
         "signal_signature": {

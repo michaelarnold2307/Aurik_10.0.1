@@ -109,8 +109,14 @@ def test_demucs_stem_split_sums_all_non_vocal_stems(monkeypatch):
     from backend.core.dsp.stem_level_restorer import StemLevelRestorer
 
     class _FakeDemucs:
+        _session = object()
+
         @staticmethod
-        def separate(audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:  # pylint: disable=unused-argument
+        def separate(
+            audio: np.ndarray,
+            sr: int,
+            prefer_mdx23c: bool = True,
+        ) -> dict[str, np.ndarray]:  # pylint: disable=unused-argument
             return {
                 "vocals": np.full_like(audio, 0.10, dtype=np.float32),
                 "drums": np.full_like(audio, 0.20, dtype=np.float32),
@@ -118,17 +124,29 @@ def test_demucs_stem_split_sums_all_non_vocal_stems(monkeypatch):
                 "other": np.full_like(audio, 0.40, dtype=np.float32),
             }
 
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "plugins.demucs_v4_plugin",
-        types.SimpleNamespace(get_demucs_plugin=lambda: _FakeDemucs()),
+    monkeypatch.setattr("plugins.demucs_v4_plugin.get_demucs_plugin", lambda: _FakeDemucs())
+    monkeypatch.setattr(
+        "plugins.bs_roformer_plugin.get_bs_roformer",
+        lambda: (_ for _ in ()).throw(RuntimeError("roformer unavailable")),
+    )
+    monkeypatch.setattr(
+        "plugins.mdx23c_plugin.get_mdx23c_plugin", lambda: (_ for _ in ()).throw(RuntimeError("mdx unavailable"))
+    )
+    monkeypatch.setattr(
+        "backend.core.dsp.sota_vocal_model_router.SotaVocalModelRouter._available_memory_gb",
+        lambda _self: 32.0,
     )
 
     audio = np.zeros(48000, dtype=np.float32)
-    vocal, instr, model_used = StemLevelRestorer()._separate_stems(audio, 48000, panns_singing=0.0)  # pylint: disable=protected-access
+    vocal, instr, model_used = StemLevelRestorer()._separate_stems(  # pylint: disable=protected-access
+        audio,
+        48000,
+        panns_singing=0.8,
+        ctx={"material_type": "live", "score_routing_enabled": False},
+    )
     np.testing.assert_allclose(vocal, np.full_like(audio, 0.10), atol=1e-6)
     np.testing.assert_allclose(instr, np.full_like(audio, 0.90), atol=1e-6)
-    assert model_used == "demucs_v4"
+    assert model_used == "demucs_v4_htdemucs"
 
 
 def test_vqi_gate_rolls_back_on_low_vqi(monkeypatch):
@@ -178,6 +196,75 @@ def test_restore_reports_routed_models(monkeypatch):
     assert result.separation_model == "test_separator"
     assert result.vocal_nr_model == "miipher"
     assert result.instrumental_nr_model == "deepfilternet_v3_ii"
+
+
+def test_restore_injects_active_ml_plugins_into_router_context(monkeypatch):
+    from backend.core.dsp.stem_level_restorer import StemLevelRestorer
+
+    slr = StemLevelRestorer()
+    audio = _sine(duration=3.0)
+    captured: dict[str, dict] = {}
+
+    class _Entry:
+        def __init__(self, active: bool):
+            self.active = active
+
+    _fake_plm = types.SimpleNamespace(
+        _entries={
+            "A": _Entry(True),
+            "B": _Entry(True),
+            "C": _Entry(False),
+        }
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "backend.core.plugin_lifecycle_manager",
+        types.SimpleNamespace(get_plugin_lifecycle_manager=lambda: _fake_plm),
+    )
+
+    def _capture_separate(_a, _sr, _p=0.0, _ctx=None):
+        captured["ctx"] = dict(_ctx or {})
+        return _a * 0.5, _a * 0.5, "test_separator"
+
+    monkeypatch.setattr(slr, "_separate_stems", _capture_separate)
+    monkeypatch.setattr(slr, "_apply_miipher", lambda stem, _sr, _bias=-6.0: (stem, True, "miipher"))
+    monkeypatch.setattr(slr, "_apply_dfn", lambda stem, _sr, energy_bias_db=-9.0: (stem, True, "deepfilternet_v3_ii"))
+    monkeypatch.setattr(slr, "_hallucination_guard", lambda _pre, post, _sr, _name: post)
+    monkeypatch.setattr(
+        "backend.core.musical_goals.vocal_quality_index.compute_vqi",
+        lambda *_args, **_kwargs: {"vqi": 0.90, "singer_identity_cosine": 0.99},
+    )
+
+    result = slr.restore(audio, 48000, panns_singing=0.9, restoration_context={})
+    assert result is not None
+    assert result.success is True
+    assert captured["ctx"]["active_ml_plugins"] == 2
+
+
+def test_restore_respects_active_ml_plugins_from_context(monkeypatch):
+    from backend.core.dsp.stem_level_restorer import StemLevelRestorer
+
+    slr = StemLevelRestorer()
+    audio = _sine(duration=3.0)
+    captured: dict[str, dict] = {}
+
+    def _capture_separate(_a, _sr, _p=0.0, _ctx=None):
+        captured["ctx"] = dict(_ctx or {})
+        return _a * 0.5, _a * 0.5, "test_separator"
+
+    monkeypatch.setattr(slr, "_separate_stems", _capture_separate)
+    monkeypatch.setattr(slr, "_apply_miipher", lambda stem, _sr, _bias=-6.0: (stem, True, "miipher"))
+    monkeypatch.setattr(slr, "_apply_dfn", lambda stem, _sr, energy_bias_db=-9.0: (stem, True, "deepfilternet_v3_ii"))
+    monkeypatch.setattr(slr, "_hallucination_guard", lambda _pre, post, _sr, _name: post)
+    monkeypatch.setattr(
+        "backend.core.musical_goals.vocal_quality_index.compute_vqi",
+        lambda *_args, **_kwargs: {"vqi": 0.90, "singer_identity_cosine": 0.99},
+    )
+
+    result = slr.restore(audio, 48000, panns_singing=0.9, restoration_context={"active_ml_plugins": 7})
+    assert result is not None
+    assert result.success is True
+    assert captured["ctx"]["active_ml_plugins"] == 7
 
 
 # ---------------------------------------------------------------------------

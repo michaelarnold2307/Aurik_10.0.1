@@ -153,7 +153,35 @@ class TestIntegration:
             calls["count"] += 1
             return _LgeStub()
 
-        monkeypatch.setattr("backend.core.lyrics_guided_enhancement.get_lyrics_guided_enhancement", _get_lge)
+        monkeypatch.setattr("backend.core.phases.phase_27_click_pop_removal._get_phase27_lge", _get_lge)
+
+        result = phase.process(
+            audio, sr, material=MaterialType.VINYL, quality_mode="balanced", restorability_score=60.0
+        )
+        assert result.success is True
+        assert calls["count"] >= 1
+
+    def test_phase27_uses_npd_singleton_accessor(self, monkeypatch):
+        phase = ClickPopRemoval()
+        sr = 48000
+        t = np.linspace(0, 0.2, int(sr * 0.2), dtype=np.float32)
+        audio = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+
+        calls = {"count": 0}
+
+        class _NpdMaskStub:
+            def get_protected_mask(self, n_samples, _sr):
+                return np.zeros(n_samples, dtype=bool)
+
+        class _NpdStub:
+            def detect(self, _audio, _sr):
+                return _NpdMaskStub()
+
+        def _get_npd():
+            calls["count"] += 1
+            return _NpdStub()
+
+        monkeypatch.setattr("backend.core.phases.phase_27_click_pop_removal._get_phase27_npd", _get_npd)
 
         result = phase.process(
             audio, sr, material=MaterialType.VINYL, quality_mode="balanced", restorability_score=60.0

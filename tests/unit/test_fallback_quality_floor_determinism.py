@@ -39,6 +39,8 @@ def test_fallback_quality_floor_is_deterministic_for_same_inputs() -> None:
     assert first["passed"] is True
     assert first["status"] == "passed"
     assert first["fallback_count"] == 2
+    assert first["drift_warning"] is False
+    assert first["drift_warning_level"] == "none"
 
 
 @pytest.mark.unit
@@ -104,3 +106,62 @@ def test_fallback_quality_floor_handles_non_finite_hpi_stably() -> None:
 
     assert result["hpi"] is None
     assert result["status"] == "degraded"
+
+
+@pytest.mark.unit
+@pytest.mark.timeout(20)
+def test_fallback_quality_floor_enforces_hard_limit_for_ml_fallback_count() -> None:
+    fallbacks = [{"phase": f"phase_{i:02d}", "fallback": "dsp"} for i in range(1, 9)]
+    result = UnifiedRestorerV3._evaluate_fallback_quality_floor(
+        ml_fallbacks_used=fallbacks,
+        hpi_result=SimpleNamespace(passed=True, hpi=0.91),
+        artifact_freedom=0.99,
+        max_ml_fallbacks_allowed=6,
+    )
+
+    assert result["triggered"] is True
+    assert result["fallback_count"] == 8
+    assert result["max_ml_fallbacks_allowed"] == 6
+    assert result["hard_limit_exceeded"] is True
+    assert result["passed"] is False
+    assert result["status"] == "degraded"
+    assert result["reason"] == "ml_fallback_limit_exceeded"
+
+
+@pytest.mark.unit
+@pytest.mark.timeout(20)
+def test_fallback_quality_floor_supports_stricter_vocal_profile_limit() -> None:
+    fallbacks = [{"phase": f"phase_{i:02d}", "fallback": "dsp"} for i in range(1, 5)]
+    result = UnifiedRestorerV3._evaluate_fallback_quality_floor(
+        ml_fallbacks_used=fallbacks,
+        hpi_result=SimpleNamespace(passed=True, hpi=0.91),
+        artifact_freedom=0.99,
+        max_ml_fallbacks_allowed=3,
+    )
+
+    assert result["fallback_count"] == 4
+    assert result["max_ml_fallbacks_allowed"] == 3
+    assert result["hard_limit_exceeded"] is True
+    assert result["drift_warning"] is True
+    assert result["drift_warning_level"] == "critical"
+    assert result["status"] == "degraded"
+    assert result["reason"] == "ml_fallback_limit_exceeded"
+
+
+@pytest.mark.unit
+@pytest.mark.timeout(20)
+def test_fallback_quality_floor_emits_warning_level_before_hard_limit() -> None:
+    fallbacks = [{"phase": f"phase_{i:02d}", "fallback": "dsp"} for i in range(1, 5)]
+    result = UnifiedRestorerV3._evaluate_fallback_quality_floor(
+        ml_fallbacks_used=fallbacks,
+        hpi_result=SimpleNamespace(passed=True, hpi=0.91),
+        artifact_freedom=0.99,
+        max_ml_fallbacks_allowed=6,
+    )
+
+    assert result["triggered"] is True
+    assert result["passed"] is True
+    assert result["hard_limit_exceeded"] is False
+    assert result["drift_warning_threshold"] == 4
+    assert result["drift_warning"] is True
+    assert result["drift_warning_level"] == "warning"

@@ -218,6 +218,81 @@ Quelle: `[SRC:S03,S04,S12,S13]`
 # metadata["weighted_artifact_sum"] und metadata["max_tolerance"] werden gepflegt
 ```
 
+## §2.49a Zentrale Gate-Klassifikation (A/B/C) [RELEASE_MUST]
+
+Die finale Endentscheidung MUSS zentral in UV3 klassifiziert werden. Einzelregeln
+duerfen nicht als ungeordnete Sonderfaelle konkurrieren.
+
+```python
+# KANONISCH: _classify_quality_gate_events(...)
+# Klasse A: HARD_VETO
+#   - artifact_freedom < 0.95
+# Klasse B: RECOVERY_TRIGGER
+#   - vqi < material_vqi_floor
+#   - singer_identity_cosine < 0.92 (wenn multi_singer=False)
+# Klasse C: ADVISORY
+#   - vqi < mode_target (Restoration 0.82 / Studio 0.87)
+
+quality_gate_registry = {
+    "events": [...],
+    "hard_veto": bool(...),
+    "hard_reasons": [...],
+    "recovery_triggers": [...],
+    "advisories": [...],
+}
+
+metadata["quality_gate_registry"] = quality_gate_registry
+```
+
+VERBOTEN:
+
+- Gleichwertige Behandlung von Hard-Veto und Recovery-Trigger ohne Klassenordnung.
+- Verstreute End-Gate-Entscheidungen ohne zentrale Registry.
+
+## §2.49b Recovery-Zustandsautomat [RELEASE_MUST]
+
+Nach der Gate-Klassifikation MUSS ein deterministischer Zustandsautomat den
+Exportpfad beschreiben.
+
+```python
+# KANONISCH: _resolve_recovery_state_machine(...)
+# Reihenfolge:
+# RUN -> SOFT_REWEIGHT -> ROLLBACK -> FALLBACK -> DEGRADED_EXPORT
+
+recovery_state_machine = {
+    "state": "RUN|SOFT_REWEIGHT|ROLLBACK|FALLBACK|DEGRADED_EXPORT",
+    "trace": [...],
+    "conflict_free": bool,
+    "semantic_conflicts": [...],
+}
+
+metadata["recovery_state_machine"] = recovery_state_machine
+```
+
+Hinweise:
+
+- `DEGRADED_EXPORT` ist Pflicht, sobald `degradation_status in {"degraded", "failed"}`
+  oder ein `fail_reason.severity in {"degraded", "failed"}` vorliegt.
+- Der Zustandsautomat ersetzt keine Guards; er standardisiert die Endentscheidung.
+
+## §2.49c Semantik-Konfliktregel Hard vs Recovery [RELEASE_MUST]
+
+Ein Trigger darf nicht gleichzeitig als Hard-Veto und Recovery-Trigger klassifiziert
+werden.
+
+```python
+overlap = set(hard_reasons) & set(recovery_triggers)
+if overlap:
+    metadata["recovery_state_machine"]["conflict_free"] = False
+    metadata["recovery_state_machine"]["semantic_conflicts"] = sorted(overlap)
+    logger.warning("Recovery-State-Machine Konflikt: %s", ", ".join(sorted(overlap)))
+```
+
+VERBOTEN:
+
+- Doppelte Trigger-Semantik (gleiches `event.id` in Hard und Recovery).
+- Silent-Fail ohne Telemetrieeintrag zu Konflikten.
+
 ## §2.48b Umgewichtung vor Rollback [RELEASE_MUST]
 
 Wenn eine Phase in PMGG/CIG/PDV an der Grenze scheitert, MUSS vor einem harten Rollback

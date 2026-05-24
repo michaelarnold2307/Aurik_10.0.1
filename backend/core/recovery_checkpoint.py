@@ -48,13 +48,25 @@ def _get_aurik_version() -> str:
 
     Priority:
     1. importlib.metadata (works when installed as editable package via pip install -e .)
-    2. regex parse of pyproject.toml  (always present in repository root)
-    3. "unknown" as last-resort fallback
+    2. Aurik910.__version__ (works for desktop runtime without package install)
+    3. regex parse of pyproject.toml  (always present in repository root)
+    4. "unknown" as last-resort fallback
     """
     try:
-        from importlib.metadata import version as _pkg_version  # Python 3.8+
+        from importlib.metadata import PackageNotFoundError  # Python 3.8+
+        from importlib.metadata import version as _pkg_version
 
         return _pkg_version("aurik9")
+    except PackageNotFoundError:
+        # Typischer Desktop-Fall: Aurik läuft aus dem Repo ohne pip-Installation.
+        pass
+    except Exception as _exc:
+        logger.debug("Operation failed (non-critical): %s", _exc)
+    try:
+        from Aurik910 import __version__ as _app_version
+
+        if isinstance(_app_version, str) and _app_version.strip():
+            return _app_version.strip()
     except Exception as _exc:
         logger.debug("Operation failed (non-critical): %s", _exc)
     try:

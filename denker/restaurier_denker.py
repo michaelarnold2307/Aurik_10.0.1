@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import threading
 from dataclasses import dataclass, field
 from typing import Any
@@ -567,6 +568,22 @@ class RestaurierDenker:
             _is_studio = mode == "studio2026"
             qmode = QualityMode.MAXIMUM if _is_studio else QualityMode.QUALITY
 
+            # Performance-Upgrade: harte 4-Core-Begrenzung entfernt.
+            # Default: nutze bis zu 8 Kerne (Desktop sweet-spot laut Scheduler-Log).
+            _system_cores = int(os.cpu_count() or 4)
+            _auto_cores = int(max(2, min(8, _system_cores)))
+            _env_cores = os.getenv("AURIK_NUM_CORES", "").strip()
+            if _env_cores:
+                try:
+                    _requested = int(_env_cores)
+                    _auto_cores = int(max(1, min(16, _requested)))
+                except ValueError:
+                    logger.warning(
+                        "AURIK_NUM_CORES='%s' ungültig — verwende Auto-Wert=%d",
+                        _env_cores,
+                        _auto_cores,
+                    )
+
             cfg = RestorationConfig(
                 mode=qmode,
                 studio_2026=_is_studio,  # §11.7a — activates Stem-Sep, Matchering, Vocos
@@ -574,11 +591,16 @@ class RestaurierDenker:
                 enable_performance_guard=True,
                 enable_adaptive_skipping=False,  # Adaptive skipping opt-in only
                 enable_phase_gate=True,
-                num_cores=4,
+                num_cores=_auto_cores,
                 enable_psychoacoustic_enhancement=True,
             )
 
-            logger.info("\U0001f3b5 RestaurierDenker: UnifiedRestorerV3 init (mode=%s)", mode)
+            logger.info(
+                "\U0001f3b5 RestaurierDenker: UnifiedRestorerV3 init (mode=%s, num_cores=%d, system_cores=%d)",
+                mode,
+                _auto_cores,
+                _system_cores,
+            )
             return UnifiedRestorerV3(config=cfg)
 
         except Exception as exc:

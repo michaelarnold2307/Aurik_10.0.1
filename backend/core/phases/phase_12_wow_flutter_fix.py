@@ -535,7 +535,7 @@ class WowFlutterFix(PhaseInterface):
         # Stattdessen robust auf pYIN neu schätzen, damit transportbedingte
         # Instabilitäten (Bandhopser/Wow) nicht unentdeckt bleiben.
         if _poly_applied and self._polyphonic_estimate_is_insufficient(pitch_trajectory, confidence):
-            logger.warning(
+            logger.info(
                 "Phase 12: Polyphoner Konsensus unzureichend (T=%d, valid_pitch=%d, valid_conf=%d) — "
                 "Re-Estimate via pYIN",
                 int(pitch_trajectory.size),
@@ -571,16 +571,17 @@ class WowFlutterFix(PhaseInterface):
             _MIN_CONFIDENCE_FOR_CORRECTION = 0.25  # tape-start-aware lower threshold
         if _mean_conf < _MIN_CONFIDENCE_FOR_CORRECTION:
             logger.info(
-                "Phase 12: Pitch-Konfidenz zu niedrig (%.3f < %.2f) — keine Korrektur angewandt "
-                "(vermeidet Artefakte bei unsicherer Detection)",
+                "Phase 12: konservativer Fallback aktiv (Konfidenz %.3f < %.2f) — "
+                "Transportstabilisierung statt Vollkorrektur",
                 _mean_conf,
                 _MIN_CONFIDENCE_FOR_CORRECTION,
             )
-            # Tape level stabilization even when pitch confidence is too low
+            # Transport-Level-Stabilisierung auch im Low-Confidence-Pfad,
+            # damit kein Komplett-Skip bei Kassetten-/Bandmaterial entsteht.
             n_level_dips_repaired = 0
             # CASSETTE + multi-chain (e.g. vinyl→tape→mp3): trigger also when
             # TAPE_HEAD_LEVEL_DIP was detected via defect_locations (§2.46a transfer chain)
-            _TAPE_LEVEL_MATERIALS = {MaterialType.TAPE, MaterialType.REEL_TAPE}
+            _TAPE_LEVEL_MATERIALS = {MaterialType.TAPE, MaterialType.REEL_TAPE, MaterialType.CASSETTE}
             _mat_enum = material if isinstance(material, MaterialType) else None
             _has_tape_dip_defect = bool((kwargs.get("defect_locations") or {}).get("tape_head_level_dip"))
             _is_primary_tape = _mat_enum in _TAPE_LEVEL_MATERIALS
@@ -610,13 +611,13 @@ class WowFlutterFix(PhaseInterface):
                     "material": material.value,
                     "mean_confidence": _mean_conf,
                     "quality_mode": quality_mode,
-                    "skipped_reason": "low_confidence",
+                    "skipped_reason": "low_confidence_fallback",
                     "tape_level_dips_repaired": n_level_dips_repaired,
                 },
                 execution_time_seconds=time.time() - start_time,
                 metadata={
-                    "algorithm": "confidence_guard_skip",
-                    "version": "4.1_confidence_guard",
+                    "algorithm": "confidence_guard_conservative_fallback",
+                    "version": "4.2_confidence_guard_fallback",
                     "ml_hybrid": use_ml_hybrid,
                     "polyphonic": _poly_applied,
                     "phase_locality_factor": phase_locality_factor,

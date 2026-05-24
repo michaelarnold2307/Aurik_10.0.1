@@ -205,6 +205,15 @@ class ReportExporter:
     """
 
     @staticmethod
+    def _json_default(obj: Any):
+        """JSON-Serializer fuer NumPy-Typen im Reporting-Export."""
+        if isinstance(obj, np.generic):
+            return obj.item()
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return str(obj)
+
+    @staticmethod
     def export_markdown(report: ProcessingReport, output_path: Path) -> bool:
         """
         Export report als Markdown.
@@ -457,7 +466,10 @@ class ReportExporter:
         payload = report.to_dict()
         with tempfile.TemporaryDirectory(prefix="aurik_pdf_") as tmpdir:
             payload_path = Path(tmpdir) / "report_payload.json"
-            payload_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            payload_path.write_text(
+                json.dumps(payload, ensure_ascii=False, default=ReportExporter._json_default),
+                encoding="utf-8",
+            )
             script = (
                 "import json, os, sys; "
                 "from pathlib import Path; "
@@ -485,6 +497,133 @@ class ReportExporter:
                 )
                 return False
             return True
+
+    @staticmethod
+    def _export_pdf_plain_fallback(report: ProcessingReport, output_path: Path) -> bool:
+        """Fallback ohne externe PDF-Backends.
+
+        Schreibt ein valides, einfaches Multi-Page-PDF (Text-only), falls
+        matplotlibs backend_pdf in der aktuellen Umgebung defekt ist.
+        """
+
+        def _sanitize_pdf_text(text: str) -> str:
+            s = str(text)
+            s = s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            # Helvetica/WinAnsi-safe; unbekannte Zeichen werden ersetzt.
+            return s.encode("latin-1", "replace").decode("latin-1")
+
+        def _build_stream(lines: list[str]) -> bytes:
+            y = 800
+            parts = ["BT", "/F1 10 Tf", "50 820 Td", "14 TL"]
+            for line in lines:
+                if y < 40:
+                    break
+                parts.append(f"({_sanitize_pdf_text(line)}) Tj")
+                parts.append("T*")
+                y -= 14
+            parts.append("ET")
+            return "\n".join(parts).encode("latin-1", "replace")
+
+        try:
+            meta_lines = [
+                "AURIK - Audio-Restaurierungsbericht",
+                f"Report-ID: {report.report_id}",
+                f"Zeit: {report.timestamp}",
+                f"Version: {report.aurik_version}",
+                f"Input: {report.input_file}",
+                f"Output: {report.output_file}",
+                f"Konfidenz: {report.overall_confidence:.3f}",
+                f"Processing-Zeit (s): {report.processing_time_sec:.3f}",
+                "",
+                "Zusammenfassung:",
+                str(report.overall_summary or "-")[:400],
+                "",
+                "Sections:",
+            ]
+            for sec in report.sections:
+                meta_lines.append(f"- {sec.section_type.value}: {sec.title}")
+
+            json_lines = json.dumps(
+                report.to_dict(),
+                ensure_ascii=False,
+                indent=2,
+                default=ReportExporter._json_default,
+            ).splitlines()
+            all_lines = meta_lines + [""] + ["Raw-Report:"] + json_lines
+
+            lines_per_page = 54
+            pages: list[list[str]] = []
+            for i in range(0, len(all_lines), lines_per_page):
+                pages.append(all_lines[i : i + lines_per_page])
+            if not pages:
+                pages = [["AURIK Report (leer)"]]
+
+            # Bei umfangreichen Reports mindestens 2 Seiten fuer stabile Lesbarkeit.
+            if len(report.sections) >= 3 and len(pages) < 2:
+                pages.append(["Weitere Details siehe JSON-Abschnitt."])
+
+            n_pages = len(pages)
+            font_obj = 3
+            first_page_obj = 4
+            first_content_obj = first_page_obj + n_pages
+            total_objects = 3 + (2 * n_pages)
+
+            objects: list[bytes] = [b""] * total_objects
+
+            # 1: Catalog
+            objects[0] = b"<< /Type /Catalog /Pages 2 0 R >>"
+
+            # 2: Pages
+            kids = " ".join(f"{first_page_obj + i} 0 R" for i in range(n_pages))
+            objects[1] = f"<< /Type /Pages /Count {n_pages} /Kids [{kids}] >>".encode("ascii")
+
+            # 3: Font
+            objects[2] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+
+            # Pages + content streams
+            for i, page_lines in enumerate(pages):
+                page_no = first_page_obj + i
+                content_no = first_content_obj + i
+                stream = _build_stream(page_lines)
+                objects[page_no - 1] = (
+                    f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+                    f"/Resources << /Font << /F1 {font_obj} 0 R >> >> "
+                    f"/Contents {content_no} 0 R >>"
+                ).encode("ascii")
+                objects[content_no - 1] = (
+                    f"<< /Length {len(stream)} >>\nstream\n".encode("ascii") + stream + b"\nendstream"
+                )
+
+            pdf = bytearray()
+            pdf.extend(b"%PDF-1.4\n")
+            pdf.extend(b"%\xe2\xe3\xcf\xd3\n")
+
+            offsets = [0]
+            for idx, obj in enumerate(objects, start=1):
+                offsets.append(len(pdf))
+                pdf.extend(f"{idx} 0 obj\n".encode("ascii"))
+                pdf.extend(obj)
+                pdf.extend(b"\nendobj\n")
+
+            xref_start = len(pdf)
+            pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+            pdf.extend(b"0000000000 65535 f \n")
+            for off in offsets[1:]:
+                pdf.extend(f"{off:010d} 00000 n \n".encode("ascii"))
+
+            pdf.extend(
+                (f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF\n").encode(
+                    "ascii"
+                )
+            )
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(bytes(pdf))
+            logger.info("PDF report exported via plain fallback: %s", output_path)
+            return True
+        except Exception as e:
+            logger.error("Plain PDF fallback failed: %s", e)
+            return False
 
     @staticmethod
     def export_pdf(report: ProcessingReport, output_path: Path) -> bool:
@@ -784,6 +923,8 @@ class ReportExporter:
 
         except Exception as e:
             logger.error("PDF export failed: %s", e)
+            if ReportExporter._export_pdf_plain_fallback(report, output_path):
+                return True
             return False
 
 

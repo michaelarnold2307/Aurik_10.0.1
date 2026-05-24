@@ -39,12 +39,12 @@ import numpy as np
 
 try:
     import torch
-except ImportError:
+except Exception:
     torch = None  # type: ignore[assignment]
 
 try:
     import torchaudio
-except ImportError:
+except Exception:
     torchaudio = None  # type: ignore[assignment]
 
 try:

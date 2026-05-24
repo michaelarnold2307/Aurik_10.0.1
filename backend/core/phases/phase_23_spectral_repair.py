@@ -69,11 +69,31 @@ from backend.core.plugin_lifecycle_manager import (
     get_plugin_lifecycle_manager,
 )
 from backend.core.quality_mode import QualityModeConfig, is_phase_ml_enabled, log_mode_decision
-from plugins.apollo_plugin import get_apollo as _get_apollo
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
 logger = logging.getLogger(__name__)
+
+
+def _get_phase23_npd():
+    """Stabiler Resolver fuer den NPA-Singleton in Phase 23."""
+    return get_natural_performance_detector()
+
+
+def _try_get_apollo_instance() -> Any | None:
+    """Lädt Apollo nur bei Bedarf (Codec-Pfad), nie beim Modul-Import.
+
+    Verhindert hohe RAM-Spitzen in Unit-Tests/Nicht-Codec-Läufen, die Apollo
+    ohnehin nicht nutzen.
+    """
+    try:
+        from plugins.apollo_plugin import get_apollo  # pylint: disable=import-outside-toplevel
+
+        return get_apollo()
+    except Exception as _apollo_import_exc:  # pragma: no cover - environment/ABI dependent
+        logger.debug("phase_23: Apollo lazy import fehlgeschlagen, DSP-Fallback aktiv: %s", _apollo_import_exc)
+        return None
+
 
 # §2.46b Spectral-Tilt-Preservation: material-adaptive tolerance in dB/octave
 _TILT_TOLERANCE_P23: dict[str, float] = {
@@ -676,9 +696,10 @@ class SpectralRepair(PhaseInterface):
                     except Exception:
                         _plm23 = None
 
-                    _apollo_inst = _get_apollo()
+                    _apollo_inst = _try_get_apollo_instance()
                     if (
-                        bool(getattr(_apollo_inst, "_model_loaded", False))
+                        _apollo_inst is not None
+                        and bool(getattr(_apollo_inst, "_model_loaded", False))
                         and getattr(_apollo_inst, "_torch_model", None) is not None
                     ):
                         if is_stereo:
@@ -995,7 +1016,7 @@ class SpectralRepair(PhaseInterface):
 
         # §2.46f NaturalPerformanceArtifacts-Guard — Restore atemgeräusche, vibrato, early-reflections
         try:
-            _npa23 = get_natural_performance_detector()
+            _npa23 = _get_phase23_npd()
             _npa_result23 = _npa23.detect(
                 audio if audio.ndim == 1 else audio.mean(axis=0),
                 sample_rate,

@@ -128,3 +128,24 @@ def test_phase31_ola_empty_stft_returns_original_audio():
     assert out.shape == audio.shape
     assert np.all(np.isfinite(out))
     assert float(np.mean(np.abs(out - audio))) < 1e-10
+
+
+def test_phase31_damage_shield_corrects_clear_stereo_onset_delay():
+    phase = SpeedPitchCorrectionPhase()
+    left = _sine(dur=0.5).astype(np.float32)
+    shift = 96
+    right = np.zeros_like(left)
+    right[shift:] = left[:-shift]
+    stereo = np.column_stack([left, right]).astype(np.float32)
+
+    guarded, meta = phase._apply_preventive_damage_shield(
+        original_audio=stereo,
+        processed_audio=stereo,
+        sample_rate=SR,
+        material_type="tape",
+    )
+
+    assert guarded.shape == stereo.shape
+    assert np.all(np.isfinite(guarded))
+    assert meta["phase31_stereo_delay_corrected"] is True
+    assert float(np.mean(np.abs(guarded[:, 0] - guarded[:, 1]))) < float(np.mean(np.abs(stereo[:, 0] - stereo[:, 1])))

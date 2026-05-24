@@ -180,6 +180,18 @@ FORCED_TRACEABILITY: dict[str, list[str]] = {
     "### [RELEASE_MUST] §2.29c PMGG Restorative-Baseline-Capping (v9.10.96)": [
         "tests/unit/test_per_phase_musical_goals_gate.py",
     ],
+    "### §0l [RELEASE_MUST] Per-Phase-Strength-Orakel und 15-Ziele-Teamarbeit (v9.12.9)": [
+        "tests/unit/test_phase_strength_oracle.py",
+        "tests/unit/test_unified_restorer_v3.py",
+    ],
+    "## [RELEASE_MUST] Frontend-Version-Anzeige-Invariante": [
+        "tests/unit/test_version_checker_and_ux.py",
+        "tests/normative/test_modern_window_gui_contract.py",
+    ],
+    "## [RELEASE_MUST] ROCm-TorchAudio-ABI-Invariante": [
+        "tests/unit/test_ml_device_manager_amd.py",
+        "tests/unit/test_ml_device_manager.py",
+    ],
 }
 
 

@@ -53,6 +53,7 @@ from scipy import signal
 
 from backend.core.audio_utils import safe_to_mono
 from backend.core.defect_scanner import MaterialType
+from backend.core.dsp.stem_routing_policy import prefer_demucs_native_from_material
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
@@ -655,6 +656,7 @@ class VocalEnhancement(PhaseInterface):
             stem_result = self._try_stem_separation(
                 audio,
                 sample_rate,
+                material=material,
                 quality_mode=_quality_mode_hint,
                 quality_first_unleashed=_quality_first_unleashed,
             )
@@ -665,7 +667,16 @@ class VocalEnhancement(PhaseInterface):
                 "Phase42 Stem-Sep fallback auf Legacy-Signatur ohne quality kwargs: %s",
                 _stem_sep_sig_exc,
             )
-            stem_result = self._try_stem_separation(audio, sample_rate)
+            try:
+                stem_result = self._try_stem_separation(audio, sample_rate, material=material)
+            except TypeError as _stem_sep_material_exc:
+                if "unexpected keyword argument" not in str(_stem_sep_material_exc):
+                    raise
+                logger.debug(
+                    "Phase42 Stem-Sep fallback auf Legacy-Signatur ohne material kwargs: %s",
+                    _stem_sep_material_exc,
+                )
+                stem_result = self._try_stem_separation(audio, sample_rate)
         stem_model_used = "none"
 
         if stem_result is not None:
@@ -1162,10 +1173,11 @@ class VocalEnhancement(PhaseInterface):
         self,
         audio: np.ndarray,
         sr: int,
+        material: MaterialType = MaterialType.CD_DIGITAL,
         quality_mode: str = "quality",
         quality_first_unleashed: bool = False,
     ) -> "tuple[np.ndarray, np.ndarray, float, str] | None":
-        """Vocal/Instrument stem separation cascade: bs_roformer → demucs_v4 → None.
+        """Vocal/Instrument stem separation cascade: bs_roformer → demucs_v4 → mdx23c → dsp.
 
         Returns (vocals, instruments, vocal_weight, model_name) or None on total failure.
         Both stems match the input shape (mono [n] or stereo [n, 2]).
@@ -1176,6 +1188,7 @@ class VocalEnhancement(PhaseInterface):
         """
         # Convert for mono-based models; keep original shape for result
         audio_mono = safe_to_mono(audio).astype(np.float32)
+        _prefer_demucs_native = self._prefer_demucs_native(material)
 
         _skip_roformer_reason: str | None = None
         try:
@@ -1257,56 +1270,94 @@ class VocalEnhancement(PhaseInterface):
                     except Exception:
                         pass
 
-        # ── 2: MDX23C fallback (Kim_Vocal_2) ─────────────────────────────────
-        _plm42_mdx = None
-        try:
-            from plugins.mdx23c_plugin import get_mdx23c_plugin  # pylint: disable=import-outside-toplevel
-
-            try:
-                # pylint: disable-next=import-outside-toplevel
-                from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm42m
-
-                _plm42_mdx = _get_plm42m()
-                # MDX23C registers as "MDX23C_vocals" and "MDX23C_inst" in PLM (§4.6c sync)
-                _plm42_mdx.set_active("MDX23C_vocals", True)
-                _plm42_mdx.set_active("MDX23C_inst", True)
-            except Exception:
-                _plm42_mdx = None
-
-            mdx = get_mdx23c_plugin()
-            if _plm42_mdx is not None:
-                try:
-                    _plm42_mdx.touch_plugin("MDX23C_vocals")  # type: ignore[attr-defined]
-                    _plm42_mdx.touch_plugin("MDX23C_inst")  # type: ignore[attr-defined]
-                except Exception:
-                    pass
-            voc_mono = mdx.process(audio_mono, sr, stem="vocals")
-            if _plm42_mdx is not None:
-                try:
-                    _plm42_mdx.touch_plugin("MDX23C_vocals")  # type: ignore[attr-defined]
-                    _plm42_mdx.touch_plugin("MDX23C_inst")  # type: ignore[attr-defined]
-                except Exception:
-                    pass
-            inst_mono = mdx.process(audio_mono, sr, stem="inst")
-            n = min(len(audio_mono), len(voc_mono), len(inst_mono))
-            if audio.ndim == 2:
-                # §9.10.118: Wiener stereo masking preserves L/R phase
-                vocals_out, instr_out = self._wiener_stereo_from_mono(audio[:n], voc_mono[:n], sr)
+        # ── 2: HTDemucs 6s fallback (nur live/crowd + native Session) ───────
+        if _prefer_demucs_native:
+            if _avail_gb is not None and _avail_gb < 5.0:
+                logger.info(
+                    "Phase42 Stem-Sep: demucs_v4 übersprungen (low_ram_%.1fGB) — Fallback auf MDX23C/NMF/HPSS",
+                    _avail_gb,
+                )
             else:
-                vocals_out = voc_mono[:n]
-                instr_out = inst_mono[:n]
-            return vocals_out, instr_out, 0.65, "mdx23c_kim_vocal_2"
-        except Exception as exc:
-            logger.debug("Phase42 mdx23c fehlgeschlagen: %s", exc)
-        finally:
-            if _plm42_mdx is not None:
                 try:
-                    _plm42_mdx.set_active("MDX23C_vocals", False)
-                    _plm42_mdx.set_active("MDX23C_inst", False)
-                except Exception:
-                    pass
+                    from plugins.demucs_v4_plugin import get_demucs_plugin  # pylint: disable=import-outside-toplevel
 
-        # ── 3: NMF-β Fallback (§2.47 ML-Failure-Degradationskascade: NMF-β→HPSS) ──
+                    demucs = get_demucs_plugin()
+                    if getattr(demucs, "_session", None) is None:
+                        logger.debug("Phase42 demucs_v4 übersprungen: keine native HTDemucs-Session")
+                    else:
+                        try:
+                            voc_mono, inst_mono = demucs.separate_vocals(audio_mono, sr, prefer_mdx23c=False)
+                        except TypeError:
+                            # Backward compatibility for older plugin stubs in tests.
+                            voc_mono, inst_mono = demucs.separate_vocals(audio_mono, sr)
+                        n = min(len(audio_mono), len(voc_mono), len(inst_mono))
+                        if audio.ndim == 2:
+                            vocals_out, instr_out = self._wiener_stereo_from_mono(
+                                audio[:n], np.asarray(voc_mono[:n]), sr
+                            )
+                        else:
+                            vocals_out = np.asarray(voc_mono[:n], dtype=np.float32)
+                            instr_out = np.asarray(inst_mono[:n], dtype=np.float32)
+                        return vocals_out, instr_out, 0.60, "demucs_v4_htdemucs"
+                except Exception as exc:
+                    logger.debug("Phase42 demucs_v4 fehlgeschlagen: %s", exc)
+
+        # ── 3: MDX23C fallback (Kim_Vocal_2) ─────────────────────────────────
+        _plm42_mdx = None
+        if _avail_gb is not None and _avail_gb < 4.0:
+            logger.info(
+                "Phase42 Stem-Sep: mdx23c übersprungen (low_ram_%.1fGB) — Fallback auf NMF/HPSS",
+                _avail_gb,
+            )
+        else:
+            try:
+                from plugins.mdx23c_plugin import get_mdx23c_plugin  # pylint: disable=import-outside-toplevel
+
+                try:
+                    # pylint: disable-next=import-outside-toplevel
+                    from backend.core.plugin_lifecycle_manager import get_plugin_lifecycle_manager as _get_plm42m
+
+                    _plm42_mdx = _get_plm42m()
+                    # MDX23C registers as "MDX23C_vocals" and "MDX23C_inst" in PLM (§4.6c sync)
+                    _plm42_mdx.set_active("MDX23C_vocals", True)
+                    _plm42_mdx.set_active("MDX23C_inst", True)
+                except Exception:
+                    _plm42_mdx = None
+
+                mdx = get_mdx23c_plugin()
+                if _plm42_mdx is not None:
+                    try:
+                        _plm42_mdx.touch_plugin("MDX23C_vocals")  # type: ignore[attr-defined]
+                        _plm42_mdx.touch_plugin("MDX23C_inst")  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                voc_mono = mdx.process(audio_mono, sr, stem="vocals")
+                if _plm42_mdx is not None:
+                    try:
+                        _plm42_mdx.touch_plugin("MDX23C_vocals")  # type: ignore[attr-defined]
+                        _plm42_mdx.touch_plugin("MDX23C_inst")  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                inst_mono = mdx.process(audio_mono, sr, stem="inst")
+                n = min(len(audio_mono), len(voc_mono), len(inst_mono))
+                if audio.ndim == 2:
+                    # §9.10.118: Wiener stereo masking preserves L/R phase
+                    vocals_out, instr_out = self._wiener_stereo_from_mono(audio[:n], voc_mono[:n], sr)
+                else:
+                    vocals_out = voc_mono[:n]
+                    instr_out = inst_mono[:n]
+                return vocals_out, instr_out, 0.65, "mdx23c_kim_vocal_2"
+            except Exception as exc:
+                logger.debug("Phase42 mdx23c fehlgeschlagen: %s", exc)
+            finally:
+                if _plm42_mdx is not None:
+                    try:
+                        _plm42_mdx.set_active("MDX23C_vocals", False)
+                        _plm42_mdx.set_active("MDX23C_inst", False)
+                    except Exception:
+                        pass
+
+        # ── 4: NMF-β Fallback (§2.47 ML-Failure-Degradationskascade: NMF-β→HPSS) ──
         try:
             from plugins.mdx23c_plugin import MDX23CModel as _MDX23CModel  # pylint: disable=import-outside-toplevel
 
@@ -1798,6 +1849,11 @@ class VocalEnhancement(PhaseInterface):
         )
 
         return result  # type: ignore[no-any-return]
+
+    @staticmethod
+    def _prefer_demucs_native(material: object) -> bool:
+        """Aktiviert nativen HTDemucs nur fuer live/crowd-nahe Quellen."""
+        return prefer_demucs_native_from_material(material)
 
     def _apply_deessing(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
         """Wendet De-Essing auf das Sibilanz-Band an."""

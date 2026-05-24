@@ -58,6 +58,39 @@ Alle Release-fähigen Oberflächen müssen denselben Aurik-Vertrag ausführen. E
 
 **Legacy-Regel:** Server-/REST-/Experimentpfade gehören nicht zum Desktop-Releasepfad. Wenn sie im Repository verbleiben, müssen sie als `LEGACY_NON_RELEASE` markiert sein. Ohne diese Markierung müssen sie denselben Bridge-Vertrag erfüllen.
 
+### §11.1c [RELEASE_MUST] Frontend-Version-Update-Invariante
+
+Bei jedem Release-Bump muss die sichtbare Frontend-Version automatisch aus der kanonischen
+Paketversion kommen und darf nicht in UI-Texten hartkodiert werden.
+
+Pflichtregeln:
+
+1. Kanonische Quelle: `Aurik910/__init__.py::__version__`.
+2. Fenstertitel: `Aurik910/ui/modern_window.py` nutzt `_AURIK_VERSION` aus `__version__`.
+3. Splashscreen-Badge: `Aurik910/ui/splash_screen.py` nutzt `_VERSION` aus `__version__`.
+4. App-Metadaten: `Aurik910/main.py` setzt `app.setApplicationVersion(__version__)`.
+5. `ui.app_title` in i18n darf eine Versionsanzeige nur als dynamischen Platzhalter enthalten
+    (z. B. `{version}`), niemals als hartkodierte Release-Nummer.
+
+Abweichungen sind Release-Blocker.
+
+### §11.1d [RELEASE_MUST] ROCm TorchAudio-ABI-Invariante
+
+Der GPU-Launcher darf niemals mit einem inkonsistenten `torch`/`torchaudio`-Stack starten.
+Ein ABI-Fehler (`undefined symbol`, Build-Tag-Mismatch) muss vor dem UI-Start erkannt und
+automatisch repariert oder klar auf CPU-Fallback umgeschaltet werden.
+
+Pflichtregeln:
+
+1. Bei Auswahl des ROCm-venv muss ein Preflight laufen: `import torch`, `import torchaudio`, Build-Tag-Abgleich (`+rocmX.Y` gleich auf beiden Paketen).
+2. Fehlerfall: Auto-Reparatur ist Pflicht, indem `torchaudio==<torch.__version__>` aus dem passenden PyTorch-ROCm-Index installiert wird.
+3. Wenn Reparatur fehlschlägt und der Fehler auf `torchaudio` begrenzt ist (Import/ABI), bleibt der ROCm-GPU-Pfad aktiv; ausschließlich `torchaudio`-abhängige Phasen/Plugins müssen selektiv auf CPU/DSP fallbacken.
+4. Nur wenn `torch` selbst im ROCm-venv nicht nutzbar ist, ist ein globaler CPU-Fallback zulässig.
+5. `.pth`-Bridge darf keine CPU-`torchaudio`-Wheels in den ROCm-Interpreter einschleusen; lokales ROCm-venv-Paket hat Vorrang.
+6. Jeder Fallback-Grund muss sichtbar im Launcher-Log stehen (kein stilles Degradieren).
+
+Abweichungen sind Release-Blocker.
+
 ### §11.1a [RELEASE_MUST] Bridge-Experience-Insights-Kontrakt (v9.11.1)
 
 `backend/api/bridge.py` MUSS eine stabile Extraktionsfunktion bereitstellen:

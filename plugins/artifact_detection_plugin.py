@@ -14,7 +14,7 @@ try:
     import torchaudio
 
     _TORCH_AVAILABLE = True
-except ImportError:
+except Exception:
     _TORCH_AVAILABLE = False
     logger.debug("torch/torchaudio nicht verfügbar, DSP-Fallback aktiv")
 

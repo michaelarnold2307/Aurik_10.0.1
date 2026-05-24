@@ -10,6 +10,157 @@ def _audio(sr: int = 48000, duration: float = 1.0) -> np.ndarray:
     return (0.2 * np.sin(2 * np.pi * 440.0 * t)).astype(np.float32)
 
 
+def test_stem_routing_policy_detects_live_like_ctx_and_chain():
+    from backend.core.dsp.stem_routing_policy import prefer_demucs_native_from_ctx
+
+    assert prefer_demucs_native_from_ctx({"material_type": "live"}) is True
+    assert prefer_demucs_native_from_ctx({"transfer_chain": ["vinyl", "stage_capture"]}) is True
+    assert prefer_demucs_native_from_ctx({"material_type": "vinyl", "transfer_chain": ["tape", "mp3"]}) is False
+
+
+def test_stem_routing_policy_detects_live_like_material_values():
+    from backend.core.dsp.stem_routing_policy import prefer_demucs_native_from_material
+
+    assert prefer_demucs_native_from_material("crowd") is True
+    assert prefer_demucs_native_from_material("cd_digital") is False
+
+
+def test_router_preflight_skips_roformer_on_low_ram(monkeypatch):
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+
+    class _VM:
+        available = int(4.2 * 1024**3)
+
+    class _FakeMdx:
+        @staticmethod
+        def separate_all_stems(audio: np.ndarray, sr: int, stems: list[str]):  # pylint: disable=unused-argument
+            return {
+                "vocals": np.full(48000, 0.08, dtype=np.float32),
+                "inst": np.full(48000, 0.12, dtype=np.float32),
+            }
+
+    monkeypatch.setitem(__import__("sys").modules, "psutil", types.SimpleNamespace(virtual_memory=lambda: _VM()))
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "plugins.bs_roformer_plugin",
+        types.SimpleNamespace(
+            get_bs_roformer=lambda: (_ for _ in ()).throw(AssertionError("roformer must be skipped"))
+        ),
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "plugins.mdx23c_plugin",
+        types.SimpleNamespace(get_mdx23c_plugin=lambda: _FakeMdx()),
+    )
+
+    result = SotaVocalModelRouter().separate_vocal_instrumental(_audio(), 48000, panns_singing=0.8)
+    assert result.success is True
+    assert result.model_used == "mdx23c"
+    assert any(x.startswith("bs_roformer:preflight_low_ram_4.2GB_req_") for x in result.fallback_chain)
+
+
+def test_router_preflight_skips_demucs_on_low_ram(monkeypatch):
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+
+    class _FakeFallbackBsResult:
+        stems = {"vocals": np.full(48000, 0.10, dtype=np.float32), "other": np.full(48000, 0.20, dtype=np.float32)}
+        model_used = "nmf_dsp_fallback"
+        confidence = 0.20
+        sdri_db = 0.0
+
+    class _FakeBs:
+        @staticmethod
+        def separate(audio: np.ndarray, sr: int, *, stems: list[str] | None = None):  # pylint: disable=unused-argument
+            return _FakeFallbackBsResult()
+
+    class _VM:
+        available = int(4.5 * 1024**3)
+
+    class _FakeMdx:
+        @staticmethod
+        def separate_all_stems(audio: np.ndarray, sr: int, stems: list[str]):  # pylint: disable=unused-argument
+            return {
+                "vocals": np.full(48000, 0.08, dtype=np.float32),
+                "inst": np.full(48000, 0.12, dtype=np.float32),
+            }
+
+    monkeypatch.setitem(__import__("sys").modules, "psutil", types.SimpleNamespace(virtual_memory=lambda: _VM()))
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "plugins.bs_roformer_plugin",
+        types.SimpleNamespace(get_bs_roformer=lambda: _FakeBs()),
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "plugins.demucs_v4_plugin",
+        types.SimpleNamespace(
+            get_demucs_plugin=lambda: (_ for _ in ()).throw(AssertionError("demucs must be skipped"))
+        ),
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "plugins.mdx23c_plugin",
+        types.SimpleNamespace(get_mdx23c_plugin=lambda: _FakeMdx()),
+    )
+
+    result = SotaVocalModelRouter().separate_vocal_instrumental(
+        _audio(),
+        48000,
+        panns_singing=0.8,
+        ctx={"material_type": "live", "score_routing_enabled": False},
+    )
+    assert result.success is True
+    assert result.model_used == "mdx23c"
+    assert any(x.startswith("demucs_v4:preflight_low_ram_4.5GB_req_") for x in result.fallback_chain)
+
+
+def test_router_required_memory_grows_with_duration_and_channels():
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+
+    sr = 48000
+    mono_short = np.zeros(sr * 10, dtype=np.float32)
+    stereo_long = np.zeros((sr * 180, 2), dtype=np.float32)
+
+    demucs_short = SotaVocalModelRouter._required_memory_gb("demucs_v4", mono_short, sr)  # pylint: disable=protected-access
+    demucs_long = SotaVocalModelRouter._required_memory_gb("demucs_v4", stereo_long, sr)  # pylint: disable=protected-access
+    roformer_short = SotaVocalModelRouter._required_memory_gb("bs_roformer", mono_short, sr)  # pylint: disable=protected-access
+
+    assert demucs_long > demucs_short
+    assert roformer_short > demucs_short
+
+
+def test_router_required_memory_grows_with_pressure_factor():
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+
+    sr = 48000
+    mono = np.zeros(sr * 30, dtype=np.float32)
+    base = SotaVocalModelRouter._required_memory_gb("mdx23c", mono, sr, pressure_factor=1.0)  # pylint: disable=protected-access
+    pressured = SotaVocalModelRouter._required_memory_gb("mdx23c", mono, sr, pressure_factor=1.5)  # pylint: disable=protected-access
+    assert pressured > base
+
+
+def test_router_runtime_pressure_multiplier_uses_active_ml_plugins(monkeypatch):
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+
+    router = SotaVocalModelRouter()
+
+    class _VM:
+        percent = 20.0
+
+    class _SWAP:
+        percent = 0.0
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "psutil",
+        types.SimpleNamespace(virtual_memory=lambda: _VM(), swap_memory=lambda: _SWAP()),
+    )
+
+    no_load = router._runtime_pressure_multiplier({"active_ml_plugins": 0})  # pylint: disable=protected-access
+    high_load = router._runtime_pressure_multiplier({"active_ml_plugins": 4})  # pylint: disable=protected-access
+    assert high_load > no_load
+
+
 def test_router_prefers_bs_roformer_for_vocal_material(monkeypatch):
     from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
 
@@ -34,7 +185,12 @@ def test_router_prefers_bs_roformer_for_vocal_material(monkeypatch):
         types.SimpleNamespace(get_bs_roformer=lambda: _FakeBs()),
     )
 
-    result = SotaVocalModelRouter().separate_vocal_instrumental(_audio(), 48000, panns_singing=0.8)
+    result = SotaVocalModelRouter().separate_vocal_instrumental(
+        _audio(),
+        48000,
+        panns_singing=0.8,
+        ctx={"material_type": "live"},
+    )
     assert result.success is True
     assert result.model_used == "bs_roformer"
     np.testing.assert_allclose(result.vocal, np.full(48000, 0.10, dtype=np.float32))
@@ -58,8 +214,15 @@ def test_router_skips_roformer_fallback_and_uses_demucs(monkeypatch):
             return _FakeFallbackBsResult()
 
     class _FakeDemucs:
+        _session = object()
+
         @staticmethod
-        def separate(audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:  # pylint: disable=unused-argument
+        def separate(
+            audio: np.ndarray,
+            sr: int,
+            prefer_mdx23c: bool = True,
+        ) -> dict[str, np.ndarray]:  # pylint: disable=unused-argument
+            assert prefer_mdx23c is False
             return {
                 "vocals": np.full(48000, 0.30, dtype=np.float32),
                 "other": np.full(48000, 0.40, dtype=np.float32),
@@ -72,13 +235,238 @@ def test_router_skips_roformer_fallback_and_uses_demucs(monkeypatch):
     monkeypatch.setitem(
         sys_modules, "plugins.demucs_v4_plugin", types.SimpleNamespace(get_demucs_plugin=lambda: _FakeDemucs())
     )
+    monkeypatch.setitem(
+        sys_modules,
+        "plugins.mdx23c_plugin",
+        types.SimpleNamespace(get_mdx23c_plugin=lambda: (_ for _ in ()).throw(RuntimeError("mdx unavailable"))),
+    )
 
-    result = SotaVocalModelRouter().separate_vocal_instrumental(_audio(), 48000, panns_singing=0.8)
+    result = SotaVocalModelRouter().separate_vocal_instrumental(
+        _audio(),
+        48000,
+        panns_singing=0.8,
+        ctx={"material_type": "live"},
+    )
     assert result.success is True
-    assert result.model_used == "demucs_v4"
+    assert result.model_used == "demucs_v4_htdemucs"
     assert "bs_roformer:nmf_dsp_fallback" in result.fallback_chain
     assert "capability_status" in result.metadata
     np.testing.assert_allclose(result.vocal, np.full(48000, 0.30, dtype=np.float32))
+
+
+def test_router_prefers_mdx23c_when_not_live_context(monkeypatch):
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+
+    class _FakeFallbackBsResult:
+        stems = {"vocals": np.full(48000, 0.10, dtype=np.float32), "other": np.full(48000, 0.20, dtype=np.float32)}
+        model_used = "nmf_dsp_fallback"
+        confidence = 0.20
+        sdri_db = 0.0
+
+    class _FakeBs:
+        @staticmethod
+        def separate(audio: np.ndarray, sr: int, *, stems: list[str] | None = None):  # pylint: disable=unused-argument
+            return _FakeFallbackBsResult()
+
+    class _FakeDemucs:
+        _session = object()
+
+        @staticmethod
+        def separate(
+            audio: np.ndarray,
+            sr: int,
+            prefer_mdx23c: bool = True,
+        ) -> dict[str, np.ndarray]:  # pylint: disable=unused-argument
+            raise AssertionError("demucs should not run without live/crowd context")
+
+    class _FakeMdx:
+        @staticmethod
+        def separate_all_stems(audio: np.ndarray, sr: int, stems: list[str]):  # pylint: disable=unused-argument
+            return {
+                "vocals": np.full(48000, 0.08, dtype=np.float32),
+                "inst": np.full(48000, 0.12, dtype=np.float32),
+            }
+
+    sys_modules = __import__("sys").modules
+    monkeypatch.setitem(
+        sys_modules, "plugins.bs_roformer_plugin", types.SimpleNamespace(get_bs_roformer=lambda: _FakeBs())
+    )
+    monkeypatch.setitem(
+        sys_modules, "plugins.demucs_v4_plugin", types.SimpleNamespace(get_demucs_plugin=lambda: _FakeDemucs())
+    )
+    monkeypatch.setitem(
+        sys_modules, "plugins.mdx23c_plugin", types.SimpleNamespace(get_mdx23c_plugin=lambda: _FakeMdx())
+    )
+
+    result = SotaVocalModelRouter().separate_vocal_instrumental(_audio(), 48000, panns_singing=0.8)
+    assert result.success is True
+    assert result.model_used == "mdx23c"
+    np.testing.assert_allclose(result.vocal, np.full(48000, 0.08, dtype=np.float32))
+
+
+def test_router_score_routing_selects_better_candidate(monkeypatch):
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+
+    class _FakeFallbackBsResult:
+        stems = {"vocals": np.full(48000, 0.10, dtype=np.float32), "other": np.full(48000, 0.20, dtype=np.float32)}
+        model_used = "nmf_dsp_fallback"
+        confidence = 0.20
+        sdri_db = 0.0
+
+    class _FakeBs:
+        @staticmethod
+        def separate(audio: np.ndarray, sr: int, *, stems: list[str] | None = None):  # pylint: disable=unused-argument
+            return _FakeFallbackBsResult()
+
+    class _FakeDemucs:
+        _session = object()
+
+        @staticmethod
+        def separate(audio: np.ndarray, sr: int, prefer_mdx23c: bool = True):  # pylint: disable=unused-argument
+            return {
+                "vocals": np.full(48000, 0.15, dtype=np.float32),
+                "other": np.full(48000, 0.40, dtype=np.float32),
+            }
+
+    class _FakeMdx:
+        @staticmethod
+        def separate_all_stems(audio: np.ndarray, sr: int, stems: list[str]):  # pylint: disable=unused-argument
+            return {
+                "vocals": np.full(48000, 0.08, dtype=np.float32),
+                "inst": np.full(48000, 0.12, dtype=np.float32),
+            }
+
+    sys_modules = __import__("sys").modules
+    monkeypatch.setitem(
+        sys_modules, "plugins.bs_roformer_plugin", types.SimpleNamespace(get_bs_roformer=lambda: _FakeBs())
+    )
+    monkeypatch.setitem(
+        sys_modules, "plugins.demucs_v4_plugin", types.SimpleNamespace(get_demucs_plugin=lambda: _FakeDemucs())
+    )
+    monkeypatch.setitem(
+        sys_modules, "plugins.mdx23c_plugin", types.SimpleNamespace(get_mdx23c_plugin=lambda: _FakeMdx())
+    )
+
+    result = SotaVocalModelRouter().separate_vocal_instrumental(
+        _audio(),
+        48000,
+        panns_singing=0.8,
+        ctx={"material_type": "live", "score_routing_enabled": True},
+    )
+    assert result.success is True
+    assert result.model_used == "mdx23c"
+    assert float(result.metadata.get("route_score", 0.0)) > 0.0
+    assert result.metadata.get("route_score_selected") is True
+
+
+def test_demucs_live_policy_contract_router_phase42():
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+    from backend.core.phases.phase_42_vocal_enhancement import VocalEnhancement
+
+    router = SotaVocalModelRouter()
+    phase42 = VocalEnhancement()
+
+    live_like = [
+        "live",
+        "concert",
+        "audience",
+        "crowd",
+        "bootleg",
+        "stage",
+        "live_recording",
+        "crowd_tape",
+    ]
+    non_live = ["vinyl", "tape", "cd_digital", "mp3", "studio"]
+
+    for tag in live_like:
+        assert router._prefer_demucs_native({"material_type": tag}) is True  # pylint: disable=protected-access
+        assert phase42._prefer_demucs_native(tag) is True  # pylint: disable=protected-access
+
+    for tag in non_live:
+        assert router._prefer_demucs_native({"material_type": tag}) is False  # pylint: disable=protected-access
+        assert phase42._prefer_demucs_native(tag) is False  # pylint: disable=protected-access
+
+
+def test_demucs_native_call_contract_router_phase42(monkeypatch):
+    from backend.core.dsp.sota_vocal_model_router import SotaVocalModelRouter
+    from backend.core.phases.phase_42_vocal_enhancement import VocalEnhancement
+
+    calls: dict[str, list[bool]] = {"router": [], "phase42": []}
+
+    class _FakeFallbackBsResult:
+        stems = {"vocals": np.full(48000, 0.10, dtype=np.float32), "other": np.full(48000, 0.20, dtype=np.float32)}
+        model_used = "nmf_dsp_fallback"
+        confidence = 0.20
+        sdri_db = 0.0
+
+    class _FakeBs:
+        @staticmethod
+        def separate(audio: np.ndarray, sr: int, *, stems: list[str] | None = None):  # pylint: disable=unused-argument
+            return _FakeFallbackBsResult()
+
+    class _FakeDemucs:
+        _session = object()
+
+        @staticmethod
+        def separate(audio: np.ndarray, sr: int, prefer_mdx23c: bool = True):  # pylint: disable=unused-argument
+            calls["router"].append(bool(prefer_mdx23c))
+            return {
+                "vocals": np.full(48000, 0.15, dtype=np.float32),
+                "other": np.full(48000, 0.40, dtype=np.float32),
+            }
+
+        @staticmethod
+        def separate_vocals(audio: np.ndarray, sr: int, prefer_mdx23c: bool = True):  # pylint: disable=unused-argument
+            calls["phase42"].append(bool(prefer_mdx23c))
+            a = np.asarray(audio, dtype=np.float32)
+            return a * 0.55, a * 0.45
+
+    class _VM:
+        available = 6 * 1024**3
+
+    sys_modules = __import__("sys").modules
+    monkeypatch.setitem(
+        sys_modules,
+        "plugins.bs_roformer_plugin",
+        types.SimpleNamespace(get_bs_roformer=lambda: _FakeBs()),
+    )
+    monkeypatch.setitem(
+        sys_modules,
+        "plugins.demucs_v4_plugin",
+        types.SimpleNamespace(get_demucs_plugin=lambda: _FakeDemucs()),
+    )
+    monkeypatch.setitem(
+        sys_modules,
+        "plugins.mdx23c_plugin",
+        types.SimpleNamespace(get_mdx23c_plugin=lambda: (_ for _ in ()).throw(RuntimeError("mdx unavailable"))),
+    )
+
+    router_result = SotaVocalModelRouter().separate_vocal_instrumental(
+        _audio(),
+        48000,
+        panns_singing=0.8,
+        ctx={"material_type": "live", "score_routing_enabled": False},
+    )
+    assert router_result.success is True
+    assert router_result.model_used == "demucs_v4_htdemucs"
+
+    import backend.core.phases.phase_42_vocal_enhancement as mod42
+
+    monkeypatch.setattr(
+        mod42.psutil if hasattr(mod42, "psutil") else __import__("psutil"),
+        "virtual_memory",
+        lambda: _VM(),
+    )
+    phase42_result = VocalEnhancement()._try_stem_separation(  # pylint: disable=protected-access
+        np.tile(np.array([[0.1, 0.05]], dtype=np.float32), (48000, 1)),
+        48000,
+        material="live",
+    )
+    assert phase42_result is not None
+    assert phase42_result[3] == "demucs_v4_htdemucs"
+
+    assert calls["router"] == [False]
+    assert calls["phase42"] == [False]
 
 
 def test_router_vocal_nr_skips_unloaded_miipher_for_sgmse(monkeypatch):

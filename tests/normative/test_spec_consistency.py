@@ -48,6 +48,9 @@ _PROJECT_ROOT = Path(__file__).parents[2]
 _SPEC_06_PATH = _PROJECT_ROOT / ".github/specs/06_phases_system.md"
 _VERBOTEN_MD_PATH = _PROJECT_ROOT / ".github/VERBOTEN.md"
 _COPILOT_INSTRUCTIONS_PATH = _PROJECT_ROOT / ".github/copilot-instructions.md"
+_PIPELINE_INSTRUCTIONS_PATH = _PROJECT_ROOT / ".github/instructions/pipeline.instructions.md"
+_PHASES_INSTRUCTIONS_PATH = _PROJECT_ROOT / ".github/instructions/phases.instructions.md"
+_UV3_PATH = _PROJECT_ROOT / "backend/core/unified_restorer_v3.py"
 _PHASES_DIR = _PROJECT_ROOT / "backend/core/phases"
 _CDR_PATH = _PROJECT_ROOT / "backend/core/causal_defect_reasoner.py"
 
@@ -366,4 +369,68 @@ class TestSpecOrphanRegression:
             "Regression: 'phase_39_air_band_enhancement' ist wieder in bandwidth_loss "
             "CAUSE_TO_PHASES.\nBUG-FIX v9.12.0 §6.2c: phase_39 erzeugt Halluzinationen "
             "über BW-Ceiling analoger Materialien im Restoration-Modus."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Gate-Architektur Drift-Guard (A/B/C + Recovery-State-Machine)
+# ---------------------------------------------------------------------------
+
+
+class TestGateArchitectureSpecSync:
+    """Sichert Konsistenz zwischen Instruktions-Text und UV3-Implementierung."""
+
+    def test_instruction_files_exist_for_gate_architecture(self) -> None:
+        assert _PIPELINE_INSTRUCTIONS_PATH.exists(), (
+            f"pipeline.instructions.md nicht gefunden: {_PIPELINE_INSTRUCTIONS_PATH}"
+        )
+        assert _PHASES_INSTRUCTIONS_PATH.exists(), f"phases.instructions.md nicht gefunden: {_PHASES_INSTRUCTIONS_PATH}"
+        assert _UV3_PATH.exists(), f"unified_restorer_v3.py nicht gefunden: {_UV3_PATH}"
+
+    def test_pipeline_instructions_define_gate_classes_and_state_machine(self) -> None:
+        content = _PIPELINE_INSTRUCTIONS_PATH.read_text(encoding="utf-8")
+        required_markers = [
+            "§2.49a Zentrale Gate-Klassifikation (A/B/C)",
+            "§2.49b Recovery-Zustandsautomat",
+            "§2.49c Semantik-Konfliktregel Hard vs Recovery",
+            "quality_gate_registry",
+            "recovery_state_machine",
+            "semantic_conflicts",
+        ]
+        missing = [m for m in required_markers if m not in content]
+        assert not missing, (
+            "Pipeline-Instruktionen fehlen Gate-Architektur-Marker:\n"
+            + "\n".join(f"  - {m}" for m in missing)
+            + "\nSpezifikation muss A/B/C-Klassen + Recovery-State-Machine vollständig dokumentieren."
+        )
+
+    def test_phases_instructions_enforce_uv3_final_authority(self) -> None:
+        content = _PHASES_INSTRUCTIONS_PATH.read_text(encoding="utf-8")
+        required_markers = [
+            'metadata["phase_decision_scope"] = "local_only"',
+            'metadata["final_authority"] = "UV3"',
+            "quality_gate_registry",
+            "recovery_state_machine",
+        ]
+        missing = [m for m in required_markers if m not in content]
+        assert not missing, (
+            "Phasen-Instruktionen fehlen UV3-Authority-Marker:\n"
+            + "\n".join(f"  - {m}" for m in missing)
+            + "\nPhasen dürfen nur lokal entscheiden; finale Gate-Authority liegt bei UV3."
+        )
+
+    def test_uv3_implements_canonical_gate_methods_and_metadata(self) -> None:
+        content = _UV3_PATH.read_text(encoding="utf-8")
+        required_markers = [
+            "def _classify_quality_gate_events(",
+            "def _resolve_recovery_state_machine(",
+            '"quality_gate_registry"',
+            '"recovery_state_machine"',
+            '"semantic_conflicts"',
+        ]
+        missing = [m for m in required_markers if m not in content]
+        assert not missing, (
+            "UV3-Code fehlt kanonische Gate-/Recovery-Marker:\n"
+            + "\n".join(f"  - {m}" for m in missing)
+            + "\nImplementierung muss den Spezifikationsvertrag vollständig abbilden."
         )

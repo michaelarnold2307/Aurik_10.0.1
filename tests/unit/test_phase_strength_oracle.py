@@ -760,6 +760,149 @@ def test_uv3_runtime_context_keeps_explicit_strength_for_o10_output_phase():
     assert "phase_strength_oracle_profile" in kwargs
 
 
+def test_uv3_runtime_context_uq_scalar_damps_non_explicit_strength_for_low_confidence():
+    uv3 = _make_dummy_uv3_for_runtime_hook()
+    phase_meta = SimpleNamespace(phase_id="phase_07_harmonic_restoration", name="Harmonic")
+    audio = np.zeros(48_000, dtype=np.float32)
+
+    kwargs_high = {
+        "strength": 0.80,
+        "sample_rate": 48_000,
+        "material": "vinyl",
+        "material_type": "vinyl",
+        "material_confidence": 0.95,
+        "song_calibration_confidence": 0.95,
+    }
+    wet_high = UnifiedRestorerV3._prepare_profiled_phase_runtime_context(
+        uv3,
+        phase_meta,
+        audio,
+        kwargs_high,
+        strength_explicit=False,
+        team_context_enabled=False,
+        song_calibration={"pipeline_confidence": 0.95},
+        song_goal_weights={"brillanz": 1.2},
+        rest_ctx=35.0,
+    )
+
+    kwargs_low = {
+        "strength": 0.80,
+        "sample_rate": 48_000,
+        "material": "vinyl",
+        "material_type": "vinyl",
+        "material_confidence": 0.35,
+        "song_calibration_confidence": 0.35,
+    }
+    wet_low = UnifiedRestorerV3._prepare_profiled_phase_runtime_context(
+        uv3,
+        phase_meta,
+        audio,
+        kwargs_low,
+        strength_explicit=False,
+        team_context_enabled=False,
+        song_calibration={"pipeline_confidence": 0.35},
+        song_goal_weights={"brillanz": 1.2},
+        rest_ctx=35.0,
+    )
+
+    assert float(kwargs_low.get("uq_confidence_scalar", 1.0)) < float(kwargs_high.get("uq_confidence_scalar", 1.0))
+    assert float(kwargs_low.get("strength", 0.0)) < float(kwargs_high.get("strength", 0.0))
+    assert float(wet_low) < float(wet_high)
+
+
+def test_uv3_runtime_context_uq_scalar_keeps_explicit_strength_but_reduces_wetdry():
+    uv3 = _make_dummy_uv3_for_runtime_hook()
+    phase_meta = SimpleNamespace(phase_id="phase_48_stereo_width_enhancer", name="Stereo Width")
+    audio = np.zeros(48_000, dtype=np.float32)
+
+    kwargs = {
+        "strength": 0.52,
+        "sample_rate": 48_000,
+        "material": "vinyl",
+        "material_type": "vinyl",
+        "material_confidence": 0.30,
+        "song_calibration_confidence": 0.30,
+    }
+    wet_dry = UnifiedRestorerV3._prepare_profiled_phase_runtime_context(
+        uv3,
+        phase_meta,
+        audio,
+        kwargs,
+        strength_explicit=True,
+        team_context_enabled=False,
+        song_calibration={"pipeline_confidence": 0.30},
+        song_goal_weights={"spatial_depth": 1.2},
+        rest_ctx=25.0,
+    )
+
+    assert float(kwargs.get("strength", 0.0)) == pytest.approx(0.52)
+    assert float(kwargs.get("uq_confidence_scalar", 1.0)) < 1.0
+    assert float(wet_dry) < 1.0
+
+
+def test_uv3_runtime_context_phase23_pre_hallucination_cap_for_tape_chain():
+    uv3 = _make_dummy_uv3_for_runtime_hook()
+    phase_meta = SimpleNamespace(phase_id="phase_23_spectral_repair", name="Spectral Repair")
+    audio = np.zeros(48_000, dtype=np.float32)
+    kwargs = {
+        "strength": 0.92,
+        "sample_rate": 48_000,
+        "material": "cassette",
+        "material_type": "cassette",
+        "transfer_chain": ["vinyl", "cassette", "mp3_low"],
+        "material_confidence": 0.85,
+        "song_calibration_confidence": 0.85,
+    }
+
+    wet_dry = UnifiedRestorerV3._prepare_profiled_phase_runtime_context(
+        uv3,
+        phase_meta,
+        audio,
+        kwargs,
+        strength_explicit=False,
+        team_context_enabled=False,
+        song_calibration={"pipeline_confidence": 0.85},
+        song_goal_weights={"transparenz": 1.2},
+        rest_ctx=40.0,
+    )
+
+    assert kwargs.get("phase23_pre_hallucination_cap") == pytest.approx(0.74)
+    assert float(kwargs.get("strength", 1.0)) <= 0.74 + 1e-9
+    assert float(kwargs.get("uq_confidence_value", 0.0)) == pytest.approx(0.85)
+    assert 0.0 < float(wet_dry) <= 1.0
+
+
+def test_uv3_runtime_context_phase23_pre_hallucination_cap_stricter_when_low_confidence():
+    uv3 = _make_dummy_uv3_for_runtime_hook()
+    phase_meta = SimpleNamespace(phase_id="phase_23_spectral_repair", name="Spectral Repair")
+    audio = np.zeros(48_000, dtype=np.float32)
+    kwargs = {
+        "strength": 0.92,
+        "sample_rate": 48_000,
+        "material": "tape",
+        "material_type": "tape",
+        "transfer_chain": ["tape", "mp3_low"],
+        "material_confidence": 0.55,
+        "song_calibration_confidence": 0.55,
+    }
+
+    UnifiedRestorerV3._prepare_profiled_phase_runtime_context(
+        uv3,
+        phase_meta,
+        audio,
+        kwargs,
+        strength_explicit=False,
+        team_context_enabled=False,
+        song_calibration={"pipeline_confidence": 0.55},
+        song_goal_weights={"transparenz": 1.2},
+        rest_ctx=40.0,
+    )
+
+    assert kwargs.get("phase23_pre_hallucination_cap") == pytest.approx(0.66)
+    assert float(kwargs.get("strength", 1.0)) <= 0.66 + 1e-9
+    assert float(kwargs.get("uq_confidence_value", 0.0)) == pytest.approx(0.55)
+
+
 @pytest.mark.parametrize(
     "phase_family,expected_class,param_assertion,max_strength_cap",
     [

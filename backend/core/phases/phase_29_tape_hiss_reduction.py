@@ -94,6 +94,13 @@ except ImportError:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
+def _get_phase29_npd():
+    """Stabiler Resolver fuer den NPA-Singleton in Phase 29."""
+    from backend.core.natural_performance_detector import get_natural_performance_detector
+
+    return get_natural_performance_detector()
+
+
 def _rms_dbfs_gated(sig: np.ndarray) -> float:
     """§2.45a-I: Frame-basierter RMS in dBFS, ignoriert Frames < −50 dBFS (Stille).
 
@@ -433,9 +440,7 @@ class TapeHissReductionPhase(PhaseInterface):
         # §2.46f Natural-Performance-Artifacts-Guard — detect protected zones before tape hiss reduction
         _npa_result_29 = None
         try:
-            from backend.core.natural_performance_detector import get_natural_performance_detector
-
-            _npa_result_29 = get_natural_performance_detector().detect(audio, sample_rate)
+            _npa_result_29 = _get_phase29_npd().detect(audio, sample_rate)
         except Exception as _npa_exc_29:
             logger.debug("§2.46f NPA detection non-blocking: %s", _npa_exc_29)
 

@@ -117,3 +117,33 @@ def test_stereo_no_crash():
     )
     assert result.success
     assert result.audio.shape == (48000, 2)
+
+
+def test_phase29_uses_npd_singleton_accessor(monkeypatch):
+    from backend.core.defect_scanner import MaterialType
+
+    phase = TapeHissReductionPhase()
+    audio = np.random.uniform(-0.05, 0.05, 48000).astype(np.float32)
+    calls = {"count": 0}
+
+    class _NpdStub:
+        def detect(self, _audio, _sr):
+            calls["count"] += 1
+            return None
+
+    monkeypatch.setattr(
+        "backend.core.phases.phase_29_tape_hiss_reduction._get_phase29_npd",
+        lambda: _NpdStub(),
+    )
+
+    result = phase.process(
+        audio,
+        48000,
+        material=MaterialType.TAPE,
+        quality_mode="balanced",
+        restorability_score=70.0,
+        strength=0.5,
+    )
+
+    assert result.success
+    assert calls["count"] >= 1
