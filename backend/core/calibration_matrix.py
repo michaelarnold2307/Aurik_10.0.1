@@ -171,7 +171,7 @@ CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {
     "micro_dynamics": 0.88,
     "groove": 0.83,
     "transparenz": 0.82,
-    "waerme": 0.75,
+    "waerme": 0.77,  # §V25 Wärmeband-Guard v9.5 (200–800 Hz, ≤2.5 dB kumulativer Verlust)
     "bass_kraft": 0.78,
     "basskraft": 0.78,
     "separation_fidelity": 0.80,  # §09.1 Spec P4 (v9.12.6: 0.78→0.80)

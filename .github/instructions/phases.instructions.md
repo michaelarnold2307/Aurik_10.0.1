@@ -31,6 +31,13 @@ applyTo: "backend/core/phases/phase_*.py"
     → Beispiel: CASSETTE braucht eigene DETECTION_THRESHOLD-Schwelle basierend auf IEC 60094-1
       (≤ 0,2 % WRMS Capstan/Pinch-Roller); Vinyl-Default 0.5 % übersieht Kassetten-Transport-Bumps
     → Pflicht-Test: test_phase_XX_all_material_types_in_DICT() für jede Phase mit material-indizierten Dicts
+13. [V38] Phasen mit Event-Schleifen (bump_locations, splice_points, Dropout-Segmente usw.):
+    → `vfa_protected_zones` aus kwargs lesen: `vfa_result = kwargs.get("vfa_result", {})` →
+      `protected_zones = [(s, e, cap) ...]` aus vfa_result (Vibrato 0.20, Frisson 0.30, Flüster 0.25, Passaggio 0.35)
+    → Per-Event-Strength-Oracle MUSS implementiert sein:
+      `_compute_<defect>_local_strength(mono_ref, start, end, sr, base_strength, protected_zones)`
+      mit 250 ms Kontext-RMS-Proxy; `base_strength < 1e-6` → 0.0 (kein Event-Processing)
+    → Einheitliche `strength` für alle Events in der Schleife ist VERBOTEN
 
 Hinweis zur Strength-Übergabe (kanonisch):
         - `strength` wird aus `kwargs` gelesen (z. B. `strength = float(kwargs.get("strength", 0.7))`).

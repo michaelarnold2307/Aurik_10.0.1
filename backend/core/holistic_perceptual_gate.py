@@ -975,8 +975,11 @@ class HolisticPerceptualGate:
         in_score = _score(original)
         out_score = _score(restored)
 
-        # Improvement ratio mapped to [0.1, 1.0].
-        # out/in > 1 → improved → gain → 1.0; equal → 0.5; worse → down to 0.1.
-        ratio = out_score / max(in_score, 1e-4)
-        gain = float(np.clip(0.5 * ratio, 0.1, 1.0))
+        # Headroom-basierte Formel: Verbesserung relativ zum maximal erreichbaren
+        # Headroom ab Input-Niveau (v9.12.10). Ratio-basierte Formel verlor
+        # Diskriminierungskraft bei niedrigem in_score: in=0.05→out=0.06 und
+        # in=0.05→out=0.90 lieferten identischen geclippten Gain (beide → 1.0).
+        _headroom = max(1.0 - in_score, 0.05)  # Maximaler erreichbarer Headroom
+        _improvement = out_score - in_score
+        gain = float(np.clip(0.5 + _improvement / _headroom, 0.1, 1.0))
         return gain
