@@ -235,6 +235,31 @@ class DynamicRangeExpansion(PhaseInterface):
         phase_locality_factor = float(_strength_ctx["phase_locality_factor"])
         _effective_strength = float(_strength_ctx["effective_strength"])
 
+        # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
+        _panns_s_26 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_26 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_26,  # pylint: disable=import-outside-toplevel
+                )
+
+                _fmg_26 = _fmg_fn_26()
+                _fmz_26 = _fmg_26.compute_zones(audio, sample_rate)
+                if _fmz_26:
+                    _n_s_26 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_26 = sum(z.end_sample - z.start_sample for z in _fmz_26)
+                    _zone_frac_26 = float(np.clip(_zone_samples_26 / max(1, _n_s_26), 0.0, 1.0))
+                    _boost_26 = _zone_frac_26 * 0.15
+                    _effective_strength = float(np.clip(_effective_strength + _boost_26, 0.0, 1.0))
+                    logger.debug(
+                        "Phase26 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → eff_str=%.3f",
+                        _zone_frac_26,
+                        _boost_26,
+                        _effective_strength,
+                    )
+            except Exception as _fmg_exc_26:  # pylint: disable=broad-except
+                logger.debug("Phase26 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_26)
+
         quality_mode = kwargs.get("quality_mode")
         restorability_score = kwargs.get("restorability_score", 50.0)
         material_key = str(getattr(material, "value", material) or "unknown")

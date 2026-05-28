@@ -242,6 +242,31 @@ class TapeSaturation(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
+        _panns_s_22 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_22 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_22,  # pylint: disable=import-outside-toplevel
+                )
+
+                _fmg_22 = _fmg_fn_22()
+                _fmz_22 = _fmg_22.compute_zones(audio, sample_rate)
+                if _fmz_22:
+                    _n_s_22 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_22 = sum(z.end_sample - z.start_sample for z in _fmz_22)
+                    _zone_frac_22 = float(np.clip(_zone_samples_22 / max(1, _n_s_22), 0.0, 1.0))
+                    _boost_22 = _zone_frac_22 * 0.15
+                    _effective_strength = float(np.clip(_effective_strength + _boost_22, 0.0, 1.0))
+                    logger.debug(
+                        "Phase22 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → eff_str=%.3f",
+                        _zone_frac_22,
+                        _boost_22,
+                        _effective_strength,
+                    )
+            except Exception as _fmg_exc_22:  # pylint: disable=broad-except
+                logger.debug("Phase22 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_22)
+
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
