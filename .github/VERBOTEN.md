@@ -1,6 +1,6 @@
 # Aurik 9 — Vollständige VERBOTEN-Tabelle
 
-> **Normative Quelle** für alle `[V01–V39]`-Linter-Regeln in `scripts/aurik_verboten_linter.py`.
+> **Normative Quelle** für alle `[V01–V45]`-Linter-Regeln in `scripts/aurik_verboten_linter.py`.
 > Top-10 häufigste Regressions-Ursachen → [`.github/copilot-instructions.md`](copilot-instructions.md)
 >
 > Inhalt: Grundregeln (Teil A) + Anti-Patterns mit Produktions-Evidenz (Teil B)
@@ -158,5 +158,11 @@
 | V33 | `backend/core/phases/phase_*.py` | Neues `MaterialType.X` ohne vollständige Einträge in ALLE `dict[MaterialType, ...]`-Variablen in der jeweiligen Phase-Datei → ERROR (Physikalisch falscher Fallback; IEC-Schwellen material-spezifisch, nicht übertragbar) |
 | V38 | `backend/core/phases/phase_*.py` | Phase iteriert über mehrere Defekt-Events (Schleife über `bump_locations`, `splice_points`, Dropout-Segmente …) mit einheitlicher `strength` ohne per-Event-Strength-Oracle → WARNING (menschliches Ohr registriert Stärke-Mismatch zwischen Events; Überkorrektur in VFA-Schutzzonen) |
 | V39 | `backend/core/causal_defect_reasoner.py`, `defect_phase_mapper.py` | §0a-verbotene Phasen (`phase_21_exciter`, `phase_35_multiband_compression`, `phase_42_vocal_enhancement`) als Eintrag in `CAUSE_TO_PHASES` für Restoration-Cause → ERROR (§0a-Guard in UV3 blockt Runtime, aber CDR soll sie gar nicht erst vorschlagen) |
+| V40 | `backend/core/phases/phase_03*.py`, `phase_29*.py` (NR-Phasen) | NR-Phase ohne `compute_nmr_score(pre, sr)` wenn FeedbackChain aktiv → WARNING (`result.recommended_nr_strength_delta` soll auf `base_strength` addiert werden; `result.ok=False` → §2.45 Minimal-Intervention prüfen) |
+| V41 | `backend/core/phases/phase_*.py` (additive Phasen, `panns_singing ≥ 0.25`) | Additive Phase ohne `ForwardMaskingGuard` bei `panns_singing ≥ 0.25` → WARNING (`get_forward_masking_guard().compute_zones(audio, sr)` + `apply_to_strength()` — NR-Stärke in post-transienten Fenstern erhöhen) |
+| V42 | `backend/core/phases/phase_03*.py`, `phase_29*.py` | `phase_03`/`phase_29` ohne `check_roughness_regression(pre, post, sr)` nach NR → WARNING (`roughness_regression=True` → blend×0.90; `pumping_detected=True` → blend×0.80 — nicht-blockierend) |
+| V43 | `backend/core/phases/phase_*.py`, `backend/core/dsp/lpc_formant_tracker.py` | Formant-Guard mit uniformem `±1 dB`-Schwellwert statt `resolve_jnd_tolerance_db(freq_hz)` → WARNING (F3/F4 bei 3 kHz hat JND ~0.8 dB; pauschale ±1 dB erlaubt hörbare Formant-Verschiebungen) |
+| V44 | `backend/core/musical_goals/musical_goals_metrics.py` | `spatial_depth`-Score ohne IACC-Komponente (nur M/S-Proxy) → INFO (`compute_iacc(audio, sr)` aus `stereo_guard.py`; `spatial_depth_score = result.spatial_depth_score` als Ergänzung zum M/S-Proxy) |
+| V45 | `backend/core/musical_goals/musical_goals_metrics.py` | `emotionalitaet`-Score ohne VAT-Blend (`_VATEmotionEstimator`) wenn Dur/Moll erkennbar → INFO (Valence-Arousal-Tension-Modell als 15%-Blend in `EmotionalitaetMetric.measure()`) |
 
 > Vollständige Linter-Implementierung: `scripts/aurik_verboten_linter.py`

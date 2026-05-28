@@ -410,3 +410,57 @@ def get_lpc_formant_tracker() -> _LPCFormantTracker:
             if _tracker_instance is None:
                 _tracker_instance = _LPCFormantTracker()
     return _tracker_instance
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §JND Frequenzabhängige JND-Toleranz (Gap 4 — §V43)
+# ─────────────────────────────────────────────────────────────────────────────
+# Stützstellen: Zwicker & Fastl 1999 §4.2 + Moore 2012 §2.4 (Spectral Masking)
+# Die JND für Formant-Energie ist NICHT identisch mit der ISO-226-Lautstärke-JND.
+# Sie beschreibt die minimale Pegeländerung eines Formant-Peaks, die von einem
+# trainierten Hörer bei kurzen Vokal-Segmenten noch detektierbar ist.
+# Für F1/F2 ist die Detektion wegen der Vokaldistinktion sensitiver (1.0–1.5 dB)
+# als für F3/F4 (0.7–1.0 dB bei 2–4 kHz, höhere Frequenzauflösung des Ohrs).
+_JND_BREAKPOINTS_HZ: list[float] = [200.0, 500.0, 1000.0, 2000.0, 4000.0, 6000.0]
+_JND_VALUES_DB: list[float] = [3.0, 2.0, 1.5, 1.0, 0.8, 0.7, 0.6]
+# Interpolation: unter 200 Hz → 3.0 dB; über 6000 Hz → 0.6 dB
+
+
+def resolve_jnd_tolerance_db(freq_hz: float) -> float:
+    """Frequenzabhängige JND-Toleranz (ISO 226-basiert) für Formant-Energie.
+
+    Gibt den psychoakustisch motivierten Schwellwert zurück, ab dem eine
+    Energieänderung eines Formant-Peaks wahrnehmbar ist. Ersetzt den uniformen
+    ±1 dB-Wert aus §0p für präzisere Formant-Guards (VERBOTEN V43).
+
+    Stützstellen (Zwicker & Fastl 1999, Moore 2012):
+      < 200 Hz:     3.0 dB  (Basalbereich: schlechtere Freq.-Auflösung)
+      200–500 Hz:   2.0 dB  (F1-Nähe: Vokal-Identität, erhöhte Sensitivität)
+      500–1000 Hz:  1.5 dB  (F1 Hauptregion)
+      1000–2000 Hz: 1.0 dB  (F2 Hauptregion: optimale Gehör-Sensitivität)
+      2000–4000 Hz: 0.8 dB  (F2–F3: engere kritische Bänder)
+      4000–6000 Hz: 0.7 dB  (F3–F4: hohe Frequenzauflösung des Ohrs)
+      > 6000 Hz:    0.6 dB  (F4+: sehr enge kritische Bänder)
+
+    Args:
+        freq_hz: Frequenz in Hz (z.B. F1-Mittelwert aus LPC-Analyse).
+
+    Returns:
+        JND-Toleranz in dB. ±value = Energieänderung < value ist nicht wahrnehmbar.
+    """
+    freq_hz = float(np.clip(freq_hz, 20.0, 24000.0))
+
+    if freq_hz < _JND_BREAKPOINTS_HZ[0]:
+        return float(_JND_VALUES_DB[0])
+    if freq_hz >= _JND_BREAKPOINTS_HZ[-1]:
+        return float(_JND_VALUES_DB[-1])
+
+    # Lineare Interpolation zwischen Stützstellen
+    for i in range(len(_JND_BREAKPOINTS_HZ) - 1):
+        f_low = _JND_BREAKPOINTS_HZ[i]
+        f_high = _JND_BREAKPOINTS_HZ[i + 1]
+        if f_low <= freq_hz < f_high:
+            t = (freq_hz - f_low) / (f_high - f_low)
+            return float(_JND_VALUES_DB[i] + t * (_JND_VALUES_DB[i + 1] - _JND_VALUES_DB[i]))
+
+    return float(_JND_VALUES_DB[-1])  # Fallback

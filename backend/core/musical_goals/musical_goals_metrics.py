@@ -1406,6 +1406,158 @@ class AuthentizitaetMetric:
         return score
 
 
+class _VATEmotionEstimator:
+    """Valence-Arousal-Tension-Modell (Russell 1980 + Thayer 1990).
+
+    Schätzt drei emotionale Dimensionen aus Musik-Features:
+      - Valence: Dur/Moll-Modalität via Krumhansl-Schmuckler-Chroma-Profil
+      - Arousal: Tempo-Proxy (Onset-Dichte) + normierte mittlere Attack-Zeit
+      - Tension: Spektrale Unregelmäßigkeit (Dissonanz-Proxy) + Lautstärke-RMS
+
+    Nutzung (intern in EmotionalitaetMetric.measure()):
+        vat = _VATEmotionEstimator()
+        dims = vat.estimate(audio, sr)
+        # dims: {'valence': 0.0..1.0, 'arousal': 0.0..1.0, 'tension': 0.0..1.0}
+        vat_score = 0.35 * valence + 0.45 * arousal + 0.20 * (1 - tension)
+    """
+
+    # Krumhansl-Schmuckler-Profile (Dur / Moll) — 12 Chroma-Klassen
+    _MAJOR_PROFILE = np.array(
+        [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88],
+        dtype=np.float32,
+    )
+    _MINOR_PROFILE = np.array(
+        [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17],
+        dtype=np.float32,
+    )
+
+    def estimate(self, audio: np.ndarray, sr: int) -> dict[str, float]:
+        """Schätzt VAT-Dimensionen aus Musik-Features.
+
+        Args:
+            audio: Mono-Signal (Multi-Channel wird gemittelt).
+            sr: Abtastrate.
+
+        Returns:
+            dict mit 'valence', 'arousal', 'tension' jeweils in [0, 1].
+            Bei Fehler: neutrale Werte {'valence': 0.5, 'arousal': 0.5, 'tension': 0.5}.
+        """
+        _neutral = {"valence": 0.5, "arousal": 0.5, "tension": 0.5}
+        try:
+            if audio.ndim > 1:
+                audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
+            audio = np.asarray(audio, dtype=np.float32)
+            if len(audio) < int(sr * 0.5):
+                return _neutral
+
+            # ── Valence: Dur/Moll-Klassifikation ─────────────────────────────
+            valence = self._compute_valence(audio, sr)
+
+            # ── Arousal: Onset-Dichte + Attack-Time ───────────────────────────
+            arousal = self._compute_arousal(audio, sr)
+
+            # ── Tension: Spektrale Dissonanz + Lautstärke ─────────────────────
+            tension = self._compute_tension(audio, sr)
+
+            return {
+                "valence": float(np.clip(valence, 0.0, 1.0)),
+                "arousal": float(np.clip(arousal, 0.0, 1.0)),
+                "tension": float(np.clip(tension, 0.0, 1.0)),
+            }
+        except Exception as exc:
+            import logging as _log  # pylint: disable=import-outside-toplevel
+
+            _log.getLogger(__name__).debug("VAT-Schätzung fehlgeschlagen (non-critical): %s", exc)
+            return _neutral
+
+    def _compute_valence(self, audio: np.ndarray, sr: int) -> float:
+        """Dur/Moll-Score via Krumhansl-Schmuckler-Chroma-Korrelation."""
+        try:
+            chroma = librosa.feature.chroma_stft(y=audio, sr=sr, n_fft=2048, hop_length=512)
+            # Mittlerer Chroma-Vektor über Zeit
+            chroma_mean = np.mean(chroma, axis=1).astype(np.float32)
+            norm = float(np.linalg.norm(chroma_mean))
+            if norm < 1e-8:
+                return 0.5
+            chroma_norm = chroma_mean / norm
+
+            # Maximale Korrelation über alle 12 Transpositionen
+            best_major = -np.inf
+            best_minor = -np.inf
+            major_norm = self._MAJOR_PROFILE / (float(np.linalg.norm(self._MAJOR_PROFILE)) + 1e-8)
+            minor_norm = self._MINOR_PROFILE / (float(np.linalg.norm(self._MINOR_PROFILE)) + 1e-8)
+            for shift in range(12):
+                shifted_chroma = np.roll(chroma_norm, shift)
+                r_major = float(np.dot(shifted_chroma, major_norm))
+                r_minor = float(np.dot(shifted_chroma, minor_norm))
+                best_major = max(best_major, r_major)
+                best_minor = max(best_minor, r_minor)
+
+            # Valence: Dur-dominiert → 1.0, Moll-dominiert → 0.0
+            total = best_major + best_minor + 1e-8
+            valence = float((best_major + 1e-8) / total)
+            return float(np.clip(valence, 0.0, 1.0))
+        except Exception:
+            return 0.5
+
+    def _compute_arousal(self, audio: np.ndarray, sr: int) -> float:
+        """Arousal via Onset-Dichte und mittlere Attack-Zeit."""
+        try:
+            # Onset-Dichte: Anzahl Onsets pro Sekunde (normiert auf [0, 1])
+            onset_env = librosa.onset.onset_strength(y=audio, sr=sr)
+            # Schätzung Tempo (BPM) via ACF auf Onset-Envelope
+            # Tempo-Normierung: 40 BPM → 0.0, 200 BPM → 1.0
+            tempo_val = 0.5
+            try:
+                tempo_arr = librosa.beat.tempo(onset_envelope=onset_env, sr=sr)
+                raw_tempo = float(tempo_arr[0]) if hasattr(tempo_arr, "__len__") else float(tempo_arr)
+                tempo_val = float(np.clip((raw_tempo - 40.0) / 160.0, 0.0, 1.0))
+            except Exception:
+                pass
+
+            # Attack-Time: durchschnittliche Anstiegszeit von Onset-Peaks
+            onset_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr)
+            attack_score = 0.5
+            if len(onset_frames) >= 2:
+                # Mittlerer Frame-Abstand (kurze Abstände = hohe Arousal)
+                frame_gaps = np.diff(onset_frames)
+                mean_gap_s = float(np.mean(frame_gaps)) * 512.0 / sr
+                # 0.1 s Abstand → hohe Arousal, 2.0 s → niedrige
+                attack_score = float(np.clip(1.0 - (mean_gap_s - 0.1) / 2.0, 0.0, 1.0))
+
+            return float(0.60 * tempo_val + 0.40 * attack_score)
+        except Exception:
+            return 0.5
+
+    def _compute_tension(self, audio: np.ndarray, sr: int) -> float:
+        """Tension via Spektrale Irregularität + RMS."""
+        try:
+            # Spektrale Irregularität: Verhältnis ungerader zu gerader Harmonik
+            fft_mag = np.abs(np.fft.rfft(audio[: min(len(audio), 4 * sr)]))
+            if fft_mag.sum() < 1e-10:
+                return 0.5
+
+            # RMS als Lautstärke-Proxy
+            rms = float(np.sqrt(np.mean(audio**2)))
+            rms_score = float(np.clip(rms / 0.3, 0.0, 1.0))  # 0.3 ≈ -10 dBFS Referenz
+
+            # Spektrale Unregelmäßigkeit (Irregularity nach Krimphoff 1994)
+            # = Summe der absoluten Differenzen benachbarter Magnitudenspitzen
+            n_bins = min(len(fft_mag), 2049)  # bis 1 kHz bei 48 kHz SR
+            spectrum = fft_mag[:n_bins]
+            if spectrum.sum() < 1e-10:
+                return float(rms_score * 0.5)
+
+            irregularity = float(np.sum(np.abs(np.diff(spectrum)))) / (float(spectrum.sum()) + 1e-8)
+            # Normierung: irregularity ~0.05 für harmonisches Sinussignal → 0.0
+            #             irregularity ~0.5  für weißes Rauschen → 1.0
+            tension_irr = float(np.clip(irregularity / 0.5, 0.0, 1.0))
+
+            return float(np.clip(0.60 * tension_irr + 0.40 * rms_score, 0.0, 1.0))
+        except Exception:
+            return 0.5
+
+
 class EmotionalitaetMetric:
     """
     Emotionalität: Dynamik & Expression
@@ -1530,6 +1682,30 @@ class EmotionalitaetMetric:
                 )
         except Exception as _exc:
             logger.debug("Operation failed (non-critical): %s", _exc)  # MERT not loaded — DSP-only path
+
+        # --- VAT emotion model (Valence-Arousal-Tension, Russell 1980 + Thayer 1990) ---
+        # Ergänzt den MERT-Blend mit einer musik-theoretisch fundierten Emotionalitäts-Schätzung.
+        # One-directional: VAT-Blend kann den Score nur nach oben korrigieren (Advisory-Modus).
+        try:
+            _vat = _VATEmotionEstimator()
+            _vat_dims = _vat.estimate(audio, sr)
+            _vat_score = float(
+                0.35 * _vat_dims["valence"] + 0.45 * _vat_dims["arousal"] + 0.20 * (1.0 - _vat_dims["tension"])
+            )
+            _vat_score = float(np.clip(_vat_score, 0.0, 1.0))
+            # Advisory-Blend: VAT kann DSP-Score nur bestätigen / nach oben korrigieren
+            _blended_vat = 0.85 * score + 0.15 * _vat_score
+            score = max(score, _blended_vat)
+            logger.debug(
+                "EmotionalitaetMetric VAT: valence=%.3f arousal=%.3f tension=%.3f vat_score=%.3f final=%.3f",
+                _vat_dims["valence"],
+                _vat_dims["arousal"],
+                _vat_dims["tension"],
+                _vat_score,
+                score,
+            )
+        except Exception as _vat_exc:
+            logger.debug("VAT-Schätzung fehlgeschlagen (non-critical): %s", _vat_exc)
 
         # Short-form reliability blend (v9.12.2):
         # Ultra-short excerpts (< 8 s) contain too little phrase-level context.
@@ -3819,7 +3995,7 @@ class MusicalGoalsChecker:
 
     def check_all_preserved(
         self, original: np.ndarray, processed: np.ndarray, sr: int
-    ) -> tuple[bool, dict[str, float]]:
+    ) -> tuple[bool, dict[str, dict[str, float]]]:
         """
         Prüft if all goals are preserved (pre/post comparison).
 
@@ -3853,7 +4029,7 @@ class MusicalGoalsChecker:
         sr: int,
         adaptive_thresholds: dict[str, float],
         reference: np.ndarray | None = None,
-    ) -> tuple[bool, dict[str, float], dict[str, float]]:
+    ) -> tuple[bool, dict[str, dict[str, float]], dict[str, float]]:
         """
         Check all goals against ADAPTIVE thresholds (für degradiertes Material).
 
