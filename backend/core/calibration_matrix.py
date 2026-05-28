@@ -1218,7 +1218,9 @@ def resolve_effective_goal_targets(
         goal = str(raw_goal or "").strip().lower()
         if not goal:
             continue
-        floor_eff = get_effective_material_floor(mat, goal, restorability_score, is_studio_2026=is_studio_2026)
+        floor_eff = get_effective_material_floor(
+            mat, goal, restorability_score=restorability_score, is_studio_2026=is_studio_2026
+        )
         target = max(floor_eff, float(song_targets.get(goal, canonical.get(goal, 0.70))))
         target = min(target, float(physical.get(goal, 0.99)), float(chain_cap.get(goal, 0.99)))
         resolved[goal] = float(np.clip(target, 0.20, 0.99))

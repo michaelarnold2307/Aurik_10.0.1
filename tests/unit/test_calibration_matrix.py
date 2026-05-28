@@ -857,7 +857,7 @@ def test_effective_floor_always_below_base():
         for goal in ("natuerlichkeit", "groove", "brillanz"):
             base = get_material_floor(mat, goal)
             for rest in (0, 25, 50, 75, 99):
-                eff = get_effective_material_floor(mat, goal, float(rest))
+                eff = get_effective_material_floor(mat, goal, restorability_score=float(rest))
                 assert eff <= base + 1e-6, (
                     f"Effective floor ({eff:.4f}) > base floor ({base:.4f}) für mat={mat} goal={goal} rest={rest}"
                 )
