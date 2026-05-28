@@ -1193,6 +1193,22 @@ class TapeHissReductionPhase(PhaseInterface):
                 _quiet_zone_stats_p29["quiet_zone_max_delta_db"],
             )
 
+        # §V42 Rauigkeits-Regression nach Tape-Hiss-NR (non-blocking, §2.62): VERBOTEN-V42
+        try:
+            from backend.core.dsp.zwicker_metrics import (  # pylint: disable=import-outside-toplevel
+                check_roughness_regression as _crr29,
+            )
+
+            _zr29 = _crr29(audio, audio_processed, sample_rate)
+            if _zr29.roughness_regression:
+                audio_processed = (0.90 * audio_processed + 0.10 * audio).astype(np.float32)
+                logger.warning("Phase29 §V42 Rauigkeits-Regression → Blend ×0.90")
+            if _zr29.pumping_detected:
+                audio_processed = (0.80 * audio_processed + 0.20 * audio).astype(np.float32)
+                logger.warning("Phase29 §V42 NR-Pumpen → Blend ×0.80")
+        except Exception as _zr29_exc:  # pylint: disable=broad-except
+            logger.debug("Phase29 §V42 Roughness-Check non-blocking: %s", _zr29_exc)
+
         return PhaseResult(
             success=True,
             audio=restore_layout(audio_processed, _p29_transposed),

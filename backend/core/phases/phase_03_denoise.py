@@ -2045,6 +2045,22 @@ class DenoisePhase(PhaseInterface):
             except Exception as _vib03_exc:
                 logger.debug("Phase03 §2.72 Vibrato-Guard (non-blocking): %s", _vib03_exc)
 
+        # §V42 Rauigkeits-Regression nach NR (non-blocking, §2.62): VERBOTEN-V42
+        try:
+            from backend.core.dsp.zwicker_metrics import (  # pylint: disable=import-outside-toplevel
+                check_roughness_regression as _crr03,
+            )
+
+            _zr03 = _crr03(audio, result_audio, sample_rate)
+            if _zr03.roughness_regression:
+                result_audio = (0.90 * result_audio + 0.10 * audio).astype(np.float32)
+                logger.warning("Phase03 §V42 Rauigkeits-Regression → Blend ×0.90")
+            if _zr03.pumping_detected:
+                result_audio = (0.80 * result_audio + 0.20 * audio).astype(np.float32)
+                logger.warning("Phase03 §V42 NR-Pumpen → Blend ×0.80")
+        except Exception as _zr03_exc:  # pylint: disable=broad-except
+            logger.debug("Phase03 §V42 Roughness-Check non-blocking: %s", _zr03_exc)
+
         return create_phase_result(
             audio=_p03_out(result_audio),
             modifications={
