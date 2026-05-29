@@ -165,10 +165,56 @@ class BigVGANv2Plugin:
                     _dev = _get_dev("BigVGAN")
                 except Exception:
                     _dev = "cpu"
-                self._torch_gen = torch.load(
+                _raw = torch.load(
                     str(checkpoint),
                     map_location=_dev,
                 )  # nosec B614 — lokales Modell aus models/
+                # State-Dict-Format erkennen (Training-Checkpoint {'generator': sd})
+                if isinstance(_raw, dict) and "generator" in _raw and not hasattr(_raw, "eval"):
+                    # Architektur via bigvgan-Paket instanziieren
+                    try:
+                        from bigvgan import AttrDict as _AttrDict
+                        from bigvgan import BigVGAN as _BigVGAN
+                    except ImportError as _ie:
+                        raise RuntimeError(
+                            "bigvgan-Paket fehlt — bitte 'pip install bigvgan --no-deps' ausführen"
+                        ) from _ie
+                    _gen_sd = _raw["generator"]
+                    # Mel-Bänder aus state_dict ableiten: conv_pre.weight_v → [out_ch, in_ch, ksize]
+                    _w = _gen_sd.get("conv_pre.weight_v")
+                    _num_mel = int(_w.shape[1]) if _w is not None else MEL_BANDS
+                    if _num_mel != MEL_BANDS:
+                        raise RuntimeError(
+                            f"BigVGAN-Checkpoint: {_num_mel} Mel-Bänder ≠ Plugin-Konfiguration "
+                            f"{MEL_BANDS} Mel-Bänder — Vocos-48kHz-Fallback wird genutzt"
+                        )
+                    # upsample_initial_channel aus state_dict
+                    _up0 = _gen_sd.get("ups.0.0.weight_v")
+                    _upsample_ch = int(_up0.shape[0]) if _up0 is not None else 512
+                    # Basisconfig für den Plugin-MEL-Standard (80 Bänder / 48 kHz)
+                    _h = _AttrDict(
+                        {
+                            "resblock": "1",
+                            "upsample_rates": [8, 8, 2, 2],
+                            "upsample_initial_channel": _upsample_ch,
+                            "upsample_kernel_sizes": [16, 16, 4, 4],
+                            "resblock_kernel_sizes": [3, 7, 11],
+                            "resblock_dilation_sizes": [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+                            "activation": "snakebeta",
+                            "snake_logscale": True,
+                            "num_mels": _num_mel,
+                            "sampling_rate": 48000,
+                            "n_fft": 2048,
+                            "hop_size": 600,
+                            "win_size": 2400,
+                            "fmin": 0,
+                            "fmax": None,
+                        }
+                    )
+                    _model = _BigVGAN(_h, use_cuda_kernel=False)
+                    _model.load_state_dict(_gen_sd)
+                    _raw = _model
+                self._torch_gen = _raw
                 self._torch_gen.eval()
                 self._torch_gen.to(_dev)
                 self._device = _dev
