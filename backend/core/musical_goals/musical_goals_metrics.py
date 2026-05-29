@@ -2314,8 +2314,23 @@ class SpatialDepthMetric:
         left = audio[:, 0]
         right = audio[:, 1]
 
-        # 0. IACC — Phantom-Center-Stabilität (Blauert 1997) — Hauptmetrik
-        iacc = self._compute_iacc(left, right, max_lag_ms=1.0, sr=sr)
+        # 0. §V44: IACC via stereo_guard.compute_iacc (primärer Raumtiefe-Proxy; VERBOTEN V44).
+        # Fallback auf private _compute_iacc bei SR ≠ 48000 oder Exception (non-blocking).
+        try:
+            from backend.core.dsp.stereo_guard import (  # pylint: disable=import-outside-toplevel
+                compute_iacc as _sg_iacc_v44,
+            )
+
+            _iacc_res_v44 = _sg_iacc_v44(audio, sr=sr)
+            iacc = _iacc_res_v44.iacc
+            if not _iacc_res_v44.ok:
+                logger.warning(
+                    "SpatialDepthMetric §V44: IACC=%.3f → Mono-Kompatibilitätswarnung",
+                    iacc,
+                )
+        except Exception as _v44_exc:  # pylint: disable=broad-except
+            logger.debug("SpatialDepthMetric §V44 stereo_guard.compute_iacc non-blocking: %s", _v44_exc)
+            iacc = self._compute_iacc(left, right, max_lag_ms=1.0, sr=sr)
 
         # Near-mono stereo (IACC > 0.90 AND high L/R correlation) indicates faithful
         # preservation of narrow vintage/mono-sourced stereo — this is NOT a defect

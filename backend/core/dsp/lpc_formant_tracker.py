@@ -329,12 +329,16 @@ def check_formant_shift_db(
         spec_post = np.abs(np.fft.rfft(_post_buf)) + 1e-12
 
         # Measure energy at each formant band (±semitone ≈ ±5.9%)
+        # §V43: Pro-Formant JND-Toleranz (resolve_jnd_tolerance_db) statt uniformem threshold_db.
+        # F1 (~600 Hz) → ~1.8 dB; F2 (~1.5 kHz) → ~1.1 dB; F3/F4 (~3 kHz) → ~0.8 dB.
+        # min(threshold_db, jnd_tol) → immer das Strengere (Primum non nocere).
         max_shift = 0.0
+        rollback = False
         for f_hz in formants_hz:
             if f_hz <= 0 or f_hz >= sr / 2.0:
                 continue
-            f_lo = f_hz * 0.941  # -1 semitone
-            f_hi = f_hz * 1.059  # +1 semitone
+            f_lo = f_hz * 0.941  # -1 Halbton
+            f_hi = f_hz * 1.059  # +1 Halbton
             band_mask = (freqs >= f_lo) & (freqs <= f_hi)
             if not np.any(band_mask):
                 continue
@@ -343,8 +347,11 @@ def check_formant_shift_db(
             if e_pre > 1e-20:
                 shift_db = abs(10.0 * np.log10(max(e_post, 1e-20) / e_pre))
                 max_shift = max(max_shift, shift_db)
+                # §V43: Strengere der beiden Toleranzen — verhindert hörbare F3/F4-Verschiebungen
+                _jnd_tol = min(threshold_db, resolve_jnd_tolerance_db(f_hz))
+                if shift_db > _jnd_tol:
+                    rollback = True
 
-        rollback = max_shift > threshold_db
         return rollback, max_shift
     except Exception:
         return False, 0.0
