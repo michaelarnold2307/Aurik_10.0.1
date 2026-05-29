@@ -985,11 +985,19 @@ class VocalEnhancement(PhaseInterface):
         # damit Überprozessierung nicht die Stimmidentität zerstört.
         if _p42_panns >= 0.35:
             try:
+                from backend.core.musical_goals.era_vocal_profile import (
+                    get_era_vocal_profile as _gevp_p42,  # pylint: disable=import-outside-toplevel  # §EraVocalProfile
+                )
                 from backend.core.musical_goals.vocal_quality_index import (  # pylint: disable=import-outside-toplevel
                     compute_vqi as _compute_vqi_p42,
                 )
 
-                _vqi_result_p42 = _compute_vqi_p42(audio_orig=audio, audio_restored=enhanced_audio, sr=sample_rate)
+                _vqi_result_p42 = _compute_vqi_p42(
+                    audio_orig=audio,
+                    audio_restored=enhanced_audio,
+                    sr=sample_rate,
+                    era_profile=_gevp_p42(int(_era_decade)) if _era_decade is not None else None,
+                )
                 _vqi_p42 = float(_vqi_result_p42.get("vqi", 1.0))
                 if _vqi_p42 < 0.95:
                     logger.info(

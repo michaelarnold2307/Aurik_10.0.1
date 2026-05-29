@@ -1844,9 +1844,17 @@ class DenoisePhase(PhaseInterface):
         if _panns_singing >= 0.35:
             try:
                 # pylint: disable-next=import-outside-toplevel
+                from backend.core.musical_goals.era_vocal_profile import (
+                    get_era_vocal_profile as _gevp_p03,  # pylint: disable=import-outside-toplevel  # §EraVocalProfile
+                )
                 from backend.core.musical_goals.vocal_quality_index import compute_vqi as _compute_vqi_p03
 
-                _vqi_result_p03 = _compute_vqi_p03(audio_orig=audio, audio_restored=result_audio, sr=sample_rate)
+                _vqi_result_p03 = _compute_vqi_p03(
+                    audio_orig=audio,
+                    audio_restored=result_audio,
+                    sr=sample_rate,
+                    era_profile=_gevp_p03(_era_decade_p03),
+                )
                 _vqi_p03 = float(_vqi_result_p03.get("vqi", 1.0))
                 if _vqi_p03 < 0.95:
                     logger.info(

@@ -2287,7 +2287,17 @@ class SpatialDepthMetric:
             audio = audio.T
         left, right = audio[:, 0], audio[:, 1]
 
-        iacc = self._compute_iacc(left, right, max_lag_ms=1.0, sr=sr)
+        try:  # §V44 stereo_guard.compute_iacc primär (RELEASE_MUST §V44)
+            from backend.core.dsp.stereo_guard import (
+                compute_iacc as _sg_iacc_sf_v44,  # pylint: disable=import-outside-toplevel
+            )
+
+            _sg_sf_arr_v44 = np.stack([left, right], axis=0)
+            _sg_sf_res_v44 = _sg_iacc_sf_v44(_sg_sf_arr_v44, sr=sr)
+            iacc = _sg_sf_res_v44.iacc
+        except Exception as _sf_v44_exc:  # pylint: disable=broad-except
+            logger.debug("SpatialDepthMetric._spatial_features §V44 non-blocking: %s", _sf_v44_exc)
+            iacc = self._compute_iacc(left, right, max_lag_ms=1.0, sr=sr)
         # Guarded Pearson correlation — np.clip does NOT protect against NaN (§VERBOTEN: np.corrcoef)
         _lc = left.astype(float) - float(np.mean(left))
         _rc = right.astype(float) - float(np.mean(right))

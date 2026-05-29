@@ -936,9 +936,22 @@ class TapeHissReductionPhase(PhaseInterface):
         # Over-aggressive OMLSA kann Formanten beschädigen → Rollback auf Original.
         if _p29_panns >= 0.35:
             try:
+                from backend.core.musical_goals.era_vocal_profile import (
+                    get_era_vocal_profile as _gevp_p29,  # pylint: disable=import-outside-toplevel  # §EraVocalProfile
+                )
                 from backend.core.musical_goals.vocal_quality_index import compute_vqi as _compute_vqi_p29
 
-                _vqi_result_p29 = _compute_vqi_p29(audio_orig=audio, audio_restored=audio_processed, sr=sample_rate)
+                _era_p29_dec = (
+                    kwargs.get("decade")
+                    or kwargs.get("era_decade")
+                    or (kwargs.get("_restoration_context") or {}).get("decade")
+                )
+                _vqi_result_p29 = _compute_vqi_p29(
+                    audio_orig=audio,
+                    audio_restored=audio_processed,
+                    sr=sample_rate,
+                    era_profile=_gevp_p29(int(_era_p29_dec)) if _era_p29_dec else None,
+                )
                 _vqi_p29 = float(_vqi_result_p29.get("vqi", 1.0))
                 if _vqi_p29 < 0.95:
                     logger.info(

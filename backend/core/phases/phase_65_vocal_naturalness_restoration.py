@@ -470,12 +470,21 @@ class VocalNaturalnessRestorationPhase(PhaseInterface):
         _vqi_before: float = -1.0
         _vqi_after: float = -1.0
         try:
+            from backend.core.musical_goals.era_vocal_profile import (
+                get_era_vocal_profile as _gevp_p65,  # pylint: disable=import-outside-toplevel  # §EraVocalProfile
+            )
             from backend.core.musical_goals.vocal_quality_index import (  # pylint: disable=import-outside-toplevel
                 compute_vqi as _compute_vqi65,
             )
 
-            _vqi_res_before = _compute_vqi65(pre_nr_ch.astype(np.float32), audio.astype(np.float32), sample_rate)
-            _vqi_res_after = _compute_vqi65(pre_nr_ch.astype(np.float32), result, sample_rate)
+            _era_dec_p65 = kwargs.get("decade") or (kwargs.get("_restoration_context") or {}).get("era_decade")
+            _era_prof_p65 = _gevp_p65(int(_era_dec_p65)) if _era_dec_p65 else None
+            _vqi_res_before = _compute_vqi65(
+                pre_nr_ch.astype(np.float32), audio.astype(np.float32), sample_rate, era_profile=_era_prof_p65
+            )
+            _vqi_res_after = _compute_vqi65(
+                pre_nr_ch.astype(np.float32), result, sample_rate, era_profile=_era_prof_p65
+            )
             _vqi_before = float(_vqi_res_before.get("vqi", -1.0))
             _vqi_after = float(_vqi_res_after.get("vqi", -1.0))
             if _vqi_before > 0 and _vqi_after > 0 and _vqi_after < _vqi_before - 0.005:

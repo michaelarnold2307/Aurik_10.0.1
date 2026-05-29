@@ -999,11 +999,19 @@ class ReverbReduction(PhaseInterface):
                 pass
         if _p20_panns >= 0.35:
             try:
+                from backend.core.musical_goals.era_vocal_profile import (
+                    get_era_vocal_profile as _gevp_p20,  # pylint: disable=import-outside-toplevel  # §EraVocalProfile
+                )
                 from backend.core.musical_goals.vocal_quality_index import (  # pylint: disable=import-outside-toplevel
                     compute_vqi as _compute_vqi_p20,
                 )
 
-                _vqi_result_p20 = _compute_vqi_p20(audio_orig=audio, audio_restored=reduced, sr=sample_rate)
+                _vqi_result_p20 = _compute_vqi_p20(
+                    audio_orig=audio,
+                    audio_restored=reduced,
+                    sr=sample_rate,
+                    era_profile=_gevp_p20(int(decade)) if decade is not None else None,
+                )
                 _vqi_p20 = float(_vqi_result_p20.get("vqi", 1.0))
                 if _vqi_p20 < 0.95:
                     logger.info(

@@ -408,8 +408,41 @@ class SpectralRepairPhase(PhaseInterface):
 
                 _ped50 = _get_ped50()
                 _audio_pre_pre_echo = audio.copy()
+                # §V38 VFA-Schutzzonen für per-Event-Blend-Cap (Vibrato 0.20, Frisson 0.30 etc.)
+                _p50_vfa_zones: list[tuple[float, float, float]] = []
+                _p50_vfa = kwargs.get("vfa_result") or {}
+                if isinstance(_p50_vfa, dict):
+                    for _z in _p50_vfa.get("vibrato_zones", []):
+                        try:
+                            _p50_vfa_zones.append((float(_z[0]), float(_z[1]), 0.20))
+                        except (TypeError, IndexError):
+                            pass
+                    for _z in _p50_vfa.get("frisson_zones", []):
+                        try:
+                            _p50_vfa_zones.append((float(_z[0]), float(_z[1]), 0.30))
+                        except (TypeError, IndexError):
+                            pass
+                    for _z in _p50_vfa.get("whisper_zones", []):
+                        try:
+                            _p50_vfa_zones.append((float(_z[0]), float(_z[1]), 0.25))
+                        except (TypeError, IndexError):
+                            pass
+                    for _z in _p50_vfa.get("passaggio_zones", []):
+                        try:
+                            _p50_vfa_zones.append((float(_z[0]), float(_z[1]), 0.35))
+                        except (TypeError, IndexError):
+                            pass
                 for _evt50 in _pre_echo_events_50:
+                    _audio_evt_pre50 = audio.copy() if _p50_vfa_zones else None
                     audio = _ped50.repair_region(audio, _evt50, sample_rate)
+                    # §V38 In VFA-Schutzzone: Repair-Stärke auf Zone-Cap blend-limitieren
+                    if _p50_vfa_zones and _audio_evt_pre50 is not None:
+                        _pec_s_t50 = float(_evt50.get("pre_echo_start", 0)) / sample_rate
+                        _pec_e_t50 = float(_evt50.get("pre_echo_end", _evt50.get("onset_sample", 0))) / sample_rate
+                        for _pz_s50, _pz_e50, _pz_cap50 in _p50_vfa_zones:
+                            if _pec_s_t50 < _pz_e50 and _pec_e_t50 > _pz_s50:
+                                audio = _audio_evt_pre50 * (1.0 - _pz_cap50) + audio * _pz_cap50
+                                break
                 logger.info(
                     "Phase50 §4.11 pre_echo_repair: n_events=%d, material=%s",
                     len(_pre_echo_events_50),
