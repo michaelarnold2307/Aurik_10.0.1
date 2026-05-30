@@ -8395,7 +8395,12 @@ class UnifiedRestorerV3:
         # Computed ONCE after all classifiers (Genre, Era, Material, Vocal)
         # and threaded through PMGG, CIG, and FeedbackChain for the entire pipeline.
         try:
-            _vocal_detected = bool(getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0) > 0.4)
+            # §0p [RELEASE_MUST]: vocal_detected Schwelle = 0.35 (VQI-Gate-Threshold aus §0p)
+            # _compute_vocal_presence_confidence() gibt 0.35 via Music+Vocal-Heuristik zurück;
+            # der alte Threshold 0.40 schloss genau diese Heuristik-Fälle aus (Elke Best 1970er).
+            _vocal_detected = bool(
+                getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0) >= 0.35
+            )
             _vocal_conf = float(getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0))
             # §2.56 v9.12: Extract audio-derived features for per-song tuning
             _sgi_bw_hz = float(_cal_sf.get("effective_bandwidth_hz", 0)) or None
@@ -8661,7 +8666,7 @@ class UnifiedRestorerV3:
                     material_type=material_type,
                     restorability_score=float(_pmgg_restorability_score),
                     vocal_detected=bool(
-                        getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0) > 0.4
+                        getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0) >= 0.35
                     ),
                     vocal_confidence=float(
                         getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0)
@@ -12243,7 +12248,7 @@ class UnifiedRestorerV3:
                         # Negieren: höheres t_obj → niedrigerer Tiebreaker → wird bevorzugt
                         t_neg = -float(item.get("transparency_objective", 0.0) or 0.0)
                         # Einbetten zwischen Position 6 (regressions) und 7 (-excellence)
-                        return base[:7] + (t_neg,) + base[7:]
+                        return (*base[:7], t_neg, *base[7:])
 
                     _best_ranked = min(_ranked_candidates, key=_final_rank_key_80)
                     if _best_ranked["name"] != "current" and _best_ranked["rank"] < _current_rank:
