@@ -172,6 +172,29 @@ class HolisticPerceptualGate:
         else:
             # Kein Referenz-Vektor: misst ob das Signal in Richtung "sauber" verbessert wurde
             timbral_ref = self._compute_directional_restoration_quality(original, restored, sr)
+            # §2.44 Codec-Digital-Floor (v9.12.10): _compute_directional_restoration_quality()
+            # ist für analoge Defekte kalibriert (Rauschreduktion → Noise-Delta, HF-Crest-Gewinn).
+            # Für Codec-Container (MP3/AAC) mit hoher Restorability ist das Signal bereits sauber
+            # → direktionale Score ~0.5 (kein Rauschboden-Delta, kein HF-Crest-Gewinn) — obwohl
+            # die Restaurierung korrekt war. Fix: timbral_input (Mel-BW-Ceiling=12kHz) als Floor.
+            # timbral_input wird erst weiter unten berechnet — hier vorab für den Floor-Check.
+            _CODEC_MATS_HPG = frozenset({"mp3_low", "mp3_high", "aac", "streaming"})
+            if _mat_key_mert in _CODEC_MATS_HPG and restorability_score > 70.0:
+                _timbral_input_floor = self._compute_timbral_fidelity(
+                    _reference_audio, restored, sr, bw_ceiling_hz=_bw_ceiling_hz
+                )
+                _timbral_ref_before = timbral_ref
+                timbral_ref = max(timbral_ref, _timbral_input_floor)
+                if timbral_ref > _timbral_ref_before:
+                    logger.debug(
+                        "§2.44 Codec-Digital-Floor: timbral_ref %.3f → %.3f"
+                        " (timbral_input_floor=%.3f mat=%s restorability=%.0f)",
+                        _timbral_ref_before,
+                        timbral_ref,
+                        _timbral_input_floor,
+                        _mat_key_mert,
+                        restorability_score,
+                    )
 
         # timbral_input als Content-Integrity-Anteil (für Logging und niedrige Restorability)
         # §2.44 BW-Ceiling-Guard (v9.12.10): mel-Vergleich auf material-native BW begrenzen

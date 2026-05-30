@@ -520,7 +520,8 @@ def test_38_fallback_stufe5_no_vector():
     """Kein Eintrag in _ref_memory → _get_reference_vector gibt None zurück."""
     from backend.core.holistic_perceptual_gate import HolisticPerceptualGate
 
-    gate = HolisticPerceptualGate()  # fresh instance, no memory
+    gate = HolisticPerceptualGate()
+    gate._ref_memory = {}  # explizit leeren: __init__ lädt ~./aurik/hpg_reference_memory.json
     vec = gate._get_reference_vector("oper", "shellac", "pre-1960")
     assert vec is None
 

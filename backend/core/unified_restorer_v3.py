@@ -11801,6 +11801,13 @@ class UnifiedRestorerV3:
                 }
             )
             _ccr_threshold = 0.05  # §0d: unified threshold for all materials (analog + digital)
+            # §0d/§SepFid-Codec-Fix (v9.12.10): MP3/AAC BW-Extension durch phase_06/07/23 fügt HF
+            # über original codec-BW hinzu. CCR-Ratio ist spektral niedrig (~0.01), weil codec bereits
+            # HF-reduziert ist (MP3 ≤128 kbps → ~12 kHz). Ohne Reference-Shift misst separation_fidelity
+            # restored (BW-extended) gegen original codec → hoher HF-Residual → sdr_db < 3 dB → 0.667.
+            # Fix: Threshold 0.01 → CCR=0.0116 überschreitet Threshold → _mg_ref auf best_carrier_checkpoint.
+            if _ccr_mat_val in {"mp3_low", "mp3_high", "aac", "streaming"}:
+                _ccr_threshold = 0.01
             # §0d groove-Timing-Fix (v9.13): phase_12 Wow/Flutter-Korrekturen verbessern Timing
             # (nicht spektrale Form) → CCR spektral niedrig (~0.01–0.03), aber Reference-Shift
             # erforderlich damit groove-DTW gegen post-phase_12 Audio vergleicht statt degradiertes
