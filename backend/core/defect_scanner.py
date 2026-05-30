@@ -5131,28 +5131,28 @@ class DefectScanner:
 
         locations: list[tuple[float, float]] = []
         if severity > 0.0 and n >= int(0.10 * self.sample_rate):
-            win = max(64, int(0.020 * self.sample_rate))
-            hop = max(1, win // 2)
-            n_frames = max(0, (n - win) // hop)
+            win_loc: int = max(64, int(0.020 * self.sample_rate))
+            hop_loc: int = max(1, win_loc // 2)
+            n_frames = max(0, (n - win_loc) // hop_loc)
             if n_frames >= 3:
                 instability = np.zeros(n_frames, dtype=np.float64)
                 for i in range(n_frames):
-                    s = i * hop
-                    frame = audio[s : s + win].astype(np.float64)
+                    s = i * hop_loc
+                    frame = audio[s : s + win_loc].astype(np.float64)
                     d1 = np.diff(frame)
                     d2 = np.diff(d1)
                     instability[i] = (float(np.std(d1)) + 0.5 * float(np.std(d2))) / (
                         float(np.mean(np.abs(frame))) + 1e-6
                     )
 
-                i_thr = float(max(np.percentile(instability, 80.0), np.median(instability) * 1.25))
+                i_thr = max(float(np.percentile(instability, 80.0)), float(np.median(instability)) * 1.25)
                 jitter_mask = instability >= i_thr
                 if np.any(jitter_mask):
                     starts = np.where(np.diff(np.concatenate(([0], jitter_mask.astype(np.int8), [0]))) == 1)[0]
                     ends = np.where(np.diff(np.concatenate(([0], jitter_mask.astype(np.int8), [0]))) == -1)[0]
                     for s_f, e_f in zip(starts, ends):
-                        t0 = max(0.0, float(s_f * hop) / self.sample_rate - 0.01)
-                        t1 = min(float(n) / self.sample_rate, float(e_f * hop + win) / self.sample_rate + 0.01)
+                        t0 = max(0.0, float(s_f * hop_loc) / self.sample_rate - 0.01)
+                        t1 = min(float(n) / self.sample_rate, float(e_f * hop_loc + win_loc) / self.sample_rate + 0.01)
                         if t1 > t0:
                             locations.append((t0, t1))
         if severity > 0.0 and not locations:
@@ -5252,7 +5252,7 @@ class DefectScanner:
                 i_hi = float(np.clip((w_hi - 0.05) / 0.20, 0.0, 1.0))
                 compressed_indicator[i] = 0.65 * i_crest + 0.35 * i_hi
 
-            c_thr = float(max(np.percentile(compressed_indicator, 70.0), 0.45))
+            c_thr = max(float(np.percentile(compressed_indicator, 70.0)), 0.45)
             compressed_mask = compressed_indicator >= c_thr
             if np.any(compressed_mask):
                 starts = np.where(np.diff(np.concatenate(([0], compressed_mask.astype(np.int8), [0]))) == 1)[0]
