@@ -1820,6 +1820,28 @@ class SpectralRepair(PhaseInterface):
         _mrsa_t0 = time.monotonic()
         _mrsa_budget_exceeded = False
 
+        # §Spec04b Intra-Zone-Budget-Guard — außerhalb der Schleife definiert (B023-sicher).
+        # Wird VOR jeder teuren Intra-Zone-Operation aufgerufen um sicherzustellen,
+        # dass ein hängender Einzelschritt nie unbemerkt das Gesamtbudget reißt.
+        def _intra_zone_budget_exceeded(zone_name: str, op_label: str) -> bool:
+            """True wenn MRSA-Gesamtbudget überschritten — setzt _mrsa_budget_exceeded."""
+            nonlocal _mrsa_budget_exceeded
+            if _mrsa_budget_exceeded:
+                return True
+            _elapsed = time.monotonic() - _mrsa_t0
+            if _elapsed > _mrsa_wall_budget_s:
+                _mrsa_budget_exceeded = True
+                logger.warning(
+                    "phase_23 MRSA: intra-zone budget %.0fs überschritten vor '%s'"
+                    " in Zone '%s' (elapsed=%.1fs) — Zone als Passthrough",
+                    _mrsa_wall_budget_s,
+                    op_label,
+                    zone_name,
+                    _elapsed,
+                )
+                return True
+            return False
+
         for _zi, name in enumerate(ZONE_ORDER):
             if callable(progress_cb):
                 try:
@@ -1886,12 +1908,21 @@ class SpectralRepair(PhaseInterface):
             # §OOM-Guard: compute ONLY this zone's STFT (lazy — not all 5 at once).
             # Peak RAM per zone = ~172 MB (STFT) + ~4× (processing intermediaries) ≈ 850 MB max.
             # vs. old approach: all 5 STFTs in memory simultaneously ≈ 863 MB + processing.
+            if _intra_zone_budget_exceeded(name, "analyze_zones"):
+                zone_audios[name] = audio_f32
+                continue
             _single = analyze_zones(audio_f32, sample_rate, zones={name: _z_cfg})
             zone = _single[name]
             del _single  # release dict wrapper immediately
 
             magnitude = np.abs(zone.stft)
             phase_arr = np.angle(zone.stft)
+
+            if _intra_zone_budget_exceeded(name, "_detect_defects"):
+                zone_audios[name] = synthesize_zone(zone, zone.stft, len(audio_f32))
+                del zone, magnitude, phase_arr
+                gc.collect(0)
+                continue
             defect_mask = self._detect_defects(magnitude, phase_arr, thresholds)
 
             if np.sum(defect_mask) == 0:
@@ -1901,6 +1932,11 @@ class SpectralRepair(PhaseInterface):
                 gc.collect(0)
                 continue
 
+            if _intra_zone_budget_exceeded(name, "_inpaint_magnitude"):
+                zone_audios[name] = synthesize_zone(zone, zone.stft, len(audio_f32))
+                del zone, magnitude, phase_arr, defect_mask
+                gc.collect(0)
+                continue
             repaired_mag = self._inpaint_magnitude(magnitude, defect_mask)
             Zxx_repaired = repaired_mag * np.exp(1j * phase_arr)
             blend_mask = defect_mask * repair_strength
