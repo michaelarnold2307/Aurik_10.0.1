@@ -397,7 +397,18 @@ class ApolloPlugin:
                         elapsed,
                         n_total - pos,
                     )
-                    result[pos:] = self._repair_dsp_fallback(audio[pos:], sr, material)
+                    # DSP-Fallback für Restfragment in eigenem try — sehr kurze Fragmente
+                    # (< n_fft Samples) werfen sonst einen Shape-Fehler, der zum äußeren
+                    # except propagiert und dort DSP auf dem GESAMTEN Audio auslöst.
+                    try:
+                        result[pos:] = self._repair_dsp_fallback(audio[pos:], sr, material)
+                    except Exception as _fb_exc:
+                        logger.debug(
+                            "Apollo: DSP-Fallback Restfragment fehlgeschlagen (%s) — Originalsamples behalten (n=%d)",
+                            _fb_exc,
+                            n_total - pos,
+                        )
+                        # result[pos:] enthält bereits audio[pos:] via audio.copy() — kein Schaden.
                     break
 
                 chunk_end = min(pos + chunk_samples, n_total)
