@@ -9,6 +9,7 @@ Output is formatted for audit/uat_report_generator.py machine parsing.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -638,6 +639,57 @@ def _worst_segment_goal_summary(
     return worst
 
 
+def _build_r5_r12_summary(case: dict[str, Any]) -> dict[str, float]:
+    """Baut eine kompakte Metrikzusammenfassung fuer R5-R12-Delta-Vergleiche."""
+    goals_before = dict(case.get("goals_before", {}))
+    goals_after = dict(case.get("goals_after", {}))
+    original = np.asarray(case.get("original"), dtype=np.float32)
+    restored = np.asarray(case.get("restored"), dtype=np.float32)
+
+    side_before = float(_stereo_side_ratio(original))
+    side_after = float(_stereo_side_ratio(restored))
+    corr_before = _safe_corr(original[:, 0], original[:, 1]) if original.ndim == 2 and original.shape[1] >= 2 else 1.0
+    corr_after = _safe_corr(restored[:, 0], restored[:, 1]) if restored.ndim == 2 and restored.shape[1] >= 2 else 1.0
+
+    return {
+        "tonal_center_delta": float(goals_after.get("tonal_center", 0.0) - goals_before.get("tonal_center", 0.0)),
+        "micro_dynamics_delta": float(goals_after.get("micro_dynamics", 0.0) - goals_before.get("micro_dynamics", 0.0)),
+        "noise_delta_db": float(case.get("noise_after_dbfs", 0.0) - case.get("noise_before_dbfs", 0.0)),
+        "lufs_delta_lu": float(case.get("lufs_after", 0.0) - case.get("lufs_before", 0.0)),
+        "side_ratio_delta": float(side_after - side_before),
+        "corr_delta": float(corr_after - corr_before),
+    }
+
+
+def _compute_summary_delta(current: dict[str, float], baseline: dict[str, float]) -> dict[str, float]:
+    """Berechnet Delta zwischen aktuellem Lauf und Baseline-Summary."""
+    keys = sorted(set(current.keys()).intersection(baseline.keys()))
+    return {k: float(current[k] - baseline[k]) for k in keys}
+
+
+def _load_json_dict(path: Path) -> dict[str, Any]:
+    """Lädt ein JSON-Dict robust (non-blocking)."""
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        return {}
+    return {}
+
+
+def _write_json_dict(path: Path, payload: dict[str, Any]) -> None:
+    """Schreibt ein JSON-Dict atomar (non-blocking)."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        tmp_path.replace(path)
+    except Exception:
+        return
+
+
 @pytest.fixture(scope="module")
 def real_audio_runtime_case(real_audio_gate_case: dict[str, object]) -> dict[str, Any]:
     """Run one real-audio restoration pass and cache runtime metrics for R5-R12."""
@@ -685,7 +737,7 @@ def real_audio_runtime_case(real_audio_gate_case: dict[str, object]) -> dict[str
     goals_after = checker.measure_all(restored_goals_input, sr, reference=original_goals_input)
     segments = _compute_runtime_segments(original, restored, sr, checker)
 
-    return {
+    case_payload = {
         "path": str(real_audio_gate_case["path"]),
         "sr": sr,
         "material_type": str(getattr(getattr(restored_result, "material_type", "unknown"), "value", "unknown")),
@@ -700,6 +752,30 @@ def real_audio_runtime_case(real_audio_gate_case: dict[str, object]) -> dict[str
         "noise_before_dbfs": _noise_floor_dbfs(original),
         "noise_after_dbfs": _noise_floor_dbfs(restored),
     }
+
+    # R5-R12 Auto-Delta gegen letzte stabile Baseline (non-blocking).
+    baseline_path = Path(os.environ.get("AURIK_R5_R12_BASELINE_PATH", "analysis_results/uat_r5_r12_baseline.json"))
+    current_summary = _build_r5_r12_summary(case_payload)
+    baseline_summary = _load_json_dict(baseline_path).get("summary", {})
+    summary_delta: dict[str, float] = {}
+    if isinstance(baseline_summary, dict) and baseline_summary:
+        summary_delta = _compute_summary_delta(current_summary, baseline_summary)
+    case_payload["r5_r12_summary"] = dict(current_summary)
+    case_payload["r5_r12_delta_vs_baseline"] = dict(summary_delta)
+    case_payload["r5_r12_baseline_path"] = str(baseline_path)
+
+    if os.environ.get("AURIK_UPDATE_R5_R12_BASELINE", "0").strip().lower() in {"1", "true", "yes", "on"}:
+        _write_json_dict(
+            baseline_path,
+            {
+                "summary": dict(current_summary),
+                "source": str(real_audio_gate_case["path"]),
+                "sr": sr,
+                "material_type": case_payload["material_type"],
+            },
+        )
+
+    return case_payload
 
 
 # ============================================================================

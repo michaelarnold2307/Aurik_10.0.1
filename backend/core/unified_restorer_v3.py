@@ -14389,16 +14389,37 @@ class UnifiedRestorerV3:
         _fqf_vocal_prob = float(np.clip(float(getattr(self, "_panns_singing", 0.0) or 0.0), 0.0, 1.0))
         _fqf_vocal_restoration_mode = bool((not self.is_studio_mode()) and _fqf_vocal_prob >= 0.35)
         # Strengeres Profil fuer Vocal-Restoration: Fallback darf nicht zum Standardpfad werden.
-        _fqf_max_ml_fallbacks_allowed = 3 if _fqf_vocal_restoration_mode else 6
+        # §0h/§0p uncertainty-adaptiv: bei hoher Unsicherheit wird die erlaubte
+        # Fallback-Anzahl weiter reduziert (konservatives End-Gate).
+        _fqf_uncertainty_index = float(
+            np.clip((getattr(self, "_recovery_certainty_profile", {}) or {}).get("uncertainty_index", 0.35), 0.0, 1.0)
+        )
+        _fqf_base_max = 3 if _fqf_vocal_restoration_mode else 6
+        _fqf_uncertainty_penalty = 0
+        if _fqf_uncertainty_index >= 0.60:
+            _fqf_uncertainty_penalty += 2
+        elif _fqf_uncertainty_index >= 0.45:
+            _fqf_uncertainty_penalty += 1
+        if _fqf_vocal_restoration_mode and _artifact_freedom_for_hpi < 0.97:
+            _fqf_uncertainty_penalty += 1
+        _fqf_max_ml_fallbacks_allowed = max(1, int(_fqf_base_max - _fqf_uncertainty_penalty))
         _fallback_quality_floor = self._evaluate_fallback_quality_floor(
             ml_fallbacks_used=list(getattr(self, "_ml_fallbacks_used", [])),
             hpi_result=_hpi_result,
             artifact_freedom=_artifact_freedom_for_hpi,
             max_ml_fallbacks_allowed=_fqf_max_ml_fallbacks_allowed,
         )
-        _fallback_quality_floor["guard_profile"] = (
-            "vocal_restoration_strict" if _fqf_vocal_restoration_mode else "default"
+        _fqf_uncertainty_tier = (
+            "high" if _fqf_uncertainty_index >= 0.60 else "medium" if _fqf_uncertainty_index >= 0.45 else "low"
         )
+        _fallback_quality_floor["guard_profile"] = (
+            f"vocal_restoration_strict_{_fqf_uncertainty_tier}"
+            if _fqf_vocal_restoration_mode
+            else f"default_{_fqf_uncertainty_tier}"
+        )
+        _fallback_quality_floor["uncertainty_index"] = _fqf_uncertainty_index
+        _fallback_quality_floor["uncertainty_tier"] = _fqf_uncertainty_tier
+        _fallback_quality_floor["max_ml_fallbacks_allowed"] = _fqf_max_ml_fallbacks_allowed
         if bool(_fallback_quality_floor.get("triggered", False)) and bool(
             _fallback_quality_floor.get("drift_warning", False)
         ):
@@ -15212,7 +15233,8 @@ class UnifiedRestorerV3:
                 _v23_result = _v23_check(restored_audio, sample_rate)
                 if not _v23_result.ok:
                     logger.warning(
-                        "§V23 MKI warning: phase_cancellation_db=%.2f (>3.0 dB) — metadata[mono_compatibility_warning]=True",
+                        "§V23 MKI warning: phase_cancellation_db=%.2f "
+                        "(>3.0 dB) — metadata[mono_compatibility_warning]=True",
                         float(getattr(_v23_result, "phase_cancellation_db", 0.0) or 0.0),
                     )
                     if isinstance(self._phase_metadata_accumulator, dict):
@@ -15234,6 +15256,10 @@ class UnifiedRestorerV3:
                 _stereo_scene_stability = 0.0
             elif bool(_stereo_safety_guard.get("warning", False)):
                 _stereo_scene_stability = 0.70
+        _noise_texture_auth_wcs = _phase_meta_acc_world.get(
+            "noise_texture_authenticity",
+            float(getattr(_noise_texture_result, "coherence", 1.0)) if _noise_texture_result is not None else 1.0,
+        )
 
         _wcs_vector_input = {
             "vocal_identity_preservation": _phase_meta_acc_world.get("singer_identity_cosine", 1.0),
@@ -15252,9 +15278,7 @@ class UnifiedRestorerV3:
             ),
             "transient_articulation": _phase_meta_acc_world.get("transient_articulation", 1.0),
             "stereo_scene_stability": _stereo_scene_stability,
-            "noise_texture_authenticity": (
-                float(getattr(_noise_texture_result, "coherence", 1.0)) if _noise_texture_result is not None else 1.0
-            ),
+            "noise_texture_authenticity": _noise_texture_auth_wcs,
             "spectral_color_preservation": _phase_meta_acc_world.get(
                 "spectral_color_preservation",
                 _phase_meta_acc_world.get("spectral_color_corr", 1.0),
@@ -24950,6 +24974,22 @@ class UnifiedRestorerV3:
             except Exception as _rough_exc:
                 logger.debug("§V42 RoughnessGuard non-blocking: %s", _rough_exc)
 
+        def _update_vocal_quality_metrics(**metrics: float) -> None:
+            """Spiegelt aktuelle Vocal-Schutzmetriken in Runtime-Context und Top-Level-Telemetrie."""
+            _clean_metrics: dict[str, float] = {}
+            for _metric_key, _metric_value in metrics.items():
+                if isinstance(_metric_value, (int, float)) and math.isfinite(float(_metric_value)):
+                    _clean_metrics[str(_metric_key)] = float(np.clip(float(_metric_value), 0.0, 1.0))
+            if not _clean_metrics:
+                return
+            _rctx_vqm = getattr(self, "_restoration_context", None)
+            if isinstance(_rctx_vqm, dict):
+                _vqc = _rctx_vqm.setdefault("vocal_quality_check", {})
+                if isinstance(_vqc, dict):
+                    _vqc.update(_clean_metrics)
+            if isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
+                self._phase_metadata_accumulator.update(_clean_metrics)
+
         # §HNR [RELEASE_MUST]: apply_hnr_blend after NR phases on vocal material (UV3 hook)
         # phase_03_denoise already has its own internal HNR blend — skip to avoid double-blend.
         _NR_PHASES_HNR = frozenset(
@@ -24985,6 +25025,61 @@ class UnifiedRestorerV3:
                     )
             except Exception as _hnr_exc:
                 logger.debug("§HNR apply_hnr_blend non-blocking: %s", _hnr_exc)
+
+        # §0p [RELEASE_MUST] Vibrato-Tiefen-Guard — NR/Dynamics dürfen
+        # die F0-Modulationstiefe nicht >10% reduzieren.
+        _VIBRATO_DEPTH_GUARD_PHASES = frozenset(
+            {
+                "phase_03_denoise",
+                "phase_18_noise_gate",
+                "phase_20_reverb_reduction",
+                "phase_26_dynamic_range_compression",
+                "phase_29_tape_hiss_reduction",
+                "phase_49_advanced_dereverb",
+                "phase_54_transparent_dynamics",
+            }
+        )
+        if (
+            phase_metadata.phase_id in _VIBRATO_DEPTH_GUARD_PHASES
+            and hasattr(result, "audio")
+            and isinstance(result.audio, np.ndarray)
+            and result.audio.shape == audio.shape
+        ):
+            try:
+                _panns_vdg = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)) or 0.0)
+                if _panns_vdg >= 0.25:
+                    from backend.core.dsp.vibrato_guard import (
+                        check_vibrato_depth_preservation as _check_vibrato_depth,
+                    )
+
+                    _sr_vdg = int(kwargs.get("sample_rate", 48000) or 48000)
+                    _vdg_result = _check_vibrato_depth(audio, result.audio, _sr_vdg)
+                    _vdg_reduction = float(getattr(_vdg_result, "depth_reduction_pct", 0.0) or 0.0)
+                    _vdg_preservation = float(np.clip(1.0 - (_vdg_reduction / 20.0), 0.0, 1.0))
+                    if _vdg_reduction > 10.0:
+                        # Globale Safety-Blend-Reduktion als konservativer Fallback,
+                        # falls keine frame-genaue Vibrato-Mask für die Phase vorliegt.
+                        _vdg_wet = 0.50
+                        result.audio = np.clip(
+                            (_vdg_wet * result.audio + (1.0 - _vdg_wet) * audio).astype(np.float32),
+                            -1.0,
+                            1.0,
+                        )
+                        logger.warning(
+                            "§0p VibratoDepthGuard: %s depth_reduction=%.1f%% > 10%% → wet=%.2f",
+                            phase_metadata.phase_id,
+                            _vdg_reduction,
+                            _vdg_wet,
+                        )
+                    if hasattr(result, "metadata") and isinstance(result.metadata, dict):
+                        result.metadata["vibrato_depth_reduction_pct"] = round(_vdg_reduction, 3)
+                        result.metadata["vibrato_depth_preservation"] = round(_vdg_preservation, 4)
+                    _update_vocal_quality_metrics(
+                        vibrato_depth_preservation=_vdg_preservation,
+                        vibrato_depth_preserved=_vdg_preservation,
+                    )
+            except Exception as _vdg_exc:
+                logger.debug("§0p VibratoDepthGuard non-blocking: %s", _vdg_exc)
 
         # §0p [RELEASE_MUST] Formant-Integrität-Wächter — F1–F4 ±2 dB Rollback.
         # Nur für Vokal-schwere Phasen, nur wenn panns_singing ≥ 0.25 (§0p Invariante).
@@ -25076,7 +25171,7 @@ class UnifiedRestorerV3:
                                 return None
                         return None
 
-                    _FORMANT_DB_LIMIT = float(
+                    _era_formant_limit = float(
                         kwargs.get(
                             "formant_tolerance_db",
                             _rft_uv3(
@@ -25085,19 +25180,28 @@ class UnifiedRestorerV3:
                             ),
                         )
                     )
+                    _FORMANT_DB_LIMITS = (1.0, 1.0, 1.5, 1.5)
                     _rollback_fg = False
                     _rollback_fg_name = ""
-                    for _fn, _fp, _fq in [
-                        ("F1", _f1_pre, _f1_post),
-                        ("F2", _f2_pre, _f2_post),
-                        ("F3", _f3_pre, _f3_post),
-                        ("F4", _f4_pre, _f4_post),
-                    ]:
+                    _formant_integrity = 1.0
+                    for _idx, (_fn, _fp, _fq) in enumerate(
+                        [
+                            ("F1", _f1_pre, _f1_post),
+                            ("F2", _f2_pre, _f2_post),
+                            ("F3", _f3_pre, _f3_post),
+                            ("F4", _f4_pre, _f4_post),
+                        ]
+                    ):
                         if _rollback_fg:
                             break
                         if _fp > 0.0 and _fq > 0.0:
+                            _formant_limit = min(_FORMANT_DB_LIMITS[_idx], _era_formant_limit)
                             _shift_db = abs(20.0 * np.log10(max(_fq / _fp, 1e-9)))
-                            if _shift_db > _FORMANT_DB_LIMIT:
+                            _formant_integrity = min(
+                                _formant_integrity,
+                                float(np.clip(1.0 - (_shift_db / max(2.0 * _formant_limit, 1e-6)), 0.0, 1.0)),
+                            )
+                            if _shift_db > _formant_limit:
                                 _rollback_fg = True
                                 _rollback_fg_name = _fn
                                 logger.warning(
@@ -25105,16 +25209,24 @@ class UnifiedRestorerV3:
                                     phase_metadata.phase_id,
                                     _fn,
                                     _shift_db,
-                                    _FORMANT_DB_LIMIT,
+                                    _formant_limit,
                                 )
                     if _rollback_fg:
                         result.audio = audio.copy()
+                        _formant_integrity = 0.0
                         logger.info(
-                            "§0p Formant-Guard: %s rolled back (%s > ±%.1f dB) — Formant-Integrität geschützt",
+                            "§0p Formant-Guard: %s rolled back "
+                            "(%s überschreitet per-formant Grenze) — "
+                            "Formant-Integrität geschützt",
                             phase_metadata.phase_id,
                             _rollback_fg_name,
-                            _FORMANT_DB_LIMIT,
                         )
+                    if hasattr(result, "metadata") and isinstance(result.metadata, dict):
+                        result.metadata["formant_integrity"] = round(_formant_integrity, 4)
+                    _update_vocal_quality_metrics(
+                        formant_integrity=_formant_integrity,
+                        formant_fidelity=_formant_integrity,
+                    )
             except Exception as _fg_exc:
                 logger.debug("§0p Formant-Guard non-blocking: %s", _fg_exc)
 
@@ -25331,25 +25443,41 @@ class UnifiedRestorerV3:
                         compute_noise_texture_distance as _ntg_dist,
                     )
 
+                    _v19_panns = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)) or 0.0)
                     _ntg_residual = (audio - result.audio).astype(np.float32)
                     _ntg_dist_val = _ntg_dist(_ntg_residual, _mat_guards, _sr_guards)
-                    if _ntg_dist_val > 0.25:
+                    _ntg_threshold = 0.18 if _v19_panns >= 0.35 else 0.25
+                    _ntg_max_wet = 0.40 if _v19_panns >= 0.35 else 0.50
+                    _noise_texture_auth = float(
+                        np.clip(1.0 - (_ntg_dist_val / max(2.0 * _ntg_threshold, 1e-6)), 0.0, 1.0)
+                    )
+                    if _ntg_dist_val > _ntg_threshold:
                         # Strength × 0.5 via Wet-Blend (50 % dry/wet)
-                        _ntg_wet = float(np.clip(0.5 - (_ntg_dist_val - 0.25), 0.1, 0.5))
+                        _ntg_wet = float(
+                            np.clip(
+                                _ntg_max_wet - (_ntg_dist_val - _ntg_threshold),
+                                0.08 if _v19_panns >= 0.35 else 0.10,
+                                _ntg_max_wet,
+                            )
+                        )
                         result.audio = np.clip(
                             (_ntg_wet * result.audio + (1.0 - _ntg_wet) * audio).astype(np.float32),
                             -1.0,
                             1.0,
                         )
                         logger.warning(
-                            "§V19 NTI: %s noise_texture_distance=%.2f > 0.25 → nr_strength×%.2f (mat=%s)",
+                            "§V19 NTI: %s noise_texture_distance=%.2f > %.2f → nr_strength×%.2f (mat=%s)",
                             _pid_guards,
                             _ntg_dist_val,
+                            _ntg_threshold,
                             _ntg_wet * 2.0,
                             _mat_guards,
                         )
                     if hasattr(result, "metadata") and isinstance(result.metadata, dict):
                         result.metadata["noise_texture_distance"] = round(float(_ntg_dist_val), 3)
+                        result.metadata["noise_texture_authenticity"] = round(_noise_texture_auth, 4)
+                    if _v19_panns >= 0.25:
+                        _update_vocal_quality_metrics(noise_texture_authenticity=_noise_texture_auth)
                 except Exception as _v19_exc:
                     logger.debug("§V19 NTI non-blocking: %s", _v19_exc)
 
@@ -25396,21 +25524,34 @@ class UnifiedRestorerV3:
                         from backend.core.dsp.mikrodynamik_guard import frame_energy_correlation as _mkk_corr
 
                         _mkk_corr_val = _mkk_corr(audio, result.audio, _sr_guards, frame_ms=10.0)
-                        if _mkk_corr_val < 0.97:
-                            _mkk_wet = float(np.clip((_mkk_corr_val - 0.90) / 0.07, 0.0, 1.0))
+                        # Strengeres Vocal-Profil: bei deutlich erkannter Stimme aggressiver
+                        # auf Dry zurückblenden, um "klinischen" Klang zu verhindern.
+                        _mkk_target_corr = 0.985 if _v20_panns >= 0.35 else 0.97
+                        _mkk_floor_corr = 0.93 if _v20_panns >= 0.35 else 0.90
+                        if _mkk_corr_val < _mkk_target_corr:
+                            _mkk_wet = float(
+                                np.clip(
+                                    (_mkk_corr_val - _mkk_floor_corr) / max(_mkk_target_corr - _mkk_floor_corr, 1e-6),
+                                    0.0,
+                                    1.0,
+                                )
+                            )
                             result.audio = np.clip(
                                 (_mkk_wet * result.audio + (1.0 - _mkk_wet) * audio).astype(np.float32),
                                 -1.0,
                                 1.0,
                             )
                             logger.info(
-                                "§V20 MKK: %s corr=%.3f < 0.97 auf Voiced-Frames → wet=%.2f",
+                                "§V20 MKK: %s corr=%.3f < %.3f auf Voiced-Frames → wet=%.2f",
                                 _pid_guards,
                                 _mkk_corr_val,
+                                _mkk_target_corr,
                                 _mkk_wet,
                             )
                         if hasattr(result, "metadata") and isinstance(result.metadata, dict):
                             result.metadata["mikrodynamik_correlation"] = round(float(_mkk_corr_val), 4)
+                            result.metadata["mikrodynamik_target_corr"] = round(float(_mkk_target_corr), 4)
+                        _update_vocal_quality_metrics(micro_dynamic_correlation=_mkk_corr_val)
                 except Exception as _v20_exc:
                     logger.debug("§V20 MKK non-blocking: %s", _v20_exc)
 

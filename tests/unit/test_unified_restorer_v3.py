@@ -312,6 +312,25 @@ class TestQuietZoneReintroductionShield:
         assert "phase_24_dropout_repair" in src
         assert "phase_38_presence_boost" in src
 
+    def test_40zzn_vocal_guard_metrics_feed_runtime_context_and_nti_is_stricter_for_vocals(self):
+        """Neue Vocal-Schutzmetriken müssen in Runtime-Context/WCS sichtbar sein."""
+        src = inspect.getsource(_uv3_mod.UnifiedRestorerV3._profiled_phase_call)
+        assert "def _update_vocal_quality_metrics" in src
+        assert '"vocal_quality_check"' in src
+        assert "_FORMANT_DB_LIMITS = (1.0, 1.0, 1.5, 1.5)" in src
+        assert "vibrato_depth_preservation" in src
+        assert "_mkk_target_corr = 0.985 if _v20_panns >= 0.35 else 0.97" in src
+        assert "_mkk_floor_corr = 0.93 if _v20_panns >= 0.35 else 0.90" in src
+        assert "_ntg_threshold = 0.18 if _v19_panns >= 0.35 else 0.25" in src
+        assert "noise_texture_authenticity" in src
+
+    def test_40zzo_wcs_prefers_aggregated_vocal_noise_texture_metric(self):
+        """WCS muss die aggregierte Vocal-Noise-Texture-Metrik vor dem End-of-pipeline-Fallback lesen."""
+        src = inspect.getsource(_uv3_mod.UnifiedRestorerV3.restore)
+        assert "_noise_texture_auth_wcs = _phase_meta_acc_world.get(" in src
+        assert '"noise_texture_authenticity": _noise_texture_auth_wcs' in src
+        assert 'float(getattr(_noise_texture_result, "coherence", 1.0))' in src
+
 
 class TestSpecUpgradeMetadata:
     def test_40zzf_build_spec_upgrade_metadata_promotes_candidate(self):

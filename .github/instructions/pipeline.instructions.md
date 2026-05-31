@@ -1097,8 +1097,11 @@ _vdp = check_vibrato_depth_preservation(audio_pre, audio_post, sr)
 if _vdp.depth_reduction_pct > 10.0:
     # Blend in Vibrato-Segmenten: 50 % Dry
     metadata["vibrato_depth_reduction_pct"] = _vdp.depth_reduction_pct
+    metadata["vibrato_depth_preservation"] = max(0.0, 1.0 - _vdp.depth_reduction_pct / 100.0)
     logger.warning("vibrato_depth: %.1f%% > 10%% → blend 50%% dry in vibrato-segments", _vdp.depth_reduction_pct)
 ```
+
+**Pflicht-Telemetrie**: `vibrato_depth_preservation` MUSS zusaetzlich ueber `_update_vocal_quality_metrics(...)` in `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator` gespiegelt werden, damit WCS/HTEV/psychoakustische Gates denselben Wert lesen wie der Phasen-Guard.
 
 ## §2.73 Pre-Echo-Prevention [RELEASE_MUST v9.5]
 
@@ -1130,17 +1133,54 @@ if _scp.correlation < 0.97:
 
 ## §2.75 Mikrodynamik-Korrelation [RELEASE_MUST v9.5]
 
-**Regel**: Frame-Energie-Korrelation (10 ms) auf voiced-Zonen ≥ 0.97 nach NR/Dynamics-Phasen.
+**Regel**: Frame-Energie-Korrelation (10 ms) auf voiced-Zonen nach NR/Dynamics-Phasen.
+
+- `0.25 ≤ panns_singing < 0.35` → Zielwert `≥ 0.97`
+- `panns_singing ≥ 0.35` → Zielwert `≥ 0.985`, Blend-Floor `0.93`
 
 ```python
 from backend.core.dsp.mikrodynamik_guard import frame_energy_correlation
 if panns_singing >= 0.25:
     _corr = frame_energy_correlation(pre_phase_audio, audio, sr, frame_ms=10)
-    if _corr < 0.97:
-        _wet = float(min(1.0, max(0.0, (_corr - 0.90) / 0.07)))
+    _target = 0.985 if panns_singing >= 0.35 else 0.97
+    _floor = 0.93 if panns_singing >= 0.35 else 0.90
+    if _corr < _target:
+        _wet = float(min(1.0, max(0.0, (_corr - _floor) / max(_target - _floor, 1e-6))))
         audio = pre_phase_audio * (1.0 - _wet) + audio * _wet
         metadata["mikrodynamik_corr"] = _corr
+        metadata["mikrodynamik_target_corr"] = _target
 ```
+
+**Pflicht-Telemetrie**: `micro_dynamic_correlation` MUSS ueber `_update_vocal_quality_metrics(...)` in `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator` geschrieben werden. Finale WCS-/Psychoakustik-Gates duerfen nicht auf phasenlokale `metadata` beschraenkt bleiben.
+
+## §2.75a Vocal-Guard-Runtime-Bridge [RELEASE_MUST v9.12.10]
+
+**Problem**: Phase-lokale Guard-Metadaten sind fuer das End-Gate wertlos, wenn sie nur in `result.metadata` leben. UV3-Final-Gates (WCS, HTEV, Psychoakustik, Spec-Upgrade-Entscheidung) lesen aggregierte Werte aus `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator`.
+
+```python
+# KANONISCH nach jedem relevanten Vocal-Guard:
+_update_vocal_quality_metrics(
+    formant_integrity=formant_integrity,
+    formant_fidelity=formant_integrity,
+    vibrato_depth_preservation=vibrato_depth_preservation,
+    micro_dynamic_correlation=micro_dynamic_correlation,
+    noise_texture_authenticity=noise_texture_authenticity,
+)
+```
+
+**Pflichtfelder**:
+
+- `formant_integrity`
+- `vibrato_depth_preservation`
+- `micro_dynamic_correlation`
+- `noise_texture_authenticity`
+
+**Verboten**:
+
+- Vocal-Guard schreibt nur in `result.metadata` oder `phase_metadata[phase_id]`
+- WCS/HTEV liest Default-1.0, obwohl ein Guard bereits degradierten Wert gemessen hat
+
+**Strenger Vocal-NTI-Pfad**: Bei `panns_singing ≥ 0.35` gilt fuer `noise_texture_authenticity` der strengere Guard-Schwellenwert `0.18` statt `0.25`.
 
 ## §2.76 Wärmeband-Guard [RELEASE_MUST v9.5]
 
