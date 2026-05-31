@@ -8,13 +8,17 @@ Runs all registered detectors and generates comprehensive report.
 
 import logging
 import time
+from typing import Any
 
 import numpy as np
 
+from backend.core.defect_scanner import DefectScanner as CoreDefectScanner
+from backend.core.defect_scanner import DefectType as CoreDefectType
 from backend.defect_detection.base import (
     DefectDetector,
     DefectInstance,
     DefectReport,
+    DefectType,
     SeverityLevel,
 )
 
@@ -66,6 +70,10 @@ class UnifiedDefectDetector:
         self,
         registry: DefectDetectorRegistry | None = None,
         enable_treatments: bool = True,
+        default_mode: str = "studio2026",
+        use_core_scanner_bridge: bool = True,
+        core_bridge_min_severity: float = 0.65,
+        core_bridge_min_confidence: float = 0.8,
         user_policy: dict | None = None,
         reference_profile: dict | None = None,
         tontraeger_chain: list | None = None,
@@ -78,7 +86,11 @@ class UnifiedDefectDetector:
         """
         self.registry = registry or get_global_registry()
         self.enable_treatments = enable_treatments
-        self.treatment_recommender = TreatmentRecommender() if enable_treatments else None
+        self.treatment_recommender = TreatmentRecommender(default_mode=default_mode) if enable_treatments else None
+        self.use_core_scanner_bridge = use_core_scanner_bridge
+        self.core_bridge_min_severity = float(np.clip(core_bridge_min_severity, 0.0, 1.0))
+        self.core_bridge_min_confidence = float(np.clip(core_bridge_min_confidence, 0.0, 1.0))
+        self.core_defect_scanner = CoreDefectScanner(sample_rate=48000) if use_core_scanner_bridge else None
         self.user_policy = user_policy or {}
         self.reference_profile = reference_profile or {}
         self.tontraeger_chain = tontraeger_chain or []
@@ -122,6 +134,7 @@ class UnifiedDefectDetector:
         sr: int,
         detector_names: list[str] | None = None,
         context: dict | None = None,
+        mode: str | None = None,
     ) -> DefectReport:
         """
         Analysiert Audio auf alle Defekte.
@@ -183,15 +196,20 @@ class UnifiedDefectDetector:
                 logger.error("Warning: Detector %s failed: %s", detector.name, e)
                 continue
 
+        # Optional: erweitert Legacy-Erkennung um kanonische Core-Defekte.
+        if self.use_core_scanner_bridge and self.core_defect_scanner is not None:
+            bridge_defects = self._scan_with_core_bridge(audio, sr, context=ctx, mode=mode)
+            all_defects.extend(self._merge_bridge_defects(all_defects, bridge_defects))
+
         # Generate treatment recommendations
         recommended_treatments = []
         if self.enable_treatments and self.treatment_recommender:
             for defect in all_defects:
-                treatment = self.treatment_recommender.recommend(defect)
+                treatment = self.treatment_recommender.recommend(defect, mode=mode)
                 defect.treatment = treatment
 
             # Get unique treatments sorted by priority
-            recommended_treatments = self.treatment_recommender.recommend_batch(all_defects)
+            recommended_treatments = self.treatment_recommender.recommend_batch(all_defects, mode=mode)
 
         # Calculate summary statistics
         severity_counts = dict.fromkeys(SeverityLevel, 0)
@@ -229,6 +247,161 @@ class UnifiedDefectDetector:
             num_channels=num_channels,
             analysis_time=analysis_time,
         )
+
+    def _core_to_legacy_defect_type(self, core_type: CoreDefectType) -> DefectType:
+        """Projiziert kanonische Core-Defekte auf das Legacy-Report-Enum."""
+        direct_map: dict[CoreDefectType, DefectType] = {
+            CoreDefectType.CLIPPING: DefectType.CLIPPING,
+            CoreDefectType.CLICKS: DefectType.CLICKS,
+            CoreDefectType.CRACKLE: DefectType.CRACKLE,
+            CoreDefectType.HUM: DefectType.HUM,
+            CoreDefectType.LOW_FREQ_RUMBLE: DefectType.RUMBLE,
+            CoreDefectType.BANDWIDTH_LOSS: DefectType.HF_ROLLOFF,
+            CoreDefectType.STEREO_IMBALANCE: DefectType.STEREO_IMBALANCE,
+            CoreDefectType.DROPOUTS: DefectType.DROPOUTS,
+            CoreDefectType.PHASE_ISSUES: DefectType.PHASE_ISSUES,
+            CoreDefectType.DC_OFFSET: DefectType.DC_OFFSET,
+            CoreDefectType.ALIASING: DefectType.ALIASING,
+            CoreDefectType.HIGH_FREQ_NOISE: DefectType.BROADBAND_NOISE,
+            CoreDefectType.DIGITAL_ARTIFACTS: DefectType.SPECTRAL_ARTIFACTS,
+            CoreDefectType.COMPRESSION_ARTIFACTS: DefectType.DISTORTION,
+        }
+        if core_type in direct_map:
+            return direct_map[core_type]
+
+        phase_family = {
+            CoreDefectType.WOW,
+            CoreDefectType.FLUTTER,
+            CoreDefectType.PITCH_DRIFT,
+            CoreDefectType.AZIMUTH_ERROR,
+            CoreDefectType.MULTIBAND_WOW_FLUTTER,
+            CoreDefectType.SCRAPE_FLUTTER,
+            CoreDefectType.SPEED_CALIBRATION_ERROR,
+            CoreDefectType.TRANSPORT_BUMP,
+        }
+        if core_type in phase_family:
+            return DefectType.PHASE_ISSUES
+
+        noisy_family = {
+            CoreDefectType.MODULATION_NOISE,
+            CoreDefectType.NR_BREATHING_ARTIFACT,
+            CoreDefectType.MOTOR_INTERFERENCE,
+            CoreDefectType.STICKY_SHED_RESIDUE,
+        }
+        if core_type in noisy_family:
+            return DefectType.BROADBAND_NOISE
+
+        return DefectType.SPECTRAL_ARTIFACTS
+
+    def _scan_with_core_bridge(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        context: dict | None = None,
+        mode: str | None = None,
+    ) -> list[DefectInstance]:
+        """Führt den kanonischen Core-Scanner aus und konvertiert Ergebnisse ins Legacy-Format."""
+        if self.core_defect_scanner is None:
+            return []
+
+        ctx = context or {}
+        min_severity = float(np.clip(ctx.get("core_bridge_min_severity", self.core_bridge_min_severity), 0.0, 1.0))
+        min_confidence = float(
+            np.clip(ctx.get("core_bridge_min_confidence", self.core_bridge_min_confidence), 0.0, 1.0)
+        )
+
+        normalized_mode = str(mode or "studio2026").strip().lower().replace("_", " ")
+        if normalized_mode in {"restoration", "restore"}:
+            min_severity = float(np.clip(min_severity + 0.05, 0.0, 1.0))
+            min_confidence = float(np.clip(min_confidence + 0.05, 0.0, 1.0))
+
+        try:
+            core_result = self.core_defect_scanner.scan(audio, sample_rate=sr)
+        except Exception as e:
+            logger.debug("Core-Bridge-Scan fehlgeschlagen, fallback auf Legacy-only: %s", e)
+            return []
+
+        bridged: list[DefectInstance] = []
+        for core_score in core_result.scores.values():
+            severity = float(np.clip(core_score.severity, 0.0, 1.0))
+            confidence = float(np.clip(core_score.confidence, 0.0, 1.0))
+            if severity < min_severity or confidence < min_confidence:
+                continue
+
+            legacy_type = self._core_to_legacy_defect_type(core_score.defect_type)
+            if core_score.locations:
+                start_time = float(core_score.locations[0][0])
+                end_time = float(core_score.locations[-1][1])
+            else:
+                start_time = None
+                end_time = None
+
+            core_metrics: dict[str, Any] = {
+                "core_severity": severity,
+                "core_confidence": confidence,
+                "core_defect_type": core_score.defect_type.value,
+            }
+
+            bridged.append(
+                DefectInstance(
+                    type=legacy_type,
+                    severity=severity,
+                    confidence=confidence,
+                    severity_level=SeverityLevel.from_score(severity),
+                    start_time=start_time,
+                    end_time=end_time,
+                    affected_channels=None,
+                    metrics=core_metrics,
+                    description=f"Core-Bridge: {core_score.defect_type.value}",
+                    detected_by=f"core_defect_scanner_bridge:{core_score.defect_type.value}",
+                )
+            )
+
+        return bridged
+
+    def _merge_bridge_defects(
+        self,
+        existing_defects: list[DefectInstance],
+        bridge_defects: list[DefectInstance],
+    ) -> list[DefectInstance]:
+        """Verhindert doppelte Defektfamilien und dämpft Bridge-FPs auf cleanem Material."""
+        if not bridge_defects:
+            return []
+
+        strongest_by_type: dict[tuple[DefectType, str], float] = {}
+        for defect in existing_defects:
+            core_key = str(defect.metrics.get("core_defect_type", "legacy"))
+            key = (defect.type, core_key)
+            strongest_by_type[key] = max(strongest_by_type.get(key, 0.0), float(defect.severity))
+
+        max_existing_severity = max((float(defect.severity) for defect in existing_defects), default=0.0)
+        clean_baseline = max_existing_severity < 0.15
+
+        merged: list[DefectInstance] = []
+        for bridge_defect in bridge_defects:
+            core_key = str(bridge_defect.metrics.get("core_defect_type", "legacy"))
+            key = (bridge_defect.type, core_key)
+            existing_severity = strongest_by_type.get(key, 0.0)
+            corroborated = existing_severity >= 0.2
+            very_high_conf = float(bridge_defect.severity) >= 0.9 and float(bridge_defect.confidence) >= 0.9
+
+            conservative_clean_types = {
+                DefectType.HF_ROLLOFF,
+                DefectType.SPECTRAL_ARTIFACTS,
+                DefectType.BROADBAND_NOISE,
+                DefectType.PHASE_ISSUES,
+            }
+
+            if clean_baseline and not (corroborated or very_high_conf):
+                continue
+            if clean_baseline and bridge_defect.type in conservative_clean_types and not corroborated:
+                continue
+
+            if float(bridge_defect.severity) > existing_severity + 0.05:
+                merged.append(bridge_defect)
+                strongest_by_type[key] = float(bridge_defect.severity)
+
+        return merged
 
     def _calculate_overall_quality(self, defects: list[DefectInstance]) -> float:
         """

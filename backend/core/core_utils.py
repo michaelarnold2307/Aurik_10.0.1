@@ -10,7 +10,7 @@ def compute_rms(audio: np.ndarray) -> float:
 def compute_loudness(audio: np.ndarray) -> float:
     """Berechnet eine einfache Lautheitsschätzung (LUFS-Approximation)."""
     rms = compute_rms(audio)
-    return 20 * np.log10(rms + 1e-8)
+    return float(20 * np.log10(rms + 1e-8))
 
 
 def safe_peak_amplitude(audio: np.ndarray) -> float:
@@ -75,5 +75,5 @@ def audio_stats(audio: np.ndarray) -> dict:
 
 def log_message(msg: str, logfile: str = "aurik6.log"):
     """Schreibt eine Lognachricht in eine Datei."""
-    with open(logfile, "a") as f:
+    with open(logfile, "a", encoding="utf-8") as f:
         f.write(msg + "\n")

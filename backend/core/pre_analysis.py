@@ -114,7 +114,8 @@ def _to_mono_native(audio: np.ndarray) -> np.ndarray:
     else:
         mono = audio.copy()
     mono = np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(mono, -1.0, 1.0).astype(np.float32)
+    mono_f32: np.ndarray = np.asarray(np.clip(mono, -1.0, 1.0), dtype=np.float32)
+    return mono_f32
 
 
 def _load_symbol(module_name: str, symbol_name: str) -> object:

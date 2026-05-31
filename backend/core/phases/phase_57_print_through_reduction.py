@@ -95,7 +95,8 @@ def apply(
                 _pt_score,
                 min_print_through_score,
             )
-            return np.clip(audio, -1.0, 1.0)
+            clipped_input: np.ndarray = np.clip(audio, -1.0, 1.0)
+            return clipped_input
 
     stereo = audio.ndim == 2
     if stereo:
@@ -110,7 +111,8 @@ def apply(
         )
         _gain_pt = np.clip(_gain_pt, 0.0, 10.0)
         out = np.stack([audio[0] * _gain_pt, audio[1] * _gain_pt], axis=0)
-        return np.clip(out, -1.0, 1.0).astype(np.float32)
+        stereo_result: np.ndarray = np.clip(out, -1.0, 1.0).astype(np.float32)
+        return stereo_result
 
     # Ab hier: Mono-Verarbeitung
     x = audio.astype(np.float64)
@@ -134,7 +136,8 @@ def apply(
     )
     if delay_pre <= 0 and delay_post <= 0:
         logger.debug("Phase 57: Keine signifikanten Echos gefunden — übersprungen")
-        return np.clip(audio, -1.0, 1.0).astype(np.float32)
+        no_echo_result: np.ndarray = np.clip(audio, -1.0, 1.0).astype(np.float32)
+        return no_echo_result
 
     # Schritt 2+3: LMS-Adaptivfilter für Pre- und Post-Echo
     try:
@@ -157,10 +160,12 @@ def apply(
             _coh,
             coherence_floor,
         )
-        return np.clip(audio, -1.0, 1.0).astype(np.float32)
+        rollback_result: np.ndarray = np.clip(audio, -1.0, 1.0).astype(np.float32)
+        return rollback_result
 
-    result = np.nan_to_num(x_clean, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result.astype(np.float32), -1.0, 1.0)
+    cleaned_result = np.nan_to_num(x_clean, nan=0.0, posinf=0.0, neginf=0.0)
+    clipped: np.ndarray = np.clip(cleaned_result.astype(np.float32), -1.0, 1.0)
+    return clipped
 
 
 # ─── Interne Hilfsfunktionen ───────────────────────────────────────────────────
@@ -403,7 +408,7 @@ class PrintThroughReductionPhase(PhaseInterface):
         # §V40 NMR-Feedback: NR-Stärke adaptiv anpassen (FeedbackChain-aware).
         try:
             from backend.core.dsp.nmr_feedback import (
-                compute_nmr_score as _nmr_fn_57,  # pylint: disable=import-outside-toplevel
+                compute_nmr_score as _nmr_fn_57,
             )
 
             _nmr_result_57 = _nmr_fn_57(audio, sample_rate)
@@ -526,6 +531,49 @@ class PrintThroughReductionPhase(PhaseInterface):
                     result_audio[_smask_57] = audio[_smask_57]
         except Exception as _pm57_exc:
             logging.getLogger(__name__).debug("\u00a72.36 phase_57 Phonem-Mask (non-blocking): %s", _pm57_exc)
+
+        # §V19 Noise-Texture-Invariante: Residual darf Material-Spektralprofil nicht whitten.
+        _nt57_residual = audio - result_audio
+        _mat57_str = str(material_type or kwargs.get("material_type", kwargs.get("material", "unknown"))).lower()
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt57_dist_fn,
+            )
+
+            if _nt57_residual.shape == audio.shape:
+                _nt57_d = _nt57_dist_fn(_nt57_residual, _mat57_str, sr=sample_rate)
+                if _nt57_d > 0.25:
+                    result_audio = (0.5 * result_audio + 0.5 * audio).astype(np.float32)
+                    logger.warning("\u00a7V19 phase_57: noise_texture_dist=%.3f > 0.25 \u2192 50%% dry-blend", _nt57_d)
+        except Exception as _nt57_exc:
+            logger.debug("\u00a7V19 phase_57 noise_texture non-blocking: %s", _nt57_exc)
+
+        # §V20 Mikrodynamik-Korrelation: Voiced-Frame-Energie nach LMS-NR nicht degradieren.
+        _p57_panns = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)))
+        if _p57_panns >= 0.25:
+            try:
+                from backend.core.dsp.mikrodynamik_guard import (  # pylint: disable=import-outside-toplevel
+                    frame_energy_correlation as _fec57,
+                )
+
+                _corr57 = _fec57(audio, result_audio, sample_rate, frame_ms=10.0)
+                if _corr57 < 0.97:
+                    _wet57 = float(np.clip((_corr57 - 0.90) / 0.07, 0.0, 1.0))
+                    result_audio = (_wet57 * result_audio + (1.0 - _wet57) * audio).astype(np.float32)
+                    logger.warning("\u00a7V20 phase_57: mikrodynamik_corr=%.4f < 0.97 \u2192 wet=%.3f", _corr57, _wet57)
+            except Exception as _v20_57_exc:
+                logger.debug("\u00a7V20 phase_57 mikrodynamik non-blocking: %s", _v20_57_exc)
+
+        # §V21 Mindestrauschboden: Pausenzonen auf Tape/Shellac dürfen nicht auf digitale Stille fallen.
+        if any(x in _mat57_str for x in ("tape", "shellac", "reel", "analog", "vinyl")):
+            try:
+                from backend.core.dsp.noise_floor_guard import (  # pylint: disable=import-outside-toplevel
+                    apply_noise_floor_minimum as _nfmin57,
+                )
+
+                result_audio = _nfmin57(result_audio, sample_rate, _mat57_str, original_audio=audio)
+            except Exception as _v21_57_exc:
+                logger.debug("\u00a7V21 phase_57 noise_floor non-blocking: %s", _v21_57_exc)
 
         _rms_out_db = _rms_dbfs_gated(result_audio)
         _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0

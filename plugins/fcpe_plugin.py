@@ -29,13 +29,15 @@ Invarianten (§3.1, §3.2, §3.7 Aurik-Spec):
     - Alle öffentlichen Methoden vollständig typisiert (PEP 484)
 """
 
+# pylint: disable=import-outside-toplevel
+
 from __future__ import annotations
 
 import logging
 import math
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -67,20 +69,19 @@ _CENT_MAX = 1200.0 * math.log2(1975.5 / 10.0)
 _CENT_TABLE = np.linspace(_CENT_MIN, _CENT_MAX, 360, dtype=np.float32)
 
 # Mel-Basis (librosa-kompatibel, einmalig berechnet)
-_MEL_BASIS: np.ndarray | None = None
+_MEL_BASIS_HOLDER: list[np.ndarray | None] = [None]
 _MEL_BASIS_LOCK = threading.Lock()
 
 
 def _get_mel_basis() -> np.ndarray:
     """Lazy-init des Mel-Filter-Basismatrix (128×513, float32)."""
-    global _MEL_BASIS
-    if _MEL_BASIS is None:
+    if _MEL_BASIS_HOLDER[0] is None:
         with _MEL_BASIS_LOCK:
-            if _MEL_BASIS is None:
+            if _MEL_BASIS_HOLDER[0] is None:
                 try:
                     from librosa.filters import mel as librosa_mel
 
-                    _MEL_BASIS = librosa_mel(
+                    _MEL_BASIS_HOLDER[0] = librosa_mel(
                         sr=_FCPE_SR,
                         n_fft=_FCPE_N_FFT,
                         n_mels=_FCPE_N_MELS,
@@ -89,8 +90,10 @@ def _get_mel_basis() -> np.ndarray:
                     ).astype(np.float32)
                 except Exception:
                     # Fallback: einfache Dreiecksfilterbänke
-                    _MEL_BASIS = np.eye(_FCPE_N_MELS, _FCPE_N_FFT // 2 + 1, dtype=np.float32)
-    return _MEL_BASIS
+                    _MEL_BASIS_HOLDER[0] = np.eye(_FCPE_N_MELS, _FCPE_N_FFT // 2 + 1, dtype=np.float32)
+    mel_basis = _MEL_BASIS_HOLDER[0]
+    assert mel_basis is not None
+    return np.asarray(mel_basis, dtype=np.float32)
 
 
 def _compute_mel(audio_16k: np.ndarray) -> np.ndarray:
@@ -128,8 +131,9 @@ def _compute_mel(audio_16k: np.ndarray) -> np.ndarray:
 
     # Log-Kompression (dynamic_range_compression_torch equivalent)
     mel = np.log(np.maximum(mel, _FCPE_CLIP))  # (128, T)
+    mel_arr = np.asarray(mel, dtype=np.float32)
 
-    return mel.T.astype(np.float32)  # (T, 128)
+    return np.asarray(mel_arr.T, dtype=np.float32)  # (T, 128)
 
 
 def _local_argmax_decode(salience: np.ndarray, threshold: float = _VOICED_THRESHOLD) -> tuple[np.ndarray, np.ndarray]:
@@ -222,7 +226,10 @@ class FcpePlugin:
                 try:
                     from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
-                    _reg_plm("FCPE", size_gb=0.07, unload_fn=lambda s=self: setattr(s, "_session", None))
+                    def _unload_fcpe() -> None:
+                        self._session = None
+
+                    _reg_plm("FCPE", size_gb=0.07, unload_fn=_unload_fcpe)
                 except Exception as _exc:
                     logger.debug("Operation failed (non-critical): %s", _exc)
                 return
@@ -236,20 +243,27 @@ class FcpePlugin:
         # Versuch 2: CREPE ONNX als transparente Delegation
         try:
             self._crepe_delegate = get_crepe_plugin()
+            delegate_model = getattr(self._crepe_delegate, "model_used", "unbekannt")
             logger.info(
                 "🎵 FCPE-Plugin: delegiert an CREPE ONNX (Modell=%s)",
-                self._crepe_delegate._model_used,
+                delegate_model,
             )
         except Exception as exc:
             logger.debug("CREPE-Delegation fehlgeschlagen (%s) — pYIN DSP aktiv", exc)
 
     @property
     def model_used(self) -> str:
+        """Gibt den aktuell aktiven Analysepfad zurück."""
         if self._session is not None:
             return "fcpe_onnx"
         if self._crepe_delegate is not None:
             return "crepe_onnx_via_fcpe"
         return "dsp_pyin"
+
+    def clear_runtime_handles(self) -> None:
+        """Gibt interne Laufzeit-Handles frei, ohne harte Fehler auszulösen."""
+        self._session = None
+        self._crepe_delegate = None
 
     def analyze(self, audio: np.ndarray, sr: int) -> CrepeResult:
         """Pitch-Tracking via FCPE ONNX → CREPE ONNX → pYIN.
@@ -268,7 +282,7 @@ class FcpePlugin:
         if self._session is not None:
             return self._analyze_fcpe_onnx(audio, sr)
         if self._crepe_delegate is not None:
-            return self._crepe_delegate.analyze(audio, sr)
+            return cast(CrepeResult, self._crepe_delegate.analyze(audio, sr))
         return self._analyze_pyin(audio, sr)
 
     def _analyze_fcpe_onnx(self, audio: np.ndarray, sr: int) -> CrepeResult:
@@ -340,7 +354,7 @@ class FcpePlugin:
         except Exception as exc:
             logger.warning("FCPE-ONNX-Inferenz fehlgeschlagen (%s) — CREPE/pYIN Fallback", exc)
             if self._crepe_delegate is not None:
-                return self._crepe_delegate.analyze(audio, sr)
+                return cast(CrepeResult, self._crepe_delegate.analyze(audio, sr))
             return self._analyze_pyin(audio, sr)
         finally:
             if _plm is not None:
@@ -385,7 +399,7 @@ class FcpePlugin:
 # ---------------------------------------------------------------------------
 # Thread-sicherer Singleton (Double-Checked Locking §3.2 Aurik-Spec)
 # ---------------------------------------------------------------------------
-_instance: FcpePlugin | None = None
+_INSTANCE_HOLDER: list[FcpePlugin | None] = [None]
 _lock = threading.Lock()
 
 
@@ -395,12 +409,13 @@ def get_fcpe_plugin() -> FcpePlugin:
     Returns:
         Initialisierte :class:`FcpePlugin`-Instanz (lazy init).
     """
-    global _instance
-    if _instance is None:
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = FcpePlugin()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = FcpePlugin()
+    plugin = _INSTANCE_HOLDER[0]
+    assert plugin is not None
+    return plugin
 
 
 def unload_fcpe() -> None:
@@ -408,15 +423,16 @@ def unload_fcpe() -> None:
 
     Safe to call multiple times.
     """
-    global _instance
+    plugin: FcpePlugin | None = None
     with _lock:
-        if _instance is not None:
+        if _INSTANCE_HOLDER[0] is not None:
             try:
-                _instance._session = None
-                _instance._crepe_delegate = None
+                plugin = _INSTANCE_HOLDER[0]
+                assert plugin is not None
+                plugin.clear_runtime_handles()
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
-            _instance = None
+            _INSTANCE_HOLDER[0] = None
     try:
         from backend.core.ml_memory_budget import release as _release
 

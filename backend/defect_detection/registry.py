@@ -5,7 +5,8 @@ Defect Detector Registry
 Central registry for managing defect detectors.
 """
 
-from backend.defect_detection.base import DefectDetector, DefectType
+from backend.core.defect_scanner import DefectType as CoreDefectType
+from backend.defect_detection.base import DefectDetector, DefectType, require_core_defect_type
 
 
 class DefectDetectorRegistry:
@@ -17,7 +18,14 @@ class DefectDetectorRegistry:
 
     def __init__(self):
         self._detectors: dict[str, DefectDetector] = {}
-        self._detectors_by_type: dict[DefectType, list[DefectDetector]] = {}
+        self._detectors_by_type: dict[CoreDefectType, list[DefectDetector]] = {}
+
+    def _normalize_type(self, defect_type: DefectType | CoreDefectType) -> CoreDefectType:
+        """Normalisiert Legacy-Typen auf den kanonischen Core-Typ, wenn möglich."""
+        if isinstance(defect_type, CoreDefectType):
+            return defect_type
+
+        return require_core_defect_type(defect_type, context="DefectDetectorRegistry")
 
     def register(self, detector: DefectDetector) -> None:
         """
@@ -28,18 +36,23 @@ class DefectDetectorRegistry:
         """
         self._detectors[detector.name] = detector
 
-        if detector.defect_type not in self._detectors_by_type:
-            self._detectors_by_type[detector.defect_type] = []
+        normalized_type = self._normalize_type(detector.defect_type)
+        if normalized_type not in self._detectors_by_type:
+            self._detectors_by_type[normalized_type] = []
 
-        self._detectors_by_type[detector.defect_type].append(detector)
+        self._detectors_by_type[normalized_type].append(detector)
 
     def get(self, name: str) -> DefectDetector | None:
         """Gibt zurück: detector by name."""
         return self._detectors.get(name)
 
-    def get_by_type(self, defect_type: DefectType) -> list[DefectDetector]:
-        """Gibt zurück: all detectors for a specific defect type."""
-        return self._detectors_by_type.get(defect_type, [])
+    def get_by_type(self, defect_type: DefectType | CoreDefectType) -> list[DefectDetector]:
+        """Gibt zurück: all detectors for a specific defect type.
+
+        Akzeptiert sowohl den Legacy-Enum als auch den kanonischen Core-Enum.
+        """
+        normalized_type = self._normalize_type(defect_type)
+        return self._detectors_by_type.get(normalized_type, [])
 
     def get_all(self) -> list[DefectDetector]:
         """Gibt zurück: all registered detectors."""
@@ -49,8 +62,11 @@ class DefectDetectorRegistry:
         """Listet alle registrierten Detektor-Namen auf."""
         return list(self._detectors.keys())
 
-    def list_types(self) -> list[DefectType]:
-        """Listet auf: all defect types with registered detectors."""
+    def list_types(self) -> list[CoreDefectType]:
+        """Listet auf: all defect types with registered detectors.
+
+        Die Registry speichert intern nur kanonische Core-Typen.
+        """
         return list(self._detectors_by_type.keys())
 
 

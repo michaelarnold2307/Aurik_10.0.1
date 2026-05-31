@@ -9,6 +9,8 @@ Implementierung ohne externe Abhängigkeiten:
 Fallback: pyloudnorm wenn installiert.
 """
 
+# pylint: disable=import-outside-toplevel
+
 import logging
 
 import numpy as np
@@ -59,13 +61,16 @@ class AiLoudnessMatching:
         a1_hp = 2.0 * (K2b * K2b - 1.0) / a0b
         a2_hp = (1.0 - K2b / Q2 + K2b * K2b) / a0b
 
-        def _ch(ch):
+        def _ch(ch: np.ndarray) -> np.ndarray:
             y = lfilter([b0_hs, b1_hs, b2_hs], [1.0, a1_hs, a2_hs], ch.astype(np.float64))
-            return lfilter([b0_hp, b1_hp, b2_hp], [1.0, a1_hp, a2_hp], y)
+            return np.asarray(
+                lfilter([b0_hp, b1_hp, b2_hp], [1.0, a1_hp, a2_hp], y),
+                dtype=np.float64,
+            )
 
         if audio.ndim == 1:
-            return _ch(audio)
-        return np.stack([_ch(c) for c in audio], axis=0)
+            return np.asarray(_ch(audio), dtype=np.float64)
+        return np.asarray(np.stack([_ch(c) for c in audio], axis=0), dtype=np.float64)
 
     def measure_lufs(self, audio: np.ndarray, sr: int) -> float:
         """Misst Integrated Loudness in LUFS (BS.1770-4).
@@ -114,4 +119,5 @@ class AiLoudnessMatching:
         out = audio * 10.0 ** (gain_db / 20.0)
         out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
         out = np.clip(out, -1.0, 1.0)
-        return out.astype(audio.dtype)
+        out_typed: np.ndarray = np.asarray(out, dtype=audio.dtype)
+        return out_typed

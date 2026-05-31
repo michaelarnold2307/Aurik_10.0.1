@@ -1,14 +1,15 @@
 """AURIK Unified Defect Detection System v8.2.
 
-Systematische Audio-Defekt-Erkennung mit Severity Scoring & Treatment Recommendations.
-Konkurriert mit iZotope RX10's "Repair Assistant".
+Systematische Audio-Defekt-Erkennung mit Severity Scoring und Treatment
+Recommendations. Die Legacy-Schicht bleibt als kompatibler Adapter erhalten,
+die kanonische Defekt- und Phasenlogik liegt in `backend.core`.
 
 Unterstützte Defekte:
 - Clipping (Übersteuerung)
 - Clicks & Pops (Vinyl, digitale Fehler)
 - Crackle (Vinyl-Rauschen)
 - Broadband Noise (Rauschen)
-- Hum & Buzz (50/60 Hz, harmonics)
+- Hum & Buzz (50/60 Hz, Harmonische)
 - Distortion (THD, IMD)
 - Spectral Artifacts (Musical Noise, Pre-Echo)
 - Low Frequency Rumble

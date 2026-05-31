@@ -68,6 +68,32 @@ kontinuierlichen und semi-kontinuierlichen Phasenparameter (`strength`, `wet`, `
 isolierte Per-Phase-Heuristiken ohne Zugriff auf `goal_gaps`, `goal_weights` und
 `effective_goal_targets`.
 
+### §0m [RELEASE_MUST] Maximal-Ausbaustufe Defektintelligenz (beide Modi)
+
+**Aurik MUSS in `restoration` und `studio2026` immer auf maximaler Ausbaustufe laufen fuer**
+1) Defekterkennung, 2) Defekt-Differenzierung, 3) Defekt-Dosierung.
+
+**Weltspitzen-Invariante (ohne Konkurrenz):**
+Die Defektintelligenz in beiden Modi ist auf die **hoechste jemals veroeffentlichte Ausbaustufe**
+auszulegen. Ziel ist ein Niveau, das in Erkennungsabdeckung, Kausalpraezision und lokaler
+Dosiergenauigkeit **keine Konkurrenz** zulaesst.
+
+**Normative Pflicht:**
+
+1. **Erkennungsvollstaendigkeit ist modusinvariant**: DefectScanner + CausalDefectReasoner laufen in beiden Modi mit identischer Detektionsabdeckung (alle bekannten DetectionTypes/Ursachen). Modus darf nur die Korrekturstrategie beeinflussen, nie die Erkennungsreichweite.
+2. **Defekt-Differenzierung ist kausal statt aggregiert**: Defekte mit unterschiedlicher physikalischer Ursache duerfen nicht in gemeinsame Sammel-Labels kollabieren, wenn getrennte Ursachen/Phasen existieren.
+3. **Dosierung ist per-Event statt global**: Jede Defekt-Reparatur mit Event-Liste nutzt ein lokales Strength-Orakel pro Event (`_compute_<defect>_local_strength(...)`), inklusive VFA-Schutzzonen-Caps.
+4. **Maximalpraezision vor Aggressivitaet**: Bei Unsicherheit wird nicht pauschal staerker gefiltert, sondern die Kausalhypothese verfeinert (Severity/Confidence/Chain-Hints) und nur lokal korrigiert.
+5. **Mode-Differenz nur in Zielbild und Ceiling**: `restoration` bleibt carrier-treu und nicht-additiv, `studio2026` darf erweitern; beide Modi muessen aber denselben Defektbestand praezise erkennen und differenzieren.
+6. **Vollabdeckung aller bekannten Defekte ist Pflicht**: Jede in Aurik bekannte Defektklasse,
+   DetectionType, Ursache und Event-Unterform MUSS in beiden Modi mit voller Sensitivitaet
+   erkannt, kausal getrennt und lokal dosiert behandelbar sein.
+
+**VERBOTEN:**
+- Defekt-Scanner-Subsets je Modus (z. B. reduzierte Analyse in Restoration).
+- Globales Einheits-Strength fuer heterogene Events derselben Defektklasse.
+- Cause-Tabellen, die bekannte Defekte ohne physikalische Begruendung auf generische NR/EQ-Fallbacks zusammenziehen.
+
 ### §0p [RELEASE_MUST] Vocal-Supremacy-Doktrin (v9.12.1)
 
 **Source-Traceability**: `[SRC:S08,S09,S10,S11]` (siehe `docs/SCIENTIFIC_INVARIANT_TRACEABILITY_MATRIX.md`)

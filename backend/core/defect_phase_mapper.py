@@ -148,6 +148,23 @@ class PhaseAssignment:
                 setattr(config, k, v)
 
 
+def _validate_phase_map_completeness() -> None:
+    """Stellt sicher, dass jede Defektart eine explizite Phase-Zuordnung hat.
+
+    Die DefectPhaseMapper ist die kanonische Entscheidungsquelle für alle
+    Defekte. Lücken würden bedeuten, dass einzelne Defekte nur teilweise oder
+    implizit behandelt werden.
+    """
+    missing = [dt for dt in DefectType if dt not in _PHASE_MAP]
+    if missing:
+        missing_names = ", ".join(dt.name for dt in missing)
+        raise RuntimeError(f"DefectPhaseMapper unvollständig: fehlende Defekte: {missing_names}")
+
+    for defect_type, assignment in _PHASE_MAP.items():
+        if not assignment.primary_phases:
+            raise RuntimeError(f"DefectPhaseMapper ungültig: {defect_type.name} hat keine Primary-Phase")
+
+
 # ---------------------------------------------------------------------------
 # Vollständige Mapping-Tabelle
 # ---------------------------------------------------------------------------
@@ -1818,6 +1835,9 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_24_dropout_repair": 0.65,
     },
 }
+
+
+_validate_phase_map_completeness()
 
 
 def get_material_initial_strength(material: str, phase_id: str) -> float:

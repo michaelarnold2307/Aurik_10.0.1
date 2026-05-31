@@ -522,6 +522,8 @@ CAUSE_TO_PHASES = {
                                    "phase_06_frequency_restoration"],
     "wire_recording_specific":   ["phase_12_wow_flutter_fix", "phase_24_dropout_repair",
                                   "phase_03_denoise", "phase_01_click_removal"],
+    "vocal_quality_degradation": ["phase_65_vocal_naturalness_restoration", "phase_03_denoise",
+                                  "phase_19_de_esser"],
 }
 # PFLICHT: Jede neue Ursache → Eintrag hier UND in allen Material-Prior-Tabellen des DefectScanners.
 

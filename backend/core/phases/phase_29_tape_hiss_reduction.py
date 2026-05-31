@@ -33,6 +33,7 @@ import logging
 import os
 import tempfile
 import time
+from typing import cast
 
 import numpy as np
 from scipy import signal
@@ -51,13 +52,17 @@ try:
         - For ν → ∞  (high SNR): E1(ν) → 0    → gain ≈ Wiener
         All gains are subsequently clamped to [G_floor, 1.0].
         """
-        return np.asarray(np.exp(np.clip(0.5 * _scipy_exp1_p29(np.maximum(nu, 1e-10)), 0.0, 5.0)), dtype=np.float64)
+        return cast(
+            np.ndarray,
+            np.asarray(np.exp(np.clip(0.5 * _scipy_exp1_p29(np.maximum(nu, 1e-10)), 0.0, 5.0)), dtype=np.float64),
+        )
 
 except ImportError:  # pragma: no cover
 
     def _exp1_p29_gain(nu: np.ndarray) -> np.ndarray:  # type: ignore[misc]
         """Fallback: identity = degenerate Wiener gain (scipy.special unavailable)."""
-        return np.ones_like(nu)
+        fallback_gain: np.ndarray = np.ones_like(nu)
+        return fallback_gain
 
 
 from backend.core.audio_utils import (
@@ -256,7 +261,10 @@ class TapeHissReductionPhase(PhaseInterface):
                 cand[start:end] *= scale
             limited_frames += 1
 
-        return np.clip(np.nan_to_num(cand, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0), {
+        clipped_candidate: np.ndarray = np.clip(np.nan_to_num(cand, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(
+            np.float32
+        )
+        return clipped_candidate, {
             "quiet_zone_limited_frames": float(limited_frames),
             "quiet_zone_max_delta_db": round(float(max_delta_db), 3),
         }
@@ -827,8 +835,8 @@ class TapeHissReductionPhase(PhaseInterface):
         }.get(_mat_name, 10.0)
         if hf_reduction_db > _hf_ceiling_db and _effective_strength > 0.0:
             _excess_db = float(hf_reduction_db - _hf_ceiling_db)
-            # Max 28% HF back-blend, scaled by excess reduction and locality strength.
-            hf_detail_blend = float(np.clip((_excess_db / 12.0) * 0.28 * _effective_strength, 0.0, 0.28))
+            # Weniger HF-Rückblendung: sonst werden Bandfehler als Luftigkeit reingemischt.
+            hf_detail_blend = float(np.clip((_excess_db / 16.0) * 0.18 * _effective_strength, 0.0, 0.18))
             if hf_detail_blend > 0.0:
                 if is_stereo:
                     for ch in range(2):
@@ -905,7 +913,7 @@ class TapeHissReductionPhase(PhaseInterface):
         try:
             from backend.core.dsp.noise_texture_resynth import restore_carrier_noise_texture as _restore_ntr_p29
 
-            _ntr_strength_p29 = float(np.clip(_effective_strength * 0.6, 0.0, 0.8))
+            _ntr_strength_p29 = float(np.clip(_effective_strength * 0.25, 0.0, 0.45))
             _mat_str_p29 = str(getattr(material, "value", material)).lower()
             audio_processed = _restore_ntr_p29(
                 audio,
@@ -1221,6 +1229,58 @@ class TapeHissReductionPhase(PhaseInterface):
         except Exception as _zr29_exc:
             logger.debug("Phase29 §V42 Roughness-Check non-blocking: %s", _zr29_exc)
 
+        # §BandAnchor: spektrale Grundbalance bei zu heller/zu dünner Ausgabe
+        # sanft zurück auf den Originalträger ziehen, ohne den Hiss-Fix zu verlieren.
+        try:
+            _anchor_src_29 = audio.mean(axis=0) if audio.ndim == 2 and audio.shape[0] <= 2 else audio
+            _anchor_proc_29 = (
+                audio_processed.mean(axis=0)
+                if audio_processed.ndim == 2 and audio_processed.shape[0] <= 2
+                else audio_processed
+            )
+            if len(_anchor_src_29) >= 2048 and len(_anchor_proc_29) >= 2048:
+
+                def _band_energy_29(sig: np.ndarray, lo: float, hi: float) -> float:
+                    _freqs, _pxx = signal.welch(sig.astype(np.float64), sample_rate, nperseg=min(8192, len(sig)))
+                    _mask = (_freqs >= lo) & (_freqs < hi)
+                    if not np.any(_mask):
+                        return 0.0
+                    return float(np.trapz(_pxx[_mask], _freqs[_mask]))
+
+                _src_lowmid_29 = _band_energy_29(_anchor_src_29, 120.0, 400.0)
+                _proc_lowmid_29 = _band_energy_29(_anchor_proc_29, 120.0, 400.0)
+                _src_presence_29 = _band_energy_29(_anchor_src_29, 400.0, 2000.0)
+                _proc_presence_29 = _band_energy_29(_anchor_proc_29, 400.0, 2000.0)
+                _src_air_29 = _band_energy_29(_anchor_src_29, 8000.0, 16000.0)
+                _proc_air_29 = _band_energy_29(_anchor_proc_29, 8000.0, 16000.0)
+
+                _lowmid_ratio_29 = _proc_lowmid_29 / (_src_lowmid_29 + 1e-18)
+                _presence_ratio_29 = _proc_presence_29 / (_src_presence_29 + 1e-18)
+                _air_ratio_29 = _proc_air_29 / (_src_air_29 + 1e-18)
+
+                _anchor_need_29 = 0.0
+                if _lowmid_ratio_29 < 0.86:
+                    _anchor_need_29 = max(_anchor_need_29, float(np.clip((0.86 - _lowmid_ratio_29) / 0.36, 0.0, 1.0)))
+                if _presence_ratio_29 < 0.90:
+                    _anchor_need_29 = max(_anchor_need_29, float(np.clip((0.90 - _presence_ratio_29) / 0.30, 0.0, 1.0)))
+                if _air_ratio_29 > 1.8:
+                    _anchor_need_29 = max(_anchor_need_29, float(np.clip((_air_ratio_29 - 1.8) / 3.2, 0.0, 1.0)))
+
+                if _anchor_need_29 > 0.0:
+                    _anchor_mix_29 = float(np.clip(_anchor_need_29 * 0.65, 0.0, 0.65))
+                    audio_processed = ((1.0 - _anchor_mix_29) * audio_processed + _anchor_mix_29 * audio).astype(
+                        np.float32
+                    )
+                    logger.warning(
+                        "Phase29 BandAnchor: lowmid=%.2f presence=%.2f air=%.2f → original-blend=%.2f",
+                        _lowmid_ratio_29,
+                        _presence_ratio_29,
+                        _air_ratio_29,
+                        _anchor_mix_29,
+                    )
+        except Exception as _band_anchor_exc_29:
+            logger.debug("Phase29 BandAnchor (non-blocking): %s", _band_anchor_exc_29)
+
         return PhaseResult(
             success=True,
             audio=restore_layout(audio_processed, _p29_transposed),
@@ -1375,20 +1435,23 @@ class TapeHissReductionPhase(PhaseInterface):
     @staticmethod
     def _shift_channel_no_wrap(channel: np.ndarray, shift_samples: int) -> np.ndarray:
         """Verschiebt channel with edge fill, never wrap samples."""
-        x = np.asarray(channel, dtype=np.float32)
+        x: np.ndarray = np.asarray(channel, dtype=np.float32)
         n = len(x)
         if n == 0 or shift_samples == 0:
-            return x.copy()
+            x_copy: np.ndarray = x.copy()
+            return x_copy
         out = np.empty_like(x)
         if shift_samples > 0:
             shift = min(shift_samples, n - 1)
             out[:shift] = x[0]
             out[shift:] = x[:-shift]
-            return out
+            out_result: np.ndarray = out
+            return out_result
         shift = min(-shift_samples, n - 1)
         out[:-shift] = x[shift:]
         out[-shift:] = x[-1]
-        return out
+        out_result_neg: np.ndarray = out
+        return out_result_neg
 
     def _enforce_stereo_lag_safety(
         self,
@@ -1433,7 +1496,8 @@ class TapeHissReductionPhase(PhaseInterface):
             lag_out,
             lag_corr,
         )
-        return np.clip(corrected, -1.0, 1.0), stats
+        clipped_corrected: np.ndarray = np.clip(corrected, -1.0, 1.0).astype(np.float32)
+        return clipped_corrected, stats
 
     def _process_channel_omlsa(
         self,
@@ -1567,7 +1631,8 @@ class TapeHissReductionPhase(PhaseInterface):
         except Exception as _pm_29o_exc:
             logger.debug("§2.36 phase_29 _omlsa Phonem-Mask (non-blocking): %s", _pm_29o_exc)
 
-        return processed
+        processed_result: np.ndarray = processed
+        return processed_result
 
     def _process_channel_omlsa_mrsa(
         self,
@@ -1606,7 +1671,8 @@ class TapeHissReductionPhase(PhaseInterface):
         MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
         if len(channel) < MIN_AUDIO_SAMPLES:
             logger.debug("phase_29: audio too short (%d < %d), passthrough", len(channel), MIN_AUDIO_SAMPLES)
-            return np.asarray(channel, dtype=np.float32).copy()
+            passthrough_result: np.ndarray = np.asarray(channel, dtype=np.float32).copy()
+            return passthrough_result
 
         n = len(channel)
         nyquist = float(sample_rate // 2)
@@ -1973,7 +2039,8 @@ class TapeHissReductionPhase(PhaseInterface):
             float(np.mean(G_combined)),
             linked_sidechain is not None,
         )
-        return np.asarray(audio_out, dtype=np.float32)
+        audio_out_result: np.ndarray = np.asarray(audio_out, dtype=np.float32)
+        return audio_out_result
 
     def _extract_band(self, signal_in: np.ndarray, sample_rate: int, low_freq: float, high_freq: float) -> np.ndarray:
         """Bandpass-Filterung f\u00fcr Metrik-Berechnung (Hilfsmethode)."""
@@ -1983,7 +2050,8 @@ class TapeHissReductionPhase(PhaseInterface):
         if low_norm >= high_norm:
             return signal_in.copy()
         sos = signal.butter(4, [low_norm, high_norm], btype="band", fs=sample_rate, output="sos")
-        return np.asarray(signal.sosfilt(sos, signal_in), dtype=np.float32)
+        band_result: np.ndarray = np.asarray(signal.sosfilt(sos, signal_in), dtype=np.float32)
+        return band_result
 
     def _estimate_noise_floor(self, band_signal: np.ndarray) -> float:
         """
@@ -2209,7 +2277,8 @@ class TapeHissReductionPhase(PhaseInterface):
         # Apply gains
         processed = band_signal * gains_smoothed
 
-        return np.asarray(processed, dtype=np.float32)
+        processed_result: np.ndarray = np.asarray(processed, dtype=np.float32)
+        return processed_result
 
     def _compute_envelope(
         self, signal_in: np.ndarray, sample_rate: int, attack_ms: float = 5.0, release_ms: float = 50.0
@@ -2236,7 +2305,8 @@ class TapeHissReductionPhase(PhaseInterface):
                 # Release
                 envelope[i] = release_coeff * envelope[i - 1] + (1 - release_coeff) * rectified[i]
 
-        return np.asarray(envelope, dtype=np.float32)
+        envelope_result: np.ndarray = np.asarray(envelope, dtype=np.float32)
+        return envelope_result
 
     def _smooth_gains(self, gains: np.ndarray, sample_rate: int, smooth_ms: float = 10.0) -> np.ndarray:
         """
@@ -2247,7 +2317,8 @@ class TapeHissReductionPhase(PhaseInterface):
         sos = signal.butter(2, cutoff, "low", fs=sample_rate, output="sos")
         gains_smoothed = signal.sosfilt(sos, gains)
 
-        return np.asarray(gains_smoothed, dtype=np.float32)
+        gains_result: np.ndarray = np.asarray(gains_smoothed, dtype=np.float32)
+        return gains_result
 
 
 # Test harness

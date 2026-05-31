@@ -130,7 +130,7 @@ class BatchParallelProcessor:
         self.enable_parallel = enable_parallel
         self.show_progress = show_progress
 
-        self._processing_stats = {
+        self._processing_stats: dict[str, Any] = {
             "total_batches": 0,
             "total_files": 0,
             "total_successes": 0,
@@ -317,13 +317,13 @@ class BatchParallelProcessor:
         Returns:
             Dictionary with batch processing stats
         """
+        success_rate = (self._processing_stats["total_successes"] / max(1, self._processing_stats["total_files"])) * 100
         return {
             "total_batches": self._processing_stats["total_batches"],
             "total_files": self._processing_stats["total_files"],
             "total_successes": self._processing_stats["total_successes"],
             "total_failures": self._processing_stats["total_failures"],
-            "success_rate": (self._processing_stats["total_successes"] / max(1, self._processing_stats["total_files"]))  # type: ignore[call-overload]
-            * 100,
+            "success_rate": success_rate,
             "average_speedup": self.get_average_speedup(),
             "worker_count": self.n_jobs,
         }
@@ -353,8 +353,6 @@ def _process_file_worker(task: FileTask, process_func: Callable[[Path, Path], No
     Returns:
         File result
     """
-    import time
-
     start_time = time.time()
 
     try:

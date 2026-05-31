@@ -13,6 +13,10 @@ applyTo: "backend/core/phases/phase_*.py"
 4. result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0) vor Return
 5. logger.info("phase=%s score=%.2f", phase_id, score) — kein print()
 6. CAUSE_TO_PHASES + CAUSES bidirektional ergänzen (V12)
+     → Die vollständige Defektoberfläche aus backend/core/defect_scanner.py MUSS
+         in _PHASE_MAP und in jedem defektgebundenen Recommender vollständig
+         abgebildet sein; Teilmengen oder lose Sonderfall-Tabellen sind
+         Release-Blocker.
 7. Neue HPF/Notch-Phase: 4-stufige Checkliste (s. unten)
 8. Wenn panns_singing ≥ 0.25: apply_hnr_blend() nach jeder ML-NR-Phase (§0p)
 9. Wenn panns_singing ≥ 0.25: Formant-Delta via lpc_formant_tracker prüfen (§0p)
@@ -38,6 +42,12 @@ applyTo: "backend/core/phases/phase_*.py"
       `_compute_<defect>_local_strength(mono_ref, start, end, sr, base_strength, protected_zones)`
       mit 250 ms Kontext-RMS-Proxy; `base_strength < 1e-6` → 0.0 (kein Event-Processing)
     → Einheitliche `strength` für alle Events in der Schleife ist VERBOTEN
+
+14. [RELEASE_MUST] Defect-Coverage-Registry:
+        → Jede komplette Defect-Registry muss alle DefectType-Werte aus
+            backend/core/defect_scanner.py abdecken.
+        → Vollständigkeits-Tests sind Pflicht; fehlende Defekte oder silent fallbacks
+            gelten als unvollständig implementiert.
 
 Hinweis zur Strength-Übergabe (kanonisch):
         - `strength` wird aus `kwargs` gelesen (z. B. `strength = float(kwargs.get("strength", 0.7))`).

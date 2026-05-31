@@ -19,12 +19,7 @@ from __future__ import annotations
 
 import warnings as _warnings
 
-_warnings.warn(
-    "backend.carrier_ml_classifier ist veraltet (Aurik 6.0). "
-    "Verwende 'from backend.core.medium_classifier import MediumClassifier, classify_medium'.",
-    DeprecationWarning,
-    stacklevel=2,
-)
+import numpy as _np
 
 from backend.core.medium_classifier import (
     ClassificationResult,
@@ -33,11 +28,18 @@ from backend.core.medium_classifier import (
     get_medium_classifier,
 )
 
+_warnings.warn(
+    "backend.carrier_ml_classifier ist veraltet (Aurik 6.0). "
+    "Verwende 'from backend.core.medium_classifier import MediumClassifier, classify_medium'.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 # Aurik-6.0-kompatibler Alias
 CarrierMLClassifier = MediumClassifier
 
 
-def classify_carrier_ml(features: dict) -> dict:  # type: ignore[type-arg]
+def classify_carrier_ml(features: dict[str, object]) -> dict:
     """Classify audio carrier type from pre-extracted feature dict.
 
     Aurik-6.0 compatibility shim — delegates to :func:`classify_medium`
@@ -53,19 +55,25 @@ def classify_carrier_ml(features: dict) -> dict:  # type: ignore[type-arg]
     -------
     dict with keys ``"carrier_ml"``, ``"confidence"``, ``"probas"``, ``"explain"``.
     """
-    import numpy as _np
-
     try:
         _sr = 48000
         _audio = _np.zeros(int(_sr * 0.1), dtype=_np.float32)
         result = classify_medium(_audio, _sr)
-        carrier = result.material_type.value if hasattr(result, "material_type") else str(result)
+        feature_count = len(features)
+        _material = getattr(result, "material", None)
+        _material_value = getattr(_material, "value", None)
+        if _material_value is not None:
+            carrier = str(_material_value)
+        elif _material is not None:
+            carrier = str(_material)
+        else:
+            carrier = str(result)
         confidence = float(result.confidence) if hasattr(result, "confidence") else 0.5
         return {
             "carrier_ml": carrier,
             "confidence": confidence,
             "probas": {},
-            "explain": f"Classified as {carrier} (shim)",
+            "explain": f"Classified as {carrier} (shim, features={feature_count})",
         }
     except Exception as exc:
         return {

@@ -3621,9 +3621,13 @@ class PerPhaseMusicalGoalsGate:
             _excluded_goals -= _recheck_goals
 
         if _excluded_goals:
+            _effective_goals_before_exclusion = list(effective_goals)
             effective_goals = [g for g in effective_goals if g not in _excluded_goals]
             if not effective_goals:
-                effective_goals = list(FAST_GOALS_SUBSET)  # Safety fallback
+                # Wenn Exclusions die komplette Zielmenge leeren, behalten wir die
+                # ursprünglichen expliziten Ziele bei (statt auf alle 15 zu springen),
+                # damit Recovery-/Tolerance-Pfade deterministisch bleiben.
+                effective_goals = _effective_goals_before_exclusion
             logger.debug(
                 "PMGG: %s goal exclusions applied: %s → %d goals checked",
                 phase_id,

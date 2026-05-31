@@ -12,6 +12,8 @@ from typing import Any
 
 import numpy as np
 
+from backend.core.defect_scanner import DefectType as CoreDefectType
+
 
 class DefectType(Enum):
     """Audio defect types that can be detected."""
@@ -31,6 +33,58 @@ class DefectType(Enum):
     PHASE_ISSUES = "phase_issues"
     DC_OFFSET = "dc_offset"
     ALIASING = "aliasing"
+
+
+LEGACY_TO_CORE_DEFECT_TYPE: dict[DefectType, CoreDefectType] = {
+    DefectType.CLIPPING: CoreDefectType.CLIPPING,
+    DefectType.CLICKS: CoreDefectType.CLICKS,
+    DefectType.CRACKLE: CoreDefectType.CRACKLE,
+    DefectType.BROADBAND_NOISE: CoreDefectType.HIGH_FREQ_NOISE,
+    DefectType.HUM: CoreDefectType.HUM,
+    DefectType.BUZZ: CoreDefectType.HIGH_FREQ_NOISE,
+    DefectType.DISTORTION: CoreDefectType.COMPRESSION_ARTIFACTS,
+    DefectType.SPECTRAL_ARTIFACTS: CoreDefectType.DIGITAL_ARTIFACTS,
+    DefectType.RUMBLE: CoreDefectType.LOW_FREQ_RUMBLE,
+    DefectType.HF_ROLLOFF: CoreDefectType.BANDWIDTH_LOSS,
+    DefectType.STEREO_IMBALANCE: CoreDefectType.STEREO_IMBALANCE,
+    DefectType.DROPOUTS: CoreDefectType.DROPOUTS,
+    DefectType.PHASE_ISSUES: CoreDefectType.PHASE_ISSUES,
+    DefectType.DC_OFFSET: CoreDefectType.DC_OFFSET,
+    DefectType.ALIASING: CoreDefectType.ALIASING,
+}
+
+
+def to_core_defect_type(defect_type: DefectType) -> CoreDefectType | None:
+    """Mappt einen Legacy-Defekttyp auf den kanonischen Core-Defekttyp.
+
+    Nicht jeder Legacy-Name hat ein 1:1-Äquivalent im Core-Enum; in solchen
+    Fällen wird None zurückgegeben.
+    """
+    return LEGACY_TO_CORE_DEFECT_TYPE.get(defect_type)
+
+
+def require_core_defect_type(defect_type: DefectType, *, context: str = "") -> CoreDefectType:
+    """Erzwingt das Vorhandensein eines kanonischen Core-Defekttyps."""
+    core_type = to_core_defect_type(defect_type)
+    if core_type is not None:
+        return core_type
+
+    prefix = f"{context}: " if context else ""
+    raise ValueError(f"{prefix}Kein kanonisches Core-Mapping für Legacy-Defekttyp {defect_type!r}")
+
+
+def assert_legacy_mapping_keys(mapping_keys: set[DefectType], *, context: str) -> None:
+    """Validiert, dass ein Legacy-Defekt-Mapping exakt dem zentralen Defektset entspricht."""
+    expected = set(LEGACY_TO_CORE_DEFECT_TYPE.keys())
+    missing = expected - mapping_keys
+    if missing:
+        names = ", ".join(sorted(defect_type.name for defect_type in missing))
+        raise ValueError(f"{context}: Fehlende Legacy-Defekte: {names}")
+
+    extra = mapping_keys - expected
+    if extra:
+        names = ", ".join(sorted(defect_type.name for defect_type in extra))
+        raise ValueError(f"{context}: Unbekannte zusätzliche Legacy-Defekte: {names}")
 
 
 class SeverityLevel(Enum):
@@ -85,7 +139,7 @@ class DefectInstance:
     affected_channels: list[int] | None = None
 
     # Quantitative metrics
-    metrics: dict[str, float] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
 
     # Treatment
     treatment: TreatmentRecommendation | None = None
@@ -202,8 +256,11 @@ class DefectDetector(ABC):
     """
 
     def __init__(self, name: str, defect_type: DefectType):
+        core_defect_type = require_core_defect_type(defect_type, context="DefectDetector")
+
         self.name = name
         self.defect_type = defect_type
+        self.core_defect_type = core_defect_type
 
     @abstractmethod
     def detect(self, audio: np.ndarray, sr: int, **kwargs) -> list[DefectInstance]:

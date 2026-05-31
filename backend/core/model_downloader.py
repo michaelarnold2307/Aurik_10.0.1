@@ -18,10 +18,16 @@ import contextlib
 import hashlib
 import json
 import logging
+import shutil
 import threading
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,7 @@ _SOTA_MANIFEST = Path.home() / ".aurik" / "sota_manifest.json"
 # Auf False setzen um SOTA-Upgrade-Downloads zu aktivieren.
 # ──────────────────────────────────────────────────────────────────────────────
 OFFLINE_MODE: bool = True
+_ALLOWED_SOTA_URL_SCHEMES = {"https"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -102,6 +109,18 @@ def verify_model(path: Path, expected_sha256: str) -> bool:
         return False
 
 
+def _download_remote_model(url: str, target: Path, timeout_s: float = 30.0) -> None:
+    """Lädt ein SOTA-Modell ausschließlich über freigegebene Remote-Schemas."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme.lower() not in _ALLOWED_SOTA_URL_SCHEMES:
+        raise ValueError(f"Nicht erlaubtes Download-Schema: {parsed.scheme or '<leer>'}")
+
+    with requests.get(url, stream=True, timeout=timeout_s) as response:
+        response.raise_for_status()
+        with target.open("wb") as target_handle:
+            shutil.copyfileobj(response.raw, target_handle)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # ModelDownloader — Singleton
 # ──────────────────────────────────────────────────────────────────────────────
@@ -132,6 +151,7 @@ class ModelDownloader:
     # Singleton-State
     _instance: ModelDownloader | None = None
     _lock: threading.Lock = threading.Lock()
+    _initialized: bool
 
     def __new__(cls) -> ModelDownloader:
         if cls._instance is None:
@@ -143,7 +163,7 @@ class ModelDownloader:
         return cls._instance
 
     def __init__(self) -> None:
-        if self._initialized:  # type: ignore[attr-defined]
+        if getattr(self, "_initialized", False):
             return
         self._initialized = True
         self._download_lock = threading.Lock()
@@ -328,8 +348,6 @@ class ModelDownloader:
             return
 
         # ── Online-Pfad (nur wenn OFFLINE_MODE = False) ───────────────────────
-        import urllib.error
-        import urllib.request
 
         if isinstance(entry, dict):
             sota = entry.get("sota_upgrade")
@@ -357,7 +375,7 @@ class ModelDownloader:
                     return
                 logger.info("Besseres KI-Modell (%s) wird im Hintergrund geladen...", sota_name)
                 try:
-                    urllib.request.urlretrieve(sota_url, target)  # nosec B310 — sota_url aus lokalem Manifest, SHA256-verifiziert nach Download
+                    _download_remote_model(sota_url, target)
                     expected_sha256 = sota.get("sha256", "")
                     if expected_sha256:
                         if verify_model(target, expected_sha256):
@@ -377,7 +395,7 @@ class ModelDownloader:
                     if progress_callback is not None:
                         with contextlib.suppress(Exception):
                             progress_callback(sota_name, 1.0)
-                except (urllib.error.URLError, OSError) as exc:
+                except (requests.RequestException, urllib.error.URLError, OSError, ValueError) as exc:
                     logger.info(
                         "Download fehlgeschlagen (%s) — Standard-Modell bleibt aktiv. Fehler: %s",
                         sota_name,
@@ -446,7 +464,7 @@ class ModelDownloader:
 # Singleton-Accessor (§3.2 Convenience-Funktion)
 # ──────────────────────────────────────────────────────────────────────────────
 
-_downloader_instance: ModelDownloader | None = None
+_DOWNLOADER_INSTANCE_HOLDER: list[ModelDownloader | None] = [None]
 _downloader_lock = threading.Lock()
 
 
@@ -456,12 +474,13 @@ def get_model_downloader() -> ModelDownloader:
     Returns:
         Globale ModelDownloader-Instanz.
     """
-    global _downloader_instance
-    if _downloader_instance is None:
+    if _DOWNLOADER_INSTANCE_HOLDER[0] is None:
         with _downloader_lock:
-            if _downloader_instance is None:
-                _downloader_instance = ModelDownloader()
-    return _downloader_instance
+            if _DOWNLOADER_INSTANCE_HOLDER[0] is None:
+                _DOWNLOADER_INSTANCE_HOLDER[0] = ModelDownloader()
+    downloader = _DOWNLOADER_INSTANCE_HOLDER[0]
+    assert downloader is not None
+    return downloader
 
 
 def verify_and_load(model_name: str) -> Path | None:

@@ -26,7 +26,10 @@ import multiprocessing as mp
 import os
 import signal
 import threading
+from collections.abc import Callable
 from functools import lru_cache
+from types import FrameType
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -40,6 +43,8 @@ from benchmarks.musical_restoration_benchmark import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SignalHandler = signal.Handlers | int | Callable[[int, FrameType | None], object]
 
 
 def _resolve_restore_timeout_seconds() -> float:
@@ -84,8 +89,8 @@ class _RestoreCallTimeout:
 
     def __init__(self, timeout_s: float) -> None:
         self._timeout_s = max(0.0, float(timeout_s))
-        self._old_handler = None
-        self._old_timer = (0.0, 0.0)
+        self._old_handler: _SignalHandler | None = None
+        self._old_timer: tuple[float, float] = (0.0, 0.0)
         self._armed = False
 
     def _on_alarm(self, signum, frame) -> None:  # type: ignore[no-untyped-def]
@@ -258,7 +263,7 @@ def _get_competitive_report_cached(n_items: int) -> BenchmarkReport:
     start_method = "fork" if os.name == "posix" else "spawn"
     ctx = mp.get_context(start_method)
     queue_obj = ctx.Queue(maxsize=1)
-    proc = ctx.Process(target=_run_competitive_worker, args=(n_items, queue_obj), daemon=True)
+    proc = cast(Any, ctx).Process(target=_run_competitive_worker, args=(n_items, queue_obj), daemon=True)
     proc.start()
     proc.join(timeout=max(1.0, benchmark_timeout_s))
 
@@ -277,9 +282,16 @@ def _get_competitive_report_cached(n_items: int) -> BenchmarkReport:
     if queue_obj.empty():
         raise AssertionError("Competitive-Benchmark lieferte kein Ergebnis-Payload.")
 
-    status, payload = queue_obj.get_nowait()
+    message = queue_obj.get_nowait()
+    if not isinstance(message, tuple) or len(message) != 2:
+        raise AssertionError("Competitive-Benchmark lieferte ungültiges Ergebnisformat.")
+
+    status, payload = message
     if status != "ok":
         raise AssertionError(f"Competitive-Benchmark meldete Fehler: {payload}")
+
+    if not isinstance(payload, BenchmarkReport):
+        raise AssertionError("Competitive-Benchmark lieferte keinen BenchmarkReport.")
 
     return payload
 

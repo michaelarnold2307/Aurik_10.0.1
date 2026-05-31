@@ -34,7 +34,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-_instance: PhaseConductor | None = None
+_INSTANCE_HOLDER: list[PhaseConductor | None] = [None]
 _lock = threading.Lock()
 
 
@@ -384,10 +384,10 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
 
 def _rms_db(mono: np.ndarray) -> float:
     rms = float(np.sqrt(np.mean(mono**2) + 1e-12))
-    return 20.0 * np.log10(max(rms, 1e-9))
+    return float(20.0 * np.log10(max(rms, 1e-9)))
 
 
-def _estimate_noise_floor(mono: np.ndarray, sr: int, n_frames: int = 20) -> float:
+def _estimate_noise_floor(mono: np.ndarray, sr: int) -> float:
     """5. Perzentil der Frame-RMS als Rauschboden-Schätzung [dBFS]."""
     frame_len = max(256, sr // 100)  # ~10 ms
     n = len(mono) // frame_len
@@ -474,9 +474,10 @@ def _canonical_material(material_type: str) -> str:
 
 def get_phase_conductor() -> PhaseConductor:
     """Gibt die globale PhaseConductor-Instanz zurück (thread-sicher)."""
-    global _instance
-    if _instance is None:
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = PhaseConductor()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = PhaseConductor()
+    conductor = _INSTANCE_HOLDER[0]
+    assert conductor is not None
+    return conductor

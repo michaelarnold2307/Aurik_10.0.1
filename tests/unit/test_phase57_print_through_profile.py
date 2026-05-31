@@ -1,6 +1,7 @@
 """Unit-Tests: PrintThroughReductionPhase._compute_print_through_profile() (§2.56)."""
 
 import numpy as np
+import pytest
 
 from backend.core.phases.phase_57_print_through_reduction import (
     PrintThroughReductionPhase,
@@ -97,3 +98,42 @@ def test_spectral_coherence_band_focus_penalizes_midband_damage():
     coh = _spectral_coherence(clean.astype(np.float64), damaged.astype(np.float64), sr)
     assert 0.0 <= coh <= 1.0
     assert coh < 0.90
+
+
+@pytest.mark.parametrize(
+    "panns,expected_calls",
+    [
+        (0.35, 1),
+        (0.10, 0),
+    ],
+)
+def test_phase57_v20_mikrodynamik_guard_vocal_gate(monkeypatch, panns: float, expected_calls: int):
+    """§V20: frame_energy_correlation nur bei panns_singing >= 0.25 ausführen."""
+    phase = PrintThroughReductionPhase()
+    audio = np.random.default_rng(77).uniform(-0.2, 0.2, 48000).astype(np.float32)
+
+    calls = {"count": 0}
+
+    def _fake_apply(inp: np.ndarray, _sr: int, **_kwargs) -> np.ndarray:
+        # Isoliert den Test auf die V20-Gating-Logik.
+        return inp.copy()
+
+    def _fake_fec(_pre: np.ndarray, _post: np.ndarray, _sr: int, frame_ms: float = 10.0) -> float:
+        assert frame_ms == 10.0
+        calls["count"] += 1
+        return 1.0
+
+    monkeypatch.setattr("backend.core.phases.phase_57_print_through_reduction.apply", _fake_apply)
+    monkeypatch.setattr("backend.core.dsp.mikrodynamik_guard.frame_energy_correlation", _fake_fec)
+
+    result = phase.process(
+        audio,
+        sample_rate=48000,
+        material_type="reel_tape",
+        defect_scores={"print_through": 0.9},
+        strength=0.7,
+        panns_singing=panns,
+    )
+
+    assert result.success
+    assert calls["count"] == expected_calls

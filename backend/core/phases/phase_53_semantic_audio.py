@@ -28,14 +28,36 @@ Version: 3.0.0
 from __future__ import annotations
 
 import logging
+import os
 import time
+from typing import Any
 
 import numpy as np
 import scipy.signal as sig
 
 from backend.core.audio_utils import safe_to_mono
+from backend.core.ml_memory_budget import release as _release_ml_budget
+from backend.core.ml_memory_budget import try_allocate as _try_allocate_ml_budget
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
+
+_clap_factory_impl: Any = None
+try:
+    from plugins.laion_clap_plugin import get_laion_clap as _clap_factory_loaded
+
+    _clap_factory_impl = _clap_factory_loaded
+except Exception:
+    pass
+_clap_factory: Any = _clap_factory_impl
+
+_beats_factory_impl: Any = None
+try:
+    from plugins.beats_plugin import get_beats_plugin as _beats_factory_loaded
+
+    _beats_factory_impl = _beats_factory_loaded
+except Exception:
+    pass
+_beats_factory: Any = _beats_factory_impl
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +102,17 @@ _GENRE_ALIAS_MAP = {
     "unknown": _CANONICAL_GENRE_FALLBACK,
     "unbekannt": _CANONICAL_GENRE_FALLBACK,
 }
+
+
+def _clap_allowed_in_current_context() -> bool:
+    """Gibt an, ob der schwere CLAP-Pfad in diesem Kontext ausgeführt werden darf."""
+    if os.getenv("AURIK_FORCE_CLAP_PHASE53", "0").strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    if os.getenv("AURIK_SAFE_VALIDATION_PROFILE", "0") == "1":
+        return False
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return False
+    return True
 
 
 def _mono(audio: np.ndarray) -> np.ndarray:
@@ -334,43 +367,43 @@ class SemanticAudioPhase(PhaseInterface):
         _clap_model_used = "none"
         _clap_confidence = 0.0
         _clap_succeeded = False
-        try:
-            from backend.core.ml_memory_budget import release as _release_c53  # pylint: disable=import-outside-toplevel
-            from backend.core.ml_memory_budget import (
-                try_allocate as _alloc_c53,  # pylint: disable=import-outside-toplevel
-            )
-            from plugins.laion_clap_plugin import (
-                get_laion_clap as _clap_factory,  # pylint: disable=import-outside-toplevel
-            )
+        _clap_enabled = _clap_allowed_in_current_context()
+        if _clap_enabled:
+            try:
+                if _clap_factory is None:
+                    raise ImportError("LAION-CLAP Plugin nicht verfügbar")
 
-            if _alloc_c53("CLAP_phase53", 0.40):
-                try:
-                    _clap_result = _clap_factory().tag(audio.astype(np.float32), sample_rate)
-                    _clap_top_genres = sorted(_clap_result.genre_tags.items(), key=lambda x: x[1], reverse=True)[:5]
-                    _clap_instruments = _clap_result.top_instruments(n=5)
-                    emb = _clap_result.embedding
-                    _clap_embedding_32 = [float(x) for x in emb.flatten()[:32].tolist()]
-                    _clap_model_used = _clap_result.model_used
-                    _clap_confidence = float(_clap_result.confidence)
-                    # Override DSP genre_hint when CLAP is confident enough
-                    if _clap_top_genres and _clap_top_genres[0][1] >= 0.35:
-                        genre_hint = _canonicalize_genre_hint(_clap_top_genres[0][0])
-                        genre_hint_source = "clap"
-                        genre_hint_confidence = float(_clap_top_genres[0][1])
-                        _clap_succeeded = True
-                    logger.info(
-                        "Phase 53: CLAP OK (model=%s, conf=%.2f, top_genre=%s, instruments=%s)",
-                        _clap_model_used,
-                        _clap_confidence,
-                        _clap_top_genres[:2],
-                        _clap_instruments[:2],
-                    )
-                except Exception as _clap_err:
-                    logger.debug("Phase 53: CLAP tagging fehlgeschlagen (%s) — BEATs-Fallback", _clap_err)
-                finally:
-                    _release_c53("CLAP_phase53")
-        except Exception as _clap_imp_err:
-            logger.debug("Phase 53: CLAP-Import nicht verfügbar (%s) — BEATs-Fallback", _clap_imp_err)
+                if _try_allocate_ml_budget("CLAP_phase53", 0.40):
+                    try:
+                        _clap_result = _clap_factory().tag(audio.astype(np.float32), sample_rate)
+                        _clap_top_genres = sorted(_clap_result.genre_tags.items(), key=lambda x: x[1], reverse=True)[:5]
+                        _clap_instruments = _clap_result.top_instruments(n=5)
+                        emb = _clap_result.embedding
+                        _clap_embedding_32 = [float(x) for x in emb.flatten()[:32].tolist()]
+                        _clap_model_used = _clap_result.model_used
+                        _clap_confidence = float(_clap_result.confidence)
+                        # Override DSP genre_hint when CLAP is confident enough
+                        if _clap_top_genres and _clap_top_genres[0][1] >= 0.35:
+                            genre_hint = _canonicalize_genre_hint(_clap_top_genres[0][0])
+                            genre_hint_source = "clap"
+                            genre_hint_confidence = float(_clap_top_genres[0][1])
+                            _clap_succeeded = True
+                        logger.info(
+                            "Phase 53: CLAP OK (model=%s, conf=%.2f, top_genre=%s, instruments=%s)",
+                            _clap_model_used,
+                            _clap_confidence,
+                            _clap_top_genres[:2],
+                            _clap_instruments[:2],
+                        )
+                    except Exception as _clap_err:
+                        logger.debug("Phase 53: CLAP tagging fehlgeschlagen (%s) — BEATs-Fallback", _clap_err)
+                    finally:
+                        _release_ml_budget("CLAP_phase53")
+            except Exception as _clap_imp_err:
+                logger.debug("Phase 53: CLAP-Import nicht verfügbar (%s) — BEATs-Fallback", _clap_imp_err)
+        else:
+            _clap_model_used = "disabled_runtime_context"
+            logger.info("Phase 53: CLAP deaktiviert (pytest/safe-validation) — BEATs/DSP aktiv")
 
         # ── Tier-0: BEATs iter3 Audio Tagging (SOTA §4.4) ───────────────────────────
         # AudioSet-527-Klassifikation für semantisch reichere Pipeline-Metadaten.
@@ -380,15 +413,10 @@ class SemanticAudioPhase(PhaseInterface):
         _beats_embedding: list[float] = []
         _beats_top_k: list[tuple[str, float]] = []
         try:
-            from backend.core.ml_memory_budget import release as _release_53  # pylint: disable=import-outside-toplevel
-            from backend.core.ml_memory_budget import (
-                try_allocate as _alloc_53,  # pylint: disable=import-outside-toplevel
-            )
-            from plugins.beats_plugin import (
-                get_beats_plugin as _beats_factory,  # pylint: disable=import-outside-toplevel
-            )
+            if _beats_factory is None:
+                raise ImportError("BEATs Plugin nicht verfügbar")
 
-            if _alloc_53("BEATs_phase53", 0.09):
+            if _try_allocate_ml_budget("BEATs_phase53", 0.09):
                 try:
                     _beats_result = _beats_factory().get_tags(audio, sample_rate, top_k=15)
                     _ = _beats_result.tags
@@ -411,7 +439,7 @@ class SemanticAudioPhase(PhaseInterface):
                 except Exception as _beats_err:
                     logger.debug("Phase 53: BEATs tagging fehlgeschlagen (%s) — DSP-Fallback", _beats_err)
                 finally:
-                    _release_53("BEATs_phase53")
+                    _release_ml_budget("BEATs_phase53")
         except Exception as _imp_err:
             logger.debug("Phase 53: BEATs-Import nicht verfügbar (%s) — DSP-only", _imp_err)
 
@@ -434,6 +462,7 @@ class SemanticAudioPhase(PhaseInterface):
             "clap_top_genres": [{"genre": g, "confidence": round(c, 3)} for g, c in _clap_top_genres[:5]],
             "clap_top_instruments": _clap_instruments[:5],
             "clap_embedding_32": _clap_embedding_32,
+            "clap_enabled": bool(_clap_enabled),
             # BEATs semantic tags — Tier-0 (AudioSet-527)
             "beats_model_used": _beats_model_used,
             "beats_top_tags": [{"tag": t, "confidence": round(c, 3)} for t, c in _beats_top_k[:10]],

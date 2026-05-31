@@ -4,6 +4,44 @@
 > Historische Qualitäts- und Marketingformulierungen bleiben zur Nachvollziehbarkeit erhalten
 > und sind nicht automatisch als aktueller, normativ bindender Außenclaim zu verstehen.
 
+## Version 9.12.10-hotfix.3 — V44 SpatialDepthMetric: `spatial_depth_score` als primärer Proxy (30. Mai 2026)
+
+### Code
+
+- `backend/core/musical_goals/musical_goals_metrics.py` — `SpatialDepthMetric._measure_absolute()`
+  - **§V44** spec-konform: `_iacc_res_v44.spatial_depth_score` (= `1.0 − iacc`) wird jetzt direkt
+    als primärer IACC-Komponenten-Proxy verwendet (statt dreistufigem Threshold-Mapping).
+  - Fallback-Pfad (Exception oder SR ≠ 48000): `_sds_v44 = 1.0 − iacc` abgeleitet.
+  - `IACC_COLLAPSE_THRESHOLD`-Mapping entfernt aus `_measure_absolute` (Klassen-Attribut bleibt).
+
+### Tests
+
+- 153 spatial/iacc/musical_goals-Tests: **153 passed**.
+
+---
+
+## Version 9.12.10-hotfix.2 — Weltspitze-Guards phase_57: V19/V20/V21/V32 vollständig (30. Mai 2026)
+
+### Code
+
+- `backend/core/phases/phase_57_print_through_reduction.py`
+  - **§V19** Noise-Texture-Invariante: `compute_noise_texture_distance()` nach LMS-Print-Through-NR;
+    dist > 0.25 → 50 % Dry-Blend (Material-Textur bewahren).
+  - **§V20** Mikrodynamik-Korrelation: `frame_energy_correlation()` bei `panns_singing ≥ 0.25`;
+    corr < 0.97 → adaptiver Dry-Wet-Blend (voiced-Frame-Energie schützen).
+  - **§V21** Mindestrauschboden: `apply_noise_floor_minimum()` auf Tape/Shellac/Analog nach NR
+    (verhindert digitale Stille in Pausenzonen).
+- `backend/core/cumulative_interaction_guard.py`
+  - **§V32** CIG-Drift-Exclusion: `transparenz` zu `phase_57_print_through_reduction` hinzugefügt
+    (HF-Echo-Tail-Entfernung senkt HF-Crest-Proxy intentional → kein false-positive CIG-Rollback).
+
+### Tests
+
+- Alle 127 betroffenen Unit-Tests (phase_57, CIG, mikrodynamik, noise_floor, noise_texture,
+  temporal_continuity, singer_identity, vocal_quality): **127 passed**.
+
+---
+
 ## Version 9.12.10-hotfix.1 — Wave 1: PMGG-Fallback-Risiko sichtbar + Wall-Budget-Qualitaetsguard verallgemeinert (24. Mai 2026)
 
 ### Code

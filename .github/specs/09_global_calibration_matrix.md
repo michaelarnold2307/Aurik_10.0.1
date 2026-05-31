@@ -52,6 +52,41 @@ Dieses Dokument ist die **Single Source of Truth** für alle Aurik-globalen Para
 
 ---
 
+## §09.0a [RELEASE_MUST] Maximal-Ausbaustufe fuer Defekt-Erkennen, Differenzieren, Dosieren
+
+Diese Invariante gilt **gleichzeitig fuer `Restoration` und `Studio 2026`**.
+
+**Leistungsziel (Weltspitze):**
+Defektintelligenz wird in beiden Modi auf die **hoechste jemals veroeffentlichte Ausbaustufe**
+festgelegt. Bewertungsziel ist ein Niveau ohne Konkurrenz in drei Dimensionen:
+Erkennungsabdeckung, kausale Differenzierungspraezision, lokale Dosiergenauigkeit.
+
+1. **Maximale Erkennungstiefe**: DefectScanner und CausalDefectReasoner muessen in beiden Modi
+    mit voller Defektabdeckung laufen (keine Modus-Reduktion der Analyse).
+2. **Maximale Differenzierungstiefe**: Defekte sind kausal getrennt zu behandeln,
+    sobald getrennte Ursachen und Reparaturpfade definiert sind; keine Sammelklassen,
+    wenn eine physikalisch spezifische Ursache vorliegt.
+3. **Maximale Dosierpraezision**: Strength-Parameter duerfen nicht global pro Defektklasse
+    fixiert werden; event-basierte lokale Orakel sind verpflichtend (Severity, Kontext,
+    Schutzmasken, Transfer-Chain, Material).
+4. **Modusunterschiede begrenzen nur das Zielbild**: `Restoration` bleibt subtraktiv/tragertreu,
+    `Studio 2026` darf erweiternde Phasen nutzen. Erkennungs- und Differenzierungs-Qualitaet
+    ist modusinvariant.
+5. **Unsicherheitsbehandlung**: Unsicherheit erhoeht zuerst die Evidenzfusion und lokale
+    Kausalpruefung, nicht die globale Aggressivitaet der Eingriffe.
+6. **Abdeckung aller bekannten Defekte**: Alle in Aurik bekannten Defektklassen,
+    DetectionTypes, Ursachen und Event-Unterformen sind in beiden Modi verpflichtend
+    vollstaendig zu erkennen, differenzieren und event-lokal zu dosieren.
+
+Referenz auf Umsetzungspfade:
+
+- `backend/core/defect_scanner.py`
+- `backend/core/causal_defect_reasoner.py`
+- `backend/core/defect_phase_mapper.py`
+- Per-Event-Strength-Oracles in `backend/core/phases/phase_*.py`
+
+---
+
 ## §09.1 Kanonische Musical-Goal-Schwellwerte
 
 ### §09.1a RESTORATION-Mode Schwellwerte (Spec §01 §1.2)

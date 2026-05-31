@@ -4,6 +4,8 @@ Modell : models/hifi_gan/hifi_gan.onnx
 ONNX   : input[1,80,seq_length] → output[1,1,2560]
 """
 
+# pylint: disable=import-outside-toplevel
+
 from __future__ import annotations
 
 import logging
@@ -15,7 +17,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 _lock = threading.Lock()
-_inst: HifiGanPlugin | None = None
+_INSTANCE_HOLDER: list[HifiGanPlugin | None] = [None]
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _MODEL = os.path.join(_ROOT, "models", "hifi_gan", "hifi_gan.onnx")
 _SR_MODEL = 22_050
@@ -32,6 +34,10 @@ class HifiGanPlugin:
         """Initialisiert HiFi-GAN plugin and attempt model load."""
         self._session: Any = None
         self._try_load(model_path or _MODEL)
+
+    def unload(self) -> None:
+        """Gibt HiFi-GAN Session frei."""
+        self._session = None
 
     def _try_load(self, path: str) -> None:
         if not os.path.exists(path):
@@ -63,10 +69,7 @@ class HifiGanPlugin:
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
-                def _unload_hifigan(s: HiFiGANPlugin = self) -> None:
-                    s._session = None
-
-                _reg_plm("HiFiGAN", size_gb=0.004, unload_fn=_unload_hifigan)
+                _reg_plm("HiFiGAN", size_gb=0.004, unload_fn=self.unload)
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
         except Exception as exc:
@@ -106,7 +109,7 @@ class HifiGanPlugin:
         wave = self.vocode(mel, sr)
         result = _resamp(wave, _SR_MODEL, sr)
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(result, -1.0, 1.0)
+        return np.asarray(np.clip(result, -1.0, 1.0), dtype=np.float32)
 
     def _vocode_onnx(self, mel: np.ndarray, sr_out: int) -> np.ndarray:
         _plm = None
@@ -137,7 +140,7 @@ class HifiGanPlugin:
             if sr_out != _SR_MODEL:
                 wave = _resamp(wave, _SR_MODEL, sr_out)
                 wave = np.nan_to_num(wave, nan=0.0, posinf=0.0, neginf=0.0)
-            return np.clip(wave, -1.0, 1.0).astype(np.float32)
+            return np.asarray(np.clip(wave, -1.0, 1.0), dtype=np.float32)
         finally:
             if _plm is not None:
                 try:
@@ -181,17 +184,23 @@ class HifiGanPlugin:
             noverlap=n_fft - _HOP,
             window="hann",
         )
-        return np.clip(wave, -1.0, 1.0).astype(np.float32)
+        return np.asarray(np.clip(wave, -1.0, 1.0), dtype=np.float32)
 
 
-def _mel_spec(mono, sr, n_mels=80, n_fft=1024, hop=256):
+def _mel_spec(
+    mono: np.ndarray,
+    sr: int,
+    n_mels: int = 80,
+    n_fft: int = 1024,
+    hop: int = 256,
+) -> np.ndarray:
     import scipy.signal as ss
 
     _, _, Z = ss.stft(mono, fs=sr, nperseg=n_fft, noverlap=n_fft - hop, window="hann")
     mag = np.abs(Z[: n_fft // 2 + 1])
     mel_fb = _mel_filterbank(sr, n_fft, n_mels)
     mel = np.dot(mel_fb, mag)
-    return 10.0 * np.log10(mel + 1e-9).astype(np.float32)
+    return np.asarray(10.0 * np.log10(mel + 1e-9), dtype=np.float32)
 
 
 def _mel_filterbank(sr, n_fft, n_mels):
@@ -211,25 +220,26 @@ def _mel_filterbank(sr, n_fft, n_mels):
     return fb
 
 
-def _resamp(x, src, dst):
+def _resamp(x: np.ndarray, src: int, dst: int) -> np.ndarray:
     if src == dst:
-        return x
+        return np.asarray(x, dtype=np.float32)
     from math import gcd
 
     from scipy.signal import resample_poly
 
     g = gcd(src, dst)
-    return resample_poly(x, dst // g, src // g).astype(np.float32)
+    return np.asarray(resample_poly(x, dst // g, src // g), dtype=np.float32)
 
 
 def get_hifigan_plugin() -> HifiGanPlugin:
     """Thread-safe singleton accessor for HiFi-GAN plugin."""
-    global _inst
-    if _inst is None:
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _inst is None:
-                _inst = HifiGanPlugin()
-    return _inst
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = HifiGanPlugin()
+    plugin = _INSTANCE_HOLDER[0]
+    assert plugin is not None
+    return plugin
 
 
 def vocode(mel: np.ndarray, sr_out: int = 48000) -> np.ndarray:
@@ -241,10 +251,9 @@ def vocode(mel: np.ndarray, sr_out: int = 48000) -> np.ndarray:
 HiFiGANPlugin = HifiGanPlugin
 
 # Convenience-Alias
-import numpy as _np
 
 
-def vocode_audio(audio: _np.ndarray, sr: int = 48000) -> _np.ndarray:
+def vocode_audio(audio: np.ndarray, sr: int = 48000) -> np.ndarray:
     """Konvertiert audio to mel spectrogram and back via HiFi-GAN."""
     plugin = get_hifigan_plugin()
     return plugin.reconstruct(audio, sr)

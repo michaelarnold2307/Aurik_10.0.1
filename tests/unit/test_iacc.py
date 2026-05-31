@@ -193,3 +193,38 @@ class TestComputeIACC:
 
         with pytest.raises(AssertionError):
             compute_iacc(_correlated_stereo(), sr=44100)
+
+
+def test_spatial_depth_metric_uses_spatial_depth_score_as_primary_proxy(monkeypatch):
+    """§V44: SpatialDepthMetric muss `spatial_depth_score` primär verwenden.
+
+    Wir patchen `compute_iacc` absichtlich mit inkonsistenten Testwerten,
+    damit klar verifiziert wird, dass `_measure_absolute()` den
+    `spatial_depth_score` (und nicht ein IACC-Threshold-Mapping) nutzt.
+    """
+    from backend.core.musical_goals.musical_goals_metrics import SpatialDepthMetric
+
+    class _FakeIaccResult:
+        def __init__(self) -> None:
+            self.iacc = 0.30
+            self.spatial_depth_score = 0.05
+            self.ok = True
+
+    calls = {"count": 0}
+
+    def _fake_compute_iacc(_audio: np.ndarray, sr: int):
+        assert sr == SR
+        calls["count"] += 1
+        return _FakeIaccResult()
+
+    monkeypatch.setattr("backend.core.dsp.stereo_guard.compute_iacc", _fake_compute_iacc)
+
+    # Identische L/R Kanäle: width_score=0, depth_score=0, center_score≈1.0
+    # => score = 0.40*iacc_score + 0.15. Bei iacc_score=0.05 ergibt das ≈ 0.17.
+    mono = np.random.default_rng(123).standard_normal(SR).astype(np.float32)
+    stereo = np.stack([mono, mono], axis=1)  # [N, 2]
+
+    score = SpatialDepthMetric().measure(stereo, SR)
+
+    assert calls["count"] >= 1
+    assert score == pytest.approx(0.17, abs=0.03)

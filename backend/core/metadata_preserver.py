@@ -24,34 +24,33 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from mutagen._file import File as MutagenFile
+from mutagen.aiff import AIFF
+from mutagen.flac import FLAC, Picture
+from mutagen.id3 import ID3
+from mutagen.id3._frames import APIC, COMM, TALB, TCON, TDRC, TIT2, TPE1, TRCK
+from mutagen.id3._util import ID3NoHeaderError
+from mutagen.mp3 import MP3
+from mutagen.oggvorbis import OggVorbis
+
 logger = logging.getLogger(__name__)
 
-_instance: MetadataPreserver | None = None
+_INSTANCE_HOLDER: list[MetadataPreserver | None] = [None]
 _lock = threading.Lock()
 
 
 def get_metadata_preserver() -> MetadataPreserver:
     """Thread-safe singleton access (double-checked locking)."""
-    global _instance
-    if _instance is None:
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = MetadataPreserver()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = MetadataPreserver()
+    preserver = _INSTANCE_HOLDER[0]
+    assert preserver is not None
+    return preserver
 
 
-try:
-    import mutagen
-    from mutagen.aiff import AIFF
-    from mutagen.flac import FLAC, Picture
-    from mutagen.id3 import APIC, ID3, TALB, TCON, TDRC, TIT2, TPE1, TRCK
-    from mutagen.mp3 import MP3
-    from mutagen.oggvorbis import OggVorbis
-
-    _MUTAGEN_AVAILABLE = True
-except ImportError:
-    _MUTAGEN_AVAILABLE = False
-    logger.warning("mutagen not installed — metadata preservation disabled")
+_MUTAGEN_AVAILABLE = True
 
 
 # Canonical tag mapping: internal key → (ID3 frame, Vorbis key)
@@ -109,7 +108,7 @@ class MetadataPreserver:
             return meta
 
         try:
-            mf = mutagen.File(str(src))
+            mf = MutagenFile(str(src))
             if mf is None:
                 return meta
         except Exception as exc:
@@ -254,7 +253,7 @@ class MetadataPreserver:
     def _apply_id3(self, path: Path, meta: AudioMetadata, version: str, orig_hash: str) -> bool:
         try:
             tags = ID3(str(path))
-        except mutagen.id3.ID3NoHeaderError:
+        except ID3NoHeaderError:
             tags = ID3()
 
         if meta.title:
@@ -272,8 +271,6 @@ class MetadataPreserver:
         if meta.cover_art:
             tags.add(APIC(encoding=3, mime=meta.cover_mime, type=3, desc="Cover", data=meta.cover_art))
         if version:
-            from mutagen.id3 import COMM
-
             tags.add(
                 COMM(
                     encoding=3, lang="eng", desc="Aurik Provenance", text=[self._provenance_comment(version, orig_hash)]
@@ -319,6 +316,9 @@ class MetadataPreserver:
         if mf.tags is None:
             mf.add_tags()
         tags = mf.tags
+        if tags is None:
+            logger.warning("AIFF tags konnten nicht initialisiert werden: %s", path.name)
+            return False
         if meta.title:
             tags.add(TIT2(encoding=3, text=[meta.title]))
         if meta.artist:
@@ -334,8 +334,6 @@ class MetadataPreserver:
         if meta.cover_art:
             tags.add(APIC(encoding=3, mime=meta.cover_mime, type=3, desc="Cover", data=meta.cover_art))
         if version:
-            from mutagen.id3 import COMM
-
             tags.add(
                 COMM(
                     encoding=3, lang="eng", desc="Aurik Provenance", text=[self._provenance_comment(version, orig_hash)]

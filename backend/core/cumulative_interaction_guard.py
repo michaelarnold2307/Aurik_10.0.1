@@ -491,9 +491,12 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
     "phase_56": frozenset({"authentizitaet", "natuerlichkeit", "timbre_authentizitaet"}),
     # Print-through reduction (reel tape): LF modulation artefact removal shifts spectral baseline.
     # authentizitaet: print-through echo phantom creates chroma artefacts; removal changes chromagram.
+    # transparenz: breitbandige HF-Energie durch Magnetisierungs-Vorecho wird intentional entfernt →
+    #   HF-Crest-Proxy (transparenz) sinkt auf physikalisch realen Träger-Wert — identischer
+    #   Reference Paradox §2.44 wie phase_29/phase_28 (V32 CIG-Exclusion).
     "phase_57_print_through_reduction": frozenset(
-        {"authentizitaet", "emotionalitaet"}
-    ),  # §2.55 sync (2026-04-26): echo-tail removal → quiet-segment crest-factor shifts → false P3 emotionalitaet regression (identical mechanism to phase_49 dereverb)
+        {"authentizitaet", "emotionalitaet", "transparenz"}
+    ),  # §2.55 sync (2026-04-26) + §V32 (2026-05-30): echo-tail removal → HF-Crest-Proxy-Drop + false P3 emotionalitaet regression
     # Lyrics-guided enhancement (§2.36): formant shaping guided by phoneme sequence.
     # artikulation: phone-boundary energy redistribution directly affects articulation metric.
     # timbre_authentizitaet: formant-targeted EQ changes MFCC-Pearson vs. pre-enhancement reference.

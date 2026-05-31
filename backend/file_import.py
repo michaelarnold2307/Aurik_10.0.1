@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Any
 
+# pylint: disable=import-outside-toplevel
 import numpy as np
 import soundfile as sf
 
@@ -80,9 +81,17 @@ def _lazy_get_carrier_tools():
     return analyze_carrier_forensics, classify_carrier_ml
 
 
+def _require_audio_array(audio: np.ndarray | None) -> np.ndarray:
+    """Normalisiert optionales Audio auf ein garantiertes float32-ndarray."""
+    if audio is None:
+        raise ValueError("Audio read error: kein Audio dekodiert")
+    return np.asarray(audio, dtype=np.float32)
+
+
 def detect_carrier(filepath: str, meta: dict[str, Any] | None = None) -> str:
     """
-    Versucht, den Tonträger (Schallplatte, Kassette, CD, Band, etc.) anhand von Dateiname, Metadaten oder User-Tag zu erkennen.
+    Versucht, den Tonträger (Schallplatte, Kassette, CD, Band, etc.)
+    anhand von Dateiname, Metadaten oder User-Tag zu erkennen.
     """
     name = os.path.basename(filepath).lower()
     meta = meta or {}
@@ -113,7 +122,7 @@ def detect_carrier(filepath: str, meta: dict[str, Any] | None = None) -> str:
     if any(x in name for x in ["reel", "tonband", "spule"]):
         return "Tonband/Reel"
     # Heuristik: Metadaten
-    for k, v in meta.items() if meta else []:
+    for _, v in meta.items() if meta else []:
         vstr = str(v).lower()
         if "vinyl" in vstr or "lp" in vstr or "platte" in vstr or "schellack" in vstr:
             return "Schallplatte (Vinyl/Schellack)"
@@ -291,27 +300,26 @@ def load_audio_file(
                 )
                 _tmp = tempfile.NamedTemporaryFile(suffix=".npy", delete=False)
                 _tmp.close()
-                _r = subprocess.run(
+                _proc = subprocess.run(
                     [sys.executable, "-c", _script, _tmp.name],
+                    check=False,
                     capture_output=True,
                     text=True,
                     timeout=120,
                 )
-                if _r.returncode == 0 and _r.stdout.strip():
-                    _d = json.loads(_r.stdout.strip())
+                if _proc.returncode == 0 and _proc.stdout.strip():
+                    _d = json.loads(_proc.stdout.strip())
                     audio = np.load(_tmp.name).astype(np.float32)
                     sr = int(_d["sr"])
                     logger.debug("load_audio_file: pydub subprocess OK (%s)", filepath)
                 else:
-                    raise RuntimeError(_r.stderr[:500] or f"returncode={_r.returncode}")
+                    raise RuntimeError(_proc.stderr[:500] or f"returncode={_proc.returncode}")
             except Exception as _e2:
                 result["error"] = f"Audio read error: pedalboard + pydub subprocess failed. Last: {_e2}"
                 return result
             finally:
                 try:
-                    import os as _os_tmp
-
-                    _os_tmp.unlink(_tmp.name)
+                    os.unlink(_tmp.name)
                 except Exception:
                     pass
 
@@ -325,15 +333,15 @@ def load_audio_file(
                     sr = int(_f.samplerate)
                     _frames = _f.frames
                     _chunk = sr * 300  # 300 s chunks to avoid OOM on long files
-                    _parts: list[np.ndarray] = []
+                    _parts_lossless: list[np.ndarray] = []
                     _read = 0
                     while _read < _frames:
                         _block = _f.read(min(_chunk, _frames - _read))
                         if _block.shape[-1] == 0:
                             break  # EOF — pedalboard.frames can overcount for VBR MP3
-                        _parts.append(_block)
+                        _parts_lossless.append(_block)
                         _read += _block.shape[-1]
-                _raw = np.concatenate(_parts, axis=1) if len(_parts) > 1 else _parts[0]
+                _raw = np.concatenate(_parts_lossless, axis=1) if len(_parts_lossless) > 1 else _parts_lossless[0]
                 # pedalboard returns (channels, samples) — transpose to (samples, channels)
                 if _raw.ndim == 2:
                     _raw = _raw.T
@@ -343,6 +351,11 @@ def load_audio_file(
                 result["error"] = f"Audio read error: soundfile + pedalboard failed. Last: {_e3}"
                 return result
 
+        if audio is None:
+            result["error"] = "Audio read error: kein Audio dekodiert"
+            return result
+        audio_work: np.ndarray = _require_audio_array(audio)
+
         # ── Post-processing ──────────────────────────────────────────────────
         # Spec §2.47: nur Mono und Stereo unterstützt. > 2 Kanäle → gewichteter Downmix.
         # WICHTIG: Downmix VOR Resampling — so wird resampy/soxr nur auf 1-2 Kanäle angewendet
@@ -350,15 +363,15 @@ def load_audio_file(
         # PANNs-Plugin noch nicht im Import-Pfad verfügbar → einfacher Energie-Downmix.
         # Der Downmix ergibt Stereo (L=avg(L+odd), R=avg(R+even)) für 4-Kanal-Material
         # und Mono für alle anderen Kanalzahlen (> 2).
-        if audio.ndim == 2 and audio.shape[-1] > 2:
-            n_ch = audio.shape[-1]
+        if audio_work.ndim == 2 and audio_work.shape[-1] > 2:
+            n_ch = audio_work.shape[-1]
             logger.warning(
                 "load_audio_file: %d Kanäle erkannt (nur Mono/Stereo unterstützt) — "
                 "Downmix auf Stereo L/R (Energie-gewichtet).",
                 n_ch,
             )
             # Energie-gewichteter Downmix: höhere Energie → höherer Beitrag pro Kanal.
-            _ch_rms = np.sqrt(np.mean(audio**2, axis=0)) + 1e-9  # (n_ch,)
+            _ch_rms = np.sqrt(np.mean(audio_work**2, axis=0)) + 1e-9  # (n_ch,)
             _weights = _ch_rms / _ch_rms.sum()
             if n_ch >= 4:
                 # L = Summe ungerade Kanäle, R = Summe gerade Kanäle (häufiges LRLS-RS-Schema)
@@ -366,34 +379,38 @@ def load_audio_file(
                 _r_idx = list(range(1, n_ch, 2))
                 ch_l = float(np.sum(_weights[_l_idx])) + 1e-9
                 ch_r = float(np.sum(_weights[_r_idx])) + 1e-9
-                _l = np.average(audio[:, _l_idx], axis=1, weights=_weights[_l_idx] / ch_l)
-                _r = np.average(audio[:, _r_idx], axis=1, weights=_weights[_r_idx] / ch_r)
-                audio = np.stack([_l, _r], axis=-1).astype(np.float32)
+                _l = np.average(audio_work[:, _l_idx], axis=1, weights=_weights[_l_idx] / ch_l)
+                _right = np.average(audio_work[:, _r_idx], axis=1, weights=_weights[_r_idx] / ch_r)
+                audio_work = np.stack([_l, _right], axis=-1).astype(np.float32)
             else:
                 # 3 o.ä. → Mono-Downmix
-                audio = np.average(audio, axis=-1, weights=_weights).astype(np.float32)
+                audio_work = np.average(audio_work, axis=-1, weights=_weights).astype(np.float32)
             logger.info(
                 "load_audio_file: Downmix %d→%d-Kanal abgeschlossen.",
                 n_ch,
-                1 if audio.ndim == 1 else audio.shape[-1],
+                1 if audio_work.ndim == 1 else audio_work.shape[-1],
             )
-        if mono and audio.ndim > 1:
-            audio = audio.mean(axis=-1)
+        if mono and audio_work.ndim > 1:
+            audio_work = audio_work.mean(axis=-1)
         # Resampling NACH Downmix (1-2 Kanäle) — verhindert soxr-Hänger bei 3-Kanal-MP3.
         if target_sr and sr != target_sr:
             import resampy
 
-            if audio.ndim == 1:
-                audio = resampy.resample(audio, sr, target_sr)
+            if audio_work.ndim == 1:
+                audio_work = np.asarray(resampy.resample(audio_work, sr, target_sr), dtype=np.float32)
             else:
-                audio = resampy.resample(audio.T, sr, target_sr, axis=-1).T
+                audio_work = np.asarray(resampy.resample(audio_work.T, sr, target_sr, axis=-1).T, dtype=np.float32)
             sr = target_sr
-        audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
-        audio = np.clip(audio, -1.0, 1.0)
+        audio_arr = np.asarray(audio_work, dtype=np.float32)
+        audio_work = np.asarray(
+            np.nan_to_num(audio_arr, nan=0.0, posinf=0.0, neginf=0.0),
+            dtype=np.float32,
+        )
+        audio_work = np.asarray(np.clip(audio_work, -1.0, 1.0), dtype=np.float32)
 
         # Import-stage stereo blind-spot guard: detect unexpected L/R lag early.
         # If critical and sr=48k, run STCG correction immediately.
-        _import_lag_before = _estimate_interchannel_lag_samples(audio, sr)
+        _import_lag_before = _estimate_interchannel_lag_samples(audio_work, sr)
         _import_lag_after = _import_lag_before
         if abs(_import_lag_before) > 64:
             logger.warning(
@@ -407,14 +424,18 @@ def load_audio_file(
                         get_stereo_temporal_coherence_guard,
                     )
 
-                    audio = get_stereo_temporal_coherence_guard().correct_interchannel_delay(
-                        audio,
+                    corrected = get_stereo_temporal_coherence_guard().correct_interchannel_delay(
+                        audio_work,
                         sr,
                         phase_id="import_pipeline",
                     )
-                    audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
-                    audio = np.clip(audio, -1.0, 1.0)
-                    _import_lag_after = _estimate_interchannel_lag_samples(audio, sr)
+                    audio_work = np.asarray(corrected, dtype=np.float32)
+                    audio_work = np.asarray(
+                        np.nan_to_num(audio_work, nan=0.0, posinf=0.0, neginf=0.0),
+                        dtype=np.float32,
+                    )
+                    audio_work = np.asarray(np.clip(audio_work, -1.0, 1.0), dtype=np.float32)
+                    _import_lag_after = _estimate_interchannel_lag_samples(audio_work, sr)
                     logger.info(
                         "load_audio_file: import lag corrected %d -> %d samples",
                         _import_lag_before,
@@ -423,11 +444,11 @@ def load_audio_file(
                 except Exception as _lag_fix_exc:
                     logger.debug("load_audio_file: import lag correction skipped: %s", _lag_fix_exc)
 
-        result["audio"] = audio
+        result["audio"] = audio_work
         result["sr"] = sr
-        result["channels"] = 1 if audio.ndim == 1 else audio.shape[-1]
+        result["channels"] = 1 if audio_work.ndim == 1 else audio_work.shape[-1]
         result["format"] = result["format"] or _ext[1:].upper()
-        result["duration"] = result["duration"] or (len(audio) / sr)
+        result["duration"] = result["duration"] or (len(audio_work) / sr)
         result["interchannel_lag_samples_before"] = int(_import_lag_before)
         result["interchannel_lag_samples_after"] = int(_import_lag_after)
         # Carrier detection (heuristic + forensics)
@@ -438,7 +459,7 @@ def load_audio_file(
         if do_carrier_analysis:
             try:
                 analyze_carrier_forensics, classify_carrier_ml = _lazy_get_carrier_tools()
-                forensic = analyze_carrier_forensics(audio, sr)
+                forensic = analyze_carrier_forensics(audio_work, sr)
                 result["carrier_forensic"] = forensic["carrier_forensic"]
                 result["carrier_forensic_score"] = forensic["score"]
                 result["carrier_forensic_features"] = forensic["features"]
