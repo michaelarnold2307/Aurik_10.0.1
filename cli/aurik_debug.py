@@ -150,6 +150,36 @@ def _print_summary(result: Any) -> None:
             print(f"    • {fr}")
 
 
+def _resolve_debug_modes(raw_mode: str | None) -> tuple[str, str, str]:
+    """Normalisiert Legacy-CLI-Modi auf Denker- und Debug-Gate-Modi.
+
+    Returns:
+        tuple aus (denker_mode, goal_gate_mode, display_mode)
+    """
+    raw_norm = str(raw_mode or "restoration").strip().lower().replace("_", "").replace(" ", "")
+
+    # Legacy-Debug-Aliase (keine Release-Oberfläche) auf die zwei kanonischen Modi abbilden.
+    legacy_aliases = {
+        "fast": "restoration",
+        "balanced": "restoration",
+        "maximum": "studio2026",
+    }
+    if raw_norm in legacy_aliases:
+        denker_mode = legacy_aliases[raw_norm]
+    else:
+        try:
+            from backend.api.bridge import normalize_user_mode
+
+            canonical = normalize_user_mode(raw_mode)
+            denker_mode = "studio2026" if canonical == "Studio 2026" else "restoration"
+        except Exception:
+            denker_mode = "studio2026" if raw_norm in {"studio", "studio2026"} else "restoration"
+
+    goal_gate_mode = "studio_2026" if denker_mode == "studio2026" else "restoration"
+    display_mode = "Studio 2026" if denker_mode == "studio2026" else "Restoration"
+    return denker_mode, goal_gate_mode, display_mode
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI-Einstieg für den Legacy-Debug-Bypass mit strukturierter Telemetrie."""
     parser = argparse.ArgumentParser(
@@ -228,6 +258,7 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
     args = parser.parse_args(argv)
 
     _setup_workspace()
+    denker_mode, goal_gate_mode, display_mode = _resolve_debug_modes(args.mode)
 
     # --- Audio laden ---
     try:
@@ -238,8 +269,8 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
 
     # --- Pipeline ---
     try:
-        _print_header(args.audio, args.mode)
-        result = _run_restore(audio, sr, args.mode, args.verbose)
+        _print_header(args.audio, display_mode)
+        result = _run_restore(audio, sr, denker_mode, args.verbose)
     except Exception as e:
         print(f"\n✗ Pipeline-Fehler: {e}", file=sys.stderr)
         if args.verbose:
@@ -288,7 +319,7 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
     # --- JSON-Summary-Modus ---
     if args.summary_json:
         summary = get_debug_summary(result)
-        summary["goal_fails"] = get_goal_fails(result, args.mode)
+        summary["goal_fails"] = get_goal_fails(result, goal_gate_mode)
         summary["worst_phases"] = (
             get_worst_phases(result, n=5) if args.worst_phases == 0 else get_worst_phases(result, n=args.worst_phases)
         )
@@ -327,7 +358,7 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
         print(_fmt_full(trace))
 
     # --- Goal-Fails prüfen (Exit-Code) ---
-    goal_fails = get_goal_fails(result, args.mode)
+    goal_fails = get_goal_fails(result, goal_gate_mode)
     if goal_fails:
         print(f"\n⚠ {len(goal_fails)} Goal(s) unter Schwellwert:")
         for gf in goal_fails:

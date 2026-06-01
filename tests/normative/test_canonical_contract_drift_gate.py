@@ -15,6 +15,7 @@ _COPILOT_INSTRUCTIONS = _ROOT / ".github" / "copilot-instructions.md"
 _SPEC_08 = _ROOT / ".github" / "specs" / "08_architecture_and_distribution.md"
 _SPEC_07 = _ROOT / ".github" / "specs" / "07_quality_and_tests.md"
 _CLI = _ROOT / "cli" / "aurik_cli.py"
+_CLI_DEBUG = _ROOT / "cli" / "aurik_debug.py"
 _FRONTEND = _ROOT / "Aurik910" / "ui" / "modern_window.py"
 _REST_LEGACY = [
     _ROOT / "backend" / "api" / "rest" / "batch_api.py",
@@ -166,4 +167,18 @@ def test_frontend_mode_aliases_use_bridge_normalizer() -> None:
     )
     assert "canonical = _bridge_normalize_user_mode(raw_mode)" in ui_src, (
         "Frontend-Mode-Mapping muss auf dem Bridge-Normalizer basieren."
+    )
+
+
+@pytest.mark.normative
+@pytest.mark.timeout(20)
+def test_legacy_debug_mode_aliases_are_bridge_harmonized() -> None:
+    """Auch Legacy-Debug-Pfade sollen den zentralen Mode-Resolver nutzen."""
+    debug_src = _CLI_DEBUG.read_text(encoding="utf-8")
+
+    assert "def _resolve_debug_modes(" in debug_src, (
+        "Debug-CLI muss einen zentralen Mode-Resolver besitzen statt verstreuter Alias-Checks."
+    )
+    assert "from backend.api.bridge import normalize_user_mode" in debug_src, (
+        "Debug-CLI soll normalize_user_mode aus der Bridge zur Alias-Harmonisierung verwenden."
     )
