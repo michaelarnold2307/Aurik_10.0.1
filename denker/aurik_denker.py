@@ -1140,7 +1140,8 @@ class AurikDenker:
         phases_executed: list[str] = []
         stage_notes: dict[str, Any] = {}
         aktuelles_audio = audio.copy()
-        effective_mode = self._normalize_mode_name(mode)
+        requested_mode = self._normalize_mode_name(mode)
+        effective_mode = requested_mode
         _critical_stages: frozenset[str] = frozenset({"tontraeger", "defekt", "restaurierung"})
         _stage_severity: dict[str, str] = {
             "tontraeger": "critical",
@@ -1435,16 +1436,12 @@ class AurikDenker:
             )
         except Exception as _autopilot_exc:
             logger.warning("Autopilot mode selection failed: %s — defaulting to requested mode", _autopilot_exc)
-            effective_mode = self._normalize_mode_name(mode) or "restoration"
+            effective_mode = requested_mode or "restoration"
             autopilot_note = f"Autopilot fallback (error): {_autopilot_exc}"
         stage_notes["autopilot"] = autopilot_note
-        if self._normalize_mode_name(mode) == "studio2026" and effective_mode == "restoration":
+        if requested_mode == "studio2026" and effective_mode == "restoration":
             warnings.append("Autopilot-Sicherheitsfallback: Studio 2026 wurde auf Restoration zurückgesetzt.")
-        elif (
-            self._normalize_mode_name(mode) == "studio2026"
-            and effective_mode == "studio2026"
-            and "Hinweis:" in autopilot_note
-        ):
+        elif requested_mode == "studio2026" and effective_mode == "studio2026" and "Hinweis:" in autopilot_note:
             warnings.append(
                 "Studio 2026 auf nicht-idealem Material: Interne Schutzmaßnahmen "
                 "(SongCal, PMGG, FeedbackChain) sind aktiv."
@@ -2579,7 +2576,7 @@ class AurikDenker:
             )
             warnings.append(_msg)
             stage_notes["material_mos_gate"] = f"FAILED: {_mos_material} MOS={_versa_mos:.3f} < {_mos_target:.3f}"
-            if mode.lower() in {"restoration", "studio2026", "maximum"}:
+            if requested_mode in {"restoration", "studio2026", "maximum"}:
                 # Proportional penalty: the closer MOS is to target, the less penalty.
                 # MOS-Deficit ratio: 0 → no penalty, 1.0+ → cap at 0.54
                 _mos_deficit_ratio = min(1.0, max(0.0, (_mos_target - _versa_mos) / _mos_target))

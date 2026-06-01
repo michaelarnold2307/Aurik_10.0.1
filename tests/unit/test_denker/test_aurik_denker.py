@@ -749,6 +749,86 @@ class TestAurikDenkerMaterialMosGate:
         assert "FAILED" in result.stage_notes.get("material_mos_gate", "")
         assert any("Material-MOS-Gate nicht bestanden" in w for w in result.warnings)
 
+    def test_material_mos_gate_honors_release_alias_studio_2026(self):
+        audio = _sine()
+        exz_m = _make_exzellenz_mock(audio)
+        exz_denker_m = MagicMock()
+        exz_denker_m.optimiere.return_value = exz_m
+        versa_result_m = MagicMock(mos=3.6, model_used="mock_versa")
+
+        kette_m = _make_kette_mock("tape→mp3_high")
+        kette_m.as_dict.return_value = {
+            "chain_string": "tape→mp3_high",
+            "chain_complexity": 0.6,
+            "is_multi_generation": True,
+            "generation_count": 2,
+            "chain": ["tape", "mp3_high"],
+            "primary_medium": "mp3_high",
+        }
+
+        strat_m = _make_strategie_mock()
+        strat_result = MagicMock()
+        strat_result.quality_mode = "quality"
+        strat_result.max_processing_s = 30.0
+        strat_m.plan.return_value = strat_result
+        strat_m.starte_timer.return_value = None
+
+        rest_result = MagicMock()
+        rest_result.audio = audio.copy()
+        rest_result.phases_executed = []
+        rest_result.warnings = []
+        rest_result.quality_estimate = 0.7
+        rest_result.rt_factor = 0.5
+        rest_result.confidence = 0.9
+        rest_result.rollback_triggered = False
+        rest_result.winning_variant = "balanced"
+        rest_result.musical_goals = {}
+        rest_result.goals_passed = 0
+        rest_m = MagicMock()
+        rest_m.restauriere.return_value = rest_result
+
+        rep_result = MagicMock(
+            audio=audio.copy(), warnings=[], clicks_removed=False, hum_removed=False, clipping_repaired=False
+        )
+        rek_result = MagicMock(audio=audio.copy(), warnings=[], gaps_found=0, gaps_repaired=0, total_repaired_ms=0.0)
+
+        with (
+            patch(
+                "denker.aurik_denker.get_tontraeger_denker",
+                MagicMock(return_value=MagicMock(erkenne=MagicMock(return_value=_make_toni_mock("tape")))),
+            ),
+            patch(
+                "denker.aurik_denker.get_tontraegerkette_denker",
+                MagicMock(return_value=MagicMock(analysiere=MagicMock(return_value=kette_m))),
+            ),
+            patch(
+                "denker.aurik_denker.get_defekt_denker",
+                MagicMock(return_value=MagicMock(analysiere=MagicMock(return_value=_make_defekt_mock()))),
+            ),
+            patch("denker.aurik_denker.get_strategie_denker", MagicMock(return_value=strat_m)),
+            patch("denker.aurik_denker.get_restaurier_denker", MagicMock(return_value=rest_m)),
+            patch(
+                "denker.aurik_denker.get_reparatur_denker",
+                MagicMock(return_value=MagicMock(repariere=MagicMock(return_value=rep_result))),
+            ),
+            patch(
+                "denker.aurik_denker.get_rekonstruktions_denker",
+                MagicMock(return_value=MagicMock(rekonstruiere=MagicMock(return_value=rek_result))),
+            ),
+            patch("denker.aurik_denker.get_exzellenz_denker", MagicMock(return_value=exz_denker_m)),
+            patch(
+                "denker.aurik_denker.AurikDenker._should_skip_excellence_for_clean_digital",
+                MagicMock(return_value=(False, {"material": "mp3_high"})),
+            ),
+            patch("plugins.versa_plugin.score_mos", MagicMock(return_value=versa_result_m)),
+        ):
+            from denker.aurik_denker import AurikDenker
+
+            result = AurikDenker().denke(audio, SR, mode="Studio 2026")
+
+        assert result.quality_estimate < 0.60
+        assert "FAILED" in result.stage_notes.get("material_mos_gate", "")
+
     def test_material_mos_gate_keeps_quality_when_target_is_met(self):
         audio = _sine()
         exz_m = _make_exzellenz_mock(audio)
