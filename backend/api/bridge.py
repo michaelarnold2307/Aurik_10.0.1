@@ -80,6 +80,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _coerce_dict_str_any(raw: Any) -> dict[str, Any]:
+    """Normalisiert optionale Metadaten auf ein dict[str, Any]."""
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _coerce_list_any(raw: Any) -> list[Any]:
+    """Normalisiert optionale Metadaten auf eine Liste."""
+    return list(raw) if isinstance(raw, list) else []
+
+
 # ---------------------------------------------------------------------------
 # Öffentliche API — explizite Export-Liste
 # ---------------------------------------------------------------------------
@@ -835,33 +846,16 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
     Frontend-safe helper for AurikErgebnis/RestorationResult-like objects.
     Returns stable keys even if metadata is partially missing.
     """
-    _meta = getattr(result, "metadata", None)
-    if not isinstance(_meta, dict):
-        _meta = {}
+    _meta_raw = getattr(result, "metadata", None)
+    _meta: dict[str, Any] = _coerce_dict_str_any(_meta_raw)
 
-    _joy: dict[str, Any] = (  # type: ignore[assignment]
-        _meta.get("joy_runtime_index") if isinstance(_meta.get("joy_runtime_index"), dict) else {}
-    )
-    _auto: dict[str, Any] = (
-        _meta.get("auto_improvement_recommendations")  # type: ignore[assignment]
-        if isinstance(_meta.get("auto_improvement_recommendations"), dict)
-        else {}
-    )
-    _song_cal: dict[str, Any] = (  # type: ignore[assignment]
-        _meta.get("song_calibration") if isinstance(_meta.get("song_calibration"), dict) else {}
-    )
-    _cluster: dict[str, Any] = (
-        _song_cal.get("cluster_policy") if isinstance(_song_cal.get("cluster_policy"), dict) else {}
-    )  # type: ignore[assignment]
-    _fqf: dict[str, Any] = (
-        _meta.get("fallback_quality_floor") if isinstance(_meta.get("fallback_quality_floor"), dict) else {}
-    )  # type: ignore[assignment]
-    _rc: dict[str, Any] = (  # type: ignore[assignment]
-        _meta.get("recovery_certainty") if isinstance(_meta.get("recovery_certainty"), dict) else {}
-    )
-    _stage_notes = getattr(result, "stage_notes", None)
-    if not isinstance(_stage_notes, dict):
-        _stage_notes = {}
+    _joy = _coerce_dict_str_any(_meta.get("joy_runtime_index"))
+    _auto = _coerce_dict_str_any(_meta.get("auto_improvement_recommendations"))
+    _song_cal = _coerce_dict_str_any(_meta.get("song_calibration"))
+    _cluster = _coerce_dict_str_any(_song_cal.get("cluster_policy"))
+    _fqf = _coerce_dict_str_any(_meta.get("fallback_quality_floor"))
+    _rc = _coerce_dict_str_any(_meta.get("recovery_certainty"))
+    _stage_notes: dict[str, Any] = _coerce_dict_str_any(getattr(result, "stage_notes", None))
 
     _rec_raw = _auto.get("recommendations")
     _recommendations: list[Any] = list(_rec_raw) if isinstance(_rec_raw, list) else []
@@ -904,9 +898,7 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
         _cnt = len(_normalized_recommendations)
     _cnt = max(_cnt, len(_normalized_recommendations), 0)
 
-    _tc: dict[str, Any] = (  # type: ignore[assignment]
-        _meta.get("team_coordination") if isinstance(_meta.get("team_coordination"), dict) else {}
-    )
+    _tc = _coerce_dict_str_any(_meta.get("team_coordination"))
     _tc_events_raw_val = _tc.get("events")
     _tc_events_raw: list[Any] = list(_tc_events_raw_val) if isinstance(_tc_events_raw_val, list) else []
     _tc_events: list[dict[str, Any]] = []
@@ -941,7 +933,7 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
             }
         )
 
-    _fail_reasons = _meta.get("fail_reasons") if isinstance(_meta.get("fail_reasons"), list) else []
+    _fail_reasons: list[Any] = _coerce_list_any(_meta.get("fail_reasons"))
     if not _fail_reasons and isinstance(_stage_notes.get("fail_reasons"), list):
         _fail_reasons = list(_stage_notes.get("fail_reasons") or [])
 
@@ -963,15 +955,11 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
     _fqf_attempts = int(_fqf.get("attempts", 0)) if isinstance(_fqf.get("attempts", 0), (int, float)) else 0
     _exp_profile = str(_meta.get("export_gate_profile", "") or "").strip()
     _exp_material = str(_meta.get("export_gate_material", "") or "").strip()
-    _exp_thresholds = (
-        _meta.get("export_gate_thresholds") if isinstance(_meta.get("export_gate_thresholds"), dict) else {}
-    )
-    _exp_signature = (
-        _meta.get("export_gate_signal_signature") if isinstance(_meta.get("export_gate_signal_signature"), dict) else {}
-    )
+    _exp_thresholds = _coerce_dict_str_any(_meta.get("export_gate_thresholds"))
+    _exp_signature = _coerce_dict_str_any(_meta.get("export_gate_signal_signature"))
     _exp_preserve_signal = _safe01(_meta.get("export_gate_preserve_signal", 0.0))
-    _xp_stage_profile = _stage_notes.get("exzellenz_recovery_profile") if isinstance(_stage_notes, dict) else {}
-    if isinstance(_xp_stage_profile, dict):
+    _xp_stage_profile = _coerce_dict_str_any(_stage_notes.get("exzellenz_recovery_profile"))
+    if _xp_stage_profile:
         _exp_preserve_signal = max(_exp_preserve_signal, _safe01(_xp_stage_profile.get("preserve_signal", 0.0)))
     if not _exp_profile:
         if _exp_preserve_signal >= 0.55:
@@ -991,10 +979,8 @@ def get_experience_insights(result: Any) -> dict[str, Any]:
     _primary_error_code = ""
     if _fail_reasons and isinstance(_fail_reasons[0], dict):
         _primary_error_code = str(_fail_reasons[0].get("error_code", "") or "")
-    _wcs_gate = (
-        _meta.get("worldclass_composite_gate") if isinstance(_meta.get("worldclass_composite_gate"), dict) else {}
-    )
-    _threshold_evidence = _meta.get("threshold_evidence") if isinstance(_meta.get("threshold_evidence"), dict) else {}
+    _wcs_gate = _coerce_dict_str_any(_meta.get("worldclass_composite_gate"))
+    _threshold_evidence = _coerce_dict_str_any(_meta.get("threshold_evidence"))
     _qe_threshold = _safe_float(_exp_thresholds.get("quality_estimate", 0.0), 0.0)
     _root_cause = str(_primary_fail_reason or "").strip()
     _root_cause_l = _root_cause.lower()
@@ -1448,28 +1434,19 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
     before calling ``backend.core.export_workflow.export_audio``.
     """
     passed, warnings = validate_export_quality(result)
-    meta = getattr(result, "metadata", None)
-    if not isinstance(meta, dict):
-        meta = {}
+    meta_raw = getattr(result, "metadata", None)
+    meta: dict[str, Any] = _coerce_dict_str_any(meta_raw)
 
-    fail_reasons: list[Any] = (  # type: ignore[assignment]
-        meta.get("fail_reasons") if isinstance(meta.get("fail_reasons"), list) else []
-    )
+    fail_reasons: list[Any] = _coerce_list_any(meta.get("fail_reasons"))
     primary_fail_reason = str(meta.get("fail_reason", "") or "")
     degradation_status = str(meta.get("degradation_status", "") or "")
-    fqf: dict[str, Any] = (
-        meta.get("fallback_quality_floor") if isinstance(meta.get("fallback_quality_floor"), dict) else {}
-    )  # type: ignore[assignment]
+    fqf = _coerce_dict_str_any(meta.get("fallback_quality_floor"))
     export_gate_profile = str(meta.get("export_gate_profile", "") or "")
     export_gate_material = str(meta.get("export_gate_material", "") or "")
     _export_gate_thresholds_raw = meta.get("export_gate_thresholds")
-    export_gate_thresholds: dict[str, Any] = (
-        _export_gate_thresholds_raw if isinstance(_export_gate_thresholds_raw, dict) else {}
-    )
+    export_gate_thresholds = _coerce_dict_str_any(_export_gate_thresholds_raw)
     _export_gate_signal_signature_raw = meta.get("export_gate_signal_signature")
-    export_gate_signal_signature: dict[str, Any] = (
-        _export_gate_signal_signature_raw if isinstance(_export_gate_signal_signature_raw, dict) else {}
-    )
+    export_gate_signal_signature = _coerce_dict_str_any(_export_gate_signal_signature_raw)
     export_gate_preserve_signal = float(np.clip(float(meta.get("export_gate_preserve_signal", 0.0) or 0.0), 0.0, 1.0))
 
     _degradation_norm = degradation_status.strip().lower()
@@ -1505,9 +1482,9 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
 
     # Music-Lover Telemetrie: liefert musikalisch relevante Exportindikatoren
     # für UI/Reporter, ohne bestehende Gate-Semantik zu verändern.
-    _goals_meta = meta.get("musical_goals") if isinstance(meta.get("musical_goals"), dict) else {}
-    _goal_scores = _goals_meta.get("scores") if isinstance(_goals_meta.get("scores"), dict) else {}
-    _goal_thresholds = _goals_meta.get("thresholds") if isinstance(_goals_meta.get("thresholds"), dict) else {}
+    _goals_meta: dict[str, Any] = _coerce_dict_str_any(meta.get("musical_goals"))
+    _goal_scores: dict[str, Any] = _coerce_dict_str_any(_goals_meta.get("scores"))
+    _goal_thresholds: dict[str, Any] = _coerce_dict_str_any(_goals_meta.get("thresholds"))
     _goal_gaps: list[dict[str, Any]] = []
     for _goal_name, _thr_val in _goal_thresholds.items():
         try:
@@ -1518,7 +1495,7 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
             _goal_gaps.append({"goal": str(_goal_name), "gap": round(float(_gap), 4)})
     _goal_gaps.sort(key=lambda e: float(e.get("gap", 0.0)), reverse=True)
 
-    _temporal_cont = meta.get("temporal_continuity") if isinstance(meta.get("temporal_continuity"), dict) else {}
+    _temporal_cont: dict[str, Any] = _coerce_dict_str_any(meta.get("temporal_continuity"))
     _temporal_hotspots: list[dict[str, Any]] = []
     for _phase_id, _entry in _temporal_cont.items():
         if not isinstance(_entry, dict):
@@ -1546,18 +1523,18 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
     _chroma_val = float(getattr(result, "chroma_correlation", 0.0) or 0.0)
     _lufs_delta_val = float(getattr(result, "lufs_delta", 0.0) or 0.0)
 
-    _mcg = meta.get("model_capability_report") if isinstance(meta.get("model_capability_report"), dict) else {}
-    _mcg_summary = _mcg.get("summary") if isinstance(_mcg, dict) else {}
-    _all_sota_raw = _mcg_summary.get("all_sota_real") if isinstance(_mcg_summary, dict) else None
+    _mcg: dict[str, Any] = _coerce_dict_str_any(meta.get("model_capability_report"))
+    _mcg_summary: dict[str, Any] = _coerce_dict_str_any(_mcg.get("summary"))
+    _all_sota_raw = _mcg_summary.get("all_sota_real")
     _vocal_cap_status = str(meta.get("vocal_restoration_capability_status", "") or "")
     _all_sota_real = True
     if isinstance(_all_sota_raw, bool):
         _all_sota_real = bool(_all_sota_raw)
     if _vocal_cap_status and _vocal_cap_status != "sota_real":
         _all_sota_real = False
-    _degraded_caps = _mcg_summary.get("degraded_capabilities") if isinstance(_mcg_summary, dict) else []
-    _wcs_gate = meta.get("worldclass_composite_gate") if isinstance(meta.get("worldclass_composite_gate"), dict) else {}
-    _threshold_evidence = meta.get("threshold_evidence") if isinstance(meta.get("threshold_evidence"), dict) else {}
+    _degraded_caps = _coerce_list_any(_mcg_summary.get("degraded_capabilities"))
+    _wcs_gate = _coerce_dict_str_any(meta.get("worldclass_composite_gate"))
+    _threshold_evidence = _coerce_dict_str_any(meta.get("threshold_evidence"))
     _qe_threshold = float(export_gate_thresholds.get("quality_estimate", 0.0) or 0.0)
     _root_cause = str(primary_fail_reason or "").strip()
     _root_cause_l = _root_cause.lower()
