@@ -2049,10 +2049,15 @@ class AurikDenker:
                         _repair_kwargs["mode"] = effective_mode
                     if "material" in _repair_sig.parameters:
                         _repair_kwargs["material"] = _exz_material
-                    if "reference_audio" in _repair_sig.parameters and audio is not None:
-                        _repair_kwargs["reference_audio"] = audio
-
-                    _repair_out = _repair_call(aktuelles_audio, sr, **_repair_kwargs)
+                    if "reference_audio" in _repair_sig.parameters:
+                        _repair_out = _repair_call(
+                            aktuelles_audio,
+                            sr,
+                            reference_audio=audio,
+                            **_repair_kwargs,
+                        )
+                    else:
+                        _repair_out = _repair_call(aktuelles_audio, sr, **_repair_kwargs)
                     _used_repair_path = True
                     if isinstance(_repair_out, tuple) and len(_repair_out) == 2:
                         aktuelles_audio = np.asarray(_repair_out[0], dtype=np.float32)
