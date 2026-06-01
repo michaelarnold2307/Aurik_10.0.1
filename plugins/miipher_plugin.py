@@ -158,9 +158,9 @@ class MiipherPlugin:
             try:
                 _reg = _load_symbol("backend.core.plugin_lifecycle_manager", "register_plugin")
 
-                def _miipher_unload(s: MiipherPlugin = self) -> None:
-                    s._model_session = None
-                    s._model_loaded = False
+                def _miipher_unload() -> None:
+                    self._model_session = None
+                    self._model_loaded = False
 
                 _reg(
                     "MIIPHER",
