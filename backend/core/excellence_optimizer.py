@@ -513,7 +513,15 @@ def _enhance_spectral_continuity(
     _pghi_fn = _pghi_excellence
     if _PGHI_AVAILABLE_EX and callable(_pghi_fn):
         try:
-            Zxx_new = _pghi_fn(Zxx_new, hop=_HOP)
+            _pghi_out = _pghi_fn(Zxx_new, hop=_HOP, n_samples=len(_audio_proc))
+            if isinstance(_pghi_out, np.ndarray) and _pghi_out.ndim == 1:
+                smoothed = _match_length(np.asarray(_pghi_out, dtype=np.float32), len(_audio_proc))
+                if len(audio) > _max_cont_samples:
+                    out = audio.copy()
+                    out[:_max_cont_samples] = smoothed
+                    return out
+                return smoothed
+            Zxx_new = _pghi_out
         except Exception:
             pass  # fallback: use original-phase reconstruction
     smoothed = _istft(Zxx_new, len(_audio_proc))
@@ -662,7 +670,15 @@ def _reinforce_harmonics(
     _pghi_fn = _pghi_excellence
     if _PGHI_AVAILABLE_EX and callable(_pghi_fn):
         try:
-            Zxx_new = _pghi_fn(Zxx_new, hop=_HOP)
+            _pghi_out = _pghi_fn(Zxx_new, hop=_HOP, n_samples=len(_audio_proc))
+            if isinstance(_pghi_out, np.ndarray) and _pghi_out.ndim == 1:
+                boosted = _match_length(np.asarray(_pghi_out, dtype=np.float32), len(_audio_proc))
+                if len(audio) > _max_harm_samples:
+                    out = audio.copy()
+                    out[:_max_harm_samples] = boosted
+                    return out
+                return boosted
+            Zxx_new = _pghi_out
         except Exception as _pghi_exc:
             logger.debug("PGHI excellence harmonic boost failed, using unmodified phase: %s", _pghi_exc)
     boosted = _istft(Zxx_new, len(_audio_proc))
@@ -925,7 +941,8 @@ class ExcellenceOptimizer:
 
         # RMS-Delta berechnen
         rms_after = float(np.sqrt(np.mean(out.astype(np.float64) ** 2)) + 1e-10)
-        result.delta_rms_db = float(20 * np.log10(rms_after / rms_before))
+        _raw_delta_rms_db = float(20 * np.log10(rms_after / rms_before))
+        result.delta_rms_db = float(np.clip(_raw_delta_rms_db, -6.0, 6.0))
 
         # §2.34 GoalPriorityProtocol: Pareto-Konflikt-Logging (MOO, §2.5)
         # Natürlichkeit/Authentizität (Stufe 1) dürfen nicht für Brillanz/Raumtiefe (Stufe 5) geopfert werden.
