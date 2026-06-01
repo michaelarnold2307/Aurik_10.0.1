@@ -37,6 +37,7 @@ from typing import Any, cast
 import numpy as np
 from scipy.signal import butter, sosfiltfilt
 
+from backend.api.bridge import normalize_user_mode as _bridge_normalize_user_mode
 from backend.core.calibration_matrix import get_material_floor
 from backend.core.pipeline_health_state import PipelineHealthState, pipeline_health_from_fail_reasons
 
@@ -606,14 +607,25 @@ class AurikDenker:
     def _normalize_mode_name(mode: str | None) -> str:
         """Normalisiert user-facing mode aliases to canonical internal names."""
         normalized = str(mode or "quality").strip().lower().replace("_", "")
-        aliases = {
-            "studio 2026": "studio2026",
-            "studio2026": "studio2026",
-            "restoration": "restoration",
+        internal_aliases = {
             "quality": "quality",
             "balanced": "balanced",
             "fast": "fast",
             "maximum": "maximum",
+        }
+        if normalized in internal_aliases:
+            return internal_aliases[normalized]
+
+        canonical_mode = _bridge_normalize_user_mode(mode)
+        if canonical_mode == "Studio 2026":
+            return "studio2026"
+        if canonical_mode == "Restoration":
+            return "restoration"
+
+        aliases = {
+            "studio 2026": "studio2026",
+            "studio2026": "studio2026",
+            "restoration": "restoration",
         }
         return aliases.get(normalized, normalized)
 

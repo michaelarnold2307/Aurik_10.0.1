@@ -1025,6 +1025,22 @@ class TestAurikDenkerAutopilotMode:
         assert "Restoration empfohlen" in note
 
 
+class TestAurikDenkerModeNormalization:
+    def test_release_aliases_map_to_canonical_internal_modes(self):
+        from denker.aurik_denker import AurikDenker
+
+        assert AurikDenker._normalize_mode_name("Restoration") == "restoration"
+        assert AurikDenker._normalize_mode_name("Studio 2026") == "studio2026"
+
+    def test_internal_strategy_aliases_remain_distinct(self):
+        from denker.aurik_denker import AurikDenker
+
+        assert AurikDenker._normalize_mode_name("quality") == "quality"
+        assert AurikDenker._normalize_mode_name("balanced") == "balanced"
+        assert AurikDenker._normalize_mode_name("fast") == "fast"
+        assert AurikDenker._normalize_mode_name("maximum") == "maximum"
+
+
 class TestAurikDenkerOracleRolloutIntelligence:
     def test_recommend_oracle_rollout_respects_explicit_mode(self):
         from denker.aurik_denker import AurikDenker
