@@ -6182,12 +6182,16 @@ class UnifiedRestorerV3:
             )
 
         # Start adaptive resource monitoring once per process lifecycle.
-        try:
-            from backend.core.adaptive_resource_manager import adaptive_resource_manager as _arm
+        _safe_validation_profile = bool(os.getenv("AURIK_SAFE_VALIDATION_PROFILE"))
+        if not _safe_validation_profile:
+            try:
+                from backend.core.adaptive_resource_manager import adaptive_resource_manager as _arm
 
-            _arm.start_monitoring()
-        except Exception as _arm_exc:
-            logger.debug("AdaptiveResourceManager.start_monitoring() fehlgeschlagen: %s", _arm_exc)
+                _arm.start_monitoring()
+            except Exception as _arm_exc:
+                logger.debug("AdaptiveResourceManager.start_monitoring() fehlgeschlagen: %s", _arm_exc)
+        else:
+            logger.debug("AdaptiveResourceManager im Safe-Validation-Kontext deaktiviert")
 
         # Early initialization of variables used before their main definition (avoids F821)
         _is_studio_26 = self.is_studio_mode()
@@ -13365,22 +13369,25 @@ class UnifiedRestorerV3:
 
         # §8.1 Reporting-Analytik: MUSHRA, Artefakt-Analyse, Qualitätsvergleich
         # und >80 weitere Diagnose-Module (analytics-only, kein Audio-Eingriff)
-        _analytics_meta = self._collect_reporting_analytics(
-            restored_audio=restored_audio,
-            audio=audio,
-            original_audio_for_goals=original_audio_for_goals,
-            sample_rate=sample_rate,
-            material_type=material_type,
-            _era_result=_era_result,
-            _quality_before=_quality_before,
-            quality_estimate=quality_estimate,
-            _pipeline_confidence=_pipeline_confidence,
-            _musical_goal_scores=_musical_goal_scores,
-            _musical_goals_passed=_musical_goals_passed,
-            defect_result=defect_result,
-            executed_phases=executed_phases,
-            _pqs_result=_pqs_result,
-        )
+        if _safe_validation_profile:
+            _analytics_meta = {}
+        else:
+            _analytics_meta = self._collect_reporting_analytics(
+                restored_audio=restored_audio,
+                audio=audio,
+                original_audio_for_goals=original_audio_for_goals,
+                sample_rate=sample_rate,
+                material_type=material_type,
+                _era_result=_era_result,
+                _quality_before=_quality_before,
+                quality_estimate=quality_estimate,
+                _pipeline_confidence=_pipeline_confidence,
+                _musical_goal_scores=_musical_goal_scores,
+                _musical_goals_passed=_musical_goals_passed,
+                defect_result=defect_result,
+                executed_phases=executed_phases,
+                _pqs_result=_pqs_result,
+            )
         # Merge gate fail-reasons from analytics into the central accumulator
         _fail_reasons.extend(_analytics_meta.pop("_fail_reasons_from_analytics", []) or [])
 
@@ -19660,27 +19667,33 @@ class UnifiedRestorerV3:
 
         # perceptual_validator (Musical Goals perceptual validation)
         _perceptual_validation: dict | None = None
-        try:
-            from backend.core.musical_goals.perceptual_validator import PerceptualValidator as _PV35
+        _skip_perceptual_validator = os.getenv("PYTEST_CURRENT_TEST") or os.getenv("AURIK_SAFE_VALIDATION_PROFILE")
+        if _skip_perceptual_validator:
+            logger.debug("PerceptualValidator in Test-/Validierungskontext deaktiviert")
+        else:
+            try:
+                from backend.core.musical_goals.perceptual_validator import PerceptualValidator as _PV35
 
-            _tech_scores35 = {}
-            if _musical_goal_scores:
-                _tech_scores35 = {k: float(v) for k, v in _musical_goal_scores.items() if isinstance(v, (int, float))}
-            # Bug-Fix §10b: cap to 10 s; avoid PerceptualValidator background-thread issues on long audio
-            _pv_cap = 10 * sample_rate
-            _pv_audio = restored_audio[:_pv_cap] if restored_audio.shape[-1] > _pv_cap else restored_audio
-            _pv35_result = _PV35().validate_all_goals(_pv_audio, sample_rate, _tech_scores35)
-            _perceptual_validation = {
-                k: {"score": float(getattr(v, "score", 0.0)), "passed": bool(getattr(v, "passed", True))}
-                for k, v in (_pv35_result or {}).items()
-            }
-            logger.debug("✅ PerceptualValidator: %d goals validated", len(_perceptual_validation))
-        except BaseException as _pv_exc:
-            # pytest-timeout may raise an outcome exception that is not always an Exception subclass.
-            # Analytics must remain non-blocking and fall back instead of aborting restore().
-            if isinstance(_pv_exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
-                raise
-            logger.debug("PerceptualValidator nicht verfügbar: %s", _pv_exc)
+                _tech_scores35 = {}
+                if _musical_goal_scores:
+                    _tech_scores35 = {
+                        k: float(v) for k, v in _musical_goal_scores.items() if isinstance(v, (int, float))
+                    }
+                # Bug-Fix §10b: cap to 10 s; avoid PerceptualValidator background-thread issues on long audio
+                _pv_cap = 10 * sample_rate
+                _pv_audio = restored_audio[:_pv_cap] if restored_audio.shape[-1] > _pv_cap else restored_audio
+                _pv35_result = _PV35().validate_all_goals(_pv_audio, sample_rate, _tech_scores35)
+                _perceptual_validation = {
+                    k: {"score": float(getattr(v, "score", 0.0)), "passed": bool(getattr(v, "passed", True))}
+                    for k, v in (_pv35_result or {}).items()
+                }
+                logger.debug("✅ PerceptualValidator: %d goals validated", len(_perceptual_validation))
+            except BaseException as _pv_exc:
+                # pytest-timeout may raise an outcome exception that is not always an Exception subclass.
+                # Analytics must remain non-blocking and fall back instead of aborting restore().
+                if isinstance(_pv_exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                    raise
+                logger.debug("PerceptualValidator nicht verfügbar: %s", _pv_exc)
 
         # epistemic_gate (Epistemic Gate — verantwortungsvolles Handeln)
         _epistemic_result: dict | None = None

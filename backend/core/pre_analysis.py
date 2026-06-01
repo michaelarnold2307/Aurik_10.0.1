@@ -38,7 +38,6 @@ Usage (UV3 / CLI — no frontend)::
 
 from __future__ import annotations
 
-import ctypes
 import gc
 import logging
 import math
@@ -306,7 +305,9 @@ def run_pre_analysis(
                 result.errors[name] = str(exc)
                 logger.warning("pre_analysis: step=%s failed (%s)", name, exc)
     finally:
-        _pool.shutdown(wait=False, cancel_futures=True)
+        # Die Futures wurden oben bereits konsumiert; hier wollen wir die Worker
+        # deterministisch beenden statt sie bis zum Interpreter-Exit offen zu lassen.
+        _pool.shutdown(wait=True, cancel_futures=True)
 
     _cb(90, "Analyse abgeschlossen — Ergebnisse werden gespeichert…")
 
@@ -320,14 +321,10 @@ def run_pre_analysis(
     logger.info("pre_analysis: complete in %.1fs (errors=%s)", result.elapsed_seconds, list(result.errors))
 
     # Free DefectScanner STFT/spectral intermediate arrays (30 defect types × full audio).
-    # These can occupy 10–15 GB of numpy malloc arenas.  Releasing them before the
-    # BatchProcessingThread loads the audio again prevents SIGABRT (malloc corruption)
-    # caused by glibc reusing bloated free-lists when pedalboard calls malloc.
+    # Vollstaendiges GC ist hier sicher; malloc_trim(0) bleibt bewusst deaktiviert,
+    # weil der Aufruf im Projekt bereits mehrfach als SIGABRT-Risiko unter
+    # konkurrierenden Audio-/NumPy-Threads aufgefallen ist.
     gc.collect()
-    try:
-        ctypes.CDLL("libc.so.6").malloc_trim(0)
-    except Exception as _trim_exc:
-        logger.debug("malloc_trim unavailable (non-glibc platform): %s", _trim_exc)
 
     _cb(100, "Voranalyse fertig.")
     return result

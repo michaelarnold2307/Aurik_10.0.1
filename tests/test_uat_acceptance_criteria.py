@@ -420,8 +420,8 @@ def _to_samples_first(audio: np.ndarray) -> np.ndarray:
 def _to_mono(audio: np.ndarray) -> np.ndarray:
     arr = _to_samples_first(audio)
     if arr.ndim == 1:
-        return arr
-    return arr.mean(axis=1, dtype=np.float32)
+        return np.asarray(arr, dtype=np.float32)
+    return np.asarray(arr.mean(axis=1, dtype=np.float32), dtype=np.float32)
 
 
 def _safe_corr(a: np.ndarray, b: np.ndarray) -> float:

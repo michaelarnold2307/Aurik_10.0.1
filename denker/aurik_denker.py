@@ -1834,7 +1834,8 @@ class AurikDenker:
                         except Exception as _exc:
                             logger.debug("Operation failed (non-critical): %s", _exc)
 
-                _t = threading.Thread(target=_run_rest, daemon=True)
+                _daemon_rest_thread = not _is_pytest_or_safe_validation_context()
+                _t = threading.Thread(target=_run_rest, daemon=_daemon_rest_thread)
                 _t.start()
                 if no_rt_limit:
                     _t.join()

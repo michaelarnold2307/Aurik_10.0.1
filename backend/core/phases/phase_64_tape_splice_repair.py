@@ -230,7 +230,7 @@ def apply(
 ) -> np.ndarray:
     """Haupt-entry point for Phase 64."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
-    audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+    audio = np.asarray(np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0), dtype=np.float32)
 
     if defect_scores is not None:
         splice_score = float(defect_scores.get("tape_splice_artifact", 0.0))
@@ -248,7 +248,7 @@ def apply(
         mono64 = mono_mix.astype(np.float32)
         splice_points = _detect_splice_points(mono64, sample_rate, crossfade_samples)
         if not splice_points:
-            return np.clip(audio, -1.0, 1.0).astype(np.float32)
+            return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)
         left_out = _apply_splice_repair(
             audio[0].astype(np.float32),
             audio[0].astype(np.float32),
@@ -269,12 +269,12 @@ def apply(
         )
         left_out = np.nan_to_num(left_out, nan=0.0, posinf=0.0, neginf=0.0)
         right_out = np.nan_to_num(right_out, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(np.stack([left_out, right_out], axis=0), -1.0, 1.0).astype(np.float32)
+        return np.asarray(np.clip(np.stack([left_out, right_out], axis=0), -1.0, 1.0), dtype=np.float32)
 
     x = audio.astype(np.float32)
     splice_points = _detect_splice_points(x, sample_rate, crossfade_samples)
     if not splice_points:
-        return np.clip(audio, -1.0, 1.0).astype(np.float32)
+        return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)
 
     out = _apply_splice_repair(
         np.copy(x),
@@ -286,7 +286,7 @@ def apply(
         sample_rate=sample_rate,
     )
     result = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result, -1.0, 1.0).astype(np.float32)
+    return np.asarray(np.clip(result, -1.0, 1.0), dtype=np.float32)
 
 
 # ─── PhaseInterface ────────────────────────────────────────────────────────────
