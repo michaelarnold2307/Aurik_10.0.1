@@ -215,6 +215,15 @@ def test_write_audio_creates_wavfile(tmp_path):
     assert loaded.size > 0
 
 
+def test_build_atomic_temp_path_preserves_target_suffix() -> None:
+    """KMV-Tempdatei muss die finale Dateiendung behalten, damit das Format stabil bleibt."""
+    from Aurik910.ui.ml_refinement_thread import _build_atomic_temp_path
+
+    assert _build_atomic_temp_path("/tmp/song.wav") == "/tmp/song.kmv_tmp.wav"
+    assert _build_atomic_temp_path("/tmp/song.flac") == "/tmp/song.kmv_tmp.flac"
+    assert _build_atomic_temp_path("/tmp/song") == "/tmp/song.kmv_tmp"
+
+
 # ── Signal-Kontrakt (alle 5 §2.38-Pflicht-Signale vorhanden) ─────────────────
 
 

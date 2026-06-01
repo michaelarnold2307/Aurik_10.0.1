@@ -279,7 +279,7 @@ class MLRefinementThread(QThread):
             _audio = np.nan_to_num(_audio, nan=0.0, posinf=0.0, neginf=0.0)
             _audio = np.clip(_audio, -1.0, 1.0)
 
-            _tmp_path = output_path + ".kmv_tmp"
+            _tmp_path = _build_atomic_temp_path(output_path)
             try:
                 _write_audio(_audio, job.sr, _tmp_path)
                 os.replace(_tmp_path, output_path)
@@ -376,3 +376,11 @@ def _write_audio(audio: np.ndarray, sr: int, path: str) -> None:
 
     _a = (audio * 32767).astype(np.int16)
     _wf.write(path, sr, _a)
+
+
+def _build_atomic_temp_path(path: str) -> str:
+    """Erzeugt einen temporären Pfad und behält die finale Dateiendung bei."""
+    target = Path(path)
+    if target.suffix:
+        return str(target.with_name(f"{target.stem}.kmv_tmp{target.suffix}"))
+    return str(target.with_name(f"{target.name}.kmv_tmp"))
