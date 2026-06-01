@@ -724,6 +724,25 @@ class TestTypeCheckingGuards:
 class TestLazyImportMuster:
     """Lazy-Import-Wrapper geben den spezifizierten Typ zurück."""
 
+    @pytest.mark.parametrize(
+        ("raw_mode", "expected"),
+        [
+            ("Restoration", "Restoration"),
+            ("restoration", "Restoration"),
+            ("quality", "Restoration"),
+            ("fast", "Restoration"),
+            ("balanced", "Restoration"),
+            ("Studio 2026", "Studio 2026"),
+            ("studio2026", "Studio 2026"),
+            ("studio", "Studio 2026"),
+            ("maximum", "Studio 2026"),
+            ("unknown", "Restoration"),
+            (None, "Restoration"),
+        ],
+    )
+    def test_normalize_user_mode_maps_release_and_legacy_aliases(self, bridge, raw_mode, expected):
+        assert bridge.normalize_user_mode(raw_mode) == expected
+
     def test_get_quality_mode_returns_enum_type(self, bridge):
         qm = bridge.get_quality_mode()
         assert isinstance(qm, type), "get_quality_mode() gibt keine Klasse zurück"
