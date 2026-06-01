@@ -233,6 +233,9 @@ try:
         normalize_pipeline_health_state as _bridge_normalize_pipeline_health_state,  # type: ignore[assignment]
     )
     from backend.api.bridge import (
+        normalize_user_mode as _bridge_normalize_user_mode,
+    )
+    from backend.api.bridge import (
         record_goal_feedback as _bridge_record_goal_feedback,
     )
     from backend.api.bridge import (
@@ -410,6 +413,17 @@ except ImportError:
             value = str(raw or "ok")
 
         return _FallbackState()  # type: ignore[return-value]
+
+    def _bridge_normalize_user_mode(mode: str | None) -> str:  # type: ignore[misc]
+        _raw = str(mode or "Restoration").strip().lower().replace("_", "").replace(" ", "")
+        _aliases = {
+            "restoration": "Restoration",
+            "quality": "Restoration",
+            "studio2026": "Studio 2026",
+            "studio": "Studio 2026",
+            "maximum": "Studio 2026",
+        }
+        return _aliases.get(_raw, "Restoration")
 
     def _bridge_resolve_pipeline_fail_reason(  # type: ignore[misc]
         *,
@@ -1350,6 +1364,14 @@ class BatchProcessingThread(QThread):
         self._emergency_mode: str = ""
         self._emergency_phases_done: list[str] = []
 
+    @staticmethod
+    def _normalize_denker_mode(raw_mode: str | None) -> str:
+        """Normalisiert GUI-/Checkpoint-Modi auf interne Denker-Modi."""
+        canonical = _bridge_normalize_user_mode(raw_mode)
+        if canonical == "Studio 2026":
+            return "studio2026"
+        return "restoration"
+
     def request_emergency_checkpoint(self) -> None:
         """§3.9.2 SIGTERM best-effort checkpoint save.
 
@@ -1557,12 +1579,11 @@ class BatchProcessingThread(QThread):
 
                 # Map GUI modes to Denker modes (§2.2 Spec)
                 mode = item.settings.get("mode", "RESTORATION")
-                if mode == "STUDIO_2026":
+                _aurik_mode = self._normalize_denker_mode(mode)
+                if _aurik_mode == "studio2026":
                     ui_mode = "MAXIMUM"
-                    _aurik_mode = "studio2026"
                 else:  # RESTORATION
                     ui_mode = "QUALITY"
-                    _aurik_mode = "restoration"
 
                 # Emit mode update
                 self.mode_update.emit(ui_mode)
@@ -11387,8 +11408,8 @@ class ModernMainWindow(QMainWindow):
 
             # Mode setzen
             _mode = checkpoint.mode
-            _mode_norm = str(_mode or "").strip().lower().replace("_", "").replace(" ", "")
-            _is_studio = _mode_norm in ("maximum", "studio2026", "studio")
+            _aurik_mode = self._normalize_denker_mode(_mode)
+            _is_studio = _aurik_mode == "studio2026"
 
             # Batch starten mit Recovery-Flag
             if hasattr(self, "_process_with_mode"):

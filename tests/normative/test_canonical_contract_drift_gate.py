@@ -146,3 +146,24 @@ def test_cli_mode_aliases_use_bridge_normalizer() -> None:
     assert "return normalize_user_mode(mode)" in cli_src, (
         "CLI _normalize_mode() muss an die Bridge delegieren, statt eigene Alias-Tabellen zu pflegen."
     )
+
+
+@pytest.mark.normative
+@pytest.mark.timeout(20)
+def test_frontend_mode_aliases_use_bridge_normalizer() -> None:
+    """Frontend darf Mode-Aliase nicht lokal driften lassen."""
+    ui_src = _FRONTEND.read_text(encoding="utf-8")
+    bridge_src = (_ROOT / "backend" / "api" / "bridge.py").read_text(encoding="utf-8")
+
+    assert "def normalize_user_mode(" in bridge_src, (
+        "Bridge muss den zentralen normalize_user_mode()-Resolver bereitstellen."
+    )
+    assert "normalize_user_mode as _bridge_normalize_user_mode" in ui_src, (
+        "Frontend muss normalize_user_mode aus der Bridge importieren."
+    )
+    assert "def _normalize_denker_mode(" in ui_src, (
+        "Frontend muss einen zentralen Denker-Mode-Mapper statt verstreuter Alias-Heuristiken nutzen."
+    )
+    assert "canonical = _bridge_normalize_user_mode(raw_mode)" in ui_src, (
+        "Frontend-Mode-Mapping muss auf dem Bridge-Normalizer basieren."
+    )
