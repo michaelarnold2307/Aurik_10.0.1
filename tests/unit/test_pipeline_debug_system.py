@@ -352,6 +352,17 @@ def test_get_goal_fails_ok_goal_not_in_fails(mock_result):
     assert "tonal_center" in fail_goals
 
 
+def test_get_goal_fails_honors_legacy_maximum_alias(mock_result):
+    """Legacy-Alias 'maximum' muss dieselben Studio-2026-Schwellen nutzen."""
+    from backend.api.debug_api import get_goal_fails
+
+    fails = get_goal_fails(mock_result, mode="maximum")
+    fail_map = {entry["goal"]: entry for entry in fails}
+
+    # natuerlichkeit=0.85 liegt unter Studio 2026 (0.92) und muss daher failen.
+    assert fail_map["natuerlichkeit"]["threshold"] == pytest.approx(0.92)
+
+
 def test_get_worst_phases_sorted(mock_result):
     """get_worst_phases gibt nach Regression sortierte Liste zurück."""
     from backend.api.debug_api import get_worst_phases

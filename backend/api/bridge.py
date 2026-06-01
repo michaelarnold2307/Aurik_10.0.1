@@ -565,7 +565,10 @@ def normalize_user_mode(mode: str | None) -> str:
     raw = str(mode or "Restoration").strip().lower().replace("_", "").replace(" ", "")
     aliases = {
         "restoration": "Restoration",
+        "fast": "Restoration",
+        "balanced": "Restoration",
         "quality": "Restoration",
+        "maximum": "Studio 2026",
         "studio2026": "Studio 2026",
         "studio": "Studio 2026",
     }

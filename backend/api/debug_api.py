@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -213,6 +214,7 @@ def get_goal_fails(result: Any, mode: str | None = None) -> list[dict[str, Any]]
         mode: "restoration" oder "studio_2026" (auto-detektiert wenn None)
     """
     try:
+        from backend.api.bridge import normalize_user_mode
         from backend.core.pipeline_trace import (
             CANONICAL_GOALS,
             RESTORATION_THRESHOLDS,
@@ -221,8 +223,8 @@ def get_goal_fails(result: Any, mode: str | None = None) -> list[dict[str, Any]]
         )
 
         trace = build_from_result(result)
-        _mode = mode or trace.mode or "restoration"
-        thresholds = STUDIO_THRESHOLDS if "studio" in _mode else RESTORATION_THRESHOLDS
+        _canonical_mode = normalize_user_mode(mode or trace.mode or "restoration")
+        thresholds = STUDIO_THRESHOLDS if _canonical_mode == "Studio 2026" else RESTORATION_THRESHOLDS
         fails = []
         for g in CANONICAL_GOALS:
             val = trace.final_goals.get(g)
@@ -255,7 +257,7 @@ def _get_meta(result: Any) -> dict[str, Any]:
 def _safe_float(v: Any, default: float = 0.0) -> float:
     try:
         f = float(v)
-        return 0.0 if (f != f or f == float("inf") or f == float("-inf")) else round(f, 4)
+        return 0.0 if not math.isfinite(f) else round(f, 4)
     except (TypeError, ValueError):
         return default
 
