@@ -234,6 +234,19 @@ def _dsp_restore(audio: np.ndarray, sr: int) -> np.ndarray:
     return np.nan_to_num(audio_f, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
 
 
+def dsp_restore(audio: np.ndarray, sr: int, sid: str | None = None) -> np.ndarray:
+    """Shared fast DSP restorer for AMRB CI and benchmark callers.
+
+    The CI gate intentionally uses this deterministic DSP benchmark path instead
+    of the full UV3 runtime path, whose optional ML/runtime dependencies are not
+    stable in nightly environments. ``sid`` is accepted for the benchmark API and
+    intentionally ignored; scenario adaptation happens inside ``_dsp_restore`` via
+    signal analysis.
+    """
+    del sid
+    return _dsp_restore(audio, sr)
+
+
 def make_restoration_fn(mode: str = "quality"):
     """Gibt eine (audio, sr) → audio Funktion zurück, die UnifiedRestorerV3 nutzt."""
     try:
@@ -282,7 +295,7 @@ def main() -> int:
         MusicalRestorationBenchmark,
     )
 
-    restore_fn = _dsp_restore  # DSP-only benchmark — UV3 would be too slow for CI
+    restore_fn = dsp_restore  # DSP-only benchmark — UV3 would be too slow for CI
 
     config = BenchmarkConfig(
         restoration_fn=restore_fn,
