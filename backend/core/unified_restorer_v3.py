@@ -6540,6 +6540,78 @@ class UnifiedRestorerV3:
         }
 
     @staticmethod
+    def _resolve_high_restorability_cap(
+        *,
+        phase_id: str,
+        material_type: Any,
+        restorability_score: float,
+        defect_scores: Any,
+        is_mandatory: bool,
+        is_restorative: bool,
+        panns_singing: float,
+        high_restorability_gate: bool,
+    ) -> float | None:
+        """§2.45b Hochrestorabilität-Gate: Near-Passthrough-Cap für mandatorische/restaurative Phasen.
+
+        Der §9.11.1-Restorability-Ceiling nimmt mandatorische und restaurative Phasen aus —
+        genau diese laufen auf makellosem Material ungebremst und erzeugen unnötiges
+        Over-Processing. Diese Methode liefert einen restorability-adaptiven Maximal-Cap
+        (aus der bereits getesteten Kurve ``get_phase_strength_range``), ABER nur wenn diese
+        Phase keinen echten Defekt adressiert.
+
+        Cap greift ausschließlich, wenn ALLE Bedingungen erfüllt sind:
+          - ``high_restorability_gate`` aktiv (§2.45b: restorability > 80 ∧ SNR > 40 dB), UND
+          - Phase ist mandatorisch ODER restaurativ (sonst greift bereits §9.11.1-Ceiling), UND
+          - Phase ist nicht vokalkritisch (§0p: ``phase_42_*``/``phase_65_*``; ``phase_03_*`` bei
+            ``panns_singing >= 0.25`` wegen HNR-/Formant-Risiko), UND
+          - Phase ist eine echte Defekt-Reparatur-Phase (in der Reverse-Map), UND
+          - ihr adressierter Defekt ist praktisch abwesend (rohe ``DefectScore.severity < 0.05``).
+
+        Defekte ≥ 0.05 → ``None`` (volle Härte, §0k Maximum-Achievable-Score / §0m
+        Maximal-Ausbaustufe). Phasen ohne Defekt-Reparatur-Ziel (z.B. Limiter, Enhancement)
+        werden nicht gecappt. Fail-safe: Bei jeder Unsicherheit (fehlende Map, fehlende Range)
+        wird ``None`` zurückgegeben → kein Cap → volle Härte. Der ``min_s``-Floor in
+        ``get_phase_strength_range`` schützt strukturell vor Unterschreitung sinnvoller Minima.
+
+        Returns:
+            Maximal erlaubte Strength (Cap im Bereich [0.05, 1.0]), oder ``None`` wenn kein Cap greift.
+        """
+        if not high_restorability_gate:
+            return None
+        if not (is_mandatory or is_restorative):
+            return None
+        # §0p Vocal-Supremacy: vokalkritische Phasen niemals cappen.
+        if any(phase_id.startswith(_p) for _p in ("phase_42_", "phase_65_")):
+            return None
+        if phase_id.startswith("phase_03_") and float(panns_singing or 0.0) >= 0.25:
+            return None
+        try:
+            from backend.core.defect_phase_mapper import get_reverse_phase_map
+
+            _targets = get_reverse_phase_map().get(phase_id)
+        except Exception:
+            return None  # fail-safe: keine Sicherheit → kein Cap → volle Härte
+        if not _targets:
+            return None  # keine Defekt-Reparatur-Phase (z.B. Limiter/Enhancement) → nicht cappen
+        # Rohe Defekt-Severity (ohne 0.15-Floor): adressierter Defekt praktisch abwesend?
+        _raw_sev = 0.0
+        for _dt in _targets:
+            _sc = (defect_scores or {}).get(_dt)
+            if _sc is not None:
+                _raw_sev = max(_raw_sev, float(getattr(_sc, "severity", 0.0)))
+        if _raw_sev >= 0.05:
+            return None  # echter Defekt → volle Härte (§0k/§0m)
+        try:
+            from backend.core.calibration_matrix import get_phase_strength_range
+
+            _mat = str(getattr(material_type, "value", material_type) or "").lower()
+            _rest = float(np.clip(restorability_score, 0.0, 100.0))
+            _max_s = get_phase_strength_range(phase_id, _mat, _rest)[1]
+            return float(np.clip(_max_s, 0.05, 1.0))
+        except Exception:
+            return None
+
+    @staticmethod
     def _classify_quality_gate_events(
         *,
         artifact_freedom: float,
@@ -10831,6 +10903,7 @@ class UnifiedRestorerV3:
                 graceful_stop_event=self._graceful_stop_event,  # §0c: Watchdog-Graceful-Stop
                 original_audio_reference=original_audio_for_goals,
                 quiet_edge_profile=_phase_quiet_edge_profile,
+                pipeline_confidence=_pipeline_confidence,
             )
             if _vintage_guard_skipped_phases:
                 skipped_phases = list(skipped_phases)
@@ -27932,6 +28005,7 @@ class UnifiedRestorerV3:
         graceful_stop_event=None,  # §0c: threading.Event — Watchdog setzt, Loop bricht nach Phase ab
         original_audio_reference: np.ndarray | None = None,
         quiet_edge_profile: dict[str, Any] | None = None,
+        pipeline_confidence: Any = None,
     ) -> tuple[np.ndarray, list[str], list[str], list[str]]:
         """
         Führt ausgewählte Phasen parallel (Multi-Core) aus, falls keine Abhängigkeiten bestehen.
@@ -27946,6 +28020,7 @@ class UnifiedRestorerV3:
         _input_n_samples: int = audio.shape[-1] if audio.ndim >= 2 else len(audio)
         _active_quality_mode = quality_mode_override or self.config.mode
         _quality_mode_value = _active_quality_mode.value
+        _pipeline_confidence = pipeline_confidence
         current_audio = audio.copy()
         _pipeline_original_reference = (
             np.asarray(original_audio_reference, dtype=np.float32).copy()
@@ -30738,6 +30813,39 @@ class UnifiedRestorerV3:
                                             _rest_cap,
                                         )
                                         _combined_strength = _rest_cap
+
+                            # §2.45b Hochrestorabilität-Gate (Near-Passthrough-Cap):
+                            # Der §9.11.1-Ceiling nimmt mandatorische + restaurative Phasen aus —
+                            # genau diese laufen auf makellosem Material ungebremst und erzeugen
+                            # unnötiges Over-Processing. _resolve_high_restorability_cap() liefert
+                            # einen restorability-adaptiven Cap, ABER nur wenn diese Phase keinen
+                            # echten Defekt adressiert (defect_severity < 0.05). Defekte ≥ 0.05
+                            # laufen mit voller Härte weiter (§0k/§0m); vokalkritische Phasen (§0p)
+                            # sind ausgenommen. Der min_s-Floor in get_phase_strength_range()
+                            # schützt strukturell vor Unterschreitung sinnvoller Minima.
+                            _cap_245b = self._resolve_high_restorability_cap(
+                                phase_id=phase_id,
+                                material_type=material_type,
+                                restorability_score=float(
+                                    getattr(self, "_last_restorability_score", _pmgg_restorability_score)
+                                ),
+                                defect_scores=defect_result.scores,
+                                is_mandatory=_is_mandatory_phase,
+                                is_restorative=_is_restorative_phase,
+                                panns_singing=float(getattr(self, "_panns_singing", 0.0) or 0.0),
+                                high_restorability_gate=bool(
+                                    (getattr(self, "_metadata", None) or {}).get("high_restorability_gate", False)
+                                ),
+                            )
+                            if _cap_245b is not None and _combined_strength > _cap_245b:
+                                logger.debug(
+                                    "§2.45b HighRestorabilityGate %s: rest=%.1f strength %.3f→%.3f (Near-Passthrough)",
+                                    phase_id,
+                                    float(getattr(self, "_last_restorability_score", _pmgg_restorability_score)),
+                                    _combined_strength,
+                                    _cap_245b,
+                                )
+                                _combined_strength = _cap_245b
 
                             # §9.11.1 Perceptual-Plateau-Stop (v9.11.1, §2.54):
                             # Only applies to non-mandatory, non-restorative (enhancement) phases.

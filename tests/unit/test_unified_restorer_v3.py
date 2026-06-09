@@ -4398,3 +4398,197 @@ class TestGoalExportCompliance:
         result = UnifiedRestorerV3._fast_goal_snapshot(short_audio, SR, "unknown")
         assert isinstance(result, dict), "_fast_goal_snapshot muss immer dict zurückgeben"
         # Kein Crash — das ist die non-blocking Garantie
+
+
+class TestResolveHighRestorabilityCap:
+    """§2.45b Hochrestorabilität-Gate — Near-Passthrough-Cap (`_resolve_high_restorability_cap`).
+
+    Vertrag: cappt mandatorische/restaurative Defekt-Reparatur-Phasen auf makellosem Material
+    NUR wenn ihr Zieldefekt praktisch abwesend ist (rohe Severity < 0.05). Echte Defekte
+    (≥ 0.05) laufen mit voller Härte (§0k/§0m). Vokalkritische Phasen (§0p) sind ausgenommen.
+    Fail-safe: jede Unsicherheit → None (kein Cap).
+    """
+
+    @staticmethod
+    def _first_non_vocal_repair_phase() -> tuple[str, DefectType]:
+        """Liefert (phase_id, ziel_defekt) einer nicht-vokalkritischen Defekt-Reparatur-Phase."""
+        from backend.core.defect_phase_mapper import get_reverse_phase_map
+
+        for pid, targets in get_reverse_phase_map().items():
+            if pid.startswith(("phase_42_", "phase_65_", "phase_03_")):
+                continue
+            if targets:
+                return pid, targets[0]
+        pytest.skip("Keine nicht-vokalkritische Defekt-Reparatur-Phase in Reverse-Map")
+
+    def test_gate_inactive_returns_none(self) -> None:
+        """high_restorability_gate=False → kein Cap (None)."""
+        pid, _dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=False,
+        )
+        assert cap is None
+
+    def test_non_mandatory_non_restorative_returns_none(self) -> None:
+        """Enhancement-Phasen (weder mandatorisch noch restaurativ) → §9.11.1 greift, hier kein Cap."""
+        pid, _dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={},
+            is_mandatory=False,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is None
+
+    def test_absent_defect_caps_to_near_passthrough(self) -> None:
+        """Zieldefekt abwesend (Severity 0.0) + makelloses Material → Cap = get_phase_strength_range()[1]."""
+        from backend.core.calibration_matrix import get_phase_strength_range
+
+        pid, _dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={},  # keine Defekte gescannt → rohe Severity 0.0
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is not None
+        _, expected_max = get_phase_strength_range(pid, "vinyl", 95.0)
+        assert cap == pytest.approx(float(np.clip(expected_max, 0.05, 1.0)), abs=1e-6)
+
+    def test_high_restorability_cap_below_low_restorability(self) -> None:
+        """§2.45b: Cap bei rest=95 muss < Cap bei rest=30 sein (restorability-adaptiv)."""
+        pid, _dt = self._first_non_vocal_repair_phase()
+        common: dict[str, Any] = {
+            "phase_id": pid,
+            "material_type": "vinyl",
+            "defect_scores": {},
+            "is_mandatory": True,
+            "is_restorative": False,
+            "panns_singing": 0.0,
+            "high_restorability_gate": True,
+        }
+        cap_high = UnifiedRestorerV3._resolve_high_restorability_cap(restorability_score=95.0, **common)
+        cap_low = UnifiedRestorerV3._resolve_high_restorability_cap(restorability_score=30.0, **common)
+        assert cap_high is not None and cap_low is not None
+        assert cap_high < cap_low
+
+    def test_real_defect_runs_uncapped(self) -> None:
+        """Echter Defekt (rohe Severity ≥ 0.05) → None (volle Härte, §0k/§0m)."""
+        pid, dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={dt: types.SimpleNamespace(severity=0.5)},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is None
+
+    def test_severity_just_below_threshold_caps(self) -> None:
+        """Rohe Severity knapp unter 0.05 → Cap greift; knapp darüber nicht."""
+        pid, dt = self._first_non_vocal_repair_phase()
+        below = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={dt: types.SimpleNamespace(severity=0.049)},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        above = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={dt: types.SimpleNamespace(severity=0.051)},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert below is not None
+        assert above is None
+
+    def test_vocal_critical_phases_excluded(self) -> None:
+        """§0p: phase_42_* und phase_65_* werden nie gecappt (volle Vokalqualität)."""
+        for pid in ("phase_42_vocal_enhancement", "phase_65_vocal_naturalness_restoration"):
+            cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+                phase_id=pid,
+                material_type="vinyl",
+                restorability_score=95.0,
+                defect_scores={},
+                is_mandatory=True,
+                is_restorative=True,
+                panns_singing=0.0,
+                high_restorability_gate=True,
+            )
+            assert cap is None
+
+    def test_phase03_excluded_only_when_singing(self) -> None:
+        """§0p: phase_03_* nur bei Gesang (panns_singing ≥ 0.25) vom Cap ausgenommen."""
+        from backend.core.defect_phase_mapper import get_reverse_phase_map
+
+        p03 = next((p for p in get_reverse_phase_map() if p.startswith("phase_03_")), None)
+        if p03 is None:
+            pytest.skip("Keine phase_03_-Phase in Reverse-Map")
+        common: dict[str, Any] = {
+            "phase_id": p03,
+            "material_type": "vinyl",
+            "restorability_score": 95.0,
+            "defect_scores": {},
+            "is_mandatory": True,
+            "is_restorative": False,
+            "high_restorability_gate": True,
+        }
+        cap_singing = UnifiedRestorerV3._resolve_high_restorability_cap(panns_singing=0.4, **common)
+        cap_instrumental = UnifiedRestorerV3._resolve_high_restorability_cap(panns_singing=0.0, **common)
+        assert cap_singing is None  # bei Gesang geschützt
+        assert cap_instrumental is not None  # ohne Gesang cappbar
+
+    def test_non_repair_phase_not_capped(self) -> None:
+        """Phase ohne Defekt-Reparatur-Ziel (nicht in Reverse-Map) → kein Cap (Limiter-Schutz)."""
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id="phase_99_nonexistent_enhancement",
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is None
+
+    def test_material_type_enum_value_extracted(self) -> None:
+        """material_type als Enum (MaterialType) → .value wird korrekt extrahiert (kein Crash)."""
+        pid, _dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type=MaterialType.VINYL,
+            restorability_score=95.0,
+            defect_scores={},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is not None and 0.05 <= cap <= 1.0
