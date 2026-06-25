@@ -31,6 +31,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from typing import Any
 
 import numpy as np
 import scipy.signal as sps
@@ -161,12 +162,10 @@ def _apply_shelving_eq(
         if audio_f64.shape[0] <= 2 and audio_f64.shape[1] > audio_f64.shape[0]:
             # [C, T] — nach to_channels_last
             return np.stack([sps.sosfiltfilt(sos, audio_f64[c]) for c in range(audio_f64.shape[0])]).astype(audio.dtype)  # type: ignore[no-any-return]
-        return np.stack(
+        return np.stack(  # type: ignore[no-any-return]
             [sps.sosfiltfilt(sos, audio_f64[:, c]) for c in range(audio_f64.shape[1])],
             axis=1,
-        ).astype(  # type: ignore[no-any-return]
-            audio.dtype
-        )
+        ).astype(audio.dtype)
     return audio
 
 
@@ -205,8 +204,8 @@ class VocalNaturalnessRestorationPhase(PhaseInterface):
             ),
         )
 
-    def process(  # pylint: disable=arguments-differ  # type: ignore[override]
-        self, audio: np.ndarray, sample_rate: int, **kwargs
+    def process(  # type: ignore[override]
+        self, audio: np.ndarray, sample_rate: int = 48000, material_type: str = "unknown", **kwargs: Any
     ) -> PhaseResult:
         """DSP-Vocal-Naturalness-Restaurierung.
 
@@ -446,10 +445,13 @@ class VocalNaturalnessRestorationPhase(PhaseInterface):
             if _rollback_needed and _max_shift > _FORMANT_SHIFT_THRESHOLD_DB:
                 # Formant-Tilt-Korrektur: sanfte LPC-Boost-Rekonstruktion
                 _formant_boost_db = float(np.clip(_max_shift * 0.4, 0.1, _FORMANT_MAX_BOOST_DB)) * effective_strength
+                # §Lücke3 WLPC: era-Info für noise-robusten Formant-Pfad
+                _era_p65_lpc = kwargs.get("decade") or (kwargs.get("_restoration_context") or {}).get("era_decade")
                 result_enhanced = _lpc_enhance65(
                     result,
                     sample_rate,
                     max_boost_db=_formant_boost_db,
+                    era_decade=int(_era_p65_lpc) if _era_p65_lpc is not None else None,  # type: ignore[call-arg]
                 )
                 result = result_enhanced.astype(np.float32)
                 _p65_meta["stages_applied"].append(f"formant_tilt_{_formant_boost_db:.2f}dB")
@@ -542,6 +544,29 @@ class VocalNaturalnessRestorationPhase(PhaseInterface):
         _p65_meta["vqi_before"] = round(_vqi_before, 4)
         _p65_meta["vqi_after"] = round(_vqi_after, 4)
 
+        # §V24 Spektralfarbe-Prüfung nach Vokal-Naturalness-Restaurierung (§2.74, non-blocking)
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg_65,
+            )
+
+            _sc_result_65 = _scg_65(audio, result, sample_rate)
+            if not _sc_result_65.ok:
+                _sc_wet_65 = 0.70  # Phase-Strength −30 % (§V24)
+                result = (_sc_wet_65 * result + (1.0 - _sc_wet_65) * audio).astype(np.float32)
+        except Exception as _sc_exc_65:
+            logger.debug("§V24 phase_65 spectral_color non-blocking: %s", _sc_exc_65)
+
+        # V26 Onset-Guard (§2.77): Vokal-Onset-Transients schützen (non-blocking)
+        try:
+            from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                apply_onset_protection_mask as _opg65,
+            )
+
+            result = _opg65(audio, result, None, max_delta_db=1.5)
+        except Exception as _on65_exc:
+            logger.debug("Phase65 V26 Onset-Guard (non-blocking): %s", _on65_exc)
+
         if _p65_transposed:
             result = result.T
 
@@ -566,14 +591,16 @@ class VocalNaturalnessRestorationPhase(PhaseInterface):
 # ---------------------------------------------------------------------------
 # Singleton
 # ---------------------------------------------------------------------------
-_instance_state: dict = {"instance": None}
+_instance: VocalNaturalnessRestorationPhase | None = None
 _lock = threading.Lock()
 
 
 def get_phase_65() -> VocalNaturalnessRestorationPhase:
     """Thread-safe Singleton accessor (§0 Kopilot-Instructions Singleton-Pattern)."""
-    if _instance_state["instance"] is None:
+    global _instance
+    if _instance is None:
         with _lock:
-            if _instance_state["instance"] is None:
-                _instance_state["instance"] = VocalNaturalnessRestorationPhase()
-    return _instance_state["instance"]
+            if _instance is None:
+                _instance = VocalNaturalnessRestorationPhase()
+    assert _instance is not None
+    return _instance

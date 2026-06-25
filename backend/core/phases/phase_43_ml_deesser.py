@@ -813,6 +813,45 @@ class AdaptiveDeEsserPhase(PhaseInterface):
 
         processed = np.nan_to_num(processed, nan=0.0, posinf=0.0, neginf=0.0)
         processed = np.clip(processed, -1.0, 1.0)
+
+        # V19 Noise-Textur-Invariante (§NTI): Residual nach De-Essing darf kein
+        # material-fremdes Spektralprofil (Whitening) aufweisen (VERBOTEN-V19).
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt43_dist_fn,
+            )
+
+            _nt43_residual = audio.astype(np.float32) - processed.astype(np.float32)
+            _nt43_dist = _nt43_dist_fn(_nt43_residual, str(material_type), sr=sample_rate)
+            if _nt43_dist > 0.25:
+                processed = (0.5 * processed + 0.5 * audio).astype(np.float32)
+                logger.warning("Phase43 V19 Noise-Textur-Dist=%.3f > 0.25 → 50%%-Blend", _nt43_dist)
+        except Exception as _nt43_exc:
+            logger.debug("Phase43 V19 Noise-Textur-Guard (non-blocking): %s", _nt43_exc)
+
+        # §V24 Spektralfarbe-Prüfung nach De-Essing (§2.74, non-blocking WARNING)
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg_43,
+            )
+
+            _sc_result_43 = _scg_43(audio, processed, sample_rate)
+            if not _sc_result_43.ok:
+                _sc_wet_43 = 0.70  # Phase-Strength −30 % (§V24)
+                processed = (_sc_wet_43 * processed + (1.0 - _sc_wet_43) * audio).astype(np.float32)
+        except Exception as _sc_exc_43:
+            logger.debug("§V24 phase_43 spectral_color non-blocking: %s", _sc_exc_43)
+
+        # V26 Onset-Guard (§2.77): Sibilanten-Transients nach De-Essing schützen (non-blocking)
+        try:
+            from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                apply_onset_protection_mask as _opg43,
+            )
+
+            processed = _opg43(audio, processed, None, max_delta_db=1.5)
+        except Exception as _on43_exc:
+            logger.debug("Phase43 V26 Onset-Guard (non-blocking): %s", _on43_exc)
+
         # §2.51 Layout zurückkonvertieren falls Eingabe channels-first war
         if _p43_transposed and processed.ndim == 2:
             processed = processed.T

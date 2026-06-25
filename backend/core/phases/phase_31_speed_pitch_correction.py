@@ -500,6 +500,29 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             except Exception as _npa31_exc:
                 logger.debug("§2.46f Phase31 NPA-Guard (non-blocking): %s", _npa31_exc)
 
+            # §V24 Spektralfarbe-Prüfung nach Pitch-/Speed-Korrektur (§2.74, non-blocking)
+            try:
+                from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                    check_spectral_color_preservation as _scg_31,
+                )
+
+                _sc_result_31 = _scg_31(audio, result_audio, sample_rate)
+                if not _sc_result_31.ok:
+                    _sc_wet_31 = 0.70  # Phase-Strength −30 % (§V24)
+                    result_audio = (_sc_wet_31 * result_audio + (1.0 - _sc_wet_31) * audio).astype(np.float32)
+            except Exception as _sc_exc_31:
+                logger.debug("§V24 phase_31 spectral_color non-blocking: %s", _sc_exc_31)
+
+            # V26 Onset-Guard (§2.77): Transients nach Pitch-Korrektur schützen (non-blocking)
+            try:
+                from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                    apply_onset_protection_mask as _opg31,
+                )
+
+                result_audio = _opg31(audio, result_audio, None, max_delta_db=1.5)
+            except Exception as _on31_exc:
+                logger.debug("Phase31 V26 Onset-Guard (non-blocking): %s", _on31_exc)
+
             return create_phase_result(
                 audio=result_audio,
                 modifications={

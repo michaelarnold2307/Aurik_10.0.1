@@ -97,7 +97,7 @@ class StemTargetedNRPhase(PhaseInterface):
         return PhaseMetadata(
             phase_id=self._PHASE_ID,
             name="Stem-Targeted NR (Vokal + Begleitung)",
-            category=PhaseCategory.NOISE_REDUCTION,
+            category=PhaseCategory.DEFECT_REMOVAL,
             priority=5,
             version="1.0.0",
             dependencies=["phase_03_denoise", "phase_29_tape_hiss_reduction"],
@@ -133,9 +133,9 @@ class StemTargetedNRPhase(PhaseInterface):
         try:
             from plugins.htdemucs_plugin import get_htdemucs_plugin
 
-            sep = get_htdemucs_plugin()
-            if sep is not None:
-                return sep, "mdx23c_fallback"
+            _sep_fb = get_htdemucs_plugin()
+            if _sep_fb is not None:
+                return _sep_fb, "mdx23c_fallback"
         except Exception as _e2:
             logger.debug("phase_66: MDX23C-Fallback nicht verfügbar: %s", _e2)
         return None, "unavailable"
@@ -162,8 +162,8 @@ class StemTargetedNRPhase(PhaseInterface):
         if a.ndim == 1:
             return a
         if a.ndim == 2 and a.shape[1] <= 2:
-            return a.mean(axis=1)
-        return a.mean(axis=-1)
+            return np.asarray(a.mean(axis=1), dtype=np.float32)
+        return np.asarray(a.mean(axis=-1), dtype=np.float32)
 
     @staticmethod
     def _apply_dsp_nr(
@@ -183,21 +183,21 @@ class StemTargetedNRPhase(PhaseInterface):
         stem_f = np.asarray(stem, dtype=np.float32)
         if dfn_plugin is not None:
             try:
-                return dfn_plugin.enhance(stem_f, sr, energy_bias_db=energy_bias_db)
+                return np.asarray(dfn_plugin.enhance(stem_f, sr, energy_bias_db=energy_bias_db), dtype=np.float32)
             except Exception as _e:
                 logger.debug("phase_66: DFN enhance Fehler (OMLSA-Fallback): %s", _e)
 
-        # OMLSA-DSP-Fallback (spectral subtraction)
+        # OMLSA-DSP-Fallback (AiDehiss OMLSA/MMSE-LSA — kanonische Implementierung in dsp/dehiss.py)
         try:
-            from backend.core.dsp.omlsa_filter import apply_omlsa_filter
+            from dsp.dehiss import AiDehiss
 
             mono_f = stem_f[:, 0] if stem_f.ndim == 2 else stem_f
-            cleaned = apply_omlsa_filter(mono_f, sr)
+            cleaned: np.ndarray = np.asarray(AiDehiss().dehiss(mono_f, sr), dtype=np.float32)
             if stem_f.ndim == 2:
                 # Beide Kanäle mit identischem Gain
                 diff = cleaned - mono_f
-                return np.clip(stem_f + diff[:, np.newaxis], -1.0, 1.0)
-            return np.clip(cleaned, -1.0, 1.0)
+                return np.asarray(np.clip(stem_f + diff[:, np.newaxis], -1.0, 1.0), dtype=np.float32)
+            return np.asarray(np.clip(cleaned, -1.0, 1.0), dtype=np.float32)
         except Exception as _e2:
             logger.debug("phase_66: OMLSA-Fallback Fehler: %s", _e2)
         return stem_f
@@ -418,6 +418,45 @@ class StemTargetedNRPhase(PhaseInterface):
                 logger.debug("phase_66: VQI-After Fehler (non-blocking): %s", _vqi_after_e)
 
         _p66_meta["activation_triggered"] = True
+
+        # V19 Noise-Textur-Invariante (§NTI): Residual nach Stem-NR darf kein
+        # material-fremdes Spektralprofil aufweisen (VERBOTEN-V19).
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt66_dist_fn,
+            )
+
+            _nt66_residual = audio.astype(np.float32) - audio_combined.astype(np.float32)
+            _nt66_mat = material_type.value if hasattr(material_type, "value") else str(material_type)
+            _nt66_dist = _nt66_dist_fn(_nt66_residual, _nt66_mat, sr=sample_rate)
+            if _nt66_dist > 0.25:
+                audio_combined = (0.5 * audio_combined + 0.5 * audio).astype(np.float32)
+                logger.warning("Phase66 V19 Noise-Textur-Dist=%.3f > 0.25 → 50%%-Blend", _nt66_dist)
+        except Exception as _nt66_exc:
+            logger.debug("Phase66 V19 Noise-Textur-Guard (non-blocking): %s", _nt66_exc)
+
+        # §V24 Spektralfarbe-Prüfung nach Stem-NR (§2.74, non-blocking WARNING)
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg_66,
+            )
+
+            _sc_result_66 = _scg_66(audio, audio_combined, sample_rate)
+            if not _sc_result_66.ok:
+                _sc_wet_66 = 0.70  # Phase-Strength −30 % (§V24)
+                audio_combined = (_sc_wet_66 * audio_combined + (1.0 - _sc_wet_66) * audio).astype(np.float32)
+        except Exception as _sc_exc_66:
+            logger.debug("§V24 phase_66 spectral_color non-blocking: %s", _sc_exc_66)
+
+        # V26 Onset-Guard (§2.77): Transients nach Stem-NR schützen (non-blocking)
+        try:
+            from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                apply_onset_protection_mask as _opg66,
+            )
+
+            audio_combined = _opg66(audio, audio_combined, None, max_delta_db=1.5)
+        except Exception as _on66_exc:
+            logger.debug("Phase66 V26 Onset-Guard (non-blocking): %s", _on66_exc)
 
         if _p66_transposed:
             audio_combined = audio_combined.T

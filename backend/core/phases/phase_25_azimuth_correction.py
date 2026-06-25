@@ -424,6 +424,30 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         if 0.0 < _effective_strength < 1.0:
             corrected_audio = audio + _effective_strength * (corrected_audio - audio)
             corrected_audio = np.clip(corrected_audio, -1.0, 1.0)
+
+        # §V24 Spektralfarbe-Prüfung nach Azimuth-Korrektur (§2.74, non-blocking WARNING)
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg_25,
+            )
+
+            _sc_result_25 = _scg_25(audio, corrected_audio, sample_rate)
+            if not _sc_result_25.ok:
+                _sc_wet_25 = 0.70  # Phase-Strength −30 % (§V24)
+                corrected_audio = (_sc_wet_25 * corrected_audio + (1.0 - _sc_wet_25) * audio).astype(np.float32)
+        except Exception as _sc_exc_25:
+            logger.debug("§V24 phase_25 spectral_color non-blocking: %s", _sc_exc_25)
+
+        # V26 Onset-Guard (§2.77): Transient-Fenster nach Azimuth-Korrektur schützen (non-blocking)
+        try:
+            from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                apply_onset_protection_mask as _opg25,
+            )
+
+            corrected_audio = _opg25(audio, corrected_audio, None, max_delta_db=1.5)
+        except Exception as _on25_exc:
+            logger.debug("Phase25 V26 Onset-Guard (non-blocking): %s", _on25_exc)
+
         return PhaseResult(
             success=True,
             audio=corrected_audio,

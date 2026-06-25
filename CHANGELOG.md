@@ -4,6 +4,171 @@
 > Historische Qualitäts- und Marketingformulierungen bleiben zur Nachvollziehbarkeit erhalten
 > und sind nicht automatisch als aktueller, normativ bindender Außenclaim zu verstehen.
 
+## Version 9.16.0 — Psychoakustische Guard-Vollständigkeit + MIIPHER-Spec-Klarstellung (27. Juni 2026)
+
+### Neue Funktionen / Systemische Verbesserungen
+
+#### Guard-Vollständigkeit: V19, V24, V26 + §2.46e in 9 Phasen nachgerüstet
+
+Analyse ergab, dass 6 NR/DSP-Phasen und 3 additive/generative Phasen die in
+Spec 09 (`VERBOTEN.md`) normierten psychoakustischen Ausgabe-Guards nicht trugen.
+Alle Lücken werden nun systemisch geschlossen (§0f — systemisch, ≥5 Stellen):
+
+**V19 Noise-Textur-Invariante (§NTI)** — nachgerüstet in:
+- `phase_43_ml_deesser.py` — Residual nach De-Essing auf material-konformes Spektralprofil prüfen
+- `phase_66_stem_targeted_nr.py` — Residual nach Stem-NR prüfen
+
+**V24 Spektralfarbe-Prüfung (§2.74)** — nachgerüstet in:
+- `phase_25_azimuth_correction.py` — nach Azimuth-Korrektur
+- `phase_31_speed_pitch_correction.py` — nach Pitch-/Speed-Korrektur
+- `phase_43_ml_deesser.py` — nach De-Essing
+- `phase_54_transparent_dynamics.py` — nach Dynamik-Kompression
+- `phase_65_vocal_naturalness_restoration.py` — nach Vokal-Naturalness-Restaurierung
+- `phase_66_stem_targeted_nr.py` — nach Stem-NR
+
+**V26 Onset-Guard (§2.77)** — nachgerüstet in:
+- `phase_25_azimuth_correction.py` — Transients nach Azimuth-Korrektur schützen
+- `phase_31_speed_pitch_correction.py` — Transients nach Pitch-Korrektur schützen
+- `phase_43_ml_deesser.py` — Sibilanten-Transients schützen
+- `phase_54_transparent_dynamics.py` — Transients nach Kompression schützen
+- `phase_65_vocal_naturalness_restoration.py` — Vokal-Onset-Transients schützen
+- `phase_66_stem_targeted_nr.py` — Transients nach Stem-NR schützen
+
+**§2.46e Hallucination-Guard** — nachgerüstet in:
+- `phase_08_transient_preservation.py` — Transient-Enhancement darf keine nicht-originären Spektralanteile einführen
+- `phase_24_dropout_repair.py` — Dropout-Reparatur nach SSIP-Audit
+- `phase_46_spatial_enhancement.py` — Räumliche Cues dürfen keine nicht-originären Spektralanteile einführen
+
+Alle Guards sind non-blocking (`try/except`); bei Guard-Auslösung wird der jeweilige
+Wet-Blend reduziert (V24: 70 % Wet, V19: 50 % Wet) bzw. auf Phase-Input zurückgerollt
+(§2.46e). Kein harter Export-Stopp durch diese Guards.
+
+#### MIIPHER-Spec-Klarstellung (§SOTA-Matrix)
+
+MIIPHER (Google 2023, W2v-BERT-Konditionierung) ist **proprietär und nicht öffentlich
+verfügbar**. Der Code (`sota_vocal_model_router.py`) enthält bereits seit v9.x eine
+vollständige Fallback-Kette via `_compensate_missing_miipher()`. Anpassungen:
+
+- **`copilot-instructions.md` SOTA-Tabelle**: Primärmodell für Gesangs-NR (SNR < 10 dB)
+  auf **SGMSE+ v2** korrigiert; MIIPHER als `¹` (proprietär, nicht öffentlich verfügbar) markiert.
+- **`specs/04_dsp_standards.md`**: MIIPHER als Last-Resort-Option mit Verfügbarkeitsvorbehalt
+  dokumentiert; Fußnote auf `_compensate_missing_miipher()` verweist.
+
+---
+
+## Version 9.15.4 — MiniDisc-Codec-Coverage + Singer-ID-DSP-Fallback-Guard (25. Juni 2026)
+
+### Korrekturen
+
+#### Bug 1 — MiniDisc fehlte in HPG-Codec-Floor-Sets (`holistic_perceptual_gate.py`)
+
+MiniDisc nutzt ATRAC-Kompression (verlustbehaftet), war aber in keinem der drei
+Codec-Floor-Sets enthalten:
+
+- `_CODEC_MATS_HPG` — `timbral_fidelity`-Floor-Prüfung für Codec-Material
+- `_VQI_CODEC_MATS_HPG` — VQI-Codec-Floor beim Singervocals-Gate
+- `_VQI_CHAIN_END_CODEC` — VQI-Codec-Floor bei Codec-Chain-End-Erkennung
+
+Folge: Bei MiniDisc-Material wurde `timbral_fidelity` nicht durch den Codec-adaptiven
+Floor geschützt → HPI-Unterbewertung bei legitimer ATRAC-bedingter Timbral-Abweichung.
+
+`"minidisc"` wurde allen drei frozensets hinzugefügt.
+
+#### Bug 2 — MiniDisc fehlte im UV3-CCR-Codec-Threshold (`unified_restorer_v3.py`)
+
+Der codec-spezifische CCR-Threshold von `0.01` galt nur für
+`{"mp3_low", "mp3_high", "aac", "streaming"}`. MiniDisc hat dieselbe physikalische
+Eigenschaft (ATRAC-BW-Beschränkung → minimale Carrier-Inversion erwartet).
+
+`"minidisc"` wurde dem CCR-Codec-Threshold-Set hinzugefügt.
+
+#### Bug 3 — Singer-ID-Rollback bei unzuverlässigem DSP-Proxy (`unified_restorer_v3.py`)
+
+Wenn Resemblyzer nicht verfügbar war und `singer_id_dsp_fallback=True` gesetzt wurde
+(ZCR/Spektral-Proxy statt echtem Speaker-Embedding), löste der Rollback trotzdem bei
+`singer_identity_cosine < 0.92` aus. Der DSP-Proxy ist zu unzuverlässig für einen
+binären Rollback-Trigger (typischer false-negative: 0.85 bei VQI=0.877).
+
+Neue Bedingung: Rollback nur wenn `not singer_id_dsp_fallback`. Bei DSP-Fallback wird
+der Singer-ID-Score als Advisory in Metadata protokolliert, aber kein Rollback ausgelöst.
+
+### Dateien
+
+- `backend/core/holistic_perceptual_gate.py` — Bug 1 (3 frozensets)
+- `backend/core/unified_restorer_v3.py` — Bug 2 (CCR-Set) + Bug 3 (Singer-ID-Guard)
+
+### Tests
+
+- Bestehende Unit-Tests: `tests/unit/test_holistic_perceptual_gate.py` — 58/58 grün
+  nach Bug 1 (keine neuen Test-Failures)
+
+---
+
+## Version 9.15.3 — HPG Reference-Memory Wiring + WLPC Noise-Robust Formant + AMRB-11-CASSETTE + §0d CCR-Timbral-Floor (25. Juni 2026)
+
+### Algorithmic-Gap-Fixes (Lücke 1 + Lücke 3)
+
+#### Lücke 1 — §2.44 HPG Reference-Memory: UV3-Wiring repariert
+
+- `backend/core/unified_restorer_v3.py`
+  - `_hg.update_reference_memory(restored=..., sr=..., hpi=..., artifact_freedom=..., p1_p2_passed=..., genre=..., material=..., era_bin=...)` wird nun
+    nach jedem erfolgreichen HPI-Lauf aufgerufen (Bedingung: `HPI > 0.0 AND artifact_freedom ≥ 0.95`, identisch mit RestorationMemory-Guard).
+  - **Bug-Ursache**: `update_reference_memory()` war seit v9.10.123 in `HolisticPerceptualGate` implementiert und
+    hatte 8 Unit-Tests, aber UV3 rief die Methode nie auf → `_ref_memory` blieb leer → alle 5 Fallback-Stufen
+    lieferten `None` → `timbral_fidelity` nutzte stets nur den degradierten Input als Referenz.
+  - **Erwarteter Gewinn**: +3 MUSHRA-Punkte auf bekanntem Material → ~97 % des physikalischen Ceilings.
+
+- `scripts/bootstrap_hpg_reference_memory.py` **(neu)**
+  - Bootstrapt `~/.aurik/hpg_reference_memory.json` aus den Golden-Samples in `golden_samples/references/`.
+  - Pflicht für Kaltstart: `python scripts/bootstrap_hpg_reference_memory.py`
+  - Seeded 12 Einträge (Format: `genre|material|era_bin`); Einträge mit ≥ 3 Observationen werden als
+    `calibrated=True` markiert (ab 40 Observationen: `calibrated=True`).
+
+#### Lücke 3 — WLPC (Weighted LPC): Noise-Robuste Formant-Extraktion für era < 1960 / SNR < 15 dB
+
+- `backend/core/dsp/lpc_formant_tracker.py`
+  - Neue Konstanten: `_WLPC_SNR_THRESHOLD_DB = 15.0`, `_WLPC_ERA_THRESHOLD = 1960`, `_WLPC_GAIN_FLOOR = 0.10`
+  - Neue Funktion `_snr_estimate_db(frame_rms_list)` — Schätzung via 75th/10th-Perzentil-Verhältnis der Frame-RMS-Werte.
+  - Neue Funktion `_wlpc_prewhiten_frame(frame, noise_psd)` — Wiener-Gain-Spektral-Pre-Whitening:
+    `G = max(1 - noise_psd / (signal_psd + eps), _WLPC_GAIN_FLOOR)`. Pre-Whitening wird **nur für die LPC-Schätzung**
+    verwendet, nicht auf das Ausgabe-Audio angewendet (§0 Primum non nocere).
+  - `lpc_formant_enhance()` und `_LPCFormantTracker.enhance()`: neue Parameter `era_decade: int | None = None`
+    und `snr_hint_db: float | None = None`. WLPC-Pfad aktiv wenn `era_decade < 1960` ODER `effective_snr < 15 dB`.
+    Noise-PSD aus den ruhigsten 20 % der Frames (Perzentil-Filter).
+  - Backward-Kompatibel: alle Aufrufer ohne neue Parameter nutzen automatisch den Standard-Pfad.
+  - Log: `wlpc=True/False`-Flag in der Formant-Enhance-Debug-Meldung.
+
+- `backend/core/phases/phase_42_vocal_enhancement.py`
+  - LFC `enhance()`-Aufruf übergibt nun `era_decade=int(_era_decade)` (war: kein era_decade-Parameter).
+  - `_era_decade` wird in dieser Phase bereits aus `_restoration_context` ermittelt (Zeile ~406).
+
+- `backend/core/phases/phase_65_vocal_naturalness_restoration.py`
+  - LPC-Enhance-Aufruf übergibt nun `era_decade` aus kwargs/`_restoration_context`.
+  - **Erwarteter Gewinn**: +1–2 MUSHRA-Punkte für pre-1960-Vokalaufnahmen (Shellac, frühe elektrische Aufnahmen).
+
+### §0d CCR-Timbral-Floor (Algorithmic-Gap aus vorheriger Session)
+
+- `backend/core/holistic_perceptual_gate.py`
+  - Neuer Block `§0d CCR-Timbral-Floor`: Wenn `mert_sim ≥ 0.74` UND `carrier_checkpoint_used=True`,
+    wird `timbral_fidelity` auf `clip(mert_sim * 0.90, 0.65, 0.95)` gefloort.
+  - Verhindert, dass intentionelle Carrier-Chain-Inversion einen falschen HPI-Fail auslöst
+    (§0d: Referenz auf `best_carrier_checkpoint` verschieben wenn `carrier_chain_recovery_ratio > 0.15`).
+
+### AMRB-11-CASSETTE
+
+- `benchmarks/musical_restoration_benchmark.py`
+  - 11. AMRB-Szenario: `AMRB-11-CASSETTE` (IEC 60094-1 Typ I: BW ≤ 12 kHz + HF-Hiss 0–12 kHz + Flutter 0.15 % WRMS).
+  - Pflicht-Score: OQS ≥ 72. Produktions-Gate: OQS ≥ 65 (analog Kassette).
+
+- `tests/normative/test_amrb_ci_gate.py`
+  - Aktualisiert auf 11 Szenarien, Bestanden-Schwelle: ≥ 8/11.
+
+### Tests
+
+- 69 HPG-Tests grün (war: 58; +11 für Reference-Memory + CCR-Timbral-Floor).
+- 63 LPC-Formant-Tests grün (4 neue Pfade: Standard, WLPC-Era, WLPC-SNR, Backward-Compat).
+- AMRB-CI-Gate: 11 Szenarien, Schwelle 8/11.
+
 ## Version 9.15.2 — PMGG Counterfactual Confidence Guard (4. Juni 2026)
 
 ### Code

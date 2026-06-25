@@ -308,6 +308,21 @@ class SpatialEnhancementPhase(PhaseInterface):
             side_reduction,
         )
 
+        # §2.46e Hallucination-Guard: Räumliche Cues dürfen keine nicht-originären
+        # Spektralanteile einführen (VERBOTEN-§2.46e).
+        try:
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _hg_46,
+            )
+
+            _mode_46 = str(kwargs.get("mode", "restoration"))
+            _hg_result_46 = _hg_46(audio, processed, sr=sample_rate, mode=_mode_46)
+            if getattr(_hg_result_46, "requires_rollback", False):
+                processed = audio.copy()
+                logger.warning("Phase46 §2.46e Hallucination-Guard Rollback (spectral_novelty > 0.15)")
+        except Exception as _hg_exc_46:
+            logger.debug("Phase46 §2.46e Hallucination-Guard (non-blocking): %s", _hg_exc_46)
+
         return PhaseResult(
             success=True,
             audio=processed,

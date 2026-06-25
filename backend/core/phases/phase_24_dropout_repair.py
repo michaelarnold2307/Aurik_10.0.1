@@ -1225,6 +1225,21 @@ class DropoutRepairPhase(PhaseInterface):
             except Exception as _ssip_audit_p24_exc:
                 logger.debug("SSIP post_inpainting_silence_audit phase_24 (non-blocking): %s", _ssip_audit_p24_exc)
 
+        # §2.46e Hallucination-Guard: Dropout-Reparatur darf keine nicht-originären
+        # Spektralanteile einführen (VERBOTEN-§2.46e).
+        try:
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _hg_24,
+            )
+
+            _mode_24 = str(kwargs.get("mode", "restoration"))
+            _hg_result_24 = _hg_24(audio, repaired_audio, sr=sample_rate, mode=_mode_24)
+            if getattr(_hg_result_24, "requires_rollback", False):
+                repaired_audio = audio.copy()
+                logger.warning("Phase24 §2.46e Hallucination-Guard Rollback (spectral_novelty > 0.15)")
+        except Exception as _hg_exc_24:
+            logger.debug("Phase24 §2.46e Hallucination-Guard (non-blocking): %s", _hg_exc_24)
+
         return create_phase_result(
             audio=repaired_audio,
             modifications={

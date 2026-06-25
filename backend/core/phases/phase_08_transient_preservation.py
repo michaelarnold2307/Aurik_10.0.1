@@ -422,6 +422,21 @@ class TransientPreservationPhase(PhaseInterface):
             enhanced = audio + _effective_strength * (enhanced - audio)
             enhanced = np.clip(enhanced, -1.0, 1.0)
 
+        # §2.46e Hallucination-Guard: Transient-Enhancement darf keine nicht-originären
+        # Spektralanteile einführen (VERBOTEN-§2.46e).
+        try:
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _hg_08,
+            )
+
+            _mode_08 = str(kwargs.get("mode", "restoration"))
+            _hg_result_08 = _hg_08(audio, enhanced, sr=sample_rate, mode=_mode_08)
+            if getattr(_hg_result_08, "requires_rollback", False):
+                enhanced = audio.copy()
+                logger.warning("Phase08 §2.46e Hallucination-Guard Rollback (spectral_novelty > 0.15)")
+        except Exception as _hg_exc_08:
+            logger.debug("Phase08 §2.46e Hallucination-Guard (non-blocking): %s", _hg_exc_08)
+
         return create_phase_result(
             audio=enhanced,
             modifications={
