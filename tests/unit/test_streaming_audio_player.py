@@ -58,7 +58,7 @@ class _FakeSounddevice:
 
     @staticmethod
     def query_devices(kind="output"):
-        return {"default_samplerate": 48000.0}
+        return {"default_samplerate": 48000.0, "max_output_channels": 2}
 
 
 @pytest.fixture(autouse=True)
