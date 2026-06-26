@@ -219,7 +219,7 @@ class DemucsV4Plugin:
         left = resample_poly(audio[:, 0], up, down).astype(np.float32)
         right = resample_poly(audio[:, 1], up, down).astype(np.float32)
         n = min(len(left), len(right))
-        return np.stack([left[:n], right[:n]], axis=1)
+        return np.stack([left[:n], right[:n]], axis=1)  # type: ignore[no-any-return]
 
     def _make_spec_cond(self, chunk: np.ndarray) -> np.ndarray:
         """Erstelle Spektrogramm-Konditionierung x[1,4,2048,336] via STFT."""
@@ -244,7 +244,7 @@ class DemucsV4Plugin:
         log_l = np.log1p(mag_l)
         log_r = np.log1p(mag_r)
         x = np.stack([mag_l, mag_r, log_l, log_r], axis=0)  # [4,2048,336]
-        return x[np.newaxis].astype(np.float32)  # [1,4,2048,336]
+        return x[np.newaxis].astype(np.float32)  # type: ignore[no-any-return]  # [1,4,2048,336]
 
     def _infer_onnx(self, audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:
         n_orig = len(audio)
@@ -303,7 +303,7 @@ class DemucsV4Plugin:
             import librosa  # pylint: disable=import-outside-toplevel
 
             mono = audio[:, 0] if audio.ndim == 2 else audio
-            H, P = librosa.effects.hpss(mono)
+            H, P = librosa.effects.hpss(mono)  # type: ignore[attr-defined]
             if audio.ndim == 2:
                 H_st = np.stack([H, H], axis=1)
                 P_st = np.stack([P, P], axis=1)
@@ -333,7 +333,7 @@ def get_demucs_plugin() -> DemucsV4Plugin:
         with _lock:
             if _inst_holder[0] is None:
                 _inst_holder[0] = DemucsV4Plugin()
-    return _inst_holder[0]
+    return _inst_holder[0]  # type: ignore[return-value]
 
 
 def separate_stems(audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:

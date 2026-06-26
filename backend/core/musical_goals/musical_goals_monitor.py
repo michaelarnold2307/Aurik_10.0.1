@@ -109,7 +109,7 @@ class MusicalGoalsMonitor:
             try:
                 from .musical_goals_metrics import MusicalGoalsChecker
             except ImportError:
-                from musical_goals_metrics import MusicalGoalsChecker
+                from musical_goals_metrics import MusicalGoalsChecker  # type: ignore[no-redef]
         self.goals_checker = MusicalGoalsChecker()
 
         # Monitoring state
@@ -268,7 +268,7 @@ class MusicalGoalsMonitor:
                         )
 
         report = MonitoringReport(
-            pre_validation=self.pre_validation_result,
+            pre_validation=self.pre_validation_result,  # type: ignore[arg-type]
             checkpoints=self.checkpoints,
             post_validation=final_goals,
             violations=violations,

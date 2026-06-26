@@ -139,14 +139,14 @@ def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
     g = gcd(from_sr, to_sr)
     up, down = to_sr // g, from_sr // g
     if audio.ndim == 1:
-        return np.asarray(resample_poly(audio, up, down), dtype=np.float32)
+        return np.asarray(resample_poly(audio, up, down), dtype=np.float32)  # type: ignore[no-any-return]
     # [C, T] or [B, C, T]
     flat = np.reshape(audio, (-1, audio.shape[-1]))
     resampled_flat = [resample_poly(ch, up, down).astype(np.float32) for ch in flat]
     stacked = np.stack(resampled_flat, axis=0)
     new_len = stacked.shape[-1]
     reshaped = np.reshape(stacked, (*audio.shape[:-1], new_len))
-    return np.asarray(reshaped, dtype=np.float32)
+    return np.asarray(reshaped, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _pad_to_stride(audio: np.ndarray) -> tuple[np.ndarray, int]:

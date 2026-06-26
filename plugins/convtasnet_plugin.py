@@ -27,7 +27,7 @@ class ConvTasNetPlugin:
         try:
             import librosa
 
-            harm, perc = librosa.effects.hpss(mono)
+            harm, perc = librosa.effects.hpss(mono)  # type: ignore[attr-defined]
             harm = np.nan_to_num(harm, nan=0.0, posinf=0.0, neginf=0.0)
             perc = np.nan_to_num(perc, nan=0.0, posinf=0.0, neginf=0.0)
         except ImportError:

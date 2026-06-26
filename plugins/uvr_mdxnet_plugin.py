@@ -139,7 +139,7 @@ class UVRMDXNetPlugin:
             out[i * _HOP : i * _HOP + _N_FFT] += frame * win
             ws[i * _HOP : i * _HOP + _N_FFT] += win**2
         ws = np.where(ws < 1e-8, 1.0, ws)
-        return (out / ws)[:n_orig].astype(np.float32)
+        return (out / ws)[:n_orig].astype(np.float32)  # type: ignore[no-any-return]
 
     def _run_ensemble(self, mono: np.ndarray, sr: int) -> np.ndarray:
         from scipy.signal import resample_poly
@@ -202,8 +202,8 @@ class UVRMDXNetPlugin:
                 inst = resample_poly(inst, sr // g, _SR // g).astype(np.float32)
             mn, mx = len(inst), len(mono)
             if mx > mn:
-                return np.pad(inst, (0, mx - mn)).astype(np.float32)
-            return inst[:mx].astype(np.float32)
+                return np.pad(inst, (0, mx - mn)).astype(np.float32)  # type: ignore[no-any-return]
+            return inst[:mx].astype(np.float32)  # type: ignore[no-any-return]
         finally:
             try:
                 if _plm_uvr is not None:
@@ -216,10 +216,10 @@ class UVRMDXNetPlugin:
         try:
             import librosa
 
-            _H, P = librosa.effects.hpss(mono)
-            return P.astype(np.float32)
+            _H, P = librosa.effects.hpss(mono)  # type: ignore[attr-defined]
+            return P.astype(np.float32)  # type: ignore[no-any-return]
         except Exception:
-            return (mono * 0.7).astype(np.float32)
+            return (mono * 0.7).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def get_uvr_mdxnet_plugin() -> UVRMDXNetPlugin:

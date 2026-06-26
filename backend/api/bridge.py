@@ -547,21 +547,21 @@ def get_quality_mode() -> type:
     """Gibt die ``QualityMode``-Enum zurück (lazy import)."""
     from backend.core.performance_guard import QualityMode  # type: ignore[import]
 
-    return QualityMode
+    return QualityMode  # type: ignore[no-any-return]
 
 
 def get_medium_type_enum() -> type:
     """Gibt die ``MediumType``-Enum zurück (lazy import)."""
     from backend.core.enums import MediumType  # type: ignore[import]
 
-    return MediumType
+    return MediumType  # type: ignore[no-any-return]
 
 
 def get_processing_mode_enum() -> type:
     """Gibt die ``ProcessingMode``-Enum zurück (lazy import)."""
     from backend.core.enums import ProcessingMode  # type: ignore[import]
 
-    return ProcessingMode
+    return ProcessingMode  # type: ignore[no-any-return]
 
 
 def normalize_user_mode(mode: str | None) -> str:
@@ -609,7 +609,7 @@ def get_aurik_denker_class() -> type:
     """
     from denker.aurik_denker import AurikDenker  # type: ignore[import]
 
-    return AurikDenker
+    return AurikDenker  # type: ignore[no-any-return]
 
 
 def get_aurik_denker_instance():
@@ -628,7 +628,7 @@ def get_defect_scanner() -> type:
     """Gibt die ``DefectScanner``-Klasse zurück (lazy import)."""
     from backend.core.defect_scanner import DefectScanner  # type: ignore[import]
 
-    return DefectScanner
+    return DefectScanner  # type: ignore[no-any-return]
 
 
 def get_audio_file_validator():
@@ -650,7 +650,7 @@ def get_defect_type() -> type:
     """
     from backend.core.defect_scanner import DefectType  # type: ignore[import]
 
-    return DefectType
+    return DefectType  # type: ignore[no-any-return]
 
 
 def get_medium_classifier_fn():
@@ -711,7 +711,7 @@ def get_restorability_estimator_class() -> type:
     """
     from backend.core.restorability_estimator import RestorabilityEstimator  # type: ignore[import]
 
-    return RestorabilityEstimator
+    return RestorabilityEstimator  # type: ignore[no-any-return]
 
 
 def get_medium_detector():
@@ -770,7 +770,7 @@ def get_audio_exporter_class() -> type | None:
             _audio_exporter_status["available"] = True
             _audio_exporter_status["last_error"] = ""
 
-        return AudioExporter
+        return AudioExporter  # type: ignore[no-any-return]
     except ImportError as exc:
         _err = f"{type(exc).__name__}: {exc}"
         with _audio_exporter_status_lock:
@@ -812,7 +812,7 @@ def get_pipeline_health_state_enum() -> type:
     """Gibt ``PipelineHealthState``-Enum zurück (lazy import)."""
     from backend.core.pipeline_health_state import PipelineHealthState  # type: ignore[import]
 
-    return PipelineHealthState
+    return PipelineHealthState  # type: ignore[no-any-return]
 
 
 def normalize_pipeline_health_state(raw):
@@ -832,7 +832,7 @@ def resolve_pipeline_fail_reason(
     """Löst ``fail_reason`` aus typed Feld, Metadata und Stage-Notes auf (lazy import)."""
     from backend.core.pipeline_health_state import resolve_fail_reason as _resolve  # type: ignore[import]
 
-    return _resolve(
+    return _resolve(  # type: ignore[no-any-return]
         typed_fail_reason=typed_fail_reason,
         metadata=metadata,
         stage_notes=stage_notes,
@@ -1242,7 +1242,7 @@ def get_musical_goals_checker() -> type:
     """
     from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker  # type: ignore[import]
 
-    return MusicalGoalsChecker
+    return MusicalGoalsChecker  # type: ignore[no-any-return]
 
 
 def get_adaptive_goals_fn():
@@ -1371,7 +1371,7 @@ def get_ml_memory_budget_status() -> dict:
         with _ml_memory_budget_status_lock:
             _ml_memory_budget_import_status["available"] = True
             _ml_memory_budget_import_status["last_error"] = ""
-        return _status
+        return _status  # type: ignore[no-any-return]
     except Exception as _e:
         _err = f"{type(_e).__name__}: {_e}"
         with _ml_memory_budget_status_lock:
@@ -1421,7 +1421,7 @@ def validate_export_quality(result: object) -> tuple[bool, list[str]]:
     try:
         from backend.exporter import validate_export_quality as _veq
 
-        return _veq(result)
+        return _veq(result)  # type: ignore[no-any-return]
     except Exception as exc:
         logger.warning("validate_export_quality unavailable -> fail-closed: %s", exc)
         return False, ["Bridge-Export-Gate nicht verfügbar (fail-closed)"]
@@ -1632,17 +1632,13 @@ def build_export_quality_gate_payload(result: object) -> dict[str, Any]:
             meta_obj["quality_gate_payload"] = payload
             meta_obj["export_quality_gate_payload"] = payload
         elif meta_obj is None and hasattr(result, "metadata"):
-            setattr(
-                result,
-                "metadata",
-                {
-                    "fail_reason": primary_fail_reason,
-                    "degradation_status": degradation_status,
-                    "fail_reasons": list(fail_reasons),
-                    "quality_gate_payload": payload,
-                    "export_quality_gate_payload": payload,
-                },
-            )
+            result.metadata = {  # type: ignore[attr-defined]
+                "fail_reason": primary_fail_reason,
+                "degradation_status": degradation_status,
+                "fail_reasons": list(fail_reasons),
+                "quality_gate_payload": payload,
+                "export_quality_gate_payload": payload,
+            }
     except Exception as exc:
         logger.debug("build_export_quality_gate_payload mirror skipped: %s", exc)
 
@@ -1784,7 +1780,7 @@ def get_deferred_refinement_job_class() -> type:
     """
     from backend.core.deferred_refinement_job import DeferredRefinementJob  # type: ignore[import]
 
-    return DeferredRefinementJob
+    return DeferredRefinementJob  # type: ignore[no-any-return]
 
 
 def get_save_checkpoint_fn():

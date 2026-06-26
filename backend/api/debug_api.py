@@ -101,7 +101,7 @@ def get_goals_timeline(result: Any) -> dict[str, list[float]]:
         from backend.core.pipeline_trace import build_from_result
 
         trace = build_from_result(result)
-        return trace.goal_timeline
+        return trace.goal_timeline  # type: ignore[no-any-return]
     except Exception as e:
         logger.debug("get_goals_timeline fehlgeschlagen: %s", e)
         return {}
@@ -133,7 +133,7 @@ def format_goals_table(result: Any) -> str:
         from backend.core.pipeline_trace import format_goals_table as _fmt
 
         trace = build_from_result(result)
-        return _fmt(trace)
+        return _fmt(trace)  # type: ignore[no-any-return]
     except Exception as e:
         return f"(format_goals_table fehlgeschlagen: {e})"
 
@@ -151,7 +151,7 @@ def format_full_report(result: Any) -> str:
 
         trace = build_from_result(result)
         store_trace(trace)  # Für get_last_trace() Zugriff
-        return _fmt(trace)
+        return _fmt(trace)  # type: ignore[no-any-return]
     except Exception as e:
         return f"(format_full_report fehlgeschlagen: {e})"
 

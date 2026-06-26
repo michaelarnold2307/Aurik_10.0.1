@@ -92,7 +92,7 @@ def _wpe_numpy(
                     _needed_mb,
                     _avail_mb,
                 )
-                return D  # passthrough: phase_20 verwendet OMLSA als Fallback
+                return D  # type: ignore[no-any-return]  # passthrough: phase_20 verwendet OMLSA als Fallback
         except ImportError:
             pass  # psutil nicht verfügbar — fortfahren
 
@@ -130,7 +130,7 @@ def _wpe_numpy(
 
         np.nan_to_num(D, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
-    return D
+    return D  # type: ignore[no-any-return]
 
 
 def _wpe_stft(
@@ -152,7 +152,7 @@ def _wpe_stft(
         mono = mono.astype(np.float32)
     _sig_len = len(mono)
     if _sig_len < 8:
-        return np.clip(np.nan_to_num(mono.astype(np.float32), nan=0.0), -1.0, 1.0)
+        return np.clip(np.nan_to_num(mono.astype(np.float32), nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
     _nperseg = int(min(_N_FFT, _sig_len))
     _noverlap = int(min(max(0, _N_FFT - _HOP), _nperseg - 1))
 
@@ -165,7 +165,7 @@ def _wpe_stft(
 
     _, out = istft(Z_wpe, fs=sr, nperseg=_nperseg, noverlap=_noverlap, window="hann")
     out = np.clip(np.nan_to_num(out.astype(np.float32), nan=0.0), -1.0, 1.0)
-    return out[: len(mono)]
+    return out[: len(mono)]  # type: ignore[no-any-return]
 
 
 def _wpe_nara(mono: np.ndarray, _sr: int) -> np.ndarray | None:
@@ -232,7 +232,7 @@ def _omlsa_fallback(
         mono = mono.astype(np.float32)
     _sig_len = len(mono)
     if _sig_len < 8:
-        return np.clip(np.nan_to_num(mono.astype(np.float32), nan=0.0), -1.0, 1.0)
+        return np.clip(np.nan_to_num(mono.astype(np.float32), nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
     _nperseg = int(min(1024, _sig_len))
     _noverlap = int(min(768, _nperseg - 1))
 
@@ -244,7 +244,7 @@ def _omlsa_fallback(
     gain = np.clip(1.0 - strength / (snr + 1e-6), 0.1, 1.0)
     _, out = istft(gain * mag * np.exp(1j * phase), fs=sr, nperseg=_nperseg, noverlap=_noverlap, window="hann")
     out = np.clip(np.nan_to_num(out.astype(np.float32), nan=0.0), -1.0, 1.0)
-    return out[: len(mono)]
+    return out[: len(mono)]  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -285,11 +285,11 @@ class WpePlugin:
 
         if audio.ndim == 2:
             if audio.shape[0] > audio.shape[1]:  # [samples, ch]
-                return np.stack(
+                return np.stack(  # type: ignore[no-any-return]
                     [self.enhance(audio[:, c], sr, strength) for c in range(audio.shape[1])],
                     axis=1,
                 )
-            return np.stack(  # [ch, samples]
+            return np.stack(  # type: ignore[no-any-return]  # [ch, samples]
                 [self.enhance(audio[c], sr, strength) for c in range(audio.shape[0])],
                 axis=0,
             )

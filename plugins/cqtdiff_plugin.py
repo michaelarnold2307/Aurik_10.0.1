@@ -152,7 +152,7 @@ class CQTdiffPlusPlugin:
                     _reg_plm(
                         "CQTdiff+",
                         size_gb=0.19,
-                        unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                        unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),  # type: ignore[func-returns-value]
                     )
                 except Exception as _exc:
                     logger.debug("Operation failed (non-critical): %s", _exc)
@@ -372,7 +372,7 @@ class CQTdiffPlusPlugin:
         result[gap_start:gap_end] = np.clip(interpolated, -1.0, 1.0)
         result = self._crossfade_edges(result, gap_start, gap_end, sr, fade_ms=5.0)
         logger.info("🔵 CQTdiff DSP-Fallback: Lineare Interpolation (%.1f ms Lücke)", gap_len / sr * 1000)
-        return np.clip(result, -1.0, 1.0).astype(np.float32)
+        return np.clip(result, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Hilfsmethoden
@@ -385,7 +385,7 @@ class CQTdiffPlusPlugin:
         ctx = audio[max(0, gap_start - ctx_len) : gap_start]
         if len(ctx) < 256:
             ctx = np.zeros(256, dtype=np.float32)
-        return ctx.astype(np.float32)
+        return ctx.astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _crossfade_edges(

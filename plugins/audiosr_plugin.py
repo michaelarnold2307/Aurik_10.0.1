@@ -379,7 +379,7 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
                 _plm_asr.set_active("AudioSR", False)
         except Exception as _exc:
             logger.debug("AudioSR: PLM unset_active failed: %s", _exc)
-        return np.clip(result, -1.0, 1.0)
+        return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
     except Exception as exc:
         logger.warning("AudioSR ML-Inferenz fehlgeschlagen: %s", exc)
@@ -509,7 +509,7 @@ class AudioSRPlugin:
                     ml_result = self._resample(ml_result, out_sr, target_sr)
                 if mono_in and ml_result.ndim > 1:
                     ml_result = ml_result.mean(axis=-1) if ml_result.shape[-1] <= 2 else ml_result[: ml_result.shape[0]]
-                return np.clip(np.nan_to_num(ml_result.astype(np.float32), nan=0.0), -1.0, 1.0)
+                return np.clip(np.nan_to_num(ml_result.astype(np.float32), nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
             logger.debug(
                 "AudioSR: ML fehlgeschlagen -- DSP-Kaskade aktiv."
             )  # Erwartet, DSP-Fallback ist designed-in (§3.5)
@@ -549,7 +549,7 @@ class AudioSRPlugin:
         win = np.hanning(n_fft).astype(np.float32)
         n_frames = (len(x) - n_fft) // hop + 1
         if n_frames <= 0:
-            return np.clip(np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
 
         specs = []
         for i in range(n_frames):
@@ -664,7 +664,7 @@ class AudioSRPlugin:
             out = out[: len(x)]
         elif len(out) < len(x):
             out = np.pad(out, (0, len(x) - len(out)))
-        return np.clip(out, -1.0, 1.0)
+        return np.clip(out, -1.0, 1.0)  # type: ignore[no-any-return]
 
     @staticmethod
     def _griffin_lim(
@@ -685,7 +685,7 @@ class AudioSRPlugin:
             sig = np.zeros(out_len + n_fft, dtype=np.float32)
             norm = np.zeros_like(sig)
             for i in range(n_fr):
-                frame = np.fft.irfft(mag[:, i] * np.exp(1j * phase[:, i]), n=n_fft).real
+                frame = np.fft.irfft(mag[:, i] * np.exp(1j * phase[:, i]), n=n_fft).real  # type: ignore[index]
                 s = i * hop
                 sig[s : s + n_fft] += frame.astype(np.float32) * win
                 norm[s : s + n_fft] += win**2
@@ -695,9 +695,9 @@ class AudioSRPlugin:
                 seg = sig[i * hop : i * hop + n_fft]
                 if len(seg) < n_fft:
                     seg = np.pad(seg, (0, n_fft - len(seg)))
-                phase[:, i] = np.angle(np.fft.rfft(seg * win))
+                phase[:, i] = np.angle(np.fft.rfft(seg * win))  # type: ignore[index]
 
-        return sig[:orig_len]
+        return sig[:orig_len]  # type: ignore[no-any-return]
 
     @staticmethod
     def _resample(x: np.ndarray, src: int, tgt: int) -> np.ndarray:
@@ -715,7 +715,7 @@ class AudioSRPlugin:
             ratio = tgt / src
             new_n = round(len(x) * ratio)
             idx = np.linspace(0, len(x) - 1, new_n)
-            return np.interp(idx, np.arange(len(x)), x).astype(np.float32)
+            return np.interp(idx, np.arange(len(x)), x).astype(np.float32)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     def process_files(

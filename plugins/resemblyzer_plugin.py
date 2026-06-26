@@ -37,7 +37,7 @@ import numpy as np
 try:
     import librosa as _librosa
 except Exception:
-    _librosa = None
+    _librosa = None  # type: ignore[assignment]
 
 # Lokales Resemblyzer-Paket aus models/rezemblyzer/ einbinden (offline-fähig,
 # kein pip install nötig). Pfad wird nur einmalig in sys.path eingetragen.
@@ -149,7 +149,7 @@ class ResemblyzerPlugin:
             # embed_utterance → 256-dim d-vector
             emb = np.asarray(cast(Any, self._encoder).embed_utterance(wav), dtype=np.float32)
             emb = np.asarray(np.nan_to_num(emb, nan=0.0, posinf=0.0, neginf=0.0), dtype=np.float32)
-            return emb
+            return emb  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.debug("resemblyzer_plugin: embed() Fehler — None zurückgegeben: %s", exc)
@@ -182,19 +182,19 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Channels-first (2,N) oder samples-first (N,2) → mono (N,)."""
     if audio.ndim == 1:
         mono_audio = np.asarray(audio, dtype=np.float32)
-        return mono_audio
+        return mono_audio  # type: ignore[no-any-return]
     if audio.ndim == 2:
         if audio.shape[0] == 2 and audio.shape[1] > 2:
             mono_audio = np.asarray(audio.mean(axis=0), dtype=np.float32)
-            return mono_audio
+            return mono_audio  # type: ignore[no-any-return]
         if audio.shape[1] == 2:
             mono_audio = np.asarray(audio.mean(axis=1), dtype=np.float32)
-            return mono_audio
+            return mono_audio  # type: ignore[no-any-return]
         if audio.shape[0] == 1:
             mono_audio = np.asarray(audio[0], dtype=np.float32)
-            return mono_audio
+            return mono_audio  # type: ignore[no-any-return]
     mono_audio = np.asarray(audio.flatten(), dtype=np.float32)
-    return mono_audio
+    return mono_audio  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

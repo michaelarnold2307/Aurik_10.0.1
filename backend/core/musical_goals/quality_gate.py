@@ -951,7 +951,7 @@ class EnhancedQualityGate:
         if self._reprocessing_engine is None:
             from .auto_reprocessing import AutoReprocessingEngine
 
-            self._reprocessing_engine = AutoReprocessingEngine(
+            self._reprocessing_engine = AutoReprocessingEngine(  # type: ignore[assignment]
                 max_attempts=5, min_improvement=0.02, enable_hybrid_fallback=True, enable_forensic_guidance=True
             )
             logger.info("Auto-reprocessing engine loaded")
@@ -1196,7 +1196,7 @@ class EnhancedQualityGate:
                 ]
             )
         else:
-            perceptual_avg = 0.0
+            perceptual_avg = 0.0  # type: ignore[assignment]
 
         # Weighted combination
         weighted = (

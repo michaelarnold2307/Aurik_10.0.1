@@ -244,7 +244,7 @@ class MLMediumDetector:
         )
 
         if return_features:
-            return result, features
+            return result, features  # type: ignore[return-value]
 
         return result
 

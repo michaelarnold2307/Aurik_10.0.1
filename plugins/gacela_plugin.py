@@ -123,7 +123,7 @@ def _fit_context(audio: np.ndarray, n_samples: int) -> np.ndarray:
     """Audio auf genau n_samples bringen: kürzen (von hinten) oder links padden."""
     if len(audio) >= n_samples:
         return audio[-n_samples:]
-    return np.pad(audio, (n_samples - len(audio), 0))
+    return np.pad(audio, (n_samples - len(audio), 0))  # type: ignore[no-any-return]
 
 
 # ── Plugin-Klasse ────────────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ class GacelaPlugin:
 
             # STFT-Objekte
             self._stft = GaussTruncTF(hop_size=FFT_HOP_SIZE, stft_channels=FFT_LENGTH)
-            mel_fb = librosa.filters.mel(sr=MODEL_SR, n_fft=FFT_LENGTH, n_mels=MEL_BINS)
+            mel_fb = librosa.filters.mel(sr=MODEL_SR, n_fft=FFT_LENGTH, n_mels=MEL_BINS)  # type: ignore[attr-defined]
             # mel_fb Form [80, FFT_LENGTH//2 + 1] = [80, 513]; nur erste 512 Bins
             self._mel_basis = mel_fb[:, : FFT_LENGTH // 2].astype(np.float32)
             # SpectrogramInverter als Typ-Referenz (nicht für Inversion genutzt)
@@ -413,7 +413,7 @@ class GacelaPlugin:
 
             # Resample auf Host-SR
             gap_out = librosa.resample(gap_audio, orig_sr=MODEL_SR, target_sr=native_sr)
-            return np.clip(gap_out, -1.0, 1.0).astype(np.float32)
+            return np.clip(gap_out, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
         except Exception as exc:
             if self._device != "cpu":
@@ -461,7 +461,7 @@ class GacelaPlugin:
         intensity = float(np.clip(intensity, 0.0, 1.0))
         mono = self._to_mono(audio)
         if intensity < 0.01:
-            return np.clip(audio.copy().astype(np.float32), -1.0, 1.0)
+            return np.clip(audio.copy().astype(np.float32), -1.0, 1.0)  # type: ignore[no-any-return]
 
         # Weiche Schaedigung: even-order Harmonics via tanh-Saettigung
         saturation_strength = intensity * (10 ** (self.MAX_BOOST_DB / 20.0) - 1.0)
@@ -471,16 +471,16 @@ class GacelaPlugin:
         if audio.ndim == 2:
             # Stereo: gleiches Enhancement auf beide Kanaele
             if audio.shape[0] <= 8:
-                return np.clip(np.stack([enhanced] * audio.shape[0]), -1.0, 1.0)
-            return np.clip(np.stack([enhanced] * audio.shape[1], axis=1), -1.0, 1.0)
+                return np.clip(np.stack([enhanced] * audio.shape[0]), -1.0, 1.0)  # type: ignore[no-any-return]
+            return np.clip(np.stack([enhanced] * audio.shape[1], axis=1), -1.0, 1.0)  # type: ignore[no-any-return]
 
-        return np.clip(enhanced, -1.0, 1.0)
+        return np.clip(enhanced, -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _to_mono(self, audio: np.ndarray) -> np.ndarray:
         a = np.array(audio, dtype=np.float32)
         if a.ndim == 2:
             a = a.mean(axis=0) if a.shape[0] <= 8 else a.mean(axis=1)
-        return np.nan_to_num(a, nan=0.0)
+        return np.nan_to_num(a, nan=0.0)  # type: ignore[no-any-return]
 
 
 # ── Singleton (Double-Checked Locking, Spec §3.2) ────────────────────────────

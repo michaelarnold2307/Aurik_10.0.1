@@ -214,8 +214,8 @@ class HarmonicCharacterAnalyzer:
             end_idx = min(len(freqs), freq_idx + search_range + 1)
 
             # Find peak in search range
-            if end_idx > start_idx:
-                local_peak_idx = np.argmax(magnitude[start_idx:end_idx]) + start_idx
+            if end_idx > start_idx:  # type: ignore[operator]
+                local_peak_idx = np.argmax(magnitude[start_idx:end_idx]) + start_idx  # type: ignore[call-overload]
                 harmonic_power = magnitude[local_peak_idx] ** 2
             else:
                 harmonic_power = 0.0
@@ -326,17 +326,17 @@ class HarmonicCharacterAnalyzer:
         if analysis.even_harmonics_ratio < 0.03:
             # Needs warmth - suggest tube-style saturation
             warmth_deficit = 0.03 - analysis.even_harmonics_ratio
-            suggestions["recommended_action"] = "add_warmth"
+            suggestions["recommended_action"] = "add_warmth"  # type: ignore[assignment]
             suggestions["saturation_gain"] = min(0.3, warmth_deficit * 5.0)  # Scale to gain (0-0.3)
 
         elif analysis.odd_harmonics_ratio > 0.02:
             # Needs de-harshness - suggest odd harmonic filtering
             harshness_excess = analysis.odd_harmonics_ratio - 0.01
-            suggestions["recommended_action"] = "reduce_harshness"
+            suggestions["recommended_action"] = "reduce_harshness"  # type: ignore[assignment]
             suggestions["de_harsh_strength"] = min(1.0, harshness_excess * 20.0)  # Scale to strength (0-1)
 
         else:
-            suggestions["recommended_action"] = "none"  # Already optimal
+            suggestions["recommended_action"] = "none"  # type: ignore[assignment]  # Already optimal
 
         return suggestions
 

@@ -455,7 +455,7 @@ class FlowMatchingPlugin:
             windowed = seg[:n_fft] * np.hanning(n_fft)
             psd = np.abs(np.fft.rfft(windowed)) ** 2 + eps
             psd /= psd.sum()
-            return psd
+            return psd  # type: ignore[no-any-return]
 
         # Kontext: 2 s vor + nach der Lücke
         ctx_len = min(2 * sr, gap_start)

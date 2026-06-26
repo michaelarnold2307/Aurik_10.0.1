@@ -188,7 +188,7 @@ class HybridDereverb:
 
             # Re-estimate reverb after DSP
             reverb_after_dsp = self._estimate_reverb_level(audio, sample_rate)
-            metadata["reverb_after_dsp"] = reverb_after_dsp
+            metadata["reverb_after_dsp"] = reverb_after_dsp  # type: ignore[assignment]
 
             logger.info("DSP complete: reverb %.3f → %.3f", reverb_estimate, reverb_after_dsp)
 
@@ -229,7 +229,7 @@ class HybridDereverb:
                 logger.info("ML-Dereverb nicht verfügbar — WPE-DSP-Ergebnis wird verwendet")
 
         processing_time = time.time() - start_time
-        metadata["processing_time"] = processing_time
+        metadata["processing_time"] = processing_time  # type: ignore[assignment]
 
         return DereverbResult(
             audio=audio,

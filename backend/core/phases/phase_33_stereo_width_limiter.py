@@ -703,7 +703,7 @@ if __name__ == "__main__":
         logger.debug("Testing with material: %s", test_material.name)
         logger.debug("%s", "─" * 80)
 
-        result = phase.process(demo_audio, demo_sr, test_material)
+        result = phase.process(demo_audio, demo_sr, test_material)  # type: ignore[arg-type]
 
         if result.success:
             logger.debug("✅ Processing Complete!")

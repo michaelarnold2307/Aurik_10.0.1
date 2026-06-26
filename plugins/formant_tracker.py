@@ -170,7 +170,7 @@ class FormantTracker:
                     "DeepFormants",
                     size_gb=0.05,
                     unload_fn=lambda s=self: (
-                        setattr(s, "_deepformants_session", None) or setattr(s, "_deepformants_loaded", False)
+                        setattr(s, "_deepformants_session", None) or setattr(s, "_deepformants_loaded", False)  # type: ignore[func-returns-value]
                     ),
                 )
             except Exception as _exc:
@@ -350,7 +350,7 @@ class FormantTracker:
                     basis[m, k] = (f - l) / max(c - l, 1e-10)
                 elif c <= f <= r:
                     basis[m, k] = (r - f) / max(r - c, 1e-10)
-        return basis
+        return basis  # type: ignore[no-any-return]
 
     def _analyze_lpc(
         self,

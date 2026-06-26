@@ -109,7 +109,7 @@ class HifiGanPlugin:
         wave = self.vocode(mel, sr)
         result = _resamp(wave, _SR_MODEL, sr)
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.asarray(np.clip(result, -1.0, 1.0), dtype=np.float32)
+        return np.asarray(np.clip(result, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     def _vocode_onnx(self, mel: np.ndarray, sr_out: int) -> np.ndarray:
         _plm = None
@@ -140,7 +140,7 @@ class HifiGanPlugin:
             if sr_out != _SR_MODEL:
                 wave = _resamp(wave, _SR_MODEL, sr_out)
                 wave = np.nan_to_num(wave, nan=0.0, posinf=0.0, neginf=0.0)
-            return np.asarray(np.clip(wave, -1.0, 1.0), dtype=np.float32)
+            return np.asarray(np.clip(wave, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
         finally:
             if _plm is not None:
                 try:
@@ -184,7 +184,7 @@ class HifiGanPlugin:
             noverlap=n_fft - _HOP,
             window="hann",
         )
-        return np.asarray(np.clip(wave, -1.0, 1.0), dtype=np.float32)
+        return np.asarray(np.clip(wave, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _mel_spec(
@@ -200,7 +200,7 @@ def _mel_spec(
     mag = np.abs(Z[: n_fft // 2 + 1])
     mel_fb = _mel_filterbank(sr, n_fft, n_mels)
     mel = np.dot(mel_fb, mag)
-    return np.asarray(10.0 * np.log10(mel + 1e-9), dtype=np.float32)
+    return np.asarray(10.0 * np.log10(mel + 1e-9), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _mel_filterbank(sr, n_fft, n_mels):
@@ -222,13 +222,13 @@ def _mel_filterbank(sr, n_fft, n_mels):
 
 def _resamp(x: np.ndarray, src: int, dst: int) -> np.ndarray:
     if src == dst:
-        return np.asarray(x, dtype=np.float32)
+        return np.asarray(x, dtype=np.float32)  # type: ignore[no-any-return]
     from math import gcd
 
     from scipy.signal import resample_poly
 
     g = gcd(src, dst)
-    return np.asarray(resample_poly(x, dst // g, src // g), dtype=np.float32)
+    return np.asarray(resample_poly(x, dst // g, src // g), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def get_hifigan_plugin() -> HifiGanPlugin:

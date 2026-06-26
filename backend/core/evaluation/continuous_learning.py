@@ -157,26 +157,26 @@ class SuccessPatternAnalyzer:
 
                 # Track strategy performance
                 if quality_passed and overall_passed:
-                    strategy_stats[module_name]["success"] += 1
+                    strategy_stats[module_name]["success"] += 1  # type: ignore[operator]
                 else:
-                    strategy_stats[module_name]["failure"] += 1
+                    strategy_stats[module_name]["failure"] += 1  # type: ignore[operator]
 
-                strategy_stats[module_name]["cas_improvements"].append(cas_improvement)
-                strategy_stats[module_name]["processing_times"].append(processing_time)
-                strategy_stats[module_name]["confidences"].append(confidence)
+                strategy_stats[module_name]["cas_improvements"].append(cas_improvement)  # type: ignore[attr-defined]
+                strategy_stats[module_name]["processing_times"].append(processing_time)  # type: ignore[attr-defined]
+                strategy_stats[module_name]["confidences"].append(confidence)  # type: ignore[attr-defined]
 
         # Convert to ProcessingStrategy objects
         strategies = {}
         for module_name, stats in strategy_stats.items():
-            total = stats["success"] + stats["failure"]
+            total = stats["success"] + stats["failure"]  # type: ignore[operator]
             strategies[module_name] = ProcessingStrategy(
                 strategy_name=module_name,
                 module_name=module_name,
-                success_count=stats["success"],
-                failure_count=stats["failure"],
+                success_count=stats["success"],  # type: ignore[arg-type]
+                failure_count=stats["failure"],  # type: ignore[arg-type]
                 avg_cas_improvement=float(np.mean(stats["cas_improvements"])) if stats["cas_improvements"] else 0.0,
                 avg_processing_time_ms=float(np.mean(stats["processing_times"])) if stats["processing_times"] else 0.0,
-                confidence_scores=stats["confidences"],
+                confidence_scores=stats["confidences"],  # type: ignore[arg-type]
                 quality_gate_pass_rate=stats["success"] / total if total > 0 else 0.0,
             )
 

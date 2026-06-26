@@ -2125,7 +2125,7 @@ def _harmonic_line_score(ps: np.ndarray, freqs: np.ndarray, f0: float, n_harmoni
         bg_lo = ps[max(0, idx - 10) : max(0, idx - 3)]
         bg_hi = ps[min(len(ps) - 1, idx + 3) : min(len(ps), idx + 10)]
         bg = np.mean(np.concatenate([bg_lo, bg_hi])) + 1e-12
-        score += min(line_energy / bg, 10.0)  # SNR der Linie
+        score += min(line_energy / bg, 10.0)  # type: ignore[operator]  # SNR der Linie
     return score / (n_harmonics * 10.0)  # normiert auf [0, 1]
 
 

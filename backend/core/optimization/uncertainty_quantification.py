@@ -490,7 +490,7 @@ class UncertaintyQuantifier:
             uq_model = self.uq_model
             if not isinstance(uq_model, EnsembleUncertainty):
                 raise RuntimeError("Internal model/method mismatch for ensemble")
-            mean, std, details = uq_model.predict_with_uncertainty(x)
+            mean, std, details = uq_model.predict_with_uncertainty(x)  # type: ignore[misc]
 
             metrics = UncertaintyMetrics(
                 mean=mean, std=std, entropy=details["entropy"], mutual_information=details["mutual_information"]

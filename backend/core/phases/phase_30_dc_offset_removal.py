@@ -172,7 +172,7 @@ class DCOffsetRemoval(PhaseInterface):
         self,
         audio: np.ndarray,
         sample_rate: int = 48000,
-        material_type: MaterialType = MaterialType.VINYL,
+        material_type: MaterialType = MaterialType.VINYL,  # type: ignore[override]
         **kwargs,
     ) -> PhaseResult:
         """

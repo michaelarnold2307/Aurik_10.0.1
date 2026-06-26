@@ -528,8 +528,8 @@ class EQCorrectionPhase(PhaseInterface):
     def process(  # pylint: disable=arguments-renamed
         self,
         audio: np.ndarray,
-        material_type: str = "unknown",
-        auto_analyze: bool = True,
+        material_type: str = "unknown",  # type: ignore[override]
+        auto_analyze: bool = True,  # type: ignore[override]
         **kwargs,  # type: ignore[override]
     ) -> PhaseResult:
         """
@@ -699,7 +699,10 @@ class EQCorrectionPhase(PhaseInterface):
                 )
 
                 result_audio = _dolby_inv(  # type: ignore[arg-type]
-                    result_audio, dolby_nr_type, sr=sample_rate, confidence=dolby_nr_conf
+                    result_audio,
+                    dolby_nr_type,
+                    sr=sample_rate,
+                    confidence=dolby_nr_conf,  # type: ignore[arg-type]
                 )
                 dolby_nr_applied = True
                 logger.info("phase_04: Dolby/DBX NR inverse applied type=%s conf=%.2f", dolby_nr_type, dolby_nr_conf)
@@ -751,7 +754,7 @@ class EQCorrectionPhase(PhaseInterface):
                     result_audio,
                     sample_rate,
                     material_type,
-                    params.get("era", ""),
+                    params.get("era", ""),  # type: ignore[arg-type]
                     _sot_strength,  # type: ignore[arg-type]
                 )
                 _sot_applied = True

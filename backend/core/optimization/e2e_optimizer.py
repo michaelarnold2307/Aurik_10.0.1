@@ -485,7 +485,7 @@ class E2EOptimizationFramework:
         for key in epoch_losses[0]:
             avg_losses[key] = np.mean([l[key] for l in epoch_losses])
 
-        return avg_losses
+        return avg_losses  # type: ignore[return-value]
 
     def validate(self, dataloader: Any) -> dict[str, float]:
         """
@@ -519,7 +519,7 @@ class E2EOptimizationFramework:
         for key in val_losses[0]:
             avg_losses[key] = np.mean([l[key] for l in val_losses])
 
-        return avg_losses
+        return avg_losses  # type: ignore[return-value]
 
     def save_checkpoint(self, epoch: int, metrics: dict[str, float]):
         """Speichert training checkpoint."""

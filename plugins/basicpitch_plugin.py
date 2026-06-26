@@ -111,7 +111,7 @@ class BasicPitchPlugin:
                 _reg_plm(
                     "BasicPitch",
                     size_gb=0.12,
-                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),  # type: ignore[func-returns-value]
                 )
             except Exception as _exc:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
@@ -345,13 +345,13 @@ class BasicPitchPlugin:
 
 def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
     if from_sr == to_sr:
-        return audio.astype(np.float32)
+        return audio.astype(np.float32)  # type: ignore[no-any-return]
     from scipy.signal import resample_poly
 
     g = math.gcd(from_sr, to_sr)
     up = to_sr // g
     down = from_sr // g
-    return resample_poly(audio.astype(np.float32), up, down).astype(np.float32)
+    return resample_poly(audio.astype(np.float32), up, down).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _select_pitch_tensor(outputs: list[np.ndarray]) -> np.ndarray | None:
@@ -375,7 +375,7 @@ def _select_pitch_tensor(outputs: list[np.ndarray]) -> np.ndarray | None:
     twod = [np.asarray(o) for o in outputs if np.asarray(o).ndim >= 2]
     if not twod:
         return None
-    return max(twod, key=lambda x: x.size)
+    return max(twod, key=lambda x: x.size)  # type: ignore[no-any-return]
 
 
 def _to_time_bins(arr: np.ndarray) -> np.ndarray:
@@ -384,32 +384,32 @@ def _to_time_bins(arr: np.ndarray) -> np.ndarray:
     if a.ndim == 2:
         # [T, B] or [B, T]
         if a.shape[0] <= 16 and a.shape[1] > a.shape[0]:
-            return a.astype(np.float32)
+            return a.astype(np.float32)  # type: ignore[no-any-return]
         if a.shape[0] > a.shape[1]:
-            return a.astype(np.float32)
-        return a.T.astype(np.float32)
+            return a.astype(np.float32)  # type: ignore[no-any-return]
+        return a.T.astype(np.float32)  # type: ignore[no-any-return]
     if a.ndim >= 3:
         # Typical: [B, T, BINS] or [B, BINS, T]
         b0 = a[0]
         if b0.ndim == 2:
             if b0.shape[0] >= b0.shape[1]:
-                return b0.astype(np.float32)
-            return b0.T.astype(np.float32)
+                return b0.astype(np.float32)  # type: ignore[no-any-return]
+            return b0.T.astype(np.float32)  # type: ignore[no-any-return]
         # Fallback flattening
         flat = b0.reshape(b0.shape[0], -1)
-        return flat.astype(np.float32)
-    return a.reshape(1, -1).astype(np.float32)
+        return flat.astype(np.float32)  # type: ignore[no-any-return]
+    return a.reshape(1, -1).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _bins_to_midi(bin_idx: np.ndarray, n_bins: int) -> np.ndarray:
     """Map pitch bin index to MIDI range [21, 108]."""
     # Linear mapping across the available bin range
     midi_min, midi_max = 21.0, 108.0
-    return midi_min + (midi_max - midi_min) * (bin_idx.astype(np.float32) / max(1.0, float(n_bins - 1)))
+    return midi_min + (midi_max - midi_min) * (bin_idx.astype(np.float32) / max(1.0, float(n_bins - 1)))  # type: ignore[no-any-return]
 
 
 def _midi_to_hz(midi: np.ndarray) -> np.ndarray:
-    return (440.0 * (2.0 ** ((midi.astype(np.float32) - 69.0) / 12.0))).astype(np.float32)
+    return (440.0 * (2.0 ** ((midi.astype(np.float32) - 69.0) / 12.0))).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def get_basicpitch_plugin() -> BasicPitchPlugin:

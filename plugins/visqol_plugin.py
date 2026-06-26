@@ -96,7 +96,7 @@ class VisqolPlugin:
         a = np.array(audio, dtype=np.float32)
         if a.ndim == 2:
             a = a.mean(axis=0) if a.shape[0] <= 8 else a.mean(axis=1)
-        return np.nan_to_num(a, nan=0.0)
+        return np.nan_to_num(a, nan=0.0)  # type: ignore[no-any-return]
 
     def _bark_matrix(self, mono: np.ndarray, sr: int) -> np.ndarray:
         from scipy.signal import stft as _stft
@@ -111,7 +111,7 @@ class VisqolPlugin:
                 bands.append(mag2[mask].mean(axis=0))
             else:
                 bands.append(np.zeros(mag2.shape[1], dtype=np.float32))
-        return np.stack(bands, axis=0)
+        return np.stack(bands, axis=0)  # type: ignore[no-any-return]
 
     def _nsim(self, ref: np.ndarray, deg: np.ndarray, k1: float = 0.01, k2: float = 0.03) -> float:
         L = max(float(ref.max()), float(deg.max()), 1e-9)

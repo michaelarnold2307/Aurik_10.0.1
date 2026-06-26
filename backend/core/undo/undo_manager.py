@@ -183,7 +183,7 @@ class ProcessingAction(Action):
         if use_delta and reference_snapshot is not None:
             # Delta compression: store only difference from reference
             reference_audio = reference_snapshot.get_audio()
-            self.before_snapshot = AudioSnapshot.create_delta(before_audio, reference_audio, sr, reference_index)
+            self.before_snapshot = AudioSnapshot.create_delta(before_audio, reference_audio, sr, reference_index)  # type: ignore[arg-type]
             self._reference_audio = reference_audio.copy()
         else:
             # Full snapshot
@@ -214,8 +214,8 @@ class ProcessingAction(Action):
 
     def cleanup(self):
         """Free audio memory."""
-        self.before_snapshot = None
-        self.after_snapshot = None
+        self.before_snapshot = None  # type: ignore[assignment]
+        self.after_snapshot = None  # type: ignore[assignment]
         self._reference_audio = None
 
     def memory_size(self) -> int:

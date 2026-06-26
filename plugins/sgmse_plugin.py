@@ -116,7 +116,7 @@ class SGMSEPlusPlugin:
         self._hop: int = _DEFAULT_HOP
         self._win: int = _DEFAULT_WIN
         self._device: str = "cpu"  # set by _try_load or _try_load_from_checkpoint
-        self._device: str = "cpu"  # set by _try_load or _try_load_from_checkpoint
+        self._device: str = "cpu"  # type: ignore[no-redef]  # set by _try_load or _try_load_from_checkpoint
         self._load_model_geometry()
         self._try_load()
 
@@ -613,7 +613,7 @@ class SGMSEPlusPlugin:
             time.perf_counter() - _t0,
             _runtime_budget_s,
         )
-        return np.clip(np.nan_to_num(out, nan=0.0), -1.0, 1.0)
+        return np.clip(np.nan_to_num(out, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # ONNX Inference (SGMSE+ deterministic forward pass @ optimal sigma)
@@ -654,7 +654,7 @@ class SGMSEPlusPlugin:
             x = x[:n_orig]
         elif len(x) < n_orig:
             x = np.pad(x, (0, n_orig - len(x)))
-        return x
+        return x  # type: ignore[no-any-return]
 
     def _enhance_onnx(self, mono: np.ndarray, sigma: float) -> np.ndarray:
         """SGMSE+ ONNX-Inferenz: Score-Based Enhancement."""
@@ -692,7 +692,7 @@ class SGMSEPlusPlugin:
             Z_enhanced = np.nan_to_num(Z_enhanced, nan=0.0, posinf=0.0, neginf=0.0)
 
             result = self._istft(Z_enhanced, n_orig)
-            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.warning("SGMSE+ ONNX-Inferenzfehler: %s — WPE-Fallback.", exc)
             return self._wpe_fallback(mono, _SR)
@@ -841,7 +841,7 @@ class SGMSEPlusPlugin:
             except Exception as _exc:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
 
-            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
         except Exception as exc:
             # Detect Torch / system OOM and re-raise as Python MemoryError so
             # UV3's §2.39 OOM-Recovery-Checkpoint handler can fire instead of
@@ -909,13 +909,13 @@ class SGMSEPlusPlugin:
             plugin = get_wpe_plugin()
             result = plugin.enhance(mono, sr)
             if hasattr(result, "audio"):
-                return np.clip(np.nan_to_num(result.audio.flatten(), nan=0.0), -1.0, 1.0)
+                return np.clip(np.nan_to_num(result.audio.flatten(), nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
             # Legacy: result ist ndarray
             arr = np.asarray(result, dtype=np.float32).flatten()
-            return np.clip(np.nan_to_num(arr, nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(arr, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.error("WPE-Fallback fehlgeschlagen: %s — Audio unverändert.", exc)
-            return np.clip(np.nan_to_num(mono.copy(), nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(mono.copy(), nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

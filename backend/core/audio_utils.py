@@ -326,8 +326,8 @@ def _quiet_edge_guard_profile(
         "channel_count": len(intro_quiet_channels),
         "intro_quiet": bool(intro_quiet or any(intro_quiet_channels)),
         "outro_quiet": bool(outro_quiet or any(outro_quiet_channels)),
-        "intro_quiet_channels": tuple(intro_quiet_channels),
-        "outro_quiet_channels": tuple(outro_quiet_channels),
+        "intro_quiet_channels": tuple(intro_quiet_channels),  # type: ignore[dict-item]
+        "outro_quiet_channels": tuple(outro_quiet_channels),  # type: ignore[dict-item]
     }
 
 

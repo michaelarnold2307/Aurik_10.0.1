@@ -558,7 +558,7 @@ class MidSideProcessing(PhaseInterface):
             {
                 "processing": "applied",
                 "bands": 4,
-                "band_metrics": band_metrics,
+                "band_metrics": band_metrics,  # type: ignore[dict-item]
                 "mid_change_db": round(float(mid_change_db), 2),
                 "side_change_db": round(float(side_change_db), 2),
                 "mono_compatibility": round(mono_compat, 3),

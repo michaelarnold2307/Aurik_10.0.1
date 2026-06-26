@@ -118,8 +118,8 @@ class BanquetVinylPlugin:
                 sess_options=opts,
                 providers=_providers,
             )
-            self._input_name = self._session.get_inputs()[0].name
-            self._output_name = self._session.get_outputs()[0].name
+            self._input_name = self._session.get_inputs()[0].name  # type: ignore[attr-defined]
+            self._output_name = self._session.get_outputs()[0].name  # type: ignore[attr-defined]
             self._model_ok = True
             logger.info(
                 "✅ BANQUET ONNX geladen: %s | In=%s | Out=%s",
@@ -133,7 +133,7 @@ class BanquetVinylPlugin:
                 _reg_plm(
                     "BanquetVinyl",
                     size_gb=0.80,
-                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_ok", False),
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_ok", False),  # type: ignore[func-returns-value]
                 )
             except Exception as _exc:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
@@ -234,7 +234,7 @@ class BanquetVinylPlugin:
 
         if not stereo_in:
             restored = restored[0]
-        return restored
+        return restored  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     def _process_onnx(self, audio: np.ndarray, strength: float) -> np.ndarray:
@@ -305,7 +305,7 @@ class BanquetVinylPlugin:
         if strength < 1.0:
             out = strength * out + (1.0 - strength) * audio
 
-        return np.clip(out, -1.0, 1.0)
+        return np.clip(out, -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _prepare_input(self, chunk: np.ndarray, channels: int) -> tuple[np.ndarray, np.ndarray]:
         """Konvertiert audio chunk [ch, chunk_len] → ONNX tensor [1, 128, 128, 128].
@@ -394,11 +394,11 @@ class BanquetVinylPlugin:
                     audio_out = audio_out[:chunk_len]
                 else:
                     audio_out = np.pad(audio_out, (0, chunk_len - len(audio_out)))
-                return np.tile(audio_out[np.newaxis, :], (channels, 1))
+                return np.tile(audio_out[np.newaxis, :], (channels, 1))  # type: ignore[no-any-return]
         except Exception as _exc:
             logger.debug("Plugin operation failed (non-critical): %s", _exc)
         # Shape fallback — return silence (chunk exception handler will use DSP)
-        return np.zeros((channels, chunk_len), dtype=np.float32)
+        return np.zeros((channels, chunk_len), dtype=np.float32)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     def _process_dsp(self, audio: np.ndarray, sr: int, strength: float = 1.0) -> np.ndarray:
@@ -438,7 +438,7 @@ class BanquetVinylPlugin:
 
             out[c] = strength * x + (1.0 - strength) * audio[c]
 
-        return np.clip(out, -1.0, 1.0)
+        return np.clip(out, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     @staticmethod

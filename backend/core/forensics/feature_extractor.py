@@ -192,22 +192,22 @@ class FeatureExtractor:
 
         # Spectral Centroid
         centroid = librosa.feature.spectral_centroid(y=audio, sr=sr, n_fft=safe_n_fft, hop_length=self.hop_length)[0]
-        features.spectral_centroid_mean = np.mean(centroid)
-        features.spectral_centroid_std = np.std(centroid)
+        features.spectral_centroid_mean = np.mean(centroid)  # type: ignore[assignment]
+        features.spectral_centroid_std = np.std(centroid)  # type: ignore[assignment]
 
         # Spectral Rolloff
         rolloff = librosa.feature.spectral_rolloff(y=audio, sr=sr, n_fft=safe_n_fft, hop_length=self.hop_length)[0]
-        features.spectral_rolloff_mean = np.mean(rolloff)
-        features.spectral_rolloff_std = np.std(rolloff)
+        features.spectral_rolloff_mean = np.mean(rolloff)  # type: ignore[assignment]
+        features.spectral_rolloff_std = np.std(rolloff)  # type: ignore[assignment]
 
         # Spectral Flux (energy difference between frames)
         S = np.abs(librosa.stft(audio, n_fft=safe_n_fft, hop_length=self.hop_length))
         flux = np.sqrt(np.sum(np.diff(S, axis=1) ** 2, axis=0))
-        features.spectral_flux_mean = np.mean(flux)
+        features.spectral_flux_mean = np.mean(flux)  # type: ignore[assignment]
 
         # Spectral Flatness
         flatness = librosa.feature.spectral_flatness(y=audio, n_fft=safe_n_fft, hop_length=self.hop_length)[0]
-        features.spectral_flatness_mean = np.mean(flatness)
+        features.spectral_flatness_mean = np.mean(flatness)  # type: ignore[assignment]
 
         # Spectral Contrast
         contrast = librosa.feature.spectral_contrast(y=audio, sr=sr, n_fft=safe_n_fft, hop_length=self.hop_length)
@@ -219,16 +219,16 @@ class FeatureExtractor:
         """Extrahiert temporale Features."""
         # Zero Crossing Rate
         zcr = librosa.feature.zero_crossing_rate(audio, frame_length=self.n_fft, hop_length=self.hop_length)[0]
-        features.zero_crossing_rate_mean = np.mean(zcr)
+        features.zero_crossing_rate_mean = np.mean(zcr)  # type: ignore[assignment]
 
         # RMS Energy
         rms = librosa.feature.rms(y=audio, frame_length=self.n_fft, hop_length=self.hop_length)[0]
-        features.rms_energy_mean = np.mean(rms)
-        features.rms_energy_std = np.std(rms)
+        features.rms_energy_mean = np.mean(rms)  # type: ignore[assignment]
+        features.rms_energy_std = np.std(rms)  # type: ignore[assignment]
 
         # Transient Density (onset detection)
-        onset_envelope = librosa.onset.onset_strength(y=audio, sr=sr)
-        onset_frames = librosa.onset.onset_detect(onset_envelope=onset_envelope, sr=sr)
+        onset_envelope = librosa.onset.onset_strength(y=audio, sr=sr)  # type: ignore[attr-defined]
+        onset_frames = librosa.onset.onset_detect(onset_envelope=onset_envelope, sr=sr)  # type: ignore[attr-defined]
         duration_sec = len(audio) / sr
         features.transient_density = len(onset_frames) / duration_sec if duration_sec > 0 else 0.0
 
@@ -241,7 +241,7 @@ class FeatureExtractor:
                     envelope = np.abs(audio[onset_sample : onset_sample + 100])
                     peak_idx = np.argmax(envelope)
                     attack_times.append(peak_idx / sr * 1000)  # ms
-            features.attack_time_mean = np.mean(attack_times) if attack_times else 0.0
+            features.attack_time_mean = np.mean(attack_times) if attack_times else 0.0  # type: ignore[assignment]
 
         return features
 
@@ -327,12 +327,12 @@ class FeatureExtractor:
             # Wow: 0.5-6 Hz modulation
             sos_wow = scipy_signal.butter(2, [0.5, 6], btype="band", fs=sr, output="sos")
             wow_component = scipy_signal.sosfilt(sos_wow, instantaneous_freq)
-            features.wow_strength = np.std(wow_component) / (np.mean(np.abs(instantaneous_freq)) + 1e-10)
+            features.wow_strength = np.std(wow_component) / (np.mean(np.abs(instantaneous_freq)) + 1e-10)  # type: ignore[assignment]
 
             # Flutter: 6-100 Hz modulation
             sos_flutter = scipy_signal.butter(2, [6, 100], btype="band", fs=sr, output="sos")
             flutter_component = scipy_signal.sosfilt(sos_flutter, instantaneous_freq)
-            features.flutter_strength = np.std(flutter_component) / (np.mean(np.abs(instantaneous_freq)) + 1e-10)
+            features.flutter_strength = np.std(flutter_component) / (np.mean(np.abs(instantaneous_freq)) + 1e-10)  # type: ignore[assignment]
         except Exception:
             features.wow_strength = 0.0
             features.flutter_strength = 0.0

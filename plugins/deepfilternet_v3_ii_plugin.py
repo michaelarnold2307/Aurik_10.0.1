@@ -47,7 +47,7 @@ def _erb_fb(n_fft: int = 960, n_erb: int = 32, sr: float = 48000.0) -> np.ndarra
     freqs = np.linspace(0, sr / 2, n_bins)
 
     def hz_to_erb(f: np.ndarray) -> np.ndarray:
-        return 21.4 * np.log10(1.0 + f / 229.0 + 1e-9)
+        return 21.4 * np.log10(1.0 + f / 229.0 + 1e-9)  # type: ignore[no-any-return]
 
     erb_max = hz_to_erb(np.array([sr / 2]))[0]
     erb_edges = np.linspace(hz_to_erb(np.array([0.0]))[0], erb_max, n_erb + 1)
@@ -60,7 +60,7 @@ def _erb_fb(n_fft: int = 960, n_erb: int = 32, sr: float = 48000.0) -> np.ndarra
         mask = (erb_freqs >= lo) & (erb_freqs < hi)
         if mask.sum() > 0:
             fb[b, mask] = 1.0 / mask.sum()
-    return fb
+    return fb  # type: ignore[no-any-return]
 
 
 _ERB_FB = _erb_fb(_N_FFT, _N_ERB, float(_SR))  # [32, 481]
@@ -132,7 +132,7 @@ class DeepFilterNetV3Plugin:
                     "DeepFilterNetV3",
                     size_gb=0.15,
                     unload_fn=lambda s=self: (
-                        setattr(s, "_enc", None) or setattr(s, "_dec", None) or setattr(s, "_erb_dec", None)
+                        setattr(s, "_enc", None) or setattr(s, "_dec", None) or setattr(s, "_erb_dec", None)  # type: ignore[func-returns-value]
                     ),
                 )
             except Exception as _exc:
@@ -180,7 +180,7 @@ class DeepFilterNetV3Plugin:
 
         def proc(ch: np.ndarray) -> np.ndarray:
             res = self._enhance_channel(ch, sr)
-            return res.astype(np.float32)
+            return res.astype(np.float32)  # type: ignore[no-any-return]
 
         if stereo:
             left = proc(audio[:, 0])
@@ -194,7 +194,7 @@ class DeepFilterNetV3Plugin:
         # Restore channels-first layout if input was (2, N)
         if _was_channels_first and out.ndim == 2:
             out = out.T
-        return np.clip(out, -1.0, 1.0)
+        return np.clip(out, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ── Internal ────────────────────────────────────────────────────────────
 
@@ -236,7 +236,7 @@ class DeepFilterNetV3Plugin:
             out = resample_poly(out, sr // g, _SR // g).astype(np.float32)
 
         int(len(mono) * sr / _SR) if sr != _SR else len(mono)
-        return out.astype(np.float32)
+        return out.astype(np.float32)  # type: ignore[no-any-return]
 
     def _compute_features(self, mono: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Berechne ERB-Features und Spektrum-Features aus mono-Audio.
@@ -377,7 +377,7 @@ class DeepFilterNetV3Plugin:
         win_sum = np.where(win_sum < 1e-8, 1.0, win_sum)
         out /= win_sum
         out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
-        return out[: len(mono)].astype(np.float32)
+        return out[: len(mono)].astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _estimate_input_snr_db(mono: np.ndarray, frame_len: int = 2048, hop: int = 512) -> float:
@@ -411,7 +411,7 @@ class DeepFilterNetV3Plugin:
         Zxx_out = mask * mag * np.exp(1j * np.angle(Zxx))
         _, out = istft(Zxx_out, fs=sr, nperseg=n_fft, noverlap=n_fft - hop, window="hann")
         out = np.nan_to_num(out[: len(mono)], nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(out, -1.0, 1.0).astype(np.float32)
+        return np.clip(out, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _secondary_fallback(mono: np.ndarray, sr: int) -> np.ndarray:
@@ -419,7 +419,7 @@ class DeepFilterNetV3Plugin:
         snr_db = DeepFilterNetV3Plugin._estimate_input_snr_db(mono)
         if snr_db > 35.0:
             logger.info("DeepFilterNet: hoher Eingangs-SNR %.1f dB — Dry-Signal statt Zusatzbearbeitung.", snr_db)
-            return np.clip(np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)
+            return np.clip(np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
         logger.info("DeepFilterNet: OMLSA fehlgeschlagen — Spectral-Gating-Fallback (SNR=%.1f dB).", snr_db)
         return DeepFilterNetV3Plugin._spectral_gating_fallback(mono, sr)
 
@@ -453,7 +453,7 @@ class DeepFilterNetV3Plugin:
 
         Zxx_out = gain * mag * np.exp(1j * np.angle(Zxx))
         _, out = istft(Zxx_out, fs=sr, nperseg=n_fft, noverlap=n_fft - hop, window="hann")
-        return out[: len(mono)].astype(np.float32)
+        return out[: len(mono)].astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _omlsa_fallback(mono: np.ndarray, sr: int) -> np.ndarray:

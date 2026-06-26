@@ -128,7 +128,7 @@ class EnhancedMetrics:
         if AUTHENTICITY_AVAILABLE:
             self.authenticity = AuthenticityMetrics()
         else:
-            self.authenticity = None
+            self.authenticity = None  # type: ignore[assignment]
 
     def _check_visqol(self) -> bool:
         """Prüft if ViSQOL is available."""

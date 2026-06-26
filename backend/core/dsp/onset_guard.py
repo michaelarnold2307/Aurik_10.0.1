@@ -18,7 +18,7 @@ import numpy as np
 try:
     import librosa  # type: ignore[import-untyped]
 except Exception:  # pragma: no cover - optional dependency
-    librosa = None
+    librosa = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ def apply_onset_protection_mask(
                 # sr aus Pufferlänge kann nicht inferiert werden → hart auf 48000 setzen
                 # (Guard wird nur aus UV3 mit sr=48000 aufgerufen)
                 _sr = 48000
-                onset_frames = librosa.onset.onset_detect(y=pre_mono, sr=_sr, hop_length=256, backtrack=True)
+                onset_frames = librosa.onset.onset_detect(y=pre_mono, sr=_sr, hop_length=256, backtrack=True)  # type: ignore[attr-defined]
                 # Sample-genaue Maske erzeugen
                 onset_mask_arr = np.zeros(n, dtype=bool)
                 window_samples = int(_ONSET_WINDOW_MS / 1000.0 * _sr)

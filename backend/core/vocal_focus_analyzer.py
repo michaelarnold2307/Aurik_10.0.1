@@ -522,7 +522,7 @@ class VocalFocusAnalyzer:
 
             f1_vals: list[float] = []
             f2_vals: list[float] = []
-            for frame in result.formant_tracks:
+            for frame in result.formant_tracks:  # type: ignore[attr-defined]
                 freqs = frame.frequencies if hasattr(frame, "frequencies") else []
                 confs = frame.confidences if hasattr(frame, "confidences") else [1.0] * len(freqs)
                 if len(freqs) >= 1 and len(confs) >= 1 and float(confs[0]) > 0.25:

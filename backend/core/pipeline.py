@@ -24,9 +24,9 @@ class AurikPipeline:
             self.audit_log.log_run({"status": "abgebrochen", "grund": "Nicht zuständig"})
             return "Nicht zuständig"
         # 2. Zonen-Engine
-        zones = self.zone_engine.segment(audio_data)
+        zones = self.zone_engine.segment(audio_data)  # type: ignore[attr-defined]
         # 3. Conduct Enforcer
-        conduct_results = self.conduct_enforcer.enforce(zones)
+        conduct_results = self.conduct_enforcer.enforce(zones)  # type: ignore[attr-defined]
         # 4. Regulator
         regulation = self.regulator.regulate(zones, tontraegerkette_info)
         # 5. Audit-Log

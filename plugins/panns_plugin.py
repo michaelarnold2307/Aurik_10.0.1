@@ -26,7 +26,6 @@ import logging
 import math
 import threading
 from pathlib import Path
-from typing import Any, cast
 
 import numpy as np
 
@@ -245,7 +244,7 @@ class PANNsPlugin:
             start = max(0, int((n - self._MODEL_SAMPLES) * float(np.clip(position_ratio, 0.0, 1.0))))
             audio = audio[start : start + self._MODEL_SAMPLES]
 
-        return audio[np.newaxis, :].astype(np.float32)  # [1, 320000]
+        return audio[np.newaxis, :].astype(np.float32)  # type: ignore[no-any-return]  # [1, 320000]
 
     def _to_model_input_from_resampled(self, audio_mono_rs: np.ndarray, position_ratio: float) -> np.ndarray:
         """Extrahiert Fenster aus bereits resampeltem Mono-Array (spart Resample-Overhead bei Multi-Window).
@@ -268,7 +267,7 @@ class PANNsPlugin:
             start = max(0, int((n - self._MODEL_SAMPLES) * float(np.clip(position_ratio, 0.0, 1.0))))
             chunk = chunk[start : start + self._MODEL_SAMPLES]
 
-        return chunk[np.newaxis, :].astype(np.float32)
+        return chunk[np.newaxis, :].astype(np.float32)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Haupt-Inferenz-Methode
@@ -336,9 +335,9 @@ class PANNsPlugin:
 
             # Primär-Inferenz: Mitte (position_ratio=0.5)
             model_input = self._to_model_input(audio, sr, position_ratio=0.5)
-            ort_out = self._session.run(
+            ort_out = self._session.run(  # type: ignore[attr-defined]
                 None,
-                {self._session.get_inputs()[0].name: model_input},
+                {self._session.get_inputs()[0].name: model_input},  # type: ignore[attr-defined]
             )
             scores: np.ndarray = ort_out[0][0].copy()  # [527] float32
 
@@ -354,7 +353,7 @@ class PANNsPlugin:
                     try:
                         assert _mono_rs is not None
                         _inp = self._to_model_input_from_resampled(_mono_rs, _pos)
-                        _out = self._session.run(None, {self._session.get_inputs()[0].name: _inp})
+                        _out = self._session.run(None, {self._session.get_inputs()[0].name: _inp})  # type: ignore[attr-defined]
                         scores = np.maximum(scores, _out[0][0])
                     except Exception as _mw_exc:
                         logger.debug("PANNs Multi-Window pos=%.2f fehlgeschlagen: %s", _pos, _mw_exc)
@@ -425,7 +424,7 @@ class PANNsPlugin:
         try:
             from backend.file_import import load_audio_file
 
-            _res = cast(dict[str, Any], load_audio_file(str(input_wav), do_carrier_analysis=False))
+            _res = load_audio_file(str(input_wav), do_carrier_analysis=False)
             audio = np.asarray(_res["audio"], dtype=np.float32)
             sr = int(_res["sr"])
         except Exception as exc:
@@ -492,7 +491,7 @@ if __name__ == "__main__":
 
     from backend.file_import import load_audio_file
 
-    _res = cast(dict[str, Any], load_audio_file(sys.argv[1]))
+    _res = load_audio_file(sys.argv[1])
     _audio, _sr = _res["audio"], int(_res["sr"])
     _tags = classify_audio(_audio, _sr)
     logger.debug("PANNs CNN14 — %s", sys.argv[1])

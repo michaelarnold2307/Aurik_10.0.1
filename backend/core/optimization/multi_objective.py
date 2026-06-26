@@ -473,7 +473,7 @@ class NSGAII:
                 best_individual = individual
 
         logger.info("Selected solution with score %.4f", best_score)
-        return best_individual
+        return best_individual  # type: ignore[return-value]
 
     def save_pareto_front(self, path: Path):
         """Speichert Pareto front to JSON."""

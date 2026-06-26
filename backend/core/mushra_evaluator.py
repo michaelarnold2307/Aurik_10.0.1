@@ -484,7 +484,7 @@ class MushraEvaluator:
             try:
                 from backend.core.musical_goals.musical_goals_metrics import get_checker
 
-                self._mu_checker = get_checker()
+                self._mu_checker = get_checker()  # type: ignore[assignment]
             except ImportError:
                 return {}
 
@@ -496,7 +496,7 @@ class MushraEvaluator:
             return dict(cached)
 
         try:
-            measured = self._mu_checker.measure_all(audio_f32, sr)
+            measured = self._mu_checker.measure_all(audio_f32, sr)  # type: ignore[attr-defined]
         except Exception as exc:
             logger.debug("Musical Goals Fehler in MUSHRA: %s", exc)
             return {}

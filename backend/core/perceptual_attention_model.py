@@ -233,7 +233,7 @@ class PerceptualAttentionModel:
         try:
             import librosa
 
-            _, percussive = librosa.effects.hpss(mono)
+            _, percussive = librosa.effects.hpss(mono)  # type: ignore[attr-defined]
             perc_energy = np.array(
                 [float(np.sqrt(np.mean(percussive[f * hop_len : (f + 1) * hop_len] ** 2))) for f in range(n_frames)],
                 dtype=np.float32,

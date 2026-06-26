@@ -155,7 +155,7 @@ class ReferenceAnchorSynthesizer:
         if isinstance(anchor_result, np.ndarray):
             anchor_spectrum = anchor_result
         elif hasattr(anchor_result, "anchor_spectrum"):
-            anchor_spectrum = anchor_result.anchor_spectrum
+            anchor_spectrum = anchor_result.anchor_spectrum  # type: ignore[assignment]
         else:
             anchor_spectrum = np.zeros(N_ANCHOR_BINS, dtype=np.float32)
 
@@ -321,4 +321,4 @@ def synthesize_reference_anchor(
     Returns:
         AnchorResult mit 128-dim Spektral-Anker und Metadaten.
     """
-    return get_reference_anchor_synthesizer().synthesize(era_decade, genre_label, material)
+    return get_reference_anchor_synthesizer().synthesize(era_decade, genre_label, material)  # type: ignore[return-value]

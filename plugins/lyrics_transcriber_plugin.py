@@ -156,7 +156,7 @@ class LyricsTranscriber:
                 _reg_plm(
                     "WhisperTiny",
                     size_gb=0.41,
-                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_session_loaded", False),
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_session_loaded", False),  # type: ignore[func-returns-value]
                 )
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
@@ -345,11 +345,11 @@ class LyricsTranscriber:
             from scipy.signal import resample_poly  # type: ignore[import]
 
             g = gcd(self.WHISPER_SR, sr)
-            return resample_poly(mono, self.WHISPER_SR // g, sr // g).astype(np.float32)
+            return resample_poly(mono, self.WHISPER_SR // g, sr // g).astype(np.float32)  # type: ignore[no-any-return]
         except Exception:
             target_len = int(len(mono) * self.WHISPER_SR / sr)
             indices = np.linspace(0, len(mono) - 1, max(target_len, 1))
-            return np.interp(indices, np.arange(len(mono)), mono).astype(np.float32)
+            return np.interp(indices, np.arange(len(mono)), mono).astype(np.float32)  # type: ignore[no-any-return]
 
     def _compute_log_mel(self, audio_16k: np.ndarray) -> np.ndarray:
         """Log-Mel-Spektrogramm [1, 80, 3000] für Whisper-Eingang (30 s @ 16 kHz).
@@ -379,7 +379,7 @@ class LyricsTranscriber:
                 break
 
         if not stft_frames:
-            return np.zeros((1, n_mels, target_frames), dtype=np.float32)
+            return np.zeros((1, n_mels, target_frames), dtype=np.float32)  # type: ignore[no-any-return]
 
         stft = np.stack(stft_frames[:target_frames], axis=1)  # [n_fft//2+1, T]
 
@@ -395,7 +395,7 @@ class LyricsTranscriber:
         T = log_mel.shape[1]
         log_mel = np.pad(log_mel, ((0, 0), (0, target_frames - T))) if target_frames > T else log_mel[:, :target_frames]
 
-        return log_mel[np.newaxis].astype(np.float32)  # [1, 80, 3000]
+        return log_mel[np.newaxis].astype(np.float32)  # type: ignore[no-any-return]  # [1, 80, 3000]
 
     def _mel_filterbank(self, n_fft: int, n_mels: int, sr: int) -> np.ndarray:
         """Dreiecks-Mel-Filterbank [n_mels × (n_fft//2+1)].
@@ -411,7 +411,7 @@ class LyricsTranscriber:
             return 2595.0 * math.log10(1.0 + f / 700.0)
 
         def mel_to_hz(m: float) -> float:
-            return 700.0 * (10.0 ** (m / 2595.0) - 1.0)
+            return 700.0 * (10.0 ** (m / 2595.0) - 1.0)  # type: ignore[no-any-return]
 
         mel_min = hz_to_mel(0.0)
         mel_max = hz_to_mel(float(sr) / 2.0)
@@ -426,7 +426,7 @@ class LyricsTranscriber:
                     filters[m, k] = (f - f_lo) / max(f_c - f_lo, 1e-8)
                 elif f_c < f <= f_hi:
                     filters[m, k] = (f_hi - f) / max(f_hi - f_c, 1e-8)
-        return filters
+        return filters  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # DSP-Fallback (kein Whisper nötig)
@@ -594,7 +594,7 @@ class LyricsTranscriber:
         try:
             from backend.core.phoneme_timeline import _detect_language as _ptl_detect
 
-            return _ptl_detect(mono, sr)
+            return _ptl_detect(mono, sr)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.debug("LyricsTranscriber._detect_language_from_mono failed: %s", exc)
             return ("unknown", 0.0)

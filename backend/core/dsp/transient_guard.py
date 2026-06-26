@@ -20,7 +20,7 @@ import numpy as np
 try:
     import librosa  # type: ignore[import-untyped]
 except Exception:  # pragma: no cover - optionale Abhängigkeit
-    librosa = None
+    librosa = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def _detect_onsets_simple(audio_mono: np.ndarray, sr: int, hop: int = 256) -> np
         if librosa is None:
             raise RuntimeError("librosa nicht verfügbar")
 
-        onsets = librosa.onset.onset_detect(y=audio_mono, sr=sr, hop_length=hop, units="samples", backtrack=True)
+        onsets = librosa.onset.onset_detect(y=audio_mono, sr=sr, hop_length=hop, units="samples", backtrack=True)  # type: ignore[attr-defined]
         return np.asarray(onsets, dtype=np.int64)  # type: ignore[no-any-return]
     except Exception:
         pass

@@ -366,16 +366,16 @@ class CompressionPhase(PhaseInterface):
             {
                 "processing": "applied",
                 "bands": 4,
-                "band_metrics": band_metrics,
-                "parallel_blend": parallel_blend,
+                "band_metrics": band_metrics,  # type: ignore[dict-item]
+                "parallel_blend": parallel_blend,  # type: ignore[dict-item]
                 "detection_mode": detection_mode,
-                "rms_change_db": round(float(rms_change_db), 2),
-                "dynamic_range_reduction_db": round(float(dr_reduction_db), 2),
-                "phase_locality_factor": phase_locality_factor,
-                "effective_strength": _effective_strength,
-                "processing_time_s": round(elapsed, 3),
-                "realtime_factor": round(realtime_factor, 2),
-                "quality_impact": 0.94,
+                "rms_change_db": round(float(rms_change_db), 2),  # type: ignore[dict-item]
+                "dynamic_range_reduction_db": round(float(dr_reduction_db), 2),  # type: ignore[dict-item]
+                "phase_locality_factor": phase_locality_factor,  # type: ignore[dict-item]
+                "effective_strength": _effective_strength,  # type: ignore[dict-item]
+                "processing_time_s": round(elapsed, 3),  # type: ignore[dict-item]
+                "realtime_factor": round(realtime_factor, 2),  # type: ignore[dict-item]
+                "quality_impact": 0.94,  # type: ignore[dict-item]
             }
         )
 
@@ -576,7 +576,7 @@ def _run_manual_demo() -> None:
         peak_in = float(np.percentile(np.abs(demo_audio), 99.9))
         dr_in = 20 * np.log10(peak_in / (rms_in + 1e-10))
 
-        phase_result = processor.process(demo_audio, sr, material)
+        phase_result = processor.process(demo_audio, sr, material)  # type: ignore[arg-type]
         processed = phase_result.audio
         meta = phase_result.metadata
 

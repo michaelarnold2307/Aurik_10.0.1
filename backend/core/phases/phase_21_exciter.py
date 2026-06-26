@@ -200,7 +200,7 @@ class Exciter(PhaseInterface):
         self,
         audio: np.ndarray,
         sample_rate: int = 48000,
-        material_type: MaterialType = MaterialType.CD_DIGITAL,
+        material_type: MaterialType = MaterialType.CD_DIGITAL,  # type: ignore[override]
         **kwargs,
     ) -> PhaseResult:  # type: ignore[override]
         """

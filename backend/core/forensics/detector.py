@@ -280,7 +280,7 @@ class MediaForensicsEngine:
             evidence.append(
                 ForensicEvidence(
                     feature="blockiness",
-                    detected_value=blockiness,
+                    detected_value=blockiness,  # type: ignore[arg-type]
                     expected_range=(0.1, 1.0),
                     confidence=0.7,
                     supports_media=[MediaType.MP3_128, MediaType.DIGITAL_NATIVE],

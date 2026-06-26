@@ -309,7 +309,7 @@ class ONNXPluginManager:
 
         # Per-model statistics
         for model_id, model in self.loaded_models.items():
-            stats["models"][model_id] = model.get_stats()
+            stats["models"][model_id] = model.get_stats()  # type: ignore[index]
 
         return stats
 

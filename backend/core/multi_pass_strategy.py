@@ -909,7 +909,7 @@ class MultiPassEngine:
             # Einmalig laden — alle Varianten nutzen dieselbe Instanz
             if self._restorer is None:
                 logger.info("Initialisiere UnifiedRestorerV3 (einmalig)...")
-                self._restorer = UnifiedRestorerV3()
+                self._restorer = UnifiedRestorerV3()  # type: ignore[assignment]
 
             _restore_mode = self._derive_restore_mode(config)
             logger.debug(

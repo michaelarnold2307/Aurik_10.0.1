@@ -1350,7 +1350,7 @@ class AurikAIFramework:
             self.vocal_enhancer = UnifiedVocalAIEnhancer(sample_rate=sample_rate)
             logger.info("✅ Aurik AI Framework Initialized (with Vocal AI)")
         else:
-            self.vocal_enhancer = None
+            self.vocal_enhancer = None  # type: ignore[assignment]
             logger.info("✅ Aurik AI Framework Initialized (Vocal AI not available)")
 
     def analyze(self, audio: np.ndarray) -> DefectDetectionResult:

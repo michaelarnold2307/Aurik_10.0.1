@@ -655,7 +655,7 @@ class GermanSchlagerClassifier:
             if len(audio) < sr:
                 return 0.35, "unknown", 120.0
 
-            tempo, _beats = librosa.beat.beat_track(y=audio, sr=sr)
+            tempo, _beats = librosa.beat.beat_track(y=audio, sr=sr)  # type: ignore[attr-defined]
             bpm = float(np.asarray(tempo, dtype=np.float64).flat[0])
             if bpm <= 0:
                 return 0.35, "unknown", 120.0
@@ -1014,7 +1014,7 @@ class GermanSchlagerClassifier:
 
             if len(mono) < sr:
                 return 2.0
-            onsets = librosa.onset.onset_detect(y=mono, sr=sr, units="time")
+            onsets = librosa.onset.onset_detect(y=mono, sr=sr, units="time")  # type: ignore[attr-defined]
             duration_s = len(mono) / sr
             return float(len(onsets) / max(duration_s, 1.0))
         except Exception:

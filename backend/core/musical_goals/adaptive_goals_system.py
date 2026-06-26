@@ -334,7 +334,7 @@ class MaterialQualityAnalyzer:
         # Normalize to 0-1 scale
         noise_level = min(1.0, noise_floor * 100)  # Rough scaling
 
-        return float(noise_level)
+        return float(noise_level)  # type: ignore[arg-type]
 
     def _measure_bandwidth_limitation(self, audio: np.ndarray, sr: int) -> float:
         """

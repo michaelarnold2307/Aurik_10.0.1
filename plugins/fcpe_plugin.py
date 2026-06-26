@@ -93,7 +93,7 @@ def _get_mel_basis() -> np.ndarray:
                     _MEL_BASIS_HOLDER[0] = np.eye(_FCPE_N_MELS, _FCPE_N_FFT // 2 + 1, dtype=np.float32)
     mel_basis = _MEL_BASIS_HOLDER[0]
     assert mel_basis is not None
-    return np.asarray(mel_basis, dtype=np.float32)
+    return np.asarray(mel_basis, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _compute_mel(audio_16k: np.ndarray) -> np.ndarray:
@@ -133,7 +133,7 @@ def _compute_mel(audio_16k: np.ndarray) -> np.ndarray:
     mel = np.log(np.maximum(mel, _FCPE_CLIP))  # (128, T)
     mel_arr = np.asarray(mel, dtype=np.float32)
 
-    return np.asarray(mel_arr.T, dtype=np.float32)  # (T, 128)
+    return np.asarray(mel_arr.T, dtype=np.float32)  # type: ignore[no-any-return]  # (T, 128)
 
 
 def _local_argmax_decode(salience: np.ndarray, threshold: float = _VOICED_THRESHOLD) -> tuple[np.ndarray, np.ndarray]:

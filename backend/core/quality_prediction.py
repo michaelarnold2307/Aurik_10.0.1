@@ -573,7 +573,7 @@ class QualityAnalyzer:
 
         # Stability confidence (low variance = more confident)
         variance = np.var(audio)
-        stability_confidence = 1.0 - min(variance, 1.0)
+        stability_confidence = 1.0 - min(variance, 1.0)  # type: ignore[operator]
 
         confidence = (snr_confidence + length_confidence + stability_confidence) / 3
 

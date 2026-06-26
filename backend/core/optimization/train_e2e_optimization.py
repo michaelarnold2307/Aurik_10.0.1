@@ -187,7 +187,7 @@ def train_e2e_optimization(
             is_best = val_metrics["total_perceptual_loss"] < best_val_loss
             best_val_loss = min(best_val_loss, val_metrics["total_perceptual_loss"])
 
-            framework.save_checkpoint(epoch, {"train": train_metrics, "val": val_metrics})
+            framework.save_checkpoint(epoch, {"train": train_metrics, "val": val_metrics})  # type: ignore[dict-item]
 
             if is_best:
                 logger.info("  *** New best validation loss: %.4f ***", best_val_loss)
@@ -203,7 +203,7 @@ def train_e2e_optimization(
     logger.info("\nTraining completed!")
 
 
-def train_hyperparameter_optimization(
+def train_hyperparameter_optimization(  # type: ignore[return]
     dataset_path: Path, output_path: Path, material_type: str, n_trials: int = 100, n_jobs: int = 4
 ) -> np.ndarray:
     """

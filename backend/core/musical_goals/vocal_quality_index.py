@@ -373,8 +373,8 @@ def _compute_articulation_score(
 
         # Broadband transient detection via spectral flux
         hop = 512
-        onset_strength_pre = librosa.onset.onset_strength(y=vocal_pre, sr=sr, hop_length=hop)
-        onset_strength_post = librosa.onset.onset_strength(y=vocal_post, sr=sr, hop_length=hop)
+        onset_strength_pre = librosa.onset.onset_strength(y=vocal_pre, sr=sr, hop_length=hop)  # type: ignore[attr-defined]
+        onset_strength_post = librosa.onset.onset_strength(y=vocal_post, sr=sr, hop_length=hop)  # type: ignore[attr-defined]
 
         min_len = min(len(onset_strength_pre), len(onset_strength_post))
         if min_len < 4:

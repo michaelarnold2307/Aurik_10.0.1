@@ -663,7 +663,7 @@ if __name__ == "__main__":
         logger.debug("")
 
         phase = OutputFormatOptimization()
-        demo_result = phase.process(test_signal_stereo, demo_sr, demo_material)
+        demo_result = phase.process(test_signal_stereo, demo_sr, demo_material)  # type: ignore[arg-type]
 
         logger.debug("✅ Professional Output Format Optimization:")
         logger.debug("   Input: %s Hz", demo_result.metrics["input_sample_rate"])

@@ -202,7 +202,7 @@ class AutonomousRestorationEngine:
         """
         # Store Denker context for full-processing UV3 call (§Dach: context propagation)
         _ctx_keys = ("global_plan", "chain_info", "defekt_hint", "mode", "material", "cached_defect_result")
-        self._denker_context: dict = {k: v for k, v in kwargs.items() if k in _ctx_keys and v is not None}
+        self._denker_context: dict = {k: v for k, v in kwargs.items() if k in _ctx_keys and v is not None}  # type: ignore[no-redef]
         start_time = time.perf_counter()
         audit: list[dict[str, Any]] = []
 
@@ -744,7 +744,7 @@ class AutonomousRestorationEngine:
         return ProcessingVariant(
             name=variant_name,
             strategy=VariantStrategy.BALANCED,
-            config=config,
+            config=config,  # type: ignore[arg-type]
             description=description,
             weight=1.2,  # leicht bevorzugt beim Scoring
         )

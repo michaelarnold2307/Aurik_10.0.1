@@ -176,7 +176,7 @@ class PsychoacousticCore:
             )
             self.masking_analyzer = MaskingAnalyzer(masking_config)
         else:
-            self.masking_analyzer = None
+            self.masking_analyzer = None  # type: ignore[assignment]
 
         if self.config.enable_fletcher_munson:
             fm_config = FletcherMunsonConfig(
@@ -184,7 +184,7 @@ class PsychoacousticCore:
             )
             self.fm_processor = FletcherMunsonProcessor(fm_config)
         else:
-            self.fm_processor = None
+            self.fm_processor = None  # type: ignore[assignment]
 
         logger.info("PsychoacousticCore initialized with all components enabled")
 

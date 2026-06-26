@@ -190,8 +190,8 @@ class EmotionalArcPlanner:
                 if isinstance(zone, (list, tuple)) and len(zone) >= 2:
                     t_start, t_end = float(zone[0]), float(zone[1])
                 elif isinstance(zone, dict):
-                    t_start = float(zone.get("start", zone.get("t_start", 0.0)))
-                    t_end = float(zone.get("end", zone.get("t_end", 0.0)))
+                    t_start = float(zone.get("start", zone.get("t_start", 0.0)))  # type: ignore[arg-type]
+                    t_end = float(zone.get("end", zone.get("t_end", 0.0)))  # type: ignore[arg-type]
                 else:
                     continue
                 i_s = max(0, int(t_start / _RESOLUTION_S))

@@ -151,7 +151,7 @@ class SongStructureAnalyzer:
         # Anzahl Boundaries heuristisch: 1 pro ~30 s, min 2, max 12
         k = max(2, min(12, int(duration_s / 30) + 1))
         try:
-            boundaries = librosa.segment.agglomerative(features, k)
+            boundaries = librosa.segment.agglomerative(features, k)  # type: ignore[attr-defined]
             boundary_times = librosa.frames_to_time(boundaries, sr=sr, hop_length=hop)
         except Exception:
             # Fallback: gleichmäßige Aufteilung

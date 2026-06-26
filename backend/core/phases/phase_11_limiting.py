@@ -653,7 +653,7 @@ def _run_manual_demo() -> None:
         logger.debug("Material: %s", material.name)
         logger.debug("%s", "─" * 80)
 
-        result = phase.process(test_audio_stereo, demo_sample_rate, material)
+        result = phase.process(test_audio_stereo, demo_sample_rate, material)  # type: ignore[arg-type]
 
         if result.success and result.metadata.get("limiting_applied"):
             logger.debug("\n✅ Multi-Band True Peak Limiting:")

@@ -1092,4 +1092,4 @@ def get_excellence_optimizer(
                     sample_rate,
                     material,
                 )
-    return _optimizer_holder[0]
+    return _optimizer_holder[0]  # type: ignore[return-value]

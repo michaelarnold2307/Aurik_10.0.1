@@ -641,13 +641,13 @@ class OptimizationIntegration:
         if strategy == "rand":
             policy = RandAugment(n_ops=n_ops, magnitude=magnitude, material_type=material_type)
         elif strategy == "auto":
-            policy = AutoAugment(n_policies=5, n_ops_per_policy=n_ops, material_type=material_type)
+            policy = AutoAugment(n_policies=5, n_ops_per_policy=n_ops, material_type=material_type)  # type: ignore[assignment]
 
             # Try to load pretrained policies
             policy_path = self.optimization_base_path / material_type / f"augmentation_policy_{material_type}.json"
             if policy_path.exists():
                 try:
-                    policy.load_policies(str(policy_path))
+                    policy.load_policies(str(policy_path))  # type: ignore[attr-defined]
                     logger.info("Loaded pretrained augmentation policy for %s", material_type)
                 except Exception as e:
                     logger.warning("Failed to load augmentation policy: %s", e)

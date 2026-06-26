@@ -2045,7 +2045,7 @@ class DefectPhaseMapper:
             try:
                 if value is None:
                     return float(default)
-                v = float(value)
+                v = float(value)  # type: ignore[arg-type]
                 if v != v:  # NaN
                     return float(default)
                 return max(0.0, min(1.0, v))

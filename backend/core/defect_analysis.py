@@ -186,8 +186,8 @@ class DefectAnalyzer:
         if librosa is None:
             return 0
         # Use onset detection with high threshold
-        onset_env = librosa.onset.onset_strength(y=audio, sr=sr)
-        onset_frames = librosa.onset.onset_detect(
+        onset_env = librosa.onset.onset_strength(y=audio, sr=sr)  # type: ignore[attr-defined]
+        onset_frames = librosa.onset.onset_detect(  # type: ignore[attr-defined]
             onset_envelope=onset_env,
             sr=sr,
             delta=0.5,  # High threshold for clicks
@@ -275,7 +275,7 @@ class DefectAnalyzer:
 
         if total_energy > 0:
             ratio = high_freq_energy / total_energy
-            return ratio > 0.1  # More than 10% high-freq energy
+            return ratio > 0.1  # type: ignore[return-value]  # More than 10% high-freq energy
 
         return False
 

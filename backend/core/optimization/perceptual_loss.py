@@ -136,8 +136,8 @@ class MultiResolutionSTFTLoss(nn.Module):
         # Weighted combination
         total_loss = self.spectral_convergence_weight * total_sc_loss + self.log_magnitude_weight * total_mag_loss
 
-        details["total_sc_loss"] = total_sc_loss.item()
-        details["total_mag_loss"] = total_mag_loss.item()
+        details["total_sc_loss"] = total_sc_loss.item()  # type: ignore[attr-defined]
+        details["total_mag_loss"] = total_mag_loss.item()  # type: ignore[attr-defined]
 
         return total_loss, details
 
@@ -533,17 +533,17 @@ class CombinedPerceptualLoss(nn.Module):
         if use_panns:
             self.panns_loss = PANNsPerceptualLoss()
         else:
-            self.panns_loss = None
+            self.panns_loss = None  # type: ignore[assignment]
 
         if use_psychoacoustic:
             self.psychoacoustic_loss = PsychoacousticMaskingLoss(sr=sr)
         else:
-            self.psychoacoustic_loss = None
+            self.psychoacoustic_loss = None  # type: ignore[assignment]
 
         if use_musical:
             self.musical_loss = MusicalFeatureLoss(sr=sr)
         else:
-            self.musical_loss = None
+            self.musical_loss = None  # type: ignore[assignment]
 
         logger.info("CombinedPerceptualLoss initialized with sr=%s", sr)
         logger.info("  STFT weight: %s", stft_weight)

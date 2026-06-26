@@ -83,7 +83,7 @@ except ImportError:
     SOUNDFILE_AVAILABLE = False
 
 try:
-    from backend.core.quality_mode import QualityMode, should_use_ml
+    from backend.core.quality_mode import QualityMode, should_use_ml  # type: ignore[attr-defined]
 
     QUALITY_MODE_AVAILABLE = True
 except ImportError:

@@ -3267,7 +3267,7 @@ class DefectScanner:
         locations: list[tuple[float, float]] = []
         if severity > 0.0 and len(rms_series) >= 4:
             wow_dev = np.abs(rms_series - 1.0)
-            wow_thr = float(max(np.percentile(wow_dev, 80.0), 0.05))
+            wow_thr = float(max(np.percentile(wow_dev, 80.0), 0.05))  # type: ignore[arg-type]
             wow_mask_frames = wow_dev >= wow_thr
             if np.any(wow_mask_frames):
                 starts = np.where(np.diff(np.concatenate(([0], wow_mask_frames.astype(np.int8), [0]))) == 1)[0]
@@ -3661,7 +3661,7 @@ class DefectScanner:
         locations: list[tuple[float, float]] = []
         if severity > 0.0 and len(centroid_norm) >= 8:
             flutter_dev = np.abs(centroid_norm)
-            flutter_thr = float(max(np.percentile(flutter_dev, 80.0), 0.015))
+            flutter_thr = float(max(np.percentile(flutter_dev, 80.0), 0.015))  # type: ignore[arg-type]
             flutter_mask_frames = flutter_dev >= flutter_thr
             if np.any(flutter_mask_frames):
                 starts = np.where(np.diff(np.concatenate(([0], flutter_mask_frames.astype(np.int8), [0]))) == 1)[0]
@@ -7072,7 +7072,7 @@ class DefectScanner:
                     _near_t = np.sum(_p_t[_near_mask_t, :], axis=0)
                     _mid_t = np.sum(_p_t[_mid_mask_t, :], axis=0) + 1e-12
                     _ratio_t = _near_t / _mid_t
-                    _r_thr = float(max(np.percentile(_ratio_t, 75.0), 1.05))
+                    _r_thr = float(max(np.percentile(_ratio_t, 75.0), 1.05))  # type: ignore[arg-type]
                     _mask_t = _ratio_t >= _r_thr
                     if np.any(_mask_t):
                         _starts = np.where(np.diff(np.concatenate(([0], _mask_t.astype(np.int8), [0]))) == 1)[0]

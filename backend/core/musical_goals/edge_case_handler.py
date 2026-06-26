@@ -508,7 +508,7 @@ class EdgeCaseHandler:
         rumble_energy = np.mean(rumble**2)
         total_energy = np.mean(audio**2)
 
-        return (rumble_energy / (total_energy + 1e-10)) > 0.15
+        return (rumble_energy / (total_energy + 1e-10)) > 0.15  # type: ignore[return-value]
 
     def _detect_hiss(self, audio: np.ndarray, sr: int) -> bool:
         """Erkennt high-frequency hiss (> 6 kHz)."""
@@ -523,7 +523,7 @@ class EdgeCaseHandler:
         total_energy = np.mean(audio**2)
 
         # Lower threshold to 5% for better sensitivity
-        return (hiss_energy / (total_energy + 1e-10)) > 0.05
+        return (hiss_energy / (total_energy + 1e-10)) > 0.05  # type: ignore[return-value]
 
     def _detect_crackles(self, audio: np.ndarray, sr: int) -> bool:
         """Erkennt crackles (rapid impulses)."""
@@ -538,7 +538,7 @@ class EdgeCaseHandler:
         zcr = librosa.feature.zero_crossing_rate(filtered)[0]
         mean_zcr = np.mean(zcr)
 
-        return mean_zcr > 0.15
+        return mean_zcr > 0.15  # type: ignore[return-value]
 
     def _detect_dropouts(self, audio: np.ndarray, sr: int) -> bool:
         """Erkennt dropouts (sudden energy drops)."""
@@ -779,8 +779,8 @@ class EdgeCaseHandler:
             bass_ratio=bass_ratio,
             mid_ratio=mid_ratio,
             treble_ratio=treble_ratio,
-            spectral_centroid=spectral_centroid,
-            spectral_bandwidth=spectral_bandwidth,
+            spectral_centroid=spectral_centroid,  # type: ignore[arg-type]
+            spectral_bandwidth=spectral_bandwidth,  # type: ignore[arg-type]
             missing_bands=missing_bands,
         )
 

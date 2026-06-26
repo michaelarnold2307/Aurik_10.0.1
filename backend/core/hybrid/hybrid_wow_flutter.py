@@ -356,7 +356,7 @@ class HybridWowFlutter:
             from plugins.fcpe_plugin import get_fcpe_plugin
 
             self.crepe = get_fcpe_plugin()
-            logger.info("FCPE pitch plugin loaded for wow/flutter detection (model=%s)", self.crepe.model_used)
+            logger.info("FCPE pitch plugin loaded for wow/flutter detection (model=%s)", self.crepe.model_used)  # type: ignore[attr-defined]
             return
         except Exception as e:
             logger.debug("FCPE-Plugin nicht verfügbar (%s) — RMVPE-Fallback (§4.4 Tier-2)", e)
@@ -473,7 +473,7 @@ class HybridWowFlutter:
         processing_time = time.time() - start_time
         valid = confidence[confidence > 0]
         mean_confidence = float(np.mean(valid)) if len(valid) > 0 else 0.0
-        metadata["processing_time"] = processing_time
+        metadata["processing_time"] = processing_time  # type: ignore[assignment]
 
         return WowFlutterResult(
             pitch_trajectory=pitch_trajectory,

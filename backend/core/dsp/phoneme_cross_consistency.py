@@ -149,7 +149,7 @@ def _compute_mfcc(mono_16k: np.ndarray, n_mfcc: int = _N_MFCC) -> np.ndarray:
         spectrum = np.abs(np.fft.rfft(windowed)) ** 2
         mel_energy = filterbank @ spectrum + 1e-12
         log_mel = np.log(mel_energy)
-        mfcc = np.fft.dct(log_mel, type=2, norm="ortho")[:n_mfcc]
+        mfcc = np.fft.dct(log_mel, type=2, norm="ortho")[:n_mfcc]  # type: ignore[attr-defined]
         mfccs.append(mfcc)
 
     if not mfccs:
@@ -368,7 +368,7 @@ class PhonemeConsistencyMonitor:
             )
 
             lge = get_lyrics_guided_enhancement()
-            if lge.is_loaded():
+            if lge.is_loaded():  # type: ignore[attr-defined]
                 result = lge.transcribe(self._orig, self._sr)
                 segs = []
                 for word in result.words:

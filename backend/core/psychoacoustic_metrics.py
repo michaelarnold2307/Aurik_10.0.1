@@ -279,7 +279,7 @@ class PsychoAcousticMetrics:
 
         # Low variance in quiet RMS = consistent noise floor
         variance = np.std(quiet_rms) / (np.mean(quiet_rms) + 1e-10)
-        consistency = 1.0 - min(1.0, variance * 10)
+        consistency = 1.0 - min(1.0, variance * 10)  # type: ignore[operator]
         # NaN/Inf-Guard (§3.1)
         consistency = np.nan_to_num(consistency, nan=0.5, posinf=1.0, neginf=0.0)
         return float(consistency)

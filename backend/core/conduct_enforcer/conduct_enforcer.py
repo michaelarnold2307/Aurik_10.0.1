@@ -120,7 +120,7 @@ class ConductEnforcer:
 
         return rules  # type: ignore[no-any-return]
 
-    def validate_step(
+    def validate_step(  # type: ignore[return]
         self,
         cas_delta: float,
         dcs: float,

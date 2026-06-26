@@ -161,7 +161,7 @@ class HybridMLDenoiser:
 
             # Estimate quality after OMLSA
             quality_estimate = self._estimate_quality(audio, sample_rate)
-            metadata["quality_after_omlsa"] = quality_estimate
+            metadata["quality_after_omlsa"] = quality_estimate  # type: ignore[assignment]
 
             logger.info("OMLSA complete: quality=%.3f", quality_estimate)
 
@@ -205,7 +205,7 @@ class HybridMLDenoiser:
 
                     # Re-estimate quality after Resemble
                     quality_estimate = self._estimate_quality(audio, sample_rate)
-                    metadata["quality_after_resemble"] = quality_estimate
+                    metadata["quality_after_resemble"] = quality_estimate  # type: ignore[assignment]
 
                     logger.info("Resemble complete: quality=%.3f", quality_estimate)
                 finally:
@@ -215,7 +215,7 @@ class HybridMLDenoiser:
                 logger.warning("Resemble not available, using OMLSA result")
 
         processing_time = time.time() - start_time
-        metadata["processing_time"] = processing_time
+        metadata["processing_time"] = processing_time  # type: ignore[assignment]
 
         return DenoiseResult(
             audio=audio,
@@ -329,7 +329,7 @@ class HybridMLDenoiser:
 
         if not self._has_sufficient_ml_headroom(audio, sample_rate):
             metadata["success"] = False
-            metadata["error"] = "OOM guard: insufficient RAM"
+            metadata["error"] = "OOM guard: insufficient RAM"  # type: ignore[assignment]
             return audio, metadata
 
         # Write to temp file (Resemble needs file I/O)

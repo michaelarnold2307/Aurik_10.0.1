@@ -154,7 +154,7 @@ class HybridVocalEnhancer:
         """
         shift = float(getattr(self.config, "formant_shift", 0.0))
         if abs(shift) < 0.01:
-            return audio, {"formant_shift": shift, "applied": False}
+            return audio, {"formant_shift": shift, "applied": False}  # type: ignore[return-value]
         from scipy.signal import butter, find_peaks, sosfilt, sosfiltfilt
 
         n = min(len(audio), 4096)
@@ -182,7 +182,7 @@ class HybridVocalEnhancer:
             band = sosfiltfilt(sos, _sig64) if _n64 >= 15 else sosfilt(sos, _sig64)
             result = result + band * gain_lin
         result = np.clip(result, -1.0, 1.0).astype(audio.dtype)
-        return result, {"formant_shift": shift, "applied": True, "peaks": len(peaks)}
+        return result, {"formant_shift": shift, "applied": True, "peaks": len(peaks)}  # type: ignore[return-value]
 
     def _apply_breath_ml(self, audio, sr) -> np.ndarray:
         """Atem-Reduktion via Frame-weise Energie/ZCR-Gate.
@@ -192,7 +192,7 @@ class HybridVocalEnhancer:
         """
         reduction = float(getattr(self.config, "breath_reduction", 0.5))
         if reduction < 0.01:
-            return audio, {"breath_reduction": reduction, "applied": False}
+            return audio, {"breath_reduction": reduction, "applied": False}  # type: ignore[return-value]
         hop = int(sr * 0.02)  # 20ms Frames
         n = len(audio)
         result = audio.copy().astype(np.float64)
@@ -206,7 +206,7 @@ class HybridVocalEnhancer:
                 fade = np.linspace(1.0 - reduction, 1.0 - reduction * 0.5, hop)
                 result[i : i + hop] *= fade
                 breath_frames += 1
-        return result.astype(audio.dtype), {
+        return result.astype(audio.dtype), {  # type: ignore[return-value]
             "breath_reduction": reduction,
             "applied": True,
             "breath_frames": breath_frames,
@@ -220,10 +220,10 @@ class HybridVocalEnhancer:
             strength = float(getattr(self.config, "deesser_strength", 0.7))
             de_esser = MLDeEsser(reduction_db=strength * 12.0)
             result = de_esser.process(audio.astype(np.float64), sr)
-            return result.astype(audio.dtype), {"deesser_strength": strength, "applied": True}
+            return result.astype(audio.dtype), {"deesser_strength": strength, "applied": True}  # type: ignore[return-value]
         except Exception as exc:
             logger.warning("MLDeEsser nicht verfügbar: %s", exc)
-            return audio, {"deesser_strength": 0.0, "applied": False}
+            return audio, {"deesser_strength": 0.0, "applied": False}  # type: ignore[return-value]
 
     def _apply_dynamic_compression(self, audio, amount) -> np.ndarray:
         # Simpler Kompressor (Soft-Knee, statisch)

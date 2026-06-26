@@ -296,9 +296,9 @@ class MicrodynamicsAnalyzer:
         if crest_std > 2.0:
             score = 1.0
         elif crest_std > 1.0:
-            score = 0.6 + (crest_std - 1.0) / 1.0 * 0.4
+            score = 0.6 + (crest_std - 1.0) / 1.0 * 0.4  # type: ignore[assignment]
         else:
-            score = crest_std / 1.0 * 0.6
+            score = crest_std / 1.0 * 0.6  # type: ignore[assignment]
 
         return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
@@ -316,10 +316,10 @@ class MicrodynamicsAnalyzer:
             Transient diversity score: 0.0 = few/monotone, 1.0 = many/diverse
         """
         # Compute onset strength envelope
-        onset_env = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=512)
+        onset_env = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=512)  # type: ignore[attr-defined]
 
         # Detect transients (peaks in onset envelope)
-        transient_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=512, backtrack=False)
+        transient_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=512, backtrack=False)  # type: ignore[attr-defined]
 
         if len(transient_frames) < 5:
             # Very few transients

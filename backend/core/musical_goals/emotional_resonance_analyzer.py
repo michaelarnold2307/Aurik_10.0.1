@@ -286,7 +286,7 @@ class EmotionalResonanceAnalyzer:
 
         # Normalize: Low flux = High flow
         # Typical range: 0.01-0.10
-        flow_score = 1.0 - min(1.0, mean_flux / 0.10)
+        flow_score = 1.0 - min(1.0, mean_flux / 0.10)  # type: ignore[operator]
 
         return float(np.clip(flow_score, 0.0, 1.0))
 

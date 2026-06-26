@@ -330,9 +330,9 @@ class LoudnessAnalyzer:
                 # LRA ≈ difference between 95th and 10th percentile
                 lra = np.percentile(short_term_loudness, 95) - np.percentile(short_term_loudness, 10)
             else:
-                lra = 0.0
+                lra = 0.0  # type: ignore[assignment]
         except Exception:
-            lra = 0.0
+            lra = 0.0  # type: ignore[assignment]
 
         # True Peak (dBTP)
         # True Peak = Sample Peak level considering inter-sample peaks
@@ -568,7 +568,7 @@ class BWFMetadataWriter:
                     # RIFF-Größe anpassen
                     new_riff_size = len(new_raw) - 8
                     new_raw = new_raw[:4] + struct.pack("<I", new_riff_size) + new_raw[8:]
-                    with open(audio_file_path, "wb") as fh:
+                    with open(audio_file_path, "wb") as fh:  # type: ignore[assignment]
                         fh.write(new_raw)
                     logger.info("BWF/BEXT-Chunk geschrieben: %s (%s Bytes)", audio_file_path, len(bext_content))
                     return True
