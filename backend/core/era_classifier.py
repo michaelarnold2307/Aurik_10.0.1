@@ -270,7 +270,7 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
         frame_fft = np.abs(np.fft.rfft(frame)) ** 2
         frames.append(frame_fft)
     if not frames:
-        return np.ones(24) / 24.0
+        return np.ones(24) / 24.0  # type: ignore[no-any-return]
     psd = np.mean(np.array(frames), axis=0)
     freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
 
@@ -281,7 +281,7 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
 
     total = energies.sum()
     if total < 1e-12:
-        return np.ones(24, dtype=np.float32) / 24.0
+        return np.ones(24, dtype=np.float32) / 24.0  # type: ignore[no-any-return]
     normalized: np.ndarray = np.nan_to_num(energies / total).astype(np.float32)
     return normalized
 

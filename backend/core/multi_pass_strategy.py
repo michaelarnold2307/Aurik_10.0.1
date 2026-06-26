@@ -926,7 +926,7 @@ class MultiPassEngine:
 
             # V3 gibt RestorationResult zurück — audio-Array extrahieren
             if hasattr(result, "audio") and result.audio is not None:
-                return result.audio
+                return result.audio  # type: ignore[no-any-return]
             raise RuntimeError("UnifiedRestorerV3 returned no audio payload for variant evaluation")
 
         except Exception as e:

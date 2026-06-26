@@ -533,12 +533,12 @@ class VocalNoHarmGate:
     def _to_mono(audio: np.ndarray) -> np.ndarray:
         arr = np.asarray(audio, dtype=np.float32)
         if arr.ndim == 1:
-            return arr
+            return arr  # type: ignore[no-any-return]
         if arr.ndim == 2 and arr.shape[0] <= 8:
             return cast(np.ndarray, np.asarray(np.mean(arr, axis=0), dtype=np.float32))
         if arr.ndim == 2:
             return cast(np.ndarray, np.asarray(np.mean(arr, axis=1), dtype=np.float32))
-        return arr.reshape(-1).astype(np.float32)
+        return arr.reshape(-1).astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _rms_db(audio: np.ndarray) -> float:

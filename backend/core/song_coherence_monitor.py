@@ -137,12 +137,12 @@ class SongCoherenceMonitor:
     @staticmethod
     def _to_mono(audio: np.ndarray) -> np.ndarray:
         if audio.ndim == 1:
-            return audio.astype(np.float32)
+            return audio.astype(np.float32)  # type: ignore[no-any-return]
         if audio.ndim == 2:
             if audio.shape[0] == 2 and audio.shape[1] > 2:
-                return audio.mean(axis=0).astype(np.float32)
-            return audio.mean(axis=-1).astype(np.float32)
-        return audio.flatten().astype(np.float32)
+                return audio.mean(axis=0).astype(np.float32)  # type: ignore[no-any-return]
+            return audio.mean(axis=-1).astype(np.float32)  # type: ignore[no-any-return]
+        return audio.flatten().astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _compute_fingerprints(mono: np.ndarray, sr: int) -> tuple[list[np.ndarray], list[tuple[float, float]]]:
@@ -181,7 +181,7 @@ class SongCoherenceMonitor:
             import librosa as _lb  # pylint: disable=import-outside-toplevel
 
             mfcc = _lb.feature.mfcc(y=seg, sr=sr, n_mfcc=_N_MFCC, n_fft=2048, hop_length=512)
-            return mfcc.mean(axis=1).astype(np.float32)
+            return mfcc.mean(axis=1).astype(np.float32)  # type: ignore[no-any-return]
         except Exception:
             pass
 
@@ -205,7 +205,7 @@ class SongCoherenceMonitor:
                 energy_accum[k] += float(np.sum(mag[mask]) + 1e-10)
 
         bands = np.log1p(energy_accum / max(n_frames, 1))
-        return bands
+        return bands  # type: ignore[no-any-return]
 
     @staticmethod
     def _cosine_similarities(fp_array: np.ndarray, reference: np.ndarray) -> np.ndarray:
@@ -215,7 +215,7 @@ class SongCoherenceMonitor:
         row_norms = np.linalg.norm(fp_array, axis=1, keepdims=True) + 1e-10
         fp_unit = fp_array / row_norms
         sims = np.clip(fp_unit @ ref_unit, 0.0, 1.0)
-        return sims.astype(np.float32)
+        return sims.astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

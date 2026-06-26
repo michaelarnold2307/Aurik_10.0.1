@@ -451,7 +451,7 @@ class E2EOptimizationFramework:
         # Optimizer step
         optimizer.step()
 
-        return loss_details
+        return loss_details  # type: ignore[no-any-return]
 
     def train_epoch(self, dataloader: Any, epoch: int) -> dict[str, float]:
         """

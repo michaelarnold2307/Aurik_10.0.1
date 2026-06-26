@@ -435,7 +435,7 @@ class HybridNVSR:
         except Exception:
             pass
         try:
-            return plugin.process(audio, sample_rate, target_sr=self.config.audiosr_target_sr)
+            return plugin.process(audio, sample_rate, target_sr=self.config.audiosr_target_sr)  # type: ignore[no-any-return]
         finally:
             if _plm_nvsr is not None:
                 try:
@@ -487,7 +487,7 @@ class HybridNVSR:
         # Blend: keep DSP low frequencies, add AudioSR high frequencies
         blended = audio_a_low + blend_ratio * audio_b_high
 
-        return blended
+        return blended  # type: ignore[no-any-return]
 
 
 def create_nvsr_config(quality_mode: str = "balanced", material_type: str = "unknown") -> NVSRConfig:

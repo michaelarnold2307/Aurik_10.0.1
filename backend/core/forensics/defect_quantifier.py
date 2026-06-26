@@ -28,21 +28,21 @@ logger = logging.getLogger(__name__)
 
 def _as_real_array(audio: np.ndarray) -> np.ndarray:
     """Gibt a contiguous real-valued ndarray for signal processing calls zurück."""
-    return np.asarray(audio, dtype=np.float64).reshape(-1)
+    return np.asarray(audio, dtype=np.float64).reshape(-1)  # type: ignore[no-any-return]
 
 
 def _analytic_envelope(audio: np.ndarray) -> np.ndarray:
     """Gibt absolute Hilbert envelope as ndarray with explicit typing zurück."""
     analytic = np.asarray(signal.hilbert(_as_real_array(audio)), dtype=np.complex128)
-    return np.abs(analytic)
+    return np.abs(analytic)  # type: ignore[no-any-return]
 
 
 def _sosfilt_array(sos: np.ndarray, audio: np.ndarray) -> np.ndarray:
     """Gibt only filtered audio ndarray from scipy.signal.sosfilt zurück."""
     filtered = signal.sosfilt(sos, _as_real_array(audio))
     if isinstance(filtered, tuple):
-        return np.asarray(filtered[0], dtype=np.float64)
-    return np.asarray(filtered, dtype=np.float64)
+        return np.asarray(filtered[0], dtype=np.float64)  # type: ignore[no-any-return]
+    return np.asarray(filtered, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def _rfft_magnitude(audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 def _as_mono_float_array(audio: np.ndarray) -> np.ndarray:
     """Gibt audio as a contiguous 1D float64 ndarray for NumPy/SciPy ops zurück."""
-    return np.asarray(audio, dtype=np.float64).reshape(-1)
+    return np.asarray(audio, dtype=np.float64).reshape(-1)  # type: ignore[no-any-return]
 
 
 # ============================================================================

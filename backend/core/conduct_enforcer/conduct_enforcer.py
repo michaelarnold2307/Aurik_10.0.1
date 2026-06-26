@@ -118,7 +118,7 @@ class ConductEnforcer:
         with open(self.rules_path, encoding="utf-8") as f:
             rules = yaml.safe_load(f)
 
-        return rules
+        return rules  # type: ignore[no-any-return]
 
     def validate_step(
         self,

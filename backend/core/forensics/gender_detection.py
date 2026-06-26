@@ -59,4 +59,4 @@ class GenderDetector:
         peak = np.argmax(corr[start:]) + start
         if peak == 0:
             return 0
-        return sr / peak
+        return sr / peak  # type: ignore[no-any-return]

@@ -1930,7 +1930,7 @@ def _apply_precise_metric_overrides(
             seg = max(1, cap // 3)
             starts = [0, max(0, (n - seg) // 2), max(0, n - seg)]
             parts = [arr[s : s + seg] for s in starts]
-            return np.concatenate(parts, axis=0)
+            return np.concatenate(parts, axis=0)  # type: ignore[no-any-return]
 
         if arr.ndim == 2:
             is_channel_first = arr.shape[0] <= 2 and arr.shape[1] > arr.shape[0]
@@ -1941,9 +1941,9 @@ def _apply_precise_metric_overrides(
             starts = [0, max(0, (time_len - seg) // 2), max(0, time_len - seg)]
             if is_channel_first:
                 parts = [arr[:, s : s + seg] for s in starts]
-                return np.concatenate(parts, axis=1)
+                return np.concatenate(parts, axis=1)  # type: ignore[no-any-return]
             parts = [arr[s : s + seg, :] for s in starts]
-            return np.concatenate(parts, axis=0)
+            return np.concatenate(parts, axis=0)  # type: ignore[no-any-return]
 
         return arr
 
@@ -2033,7 +2033,7 @@ def _measure_vocal_guard_features(
 
     def _band_vector(signal_mono: np.ndarray, lo: float, hi: float, bands: int) -> np.ndarray:
         if len(signal_mono) < 64:
-            return np.zeros(bands, dtype=np.float32)
+            return np.zeros(bands, dtype=np.float32)  # type: ignore[no-any-return]
         band_edges = np.exp(np.linspace(np.log(lo), np.log(hi), bands + 1)).astype(np.float32)
         mag, freqs_arr = _mean_fft(signal_mono)
         vec = np.zeros(bands, dtype=np.float32)
@@ -2041,7 +2041,7 @@ def _measure_vocal_guard_features(
             mask = (freqs_arr >= band_edges[band_idx]) & (freqs_arr < band_edges[band_idx + 1])
             if np.any(mask):
                 vec[band_idx] = float(np.mean(mag[mask] ** 2))
-        return vec
+        return vec  # type: ignore[no-any-return]
 
     try:
         fft_mag, freqs = _mean_fft(mono)
@@ -5068,7 +5068,7 @@ class PerPhaseMusicalGoalsGate:
             """NaN-safe, clipped fallback that preserves input shape/layout."""
             _x = np.nan_to_num(np.asarray(x), nan=0.0, posinf=0.0, neginf=0.0)
             _x = np.clip(_x, -1.0, 1.0).astype(np.float32, copy=False)
-            return np.asarray(_x)
+            return np.asarray(_x)  # type: ignore[no-any-return]
 
         # Timing-modifizierende Phasen: kein Wet/Dry (Phasen-Artefakte)
         _TIMING_PHASES = frozenset(
@@ -5173,7 +5173,7 @@ class PerPhaseMusicalGoalsGate:
                     out = (audio + strength * (out - audio)).astype(np.float32)
                     out = np.clip(out, -1.0, 1.0)
 
-            return np.asarray(out)
+            return np.asarray(out)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.debug("PMGG: Phase-Ausführung fehlgeschlagen: %s", exc)
             return _safe_audio_fallback(audio)
@@ -5223,13 +5223,13 @@ class PerPhaseMusicalGoalsGate:
                 return x[:target_len, ...]
             pad_rows = target_len - int(x.shape[0])
             pad_spec = [(0, pad_rows)] + [(0, 0)] * (max(x.ndim, 1) - 1)
-            return np.pad(x, pad_spec)
+            return np.pad(x, pad_spec)  # type: ignore[no-any-return]
 
         # Time axis must always match before blending.
         wet = _match_time_axis(wet, int(dry.shape[0]))
         if strength >= 1.0:
             out = np.clip(wet, -1.0, 1.0).astype(np.float32)
-            return out.T if _dry_ch_first and out.ndim == 2 else out
+            return out.T if _dry_ch_first and out.ndim == 2 else out  # type: ignore[no-any-return]
         if strength <= 0.0:
             out = dry.copy()
             return out.T if _dry_ch_first and out.ndim == 2 else out
@@ -5243,7 +5243,7 @@ class PerPhaseMusicalGoalsGate:
                 logger.debug("PMGG: Wet/Dry-Blend Phase-Metadata-Zugriff fehlgeschlagen: %s", _meta_exc)
         if phase_id in _TIMING_PHASES:
             out = np.clip(wet, -1.0, 1.0).astype(np.float32)
-            return out.T if _dry_ch_first and out.ndim == 2 else out
+            return out.T if _dry_ch_first and out.ndim == 2 else out  # type: ignore[no-any-return]
 
         # Stereo-safe handling: never run STFT blend on channel axis.
         if dry.ndim == 2 or wet.ndim == 2:
@@ -5259,7 +5259,7 @@ class PerPhaseMusicalGoalsGate:
                     wet = wet.mean(axis=1)
                 out_lin = (dry + strength * (wet - dry)).astype(np.float32)
                 out_lin = np.clip(out_lin, -1.0, 1.0)
-                return np.asarray(out_lin.T if _dry_ch_first and out_lin.ndim == 2 else out_lin)
+                return np.asarray(out_lin.T if _dry_ch_first and out_lin.ndim == 2 else out_lin)  # type: ignore[no-any-return]
 
             if dry.shape[1] != wet.shape[1]:
                 logger.debug(
@@ -5271,7 +5271,7 @@ class PerPhaseMusicalGoalsGate:
                 out = dry.copy()
                 out[:, :n_ch] = dry[:, :n_ch] + strength * (wet[:, :n_ch] - dry[:, :n_ch])
                 out = np.clip(out.astype(np.float32), -1.0, 1.0)
-                return out.T if _dry_ch_first and out.ndim == 2 else out
+                return out.T if _dry_ch_first and out.ndim == 2 else out  # type: ignore[no-any-return]
 
             if strength < 0.30 and dry.shape[0] >= 2048:
                 ch_out = []
@@ -5285,11 +5285,11 @@ class PerPhaseMusicalGoalsGate:
                         )
                     )
                 out = np.clip(np.stack(ch_out, axis=1).astype(np.float32), -1.0, 1.0)
-                return out.T if _dry_ch_first and out.ndim == 2 else out
+                return out.T if _dry_ch_first and out.ndim == 2 else out  # type: ignore[no-any-return]
 
             out = (dry + strength * (wet - dry)).astype(np.float32)
             out = np.clip(out, -1.0, 1.0)
-            return out.T if _dry_ch_first and out.ndim == 2 else out
+            return out.T if _dry_ch_first and out.ndim == 2 else out  # type: ignore[no-any-return]
 
         # §9.10.118: phase-aware STFT blending for low strengths to prevent
         # comb-filter artifacts from time-domain mixing of phase-shifted signals.
@@ -5319,13 +5319,13 @@ class PerPhaseMusicalGoalsGate:
                 elif len(out) < len(dry):
                     out = np.pad(out, (0, len(dry) - len(out)))
                 out = np.clip(out.astype(np.float32), -1.0, 1.0)
-                return out.T if _dry_ch_first and out.ndim == 2 else out
+                return out.T if _dry_ch_first and out.ndim == 2 else out  # type: ignore[no-any-return]
             except Exception as _stft_exc:
                 logger.debug("PMGG STFT-Blend fallback to linear: %s", _stft_exc)
 
         out = (dry + strength * (wet - dry)).astype(np.float32)
         out = np.clip(out, -1.0, 1.0)
-        return out.T if _dry_ch_first and out.ndim == 2 else out
+        return out.T if _dry_ch_first and out.ndim == 2 else out  # type: ignore[no-any-return]
 
     @staticmethod
     def _max_regression(

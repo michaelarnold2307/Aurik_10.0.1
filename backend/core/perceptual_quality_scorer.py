@@ -103,7 +103,7 @@ class PerceptualQualityScorer:
         # len() auf (2, N) liefert 2 (Kanäle), nicht Samples → würde Stub auslösen.
         def _to_mono(x: np.ndarray) -> np.ndarray:
             if x.ndim == 2:
-                return np.mean(x, axis=0) if x.shape[0] <= x.shape[1] else np.mean(x, axis=1)
+                return np.mean(x, axis=0) if x.shape[0] <= x.shape[1] else np.mean(x, axis=1)  # type: ignore[no-any-return]
             return x
 
         reference = _to_mono(reference)

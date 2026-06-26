@@ -105,7 +105,7 @@ def _hz_to_cents(f0_hz: np.ndarray, ref_hz: float = 440.0) -> np.ndarray:
     """F0 in Hz → Cent relativ zu ref_hz. 0 Hz → NaN."""
     with np.errstate(divide="ignore", invalid="ignore"):
         result = np.where(f0_hz > 0, 1200.0 * np.log2(f0_hz / ref_hz), np.nan)
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 def _nearest_scale_distance_cents(cents: float) -> float:

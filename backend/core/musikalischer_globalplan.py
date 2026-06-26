@@ -421,8 +421,8 @@ def _safe_mono(audio: np.ndarray) -> np.ndarray:
     """Konvertiert to mono without NaN propagation."""
     arr = np.nan_to_num(np.asarray(audio, dtype=np.float32))
     if arr.ndim == 2:
-        return arr.mean(axis=0) if arr.shape[0] <= arr.shape[1] else arr.mean(axis=1)
-    return arr
+        return arr.mean(axis=0) if arr.shape[0] <= arr.shape[1] else arr.mean(axis=1)  # type: ignore[no-any-return]
+    return arr  # type: ignore[no-any-return]
 
 
 def _estimate_warmth(mono: np.ndarray, sr: int) -> float:

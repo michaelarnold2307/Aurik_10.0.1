@@ -326,7 +326,7 @@ class PreEchoDetector:
         else:
             result[start:end] = audio_arr[start:end] * gain_profile
 
-        return result.astype(audio.dtype if hasattr(audio, "dtype") else np.float32)
+        return result.astype(audio.dtype if hasattr(audio, "dtype") else np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -338,19 +338,19 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Konvertiert beliebige Kanal-Geometrie zu Mono."""
     a = np.asarray(audio, dtype=np.float64)
     if a.ndim == 1:
-        return a
+        return a  # type: ignore[no-any-return]
     if a.ndim == 2:
         if a.shape[0] <= 2:
-            return np.asarray(a.mean(axis=0))
-        return np.asarray(a.mean(axis=1))
-    return np.asarray(a.flatten())
+            return np.asarray(a.mean(axis=0))  # type: ignore[no-any-return]
+        return np.asarray(a.mean(axis=1))  # type: ignore[no-any-return]
+    return np.asarray(a.flatten())  # type: ignore[no-any-return]
 
 
 def _frames_to_energy_db(mag: np.ndarray) -> np.ndarray:
     """Berechnet dBFS-Energie pro STFT-Frame aus Magnitude-Spektrogramm."""
     # mag: [freq_bins, n_frames]
     energy = np.mean(mag**2, axis=0) + 1e-12
-    return np.asarray(10.0 * np.log10(energy))
+    return np.asarray(10.0 * np.log10(energy))  # type: ignore[no-any-return]
 
 
 def _detect_onsets_energy_flux(
@@ -396,4 +396,4 @@ def _build_gain_profile(
         fade_out = np.linspace(target_gain, 1.0, cf)
         profile[:cf] = fade_in
         profile[-cf:] = fade_out
-    return profile
+    return profile  # type: ignore[no-any-return]

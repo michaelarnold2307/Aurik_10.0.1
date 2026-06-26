@@ -72,7 +72,7 @@ def _mfcc_fingerprint(audio_1ch: np.ndarray, sr: int, n_mfcc: int = _N_MFCC) -> 
     """
     n = len(audio_1ch)
     if n < 512:
-        return np.zeros(n_mfcc, dtype=np.float32)
+        return np.zeros(n_mfcc, dtype=np.float32)  # type: ignore[no-any-return]
 
     # Kurze STFT (fensterbasiert, ~50 ms Frames)
     frame_len = min(2048, max(512, n // 64))
@@ -104,7 +104,7 @@ def _mfcc_fingerprint(audio_1ch: np.ndarray, sr: int, n_mfcc: int = _N_MFCC) -> 
 
     # Normieren auf Einheitsnorm für Cosinus-Ähnlichkeit
     norm = np.linalg.norm(mel_features) + 1e-10
-    return (mel_features / norm).astype(np.float32)
+    return (mel_features / norm).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _octave_band_spectrum(audio_1ch: np.ndarray, sr: int, n_bands: int = _N_OCTAVE_BANDS) -> np.ndarray:
@@ -120,7 +120,7 @@ def _octave_band_spectrum(audio_1ch: np.ndarray, sr: int, n_bands: int = _N_OCTA
     """
     n = len(audio_1ch)
     if n < 256:
-        return np.zeros(n_bands, dtype=np.float32)
+        return np.zeros(n_bands, dtype=np.float32)  # type: ignore[no-any-return]
     fft = np.abs(np.fft.rfft(audio_1ch.astype(np.float64))) ** 2
     freqs = np.fft.rfftfreq(n, d=1.0 / sr)
     f_min, f_max = 80.0, min(20000.0, sr / 2.0)
@@ -181,7 +181,7 @@ def _apply_octave_correction(
     gain_linear = 10.0 ** (gain_db_curve / 20.0)
     spectrum *= gain_linear.astype(np.complex128)
     corrected = np.fft.irfft(spectrum, n=n).real.astype(np.float32)
-    return corrected
+    return corrected  # type: ignore[no-any-return]
 
 
 def check_musical_coherence(

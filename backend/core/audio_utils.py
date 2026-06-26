@@ -25,18 +25,18 @@ def safe_to_mono(audio: np.ndarray) -> np.ndarray:
     # Determine orientation and convert safely
     if audio.shape[0] == 2 and audio.shape[1] > 2:
         # (2, N) channels-first → mean over channels (axis=0)
-        return np.asarray(np.mean(audio, axis=0))
+        return np.asarray(np.mean(audio, axis=0))  # type: ignore[no-any-return]
     if audio.shape[0] == 2 and audio.shape[1] == 2:
         # Edge case: exactly (2, 2) — ambiguous, but treat as (2, N) channels-first
         # This gives a (2,) output
-        return np.asarray(np.mean(audio, axis=0))
+        return np.asarray(np.mean(audio, axis=0))  # type: ignore[no-any-return]
     if audio.shape[1] == 2:
         # (N, 2) channels-last → mean over channels (axis=1)
-        return np.asarray(np.mean(audio, axis=1))
+        return np.asarray(np.mean(audio, axis=1))  # type: ignore[no-any-return]
     # Ambiguous: use heuristic based on which dimension is smaller
     # (channels are typically 2, samples >> 2)
     axis = 0 if audio.shape[0] < audio.shape[1] else 1
-    return np.asarray(np.mean(audio, axis=axis))
+    return np.asarray(np.mean(audio, axis=axis))  # type: ignore[no-any-return]
 
 
 def stereo_channel_view(audio: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -57,11 +57,11 @@ def stereo_like(left: np.ndarray, right: np.ndarray, template: np.ndarray) -> np
     if template.ndim != 2:
         raise ValueError(f"Stereo template must be 2D, got shape {template.shape}")
     if template.shape[0] == 2 and template.shape[1] > 2:
-        return np.vstack([left, right])
+        return np.vstack([left, right])  # type: ignore[no-any-return]
     if template.shape[1] == 2:
-        return np.column_stack([left, right])
+        return np.column_stack([left, right])  # type: ignore[no-any-return]
     if template.shape[0] == 2 and template.shape[1] == 2:
-        return np.vstack([left, right])
+        return np.vstack([left, right])  # type: ignore[no-any-return]
     raise ValueError(f"Unsupported stereo template layout: {template.shape}")
 
 
@@ -406,19 +406,19 @@ def _scale_audio_region(
     out = np.array(audio, dtype=np.float32, copy=True)
     if out.ndim == 1:
         out[start:end] *= np.float32(scale)
-        return out
+        return out  # type: ignore[no-any-return]
     ch_first = out.shape[0] <= 2 and out.shape[1] > out.shape[0]
     if ch_first:
         if channel_index is None:
             out[:, start:end] *= np.float32(scale)
         else:
             out[channel_index, start:end] *= np.float32(scale)
-        return out
+        return out  # type: ignore[no-any-return]
     if channel_index is None:
         out[start:end, :] *= np.float32(scale)
     else:
         out[start:end, channel_index] *= np.float32(scale)
-    return out
+    return out  # type: ignore[no-any-return]
 
 
 def limit_quiet_edge_boost(
@@ -432,7 +432,7 @@ def limit_quiet_edge_boost(
     """Skaliert quiet intro/outro regions back toward the original edge level."""
     profile = _quiet_edge_guard_profile(reference_audio, sr, material_key=material_key)
     if profile is None:
-        return np.asarray(candidate_audio, dtype=np.float32)
+        return np.asarray(candidate_audio, dtype=np.float32)  # type: ignore[no-any-return]
 
     out = np.asarray(candidate_audio, dtype=np.float32)
     ref_channels, cand_channels = _match_edge_channel_views(reference_audio, out)
@@ -442,7 +442,7 @@ def limit_quiet_edge_boost(
         *(len(ch) for ch in cand_channels),
     )
     if n < max(int(sr * 2.0), 4_800):
-        return out
+        return out  # type: ignore[no-any-return]
 
     edge_len = int(profile["edge_len"])
     gate_dbfs = float(profile["gate_dbfs"])
@@ -488,7 +488,7 @@ def limit_quiet_edge_boost(
                 )
             out = _scale_audio_region(out, start, end, max(scale, 0.0), channel_index=channel_index)
             _, cand_channels = _match_edge_channel_views(reference_audio, out)
-    return out
+    return out  # type: ignore[no-any-return]
 
 
 def apply_musical_gain_envelope(  # pylint: disable=too-many-positional-arguments

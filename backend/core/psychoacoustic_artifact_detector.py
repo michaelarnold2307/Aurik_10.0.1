@@ -255,4 +255,4 @@ class PsychoacousticArtifactDetector:
             audio_f *= rms_in / rms_out
 
         self.detected_artifacts = [name for name, score in metrics.items() if score > 0.5]
-        return np.clip(audio_f, -1.0, 1.0).astype(audio.dtype)
+        return np.clip(audio_f, -1.0, 1.0).astype(audio.dtype)  # type: ignore[no-any-return]

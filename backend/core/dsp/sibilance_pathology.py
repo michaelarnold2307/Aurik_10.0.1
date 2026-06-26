@@ -104,7 +104,7 @@ def _bandpass_energy(mono: np.ndarray, sr: int, low: float, high: float) -> np.n
     frame_len = max(1, int(sr * 0.010))  # 10 ms
     n_frames = len(filtered) // frame_len
     energy = np.array([float(np.mean(filtered[i * frame_len : (i + 1) * frame_len] ** 2)) for i in range(n_frames)])
-    return np.maximum(energy, 1e-30)
+    return np.maximum(energy, 1e-30)  # type: ignore[no-any-return]
 
 
 def _spectral_flatness(spectrum: np.ndarray) -> float:

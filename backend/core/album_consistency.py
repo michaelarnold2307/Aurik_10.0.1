@@ -122,7 +122,7 @@ class AlbumConsistencyPass:
         try:
             from dsp.loudness_matching import AiLoudnessMatching  # pylint: disable=import-outside-toplevel
 
-            return AiLoudnessMatching().measure_lufs(audio, sr)
+            return AiLoudnessMatching().measure_lufs(audio, sr)  # type: ignore[no-any-return]
         except Exception as _exc:
             logger.debug("AiLoudnessMatching unavailable (%s), using fallback LUFS", _exc)
         # Minimal fallback: RMS in dBFS (not gated, but adequate for relative comparison)
@@ -202,7 +202,7 @@ class AlbumConsistencyPass:
         peak = float(np.percentile(np.abs(out), 99.9))
         if peak > _PEAK_SAFETY:
             out = out * (_PEAK_SAFETY / peak)
-        return out.astype(audio.dtype)
+        return out.astype(audio.dtype)  # type: ignore[no-any-return]
 
     @staticmethod
     def _build_shelf_sos(shelf_gain_db: float, shelf_freq_hz: float, sr: int) -> np.ndarray:
@@ -214,7 +214,7 @@ class AlbumConsistencyPass:
         G = float(np.clip(shelf_gain_db, -_TILT_MAX_CORRECTION_DB, _TILT_MAX_CORRECTION_DB))
         if abs(G) < 0.05:
             # Identity filter
-            return np.array([[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]])
+            return np.array([[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]])  # type: ignore[no-any-return]
 
         A = 10.0 ** (G / 40.0)  # shelf midpoint amplitude
         w0 = 2.0 * np.pi * shelf_freq_hz / sr
@@ -228,7 +228,7 @@ class AlbumConsistencyPass:
         a1 = 2 * ((A - 1) - (A + 1) * cos_w0)
         a2 = (A + 1) - (A - 1) * cos_w0 - 2 * np.sqrt(A) * alpha
 
-        return np.array([[b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0]])
+        return np.array([[b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0]])  # type: ignore[no-any-return]
 
     def _apply_tilt_correction(self, audio: np.ndarray, tilt_correction_db: float, sr: int) -> np.ndarray:
         """Wendet an: high-shelf correction to compensate spectral tilt deviation."""
@@ -251,7 +251,7 @@ class AlbumConsistencyPass:
                     ],
                     axis=1,
                 )
-        return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
     # ---------------------------------------------------------------------------
     # Main pipeline

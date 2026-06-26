@@ -103,7 +103,7 @@ def _apply_dither_16bit(audio: np.ndarray) -> np.ndarray:
 
         if audio.ndim == 1:
             return _shape_channel(audio)
-        return np.stack(
+        return np.stack(  # type: ignore[no-any-return]
             [_shape_channel(audio[:, c]) for c in range(audio.shape[1])],
             axis=1,
         )
@@ -160,7 +160,7 @@ def _apply_musiclover_export_optimizations(
     """
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim != 2 or arr.shape[1] < 2:
-        return arr
+        return arr  # type: ignore[no-any-return]
 
     mono_warn = _meta_bool(metadata, "quality_gate_musiclover_mono_warning", False)
     already_softened = _meta_bool(metadata, "quality_gate_musiclover_mono_softened", False)
@@ -208,7 +208,7 @@ def _apply_musiclover_export_optimizations(
                 remaining_goals,
             )
 
-    return arr
+    return arr  # type: ignore[no-any-return]
 
 
 _lock = threading.Lock()
@@ -225,7 +225,7 @@ def get_audio_exporter() -> AudioExporter:
         with _lock:
             if _INSTANCE_HOLDER["instance"] is None:
                 _INSTANCE_HOLDER["instance"] = AudioExporter()
-    return cast(AudioExporter, _INSTANCE_HOLDER["instance"])
+    return cast(AudioExporter, _INSTANCE_HOLDER["instance"])  # type: ignore[redundant-cast]
 
 
 class AudioExporter:

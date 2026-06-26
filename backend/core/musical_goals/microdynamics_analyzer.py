@@ -194,7 +194,7 @@ class MicrodynamicsAnalyzer:
         else:
             score = variance_db / 1.5 * 0.7  # Linear scaling
 
-        return np.clip(score, 0.0, 1.0)
+        return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
     def _measure_envelope_modulation(self, audio: np.ndarray, sr: int) -> float:
         """
@@ -247,7 +247,7 @@ class MicrodynamicsAnalyzer:
         else:
             score = modulation_depth_db / 6.0 * 0.6
 
-        return np.clip(score, 0.0, 1.0)
+        return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
     def _measure_crest_variability(self, audio: np.ndarray, sr: int) -> float:
         """
@@ -300,7 +300,7 @@ class MicrodynamicsAnalyzer:
         else:
             score = crest_std / 1.0 * 0.6
 
-        return np.clip(score, 0.0, 1.0)
+        return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
     def _measure_transient_diversity(self, audio: np.ndarray, sr: int) -> float:
         """
@@ -353,7 +353,7 @@ class MicrodynamicsAnalyzer:
         # Combined score (equal weighting)
         transient_score = 0.5 * density_score + 0.5 * diversity_score
 
-        return np.clip(transient_score, 0.0, 1.0)
+        return np.clip(transient_score, 0.0, 1.0)  # type: ignore[no-any-return]
 
     def check_preservation(
         self, original: np.ndarray, processed: np.ndarray, sr: int

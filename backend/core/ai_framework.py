@@ -38,7 +38,7 @@ def _analytic_envelope(signal_in: np.ndarray) -> np.ndarray:
     x = np.asarray(signal_in, dtype=np.float64).reshape(-1)
     n = x.shape[0]
     if n == 0:
-        return np.asarray([], dtype=np.float64)
+        return np.asarray([], dtype=np.float64)  # type: ignore[no-any-return]
     spectrum = np.fft.fft(x)
     h = np.zeros(n, dtype=np.float64)
     if n % 2 == 0:
@@ -48,7 +48,7 @@ def _analytic_envelope(signal_in: np.ndarray) -> np.ndarray:
     else:
         h[0] = 1.0
         h[1 : (n + 1) // 2] = 2.0
-    return np.abs(np.fft.ifft(spectrum * h))
+    return np.abs(np.fft.ifft(spectrum * h))  # type: ignore[no-any-return]
 
 
 # Import Vocal AI Enhancement
@@ -771,7 +771,7 @@ class UnifiedAudioRestorer:
 
         # Stereo processing
         if audio.ndim == 2:
-            return np.stack([self._reduce_hiss_mono(audio[:, ch], mode) for ch in range(audio.shape[1])], axis=1)
+            return np.stack([self._reduce_hiss_mono(audio[:, ch], mode) for ch in range(audio.shape[1])], axis=1)  # type: ignore[no-any-return]
         else:
             return self._reduce_hiss_mono(audio, mode)
 
@@ -810,7 +810,7 @@ class UnifiedAudioRestorer:
         elif len(restored) < len(audio):
             restored = np.pad(restored, (0, len(audio) - len(restored)))
 
-        return restored
+        return restored  # type: ignore[no-any-return]
 
     def _remove_hum(self, audio: np.ndarray) -> np.ndarray:
         """Eigenentwicklung: Notch filtering for hum removal."""
@@ -973,7 +973,7 @@ class UnifiedAudioEnhancer:
         else:
             result = signal.filtfilt(b, a, audio)
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     def _enhance_presence(self, audio: np.ndarray, amount: float) -> np.ndarray:
         """Eigenentwicklung: Presence enhancement via high-frequency emphasis."""
@@ -1007,7 +1007,7 @@ class UnifiedAudioEnhancer:
         else:
             result = signal.filtfilt(b, a, audio)
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     def _enhance_detail(self, audio: np.ndarray, amount: float) -> np.ndarray:
         """Eigenentwicklung: Detail enhancement via transient emphasis."""
@@ -1020,7 +1020,7 @@ class UnifiedAudioEnhancer:
         else:
             result = self._enhance_detail_mono(audio, amount)
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     def _enhance_detail_mono(self, audio: np.ndarray, amount: float) -> np.ndarray:
         """Mono transient enhancement."""
@@ -1045,7 +1045,7 @@ class UnifiedAudioEnhancer:
 
         result = audio * gain
 
-        return result
+        return result  # type: ignore[no-any-return]
 
 
 # ============================================================
@@ -1316,7 +1316,7 @@ class Studio2026Processor:
         if peak > 0.99:
             mastered = mastered / peak * 0.99
 
-        return mastered
+        return mastered  # type: ignore[no-any-return]
 
 
 # ============================================================
@@ -1369,7 +1369,7 @@ class AurikAIFramework:
 
     def restoration_magic_button(self, audio: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
         """Magic Button 1: Restoration Only (keine Enhancement)."""
-        return self.restoration_button.process(audio)  # type: ignore[attr-defined]
+        return self.restoration_button.process(audio)  # type: ignore[no-any-return,attr-defined]
 
     def studio2026_magic_button(self, audio: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
         """Magic Button 2: Studio 2026 Complete Pipeline."""

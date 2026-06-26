@@ -122,7 +122,7 @@ def detect_phoneme_boundaries_dsp(
         hop_length = _valid_hop_length(hop_length)
         mono = _to_mono(audio)
         if len(mono) < hop_length * 4:
-            return np.zeros(max(1, len(mono) // hop_length), dtype=bool)
+            return np.zeros(max(1, len(mono) // hop_length), dtype=bool)  # type: ignore[no-any-return]
 
         features = _extract_frame_features(mono, sr, hop_length)
         classes = [feature.phoneme_class for feature in features]
@@ -141,7 +141,7 @@ def detect_phoneme_boundaries_dsp(
         logger.debug("phoneme_boundaries_dsp: Fehler (non-blocking): %s", exc)
         hop_length = _valid_hop_length(hop_length)
         n_frames = max(1, len(np.asarray(audio).flatten()) // hop_length)
-        return np.zeros(n_frames, dtype=bool)
+        return np.zeros(n_frames, dtype=bool)  # type: ignore[no-any-return]
 
 
 def get_phoneme_features_dsp(
@@ -184,10 +184,10 @@ def detect_phoneme_protection_mask_dsp(
             start = max(0, idx * hop_length - guard)
             end = min(n_samples, idx * hop_length + hop_length * 2 + guard)
             mask[start:end] = True
-        return mask
+        return mask  # type: ignore[no-any-return]
     except Exception as exc:  # pylint: disable=broad-except
         logger.debug("phoneme_protection_mask_dsp: Fehler (non-blocking): %s", exc)
-        return np.zeros(len(np.asarray(audio).flatten()), dtype=bool)
+        return np.zeros(len(np.asarray(audio).flatten()), dtype=bool)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -204,13 +204,13 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Konvertierung Stereo zu Mono (mean über Kanal-Achse)."""
     arr = np.asarray(audio, dtype=np.float64)
     if arr.ndim == 1:
-        return arr
+        return arr  # type: ignore[no-any-return]
     if arr.ndim == 2:
         if arr.shape[0] <= 8 and arr.shape[1] > arr.shape[0]:
             return arr.mean(axis=0)  # type: ignore[no-any-return]
         if arr.shape[1] <= 8 and arr.shape[0] > arr.shape[1]:
             return arr.mean(axis=1)  # type: ignore[no-any-return]
-    return arr.flatten()
+    return arr.flatten()  # type: ignore[no-any-return]
 
 
 def _frame_audio(audio: np.ndarray, hop_length: int) -> list[np.ndarray]:
@@ -327,4 +327,4 @@ def _detect_boundaries(classes: list[str]) -> np.ndarray:
     for i in range(1, n):
         if classes[i] != classes[i - 1]:
             boundaries[i] = True
-    return boundaries
+    return boundaries  # type: ignore[no-any-return]

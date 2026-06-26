@@ -128,7 +128,7 @@ class PsychoacousticMaskingModel:
             ],
             dtype=np.float32,
         )
-        return bark_edges_hz  # 25 Elemente = N_BARK + 1
+        return bark_edges_hz  # type: ignore[no-any-return]  # 25 Elemente = N_BARK + 1
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -145,7 +145,7 @@ class PsychoacousticMaskingModel:
             cnt = int(sel.sum())
             if cnt > 0:
                 mask[b, sel] = 1.0 / cnt
-        return mask
+        return mask  # type: ignore[no-any-return]
 
     # Lock ensures only one thread runs compute_threshold at a time.
     # Prevents concurrent OpenBLAS worker threads (spawned by @, np.mean,
@@ -311,7 +311,7 @@ class PsychoacousticMaskingModel:
         """
         g = np.nan_to_num(np.asarray(gain_mask, dtype=np.float32))
         if g.ndim != 2:
-            return np.clip(g, self.g_floor, 1.0)
+            return np.clip(g, self.g_floor, 1.0)  # type: ignore[no-any-return]
 
         # MaskingResult oder raw ndarray als Masking-Modifier
         if isinstance(masking_result, MaskingResult):
@@ -325,7 +325,7 @@ class PsychoacousticMaskingModel:
         if t.ndim == 2 and rows > 0 and cols > 0:
             scale = np.clip(t[:rows, :cols], 0.3, 1.0)
             out[:rows, :cols] *= scale
-        return np.clip(np.nan_to_num(out), self.g_floor, 1.0)
+        return np.clip(np.nan_to_num(out), self.g_floor, 1.0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

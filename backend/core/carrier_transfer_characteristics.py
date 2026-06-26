@@ -99,9 +99,9 @@ def spectral_correlation(audio1: np.ndarray, audio2: np.ndarray, sr: int = 48000
     def _to_mono(a: np.ndarray) -> np.ndarray:
         if a.ndim == 2:
             if a.shape[0] == 2:
-                return np.asarray((a[0] + a[1]) / 2.0, dtype=np.float64)
+                return np.asarray((a[0] + a[1]) / 2.0, dtype=np.float64)  # type: ignore[no-any-return]
             if a.shape[-1] == 2:
-                return np.asarray((a[:, 0] + a[:, 1]) / 2.0, dtype=np.float64)
+                return np.asarray((a[:, 0] + a[:, 1]) / 2.0, dtype=np.float64)  # type: ignore[no-any-return]
         return a.ravel()
 
     m1 = np.asarray(_to_mono(audio1), dtype=np.float64)
@@ -171,8 +171,8 @@ def compute_carrier_recovery_ratio(audio_pre: np.ndarray, audio_post: np.ndarray
     def _to_mono(a: np.ndarray) -> np.ndarray:
         if a.ndim == 2:
             if a.shape[0] == 2:
-                return np.asarray((a[0] + a[1]) / 2.0, dtype=np.float64)
-            return np.asarray((a[:, 0] + a[:, 1]) / 2.0, dtype=np.float64)
+                return np.asarray((a[0] + a[1]) / 2.0, dtype=np.float64)  # type: ignore[no-any-return]
+            return np.asarray((a[:, 0] + a[:, 1]) / 2.0, dtype=np.float64)  # type: ignore[no-any-return]
         return a.ravel()
 
     m_pre = np.asarray(_to_mono(audio_pre), dtype=np.float64)

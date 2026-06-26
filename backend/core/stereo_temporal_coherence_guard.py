@@ -75,7 +75,7 @@ def _to_mono_analysis(audio: np.ndarray) -> np.ndarray:
     """
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim == 1:
-        return arr
+        return arr  # type: ignore[no-any-return]
     if arr.ndim == 2:
         # Detect orientation: channels-first (2, N) vs channels-last (N, 2)
         if arr.shape[0] == 2 and arr.shape[1] > 2:
@@ -85,7 +85,7 @@ def _to_mono_analysis(audio: np.ndarray) -> np.ndarray:
         # Fallback: sum along shorter axis
         return arr.mean(axis=0 if arr.shape[0] <= arr.shape[1] else 1)  # type: ignore
     # Unexpected rank — return first row/channel
-    return arr.reshape(-1)[: arr.size // arr.shape[0]]
+    return arr.reshape(-1)[: arr.size // arr.shape[0]]  # type: ignore[no-any-return]
 
 
 def _mid_window(signal: np.ndarray, sr: int) -> np.ndarray:
@@ -219,7 +219,7 @@ def _apply_correction_shift(signal: np.ndarray, shift_samples: float) -> np.ndar
         Shifted signal, same length as input, clipped to [-1, 1].
     """
     if abs(shift_samples) < 1e-4:
-        return signal.astype(np.float32)
+        return signal.astype(np.float32)  # type: ignore[no-any-return]
 
     shifted = _ndimage_shift(
         signal.astype(np.float64),
@@ -228,7 +228,7 @@ def _apply_correction_shift(signal: np.ndarray, shift_samples: float) -> np.ndar
         cval=0.0,
         order=_INTERP_ORDER,
     )
-    return np.asarray(
+    return np.asarray(  # type: ignore[no-any-return]
         np.clip(
             np.nan_to_num(shifted, nan=0.0, posinf=0.0, neginf=0.0),
             -1.0,
@@ -258,7 +258,7 @@ def _apply_shift_to_audio(audio: np.ndarray, shift_samples: float) -> np.ndarray
     arr = np.asarray(audio, dtype=np.float32)
 
     if arr.ndim == 1:
-        return _apply_correction_shift(arr, shift_samples).astype(orig_dtype)
+        return _apply_correction_shift(arr, shift_samples).astype(orig_dtype)  # type: ignore[no-any-return]
 
     if arr.ndim == 2:
         channels_first = arr.shape[0] == 2 and arr.shape[1] > 2
@@ -270,7 +270,7 @@ def _apply_shift_to_audio(audio: np.ndarray, shift_samples: float) -> np.ndarray
             shifted_ch = np.column_stack(
                 [_apply_correction_shift(arr[:, i], shift_samples) for i in range(arr.shape[1])]
             )
-        return shifted_ch.astype(orig_dtype)
+        return shifted_ch.astype(orig_dtype)  # type: ignore[no-any-return]
 
     # Unexpected rank — return unchanged
     logger.debug("STCG: unexpected audio rank %d — skipping shift", arr.ndim)
@@ -387,7 +387,7 @@ class StereoTemporalCoherenceGuard:
         else:
             result = np.column_stack([ch_l, ch_r_corrected])
 
-        return result.astype(orig_dtype)
+        return result.astype(orig_dtype)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # 2. Stem latency compensation (processed vs original)

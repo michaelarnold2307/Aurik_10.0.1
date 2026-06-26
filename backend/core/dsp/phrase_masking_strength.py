@@ -150,7 +150,7 @@ def _band_rms_frames(
     rms = np.array(
         [float(np.sqrt(np.mean(filtered[i * frame_len : (i + 1) * frame_len] ** 2) + 1e-30)) for i in range(n_frames)]
     )
-    return rms
+    return rms  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

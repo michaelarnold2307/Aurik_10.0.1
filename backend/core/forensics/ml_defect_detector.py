@@ -78,7 +78,7 @@ class DefectFeatures:
 
     def to_array(self) -> np.ndarray:
         """Konvertiert to numpy array."""
-        return np.array(
+        return np.array(  # type: ignore[no-any-return]
             [
                 # Clicks
                 self.impulsiveness,
@@ -202,7 +202,7 @@ class DefectFeatureExtractor:
         if np.sum(peaks) > 0:
             peak_energy = np.mean(envelope[peaks])
             mean_energy = np.mean(envelope) + 1e-10
-            return peak_energy / mean_energy
+            return peak_energy / mean_energy  # type: ignore[return-value]
         return 0.0
 
     def _zcr_variation(self, audio: np.ndarray, sr: int) -> float:
@@ -320,7 +320,7 @@ class DefectFeatureExtractor:
 
         # Modulation = std of envelope / mean of envelope
         if np.mean(envelope) > 1e-10:
-            return np.std(envelope) / np.mean(envelope)
+            return np.std(envelope) / np.mean(envelope)  # type: ignore[return-value]
         return 0.0
 
     def _calculate_thd(self, audio: np.ndarray, sr: int) -> float:
@@ -348,7 +348,7 @@ class DefectFeatureExtractor:
             # THD = sqrt(harmonic_power / fundamental_power) * 100%
             if fundamental_power > 1e-10:
                 thd = np.sqrt(harmonic_power / fundamental_power) * 100
-                return min(thd, 100.0)  # Cap at 100%
+                return min(thd, 100.0)  # type: ignore[no-any-return]  # Cap at 100%
 
         return 0.0
 
@@ -364,7 +364,7 @@ class DefectFeatureExtractor:
         clipped = np.sum(np.abs(audio_norm) > 0.98)
         clipping_percent = (clipped / len(audio)) * 100
 
-        return clipping_percent
+        return clipping_percent  # type: ignore[no-any-return]
 
     def _harmonic_analysis(self, audio: np.ndarray, sr: int) -> tuple[float, float]:
         """Analysiert harmonic distribution."""
@@ -397,7 +397,7 @@ class DefectFeatureExtractor:
             else:
                 odd_ratio = 1.0
 
-            return harmonic_spread, odd_ratio
+            return harmonic_spread, odd_ratio  # type: ignore[return-value]
 
         return 0.0, 1.0
 
@@ -419,7 +419,7 @@ class DefectFeatureExtractor:
         if arithmetic_mean > 1e-10:
             spectral_flatness = geometric_mean / arithmetic_mean
             # IMD increases with spectral flatness deviation
-            return (1.0 - spectral_flatness) * 100
+            return (1.0 - spectral_flatness) * 100  # type: ignore[no-any-return]
 
         return 0.0
 
@@ -431,7 +431,7 @@ class DefectFeatureExtractor:
         silent_samples = np.sum(np.abs(audio) < threshold)
         silence_ratio = silent_samples / len(audio)
 
-        return silence_ratio
+        return silence_ratio  # type: ignore[no-any-return]
 
     def _detect_dropouts(self, audio: np.ndarray, sr: int) -> tuple[int, float]:
         """Erkennt dropouts (sudden amplitude drops)."""
@@ -739,7 +739,7 @@ class MLDefectDetector:
         )
 
         if return_features:
-            return result, base_features, defect_features
+            return result, base_features, defect_features  # type: ignore[return-value]
 
         return result
 

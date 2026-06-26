@@ -455,7 +455,7 @@ class SignalFlowTracer:
             data = json.loads(_LATEST_SYMLINK.read_text(encoding="utf-8"))
             wav = data.get("output_wav")
             if wav and Path(wav).exists():
-                return wav
+                return wav  # type: ignore[no-any-return]
         except Exception:
             pass
         # 3. Filesystem-Fallback: neueste WAV in output/
@@ -558,7 +558,7 @@ def _to_mono(audio: np.ndarray | None) -> np.ndarray | None:
                 a = np.mean(a, axis=0)
             else:
                 a = np.mean(a, axis=1)
-        return a.ravel()
+        return a.ravel()  # type: ignore[no-any-return]
     except Exception:
         return None
 

@@ -340,7 +340,7 @@ def _make_biquad_sos(btype: str, fc: float, gain_db: float, q: float, sr: int) -
 
         b_coeffs = np.array([b0, b1, b2]) / a0
         a_coeffs = np.array([a0, a1, a2]) / a0
-        return np.array([[b_coeffs[0], b_coeffs[1], b_coeffs[2], 1.0, a_coeffs[1], a_coeffs[2]]])
+        return np.array([[b_coeffs[0], b_coeffs[1], b_coeffs[2], 1.0, a_coeffs[1], a_coeffs[2]]])  # type: ignore[no-any-return]
 
     if btype == "peaking":
         A = 10.0 ** (gain_db / 40.0)
@@ -354,10 +354,10 @@ def _make_biquad_sos(btype: str, fc: float, gain_db: float, q: float, sr: int) -
         a2 = 1 - alpha / A
         b_c = np.array([b0, b1, b2]) / a0
         a_c = np.array([a0, a1, a2]) / a0
-        return np.array([[b_c[0], b_c[1], b_c[2], 1.0, a_c[1], a_c[2]]])
+        return np.array([[b_c[0], b_c[1], b_c[2], 1.0, a_c[1], a_c[2]]])  # type: ignore[no-any-return]
 
     # Fallback: identity
-    return np.array([[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]])
+    return np.array([[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]])  # type: ignore[no-any-return]
 
 
 def build_inverse_filter_sos(nr_type: DolbyType, sr: int = 48000) -> np.ndarray | None:
@@ -369,7 +369,7 @@ def build_inverse_filter_sos(nr_type: DolbyType, sr: int = 48000) -> np.ndarray 
         return None
     specs = _INVERSE_BIQUADS[nr_type]
     sections = [_make_biquad_sos(btype, fc, gain_db, q, sr) for btype, fc, gain_db, q in specs]
-    return np.vstack(sections)
+    return np.vstack(sections)  # type: ignore[no-any-return]
 
 
 def apply_inverse_filter(
@@ -394,11 +394,11 @@ def apply_inverse_filter(
     """
     assert sr == 48000, f"SR must be 48000, got {sr}"
     if nr_type == "none":
-        return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)
+        return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     sos = build_inverse_filter_sos(nr_type, sr)
     if sos is None:
-        return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)
+        return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -414,19 +414,19 @@ def apply_inverse_filter(
         if conf < 1.0:
             filtered = ch.astype(np.float64) * (1.0 - conf) + filtered * conf
         filtered_arr = np.asarray(filtered, dtype=np.float64)
-        return np.asarray(np.clip(filtered_arr, -1.0, 1.0), dtype=np.float32)
+        return np.asarray(np.clip(filtered_arr, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     if audio.ndim == 1:
-        return np.asarray(_filter_channel(audio), dtype=np.float32)
+        return np.asarray(_filter_channel(audio), dtype=np.float32)  # type: ignore[no-any-return]
     if audio.shape[0] == 2 and audio.shape[1] != 2:
         # (2, N) channels-first
         left = _filter_channel(audio[0])
         right = _filter_channel(audio[1])
-        return np.asarray(np.stack([left, right], axis=0), dtype=np.float32)
+        return np.asarray(np.stack([left, right], axis=0), dtype=np.float32)  # type: ignore[no-any-return]
     # (N, 2) samples-first
     left = _filter_channel(audio[:, 0])
     right = _filter_channel(audio[:, 1])
-    return np.asarray(np.stack([left, right], axis=1), dtype=np.float32)
+    return np.asarray(np.stack([left, right], axis=1), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 # ─── Singleton ─────────────────────────────────────────────────────────────────

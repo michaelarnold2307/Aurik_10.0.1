@@ -457,7 +457,7 @@ class PhysicalMediumChainModel:
         mid_level = np.mean(spectrum[mask_mid] ** 2)
         ref_level = np.mean(spectrum[mask_ref] ** 2)
         ratio_db = 10 * np.log10((mid_level + 1e-10) / (ref_level + 1e-10))
-        return ratio_db > 4.0
+        return ratio_db > 4.0  # type: ignore[no-any-return]
 
     def _damp_horn_resonance(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """Dämpft Schallhorn-Resonanz-Peak mit Notch-EQ bei ~1000 Hz."""
@@ -470,7 +470,7 @@ class PhysicalMediumChainModel:
         alpha = np.sin(w0) / (2 * Q)
         b = np.array([1 + alpha * A, -2 * np.cos(w0), 1 - alpha * A])
         a = np.array([1 + alpha / A, -2 * np.cos(w0), 1 - alpha / A])
-        return sp_signal.lfilter(b, a, audio, axis=0)
+        return sp_signal.lfilter(b, a, audio, axis=0)  # type: ignore[no-any-return]
 
     def _shellac_noise_floor_correction(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """Sanfte Hochtonanhebung (kompensiert Shellac-bedingte HF-Dämpfung)."""
@@ -492,7 +492,7 @@ class PhysicalMediumChainModel:
         hi_rms = np.mean(spec[hi_mask] ** 2)
         ratio_db = 10 * np.log10((bass_rms + 1e-10) / (hi_rms + 1e-10))
         # RIAA pre-emphasis: Bass ist ~20 dB über HF → noch nicht deemphasisiert
-        return ratio_db > 22.0
+        return ratio_db > 22.0  # type: ignore[no-any-return]
 
     def _apply_riaa_deemphasis(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """Wendet RIAA De-Emphasis an (kompensiert versehentliches pre-emphasis)."""
@@ -510,7 +510,7 @@ class PhysicalMediumChainModel:
         if cutoff_hz >= nyq:
             return audio
         sos = sp_signal.butter(4, cutoff_hz / nyq, btype="high", output="sos")
-        return sp_signal.sosfilt(sos, audio, axis=0)
+        return sp_signal.sosfilt(sos, audio, axis=0)  # type: ignore[no-any-return]
 
     def _gentle_hf_restore(self, audio: np.ndarray, sr: int, shelf_hz: float, gain_db: float) -> np.ndarray:
         """Sanfte HF-Shelf-Anhebung für Vinyl-Hochtonkorrektur."""
@@ -542,7 +542,7 @@ class PhysicalMediumChainModel:
         )
         b /= a[0]
         a /= a[0]
-        return sp_signal.lfilter(b, a, audio, axis=0).astype(audio.dtype)
+        return sp_signal.lfilter(b, a, audio, axis=0).astype(audio.dtype)  # type: ignore[no-any-return]
 
     def _has_azimuth_comb(self, audio: np.ndarray, sr: int) -> bool:
         """Erkennt Azimuth-Kammfilter-Muster (Kanalkorrelation bei HF ≈ 0)."""
@@ -593,7 +593,7 @@ class PhysicalMediumChainModel:
         # Sanfte Soft-Clip-Inversion (inverse Sättigung)
         # Sehr kleiner Effekt: < 0.5 dB Änderung
         factor = 0.02
-        return audio - factor * (audio**3)
+        return audio - factor * (audio**3)  # type: ignore[no-any-return]
 
     def _damp_reconstruction_preringing(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
@@ -603,7 +603,7 @@ class PhysicalMediumChainModel:
         nyq = sr / 2
         cutoff = min(0.98 * nyq, nyq - 100)
         sos = sp_signal.butter(2, cutoff / nyq, btype="low", output="sos")
-        return sp_signal.sosfilt(sos, audio, axis=0).astype(audio.dtype)
+        return sp_signal.sosfilt(sos, audio, axis=0).astype(audio.dtype)  # type: ignore[no-any-return]
 
     def _suppress_jitter_sidebands(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """
@@ -617,7 +617,7 @@ class PhysicalMediumChainModel:
         # §2.51 Anti-Zeitversatz: sosfiltfilt (Zero-Phase) — filtered wird mit audio geblendet.
         filtered = sp_signal.sosfiltfilt(sos, audio, axis=0).astype(audio.dtype)
         # Blend: 80% original + 20% filtered (konservativ)
-        return 0.85 * audio + 0.15 * filtered
+        return 0.85 * audio + 0.15 * filtered  # type: ignore[no-any-return]
 
     def _measure_spectral_change(self, original: np.ndarray, corrected: np.ndarray, sr: int) -> float:
         """Mittlere spektrale Änderung in dB (Maß für Stärke der Korrektur)."""

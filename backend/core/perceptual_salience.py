@@ -336,7 +336,7 @@ class PerceptualSalienceEstimator:
             rms = np.sqrt(np.mean(mono[start:end] ** 2) + 1e-12)
             loudness[i] = 20.0 * np.log10(max(rms, 1e-10))
 
-        return loudness
+        return loudness  # type: ignore[no-any-return]
 
     def _time_to_frame(self, t: float, sr: int) -> int:
         """Konvertiert time in seconds to loudness profile frame index."""

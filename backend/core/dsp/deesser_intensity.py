@@ -56,12 +56,12 @@ def extract_sibilance_pressure(defect_scores: object) -> float:
 def _as_mono(audio: np.ndarray) -> np.ndarray:
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim == 1:
-        return arr
+        return arr  # type: ignore[no-any-return]
     if arr.ndim == 2:
         if arr.shape[0] <= 2 and arr.shape[1] > arr.shape[0]:
-            return np.asarray(np.mean(arr, axis=0, dtype=np.float32), dtype=np.float32)
-        return np.asarray(np.mean(arr, axis=1, dtype=np.float32), dtype=np.float32)
-    return np.ravel(arr).astype(np.float32)
+            return np.asarray(np.mean(arr, axis=0, dtype=np.float32), dtype=np.float32)  # type: ignore[no-any-return]
+        return np.asarray(np.mean(arr, axis=1, dtype=np.float32), dtype=np.float32)  # type: ignore[no-any-return]
+    return np.ravel(arr).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _analyze_sibilance_shape(audio: np.ndarray, sr: int, freq_low: float, freq_high: float) -> tuple[float, float]:

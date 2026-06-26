@@ -482,7 +482,7 @@ def _normalize_params(
                 v.append((raw - lo) / (hi - lo + 1e-12))
         else:
             v.append(0.5)  # Mittelpunkt als Default
-    return np.clip(np.array(v, dtype=np.float64), 0.0, 1.0)
+    return np.clip(np.array(v, dtype=np.float64), 0.0, 1.0)  # type: ignore[no-any-return]
 
 
 def _denormalize_params(
@@ -516,7 +516,7 @@ def _sample_random_candidates(n: int, d: int, rng: np.random.Generator) -> np.nd
     for j in range(d):
         perm = rng.permutation(n)
         samples[:, j] = (perm + rng.uniform(0, 1, size=n)) / n
-    return samples
+    return samples  # type: ignore[no-any-return]
 
 
 def _safe_normalize_targets(y: np.ndarray) -> tuple[np.ndarray, float, float, np.ndarray]:

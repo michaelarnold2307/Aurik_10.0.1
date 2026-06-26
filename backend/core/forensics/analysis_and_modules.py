@@ -71,7 +71,7 @@ def _k_weight_channel(channel: np.ndarray, sr: int) -> np.ndarray:
         weighted = sosfiltfilt(sos_hp, channel)
         sos_hi = butter(1, 1500.0, btype="highpass", fs=sr, output="sos")
         high = sosfiltfilt(sos_hi, weighted)
-        return weighted + high * 0.18
+        return weighted + high * 0.18  # type: ignore[no-any-return]
     except Exception:
         return channel
 
@@ -150,7 +150,7 @@ class PolicyManager:
                 "timestamp": now,
             }
         )
-        return self.policy
+        return self.policy  # type: ignore[return-value]
 
     def reset_policy(self) -> dict[str, Any]:
         """Setzt zurück: all policy gate states while preserving the policy log."""
@@ -209,7 +209,7 @@ class FeatureExtractor:
                 if len(y) >= 2048:
                     chroma = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=min(2048, len(y)))
                     key = librosa.feature.chroma_cqt(y=y, sr=sr)
-                    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+                    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)  # type: ignore[attr-defined]
                     melody = librosa.feature.mfcc(y=y, sr=sr, n_fft=min(2048, len(y)))
                     return {
                         "chroma_mean": float(np.mean(chroma)),
@@ -258,7 +258,7 @@ class FeatureExtractor:
                     try:
                         sf.write(tmp_in.name, audio_for_panns, sr)
                         panns_tags = panns.tag(tmp_in.name, tmp_out.name)
-                        return panns_tags
+                        return panns_tags  # type: ignore[no-any-return]
                     finally:
                         if os.path.exists(tmp_in.name):
                             os.remove(tmp_in.name)
@@ -297,7 +297,7 @@ class FeatureExtractor:
                 key = librosa.feature.chroma_cqt(y=y, sr=sr)
                 features["key_chroma_cqt_mean"] = float(np.mean(key))
                 # Beat/Rhythmus
-                tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+                tempo, beats = librosa.beat.beat_track(y=y, sr=sr)  # type: ignore[attr-defined]
                 features["tempo_bpm"] = float(np.asarray(tempo).flat[0])
                 features["beat_count"] = len(beats)
                 # Melodie-Contour
@@ -417,10 +417,10 @@ class FeatureExtractor:
             return audio.reshape(-1)
         rows, cols = audio.shape
         if rows <= 8 and cols > rows:
-            return audio.mean(axis=0)
+            return audio.mean(axis=0)  # type: ignore[no-any-return]
         if cols <= 8 and rows > cols:
-            return audio.mean(axis=1)
-        return audio.mean(axis=0)
+            return audio.mean(axis=1)  # type: ignore[no-any-return]
+        return audio.mean(axis=0)  # type: ignore[no-any-return]
 
     @staticmethod
     def _as_channels(audio: np.ndarray) -> np.ndarray:
@@ -479,8 +479,8 @@ class FeatureExtractor:
             import librosa
 
             # Stage 1: Onset detection (transient detection)
-            onset_env = librosa.onset.onset_strength(y=audio, sr=sr)
-            librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)
+            onset_env = librosa.onset.onset_strength(y=audio, sr=sr)  # type: ignore[attr-defined]
+            librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)  # type: ignore[attr-defined]
 
             # Stage 2: Statistical outlier detection (5σ threshold)
             threshold = np.mean(audio) + 5 * np.std(audio)
@@ -661,12 +661,12 @@ class FeatureExtractor:
                 flutter = scipy_signal.sosfilt(sos_flutter, pitch_deviation)
                 flutter_score = np.std(flutter) / (np.mean(np.abs(f0_voiced)) + 1e-10)
             else:
-                wow_score = 0.0
-                flutter_score = 0.0
+                wow_score = 0.0  # type: ignore[assignment]
+                flutter_score = 0.0  # type: ignore[assignment]
 
             # Clamp to 0-1 range
-            wow_score = min(1.0, wow_score * 10)  # Scale for typical values
-            flutter_score = min(1.0, flutter_score * 10)
+            wow_score = min(1.0, wow_score * 10)  # type: ignore[arg-type]  # Scale for typical values
+            flutter_score = min(1.0, flutter_score * 10)  # type: ignore[arg-type]
 
             return float(wow_score), float(flutter_score)
 
@@ -705,7 +705,7 @@ class FeatureExtractor:
             hum_score = max(hum_50_score, hum_60_score)
 
             # Normalize (typical hum is 0.01 - 0.1 of spectrum)
-            hum_score = min(1.0, hum_score * 10)
+            hum_score = min(1.0, hum_score * 10)  # type: ignore[arg-type]
 
             return float(hum_score)
 
@@ -853,7 +853,7 @@ class AnalysisEngineAdapter:
 
             # 🗳️ MAJORITY VOTING for Vocals (2 out of 3)
             has_vocals = sum(v for v, _ in vocal_votes) >= 2
-            vocal_confidence = np.mean([conf for _, conf in vocal_votes])
+            vocal_confidence = np.mean([conf for _, conf in vocal_votes])  # type: ignore[assignment]
 
             # Use first segment's tags for instruments (less critical)
             instruments = self._extract_instruments_from_panns(all_panns_tags[0])

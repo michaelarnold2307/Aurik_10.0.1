@@ -489,7 +489,7 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
             a = a.mean(axis=0)
         elif a.shape[1] <= 2:
             a = a.mean(axis=1)
-    return np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
 
 def _konsonanten_transient_ratio(orig: np.ndarray, rest: np.ndarray, sr: int) -> float:
@@ -554,7 +554,7 @@ def _breathiness_ratio(orig: np.ndarray, rest: np.ndarray, sr: int) -> float:
         for i in range(n_frames):
             chunk = sig[i * hop : i * hop + frame_len]
             r[i] = np.sqrt(np.mean(chunk**2) + 1e-30)
-        return r
+        return r  # type: ignore[no-any-return]
 
     rms_orig = _rms_frames(orig)
     rms_rest = _rms_frames(rest)

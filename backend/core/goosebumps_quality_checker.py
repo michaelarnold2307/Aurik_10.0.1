@@ -104,7 +104,7 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
     averaging over the axis with fewer elements (= the channels axis).
     """
     if audio.ndim == 1:
-        return np.asarray(audio, dtype=np.float64)
+        return np.asarray(audio, dtype=np.float64)  # type: ignore[no-any-return]
     # Smallest dimension = channels axis (works for stereo where n_samples >> 2)
     ch_axis = int(np.argmin(audio.shape))
     mono: np.ndarray[Any, Any] = np.asarray(np.mean(audio, axis=ch_axis), dtype=np.float64)
@@ -128,7 +128,7 @@ def _onset_envelope(audio: np.ndarray, _sr: int, hop: int = _ONSET_ENV_HOP) -> n
     padded = np.pad(audio, (n_fft // 2, n_fft // 2))
     n_frames = 1 + (len(padded) - n_fft) // hop_size
     if n_frames < 2:
-        return np.array([0.0])
+        return np.array([0.0])  # type: ignore[no-any-return]
 
     window = np.hanning(n_fft)
     magnitudes = np.zeros((n_frames, n_fft // 2 + 1))
@@ -146,7 +146,7 @@ def _onset_envelope(audio: np.ndarray, _sr: int, hop: int = _ONSET_ENV_HOP) -> n
     flux_max = np.max(flux)
     if flux_max > 0:
         flux /= flux_max
-    return flux
+    return flux  # type: ignore[no-any-return]
 
 
 def _measure_transient_integrity(original: np.ndarray, restored: np.ndarray, sr: int) -> tuple[float, dict[str, float]]:
@@ -238,7 +238,7 @@ def _measure_micro_dynamics(original: np.ndarray, restored: np.ndarray, sr: int)
     def _rms_profile(audio: np.ndarray) -> np.ndarray:
         n_frames = len(audio) // window_samples
         if n_frames < 2:
-            return np.asarray([float(np.sqrt(np.mean(audio**2) + 1e-12))], dtype=np.float64)
+            return np.asarray([float(np.sqrt(np.mean(audio**2) + 1e-12))], dtype=np.float64)  # type: ignore[no-any-return]
         shaped = audio[: n_frames * window_samples].reshape(n_frames, window_samples)
         rms_profile: np.ndarray[Any, Any] = np.asarray(np.sqrt(np.mean(shaped**2, axis=1) + 1e-12), dtype=np.float64)
         return rms_profile
@@ -456,7 +456,7 @@ def _measure_authenticity(original: np.ndarray, restored: np.ndarray, sr: int) -
                 mfccs[i, k] = np.sum(
                     log_spec * np.cos(np.pi * k * (2 * np.arange(len(log_spec)) + 1) / (2 * len(log_spec)))
                 )
-        return mfccs
+        return mfccs  # type: ignore[no-any-return]
 
     mfcc_orig = _mfcc_simple(orig)
     mfcc_rest = _mfcc_simple(rest)
@@ -509,7 +509,7 @@ def _measure_authenticity(original: np.ndarray, restored: np.ndarray, sr: int) -
         norm = np.linalg.norm(chroma)
         if norm > 0:
             chroma /= norm
-        return chroma
+        return chroma  # type: ignore[no-any-return]
 
     # Use first 30s max for chroma
     chroma_len = min(min_len, int(30.0 * sr))

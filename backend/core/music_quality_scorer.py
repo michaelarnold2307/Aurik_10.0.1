@@ -64,7 +64,7 @@ def _resample_to_16k(audio: np.ndarray, sample_rate: int) -> np.ndarray:
     resampled = np.interp(indices, np.arange(len(mono)), mono).astype(np.float32)
     # NaN/Inf-Guard (§3.1)
     resampled = np.nan_to_num(resampled, nan=0.0, posinf=1.0, neginf=-1.0)
-    return np.clip(resampled, -1.0, 1.0)
+    return np.clip(resampled, -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 def _frame_audio(audio: np.ndarray) -> np.ndarray:
@@ -312,7 +312,7 @@ def score_music_mos(audio: np.ndarray, sample_rate: int) -> MusicMOS:
 
         plugin = importlib.import_module("music_mos_plugin")
         if hasattr(plugin, "score"):
-            return plugin.score(audio, sample_rate)
+            return plugin.score(audio, sample_rate)  # type: ignore[no-any-return]
     except ImportError:
         pass
 

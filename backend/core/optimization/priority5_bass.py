@@ -101,7 +101,7 @@ class PhaseCoherentBassProcessor:
         """
         x = np.asarray(audio, dtype=np.float32)
         if len(x) == 0:
-            return x.copy()
+            return x.copy()  # type: ignore[no-any-return]
 
         # Low-pass to extract sub-bass (< 250 Hz) — zero-phase (§2.51: sosfiltfilt statt
         # causalem lfilter, FIR lfilter(taps=127) erzeugte 63-Sample Gruppenversatz → Comb-Filter)
@@ -117,4 +117,4 @@ class PhaseCoherentBassProcessor:
         enhanced = x.astype(np.float64) + 0.26 * bass  # 0.26 ≈ +2 dB mix-in
 
         out = np.clip(np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
-        return out.astype(np.float32)
+        return out.astype(np.float32)  # type: ignore[no-any-return]

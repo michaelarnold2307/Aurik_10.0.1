@@ -41,7 +41,7 @@ import numpy as np
 
 # Rückwärtskompatible Importe vom lyrics_transcriber_plugin.
 # Stubs werden nur im innersten except-Block definiert;
-# type: ignore[assignment] auf der from-Zeile deckt den
+# ignore-assignment auf der from-Zeile deckt den
 # Typ-Konflikt zwischen Plugin-Klasse und Stub-Klasse für den gesamten Block.
 try:
     from plugins.lyrics_transcriber_plugin import (
@@ -77,7 +77,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 N_BARK_BANDS: int = 24
-"""Anzahl Bark-Bänder — identisch zu PerceptualAttentionModel (§2.22)."""
+# Anzahl Bark-Bänder — identisch zu PerceptualAttentionModel (§2.22).
 
 # HF-Bark-Bänder-Index-Bereich: Bänder 17–23 (~4–16 kHz, §2.36)
 HF_BARK_START: int = 17
@@ -145,7 +145,7 @@ def _find_word_at(
     """
     for w in words:
         if w.start_s <= t_center_s < w.end_s:
-            return w
+            return w  # type: ignore[no-any-return]
     return None
 
 
@@ -206,7 +206,7 @@ class ContentAwareProcessor:
 
         if base_saliency.ndim != 2 or base_saliency.shape[1] != N_BARK_BANDS:
             # Rückgabe geclampter Basis bei falscher Form
-            return np.clip(base_saliency, _SALIENCY_MIN, _SALIENCY_MAX).astype(np.float32)
+            return np.clip(base_saliency, _SALIENCY_MIN, _SALIENCY_MAX).astype(np.float32)  # type: ignore[no-any-return]
 
         n_frames = base_saliency.shape[0]
         result = base_saliency.copy()
@@ -214,7 +214,7 @@ class ContentAwareProcessor:
         # Fallback: keine Wörter oder fallback_used → basis zurückgeben
         words = getattr(transcription, "words", [])
         if not words:
-            return np.clip(result, _SALIENCY_MIN, _SALIENCY_MAX).astype(np.float32)
+            return np.clip(result, _SALIENCY_MIN, _SALIENCY_MAX).astype(np.float32)  # type: ignore[no-any-return]
 
         # Frame-Konfiguration
         frame_hop_s = _FRAME_HOP_S
@@ -245,7 +245,7 @@ class ContentAwareProcessor:
         # NaN-Guard + Clamp
         result = np.nan_to_num(result, nan=1.0, posinf=_SALIENCY_MAX, neginf=_SALIENCY_MIN)
         result = np.clip(result, _SALIENCY_MIN, _SALIENCY_MAX)
-        return result.astype(np.float32)
+        return result.astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

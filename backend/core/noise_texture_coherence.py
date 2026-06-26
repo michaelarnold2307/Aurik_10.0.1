@@ -90,7 +90,7 @@ def _generate_reference_profile(
     else:
         ref = ref - mean
 
-    return np.asarray(ref, dtype=np.float64)
+    return np.asarray(ref, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def compute_noise_texture_coherence(

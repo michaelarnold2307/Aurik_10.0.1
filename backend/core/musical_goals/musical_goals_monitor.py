@@ -367,7 +367,7 @@ class MusicalGoalsMonitor:
         # Combined uncertainty (capped at 0.50)
         total_uncertainty = min(0.50, strength_uncertainty + algorithm_uncertainty + degradation_uncertainty)
 
-        return total_uncertainty
+        return total_uncertainty  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

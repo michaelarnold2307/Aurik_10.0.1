@@ -226,7 +226,7 @@ class EnhancedMetrics:
 
             # Clamp to valid range + NaN-Guard (§3.1)
             mos = np.nan_to_num(mos, nan=3.5, posinf=5.0, neginf=1.0)
-            return max(1.0, min(mos, 5.0))
+            return max(1.0, min(mos, 5.0))  # type: ignore[no-any-return]
 
         except Exception as e:
             warnings.warn(f"ViSQOL computation failed: {e}", UserWarning)
@@ -252,7 +252,7 @@ class EnhancedMetrics:
         snr_db = 20 * np.log10(rms / noise_rms)
         # NaN/Inf-Guard (§3.1)
         snr_db = np.nan_to_num(snr_db, nan=30.0, posinf=100.0, neginf=0.0)
-        return max(0.0, min(snr_db, 100.0))
+        return max(0.0, min(snr_db, 100.0))  # type: ignore[no-any-return]
 
     @staticmethod
     def compute_thd(audio: np.ndarray, sr: int) -> float:
@@ -275,7 +275,7 @@ class EnhancedMetrics:
             return 0.0
 
         thd = np.sqrt(harmonic_power / fundamental_power)
-        return min(thd, 1.0)
+        return min(thd, 1.0)  # type: ignore[no-any-return]
 
     @staticmethod
     def compute_lufs(audio: np.ndarray, sr: int) -> float:
@@ -284,7 +284,7 @@ class EnhancedMetrics:
         if rms < 1e-10:
             return -100.0
         lufs = 20 * np.log10(rms) - 0.691
-        return max(lufs, -100.0)
+        return max(lufs, -100.0)  # type: ignore[no-any-return]
 
     # ============================================================
     # Unified Interface

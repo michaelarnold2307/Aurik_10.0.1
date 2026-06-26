@@ -1965,7 +1965,7 @@ class GermanSchlagerClassifier:
             if e < 1e-18:
                 break
         # Return -a_ar so that poly = [1, -lpc_coefs] = [1, a_ar] (standard all-pole filter)
-        return -a
+        return -a  # type: ignore[no-any-return]
 
     def _to_mono(self, audio: np.ndarray) -> np.ndarray:
         """Konvertiert Stereo → Mono.
@@ -1979,10 +1979,10 @@ class GermanSchlagerClassifier:
         """
         if audio.ndim == 2:
             if min(audio.shape) < 2:
-                return np.asarray(audio, dtype=np.float32).reshape(-1)
+                return np.asarray(audio, dtype=np.float32).reshape(-1)  # type: ignore[no-any-return]
             ch_axis = 1 if audio.shape[1] <= audio.shape[0] else 0
-            return np.asarray(audio.mean(axis=ch_axis), dtype=np.float32)
-        return np.asarray(audio, dtype=np.float32)
+            return np.asarray(audio.mean(axis=ch_axis), dtype=np.float32)  # type: ignore[no-any-return]
+        return np.asarray(audio, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _resample(self, audio: np.ndarray, sr_in: int, sr_out: int) -> np.ndarray:
         """Resampelt auf Ziel-Sample-Rate."""
@@ -1991,7 +1991,7 @@ class GermanSchlagerClassifier:
         try:
             import librosa
 
-            return np.asarray(librosa.resample(audio, orig_sr=sr_in, target_sr=sr_out), dtype=np.float32)
+            return np.asarray(librosa.resample(audio, orig_sr=sr_in, target_sr=sr_out), dtype=np.float32)  # type: ignore[no-any-return]
         except Exception:
             return audio
 

@@ -521,19 +521,19 @@ class MushraEvaluator:
 
             sos = butter(8, 3500 / (sr / 2), btype="low", output="sos")
             anchor = sosfilt(sos, audio).astype(np.float32)
-            return np.clip(anchor, -1.0, 1.0)
+            return np.clip(anchor, -1.0, 1.0)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.debug("Anchor-Erzeugung Fallback: %s", exc)
             # Einfacher Bandpass als Fallback
-            return audio * 0.3  # starke Abschwächung ≈ schlechte Qualität
+            return audio * 0.3  # type: ignore[no-any-return]  # starke Abschwächung ≈ schlechte Qualität
 
     @staticmethod
     def _to_mono(audio: np.ndarray) -> np.ndarray:
         """Konvertiert Stereo → Mono; no-op bei Mono."""
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
         if audio.ndim == 2:
-            return np.mean(audio, axis=1).astype(np.float32)
-        return audio.astype(np.float32)
+            return np.mean(audio, axis=1).astype(np.float32)  # type: ignore[no-any-return]
+        return audio.astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _grade(score: float) -> tuple[str, str]:

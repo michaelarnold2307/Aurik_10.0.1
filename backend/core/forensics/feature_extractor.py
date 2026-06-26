@@ -118,7 +118,7 @@ class AudioFeatures:
         features.extend(self.mfcc_std.tolist())
         features.extend(self.chroma_mean.tolist())
 
-        return np.array(features)
+        return np.array(features)  # type: ignore[no-any-return]
 
 
 class FeatureExtractor:
@@ -417,4 +417,4 @@ class FeatureExtractor:
             Feature-Matrix (n_samples, n_features)
         """
         feature_arrays = [f.to_array() for f in features_list]
-        return np.vstack(feature_arrays)
+        return np.vstack(feature_arrays)  # type: ignore[no-any-return]

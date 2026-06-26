@@ -174,7 +174,7 @@ def hz_to_bark(freq_hz: float) -> float:
     """
     # Zwicker & Terhardt (1980) formula
     bark = 13 * np.arctan(0.00076 * freq_hz) + 3.5 * np.arctan((freq_hz / 7500) ** 2)
-    return bark
+    return bark  # type: ignore[no-any-return]
 
 
 def bark_to_hz(bark: float) -> float:
@@ -324,7 +324,7 @@ class BarkScaleProcessor:
 
         if low_norm >= high_norm:
             logger.warning("Invalid band [%s]: %s >= %s", bark_index, low_norm, high_norm)
-            return np.zeros_like(audio)
+            return np.zeros_like(audio)  # type: ignore[no-any-return]
 
         # Design bandpass filter
         sos = butter(order, [low_norm, high_norm], btype="bandpass", output="sos")
@@ -332,7 +332,7 @@ class BarkScaleProcessor:
         # Apply filter
         filtered = sosfilt(sos, audio)
 
-        return filtered
+        return filtered  # type: ignore[no-any-return]
 
     def filter_bark_range(
         self, audio: np.ndarray, sr: int, lower_bark: int, upper_bark: int, order: int = 8
@@ -367,7 +367,7 @@ class BarkScaleProcessor:
         # Apply filter
         filtered = sosfilt(sos, audio)
 
-        return filtered
+        return filtered  # type: ignore[no-any-return]
 
     def synthesize_from_bark(
         self, bark_spectrum: BarkSpectrum, audio_length: int, phase: np.ndarray | None = None
@@ -403,7 +403,7 @@ class BarkScaleProcessor:
         # IFFT
         audio = np.fft.irfft(spectrum, n=audio_length)
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(audio, -1.0, 1.0)
+        return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

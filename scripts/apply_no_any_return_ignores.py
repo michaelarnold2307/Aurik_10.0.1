@@ -80,7 +80,16 @@ def apply_ignores(filepath: str, linenos: set[int], dry_run: bool) -> int:
                 1,
             )
         else:
-            new_line = original + "  # type: ignore[no-any-return]"
+            # mypy 2.1.0: # type: ignore muss VOR anderen Inline-Kommentaren stehen.
+            # Ziel: "code  # kommentar" → "code  # type: ignore[no-any-return]  # kommentar"
+            comment_marker = "  #"
+            if comment_marker in original:
+                comment_pos = original.index(comment_marker)
+                code_part = original[:comment_pos]
+                rest = original[comment_pos + 2 :]  # "# kommentar"
+                new_line = f"{code_part}  # type: ignore[no-any-return]  {rest}"
+            else:
+                new_line = original + "  # type: ignore[no-any-return]"
         eol = "\n"
         lines[idx] = new_line + eol
         changed += 1

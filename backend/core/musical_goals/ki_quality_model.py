@@ -160,7 +160,7 @@ class KIQualityAnalyzer:
             # Kombinierter Score
             quality_score = (chain_score * 0.7) + (forensic_confidence * 0.3)
 
-            return np.clip(quality_score, 0.0, 1.0)
+            return np.clip(quality_score, 0.0, 1.0)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("Fallback chain analysis failed: %s", e)
@@ -495,7 +495,7 @@ class KIQualityAnalyzer:
             if digital_metrics.get("codec_artifacts", {}).get("pre_echo_detected", False):
                 score += 0.1
 
-            return np.clip(score, 0.0, 1.0)
+            return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("KI-Quality Digital Analysis failed: %s", e)
@@ -527,7 +527,7 @@ class KIQualityAnalyzer:
             if mt_metrics.get("balance", {}).get("correction_applied", False):
                 score += 0.05
 
-            return np.clip(score, 0.0, 1.0)
+            return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("KI-Quality Multi-Track Analysis failed: %s", e)
@@ -558,7 +558,7 @@ class KIQualityAnalyzer:
             if metrics.get("mono_compatible", True):
                 score += 0.05
 
-            return np.clip(score, 0.0, 1.0)
+            return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("KI-Quality Mono-to-Stereo Analysis failed: %s", e)
@@ -586,7 +586,7 @@ class KIQualityAnalyzer:
             # Kombiniere Metriken
             quality_score = (spectral_clarity * 0.6) + (distortion_score * 0.4)
 
-            return np.clip(quality_score, 0.0, 1.0)
+            return np.clip(quality_score, 0.0, 1.0)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("KI-Quality Spectral Analysis failed: %s", e)

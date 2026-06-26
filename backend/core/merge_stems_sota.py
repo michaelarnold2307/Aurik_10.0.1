@@ -83,7 +83,7 @@ class MergeStemsSOTA:
             policy_manager=policy_manager,
         )
         if any(v.get("action") == "bypass" for v in policy.values() if isinstance(v, dict)):
-            return np.asarray(np.stack(stems_proc).sum(axis=0).astype(stems[0].dtype))
+            return np.asarray(np.stack(stems_proc).sum(axis=0).astype(stems[0].dtype))  # type: ignore[no-any-return]
         # 2. Optional: Lautheitsabgleich
         stems_proc = self._loudness_match(stems_proc) if self.loudness_match else stems_proc
         extractor.extract(
@@ -93,18 +93,18 @@ class MergeStemsSOTA:
             policy_manager=policy_manager,
         )
         if any(v.get("action") == "bypass" for v in policy.values() if isinstance(v, dict)):
-            return np.asarray(np.stack(stems_proc).sum(axis=0).astype(stems[0].dtype))
+            return np.asarray(np.stack(stems_proc).sum(axis=0).astype(stems[0].dtype))  # type: ignore[no-any-return]
         # 3. Spektrale Gewichtung und Summierung
         merged = self._spectral_weighted_sum(stems_proc)
         extractor.extract(merged, sr, reference, policy_manager=policy_manager)
         if any(v.get("action") == "bypass" for v in policy.values() if isinstance(v, dict)):
-            return np.asarray(merged.astype(stems[0].dtype))
+            return np.asarray(merged.astype(stems[0].dtype))  # type: ignore[no-any-return]
         # 4. Clipping vermeiden
         maxval = np.max(np.abs(merged))
         if maxval > 1.0:
             merged = merged / maxval * 0.999
         merged = np.nan_to_num(merged, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(np.asarray(merged.astype(stems[0].dtype)), -1.0, 1.0)
+        return np.clip(np.asarray(merged.astype(stems[0].dtype)), -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _phase_align_stems(self, stems: list[np.ndarray]) -> list[np.ndarray]:
         # Einfache Phasenausrichtung: Maximale Kreuzkorrelation
@@ -141,4 +141,4 @@ class MergeStemsSOTA:
         weights = weights / np.sum(weights)
         stacked = np.stack(stems, axis=0)
         merged = np.sum(stacked * weights[:, None], axis=0)
-        return merged
+        return merged  # type: ignore[no-any-return]

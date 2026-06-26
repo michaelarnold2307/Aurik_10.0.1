@@ -107,7 +107,7 @@ class ContentAwareProcessor:
         x = np.asarray(signal, dtype=np.float64)
         n = int(x.size)
         if order < 1 or n <= (order + 2):
-            return np.array([1.0], dtype=np.float64)
+            return np.array([1.0], dtype=np.float64)  # type: ignore[no-any-return]
 
         ef = x[1:].copy()
         eb = x[:-1].copy()
@@ -132,8 +132,8 @@ class ContentAwareProcessor:
             ef, eb = ef_new, eb_new
 
         if not np.isfinite(a).all() or abs(a[0]) < 1e-12:
-            return np.array([1.0], dtype=np.float64)
-        return a
+            return np.array([1.0], dtype=np.float64)  # type: ignore[no-any-return]
+        return a  # type: ignore[no-any-return]
 
     def _apply_phoneme_dsp(
         self,
@@ -185,7 +185,7 @@ class ContentAwareProcessor:
         seg = np.asarray(segment, dtype=np.float64)
         n = len(seg)
         if n < 32 or strength < 1e-6:
-            return segment.astype(np.float32)
+            return segment.astype(np.float32)  # type: ignore[no-any-return]
 
         seg_out: np.ndarray
 
@@ -295,7 +295,7 @@ class ContentAwareProcessor:
             seg_out = np.pad(seg_out, (0, n - len(seg_out)))
         else:
             seg_out = seg_out[:n]
-        return np.clip(np.nan_to_num(seg_out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)
+        return np.clip(np.nan_to_num(seg_out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     def apply_phoneme_dsp_to_audio(
         self,
@@ -344,7 +344,7 @@ class ContentAwareProcessor:
                 seg_len = min(len(seg_out), i1 - i0)
                 out[i0 : i0 + seg_len] = seg_out[:seg_len]
 
-        return np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
+        return np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
 
     def compute_lyrics_saliency(
         self,
@@ -368,9 +368,9 @@ class ContentAwareProcessor:
         """
         sal = np.nan_to_num(np.asarray(base_saliency, dtype=np.float32))
         if sal.ndim != 1:
-            return np.clip(sal, 0.3, 2.0)
+            return np.clip(sal, 0.3, 2.0)  # type: ignore[no-any-return]
         if transcription.fallback_used or not transcription.words:
-            return np.clip(sal, 0.3, 2.0)
+            return np.clip(sal, 0.3, 2.0)  # type: ignore[no-any-return]
         n = len(sal)
         for word in transcription.words:
             boost = self.SALIENCY_BOOST.get(word.phoneme_type, 1.0)
@@ -378,7 +378,7 @@ class ContentAwareProcessor:
             i1 = max(i0, min(n, int(word.end_s * sr)))
             if i1 > i0:
                 sal[i0:i1] = boost
-        return np.clip(sal, 0.3, 2.0)
+        return np.clip(sal, 0.3, 2.0)  # type: ignore[no-any-return]
 
 
 class LyricsGuidedTimeline:
@@ -1006,7 +1006,7 @@ class LyricsGuidedEnhancement:
             transcription = self._transcribe_internal(mono, sr, float(n_samples / max(1, sr)))
         except Exception as exc:
             logger.debug("get_phoneme_mask: transcription failed (%s) — no protection", exc)
-            return np.zeros(n_frames, dtype=bool)
+            return np.zeros(n_frames, dtype=bool)  # type: ignore[no-any-return]
 
         _CONSONANT_TYPES = frozenset({"plosive", "fricative_stressed", "fricative_unstressed"})
 
@@ -1027,7 +1027,7 @@ class LyricsGuidedEnhancement:
             100.0 * float(mask.sum()) / float(n_frames),
             hop_length,
         )
-        return mask
+        return mask  # type: ignore[no-any-return]
 
     def get_timeline(self) -> LyricsGuidedTimeline:
         """Gibt the timeline renderer used by ``_toggle_lyrics_overlay`` in the frontend zurück."""
@@ -1298,14 +1298,14 @@ class LyricsGuidedEnhancement:
         """Erstellt sample-level gain curve from word timestamps; values ∈ [0.3, 2.0]."""
         saliency = np.ones(n_samples, dtype=np.float32)
         if transcription.fallback_used or not transcription.words:
-            return saliency
+            return saliency  # type: ignore[no-any-return]
         for word in transcription.words:
             boost = self._cap.SALIENCY_BOOST.get(word.phoneme_type, 1.0)
             i0 = max(0, min(n_samples, int(word.start_s * sr)))
             i1 = max(i0, min(n_samples, int(word.end_s * sr)))
             if i1 > i0:
                 saliency[i0:i1] = boost
-        return np.clip(saliency, 0.3, 2.0)
+        return np.clip(saliency, 0.3, 2.0)  # type: ignore[no-any-return]
 
     @staticmethod
     def _resample(mono: np.ndarray, sr_in: int, sr_out: int) -> np.ndarray:
@@ -1316,12 +1316,12 @@ class LyricsGuidedEnhancement:
             import scipy.signal as sps  # type: ignore[import]
 
             n_out = max(1, int(len(mono) * sr_out / sr_in))
-            return np.asarray(sps.resample(mono, n_out), dtype=np.float32)
+            return np.asarray(sps.resample(mono, n_out), dtype=np.float32)  # type: ignore[no-any-return]
         except Exception:
             step = max(1.0, sr_in / sr_out)
             indices = np.arange(0, len(mono), step).astype(np.int64)
             indices = np.clip(indices, 0, len(mono) - 1)
-            return mono[indices].astype(np.float32)
+            return mono[indices].astype(np.float32)  # type: ignore[no-any-return]
 
     def _compute_mel_features(self, mono_16k: np.ndarray) -> np.ndarray:
         """Berechnet Whisper-compatible 80-channel log-mel spectrogram.
@@ -1358,10 +1358,10 @@ class LyricsGuidedEnhancement:
                 log_mel = np.pad(log_mel, ((0, 0), (0, self._MAX_FRAMES - log_mel.shape[1])))
             else:
                 log_mel = log_mel[:, : self._MAX_FRAMES]
-            return np.asarray(log_mel, dtype=np.float32)[np.newaxis, ...]  # (1, 80, 3000)
+            return np.asarray(log_mel, dtype=np.float32)[np.newaxis, ...]  # type: ignore[no-any-return]  # (1, 80, 3000)
         except Exception:
             # Zero fallback: encoder processes silence → near-zero hidden states
-            return np.zeros((1, self._N_MELS, self._MAX_FRAMES), dtype=np.float32)
+            return np.zeros((1, self._N_MELS, self._MAX_FRAMES), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def get_lyrics_guided_enhancement() -> LyricsGuidedEnhancement:
@@ -1403,7 +1403,7 @@ def _detect_transients_energy_proxy(  # pylint: disable=too-many-positional-argu
     """
     n = len(mono)
     if n == 0:
-        return np.zeros(0, dtype=bool)
+        return np.zeros(0, dtype=bool)  # type: ignore[no-any-return]
 
     min_frames = max(1, int(min_dur_ms / 1000.0 * sr / hop_length))
     max_frames = max(min_frames, int(max_dur_ms / 1000.0 * sr / hop_length))
@@ -1437,7 +1437,7 @@ def _detect_transients_energy_proxy(  # pylint: disable=too-many-positional-argu
             if min_frames <= run <= max_frames:
                 mask[fi : fi + run] = True
 
-    return mask
+    return mask  # type: ignore[no-any-return]
 
 
 def reconstruct_consonant_bursts(  # pylint: disable=too-many-positional-arguments
@@ -1484,7 +1484,7 @@ def reconstruct_consonant_bursts(  # pylint: disable=too-many-positional-argumen
     # Längendifferenz abandon (Pipeline kann Länge minimal ändern)
     n = min(len(audio_deg), len(audio_rest))
     if n == 0:
-        return audio_rest.copy()
+        return audio_rest.copy()  # type: ignore[no-any-return]
 
     audio_deg = audio_deg[:n]
     audio_rest = audio_rest[:n]
@@ -1508,7 +1508,7 @@ def reconstruct_consonant_bursts(  # pylint: disable=too-many-positional-argumen
                 int(np.sum(phoneme_mask)),
             )
         else:
-            return audio_rest.copy()
+            return audio_rest.copy()  # type: ignore[no-any-return]
 
     audio_out = audio_rest.copy()
     n_restored = 0
@@ -1551,7 +1551,7 @@ def reconstruct_consonant_bursts(  # pylint: disable=too-many-positional-argumen
             int(np.sum(phoneme_mask)),
         )
 
-    return audio_out
+    return audio_out  # type: ignore[no-any-return]
 
 
 __all__ = [

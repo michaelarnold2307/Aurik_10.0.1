@@ -82,7 +82,7 @@ class EraFeatures:
 
     def to_array(self) -> np.ndarray:
         """Konvertiert to numpy array for ML."""
-        return np.array(
+        return np.array(  # type: ignore[no-any-return]
             [
                 self.bandwidth_low_hz,
                 self.bandwidth_high_hz,
@@ -196,7 +196,7 @@ class EraFeatureExtractor:
         low_noise = np.mean(psd[f < 1000])
         high_noise = np.mean(psd[f > 5000])
         if low_noise > 0:
-            era_features.noise_spectrum_shape = high_noise / low_noise
+            era_features.noise_spectrum_shape = high_noise / low_noise  # type: ignore[assignment]
 
         # 7. Compression characteristics (simplified estimation)
         # Look at envelope variations
@@ -210,7 +210,7 @@ class EraFeatureExtractor:
         envelope_std = np.std(envelope_smooth)
         envelope_mean = np.mean(envelope_smooth)
         if envelope_mean > 0:
-            era_features.compression_ratio_estimate = 1.0 / (envelope_std / envelope_mean + 0.1)
+            era_features.compression_ratio_estimate = 1.0 / (envelope_std / envelope_mean + 0.1)  # type: ignore[assignment]
 
         # Attack/release times (simplified)
         era_features.attack_time_ms = (
@@ -448,7 +448,7 @@ class MLEraDetector:
         )
 
         if return_features:
-            return result, base_features, era_features
+            return result, base_features, era_features  # type: ignore[return-value]
 
         return result
 

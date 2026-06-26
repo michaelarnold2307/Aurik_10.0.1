@@ -176,8 +176,8 @@ def _compute_goal_adaptive_threshold_scale(
 def _as_mono(audio: np.ndarray) -> np.ndarray:
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim == 2:
-        return np.asarray(np.mean(arr, axis=0, dtype=np.float32), dtype=np.float32)
-    return arr
+        return np.asarray(np.mean(arr, axis=0, dtype=np.float32), dtype=np.float32)  # type: ignore[no-any-return]
+    return arr  # type: ignore[no-any-return]
 
 
 def _proxy_impulse_ratio(audio: np.ndarray) -> float:
@@ -398,12 +398,12 @@ def _frequency_selective_blend(
     """
     d = str(worst_defect or "").upper()
     if d not in {"HUM", "LOW_FREQ_RUMBLE", "DC_OFFSET", "CLICKS", "CRACKLE"}:
-        return np.clip(alpha * audio_after + (1.0 - alpha) * audio_before, -1.0, 1.0).astype(np.float32)
+        return np.clip(alpha * audio_after + (1.0 - alpha) * audio_before, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     arr_b = np.asarray(audio_before, dtype=np.float32)
     arr_a = np.asarray(audio_after, dtype=np.float32)
     if arr_b.shape != arr_a.shape:
-        return np.clip(alpha * arr_a + (1.0 - alpha) * arr_b, -1.0, 1.0).astype(np.float32)
+        return np.clip(alpha * arr_a + (1.0 - alpha) * arr_b, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     was_mono = arr_b.ndim == 1
     if was_mono:
@@ -413,7 +413,7 @@ def _frequency_selective_blend(
     n = int(arr_b.shape[-1])
     if n < 16:
         out = np.clip(alpha * arr_a + (1.0 - alpha) * arr_b, -1.0, 1.0).astype(np.float32)
-        return out[0] if was_mono else out
+        return out[0] if was_mono else out  # type: ignore[no-any-return]
 
     local_alpha = float(np.clip(alpha - 0.28, 0.05, 0.98))
 
@@ -435,7 +435,7 @@ def _frequency_selective_blend(
             out_td[ch] = alpha_curve * arr_a[ch] + (1.0 - alpha_curve) * arr_b[ch]
 
         out_td = np.clip(out_td, -1.0, 1.0).astype(np.float32)
-        return out_td[0] if was_mono else out_td
+        return out_td[0] if was_mono else out_td  # type: ignore[no-any-return]
 
     freqs = np.fft.rfftfreq(n, d=1.0 / float(max(1, sr)))
     alpha_map = np.full(freqs.shape, float(alpha), dtype=np.float32)
@@ -462,7 +462,7 @@ def _frequency_selective_blend(
         out[ch] = np.fft.irfft(spec_mix, n=n).astype(np.float32)
 
     out = np.clip(out, -1.0, 1.0).astype(np.float32)
-    return out[0] if was_mono else out
+    return out[0] if was_mono else out  # type: ignore[no-any-return]
 
 
 def _proxy_hum_energy(audio: np.ndarray, sr: int) -> float:

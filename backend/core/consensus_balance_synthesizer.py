@@ -345,8 +345,8 @@ def _build_silence_mask(
         return None  # Keine Zone im Signal-Bereich
 
     if ndim == 2:
-        return mask[np.newaxis, :]  # (1, N) für (C, N)-Arrays
-    return mask  # (N,) für Mono
+        return mask[np.newaxis, :]  # type: ignore[no-any-return]  # (1, N) für (C, N)-Arrays
+    return mask  # type: ignore[no-any-return]  # (N,) für Mono
 
 
 def apply_dgwcs(

@@ -167,26 +167,26 @@ class MaterialRouter:
                 return "digital"
 
         # 4. Fallback
-        return audio_metadata.get("material", "vinyl")
+        return audio_metadata.get("material", "vinyl")  # type: ignore[no-any-return]
 
     def get_chain_template(self, material: str) -> list[str]:
         if material == "vinyl":
             from chain_templates.vinyl_chain import VINYL_CHAIN
 
-            return VINYL_CHAIN
+            return VINYL_CHAIN  # type: ignore[no-any-return]
         elif material == "digital":
             from chain_templates.digital_chain import DIGITAL_CHAIN
 
-            return DIGITAL_CHAIN
+            return DIGITAL_CHAIN  # type: ignore[no-any-return]
         elif material == "tape":
             from chain_templates.tape_chain import TAPE_CHAIN
 
-            return TAPE_CHAIN
+            return TAPE_CHAIN  # type: ignore[no-any-return]
         elif material == "broadcast":
             from chain_templates.broadcast_chain import BROADCAST_CHAIN
 
-            return BROADCAST_CHAIN
+            return BROADCAST_CHAIN  # type: ignore[no-any-return]
         else:
             from chain_templates.vinyl_chain import VINYL_CHAIN
 
-            return VINYL_CHAIN
+            return VINYL_CHAIN  # type: ignore[no-any-return]

@@ -348,7 +348,7 @@ class UnifiedForensicAnalyzer:
             consistency_bonus = (consistency_score - 0.5) * 0.15
 
             final_confidence = np.clip(base_confidence + consistency_bonus, 0.0, 1.0)
-            return final_confidence
+            return final_confidence  # type: ignore[no-any-return]
 
         return 0.5
 

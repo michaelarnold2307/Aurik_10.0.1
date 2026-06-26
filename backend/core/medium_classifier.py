@@ -135,14 +135,14 @@ class _SpectralFingerprinter:
         arr = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         arr = np.clip(arr, -1.0, 1.0)
         if arr.ndim != 2:
-            return arr
+            return arr  # type: ignore[no-any-return]
         # Aurik-Konvention: ``(samples, channels)``. Über die Kanal-Achse (die
         # kleinere, da nur Mono/Stereo) mitteln — robust gegen beide Layouts.
         # Spaltenvektoren ``(N, 1)`` als Mono behandeln.
         if min(arr.shape) < 2:
-            return arr.reshape(-1)
+            return arr.reshape(-1)  # type: ignore[no-any-return]
         ch_axis = 1 if arr.shape[1] <= arr.shape[0] else 0
-        return arr.mean(axis=ch_axis)
+        return arr.mean(axis=ch_axis)  # type: ignore[no-any-return]
 
     @staticmethod
     def _null_features() -> dict[str, float]:

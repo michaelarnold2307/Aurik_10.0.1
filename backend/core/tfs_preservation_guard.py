@@ -284,7 +284,7 @@ class TFSPreservationGuard:
         arr = np.asarray(audio, dtype=np.float64)
         if arr.ndim == 2:
             arr = arr.mean(axis=0) if arr.shape[0] > arr.shape[1] else arr.mean(axis=1)
-        return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

@@ -97,7 +97,7 @@ def _make_fp(
     fp[:20] = np.clip(mfcc_mean, -1.0, 1.0)
     fp[20:40] = np.clip(mfcc_std, 0.0, 1.0)
     fp[40] = float(np.clip(centroid_norm, 0.0, 1.0))
-    return fp
+    return fp  # type: ignore[no-any-return]
 
 
 # Voice-class prototypes (no real artist fingerprints)
@@ -388,10 +388,10 @@ def compute_vocal_fingerprint(audio: np.ndarray, sr: int) -> np.ndarray:
         max_samples = min(len(audio_f32), sr * 30)
         audio_f32 = audio_f32[:max_samples]
         if audio_f32.size < max(32, sr // 10):
-            return np.zeros(_FINGERPRINT_DIM, dtype=np.float32)
+            return np.zeros(_FINGERPRINT_DIM, dtype=np.float32)  # type: ignore[no-any-return]
         rms = float(np.sqrt(np.mean(audio_f32**2)))
         if not np.isfinite(rms) or rms < 1e-6:
-            return np.zeros(_FINGERPRINT_DIM, dtype=np.float32)
+            return np.zeros(_FINGERPRINT_DIM, dtype=np.float32)  # type: ignore[no-any-return]
 
         # MFCC 20 Koeffizienten
         mfcc = librosa.feature.mfcc(y=audio_f32, sr=sr, n_mfcc=20, hop_length=512)
@@ -413,10 +413,10 @@ def compute_vocal_fingerprint(audio: np.ndarray, sr: int) -> np.ndarray:
         fp[:20] = mfcc_mean_norm
         fp[20:40] = mfcc_std_norm
         fp[40] = centroid_norm
-        return fp
+        return fp  # type: ignore[no-any-return]
     except Exception as exc:
         logger.debug("compute_vocal_fingerprint failed: %s", exc)
-        return np.zeros(_FINGERPRINT_DIM, dtype=np.float32)
+        return np.zeros(_FINGERPRINT_DIM, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _to_mono(audio: np.ndarray) -> np.ndarray:
@@ -425,10 +425,10 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
         return audio.reshape(-1)
     rows, cols = audio.shape
     if rows <= 8 and cols > rows:
-        return audio.mean(axis=0)
+        return audio.mean(axis=0)  # type: ignore[no-any-return]
     if cols <= 8 and rows > cols:
-        return audio.mean(axis=1)
-    return audio.mean(axis=0)
+        return audio.mean(axis=1)  # type: ignore[no-any-return]
+    return audio.mean(axis=0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

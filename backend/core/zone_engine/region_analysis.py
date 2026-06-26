@@ -238,7 +238,7 @@ class RegionDetector:
             where=total_energy > 1e-10,
         )
 
-        return harmonic_ratio
+        return harmonic_ratio  # type: ignore[no-any-return]
 
     def _merge_frames_to_regions(
         self, frame_types: list[tuple[RegionType, float]], hop_length: int, sr: int

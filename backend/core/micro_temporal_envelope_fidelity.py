@@ -80,7 +80,7 @@ def _hilbert_envelope(audio: np.ndarray) -> np.ndarray:
     max_chunk = 48000 * 30
     if n <= max_chunk:
         analytic = hilbert(audio.astype(np.float64))
-        return np.abs(analytic).astype(np.float32)
+        return np.abs(analytic).astype(np.float32)  # type: ignore[no-any-return]
 
     envelope = np.empty(n, dtype=np.float32)
     overlap = 4800  # 100 ms overlap for smooth stitching
@@ -100,7 +100,7 @@ def _hilbert_envelope(audio: np.ndarray) -> np.ndarray:
             envelope[write_start:end] = analytic_chunk[data_offset:]
         pos = end - overlap if end < n else n
 
-    return envelope
+    return envelope  # type: ignore[no-any-return]
 
 
 def _smooth_envelope(env: np.ndarray, sr: int, window_s: float) -> np.ndarray:
@@ -109,7 +109,7 @@ def _smooth_envelope(env: np.ndarray, sr: int, window_s: float) -> np.ndarray:
     kernel = np.hanning(win_samples).astype(np.float32)
     kernel /= kernel.sum()
     # Use 'same' mode to keep alignment
-    return np.convolve(env, kernel, mode="same").astype(np.float32)
+    return np.convolve(env, kernel, mode="same").astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _frame_pearson(env_orig: np.ndarray, env_rest: np.ndarray, sr: int, window_s: float) -> float:

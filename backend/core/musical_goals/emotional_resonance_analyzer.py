@@ -466,7 +466,7 @@ class EmotionalResonanceEnhancer:
         gain_linear = 10 ** (gain_db / 20.0)
         enhanced = audio + (filtered - audio) * (gain_linear - 1.0)
 
-        return enhanced
+        return enhanced  # type: ignore[no-any-return]
 
     def _apply_tube_saturation(self, audio: np.ndarray, gain: float = 0.15) -> np.ndarray:
         """
@@ -485,7 +485,7 @@ class EmotionalResonanceEnhancer:
         mix = 0.15
         enhanced = (1 - mix) * audio + mix * saturated
 
-        return enhanced
+        return enhanced  # type: ignore[no-any-return]
 
     def _apply_high_shelf(self, audio: np.ndarray, sr: int, cutoff_freq: float, gain_db: float) -> np.ndarray:
         """
@@ -514,7 +514,7 @@ class EmotionalResonanceEnhancer:
         # Mix to apply gain
         enhanced = audio + (filtered * (gain_linear - 1.0))
 
-        return enhanced
+        return enhanced  # type: ignore[no-any-return]
 
     def _apply_expansion(self, audio: np.ndarray, threshold_db: float = -40.0, ratio: float = 1.2) -> np.ndarray:
         """
@@ -586,7 +586,7 @@ class EmotionalResonanceEnhancer:
             window_sum[window_sum == 0] = 1.0
             expanded /= window_sum
 
-        return expanded
+        return expanded  # type: ignore[no-any-return]
 
 
 # === CONVENIENCE FUNCTION ===

@@ -298,7 +298,7 @@ class DefectAnalyzer:
         has_50hz = check_frequency(50)
         has_60hz = check_frequency(60)
 
-        return has_50hz or has_60hz
+        return has_50hz or has_60hz  # type: ignore[no-any-return]
 
     def _detect_medium(self, analysis: DefectAnalysis) -> tuple[SourceMedium, float]:
         """Erkennt source medium based on defect patterns."""

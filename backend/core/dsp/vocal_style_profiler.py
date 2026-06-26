@@ -164,7 +164,7 @@ class VocalStyleProfiler:
             f0 = sr / max(peak_idx, 1)
             if _F0_MIN_HZ <= f0 <= _F0_MAX_HZ:
                 f0_frames.append(f0)
-        return np.array(f0_frames, dtype=np.float64)
+        return np.array(f0_frames, dtype=np.float64)  # type: ignore[no-any-return]
 
     def _compute_vibrato(self, mono: np.ndarray, sr: int) -> tuple[float, float]:
         """Vibrato rate (Hz) and depth (cents) via F0 modulation analysis."""

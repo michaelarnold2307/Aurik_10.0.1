@@ -281,7 +281,7 @@ class DamageAnalyzer:
         elif zcr_normalized > 0.3:
             corruption_score += 10
 
-        return min(corruption_score, 100.0)
+        return min(corruption_score, 100.0)  # type: ignore[no-any-return]
 
     def _analyze_frequency_bands(self, audio: np.ndarray, sample_rate: int) -> list[FrequencyBand]:
         """
@@ -584,7 +584,7 @@ class EmergencyRestorationEngine:
 
         restored = uniform_filter1d(restored, size=3, mode="nearest")
 
-        return restored
+        return restored  # type: ignore[no-any-return]
 
     def _generate_report(
         self, assessment: DamageAssessment, restored_audio: np.ndarray, sample_rate: int

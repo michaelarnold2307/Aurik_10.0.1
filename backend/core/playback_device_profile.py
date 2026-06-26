@@ -198,7 +198,7 @@ def _build_correction_filter(
         raw_db = _interpolate_db(float(f), curve)
         clamped_db = float(np.clip(raw_db, -max_db, max_db))
         gains[i] = 10.0 ** (clamped_db / 20.0)
-    return gains
+    return gains  # type: ignore[no-any-return]
 
 
 def get_playback_device_profile(device_id: str) -> PlaybackDeviceProfile:
@@ -298,7 +298,7 @@ def apply_translation_eq(
 
     if orig_ndim == 1:
         return audio_out[0]  # type: ignore[no-any-return]
-    return audio_out
+    return audio_out  # type: ignore[no-any-return]
 
 
 def list_device_ids() -> list[str]:

@@ -157,7 +157,7 @@ class MixedOp(nn.Module):
         """Gibt zurück: operation with highest weight."""
         weights = F.softmax(self.alpha, dim=0)
         best_idx = int(torch.argmax(weights).item())
-        return list(self.operations.keys())[best_idx]
+        return list(self.operations.keys())[best_idx]  # type: ignore[no-any-return]
 
 
 class Zero(nn.Module):
@@ -476,7 +476,7 @@ class NASTrainer:
             genotype = json.load(f)
 
         logger.info("Architecture loaded from %s", path)
-        return genotype
+        return genotype  # type: ignore[no-any-return]
 
 
 # Example usage

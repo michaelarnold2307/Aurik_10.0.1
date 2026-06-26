@@ -65,7 +65,7 @@ def multiband_compress(
             band,
         )
         out += band
-    return out
+    return out  # type: ignore[no-any-return]
 
 
 def adaptive_eq(audio: np.ndarray, sr: int) -> np.ndarray:
@@ -88,7 +88,7 @@ def adaptive_eq(audio: np.ndarray, sr: int) -> np.ndarray:
         # Phase-preserving iSTFT fallback — original phases aus stft_full beibehalten
         Zxx_eq = S_eq * np.exp(1j * np.angle(stft_full))
         audio_eq = librosa.istft(Zxx_eq, hop_length=hop, win_length=n_fft)
-    return librosa.util.fix_length(audio_eq, size=len(audio))
+    return librosa.util.fix_length(audio_eq, size=len(audio))  # type: ignore[no-any-return]
 
 
 def limiter(audio: np.ndarray, threshold: float = 0.98) -> np.ndarray:
@@ -112,7 +112,7 @@ def stereo_enhance(audio: np.ndarray, width: float = 1.1) -> np.ndarray:
     side = (audio[0] - audio[1]) / 2 * width
     left = mid + side
     right = mid - side
-    return np.vstack([left, right])
+    return np.vstack([left, right])  # type: ignore[no-any-return]
 
 
 def mastering_chain(audio: np.ndarray, sr: int, config: dict[str, Any] | None = None) -> np.ndarray:
@@ -155,14 +155,14 @@ def dither(audio: np.ndarray, bit_depth: int = 16) -> np.ndarray:
         noise = np.random.uniform(-lsb_16, lsb_16, size=audio.shape) + np.random.uniform(
             -lsb_16, lsb_16, size=audio.shape
         )
-        return audio + noise
+        return audio + noise  # type: ignore[no-any-return]
     elif bit_depth == 24:
         # TPDF für 24-Bit: 1 LSB = 1/2^23
         lsb_24 = 1.0 / 8_388_608.0
         noise = np.random.uniform(-lsb_24, lsb_24, size=audio.shape) + np.random.uniform(
             -lsb_24, lsb_24, size=audio.shape
         )
-        return audio + noise
+        return audio + noise  # type: ignore[no-any-return]
     # 32-bit float: kein Quantisierungsrauschen, kein Dithering nötig
     return audio
 
@@ -195,4 +195,4 @@ def simple_compressor(
     abs_audio = np.abs(audio)
     over = abs_audio > threshold
     audio[over] = np.sign(audio[over]) * (threshold + (abs_audio[over] - threshold) / ratio)
-    return audio * makeup_gain
+    return audio * makeup_gain  # type: ignore[no-any-return]

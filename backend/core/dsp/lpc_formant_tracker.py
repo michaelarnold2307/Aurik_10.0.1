@@ -101,7 +101,7 @@ def _wlpc_prewhiten_frame(frame: np.ndarray, noise_psd: np.ndarray) -> np.ndarra
     # Vorgeweißter Frame: nur Real-Anteil, gleiche Länge wie Input
     X_white = X * gain
     frame_white = np.fft.irfft(X_white, n=nfft)
-    return np.asarray(frame_white[:n], dtype=np.float64)
+    return np.asarray(frame_white[:n], dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def _burg_lpc(x: np.ndarray, order: int) -> np.ndarray:
@@ -135,7 +135,7 @@ def _burg_lpc(x: np.ndarray, order: int) -> np.ndarray:
         f = f_new
         b = b_new
 
-    return a
+    return a  # type: ignore[no-any-return]
 
 
 def _lpc_to_formants(a: np.ndarray, sr: int, max_formants: int = 4) -> list[float]:
@@ -201,7 +201,7 @@ def _formant_boost_eq(
         else:
             out = sosfiltfilt(sos_eq, out)
 
-    return np.clip(out, -1.0, 1.0).astype(np.float32)
+    return np.clip(out, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def lpc_formant_enhance(
@@ -411,7 +411,7 @@ def check_formant_shift_db(
             a = np.asarray(a, dtype=np.float32)
             if a.ndim == 2:
                 result = np.mean(a, axis=0) if a.shape[0] == 2 and a.shape[1] > 2 else np.mean(a, axis=1)
-                return np.asarray(result, dtype=np.float32)
+                return np.asarray(result, dtype=np.float32)  # type: ignore[no-any-return]
             return a
 
         pre_m = _to_mono(audio_pre)

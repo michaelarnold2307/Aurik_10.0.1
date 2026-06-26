@@ -143,7 +143,7 @@ class HybridVocalEnhancer:
         sos = butter(2, [2000 / (sr / 2), 4000 / (sr / 2)], btype="band", output="sos")
         _n = audio.shape[-1] if hasattr(audio, "shape") else len(audio)
         band = sosfiltfilt(sos, audio) if _n >= 15 else sosfilt(sos, audio)
-        return audio + band * (10 ** (gain_db / 20) - 1)
+        return audio + band * (10 ** (gain_db / 20) - 1)  # type: ignore[no-any-return]
 
     def _apply_formant_ml(self, audio, sr) -> np.ndarray:
         """Formantverstärkung via spektraler Spitzenanhebung.
@@ -229,7 +229,7 @@ class HybridVocalEnhancer:
         # Simpler Kompressor (Soft-Knee, statisch)
         ratio = 2.0 + amount
         compressed = np.tanh(audio * ratio) / np.tanh(ratio)
-        return compressed
+        return compressed  # type: ignore[no-any-return]
 
     def _apply_deesser_dsp(self, audio, sr, strength) -> np.ndarray:
         # Simpler adaptiver De-Esser (Bandstop 5-9 kHz)
@@ -239,4 +239,4 @@ class HybridVocalEnhancer:
         sos = butter(2, [5000 / (sr / 2), 9000 / (sr / 2)], btype="bandstop", output="sos")
         _n = audio.shape[-1] if hasattr(audio, "shape") else len(audio)
         _filtered = sosfiltfilt(sos, audio) if _n >= 15 else sosfilt(sos, audio)
-        return _filtered * (1 - strength) + audio * strength
+        return _filtered * (1 - strength) + audio * strength  # type: ignore[no-any-return]

@@ -415,7 +415,7 @@ class DeEsserPhase(PhaseInterface):
             "brilliance_preservation": self.vocal_profile.get("brilliance_preserve", 0.90),
         }
 
-    def process(  # pylint: disable=signature-differs  # type: ignore[override]
+    def process(  # type: ignore[override]  # pylint: disable=signature-differs
         self, audio: np.ndarray, sample_rate: int, material_type: MaterialType, gender: str | None = None, **kwargs
     ) -> PhaseResult:
         """

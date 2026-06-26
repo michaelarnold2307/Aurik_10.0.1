@@ -118,7 +118,7 @@ class OptimizationIntegration:
         try:
             with open(params_path, encoding="utf-8") as f:
                 params = yaml.safe_load(f)
-            return params
+            return params  # type: ignore[no-any-return]
         except Exception as e:
             logger.error("Failed to load parameters for %s: %s", material_type, e)
             return None
@@ -286,7 +286,7 @@ class OptimizationIntegration:
         comp_config["release_ms"] = params.get("comp_release_ms", 100.0)
         comp_config["knee_db"] = params.get("comp_knee_db", 6.0)
 
-    def _update_musical_goals_weights(self, context: dict[str, Any], params: dict[str, Any]) -> bool:
+    def _update_musical_goals_weights(self, context: dict[str, Any], params: dict[str, Any]) -> bool:  # type: ignore[return]
         """Aktualisiert musical goals weights."""
         if "musical_goals" not in context:
             context["musical_goals"] = {}
@@ -320,7 +320,7 @@ class OptimizationIntegration:
         if reference_audio is None:
             # No reference: use self-consistency metrics
             logger.warning("No reference audio provided, quality assessment limited")
-            return 0.5 if not return_details else (0.5, {"warning": "no_reference"})
+            return 0.5 if not return_details else (0.5, {"warning": "no_reference"})  # type: ignore[return-value,dict-item]
 
         # Convert to torch tensors (robust against array subclasses/views).
         output_np = np.asarray(output_audio, dtype=np.float32)
@@ -347,7 +347,7 @@ class OptimizationIntegration:
             details["quality_score"] = quality_score
             return quality_score, details
 
-        return quality_score
+        return quality_score  # type: ignore[no-any-return]
 
     def recommend_processing_strategy(self, context: dict[str, Any], material_type: str) -> dict[str, Any]:
         """
@@ -427,7 +427,7 @@ class OptimizationIntegration:
             strategy["recommended_dsp_chain"] = ["eq_mp3_compensation", "stereo_enhancer", "harmonic_enhancer"]
 
         # Add optimized parameters to strategy
-        strategy["optimized_params"] = params
+        strategy["optimized_params"] = params  # type: ignore[assignment]
 
         logger.info("Processing strategy recommended for %s", material_type)
         logger.info("  Models: %s", strategy["recommended_models"])
@@ -492,7 +492,7 @@ class OptimizationIntegration:
         self._nas_network_cache[cache_key] = network
         logger.info("Created NAS network for %s: %s cells, %s nodes", material_type, n_cells, n_nodes)
 
-        return network
+        return network  # type: ignore[no-any-return]
 
     def create_ensemble(
         self,

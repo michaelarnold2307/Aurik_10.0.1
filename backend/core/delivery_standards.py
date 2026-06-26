@@ -396,11 +396,11 @@ class LoudnessAnalyzer:
                 except Exception:
                     continue
 
-            return np.array(loudness_values)
+            return np.array(loudness_values)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("Short-term loudness calculation failed: %s", e)
-            return np.array([])
+            return np.array([])  # type: ignore[no-any-return]
 
 
 class TruePeakLimiter:
@@ -452,12 +452,12 @@ class TruePeakLimiter:
             # Downsample back
             result = signal.resample(limited, len(audio), axis=0)
 
-            return result.astype(audio.dtype)
+            return result.astype(audio.dtype)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("True Peak limiting failed: %s, using simple clipper", e)
             # Fallback: Simple hard clip
-            return np.clip(audio, -self.threshold_linear, self.threshold_linear)
+            return np.clip(audio, -self.threshold_linear, self.threshold_linear)  # type: ignore[no-any-return]
 
     def _soft_clip(self, audio: np.ndarray, threshold: float) -> np.ndarray:
         """
@@ -472,7 +472,7 @@ class TruePeakLimiter:
         clipped_normalized = np.tanh(normalized)
 
         # Scale back
-        return clipped_normalized * threshold
+        return clipped_normalized * threshold  # type: ignore[no-any-return]
 
 
 class BWFMetadataWriter:
@@ -786,7 +786,7 @@ class DeliveryStandardsManager:
 
             gain_smooth = gaussian_filter1d(gain, sigma=window_size)
 
-            return audio * gain_smooth
+            return audio * gain_smooth  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("DRC failed: %s, returning original", e)

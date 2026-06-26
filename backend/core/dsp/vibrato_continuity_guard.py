@@ -95,7 +95,7 @@ class VibratoContinuityGuard:
         n_samples = audio_in.shape[0]
 
         if n_samples < sr // 10:  # Weniger als 100 ms → zu kurz für Vibrato-Analyse
-            return audio_in.copy()
+            return audio_in.copy()  # type: ignore[no-any-return]
 
         # Mono-Kanal für Analyse extrahieren
         mono = (audio_in[:, 0] if audio_in.ndim == 2 else audio_in).astype(np.float64)
@@ -106,13 +106,13 @@ class VibratoContinuityGuard:
             logger.debug("VibratoContinuityGuard: Vibrato-Schätzung fehlgeschlagen (non-blocking): %s", _exc)
             self._prev_f0_phase = None
             self._prev_f0_rate_hz = None
-            return audio_in.copy()
+            return audio_in.copy()  # type: ignore[no-any-return]
 
         if vibrato_rate is None:
             # Kein Vibrato erkannt — Zustand zurücksetzen, Passthrough
             self._prev_f0_phase = None
             self._prev_f0_rate_hz = None
-            return audio_in.copy()
+            return audio_in.copy()  # type: ignore[no-any-return]
 
         out = audio_in.copy()
 
@@ -135,7 +135,7 @@ class VibratoContinuityGuard:
             self._prev_f0_phase = f0_phase_end
             self._prev_f0_rate_hz = vibrato_rate
 
-        return out
+        return out  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------ #
     #  Private helpers                                                     #
@@ -303,7 +303,7 @@ class VibratoContinuityGuard:
             tau_best = taus[best_i]
             f0_curve[i] = float(sr) / float(tau_best) if tau_best > 0 else f0_nominal
 
-        return f0_curve
+        return f0_curve  # type: ignore[no-any-return]
 
     @staticmethod
     def _detect_vibrato_rate(f0_curve: np.ndarray, hop_sec: float) -> float | None:

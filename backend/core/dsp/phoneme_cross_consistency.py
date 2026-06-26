@@ -102,7 +102,7 @@ def _resample_to_16k(mono: np.ndarray, sr: int) -> np.ndarray:
     if sr == _SR_MFCC:
         return mono
     n_out = int(len(mono) * _SR_MFCC / sr)
-    return sp_sig.resample(mono, n_out).astype(np.float32)
+    return sp_sig.resample(mono, n_out).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _mel_filterbank(sr: int, n_fft: int, n_mels: int = _N_MELS) -> np.ndarray:
@@ -127,7 +127,7 @@ def _mel_filterbank(sr: int, n_fft: int, n_mels: int = _N_MELS) -> np.ndarray:
             if f_m_plus > f_m:
                 filterbank[m - 1, k] = (f_m_plus - k) / (f_m_plus - f_m)
 
-    return filterbank
+    return filterbank  # type: ignore[no-any-return]
 
 
 def _compute_mfcc(mono_16k: np.ndarray, n_mfcc: int = _N_MFCC) -> np.ndarray:
@@ -153,8 +153,8 @@ def _compute_mfcc(mono_16k: np.ndarray, n_mfcc: int = _N_MFCC) -> np.ndarray:
         mfccs.append(mfcc)
 
     if not mfccs:
-        return np.zeros(n_mfcc)
-    return np.mean(mfccs, axis=0)
+        return np.zeros(n_mfcc)  # type: ignore[no-any-return]
+    return np.mean(mfccs, axis=0)  # type: ignore[no-any-return]
 
 
 def _cosine_distance(a: np.ndarray, b: np.ndarray) -> float:
@@ -225,8 +225,8 @@ class PhonemeConsistencyMonitor:
         # Mono
         def _to_mono(a: np.ndarray) -> np.ndarray:
             if a.ndim == 2:
-                return np.nan_to_num(a.mean(axis=0), nan=0.0).astype(np.float32)
-            return np.nan_to_num(a, nan=0.0).astype(np.float32)
+                return np.nan_to_num(a.mean(axis=0), nan=0.0).astype(np.float32)  # type: ignore[no-any-return]
+            return np.nan_to_num(a, nan=0.0).astype(np.float32)  # type: ignore[no-any-return]
 
         self._orig = _to_mono(audio_orig)
         self._restored = _to_mono(audio_restored)

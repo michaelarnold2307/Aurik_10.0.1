@@ -301,10 +301,10 @@ class ArtisticIntentDiscriminator:
             return audio.reshape(-1)
         rows, cols = audio.shape
         if rows <= 8 and cols > rows:
-            return audio.mean(axis=0)
+            return audio.mean(axis=0)  # type: ignore[no-any-return]
         if cols <= 8 and rows > cols:
-            return audio.mean(axis=1)
-        return audio.mean(axis=0)
+            return audio.mean(axis=1)  # type: ignore[no-any-return]
+        return audio.mean(axis=0)  # type: ignore[no-any-return]
 
     @staticmethod
     def _measure_harmonic_distortion(mono: np.ndarray, sr: int) -> float:

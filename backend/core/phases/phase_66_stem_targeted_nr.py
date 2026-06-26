@@ -202,7 +202,7 @@ class StemTargetedNRPhase(PhaseInterface):
             logger.debug("phase_66: OMLSA-Fallback Fehler: %s", _e2)
         return stem_f  # type: ignore[no-any-return]
 
-    def process(  # pylint: disable=arguments-differ  # type: ignore[override]
+    def process(  # type: ignore[override]  # pylint: disable=arguments-differ
         self,
         audio: np.ndarray,
         sample_rate: int = 48000,

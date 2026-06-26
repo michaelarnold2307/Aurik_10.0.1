@@ -494,7 +494,7 @@ class AestheticProxyCalculator:
                     frame = np.pad(frame, (0, n_fft - len(frame)))
                 log_spec = np.log(np.maximum(np.abs(np.fft.rfft(frame * window)), 1e-10))
                 coeffs[i] = cos_tbl @ log_spec
-            return coeffs
+            return coeffs  # type: ignore[no-any-return]
 
         mfcc_o = _mfcc_frames(orig).flatten()
         mfcc_p = _mfcc_frames(proc).flatten()
@@ -535,7 +535,7 @@ class AestheticProxyCalculator:
                     continue
                 chroma[int(round(69 + 12 * np.log2(f / 440.0 + 1e-12))) % 12] += spec[i] ** 2
             norm = np.linalg.norm(chroma)
-            return chroma / norm if norm > 0 else chroma
+            return chroma / norm if norm > 0 else chroma  # type: ignore[no-any-return]
 
         chroma_corr = float(np.dot(_chroma(orig), _chroma(proc)))
 

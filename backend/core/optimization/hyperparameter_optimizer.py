@@ -467,7 +467,7 @@ class MaterialSpecificOptimizer:
 
         logger.info("Best parameters loaded: %s", params_path)
 
-        return params
+        return params  # type: ignore[no-any-return]
 
 
 class MultiMaterialOptimizer:
@@ -561,7 +561,7 @@ if __name__ == "__main__":
     # Dummy process function (in practice, use actual Aurik pipeline)
     def dummy_process(audio, config) -> np.ndarray:
         # Simulate processing
-        return audio * 0.9
+        return audio * 0.9  # type: ignore[no-any-return]
 
     # Run optimization
     results = optimizer.optimize(evaluation_dataset=dummy_dataset, process_function=dummy_process)

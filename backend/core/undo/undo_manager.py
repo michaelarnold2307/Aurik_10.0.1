@@ -90,7 +90,7 @@ class AudioSnapshot:
             raise ValueError("Delta-compressed snapshot requires reference audio")
 
         # Reconstruct from delta
-        return reference + self.delta
+        return reference + self.delta  # type: ignore[no-any-return]
 
     @classmethod
     def create_full(cls, audio: np.ndarray, sr: int) -> "AudioSnapshot":

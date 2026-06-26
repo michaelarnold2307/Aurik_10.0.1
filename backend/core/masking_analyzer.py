@@ -121,7 +121,7 @@ class MaskingProfile:
         Returns:
             Boolean mask: True where signal is audible
         """
-        return self.masking_ratio_db > threshold_db
+        return self.masking_ratio_db > threshold_db  # type: ignore[no-any-return]
 
     def get_masked_components_ratio(self) -> float:
         """
@@ -272,7 +272,7 @@ class MaskingAnalyzer:
         # Interpolate (log-space for frequency)
         threshold_db = np.interp(np.log10(frequencies + 1), np.log10(ath_freqs), ath_thresholds)  # +1 to avoid log(0)
 
-        return threshold_db
+        return threshold_db  # type: ignore[no-any-return]
 
     def _compute_simultaneous_masking(self, power_db: np.ndarray, _frequencies: np.ndarray, _sr: int) -> np.ndarray:
         """
@@ -340,7 +340,7 @@ class MaskingAnalyzer:
             # Simple: -50dB below signal
             masking_threshold = power_db - 50.0
 
-        return masking_threshold
+        return masking_threshold  # type: ignore[no-any-return]
 
     def _compute_temporal_masking(self, power_db: np.ndarray, times: np.ndarray, _sr: int) -> np.ndarray:
         """
@@ -391,7 +391,7 @@ class MaskingAnalyzer:
             # Combine (maximum)
             masking_threshold[f_idx, :] = np.maximum(forward_mask, backward_mask) - 30.0  # -30dB typical
 
-        return masking_threshold
+        return masking_threshold  # type: ignore[no-any-return]
 
     def apply_masking(
         self, audio: np.ndarray, sr: int, profile: MaskingProfile | None = None, threshold_db: float = 0.0
@@ -438,7 +438,7 @@ class MaskingAnalyzer:
         elif len(audio_filtered) > len(audio):
             audio_filtered = audio_filtered[: len(audio)]
 
-        return np.asarray(audio_filtered)
+        return np.asarray(audio_filtered)  # type: ignore[no-any-return]
 
     def compute_smr(self, audio: np.ndarray, sr: int) -> float:
         """

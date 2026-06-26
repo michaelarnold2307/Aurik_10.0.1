@@ -31,7 +31,7 @@ def _savgol_smooth(arr: np.ndarray, window: int = 7, polyorder: int = 2) -> np.n
     try:
         from scipy.signal import savgol_filter
 
-        return savgol_filter(arr, window_length=window, polyorder=polyorder).astype(np.float32)
+        return savgol_filter(arr, window_length=window, polyorder=polyorder).astype(np.float32)  # type: ignore[no-any-return]
     except Exception:
         # Boxcar-Fallback
         half = window // 2
@@ -88,7 +88,7 @@ class MicroDynamicsEnvelopeMorphing:
             end = start + fsize
             frame = arr[start : min(end, n)]
             profile[i] = _lufs_frame(frame)
-        return profile
+        return profile  # type: ignore[no-any-return]
 
     def morph(
         self,
@@ -444,7 +444,7 @@ class MicroDynamicsEnvelopeMorphing:
                 )
             else:
                 logger.info("§8.2 MDEM Micro-Dynamics pearson=%.4f ≥ 0.92 (retry, r_before=%.4f)", r_final, r)
-            return final
+            return final  # type: ignore[no-any-return]
 
         # §8.2 Observability: log final pearson (universal guarantee ≥ 0.92)
         if r < 0.92:
@@ -457,7 +457,7 @@ class MicroDynamicsEnvelopeMorphing:
         else:
             logger.debug("§8.2 MDEM Micro-Dynamics pearson=%.4f ≥ 0.92 (max_gain=%.1f dB)", r, max_gain)
 
-        return out.astype(np.float32)
+        return out.astype(np.float32)  # type: ignore[no-any-return]
 
     def _morph_internal(
         self,

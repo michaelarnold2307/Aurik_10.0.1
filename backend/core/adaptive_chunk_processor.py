@@ -66,7 +66,7 @@ def _is_near_silence(audio: np.ndarray, threshold_db: float = -55.0) -> bool:
     mono = audio.mean(axis=0) if audio.ndim == 2 else audio
     rms = float(np.sqrt(np.mean(mono.astype(np.float64) ** 2) + 1e-15))
     db = 20.0 * np.log10(rms + 1e-15)
-    return db < threshold_db
+    return db < threshold_db  # type: ignore[no-any-return]
 
 
 def _estimate_beat_times(audio_mono: np.ndarray, sr: int) -> list[float]:

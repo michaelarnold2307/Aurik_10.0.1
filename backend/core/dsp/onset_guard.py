@@ -138,7 +138,7 @@ def apply_onset_protection_mask(
         result = np.clip(result, -1.0, 1.0).astype(np.float32)
         if _was_transposed:
             result = result.T
-        return result
+        return result  # type: ignore[no-any-return]
 
     except Exception as exc:
         logger.debug("apply_onset_protection_mask non-blocking: %s", exc)

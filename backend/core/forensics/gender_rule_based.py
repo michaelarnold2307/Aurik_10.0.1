@@ -131,4 +131,4 @@ class RuleBasedGenderDetector:
                 a[j] = a[j] - k * a[i - j]
             e *= 1 - k * k
         a[0] = 1
-        return a
+        return a  # type: ignore[no-any-return]

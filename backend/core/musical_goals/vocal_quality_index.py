@@ -162,15 +162,15 @@ def _get_vqi_weights(genre: str | None) -> tuple[float, float, float, float, flo
 def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Channels-first (2,N) oder samples-first (N,2) → mono (N,)."""
     if audio.ndim == 1:
-        return audio.astype(np.float32)
+        return audio.astype(np.float32)  # type: ignore[no-any-return]
     if audio.ndim == 2:
         if audio.shape[0] == 2 and audio.shape[1] > 2:
-            return np.asarray(audio.mean(axis=0), dtype=np.float32)
+            return np.asarray(audio.mean(axis=0), dtype=np.float32)  # type: ignore[no-any-return]
         if audio.shape[1] == 2:
-            return np.asarray(audio.mean(axis=1), dtype=np.float32)
+            return np.asarray(audio.mean(axis=1), dtype=np.float32)  # type: ignore[no-any-return]
         if audio.shape[0] == 1:
-            return np.asarray(audio[0], dtype=np.float32)
-    return audio.flatten().astype(np.float32)
+            return np.asarray(audio[0], dtype=np.float32)  # type: ignore[no-any-return]
+    return audio.flatten().astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _safe_cosine(a: np.ndarray, b: np.ndarray) -> float:
@@ -607,7 +607,7 @@ def compute_vqi(  # pylint: disable=too-many-positional-arguments
     # Normiert auf [0,1]: SingMOS MOS ∈ [1,5] → (mos - 1) / 4.
     singmos_score: float | None = None
     try:
-        from plugins.versa_plugin import get_versa_plugin  # pylint: disable=import-outside-toplevel  # noqa: I001  # type: ignore[import]
+        from plugins.versa_plugin import get_versa_plugin  # type: ignore[import]  # pylint: disable=import-outside-toplevel  # noqa: I001
 
         _versa = get_versa_plugin()
         if _versa is not None:

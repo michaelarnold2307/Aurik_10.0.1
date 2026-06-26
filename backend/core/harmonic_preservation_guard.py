@@ -284,7 +284,7 @@ class HarmonicPreservationGuard:
             out = self._correct_channel(restored, h_ref, protected_mask, sr)
 
         out = np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
-        return out.astype(np.float32)
+        return out.astype(np.float32)  # type: ignore[no-any-return]
 
     def build_gfloor_mask(
         self,
@@ -329,7 +329,7 @@ class HarmonicPreservationGuard:
         else:
             # Legacy: statisch (rückwärtskompatibel)
             mask = np.where(protected_mask > 0.5, G_FLOOR_HARMONIC, G_FLOOR_DEFAULT)
-        return mask.astype(np.float32)
+        return mask.astype(np.float32)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Interne Methoden
@@ -378,7 +378,7 @@ class HarmonicPreservationGuard:
         snr_linear = power / noise_psd_used
         snr_db = 10.0 * np.log10(np.maximum(snr_linear, 1e-12))
         snr_db = np.clip(snr_db, -60.0, 60.0)
-        return np.nan_to_num(snr_db, nan=0.0, posinf=60.0, neginf=-60.0).astype(np.float32)
+        return np.nan_to_num(snr_db, nan=0.0, posinf=60.0, neginf=-60.0).astype(np.float32)  # type: ignore[no-any-return]
 
     def _stft(self, mono: np.ndarray) -> np.ndarray:
         """STFT → [n_bins × n_frames] complex128."""
@@ -392,8 +392,8 @@ class HarmonicPreservationGuard:
                 frame = np.pad(frame, (0, n_fft - len(frame)))
             frames.append(np.fft.rfft(frame * win))
         if not frames:
-            return np.zeros((n_fft // 2 + 1, 1), dtype=np.complex64)
-        return np.array(frames, dtype=np.complex64).T
+            return np.zeros((n_fft // 2 + 1, 1), dtype=np.complex64)  # type: ignore[no-any-return]
+        return np.array(frames, dtype=np.complex64).T  # type: ignore[no-any-return]
 
     def _istft_ola(self, D: np.ndarray, target_len: int) -> np.ndarray:
         """OLA-ISTFT → float32 mit korrekter Länge."""
@@ -425,7 +425,7 @@ class HarmonicPreservationGuard:
         elif len(audio_out) < target_len:
             audio_out = np.pad(audio_out, (0, target_len - len(audio_out)))
 
-        return audio_out.astype(np.float32)
+        return audio_out.astype(np.float32)  # type: ignore[no-any-return]
 
     def _correct_channel(
         self,
@@ -501,7 +501,7 @@ class HarmonicPreservationGuard:
                     confs,
                 )
                 f0_track[conf_track < VOICING_CONFIDENCE_MIN] = 0.0
-                return f0_track.astype(np.float32)
+                return f0_track.astype(np.float32)  # type: ignore[no-any-return]
             except Exception as exc:
                 logger.debug("FCPE f₀-Track fehlgeschlagen: %s", exc)
 
@@ -523,7 +523,7 @@ class HarmonicPreservationGuard:
                         int(np.sum(_rmvpe_r.voiced_flag)),
                         len(_rmvpe_r.voiced_flag),
                     )
-                    return f0_track
+                    return f0_track  # type: ignore[no-any-return]
             except Exception as exc:
                 logger.debug("RMVPE f₀-Track fehlgeschlagen: %s", exc)
 
@@ -543,7 +543,7 @@ class HarmonicPreservationGuard:
                         np.arange(len(pesto_f0)),
                         pesto_f0,
                     )
-                    return f0_track.astype(np.float32)
+                    return f0_track.astype(np.float32)  # type: ignore[no-any-return]
             except Exception as exc:
                 logger.debug("PESTO f₀-Track fehlgeschlagen: %s", exc)
 
@@ -571,7 +571,7 @@ class HarmonicPreservationGuard:
                     np.arange(len(f0_pyin)),
                     f0_pyin,
                 )
-                return f0_track.astype(np.float32)
+                return f0_track.astype(np.float32)  # type: ignore[no-any-return]
             except Exception as exc:
                 logger.debug("pYIN f₀-Track fehlgeschlagen: %s", exc)
 
@@ -586,8 +586,8 @@ class HarmonicPreservationGuard:
             peak_lag = min_lag + int(np.argmax(autocorr[min_lag : max_lag + 1]))
             f0_global = float(sr / max(peak_lag, 1))
             if autocorr[peak_lag] / (autocorr[0] + 1e-12) > 0.3:
-                return np.full(n_frames, f0_global, dtype=np.float32)
-        return np.zeros(n_frames, dtype=np.float32)
+                return np.full(n_frames, f0_global, dtype=np.float32)  # type: ignore[no-any-return]
+        return np.zeros(n_frames, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

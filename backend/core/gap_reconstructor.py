@@ -127,7 +127,7 @@ class GapReconstructionResult:
 
 
 def _db_to_linear(db: float) -> float:
-    return 10.0 ** (db / 20.0)
+    return 10.0 ** (db / 20.0)  # type: ignore[no-any-return]
 
 
 def _rms(x: np.ndarray) -> float:
@@ -151,7 +151,7 @@ def _burg_ar(x: np.ndarray, order: int) -> np.ndarray:
     n = len(x)
     order = min(order, n - 1)
     if order < 1:
-        return np.zeros(1)
+        return np.zeros(1)  # type: ignore[no-any-return]
 
     # In-place Puffer (keine Re-Allokation innerhalb der Schleife)
     f = np.zeros(n, dtype=np.float64)
@@ -182,7 +182,7 @@ def _burg_ar(x: np.ndarray, order: int) -> np.ndarray:
         b[: n - m] = old_b + km * old_f
         b[n - m :] = 0.0
 
-    return a[1:]  # a[1..order]; Vorzeichen: x[n] = -sum(a[i]*x[n-i])
+    return a[1:]  # type: ignore[no-any-return]  # a[1..order]; Vorzeichen: x[n] = -sum(a[i]*x[n-i])
 
 
 def _stabilize_ar(coeffs: np.ndarray) -> np.ndarray:
@@ -221,7 +221,7 @@ def _stabilize_ar(coeffs: np.ndarray) -> np.ndarray:
     if mask.any():
         roots[mask] = roots[mask] / (mags[mask] + 1e-9) * 0.99
     stable_poly = np.poly(roots).real
-    return stable_poly[1:]  # a[1..order]
+    return stable_poly[1:]  # type: ignore[no-any-return]  # a[1..order]
 
 
 def _ar_predict_forward(context: np.ndarray, ar_coeffs: np.ndarray, n_samples: int) -> np.ndarray:
@@ -237,7 +237,7 @@ def _ar_predict_forward(context: np.ndarray, ar_coeffs: np.ndarray, n_samples: i
         val = float(np.clip(val, -10.0, 10.0))
         out.append(val)
         buf.append(val)
-    return np.clip(np.array(out, dtype=np.float32), -1.0, 1.0)
+    return np.clip(np.array(out, dtype=np.float32), -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 def _ar_predict_backward(context: np.ndarray, ar_coeffs: np.ndarray, n_samples: int) -> np.ndarray:
@@ -307,7 +307,7 @@ def _spectral_interp(pre: np.ndarray, post: np.ndarray, n_gap: int, sr: int) -> 
     # OLA-Normalisierung
     weights = np.maximum(weights, 1e-8)
     output /= weights
-    return output[:n_gap]
+    return output[:n_gap]  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +554,7 @@ class GapReconstructor:
         """Lineare Interpolation zwischen letztem Pre- und erstem Post-Sample."""
         a = float(pre[-1])
         b = float(post[0])
-        return np.linspace(a, b, n_gap, dtype=np.float32)
+        return np.linspace(a, b, n_gap, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _method_ar(
         self,
@@ -588,7 +588,7 @@ class GapReconstructor:
         # Linearer Blend: fwd dominiert am Anfang, bwd am Ende
         t = np.linspace(0.0, 1.0, n_gap, dtype=np.float32)
         patch = (1.0 - t) * fwd + t * bwd
-        return patch.astype(np.float32)
+        return patch.astype(np.float32)  # type: ignore[no-any-return]
 
     def _method_spectral(
         self,

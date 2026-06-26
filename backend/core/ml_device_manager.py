@@ -814,7 +814,7 @@ class MLDeviceManager:
             import torch  # type: ignore[import]
 
             free_bytes, _ = torch.cuda.mem_get_info(0)
-            return round(free_bytes / (1024**3), 2)
+            return round(free_bytes / (1024**3), 2)  # type: ignore[no-any-return]
         except Exception:
             return self._vram_total_gb  # assume empty on query failure
 

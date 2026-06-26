@@ -1822,13 +1822,13 @@ class MertMushraProxy:
                 frame_len = int(0.030 * sr)  # 30 ms frames
                 hop = int(0.010 * sr)  # 10 ms hop
                 if frame_len < 32 or len(audio) < frame_len:
-                    return np.array([], dtype=np.float64)
+                    return np.array([], dtype=np.float64)  # type: ignore[no-any-return]
                 n_frames = (len(audio) - frame_len) // hop
                 f0_values = np.zeros(n_frames, dtype=np.float64)
                 min_lag = max(1, int(sr / 500))
                 max_lag = min(int(sr / 50), frame_len - 1)
                 if max_lag <= min_lag:
-                    return f0_values
+                    return f0_values  # type: ignore[no-any-return]
                 for i in range(n_frames):
                     start = i * hop
                     frame = audio[start : start + frame_len]
@@ -1844,7 +1844,7 @@ class MertMushraProxy:
                     peak_idx = int(np.argmax(search)) + min_lag
                     if ac_norm[peak_idx] > 0.35:
                         f0_values[i] = sr / peak_idx
-                return f0_values
+                return f0_values  # type: ignore[no-any-return]
 
             def _vibrato_fidelity(ref_f0_voiced: np.ndarray, test_f0_voiced: np.ndarray) -> float:
                 """Berechnet vibrato fidelity sub-metric [0, 1].
@@ -2396,7 +2396,7 @@ class MertMushraProxy:
                 win = np.hanning(n_fft)
                 n_frames = max(1, (len(audio) - n_fft) // hop + 1)
                 if n_frames < 2:
-                    return np.array([0.0])
+                    return np.array([0.0])  # type: ignore[no-any-return]
                 mags = np.zeros((n_frames, n_fft // 2 + 1))
                 for i in range(n_frames):
                     frame = audio[i * hop : i * hop + n_fft]
@@ -2405,7 +2405,7 @@ class MertMushraProxy:
                     mags[i] = np.abs(np.fft.rfft(frame * win))
                 # L2 flux: ||S(t) - S(t-1)||_2
                 flux = np.sqrt(np.sum((mags[1:] - mags[:-1]) ** 2, axis=1))
-                return flux
+                return flux  # type: ignore[no-any-return]
 
             ref_flux = _spectral_flux(ref)
             test_flux = _spectral_flux(test)
@@ -2821,7 +2821,7 @@ class MertMushraProxy:
                 starts = starts[valid]
                 n_frm = len(starts)
                 if n_frm < 8:
-                    return np.zeros(n_bark, dtype=np.float64)
+                    return np.zeros(n_bark, dtype=np.float64)  # type: ignore[no-any-return]
 
                 # Batch STFT
                 frames = np.array([audio[s : s + frame_len] * window for s in starts])
@@ -2855,7 +2855,7 @@ class MertMushraProxy:
                     if valid_mod.any():
                         roughness_per_band[b] = float(np.sum(mod_spec[valid_mod] * weight[valid_mod]))
 
-                return roughness_per_band
+                return roughness_per_band  # type: ignore[no-any-return]
 
             r_rough = _band_roughness(r)
             t_rough = _band_roughness(t)
@@ -3139,7 +3139,7 @@ class MertMushraProxy:
                 starts = starts[valid_s]
                 n_frm = len(starts)
                 if n_frm < 16:
-                    return np.zeros(n_bark, dtype=np.float64)
+                    return np.zeros(n_bark, dtype=np.float64)  # type: ignore[no-any-return]
 
                 frames = np.array([audio[s : s + frame_len] * window for s in starts])
                 spec_power = np.abs(np.fft.rfft(frames, axis=1)) ** 2 + 1e-20
@@ -3171,7 +3171,7 @@ class MertMushraProxy:
                     if valid_mod.any():
                         fluct_per_band[b] = float(np.sum(mod_spec[valid_mod] * weight[valid_mod]))
 
-                return fluct_per_band
+                return fluct_per_band  # type: ignore[no-any-return]
 
             r_fluct = _band_fluctuation(r)
             t_fluct = _band_fluctuation(t)
@@ -3220,7 +3220,7 @@ def _extract_hf_embedding(mert_plugin: object, audio: np.ndarray, sr: int) -> np
         last_hidden = outputs.hidden_states[-1]
         # Temporal mean → fixed 768-dim embedding
         embedding = last_hidden.mean(dim=1).squeeze(0).cpu().numpy()
-        return embedding.astype(np.float32)
+        return embedding.astype(np.float32)  # type: ignore[no-any-return]
     except Exception as exc:
         logger.debug("HF embedding extraction failed: %s", exc)
         return None
@@ -3257,7 +3257,7 @@ def _extract_onnx_embedding(mert_plugin: object, audio: np.ndarray, sr: int) -> 
             embedding = result[0]
         else:
             embedding = result.flatten()
-        return embedding.astype(np.float32)
+        return embedding.astype(np.float32)  # type: ignore[no-any-return]
     except Exception as exc:
         logger.debug("ONNX embedding extraction failed: %s", exc)
         return None
@@ -3324,9 +3324,9 @@ def _extract_dsp_embedding(audio: np.ndarray, sr: int) -> np.ndarray:
         if norm > 1e-10:
             vec /= norm
 
-        return vec
+        return vec  # type: ignore[no-any-return]
     except Exception:
-        return np.zeros(512, dtype=np.float32)
+        return np.zeros(512, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -3349,9 +3349,9 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
     if audio.ndim == 2:
         if audio.shape[0] <= 8:
-            return np.mean(audio, axis=0).astype(np.float32)
-        return np.mean(audio, axis=1).astype(np.float32)
-    return audio.astype(np.float32)
+            return np.mean(audio, axis=0).astype(np.float32)  # type: ignore[no-any-return]
+        return np.mean(audio, axis=1).astype(np.float32)  # type: ignore[no-any-return]
+    return audio.astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _grade(score: float) -> str:
@@ -3378,7 +3378,7 @@ def _stft_magnitude(audio: np.ndarray, n_fft: int, hop_length: int) -> np.ndarra
         audio = np.pad(audio, (0, n_fft - len(audio)))
     n_frames = 1 + (len(audio) - n_fft) // hop_length
     if n_frames < 1:
-        return np.zeros((n_fft // 2 + 1, 0), dtype=np.float64)
+        return np.zeros((n_fft // 2 + 1, 0), dtype=np.float64)  # type: ignore[no-any-return]
     window = np.hanning(n_fft).astype(np.float32)
     n_bins = n_fft // 2 + 1
     result = np.zeros((n_bins, n_frames), dtype=np.float32)
@@ -3386,7 +3386,7 @@ def _stft_magnitude(audio: np.ndarray, n_fft: int, hop_length: int) -> np.ndarra
         start = i * hop_length
         frame = audio[start : start + n_fft] * window
         result[:, i] = np.abs(np.fft.rfft(frame, n=n_fft))
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 # ISO 226:2003 equal-loudness data (40 phon) — 19 anchor frequencies
@@ -3453,7 +3453,7 @@ def _iso226_weights_for_proxy(freqs: np.ndarray) -> np.ndarray:
     # At 1 kHz: SPL = 35.35 dB → weight = 1.0. At 20 Hz: SPL = 99.85 → weight ≈ 0.006
     ref_spl = 35.35  # SPL at 1 kHz
     weights = 10.0 ** ((ref_spl - spl) / 20.0)
-    return np.clip(weights, 0.001, 10.0).astype(np.float32)
+    return np.clip(weights, 0.001, 10.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

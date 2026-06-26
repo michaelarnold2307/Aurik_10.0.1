@@ -861,7 +861,7 @@ def get_nr_bypass_mask_bark(
     mask = np.zeros(24, dtype=bool)
     for low, high in regions:
         mask |= (bark_centers >= low) & (bark_centers <= high)
-    return mask
+    return mask  # type: ignore[no-any-return]
 
 
 def list_all_instruments() -> list[str]:

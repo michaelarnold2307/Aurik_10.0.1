@@ -98,7 +98,7 @@ class EnsembleProcessor:
         else:
             out = audio_f32.copy()
 
-        return np.asarray(np.clip(out, -1.0, 1.0), dtype=np.float32)
+        return np.asarray(np.clip(out, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +163,7 @@ def process_ensemble(
     audio_f32 = np.nan_to_num(audio_f32, nan=0.0, posinf=0.0, neginf=0.0)
 
     if restoration_fn is None:
-        return np.clip(audio_f32, -1.0, 1.0)
+        return np.clip(audio_f32, -1.0, 1.0)  # type: ignore[no-any-return]
 
     candidates: list[np.ndarray] = []
     for strength in _ENSEMBLE_STRENGTHS:
@@ -178,10 +178,10 @@ def process_ensemble(
 
     # Frame-wise RMS-weighted fusion (OLA)
     if not candidates:
-        return np.clip(audio_f32, -1.0, 1.0)
+        return np.clip(audio_f32, -1.0, 1.0)  # type: ignore[no-any-return]
 
     if len(candidates) == 1:
-        return np.clip(candidates[0], -1.0, 1.0)
+        return np.clip(candidates[0], -1.0, 1.0)  # type: ignore[no-any-return]
 
     # Simple weighted mean: weight by per-candidate RMS (higher quality → more weight)
     weights: list[float] = []
@@ -193,4 +193,4 @@ def process_ensemble(
     fused = sum(w / total * c for w, c in zip(weights, candidates))
     fused = np.asarray(fused, dtype=np.float32)
     fused = np.nan_to_num(fused, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(fused, -1.0, 1.0)
+    return np.clip(fused, -1.0, 1.0)  # type: ignore[no-any-return]

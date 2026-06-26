@@ -63,7 +63,7 @@ def _shaped_noise(n_samples: int, sr: int, cutoff_hz: float, rng: np.random.Gene
     """Einfaches pink-geformtes Rauschen (Butterworth LP) für Rauschboden-Injektion."""
     white = rng.standard_normal(n_samples).astype(np.float32)
     sos = butter(2, cutoff_hz / (sr / 2.0), btype="low", output="sos")
-    return np.asarray(sosfiltfilt(sos, white), dtype=np.float32)
+    return np.asarray(sosfiltfilt(sos, white), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _extract_noise_psd_profile(
@@ -103,7 +103,7 @@ def _extract_noise_psd_profile(
     psd_mean = psd_sum / n_quiet
     # Sicherheits-Floor: verhindert Null-Division bei sehr stillem Original
     psd_mean = np.maximum(psd_mean, 1e-20)
-    return psd_mean.astype(np.float64)
+    return psd_mean.astype(np.float64)  # type: ignore[no-any-return]
 
 
 def _generate_texture_noise(
@@ -140,7 +140,7 @@ def _generate_texture_noise(
     # Normieren auf RMS ≈ 1
     rms = float(np.sqrt(np.mean(result**2) + 1e-12))
     result /= rms + 1e-12
-    return result.astype(np.float32)
+    return result.astype(np.float32)  # type: ignore[no-any-return]
 
 
 def apply_noise_floor_minimum(

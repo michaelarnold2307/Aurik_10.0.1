@@ -41,7 +41,7 @@ class AdaptiveOversamplingProcessor:
         """
         x = np.asarray(audio, dtype=np.float32)
         if len(x) == 0:
-            return x.copy()
+            return x.copy()  # type: ignore[no-any-return]
 
         try:
             import librosa
@@ -60,7 +60,7 @@ class AdaptiveOversamplingProcessor:
             processed = self._oversample_process(segment) if mask[start] else segment
             out[start : start + hop] = processed
 
-        return np.clip(
+        return np.clip(  # type: ignore[no-any-return]
             np.nan_to_num(out.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0),
             -1.0,
             1.0,
@@ -82,7 +82,7 @@ class AdaptiveOversamplingProcessor:
             start = max(0, int(onset) - window // 4)
             end = min(len(audio), int(onset) + window)
             mask[start:end] = True
-        return mask
+        return mask  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -103,4 +103,4 @@ class AdaptiveOversamplingProcessor:
         downsampled = upsampled[::factor][:n]
         if len(downsampled) < n:
             downsampled = np.pad(downsampled, (0, n - len(downsampled)))
-        return downsampled.astype(np.float32)
+        return downsampled.astype(np.float32)  # type: ignore[no-any-return]

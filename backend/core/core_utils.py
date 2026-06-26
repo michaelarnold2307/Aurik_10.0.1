@@ -39,7 +39,7 @@ def fft_autocorr(x: np.ndarray, max_lag: int | None = None) -> np.ndarray:
     ac_full = irfft(X * np.conj(X), n=fft_len)[:n]
     if max_lag is not None:
         ac_full = ac_full[: max_lag + 1]
-    return np.asarray(ac_full, dtype=np.float64)
+    return np.asarray(ac_full, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def fft_crosscorr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -61,7 +61,7 @@ def fft_crosscorr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     shift = len(b) - 1
     out[shift:] = cc[: len(a)]
     out[:shift] = cc[fft_len - shift : fft_len]
-    return out
+    return out  # type: ignore[no-any-return]
 
 
 def audio_stats(audio: np.ndarray) -> dict:

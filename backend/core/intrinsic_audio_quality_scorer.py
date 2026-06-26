@@ -298,7 +298,7 @@ class IntrinsicAudioQualityScorer:
             padded=True,
             boundary="even",
         )
-        return z  # shape (freqs, frames)
+        return z  # type: ignore[no-any-return]  # shape (freqs, frames)
 
     def _blind_snr(self, power: np.ndarray) -> tuple[float, float]:
         """
@@ -437,9 +437,9 @@ class IntrinsicAudioQualityScorer:
         frame_len = max(int(sr * frame_ms / 1000), 1)
         n_frames = len(mono) // frame_len
         if n_frames == 0:
-            return np.array([float(np.sqrt(np.mean(mono**2)))])
+            return np.array([float(np.sqrt(np.mean(mono**2)))])  # type: ignore[no-any-return]
         frames = mono[: n_frames * frame_len].reshape(n_frames, frame_len)
-        return np.sqrt(np.mean(frames**2, axis=1))
+        return np.sqrt(np.mean(frames**2, axis=1))  # type: ignore[no-any-return]
 
     def _transient_clarity(self, mono: np.ndarray, sample_rate: int) -> float:
         """

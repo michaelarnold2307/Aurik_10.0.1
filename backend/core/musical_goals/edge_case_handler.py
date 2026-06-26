@@ -381,7 +381,7 @@ class EdgeCaseHandler:
 
         snr = 20 * np.log10(snr_ratio)  # Use 20*log10 for RMS ratio
 
-        return max(0.0, min(100.0, snr))
+        return max(0.0, min(100.0, snr))  # type: ignore[no-any-return]
 
     def _estimate_defect_coverage(self, audio: np.ndarray, sr: int) -> float:
         """
@@ -406,7 +406,7 @@ class EdgeCaseHandler:
         defect_samples = np.sum(energy > threshold)
 
         coverage = defect_samples / len(audio)
-        return min(1.0, coverage)
+        return min(1.0, coverage)  # type: ignore[no-any-return]
 
     def _measure_dynamic_range(self, audio: np.ndarray) -> float:
         """Misst dynamic range in dB."""
@@ -417,13 +417,13 @@ class EdgeCaseHandler:
             return 0.0
 
         dynamic_range = 20 * np.log10(peak / rms)
-        return max(0.0, dynamic_range)
+        return max(0.0, dynamic_range)  # type: ignore[no-any-return]
 
     def _detect_clipping(self, audio: np.ndarray) -> float:
         """Erkennt clipping ratio (fraction of samples near ±1.0)."""
         clipping_threshold = 0.99
         clipped_samples = np.sum(np.abs(audio) > clipping_threshold)
-        return clipped_samples / len(audio)
+        return clipped_samples / len(audio)  # type: ignore[no-any-return]
 
     def _get_degradation_reason(
         self, snr: float, defect_coverage: float, dynamic_range: float, clipping_ratio: float
@@ -552,7 +552,7 @@ class EdgeCaseHandler:
         energy_diff = np.diff(energy)
         large_drops = np.sum(energy_diff < -0.5 * np.median(energy))
 
-        return large_drops > 5  # More than 5 large drops
+        return large_drops > 5  # type: ignore[no-any-return]  # More than 5 large drops
 
     def _detect_quantization_noise(self, audio: np.ndarray, sr: int) -> bool:
         """Erkennt quantization noise patterns."""
@@ -582,7 +582,7 @@ class EdgeCaseHandler:
         center = len(autocorr) // 2
         side_lobe_energy = np.sum(np.abs(autocorr[center + 10 : center + 50]))
 
-        return side_lobe_energy > 0.3
+        return side_lobe_energy > 0.3  # type: ignore[no-any-return]
 
     def _is_unusual_defect_combination(self, patterns: dict[str, bool]) -> bool:
         """Prüft if defect combination is unusual."""

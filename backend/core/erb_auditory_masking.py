@@ -513,7 +513,7 @@ class ERBAuditoryMaskingModel:
         s = max(0, int(t_start * sr))
         e = min(len(mono), int(t_end * sr))
         if e <= s:
-            return np.full(len(centres), 1e-15, dtype=np.float64)
+            return np.full(len(centres), 1e-15, dtype=np.float64)  # type: ignore[no-any-return]
 
         segment = mono[s:e]
 
@@ -532,7 +532,7 @@ class ERBAuditoryMaskingModel:
         # mask_mat @ spectrum = Summe der Spektral-Energie pro Band (n_bands,)
         powers = np.maximum(1e-15, (mask_mat @ spectrum) / band_sizes)
 
-        return np.asarray(powers, dtype=np.float64)
+        return np.asarray(powers, dtype=np.float64)  # type: ignore[no-any-return]
 
     def _estimate_tonality(
         self,
@@ -583,7 +583,7 @@ class ERBAuditoryMaskingModel:
             # Detect Aurik (N, channels) vs. legacy (channels, N):
             # The channel count is always ≤ 2; the sample count is always >> 2.
             arr = arr.mean(axis=1) if arr.shape[0] > arr.shape[1] else arr.mean(axis=0)
-        return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

@@ -1056,7 +1056,7 @@ class TonalCurve:
                 return audio_post
 
             result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-            return np.clip(result, -1.0, 1.0).astype(np.float32)
+            return np.clip(result, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.debug("TonalCurve.apply_target_steering non-blocking: %s", exc)
@@ -1103,7 +1103,7 @@ def _bark_band_rms(audio: np.ndarray, sr: int) -> np.ndarray:
             rms[i] = float(np.sqrt(np.mean(psd[mask]) + 1e-20))
         else:
             rms[i] = 1e-10
-    return rms
+    return rms  # type: ignore[no-any-return]
 
 
 def _estimate_bark_band_snr(audio: np.ndarray, sr: int, n_noise_frames: int = 10) -> np.ndarray:
@@ -1155,7 +1155,7 @@ def _estimate_bark_band_snr(audio: np.ndarray, sr: int, n_noise_frames: int = 10
         noise = float(np.mean(np.sort(band_power)[:n_noise]) + 1e-20)
         snr_db[i] = float(np.clip(10.0 * np.log10(sig / noise), 0.0, 60.0))
 
-    return snr_db
+    return snr_db  # type: ignore[no-any-return]
 
 
 def _snr_scaled_ceilings(band_ceiling_db: np.ndarray, band_snr_db: np.ndarray) -> np.ndarray:
@@ -1183,7 +1183,7 @@ def _snr_scaled_ceilings(band_ceiling_db: np.ndarray, band_snr_db: np.ndarray) -
         band_ceiling_db * snr_scale,
         band_ceiling_db,  # keep rolloff bands (< 0) unchanged
     )
-    return scaled.astype(np.float32)
+    return scaled.astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _apply_bark_ceiling(
@@ -1262,7 +1262,7 @@ def _apply_bark_ceiling(
         return audio_post
 
     result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result, -1.0, 1.0).astype(np.float32)
+    return np.clip(result, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _era_bw_hz_for_decade(decade: int | None) -> float:

@@ -239,7 +239,7 @@ def train_hyperparameter_optimization(
         # Interface-Vertrag des Optimizers erwartet (audio, config).
         del config
         # Simulate processing
-        return audio * 0.9
+        return audio * 0.9  # type: ignore[no-any-return]
 
     # Run optimization
     results = optimizer.optimize(evaluation_dataset=eval_dataset, process_function=process_audio)

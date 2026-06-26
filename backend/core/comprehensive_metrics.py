@@ -35,17 +35,17 @@ logger = logging.getLogger(__name__)
 
 def _rfft(x: np.ndarray, n: int | None = None) -> np.ndarray:
     """scipy.fft.rfft with explicit ndarray return type for Pylance."""
-    return np.asarray(fft.rfft(x, n=n))  # type: ignore[arg-type]
+    return np.asarray(fft.rfft(x, n=n))  # type: ignore[no-any-return,arg-type]
 
 
 def _irfft(x: np.ndarray, n: int | None = None) -> np.ndarray:
     """scipy.fft.irfft with explicit ndarray return type for Pylance."""
-    return np.asarray(fft.irfft(x, n))  # type: ignore[arg-type]
+    return np.asarray(fft.irfft(x, n))  # type: ignore[no-any-return,arg-type]
 
 
 def _hilbert(x: np.ndarray) -> np.ndarray:
     """scipy.signal.hilbert with explicit ndarray return type for Pylance."""
-    return np.asarray(signal.hilbert(x))  # type: ignore[arg-type]
+    return np.asarray(signal.hilbert(x))  # type: ignore[no-any-return,arg-type]
 
 
 # Import existing metrics modules
@@ -453,7 +453,7 @@ class ComprehensiveMetricsCalculator:
         seg = max(1, min(int(nperseg), x.size))
         ov = min(seg // 2, seg - 1) if noverlap is None else min(int(noverlap), seg - 1)
 
-        return signal.stft(x, self.sr, nperseg=seg, noverlap=ov, boundary="even")
+        return signal.stft(x, self.sr, nperseg=seg, noverlap=ov, boundary="even")  # type: ignore[no-any-return]
 
     def _compute_spectral_features(self, audio: np.ndarray) -> tuple[float, float, float, float]:
         """Spektrale Merkmale: Flatness, Centroid, Rolloff, Flux (vektorisiert)."""
@@ -771,7 +771,7 @@ class ComprehensiveMetricsCalculator:
                 chroma[pitch_class] += spectrum[i]
 
         chroma = chroma / (np.sum(chroma) + 1e-10)
-        return chroma
+        return chroma  # type: ignore[no-any-return]
 
     def _compute_consonance(self, audio: np.ndarray) -> float:
         """Harmonic consonance (Helmholtz consonance)."""

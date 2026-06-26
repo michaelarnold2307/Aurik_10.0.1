@@ -67,7 +67,7 @@ def _third_octave_profile(audio_mono: np.ndarray, sr: int) -> np.ndarray:
     """Berechnet 1/3-Oktav-Profil (dB) für ISO-266-Mittenfrequenzen."""
     n_fft = min(16384, len(audio_mono))
     if n_fft < 256:
-        return np.zeros(len(_THIRD_OCT_CENTERS_HZ), dtype=np.float32)
+        return np.zeros(len(_THIRD_OCT_CENTERS_HZ), dtype=np.float32)  # type: ignore[no-any-return]
 
     spectrum = np.abs(np.fft.rfft(audio_mono[:n_fft].astype(np.float32), n=n_fft)) ** 2
     freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
@@ -84,7 +84,7 @@ def _third_octave_profile(audio_mono: np.ndarray, sr: int) -> np.ndarray:
         band_energy = float(np.mean(spectrum[mask]) + 1e-14)
         profile[i] = float(10.0 * np.log10(band_energy))
 
-    return np.nan_to_num(profile, nan=-120.0, posinf=0.0, neginf=-120.0)
+    return np.nan_to_num(profile, nan=-120.0, posinf=0.0, neginf=-120.0)  # type: ignore[no-any-return]
 
 
 def check_spectral_color_preservation(

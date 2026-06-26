@@ -133,8 +133,8 @@ class AttackTypeClassifier:
         """Gibt mono view (averaged channels, float64) zurück."""
         a = audio.astype(np.float64)
         if a.ndim == 2:
-            return np.mean(a, axis=0) if a.shape[0] < a.shape[1] else np.mean(a, axis=1)
-        return a
+            return np.mean(a, axis=0) if a.shape[0] < a.shape[1] else np.mean(a, axis=1)  # type: ignore[no-any-return]
+        return a  # type: ignore[no-any-return]
 
     @staticmethod
     def _spectral_centroid(frame: np.ndarray, sr: int) -> float:

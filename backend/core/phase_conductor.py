@@ -51,7 +51,7 @@ class PhaseState:
 
     def as_vec(self) -> np.ndarray:
         """4D-Merkmals-Vektor für Nearest-Neighbor-Lookup."""
-        return np.array(
+        return np.array(  # type: ignore[no-any-return]
             [
                 float(np.clip((self.noise_floor_db + 80.0) / 80.0, 0.0, 1.0)),  # 0=sauber, 1=laut
                 float(np.clip(self.hf_energy_ratio, 0.0, 1.0)),
@@ -398,7 +398,7 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
         mono = np.mean(audio, axis=1) if audio.shape[1] <= 8 else np.mean(audio, axis=0)
     else:
         mono = audio
-    return np.asarray(mono, dtype=np.float64)
+    return np.asarray(mono, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def _rms_db(mono: np.ndarray) -> float:

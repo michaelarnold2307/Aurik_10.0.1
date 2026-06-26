@@ -199,7 +199,7 @@ class FeedbackChain:
             _frisson_zones = getattr(self, "frisson_zones", None)
             _frisson_orig: np.ndarray | None = getattr(self, "frisson_orig_audio", None)
             if _frisson_zones and _frisson_orig is not None:
-                _fo: np.ndarray = _frisson_orig  # narrowed: is not None guard oben  # type: ignore[assignment]
+                _fo: np.ndarray = _frisson_orig  # type: ignore[assignment]  # narrowed: is not None guard oben
                 try:
                     _frisson_penalty = 1.0
                     _n_frisson = int(audio.shape[-1] if audio.ndim == 2 else len(audio))

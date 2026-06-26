@@ -144,7 +144,7 @@ def _export_shape(audio: np.ndarray) -> np.ndarray:
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim == 2 and arr.shape[0] in {1, 2} and arr.shape[1] > 2:
         arr = arr.T
-    return np.nan_to_num(np.clip(arr, -1.0, 1.0), nan=0.0, posinf=0.0, neginf=0.0)
+    return np.nan_to_num(np.clip(arr, -1.0, 1.0), nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
 
 def _error_codes(fail_reasons: object) -> tuple[str, ...]:

@@ -312,7 +312,7 @@ def load_checkpoint_audio(checkpoint: RecoveryCheckpoint) -> np.ndarray | None:
         interpreted at the wrong SR and pitch/tempo shift occurs.
         """
         if sr_in == checkpoint.sample_rate:
-            return np.asarray(audio, dtype=np.float32)
+            return np.asarray(audio, dtype=np.float32)  # type: ignore[no-any-return]
 
         import librosa  # pylint: disable=import-outside-toplevel
 
@@ -324,7 +324,7 @@ def load_checkpoint_audio(checkpoint: RecoveryCheckpoint) -> np.ndarray | None:
 
         x = np.asarray(audio, dtype=np.float32)
         if x.ndim == 1:
-            return np.asarray(
+            return np.asarray(  # type: ignore[no-any-return]
                 librosa.resample(x, orig_sr=sr_in, target_sr=checkpoint.sample_rate),
                 dtype=np.float32,
             )
@@ -336,20 +336,20 @@ def load_checkpoint_audio(checkpoint: RecoveryCheckpoint) -> np.ndarray | None:
                 np.asarray(librosa.resample(x[:, i], orig_sr=sr_in, target_sr=checkpoint.sample_rate), dtype=np.float32)
                 for i in range(x.shape[1])
             ]
-            return np.stack(ch, axis=1).astype(np.float32, copy=False)
+            return np.stack(ch, axis=1).astype(np.float32, copy=False)  # type: ignore[no-any-return]
 
         if x.shape[0] <= 8 and x.shape[1] > x.shape[0]:
             ch = [
                 np.asarray(librosa.resample(x[i], orig_sr=sr_in, target_sr=checkpoint.sample_rate), dtype=np.float32)
                 for i in range(x.shape[0])
             ]
-            return np.stack(ch, axis=0).astype(np.float32, copy=False)
+            return np.stack(ch, axis=0).astype(np.float32, copy=False)  # type: ignore[no-any-return]
 
         ch = [
             np.asarray(librosa.resample(x[:, i], orig_sr=sr_in, target_sr=checkpoint.sample_rate), dtype=np.float32)
             for i in range(x.shape[1])
         ]
-        return np.stack(ch, axis=1).astype(np.float32, copy=False)
+        return np.stack(ch, axis=1).astype(np.float32, copy=False)  # type: ignore[no-any-return]
 
     # Primary source per §2.39: original input audio
     try:
@@ -367,7 +367,7 @@ def load_checkpoint_audio(checkpoint: RecoveryCheckpoint) -> np.ndarray | None:
             logger.info(
                 "Recovery: Original-Datei als Primärquelle geladen (Checkpoint nur Notfall-Fallback gemäß §2.39)."
             )
-            return audio
+            return audio  # type: ignore[no-any-return]
         orig_exc = RuntimeError(str((_res or {}).get("error", "load_audio_file returned invalid result")))
     except Exception as _exc:
         orig_exc = _exc
@@ -396,7 +396,7 @@ def load_checkpoint_audio(checkpoint: RecoveryCheckpoint) -> np.ndarray | None:
             "§2.39 OOM-Checkpoint-Ausnahme aktiv: Checkpoint-Audio wird verwendet, "
             "weil das Original nicht verfügbar/lesbar ist."
         )
-        return audio
+        return audio  # type: ignore[no-any-return]
     except Exception as cp_exc:
         logger.error(
             "Recovery: Weder Original noch Checkpoint-Audio konnte geladen werden: Original: %s, Checkpoint: %s",

@@ -588,7 +588,7 @@ class RestorationArtifactDetector:
         # Pad to match original length
         onset_strength = np.concatenate([[0], onset_strength])
 
-        return onset_strength
+        return onset_strength  # type: ignore[no-any-return]
 
     def _compute_spectrogram(self, audio: np.ndarray) -> np.ndarray:
         """Berechnet magnitude spectrogram."""
@@ -614,7 +614,7 @@ class RestorationArtifactDetector:
             fft_frame = np.fft.rfft(frame)
             spec[:, i] = np.abs(fft_frame)
 
-        return spec
+        return spec  # type: ignore[no-any-return]
 
     def _compute_spectral_flatness(self, spec: np.ndarray) -> np.ndarray:
         """Berechnet spectral flatness for each frame."""
@@ -629,7 +629,7 @@ class RestorationArtifactDetector:
 
         flatness = geometric_mean / (arithmetic_mean + 1e-10)
 
-        return flatness
+        return flatness  # type: ignore[no-any-return]
 
     def _hilbert_transform(self, audio: np.ndarray) -> np.ndarray:
         """Berechnet analytic signal via Hilbert transform."""
@@ -644,7 +644,7 @@ class RestorationArtifactDetector:
 
         analytic = np.fft.ifft(fft * h)
 
-        return analytic
+        return analytic  # type: ignore[no-any-return]
 
     def _group_adjacent_indices(self, indices: np.ndarray, max_gap: int = 1) -> list[list[int]]:
         """Group adjacent indices into continuous segments."""

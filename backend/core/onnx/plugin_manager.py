@@ -103,7 +103,7 @@ class ONNXPluginManager:
         Returns:
             Model configuration dict or None if not found
         """
-        return self.registry["models"].get(model_id)
+        return self.registry["models"].get(model_id)  # type: ignore[no-any-return]
 
     def load_model(self, model_id: str, use_quantized: bool = False, force_reload: bool = False) -> bool:
         """
@@ -274,7 +274,7 @@ class ONNXPluginManager:
                 # Has inference stats
                 pass  # Stats are self-contained in model
 
-            return output
+            return output  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.error("Error processing with %s: %s", model_id, e)

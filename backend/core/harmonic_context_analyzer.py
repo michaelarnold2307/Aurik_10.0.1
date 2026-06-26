@@ -235,7 +235,7 @@ class HarmonicContextAnalyzer:
         try:
             import librosa  # pylint: disable=import-outside-toplevel
 
-            return librosa.feature.chroma_cqt(y=mono, sr=sr, hop_length=self.HOP_LENGTH, bins_per_octave=36).astype(
+            return librosa.feature.chroma_cqt(y=mono, sr=sr, hop_length=self.HOP_LENGTH, bins_per_octave=36).astype(  # type: ignore[no-any-return]
                 np.float32
             )
         except Exception:
@@ -265,7 +265,7 @@ class HarmonicContextAnalyzer:
         # Normalise each frame
         col_max = np.max(chroma, axis=0, keepdims=True)
         chroma = chroma / (col_max + 1e-8)
-        return chroma
+        return chroma  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Chord matching
@@ -369,7 +369,7 @@ class HarmonicContextAnalyzer:
             # Fallback: full protect (never gate anything)
             n_fft_bins = n_fft // 2 + 1
             n_frames = chroma.shape[1]
-            return np.ones((n_fft_bins, n_frames), dtype=bool)
+            return np.ones((n_fft_bins, n_frames), dtype=bool)  # type: ignore[no-any-return]
 
         n_fft_bins, n_stft_frames = Zxx.shape
         mag = np.abs(Zxx).astype(np.float32)
