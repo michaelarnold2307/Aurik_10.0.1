@@ -36,38 +36,25 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import Any
 
 import numpy as np
 
-# Rückwärtskompatible Importe vom lyrics_transcriber_plugin.
-# Stubs werden nur im innersten except-Block definiert;
-# ignore-assignment auf der from-Zeile deckt den
-# Typ-Konflikt zwischen Plugin-Klasse und Stub-Klasse für den gesamten Block.
-try:
-    from plugins.lyrics_transcriber_plugin import (
-        LyricsTranscriptionResult,  # type: ignore[import, assignment, no-redef]
-        WordTimestamp,  # type: ignore[import, assignment, no-redef]
-    )
-except ImportError:
-    try:
-        from lyrics_transcriber_plugin import (  # type: ignore[no-redef]
-            LyricsTranscriptionResult,  # type: ignore[import, assignment, no-redef]
-            WordTimestamp,  # type: ignore[import, assignment, no-redef]
-        )
-    except ImportError:
-        # Minimale Stub-Typen damit das Modul auch ohne Plugin ladbar ist
-        class LyricsTranscriptionResult:  # type: ignore[no-redef]
-            words: list = []
-            fallback_used: bool = True
-            duration_s: float = 0.0
 
-        class WordTimestamp:  # type: ignore[no-redef]
-            word: str = ""
-            start_s: float = 0.0
-            end_s: float = 0.0
-            confidence: float = 0.0
-            is_stressed: bool = False
-            phoneme_type: str = "mixed"
+# Duck-typed Stubs: Der Processor benötigt nur diese Attribute, keine konkrete Plugin-Klasse.
+class LyricsTranscriptionResult:  # type: ignore[no-redef]
+    words: list[Any] = []
+    fallback_used: bool = True
+    duration_s: float = 0.0
+
+
+class WordTimestamp:  # type: ignore[no-redef]
+    word: str = ""
+    start_s: float = 0.0
+    end_s: float = 0.0
+    confidence: float = 0.0
+    is_stressed: bool = False
+    phoneme_type: str = "mixed"
 
 
 logger = logging.getLogger(__name__)

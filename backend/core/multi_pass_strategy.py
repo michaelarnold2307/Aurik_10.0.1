@@ -694,7 +694,7 @@ class MultiPassEngine:
         """
         self.scorer = scorer or ObjectiveScorer()
         self.confidence_calc = ConfidenceCalculator()
-        self._restorer = None  # gecachte UnifiedRestorerV3-Instanz (einmalig laden)
+        self._restorer: Any | None = None  # gecachte UnifiedRestorerV3-Instanz (einmalig laden)
 
     def process_with_variants(
         self,
@@ -907,9 +907,11 @@ class MultiPassEngine:
             from backend.core.unified_restorer_v3 import UnifiedRestorerV3  # pylint: disable=import-outside-toplevel
 
             # Einmalig laden — alle Varianten nutzen dieselbe Instanz
-            if self._restorer is None:
+            restorer = self._restorer
+            if restorer is None:
                 logger.info("Initialisiere UnifiedRestorerV3 (einmalig)...")
-                self._restorer = UnifiedRestorerV3()  # type: ignore[assignment]
+                restorer = UnifiedRestorerV3()
+                self._restorer = restorer
 
             _restore_mode = self._derive_restore_mode(config)
             logger.debug(
@@ -917,7 +919,7 @@ class MultiPassEngine:
                 _restore_mode,
                 len(audio) / sample_rate,
             )
-            result = self._restorer.restore(  # type: ignore[union-attr,attr-defined]
+            result = restorer.restore(  # type: ignore[union-attr,attr-defined]
                 audio=audio,
                 sample_rate=sample_rate,
                 mode=_restore_mode,
@@ -926,7 +928,8 @@ class MultiPassEngine:
 
             # V3 gibt RestorationResult zurück — audio-Array extrahieren
             if hasattr(result, "audio") and result.audio is not None:
-                return result.audio  # type: ignore[no-any-return]
+                processed_audio: np.ndarray = np.asarray(result.audio, dtype=np.float32)
+                return processed_audio
             raise RuntimeError("UnifiedRestorerV3 returned no audio payload for variant evaluation")
 
         except Exception as e:

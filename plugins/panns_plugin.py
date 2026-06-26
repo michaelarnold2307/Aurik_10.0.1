@@ -26,6 +26,7 @@ import logging
 import math
 import threading
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -425,8 +426,11 @@ class PANNsPlugin:
             from backend.file_import import load_audio_file
 
             _res = load_audio_file(str(input_wav), do_carrier_analysis=False)
-            audio = np.asarray(_res["audio"], dtype=np.float32)
-            sr = int(_res["sr"])
+            if not isinstance(_res, dict):
+                raise TypeError("load_audio_file() muss ein Dict mit audio/sr liefern")
+            _payload: dict[str, Any] = _res
+            audio = np.asarray(_payload["audio"], dtype=np.float32)
+            sr = int(_payload["sr"])
         except Exception as exc:
             logger.error("PANNsPlugin.tag: Datei nicht lesbar '%s': %s", input_wav, exc)
             return {}
@@ -492,7 +496,10 @@ if __name__ == "__main__":
     from backend.file_import import load_audio_file
 
     _res = load_audio_file(sys.argv[1])
-    _audio, _sr = _res["audio"], int(_res["sr"])
+    if not isinstance(_res, dict):
+        raise TypeError("load_audio_file() muss ein Dict mit audio/sr liefern")
+    _payload: dict[str, Any] = _res
+    _audio, _sr = _payload["audio"], int(_payload["sr"])
     _tags = classify_audio(_audio, _sr)
     logger.debug("PANNs CNN14 — %s", sys.argv[1])
     for _tag, _score in sorted(_tags.items(), key=lambda x: -x[1]):

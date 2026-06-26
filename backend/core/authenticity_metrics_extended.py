@@ -19,6 +19,7 @@ import dataclasses
 import logging
 import warnings
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from scipy import signal
@@ -157,7 +158,7 @@ class FingerNoiseDetector:
         self.sensitivity = np.clip(sensitivity, 0.0, 1.0)
         self.freq_range = freq_range
 
-        self.metrics = {}
+        self.metrics: FingerNoiseResult | None = None
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> FingerNoiseResult:
         """
@@ -208,11 +209,11 @@ class FingerNoiseDetector:
             avg_duration_ms = 0.0
 
         # Compute finger noise energy ratio
-        finger_noise_energy = np.sum(filtered**2)
-        total_energy = np.sum(audio**2)
+        finger_noise_energy: float = float(np.sum(filtered**2))
+        total_energy: float = float(np.sum(audio**2))
         energy_ratio = finger_noise_energy / (total_energy + 1e-8)
 
-        self.metrics = FingerNoiseResult(  # type: ignore[assignment]
+        result = FingerNoiseResult(
             finger_noise_detected=n_events > 0,
             num_events=n_events,
             total_duration_ms=total_duration_ms,
@@ -220,7 +221,8 @@ class FingerNoiseDetector:
             energy_ratio=energy_ratio,
             retention_target=0.85,
         )
-        return self.metrics  # type: ignore[return-value]
+        self.metrics = result
+        return result
 
 
 # =============================================================================
@@ -258,7 +260,7 @@ class BowNoiseDetector:
         self.sensitivity = np.clip(sensitivity, 0.0, 1.0)
         self.freq_range = freq_range
 
-        self.metrics = {}
+        self.metrics: BowNoiseResult | None = None
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> BowNoiseResult:
         """
@@ -298,18 +300,19 @@ class BowNoiseDetector:
         bow_noise_ratio = np.mean(bow_noise_frames)
 
         # Compute bow noise energy
-        bow_noise_energy = np.sum(filtered**2)
-        total_energy = np.sum(audio**2)
+        bow_noise_energy: float = float(np.sum(filtered**2))
+        total_energy: float = float(np.sum(audio**2))
         energy_ratio = bow_noise_energy / (total_energy + 1e-8)
 
-        self.metrics = BowNoiseResult(  # type: ignore[assignment]
+        result = BowNoiseResult(
             bow_noise_detected=bool(bow_noise_ratio > 0.1),
             bow_noise_ratio=float(bow_noise_ratio),
             energy_ratio=float(energy_ratio),
             spectral_flatness_mean=float(np.mean(spectral_flatness)),
             retention_target=0.80,
         )
-        return self.metrics  # type: ignore[return-value]
+        self.metrics = result
+        return result
 
 
 # =============================================================================
@@ -347,7 +350,7 @@ class PedalNoiseDetector:
         self.sensitivity = np.clip(sensitivity, 0.0, 1.0)
         self.freq_range = freq_range
 
-        self.metrics = {}
+        self.metrics: PedalNoiseResult | None = None
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> PedalNoiseResult:
         """
@@ -393,17 +396,18 @@ class PedalNoiseDetector:
         n_events = len(peaks)
 
         # Compute pedal noise energy
-        pedal_energy = np.sum(filtered**2)
-        total_energy = np.sum(audio**2)
+        pedal_energy: float = float(np.sum(filtered**2))
+        total_energy: float = float(np.sum(audio**2))
         energy_ratio = pedal_energy / (total_energy + 1e-8)
 
-        self.metrics = PedalNoiseResult(  # type: ignore[assignment]
+        result = PedalNoiseResult(
             pedal_noise_detected=n_events > 0,
             num_events=n_events,
             energy_ratio=float(energy_ratio),
             retention_target=0.80,
         )
-        return self.metrics  # type: ignore[return-value]
+        self.metrics = result
+        return result
 
 
 # =============================================================================
@@ -441,7 +445,7 @@ class BrushTextureDetector:
         self.sensitivity = np.clip(sensitivity, 0.0, 1.0)
         self.freq_range = freq_range
 
-        self.metrics = {}
+        self.metrics: BrushTextureResult | None = None
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> BrushTextureResult:
         """
@@ -484,7 +488,7 @@ class BrushTextureDetector:
         num_regions: int = int(_label_result[1])
 
         if num_regions > 0:
-            region_lengths = [np.sum(labeled == i) for i in range(1, num_regions + 1)]
+            region_lengths: list[float] = [float(np.sum(labeled == i)) for i in range(1, num_regions + 1)]
             avg_region_length_ms = float(np.mean(region_lengths) / sample_rate * 1000)
             total_active_ms = np.sum(active_frames) / sample_rate * 1000
         else:
@@ -492,11 +496,11 @@ class BrushTextureDetector:
             total_active_ms = 0.0
 
         # Compute brush texture energy
-        brush_energy = np.sum(filtered**2)
-        total_energy = np.sum(audio**2)
+        brush_energy: float = float(np.sum(filtered**2))
+        total_energy: float = float(np.sum(audio**2))
         energy_ratio = brush_energy / (total_energy + 1e-8)
 
-        self.metrics = BrushTextureResult(  # type: ignore[assignment]
+        result = BrushTextureResult(
             brush_texture_detected=bool(num_regions > 0 and avg_region_length_ms > 100),
             num_regions=num_regions,
             avg_region_length_ms=float(avg_region_length_ms),
@@ -504,7 +508,8 @@ class BrushTextureDetector:
             energy_ratio=float(energy_ratio),
             retention_target=0.85,
         )
-        return self.metrics  # type: ignore[return-value]
+        self.metrics = result
+        return result
 
 
 # =============================================================================
@@ -542,7 +547,7 @@ class VinylCharacterDetector:
         self.sensitivity = np.clip(sensitivity, 0.0, 1.0)
         self.thd_threshold = thd_threshold
 
-        self.metrics = {}
+        self.metrics: VinylCharacterResult | None = None
 
     def detect(self, audio: np.ndarray, sample_rate: int) -> VinylCharacterResult:
         """
@@ -604,8 +609,8 @@ class VinylCharacterDetector:
         # Compute noise floor (high-frequency energy >10 kHz)
         noise_mask = positive_freqs > 10000
         if np.any(noise_mask):
-            noise_energy = np.sum(magnitude[noise_mask] ** 2)
-            total_energy = np.sum(magnitude**2)
+            noise_energy: float = float(np.sum(magnitude[noise_mask] ** 2))
+            total_energy: float = float(np.sum(magnitude**2))
             noise_ratio = noise_energy / (total_energy + 1e-8)
         else:
             noise_ratio = 0.0
@@ -614,7 +619,7 @@ class VinylCharacterDetector:
         has_warmth = 0.01 < thd < self.thd_threshold  # Warmth: 1-5% THD
         has_defects = noise_ratio > 0.02  # Defects: >2% HF noise
 
-        self.metrics = VinylCharacterResult(  # type: ignore[assignment]
+        result = VinylCharacterResult(
             vinyl_character_detected=bool(has_warmth or has_defects),
             warmth_detected=bool(has_warmth),
             defects_detected=bool(has_defects),
@@ -623,7 +628,8 @@ class VinylCharacterDetector:
             warmth_retention_target=0.90,
             defects_removal_target=0.90,
         )
-        return self.metrics  # type: ignore[return-value]
+        self.metrics = result
+        return result
 
 
 # =============================================================================
@@ -733,8 +739,11 @@ if __name__ == "__main__":
     from backend.file_import import load_audio_file
 
     _res = load_audio_file(args.input)
-    audio = np.asarray(_res["audio"], dtype=np.float32)
-    sr = int(_res["sr"])
+    if not isinstance(_res, dict):
+        raise TypeError("load_audio_file() muss ein Dict mit audio/sr liefern")
+    _payload: dict[str, Any] = _res
+    audio = np.asarray(_payload["audio"], dtype=np.float32)
+    sr = int(_payload["sr"])
 
     # Transpose if stereo
     if audio.ndim == 2:

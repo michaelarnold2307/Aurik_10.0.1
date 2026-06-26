@@ -52,7 +52,7 @@ def main() -> int:
         print("Aurik mypy Real-Bug-Gate: 0 echte Bugs (var-annotated Sprint 4 toleriert)")
         return 0
 
-    counts = Counter()
+    counts: Counter[str] = Counter()
     for line in real_bugs:
         match = ERROR_CODE_RE.search(line)
         counts[match.group(1) if match else "unknown"] += 1

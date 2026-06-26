@@ -22,6 +22,7 @@ Phase: 2D.2.1 - Real-World Validation Testing
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from typing import cast
 
 import numpy as np
 
@@ -271,10 +272,12 @@ class RestorationArtifactDetector:
                 duration = (end_frame - start_frame) * self.hop_size / sr
 
                 # Compute severity based on variance increase
-                max_variance_increase = np.max(variance_increase[group])
+                max_variance_increase: float = float(np.max(variance_increase[group]))
                 severity = self._classify_severity(
-                    max_variance_increase / (np.mean(original_variance) + 1e-6), [0.5, 1.0, 2.0, 5.0]
+                    float(max_variance_increase / (float(np.mean(original_variance)) + 1e-6)),
+                    [0.5, 1.0, 2.0, 5.0],
                 )
+                confidence = float(np.clip(max_variance_increase / threshold, 0.0, 1.0))
 
                 artifacts.append(
                     Artifact(
@@ -282,7 +285,7 @@ class RestorationArtifactDetector:
                         severity=severity,
                         start_time=start_time,
                         duration=duration,
-                        confidence=min(1.0, max_variance_increase / threshold),
+                        confidence=confidence,
                         description=f"Musical noise detected at {start_time:.2f}s",
                         metadata={"variance_increase": max_variance_increase},
                     )
@@ -490,14 +493,13 @@ class RestorationArtifactDetector:
 
         # Compute RMS envelope
         frame_length = int(0.05 * sr)  # 50ms frames
-        rms_envelope = []
+        rms_values: list[float] = []
 
         for i in range(0, len(audio) - frame_length, frame_length // 2):
-            frame = audio[i : i + frame_length]
-            rms = np.sqrt(np.mean(frame**2))
-            rms_envelope.append(rms)
+            rms = float(np.sqrt(np.mean(np.square(audio[i : i + frame_length]))))
+            rms_values.append(rms)
 
-        rms_envelope = np.array(rms_envelope)
+        rms_envelope = np.asarray(rms_values, dtype=np.float64)
 
         # Pumping = rapid RMS fluctuations
         rms_diff = np.abs(np.diff(rms_envelope))
@@ -624,12 +626,15 @@ class RestorationArtifactDetector:
         # Avoid log(0)
         spec_safe = spec + 1e-10
 
-        geometric_mean = np.exp(np.mean(np.log(spec_safe), axis=0))
-        arithmetic_mean = np.mean(spec_safe, axis=0)
+        log_spec = np.asarray(np.log(spec_safe), dtype=np.float64)
+        mean_log_spec = np.asarray(np.mean(log_spec, axis=0), dtype=np.float64)
+        geometric_mean = np.asarray(np.exp(mean_log_spec), dtype=np.float64)
+        arithmetic_mean = np.asarray(np.mean(spec_safe, axis=0), dtype=np.float64)
 
         flatness = geometric_mean / (arithmetic_mean + 1e-10)
 
-        return flatness  # type: ignore[no-any-return]
+        flatness_array = np.asarray(flatness, dtype=np.float64)
+        return cast(np.ndarray, flatness_array)
 
     def _hilbert_transform(self, audio: np.ndarray) -> np.ndarray:
         """Berechnet analytic signal via Hilbert transform."""
@@ -642,9 +647,10 @@ class RestorationArtifactDetector:
         h[0] = 1
         h[1 : n // 2] = 2
 
-        analytic = np.fft.ifft(fft * h)
+        analytic: np.ndarray = np.asarray(np.fft.ifft(fft * h))
 
-        return analytic  # type: ignore[no-any-return]
+        analytic_array: np.ndarray = np.asarray(analytic)
+        return analytic_array
 
     def _group_adjacent_indices(self, indices: np.ndarray, max_gap: int = 1) -> list[list[int]]:
         """Group adjacent indices into continuous segments."""
