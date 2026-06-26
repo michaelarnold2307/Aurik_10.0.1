@@ -1454,7 +1454,7 @@ class TestPhase55DiffWaveBridgeIntegration:
         from backend.core.phases import DiffusionInpaintingPhase
 
         phase = DiffusionInpaintingPhase()
-        sr = 8000
+        sr = 48000
         audio = np.sin(2 * np.pi * 440 * np.arange(sr) / sr).astype(np.float32)
         audio[sr // 2 : sr // 2 + int(0.05 * sr)] = 0.0
         result = phase.process(audio, sample_rate=sr)
@@ -1467,7 +1467,7 @@ class TestPhase55DiffWaveBridgeIntegration:
         from backend.core.phases import DiffusionInpaintingPhase
 
         phase = DiffusionInpaintingPhase()
-        sr = 8000
+        sr = 48000
         audio = np.random.default_rng(0).uniform(-0.5, 0.5, sr).astype(np.float32)
         audio[1000:1500] = 0.0
         result = phase.process(audio, sample_rate=sr)
