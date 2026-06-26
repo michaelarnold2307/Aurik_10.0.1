@@ -92,7 +92,7 @@ def _peaking_eq(audio: np.ndarray, sr: int, freq: float, gain_db: float, q: floa
     result = np.empty_like(audio)
     for ch in range(audio.shape[1]):
         result[:, ch] = sig.filtfilt(b, a, audio[:, ch])
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 def _high_shelf(audio: np.ndarray, sr: int, freq: float, gain_db: float) -> np.ndarray:
@@ -118,7 +118,7 @@ def _high_shelf(audio: np.ndarray, sr: int, freq: float, gain_db: float) -> np.n
     result = np.empty_like(audio)
     for ch in range(audio.shape[1]):
         result[:, ch] = sig.filtfilt(b, a, audio[:, ch])
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 class BrassEnhancementPhase(PhaseInterface):
@@ -188,7 +188,7 @@ class BrassEnhancementPhase(PhaseInterface):
                     _n_s_45 = audio.shape[-1] if audio.ndim > 1 else len(audio)
                     _zone_s_45 = sum(z.end_sample - z.start_sample for z in _fmz_45)
                     _zone_frac_45 = float(np.clip(_zone_s_45 / max(1, _n_s_45), 0.0, 1.0))
-                    _effective_strength: float = float(np.clip(_effective_strength + _zone_frac_45 * 0.15, 0.0, 1.0))
+                    _effective_strength = float(np.clip(_effective_strength + _zone_frac_45 * 0.15, 0.0, 1.0))
             except Exception as _fmg_exc_45:
                 logger.debug("Phase45 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_45)
 
