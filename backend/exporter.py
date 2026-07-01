@@ -11,6 +11,11 @@ import soundfile as sf
 from backend.core.metadata_preserver import get_metadata_preserver
 
 try:
+    from Aurik910 import __version__ as _AURIK_VERSION
+except Exception:
+    _AURIK_VERSION = "unknown"
+
+try:
     import ffmpeg
 except ImportError:
     ffmpeg = None
@@ -31,7 +36,7 @@ def _transfer_metadata(source_path: str, target_path: str) -> None:
     if not source_path:
         return
     try:
-        get_metadata_preserver().transfer(source_path, target_path, aurik_version="9.15.0")
+        get_metadata_preserver().transfer(source_path, target_path, aurik_version=_AURIK_VERSION)
     except Exception as exc:
         logger.debug("metadata transfer skipped: %s", exc)
 

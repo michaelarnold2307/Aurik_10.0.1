@@ -271,12 +271,31 @@ def _as_samples_channels(audio: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(arr)  # type: ignore[no-any-return]
 
 
+def _resample_audio(audio: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
+    """Resampelt Audio von src_sr auf dst_sr mit soxr HQ (Fallback: scipy)."""
+    if src_sr == dst_sr:
+        return audio
+    if _soxr_rs is not None:
+        try:
+            return _soxr_rs.resample(audio, src_sr, dst_sr, quality="HQ").astype(np.float32)
+        except Exception:
+            pass
+    if _sig is not None:
+        n_out = int(round(audio.shape[0] * dst_sr / src_sr))
+        if audio.ndim == 1:
+            return _sig.resample(audio, n_out).astype(np.float32)
+        return np.stack([_sig.resample(audio[:, ch], n_out) for ch in range(audio.shape[1])], axis=1).astype(np.float32)
+    raise RuntimeError("soxr und scipy nicht verfügbar — Output-Resampling nicht möglich.")
+
+
 def _export_audio_frontend_parity(
     result: object,
     output_path: str,
     restored_audio: np.ndarray,
     reference_audio: np.ndarray,
     logger: logging.Logger,
+    bit_depth: int = 24,
+    output_sr: int = _TARGET_SR,
 ) -> tuple[bool, list[str], dict[str, object]]:
     """Exportiert mit demselben Guard-/Gate-Vertrag wie das Frontend."""
     write_audio = export_guard(_as_samples_channels(restored_audio))
@@ -390,14 +409,29 @@ def _export_audio_frontend_parity(
         out_path = out_path.with_suffix(".wav")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Output-Resampling wenn abweichende Ziel-Sample-Rate gewünscht (z.B. 44100 Hz für CD)
+    write_sr = _TARGET_SR
+    if output_sr != _TARGET_SR:
+        try:
+            write_audio = _resample_audio(write_audio, _TARGET_SR, output_sr)
+            if reference_for_export is not None:
+                reference_for_export = _resample_audio(reference_for_export, _TARGET_SR, output_sr)
+            write_sr = output_sr
+            logger.info("Output-Resampling: %d Hz → %d Hz (soxr HQ)", _TARGET_SR, output_sr)
+        except Exception as _rs_exc:
+            logger.warning("Output-Resampling fehlgeschlagen, exportiere mit %d Hz: %s", _TARGET_SR, _rs_exc)
+
+    _SUBTYPE_MAP = {16: "PCM_16", 24: "PCM_24", 32: "FLOAT"}
+    _sf_subtype = _SUBTYPE_MAP.get(bit_depth, "PCM_24")
+
     audio_exporter_cls = get_audio_exporter_class()
     if audio_exporter_cls is not None and out_path.suffix.lower() in audio_exporter_cls.FORMATS:
         exporter = audio_exporter_cls()
         exporter.export(
             write_audio,
-            _TARGET_SR,
+            write_sr,
             out_path,
-            bit_depth=24,
+            bit_depth=bit_depth,
             quality="veryhigh",
             metadata=export_metadata,
             normalize=False,
@@ -406,7 +440,7 @@ def _export_audio_frontend_parity(
     else:
         tmp_path = str(out_path) + ".wav.tmp"
         try:
-            sf.write(tmp_path, write_audio, _TARGET_SR, format="WAV", subtype="PCM_24")
+            sf.write(tmp_path, write_audio, write_sr, format="WAV", subtype=_sf_subtype)
             os.replace(tmp_path, out_path)
         finally:
             if os.path.exists(tmp_path):
@@ -426,6 +460,8 @@ def process_audio(
     verbose: bool = True,
     mode: str = "Restoration",
     phase_strength_oracle_rollout: str | None = None,
+    bit_depth: int = 24,
+    output_sr: int = _TARGET_SR,
 ) -> object:
     """Verarbeitet eine Audiodatei über denselben Denker-/Exportpfad wie das Frontend."""
     logging.basicConfig(level=logging.INFO if verbose else logging.WARNING, format="%(levelname)s: %(message)s")
@@ -657,6 +693,8 @@ def process_audio(
             restored,
             audio_48k,
             logger,
+            bit_depth=bit_depth,
+            output_sr=output_sr,
         )
     except Exception as exc:
         logger.error("Fehler beim Speichern der Audiodatei: %s", exc)
@@ -683,11 +721,13 @@ def process_audio(
 
 def print_usage():
     """Gibt die CLI-Hilfe aus."""
-    print("\nVerwendung: aurik_cli [--input PATH] [--output PATH] [--mode MODUS] [-q] [-h]")
+    print("\nVerwendung: aurik_cli [--input PATH] [--output PATH] [--mode MODUS] [--bit-depth N] [--output-sr HZ] [-q] [-h]")
     print("\nOptionen:")
     print("  --input, --input_audio PATH  Eingabe-Audiodatei")
     print("  --output, --output_audio PATH Ausgabe-Audiodatei")
     print("  --mode MODUS                 Restaurierungsmodus: 'Restoration' (Standard) oder 'Studio 2026'")
+    print("  --bit-depth N                Bit-Tiefe: 16, 24 (Standard) oder 32 (float)")
+    print("  --output-sr HZ               Ausgabe-Sample-Rate: 44100 oder 48000 (Standard)")
     print("  -q, --quiet                  Keine Fortschritts-Ausgaben")
     print("  -h, --help                   Diese Hilfe anzeigen")
     print()
@@ -709,6 +749,8 @@ def main():
     output_file = None
     mode = "Restoration"
     phase_strength_oracle_rollout: str | None = None
+    bit_depth = 24
+    output_sr = _TARGET_SR
     skip_next = False
     for i, arg in enumerate(args):
         if skip_next:
@@ -732,6 +774,56 @@ def main():
                 skip_next = True
         elif "=" in arg and arg.split("=", 1)[0] == "--mode":
             mode = arg.split("=", 1)[1]
+        elif arg == "--bit-depth":
+            if i + 1 < len(args):
+                try:
+                    _bd = int(args[i + 1])
+                    if _bd in (16, 24, 32):
+                        bit_depth = _bd
+                    else:
+                        print(f"❌ Ungültige Bit-Tiefe '{args[i+1]}' — erlaubt: 16, 24, 32")
+                        sys.exit(1)
+                except ValueError:
+                    print(f"❌ Ungültige Bit-Tiefe '{args[i+1]}' — erlaubt: 16, 24, 32")
+                    sys.exit(1)
+                skip_next = True
+        elif "=" in arg and arg.split("=", 1)[0] == "--bit-depth":
+            _bd_str = arg.split("=", 1)[1]
+            try:
+                _bd = int(_bd_str)
+                if _bd in (16, 24, 32):
+                    bit_depth = _bd
+                else:
+                    print(f"❌ Ungültige Bit-Tiefe '{_bd_str}' — erlaubt: 16, 24, 32")
+                    sys.exit(1)
+            except ValueError:
+                print(f"❌ Ungültige Bit-Tiefe '{_bd_str}' — erlaubt: 16, 24, 32")
+                sys.exit(1)
+        elif arg == "--output-sr":
+            if i + 1 < len(args):
+                try:
+                    _sr = int(args[i + 1])
+                    if _sr in (44_100, 48_000):
+                        output_sr = _sr
+                    else:
+                        print(f"❌ Ungültige Sample-Rate '{args[i+1]}' — erlaubt: 44100, 48000")
+                        sys.exit(1)
+                except ValueError:
+                    print(f"❌ Ungültige Sample-Rate '{args[i+1]}' — erlaubt: 44100, 48000")
+                    sys.exit(1)
+                skip_next = True
+        elif "=" in arg and arg.split("=", 1)[0] == "--output-sr":
+            _sr_str = arg.split("=", 1)[1]
+            try:
+                _sr = int(_sr_str)
+                if _sr in (44_100, 48_000):
+                    output_sr = _sr
+                else:
+                    print(f"❌ Ungültige Sample-Rate '{_sr_str}' — erlaubt: 44100, 48000")
+                    sys.exit(1)
+            except ValueError:
+                print(f"❌ Ungültige Sample-Rate '{_sr_str}' — erlaubt: 44100, 48000")
+                sys.exit(1)
     # Positional Fallback: nur Nicht-Flag-Argumente verwenden
     positional = [a for a in args if not a.startswith("-")]
     if input_file is None and len(positional) >= 1:
@@ -750,6 +842,8 @@ def main():
         verbose=verbose,
         mode=mode,
         phase_strength_oracle_rollout=phase_strength_oracle_rollout,
+        bit_depth=bit_depth,
+        output_sr=output_sr,
     )
 
 
