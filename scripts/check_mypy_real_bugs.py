@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Aurik mypy Real-Bug-Gate.
 
-Fuehrt mypy auf den release-relevanten Ebenen aus und blockiert alle Fehler ausser
-der bewusst noch offenen Sprint-4-Klasse `var-annotated`.
+Fuehrt mypy auf den release-relevanten Ebenen aus und blockiert jeden Fehlercode.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ import sys
 from collections import Counter
 
 DEFAULT_TARGETS = ["backend/core/", "backend/api/", "plugins/", "Aurik910/", "cli/"]
-IGNORED_CODES = {"var-annotated"}
+IGNORED_CODES: set[str] = set()
 ERROR_CODE_RE = re.compile(r"\[([a-z0-9-]+)\]$")
 
 
@@ -49,7 +48,7 @@ def main() -> int:
     _, lines = run_mypy(args.targets)
     real_bugs = [line for line in lines if keep_real_bug(line)]
     if not real_bugs:
-        print("Aurik mypy Real-Bug-Gate: 0 echte Bugs (var-annotated Sprint 4 toleriert)")
+        print("Aurik mypy Real-Bug-Gate: 0 Fehlercodes in Release-Layern")
         return 0
 
     counts: Counter[str] = Counter()

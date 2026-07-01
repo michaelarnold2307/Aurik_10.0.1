@@ -372,7 +372,7 @@ def _synthesize_sinusoidal(
         output += amp * np.sin(2.0 * np.pi * freq_hz * t + phase)
 
     # Robust level match (no RMS normalization)
-    peak = np.max(np.abs(output))
+    peak: float = float(np.max(np.abs(output)))
     if peak > 0:
         target_level = (
             float(np.median(np.abs(np.array([a for _, a in partials[:8]], dtype=np.float64)))) if partials else 0.1

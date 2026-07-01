@@ -50,6 +50,63 @@ def test_cli_uses_frontend_export_contract():
     assert "sf.write(output_path" not in source
 
 
+def test_export_quality_blocks_structural_silence_lift() -> None:
+    """§0h: Export darf in struktureller Stille keine Energie hinzufuegen."""
+    from backend.exporter import validate_export_quality
+
+    result = SimpleNamespace(
+        quality_estimate=0.9,
+        metadata={
+            "structural_silence_audit": {
+                "failed": True,
+                "max_lift_db": 2.4,
+            },
+            "musical_goals": {"scores": {}, "violations": [], "thresholds": {}},
+        },
+    )
+
+    passed, warnings = validate_export_quality(result)
+
+    assert passed is False
+    assert any("Structural-Silence" in warning or "Stille-Zonen" in warning for warning in warnings)
+
+
+def test_export_quality_blocks_severe_vocal_naturalness_damage() -> None:
+    """§0p: schwere Formant-/Vibrato-Schäden sind Export-Hörschaden, kein kosmetischer Warnfall."""
+    from backend.exporter import validate_export_quality
+
+    result = SimpleNamespace(
+        quality_estimate=0.9,
+        metadata={
+            "vocal_quality_check": {
+                "formant_integrity": 0.68,
+                "vibrato_depth_preservation": 0.76,
+            },
+            "musical_goals": {"scores": {}, "violations": [], "thresholds": {}},
+        },
+    )
+
+    passed, warnings = validate_export_quality(result)
+
+    assert passed is False
+    assert any("Formant" in warning for warning in warnings)
+    assert any("Vibrato" in warning for warning in warnings)
+
+
+def test_ab_plan_recommendation_prefers_safe_candidate_over_metric_gain() -> None:
+    """A/B-Harness darf Metrikgewinn nie ueber AFG/VQI-Sicherheitsveto stellen."""
+    from scripts.ab_plan_eval import _recommend_plan
+
+    baseline = {"hpi": 0.05, "artifact_freedom": 0.96, "vqi": 0.78, "n_phases_executed": 3}
+    unsafe_candidate = {"hpi": 0.20, "artifact_freedom": 0.90, "vqi": 0.69, "n_phases_executed": 2}
+
+    recommendation = _recommend_plan(baseline, unsafe_candidate)
+
+    assert recommendation["winner"] == "A"
+    assert "artifact_freedom<0.95" in recommendation["safety_violations_b"]
+    assert "vqi<0.72" in recommendation["safety_violations_b"]
+
+
 def test_cli_export_helper_uses_audio_exporter_and_quality_payload(monkeypatch, tmp_path):
     """CLI-Export muss AudioExporter, Export-Guard und Gate-Payload wie das Frontend nutzen."""
     from cli import aurik_cli

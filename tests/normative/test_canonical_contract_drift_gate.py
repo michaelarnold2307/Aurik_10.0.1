@@ -143,6 +143,30 @@ def test_batch_release_path_uses_bridge_contract() -> None:
 
 @pytest.mark.normative
 @pytest.mark.timeout(20)
+def test_release_surfaces_share_same_bridge_contract_symbols() -> None:
+    """GUI, CLI und Batch duerfen keinen auseinanderlaufenden Release-Vertrag pflegen."""
+    surfaces = {
+        "cli": _CLI.read_text(encoding="utf-8"),
+        "frontend": _FRONTEND.read_text(encoding="utf-8"),
+        "batch": _BATCH.read_text(encoding="utf-8"),
+    }
+    canonical_tokens = {
+        "load_audio": ("get_load_audio_fn", "_bridge_get_load_audio_fn", "_get_load_audio_fn"),
+        "pre_analysis": ("run_pre_analysis", "_bridge_run_pre_analysis", "_run_pre_analysis"),
+        "denker": ("get_aurik_denker_instance", "_bridge_get_aurik_denker_instance", "_get_aurik_denker_instance"),
+        "export_guard": ("export_guard", "_export_guard", "_export_guard"),
+        "validate_export_quality": ("validate_export_quality", "_validate_export_quality", "_validate_export_quality"),
+        "audio_exporter": ("get_audio_exporter_class", "_bridge_get_audio_exporter_class", "_get_audio_exporter_class"),
+    }
+    for contract_name, tokens in canonical_tokens.items():
+        for surface_name, token in zip(surfaces.keys(), tokens, strict=True):
+            assert token in surfaces[surface_name], (
+                f"{surface_name} fehlt Canonical-Contract-Symbol {contract_name}: {token}"
+            )
+
+
+@pytest.mark.normative
+@pytest.mark.timeout(20)
 def test_legacy_rest_server_paths_are_explicitly_non_release() -> None:
     """REST-Altpfade mit eigenem IO muessen klar als nicht release-faehig markiert sein."""
     for path in _REST_LEGACY:

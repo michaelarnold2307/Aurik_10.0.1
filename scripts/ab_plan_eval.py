@@ -199,6 +199,68 @@ def _delta(b: Any, a: Any) -> str:
     return ""
 
 
+def _metric_float(metrics: dict[str, Any], key: str) -> float | None:
+    value = metrics.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (float, int)):
+        return float(value)
+    return None
+
+
+def _safety_violations(metrics: dict[str, Any], *, vocal_required: bool) -> list[str]:
+    violations: list[str] = []
+    artifact_freedom = _metric_float(metrics, "artifact_freedom")
+    if artifact_freedom is not None and artifact_freedom < 0.95:
+        violations.append(f"artifact_freedom<{0.95:.2f}")
+    hpi = _metric_float(metrics, "hpi")
+    if hpi is not None and hpi <= 0.0:
+        violations.append("hpi<=0")
+    vqi = _metric_float(metrics, "vqi")
+    if vocal_required and vqi is not None and vqi < 0.72:
+        violations.append(f"vqi<{0.72:.2f}")
+    return violations
+
+
+def _plan_quality_score(metrics: dict[str, Any]) -> float:
+    hpi = _metric_float(metrics, "hpi") or 0.0
+    artifact_freedom = _metric_float(metrics, "artifact_freedom") or 0.0
+    vqi = _metric_float(metrics, "vqi") or 0.0
+    timbral_fidelity = _metric_float(metrics, "timbral_fidelity") or 0.0
+    oqs = (_metric_float(metrics, "oqs_mushra") or 0.0) / 100.0
+    n_phases = _metric_float(metrics, "n_phases_executed") or 0.0
+    intervention_penalty = min(0.08, 0.002 * n_phases)
+    return hpi + 0.35 * artifact_freedom + 0.25 * vqi + 0.15 * timbral_fidelity + 0.10 * oqs - intervention_penalty
+
+
+def _recommend_plan(metrics_a: dict[str, Any], metrics_b: dict[str, Any]) -> dict[str, Any]:
+    """Waehlt den sichersten A/B-Kandidaten; Safety-Gates schlagen Score-Gewinne."""
+    vocal_required = (_metric_float(metrics_a, "vqi") is not None) or (_metric_float(metrics_b, "vqi") is not None)
+    violations_a = _safety_violations(metrics_a, vocal_required=vocal_required)
+    violations_b = _safety_violations(metrics_b, vocal_required=vocal_required)
+    score_a = _plan_quality_score(metrics_a)
+    score_b = _plan_quality_score(metrics_b)
+
+    if violations_a and not violations_b:
+        winner = "B"
+    elif violations_b and not violations_a:
+        winner = "A"
+    elif violations_a and violations_b:
+        winner = "A" if score_a >= score_b else "B"
+    else:
+        winner = "B" if score_b > score_a + 0.005 else "A"
+
+    return {
+        "winner": winner,
+        "score_a": round(score_a, 6),
+        "score_b": round(score_b, 6),
+        "score_delta_b_minus_a": round(score_b - score_a, 6),
+        "safety_violations_a": violations_a,
+        "safety_violations_b": violations_b,
+        "vocal_required": vocal_required,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Plan-A-vs-Plan-B-Mess-Harness (EVAL_NON_RELEASE) — rendert beide Pläne und vergleicht.",
@@ -217,6 +279,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--label-a", default="A", help="Label für Plan A (Dateiname/Report).")
     parser.add_argument("--label-b", default="B", help="Label für Plan B (Dateiname/Report).")
     parser.add_argument("--out-dir", default="output_audio/ab_eval", help="Ausgabeverzeichnis.")
+    parser.add_argument(
+        "--fail-on-unsafe-candidate",
+        action="store_true",
+        help="Exit-Code 3, wenn Plan B gegen AFG/HPI/VQI-Sicherheitsgates verstoesst.",
+    )
     parser.add_argument(
         "--rt-limit",
         action="store_true",
@@ -314,6 +381,14 @@ def main(argv: list[str] | None = None) -> int:
             _delta(metrics_b.get(k), metrics_a.get(k)),
         )
     logger.info("%-20s %12.1f %12.1f %12s", "runtime_s", rt_a, rt_b, _delta(rt_b, rt_a))
+    recommendation = _recommend_plan(metrics_a, metrics_b)
+    logger.info(
+        "A/B-Empfehlung: Gewinner=%s score_delta_b_minus_a=%s safety_a=%s safety_b=%s",
+        recommendation["winner"],
+        recommendation["score_delta_b_minus_a"],
+        recommendation["safety_violations_a"],
+        recommendation["safety_violations_b"],
+    )
 
     # --- JSON-Report ---
     report = {
@@ -323,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
         "no_rt_limit": no_rt_limit,
         "plan_a": {"label": args.label_a, "desc": desc_a, "phases": plan_a, "runtime_s": rt_a, "metrics": metrics_a},
         "plan_b": {"label": args.label_b, "desc": desc_b, "phases": plan_b, "runtime_s": rt_b, "metrics": metrics_b},
+        "recommendation": recommendation,
         "audio_a": str(path_a),
         "audio_b": str(path_b),
     }
@@ -332,6 +408,9 @@ def main(argv: list[str] | None = None) -> int:
     logger.info(
         "Hinweis (§0g): Die Zahlen sind ein Proxy. Höre A und B gegen, bevor du einen Plan als 'besser' wertest."
     )
+    if args.fail_on_unsafe_candidate and recommendation["safety_violations_b"]:
+        logger.error("Plan B verletzt Sicherheitsgates: %s", recommendation["safety_violations_b"])
+        return 3
     return 0
 
 
