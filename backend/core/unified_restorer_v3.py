@@ -1236,6 +1236,9 @@ class UnifiedRestorerV3:
         self._active_causal_phase_parameters: dict[str, Any] = {}
         self._active_defekt_phase_parameters: dict[str, Any] = {}
         self._active_phase_parameter_overrides: dict[str, dict[str, Any]] = {}
+        # Laufzeit-Metadaten für Guards/Korrekturen (z.B. §2.45b, §2.61).
+        # Muss immer existieren, da mehrere Pfade self._metadata[...] direkt schreiben.
+        self._metadata: dict[str, Any] = {}
         self._restoration_context: dict = {}
         self._material_defect_consistency_warnings: list = []
         self._last_restorability_score: float = 50.0
@@ -6944,6 +6947,9 @@ class UnifiedRestorerV3:
         _FAST_GOAL_SNAP_CACHE.clear()
         # §Perf: Bereits von APR/FC-SECONDARY behandelte Goals — verhindert Multi-Mechanismus-Doppelarbeit.
         self._session_recovered_goals = set()
+        # Per-Run Metadata zurücksetzen, damit keine Stale-Einträge aus Vorläufen
+        # in Guard-/Export-Entscheidungen einfließen.
+        self._metadata = {}
 
         def _cb(pct: int, phase: str) -> None:
             """Sendet Progress-Update, falls Callback registriert."""

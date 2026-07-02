@@ -1413,6 +1413,10 @@ class TestUnifiedRestorerV3Init:
         restorer = UnifiedRestorerV3()
         assert restorer is not None
 
+    def test_19a_metadata_runtime_dict_initialized(self):
+        restorer = UnifiedRestorerV3()
+        assert isinstance(restorer._metadata, dict)
+
     def test_20_custom_config_applied(self):
         cfg = RestorationConfig(mode=QualityMode.FAST, num_cores=2)
         restorer = UnifiedRestorerV3(config=cfg)
@@ -1441,6 +1445,18 @@ class TestUnifiedRestorerV3Init:
         restorer = UnifiedRestorerV3(quality_mode="studio_2026")
         assert restorer.config.mode == QualityMode.MAXIMUM
         assert restorer.is_studio_mode() is True
+
+    def test_23c_restore_resets_metadata_per_run(self):
+        restorer = UnifiedRestorerV3()
+        restorer._metadata["stale_marker"] = True
+
+        # <100 ms triggert den frühen Pass-Through, aber der per-run Reset
+        # in restore() muss vorher bereits erfolgt sein.
+        tiny_audio = np.zeros(100, dtype=np.float32)
+        result = restorer.restore(tiny_audio, sample_rate=48000)
+
+        assert isinstance(result, RestorationResult)
+        assert restorer._metadata == {}
 
 
 # ---------------------------------------------------------------------------

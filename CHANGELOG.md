@@ -4,6 +4,51 @@
 > Historische Qualitäts- und Marketingformulierungen bleiben zur Nachvollziehbarkeit erhalten
 > und sind nicht automatisch als aktueller, normativ bindender Außenclaim zu verstehen.
 
+## Version 9.20.2 — UV3-Metadaten-Init-Fix + Gate-Serie gruen (Stand: 2. Juli 2026)
+
+### Bugfix
+
+- `backend/core/unified_restorer_v3.py`
+  - `_metadata` wird nun in `UnifiedRestorerV3.__init__()` garantiert initialisiert.
+  - `_metadata` wird zu Beginn jedes `restore()`-Laufs zurueckgesetzt, damit keine
+    Stale-Eintraege aus Vorlaeufen Guard-/Export-Entscheidungen beeinflussen.
+
+### Regression-Absicherung
+
+- `tests/unit/test_unified_restorer_v3.py`
+  - Neuer Test: `test_19a_metadata_runtime_dict_initialized`
+  - Neuer Test: `test_23c_restore_resets_metadata_per_run`
+  - Verifikation (gezielt): `2 passed, 266 deselected`.
+
+### Verifikation (Gate-Serie)
+
+- Spec Gate CORE: `833 passed, 10 deselected, 4 warnings`.
+- AMRB Gate: `12 passed`.
+- Competitive Gate: `11 passed, 1 skipped, 4 warnings`.
+
+## Version 9.20.1 — Safe-Runner-Timeout-Guard + Real-Audio-Edge/Lag-Timeout-Härtung (Stand: 2. Juli 2026)
+
+### Stabilität / Test-Infrastruktur
+
+- `run_tests_safe.sh`
+  - Neuer globaler Laufzeit-Watchdog via `AURIK_GLOBAL_TIMEOUT_S` (Default: 5400 s).
+  - Gilt für beide Ausführungspfade (`systemd-run` und `setsid`), inkl. `--kill-after`-Esklation.
+  - Ziel: Hängende Langläufe kontrolliert beenden statt Lock-/Terminal-Deadlocks im CI/VS-Workflow.
+
+### Normative Gate-Härtung
+
+- `tests/normative/test_real_audio_edge_lag_gate.py`
+  - Primärer Restore-Timeout auf robusteren Wert angehoben (`AURIK_REAL_AUDIO_GATE_RESTORE_TIMEOUT_S`, Default 240 s).
+  - Timeout-spezifischer Retry-Pfad ergänzt (kürzeres Analysefenster + reduziertes ML-Budget),
+    um Infrastruktur-Latenzspitzen abzufangen.
+  - Gate-Assertions (`Edge-Peak-Explosion`, `Interchannel-Delay`) bleiben unverändert streng.
+
+### Verifikation
+
+- `tests/normative/test_real_audio_edge_lag_gate.py`: **2 passed**.
+- Spec Gate CORE (`tests/integration` + `tests/normative`, ohne AMRB/competitive):
+  **833 passed, 10 deselected, 1 warning, 0 errors** in 710.33 s.
+
 ## Version 9.20.0 — HPG Reference Memory Bootstrap, Harmonische Direktionalität, V54/V38 Compliance (Stand: 3. Juli 2026)
 
 ### Qualitätsverbesserungen
