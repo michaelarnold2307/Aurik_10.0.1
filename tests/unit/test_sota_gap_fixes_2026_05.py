@@ -142,6 +142,23 @@ class TestRestoreCarrierNoiseTexture:
             f"Starkregen-Artefakt."
         )
 
+    @pytest.mark.parametrize("material", ["cassette", "vinyl", "shellac", "tape", "reel_tape", "wax_cylinder"])
+    def test_analog_resynth_targets_cd_like_floor(self, material):
+        """Analogträger: Over-NR-Korrektur darf analoges Trägerrauschen nicht zurückfüllen."""
+        from backend.core.dsp.noise_texture_resynth import restore_carrier_noise_texture
+
+        analog_amplitude = 10 ** (-52.0 / 20.0)
+        sr = 48000
+        rng = np.random.default_rng(43)
+        pre = rng.standard_normal(sr * 2).astype(np.float32) * analog_amplitude
+        post = np.zeros(sr * 2, dtype=np.float32) + 1e-7
+
+        result = restore_carrier_noise_texture(pre, post, sr=sr, material_type=material, strength=1.0)
+        result_rms = float(np.sqrt(np.mean(result.astype(float) ** 2) + 1e-20))
+        result_db = 20.0 * np.log10(result_rms + 1e-20)
+
+        assert result_db <= -68.0, f"{material}-Resynthese muss CD-like leise bleiben, got {result_db:.1f} dBFS"
+
 
 # ===========================================================================
 # Gap 2: nvsr_plugin

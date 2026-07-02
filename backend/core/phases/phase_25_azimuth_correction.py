@@ -199,6 +199,79 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
         return mask, float(np.mean(mask))
 
+    @staticmethod
+    def _limit_envelope_modulation(
+        reference: np.ndarray,
+        candidate: np.ndarray,
+        sample_rate: int,
+        *,
+        max_delta_db: float = 1.25,
+    ) -> tuple[np.ndarray, dict[str, float]]:
+        """Begrenzt neu erzeugte Pegelmodulation durch lokale Dry/Wet-Rueckblendung."""
+        if reference.shape != candidate.shape or reference.size < 512 or sample_rate <= 0:
+            return candidate, {"envelope_guard_applied": 0.0, "max_envelope_delta_db": 0.0, "min_wet": 1.0}
+
+        ref = np.nan_to_num(reference.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        cand = np.nan_to_num(candidate.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        ref_mono = np.mean(ref, axis=1) if ref.ndim == 2 else ref
+        cand_mono = np.mean(cand, axis=1) if cand.ndim == 2 else cand
+        n_samples = int(ref_mono.shape[0])
+        frame_len = max(256, int(round(sample_rate * 0.025)))
+        hop = max(128, frame_len // 2)
+        starts = list(range(0, max(1, n_samples - frame_len + 1), hop))
+        if not starts or starts[-1] + frame_len < n_samples:
+            starts.append(max(0, n_samples - frame_len))
+
+        centers: list[float] = []
+        wet_values: list[float] = []
+        delta_values: list[float] = []
+        max_delta = 0.0
+        min_wet = 1.0
+        for start in starts:
+            end = min(n_samples, start + frame_len)
+            ref_rms = float(np.sqrt(np.mean(ref_mono[start:end].astype(np.float64) ** 2) + 1e-12))
+            cand_rms = float(np.sqrt(np.mean(cand_mono[start:end].astype(np.float64) ** 2) + 1e-12))
+            ref_db = 20.0 * np.log10(max(ref_rms, 1e-12))
+            delta_db = float(20.0 * np.log10(max(cand_rms, 1e-12) / max(ref_rms, 1e-12)))
+            max_delta = max(max_delta, abs(delta_db))
+
+            if ref_db < -55.0:
+                wet = 0.35 if abs(delta_db) > 0.5 else 1.0
+            elif abs(delta_db) > max_delta_db:
+                wet = float(np.clip(max_delta_db / max(abs(delta_db), 1e-6), 0.0, 1.0))
+            else:
+                wet = 1.0
+            min_wet = min(min_wet, wet)
+            centers.append(float((start + end - 1) * 0.5))
+            wet_values.append(wet)
+            delta_values.append(delta_db)
+
+        if min_wet >= 0.999:
+            return cand, {"envelope_guard_applied": 0.0, "max_envelope_delta_db": float(max_delta), "min_wet": 1.0}
+
+        wet_curve = np.interp(
+            np.arange(n_samples, dtype=np.float64),
+            np.asarray(centers, dtype=np.float64),
+            np.asarray(wet_values, dtype=np.float64),
+        ).astype(np.float32)
+        smooth = max(16, int(round(sample_rate * 0.050)))
+        if smooth < n_samples:
+            kernel = np.hanning(smooth).astype(np.float32)
+            kernel /= float(np.sum(kernel) + 1e-12)
+            wet_curve = np.convolve(wet_curve, kernel, mode="same").astype(np.float32)
+            wet_curve = np.clip(wet_curve, 0.0, 1.0)
+
+        wet_curve_2d = wet_curve[:, np.newaxis] if cand.ndim == 2 else wet_curve
+        limited = ref + wet_curve_2d * (cand - ref)
+        limited = np.nan_to_num(limited, nan=0.0, posinf=0.0, neginf=0.0)
+        limited = np.clip(limited, -1.0, 1.0).astype(np.float32)
+        return limited, {
+            "envelope_guard_applied": 1.0,
+            "max_envelope_delta_db": float(max_delta),
+            "min_wet": float(min_wet),
+            "mean_envelope_delta_db": float(np.mean(np.abs(np.asarray(delta_values, dtype=np.float64)))),
+        }
+
     def process(
         self,
         audio: np.ndarray,
@@ -448,6 +521,14 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         except Exception as _on25_exc:
             logger.debug("Phase25 V26 Onset-Guard (non-blocking): %s", _on25_exc)
 
+        corrected_audio, _env_guard_stats = self._limit_envelope_modulation(audio, corrected_audio, sample_rate)
+        if float(_env_guard_stats.get("envelope_guard_applied", 0.0)) > 0.0:
+            logger.info(
+                "phase_25 Envelope-Guard: max_delta=%.2f dB min_wet=%.2f",
+                float(_env_guard_stats.get("max_envelope_delta_db", 0.0)),
+                float(_env_guard_stats.get("min_wet", 1.0)),
+            )
+
         return PhaseResult(
             success=True,
             audio=corrected_audio,
@@ -462,6 +543,9 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                 "repair_locality_coverage": float(_locality_coverage),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
+                "envelope_guard_applied": bool(_env_guard_stats.get("envelope_guard_applied", 0.0)),
+                "envelope_guard_max_delta_db": float(_env_guard_stats.get("max_envelope_delta_db", 0.0)),
+                "envelope_guard_min_wet": float(_env_guard_stats.get("min_wet", 1.0)),
                 "rms_drop_db": 0.0,
                 "loudness_makeup_db": 0.0,
             },

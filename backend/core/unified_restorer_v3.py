@@ -14556,19 +14556,25 @@ class UnifiedRestorerV3:
                 from vocos_plugin import get_vocos_plugin as _get_vocos_plg
 
                 _vplug = _get_vocos_plg()
+                _vocos_mel_snr_db = float("nan")
                 if restored_audio.ndim == 2:
                     # Stereo: beide Kanäle separat synthetisieren und stapeln
-                    _vch0 = _vplug.vocode(restored_audio[0], sample_rate, mode="studio2026").audio
-                    _vch1 = _vplug.vocode(restored_audio[1], sample_rate, mode="studio2026").audio
+                    _vr0 = _vplug.vocode(restored_audio[0], sample_rate, mode="studio2026")
+                    _vr1 = _vplug.vocode(restored_audio[1], sample_rate, mode="studio2026")
+                    _vch0 = _vr0.audio
+                    _vch1 = _vr1.audio
                     _vn = min(len(_vch0), len(_vch1), restored_audio.shape[1])
                     _vocos_out = np.stack([_vch0[:_vn], _vch1[:_vn]], axis=0)
+                    _vocos_mel_snr_db = float(np.nanmean([_vr0.mel_snr_db, _vr1.mel_snr_db]))
                     logger.info(
-                        "§1.4 Vocos: Stereo-Finisher angewendet (model=%s)",
-                        "vocos_mel_24khz/griffin_lim",
+                        "§1.4 Vocos: Stereo-Finisher angewendet (model=%s mel_snr=%.1f dB)",
+                        getattr(_vr0, "model_used", "vocos_mel_24khz/griffin_lim"),
+                        _vocos_mel_snr_db,
                     )
                 else:
                     _vr = _vplug.vocode(restored_audio, sample_rate, mode="studio2026")
                     _vocos_out = _vr.audio
+                    _vocos_mel_snr_db = float(_vr.mel_snr_db)
                     logger.info(
                         "§1.4 Vocos: Mono-Finisher angewendet (model=%s pqs_mos=%.3f mel_snr=%.1f dB)",
                         _vr.model_used,
@@ -14587,7 +14593,7 @@ class UnifiedRestorerV3:
                         "§1.4 Vocos: Ausgabe stumm (RMS=%.2e, mel_snr=%.1f dB) -> "
                         "verworfen, behalte Pre-Vocos-Audio (§0 Primum non nocere)",
                         _vocos_rms,
-                        getattr(_vr, "mel_snr_db", float("nan")),
+                        _vocos_mel_snr_db,
                     )
                 else:
                     restored_audio = _vocos_safe

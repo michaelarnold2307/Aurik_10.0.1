@@ -193,8 +193,8 @@ item_seed = _sid_offset(scenario_id)  # RICHTIG
 | Chroma-Korrelation (Tonart) | Pearson ≥ 0.95 |
 | **Pass-Through (sauberes Material)** | PQS-MOS-Verlust ≤ 0.05, Goals stabil ± 0.02 |
 | **Rauschboden (Studio-2026)** | ≤ −72 dBFS, A-gew. ≤ −75 dB(A), 0 Musical-Noise-Events |
-| **Rauschboden (Restoration)** | Material-adaptiv (§0a): wax_cylinder ≤ −35, shellac ≤ −45, vinyl ≤ −55, tape/reel_tape ≤ −58, cassette ≤ −52, minidisc ≤ −65, cd_digital ≤ −72 dBFS. Niveau UND Textur des Quellmediums bewahren, nicht aggressiver. |
-| **Rauschtextur-Kohärenz (Restoration)** | `noise_texture_coherence ≥ 0.80` (§4.7) — Restrauschen muss Carrier-Profil entsprechen |
+| **Rauschboden (Restoration)** | Export-Ziel für alle analogen Tonträger: CD-ähnlicher Rauschboden statt analogem Trägerboden. `shellac`, `wax_cylinder`, `lacquer_disc`, `wire_recording`, `vinyl`, `tape`, `reel_tape`, `cassette` dürfen keinen analogen Mindestboden reinjizieren; bei nötiger Resttextur-Auffüllung Ziel `cd_digital`, ca. −74 dBFS und Testanker ≤ −68 dBFS. `minidisc`, `cd_digital`, `dat`, `mp3_*` bleiben ohne analoge Floor-Injektion. |
+| **Rauschtextur-Kohärenz (Restoration)** | `noise_texture_coherence ≥ 0.80` (§4.7) — analoge Trägerdefekt-Textur darf im Export nicht zurückkehren; Ziel ist CD-ähnliche Resttextur ohne Musical-Noise. |
 | **Temporale Kohärenz** | MOS-Spanne über 10-s-Segmente ≤ 0.30, σ ≤ 0.15 |
 | **Stereo-Authentizität** | Mono-Ären M/S-Korrelation nach Restaur. ≥ 0.97 |
 | **HF-Kumulativ-Limit** | Presence + Air kumulativ ≤ +4 dB (Listening-Fatigue) |
@@ -296,6 +296,14 @@ Jede Änderung an GUI, CLI, Batch, REST-Legacy, Bridge, Import, Denker-Einstieg 
 
 Kanonischer Testanker: `tests/normative/test_canonical_contract_drift_gate.py`.
 
+**GUI-Live-Status-Zusatzpflicht:** Aenderungen an Defektchips, Waveform-Markern,
+Statusmeldungen oder Hauptfortschrittsmapping MUESSEN zusaetzlich durch
+`tests/normative/test_modern_window_gui_contract.py` abgesichert sein. Pflichtfaelle:
+Dropout-Aliase (`dropouts`, `DROPOUTS`, `gap`, `gaps`, `tape_dropout`) zaehlen zum
+sichtbaren Chip `Tonaussetzer`; lokalisierte Dropout-Events zaehlen waehrend echter
+Dropout-/Inpainting-Phasen anhand des Timeline-Cursors herunter; UV3-Post-Processing darf
+den Hauptbalken nicht ueber 90 % treiben, bevor Export/Finalisierung explizit gestartet sind.
+
 ### §8.3.2a Era-/VFA-/GP-Prior-Regressionspflicht [RELEASE_MUST]
 
 Jede Änderung an Vokal-Gates, VFA-Zonen, GP-Priors oder RecordingChainProfiler-Integration MUSS fokussierte Unit-Tests enthalten:
@@ -331,6 +339,9 @@ dass der Mittelteil angehoben wird, während Intro/Outro-Peaks relativ zur Refer
 
 **Real-Audio-Gate (heavy)**: `tests/normative/test_real_audio_edge_lag_gate.py` muss bei
 `--run-heavy-tests` grün sein (Intro/Outro-Peak-Exzess + Interchannel-Delay-Delta).
+Alle Fixture-Payloads in diesem Gate muessen statisch typisiert werden; `dict[str, object]`-
+Werte sind vor numerischer Umwandlung per `typing.cast` oder lokaler Typpruefung zu verengen,
+damit `call-overload`-Fehler nicht durch schwache Fixture-Typisierung verdeckt werden.
 
 ## §8.5 [RELEASE_MUST] Globales Parameterregister
 

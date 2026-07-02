@@ -144,6 +144,19 @@ class TestMDEMMorph:
         except Exception:
             pass  # Stereo-Ablehnung akzeptabel
 
+    def test_11b_channel_last_stereo_preserves_shape(self, mdem):
+        """MDEM muss GUI/Importer-typisches (samples, channels)-Stereo korrekt behandeln."""
+        t = np.linspace(0, 1.0, SR, endpoint=False)
+        left = np.sin(2 * np.pi * 440 * t).astype(np.float32) * 0.35
+        right = np.sin(2 * np.pi * 550 * t).astype(np.float32) * 0.30
+        stereo = np.stack([left, right], axis=1)
+
+        out = mdem.morph(stereo.copy(), stereo.copy(), SR)
+
+        assert out.shape == stereo.shape
+        assert np.isfinite(out).all()
+        assert np.max(np.abs(out)) <= 1.0 + 1e-6
+
     def test_12_short_audio_100ms(self, mdem):
         np.random.seed(42)
         audio = (np.sin(2 * np.pi * 440 * np.linspace(0, 0.1, SR // 10)) * 0.5).astype(np.float32)

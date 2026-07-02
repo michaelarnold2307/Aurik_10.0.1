@@ -38,6 +38,7 @@ MEM_KB=$(( MEM_GB * 1024 * 1024 ))
 SWAP_MB="${AURIK_SWAP_MB:-2048}"
 LOG_FILE="${AURIK_LOG_FILE:-${SCRIPT_DIR}/logs/pytest_safe.log}"
 RSS_LIMIT_MB="${AURIK_TEST_RSS_LIMIT_MB:-$(( MEM_GB * 1024 * 85 / 100 ))}"
+GLOBAL_TIMEOUT_S="${AURIK_GLOBAL_TIMEOUT_S:-5400}"
 STATUS_FILE="${AURIK_STATUS_FILE:-${SCRIPT_DIR}/logs/pytest_safe.status}"
 REPORT_FILE="${AURIK_REPORT_FILE:-${SCRIPT_DIR}/logs/pytest_safe.mini_report.txt}"
 STREAM_MODE_RAW="${AURIK_STREAM_TO_TERMINAL:-auto}"
@@ -213,6 +214,7 @@ echo " Aurik Safe Test Runner"
 echo " Speicher-Cap : ${MEM_GB} GB"
 echo " Swap-Cap     : ${SWAP_MB} MB"
 echo " RSS-Watchdog : ${RSS_LIMIT_MB} MB"
+echo " Global-Timeout: ${GLOBAL_TIMEOUT_S} s"
 echo " Log          : ${LOG_FILE}"
 echo " Terminal-Budget: ${TERMINAL_LINE_BUDGET} Zeilen (live)"
 if [[ "$_HEAVY_SERIAL_LOCK_ACTIVE" -eq 1 ]]; then
@@ -297,6 +299,7 @@ if [[ "$_SYSTEMD_OK" -eq 1 ]]; then
     echo "[safe-runner] Methode: systemd-run cgroup (MemoryMax=${MEM_GB}G, MemorySwapMax=${SWAP_MB}M)"
     set +e
     if [[ "$STREAM_TO_TERMINAL" == "1" ]]; then
+        timeout --foreground --signal=TERM --kill-after=60 "${GLOBAL_TIMEOUT_S}" \
         systemd-run \
             --user \
             --scope \
@@ -323,6 +326,7 @@ if [[ "$_SYSTEMD_OK" -eq 1 ]]; then
             echo "[safe-runner] mode=systemd-run quiet"
             echo "[safe-runner] pytest_args=$*"
         } > "$LOG_FILE"
+        timeout --foreground --signal=TERM --kill-after=60 "${GLOBAL_TIMEOUT_S}" \
         systemd-run \
             --user \
             --scope \
@@ -359,7 +363,7 @@ echo "[safe-runner] Methode: setsid + ulimit -v ${MEM_MB}M"
 (
     # Eigene Session → eigene Prozessgruppe → kein Signal-Forwarding zu VS Code
     if [[ "$STREAM_TO_TERMINAL" == "1" ]]; then
-        exec setsid bash -c "
+        exec timeout --foreground --signal=TERM --kill-after=60 "${GLOBAL_TIMEOUT_S}" setsid bash -c "
             ulimit -v $MEM_KB 2>/dev/null || true
             ulimit -m $MEM_KB 2>/dev/null || true
             exec '$PYTHON' -m pytest \"\$@\" \
@@ -375,7 +379,7 @@ echo "[safe-runner] Methode: setsid + ulimit -v ${MEM_MB}M"
             echo "[safe-runner] mode=setsid quiet"
             echo "[safe-runner] pytest_args=$*"
         } > "$LOG_FILE"
-        setsid bash -c "
+        timeout --foreground --signal=TERM --kill-after=60 "${GLOBAL_TIMEOUT_S}" setsid bash -c "
             ulimit -v $MEM_KB 2>/dev/null || true
             ulimit -m $MEM_KB 2>/dev/null || true
             exec '$PYTHON' -m pytest \"\$@\" \

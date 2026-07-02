@@ -436,6 +436,11 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Beim Schlie\u00dfen wird der laufende Job sicher beendet \u2014 das Zwischenergebnis geht verloren.\n\n"
             "Trotzdem schlie\u00dfen?"
         ),
+        "dialog.close_while_processing_btn_close": "Jetzt schließen",
+        "dialog.close_while_processing_btn_keep": "Weiter restaurieren",
+        "status.processing_continues": "Restaurierung läuft weiter",
+        "status.processing_continues_detail": "Restaurierung wird fortgesetzt — das Fenster bleibt geöffnet.",
+        "status.processing_continues_toast": "Restaurierung läuft weiter",
         # Materialerkennung
         "material.tape": "Kassette (Band)",
         "material.reel_tape": "Spulenband",
@@ -546,6 +551,10 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "progress.loading_file": "📂\u2002Datei wird geladen …",
         "progress.exporting": "📤\u2002Ergebnis wird exportiert …",
         "progress.complete": "✅\u2002Intelligente Korrektur abgeschlossen",
+        "progress.planning": "🧭\u2002Passende Korrekturen werden ausgewählt …",
+        "progress.planning_pct": "🧭\u2002Passende Korrekturen werden ausgewählt … {pct}\u202f%",
+        "progress.planning_eta": "🧭\u2002Passende Korrekturen werden ausgewählt … {pct}\u202f%  ·  noch {eta}",
+        "progress.planning_eta_defects": "🧭\u2002Passende Korrekturen werden ausgewählt … {pct}\u202f%  ·  noch {eta}{defects}",
         "progress.restoring": "⚙️\u2002Song wird restauriert …",
         "progress.restoring_pct": "⚙️\u2002Song wird restauriert … {pct}\u202f%",
         "progress.restoring_eta": "⚙️\u2002Song wird restauriert … {pct}\u202f%  ·  noch {eta}",
@@ -963,6 +972,11 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Closing will safely stop the running job \u2014 intermediate results will be lost.\n\n"
             "Close anyway?"
         ),
+        "dialog.close_while_processing_btn_close": "Close now",
+        "dialog.close_while_processing_btn_keep": "Continue restoration",
+        "status.processing_continues": "Restoration continues",
+        "status.processing_continues_detail": "Restoration continues — the window remains open.",
+        "status.processing_continues_toast": "Restoration continues",
         # Material
         "material.tape": "Cassette Tape",
         "material.reel_tape": "Reel-to-Reel Tape",
@@ -1071,6 +1085,10 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "progress.loading_file": "📂\u2002Loading file …",
         "progress.exporting": "📤\u2002Exporting result …",
         "progress.complete": "✅\u2002Intelligent restoration complete",
+        "progress.planning": "🧭\u2002Selecting suitable corrections …",
+        "progress.planning_pct": "🧭\u2002Selecting suitable corrections … {pct}\u202f%",
+        "progress.planning_eta": "🧭\u2002Selecting suitable corrections … {pct}\u202f%  ·  {eta} remaining",
+        "progress.planning_eta_defects": "🧭\u2002Selecting suitable corrections … {pct}\u202f%  ·  {eta} remaining{defects}",
         "progress.restoring": "⚙️\u2002Restoring song …",
         "progress.restoring_pct": "⚙️\u2002Restoring song … {pct}\u202f%",
         "progress.restoring_eta": "⚙️\u2002Restoring song … {pct}\u202f%  ·  {eta} remaining",

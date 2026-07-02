@@ -112,6 +112,36 @@ def test_kmv_signals_and_refinement_bar_present() -> None:
 
 
 @pytest.mark.normative
+def test_dropout_chip_counter_accepts_backend_aliases() -> None:
+    src = _read_gui_source()
+    assert '"dropouts": "dropout"' in src
+    assert '"gap": "dropout"' in src
+    assert '"gaps": "dropout"' in src
+    assert '"tape_dropout": "dropout"' in src
+    assert '"dropout": ("dropouts", "DROPOUTS", "gap", "gaps", "tape_dropout")' in src
+
+
+@pytest.mark.normative
+def test_dropout_chip_counter_follows_timeline_repair_cursor() -> None:
+    src = _read_gui_source()
+    assert "def mark_defects_resolved_up_to" in src
+    assert "_cutoff_s = max(0.0, min(1.0, float(frac))) * _duration" in src
+    assert "_resolved_keys" in src
+    assert "_resolved_for_key" in src
+    assert 'self.waveform_widget.mark_defects_resolved_up_to(["dropout"], float(frac), _tool)' in src
+    assert '"dropout", "dropouts", "gap", "gaps", "tape_dropout"' in src
+
+
+@pytest.mark.normative
+def test_main_progress_keeps_export_headroom_after_uv3_post_processing() -> None:
+    src = _read_gui_source()
+    assert "UI progress (9-90%)" in src
+    assert "return 83.0 + (uv3_pct - 86) / 12.0 * 7.0" in src
+    assert "item_cap_pct = min(90.0, ui_pct + drift_pct)" in src
+    assert "min(90.0, item_cap_pct)" in src
+
+
+@pytest.mark.normative
 def test_watchdog_formula_correct() -> None:
     src = _read_gui_source()
     # §11.4 Watchdog-Timer Formel: max(5_400_000, dur * 32_000 + 1_800_000)
@@ -302,9 +332,294 @@ def test_phase_step_label_has_no_audio_callback_fallback() -> None:
 
 
 @pytest.mark.normative
+def test_heartbeat_progress_forecast_keeps_long_phases_smooth() -> None:
+    src = _read_gui_source()
+    assert "def _apply_heartbeat_progress_forecast" in src
+    assert "progress_anchor = self._heartbeat_phase_progress_started_at or wall_time" in src
+    assert "time_since_cb = max(0.0, now - progress_anchor)" in src
+    assert "item_cap_pct = min(82.7, ui_pct + drift_pct)" in src
+    assert "self.progress_bar.setValue(min(target_overall_bp, current_bp + step_bp))" in src
+    assert "self.phase_progress_bar.setValue(phase_target_bp)" in src
+    assert "set_stage_progress(phase_target_bp / 10000.0)" in src
+
+
+@pytest.mark.normative
+def test_repeated_same_percent_callbacks_do_not_reset_progress_anchor() -> None:
+    src = _read_gui_source()
+    assert '_target_advanced = _new_tgt > (_sp["target"] + 0.01)' in src
+    assert "if _target_advanced and _inter_s >= 0.5:" in src
+    assert "if _target_advanced:" in src
+    assert '_sp["last_target_time"] = _now' in src
+
+
+@pytest.mark.normative
 def test_waveform_stage_and_scan_are_mirrored_to_rest_ab_widget() -> None:
     src = _read_gui_source()
     assert "self.waveform_widget_rest_ab.set_scan_pos(frac)" in src
     assert "self.waveform_widget_rest_ab.set_active_stage(phase_text)" in src
     assert "self.waveform_widget_rest_ab.set_scan_pos(-1.0)" in src
     assert "self.waveform_widget_rest_ab.clear_stage()" in src
+
+
+@pytest.mark.normative
+def test_scan_cursor_forward_progress_keeps_main_bar_moving() -> None:
+    src = _read_gui_source()
+    assert "self._sync_progress_bar_to_scan_cursor(frac)" in src
+    assert "def _sync_progress_bar_to_scan_cursor(self, frac: float) -> None:" in src
+    assert "_ui_pct = 13.0 + _frac * 70.0" in src
+    assert "if _target_bp <= _current_bp:" in src
+    assert "self.progress_bar.setValue(_target_bp)" in src
+    assert 'current_item = next((i for i in self.batch_queue.items if i.status == "processing"), None)' in src
+    assert 'current_item.progress = max(int(getattr(current_item, "progress", 0) or 0), int(_ui_pct))' in src
+
+
+@pytest.mark.normative
+def test_active_repair_defects_are_visible_without_initial_scanner_score() -> None:
+    src = _read_gui_source()
+    assert "_active_defects_set: set[str] = {" in src
+    assert '{"noise": "noise_level"}.get(str(k), str(k)) for k in (defects.get("_active_defects") or [])' in src
+    assert "or bool(_active_defects_set)" in src
+    assert "for _ak in sorted(_active_defects_set):" in src
+    assert "_active_level = max(_thr_light * 1.05, 0.02)" in src
+    assert "if _canon not in _active_keys:" in src
+
+
+@pytest.mark.normative
+def test_waveform_tool_label_resets_when_phase_has_no_tool_match() -> None:
+    src = _read_gui_source()
+    assert "self._active_tool = _detected_tool" in src
+    assert "if _detected_tool:\n            self._active_tool = _detected_tool" not in src
+
+
+@pytest.mark.normative
+def test_close_while_processing_dialog_uses_explicit_german_buttons() -> None:
+    src = _read_gui_source()
+    _anchor = src.find("if _workers_running:")
+    _end = src.find("self._window_tearing_down = True", _anchor)
+    assert _anchor >= 0 and _end > _anchor
+    _dialog_block = src[_anchor:_end]
+    assert "QDialog(self)" in _dialog_block
+    assert "QMessageBox" not in _dialog_block
+    assert 'QPushButton(t("dialog.close_while_processing_btn_keep"))' in _dialog_block
+    assert 'QPushButton(t("dialog.close_while_processing_btn_close"))' in _dialog_block
+
+
+@pytest.mark.normative
+def test_status_and_quality_styles_sanitize_qss_colors() -> None:
+    src = _read_gui_source()
+    assert "def _sanitize_qss_colors" in src
+    assert "_QSS_COLOR_TOKEN_RE" in src
+    assert "self.status_label.setStyleSheet(_sanitize_qss_colors(" in src
+    assert "self.quality_score_label.setStyleSheet(_sanitize_qss_colors(" in src
+    assert "self.info_banner.setStyleSheet(_sanitize_qss_colors(" in src
+    assert "self.defect_summary_label.setStyleSheet(_sanitize_qss_colors(" in src
+
+
+@pytest.mark.normative
+def test_dropout_status_overrides_stale_resampling_focus() -> None:
+    src = _read_gui_source()
+    assert "_dropout_context = any(" in src
+    assert "_needle in _msg_underscored or _needle in _cur_pid" in src
+    assert "_repair_names_for_desc" not in src
+    assert 'for _needle in ("dropout", "diffusion_inpainting", "tonaussetzer")' in src
+    assert 'if _dropout_context and "abtastrate" in _step_desc.lower():' in src
+    assert '_step_desc = "Tonaussetzer werden repariert"' in src
+    assert 'if _dropout_context and "abtastrate" in _base_text.lower():' in src
+    assert '_base_text = "Tonaussetzer werden repariert"' in src
+
+
+@pytest.mark.normative
+def test_planning_status_clears_stale_repair_hints() -> None:
+    src = _read_gui_source()
+    assert "_planning_context = any(" in src
+    assert 'for _needle in ("phasenauswahl", "passende_korrekturen", "korrekturen werden ausgewählt")' in src
+    assert (
+        'if _planning_context or not _real_repair_phase:\n                        self._current_repair_names = ""'
+        in src
+    )
+    assert 'if _base_bucket == "planning":\n                            _repair_stale = True' in src
+
+
+@pytest.mark.normative
+def test_defect_chips_show_measured_values_when_event_counts_are_absent() -> None:
+    src = _read_gui_source()
+    assert "def _format_defect_value_html" in src
+    assert (
+        "if _cnt_total > 0:\n                    return f' <span style=\"color:#8FA6C8;\">{_cnt_total}/{_cnt_rem}</span>'"
+        in src
+    )
+    assert '"bandwidth_loss"' in src
+    assert '"bias_error"' in src
+    assert '"noise_level": "dB"' in src
+    assert '"noise": ("Rauschen", 0.1, 0.5)' not in src
+    assert '_txt = f"{_init_txt}→{_cur_txt}"' in src
+    assert '_event_like_keys = {"clicks", "crackle", "pops", "sibilance", "dropout"}' in src
+    assert "_count_html = _format_defect_value_html(k, float(v_init), float(v_cur))" in src
+
+
+@pytest.mark.normative
+def test_impulse_chip_uses_clipping_event_count_alias() -> None:
+    src = _read_gui_source()
+    assert '"pops": ("clipping",),' in src
+    assert '"clipping": ("pops",),' in src
+    assert "for _lookup_key in (_key, *_aliases.get(_key, ()))" in src
+    assert "_cnt_key = next(" in src
+
+
+@pytest.mark.normative
+def test_click_passes_are_explained_as_distinct_serial_repairs() -> None:
+    src = _read_gui_source()
+    assert '"click_removal": "Kurze Knackser werden im ersten Durchgang entfernt"' in src
+    assert '"click_pop": "Rest-Impulse und tiefe Pops werden im zweiten Durchgang entfernt"' in src
+    assert '"declick": "Kurze Knackser werden im ersten Durchgang entfernt"' in src
+    assert '"click_removal": ["clicks", "pops"]' in src
+    assert '"click_pop": ["clicks", "pops"]' in src
+    assert '"phase_01": "kurze Knackser"' in src
+    assert '"phase_27": "Rest-Impulse und Pops"' in src
+    assert "entfernt kurze Einzelknackser im ersten Durchgang" in src
+    assert "prüft verbleibende Impulse mit größerem Kontext" in src
+
+
+@pytest.mark.normative
+def test_denoise_activates_single_noise_chip_without_hum_alias() -> None:
+    src = _read_gui_source()
+    assert '"denoise": ["noise_level"],' in src
+    assert '"noise_gate": ["noise_level"],' in src
+    assert '"tape_hiss": ["crackle", "noise_level"],' in src
+    assert 'return {"noise": "noise_level"}.get(str(defect_key), str(defect_key))' in src
+    assert '{"noise": "noise_level"}.get(str(k), str(k))' in src
+    assert '_canon_key = {"noise": "noise_level"}.get(str(_raw_key), str(_raw_key))' in src
+
+
+@pytest.mark.normative
+def test_chip_event_remaining_counts_follow_serial_phase_score_reduction() -> None:
+    src = _read_gui_source()
+    assert "_drop_factor = 0.84  # 16 % konservative Absenkung pro abgeschlossener Phase" in src
+    assert "_current_defect_scores[_rkey] = _next_val" in src
+    assert 'if _resolved <= 0 and _status in ("correcting", "completed", "blocked"):' in src
+    assert "_phase_estimated_remaining = int(math.ceil(float(_total) * _score_ratio))" in src
+    assert "_remaining = min(_remaining, max(0, _phase_estimated_remaining))" in src
+
+
+@pytest.mark.normative
+def test_resolved_waveform_marker_updates_chip_and_status_counts_immediately() -> None:
+    src = _read_gui_source()
+    assert "self._resolved_defects_changed_cb: Callable[[], None] | None = None" in src
+    assert "def set_resolved_defects_changed_callback(self, callback: Callable[[], None] | None) -> None:" in src
+    assert (
+        "self.waveform_widget.set_resolved_defects_changed_callback(self._on_waveform_resolved_defects_changed)" in src
+    )
+    assert "def _on_waveform_resolved_defects_changed(self) -> None:" in src
+    assert 'if isinstance(defects, dict) and not defects.get("_from_waveform_resolved_refresh"):' in src
+    assert "self._latest_defect_payload = dict(defects)" in src
+    assert '_payload["_no_anim"] = True' in src
+    assert '_payload["_from_waveform_resolved_refresh"] = True' in src
+    assert "seg, tool = queue.pop(0)" in src
+    assert "self._repair_history[dk] = history" in src
+    assert "if _changed and self._resolved_defects_changed_cb is not None:" in src
+    assert "self._resolved_defects_changed_cb()" in src
+    assert "n_pop = min(2, len(queue))" not in src
+
+
+@pytest.mark.normative
+def test_active_defect_chips_require_real_phase_id_not_preparation_status() -> None:
+    src = _read_gui_source()
+    assert '_real_repair_phase = _status == "correcting" and _live_phase_id.startswith("phase_")' in src
+    assert '_active_now = (defects.get("_active_defects") or []) if _real_repair_phase else []' in src
+    assert 'if _status == "correcting" and _real_repair_phase:' in src
+    assert "} if _real_repair_phase else set()" in src
+
+
+@pytest.mark.normative
+def test_multi_active_defect_chips_are_reflected_in_phase_status() -> None:
+    src = _read_gui_source()
+    assert '"click_removal": ["clicks", "pops"]' in src
+    assert '"azimuth": ["azimuth_error", "phase_issues", "head_wear"]' in src
+    assert '"wow_flutter": ["wow", "flutter", "transport_bump"]' in src
+    assert "def _format_active_defect_names" in src
+    assert "_active_names = _format_active_defect_names(_active_keys)" in src
+    assert "self._current_repair_names = _active_names" in src
+    assert 'if _active_defect_names and "·" in _active_defect_names:' in src
+    assert "_step_desc = _active_defect_sentence" in src
+    assert "_base_text = _active_defect_sentence" in src
+
+
+@pytest.mark.normative
+def test_backend_pipeline_started_callback_is_translated_to_german() -> None:
+    src = _read_gui_source()
+    assert '"pipeline started": "Restaurierung wird gestartet"' in src
+    assert '"pipeline startet": "Restaurierung wird gestartet"' in src
+
+
+@pytest.mark.normative
+def test_noise_phases_are_explained_as_distinct_serial_repairs() -> None:
+    src = _read_gui_source()
+    phase_focus = src[src.index("def _phase_risk_focus_label") : src.index("def _phase_priority_confidence")]
+    phase_priority = src[src.index("def _phase_priority_explanation") : src.index("def _sync_runtime_display_state")]
+    assert '"phase_03": "Breitbandrauschen"' in phase_focus
+    assert '"phase_29": "Bandrauschen"' in phase_focus
+    assert '_focus == "Breitbandrauschen"' in phase_priority
+    assert "senkt gleichmäßiges Grundrauschen" in phase_priority
+    assert '_focus == "Bandrauschen"' in phase_priority
+    assert "senkt band- und trägerbedingtes Hiss" in phase_priority
+
+
+@pytest.mark.normative
+def test_quality_risk_message_explains_user_relevant_protection() -> None:
+    src = _read_gui_source()
+    assert "def _quality_risk_guidance_text" in src
+    assert "Schutzmodus aktiv" in src
+    assert "Aurik dosiert die Korrektur vorsichtig" in src
+    assert "misst nach jeder Phase nach" in src
+    assert "nimmt Schritte zurueck" in src
+    assert "Aurik schuetzt" in src
+    assert "Risiko erhöht ({_pid_goal_risk:.2f})" not in src
+    assert "Qualitätsrisiko erhöht ({_pid_goal_risk:.2f})" not in src
+
+
+@pytest.mark.normative
+def test_defect_progress_uses_open_done_wording_and_deduped_event_totals() -> None:
+    src = _read_gui_source()
+    assert "_has_progress = _remaining < _total or _resolved > 0 or _reduced >= 3" in src
+    assert "if _pct < 19.0 and not _has_progress:" in src
+    assert '_base = f"Defektstatus: {_remaining} offen, {_done} erledigt (von {_total})"' in src
+    assert "def _sum_event_counts_dedup" in src
+    assert '_alias_groups = (("pops", "clipping"), ("noise", "noise_level"))' in src
+    assert "_total_count += max(max(0, int(_counts.get(_member, 0) or 0)) for _member in _group)" in src
+
+
+@pytest.mark.normative
+def test_active_phase_beats_stale_planning_status() -> None:
+    src = _read_gui_source()
+    assert 'if str(phase_id or "").strip().lower().startswith("phase_"):\n            return "restoring"' in src
+    assert "_latest_is_planning = any(" in src
+    assert '_base_is_repair = bool(_phase_id.strip().lower().startswith("phase_"))' in src
+    assert "if _latest_phase and not (_latest_is_planning and _base_is_repair):" in src
+    phase_focus = src[src.index("def _phase_risk_focus_label") : src.index("def _phase_priority_confidence")]
+    assert phase_focus.index("# Primär: deterministische Zuordnung über Phase-ID.") < phase_focus.index(
+        "if ui_pct < 20.0:"
+    )
+
+
+@pytest.mark.normative
+def test_pre_repair_status_does_not_show_stale_defect_focus() -> None:
+    src = _read_gui_source()
+    assert '_real_repair_phase = bool(str(_cur_pid or "").strip().lower().startswith("phase_"))' in src
+    assert (
+        'if _planning_context or not _real_repair_phase:\n                        self._current_repair_names = ""'
+        in src
+    )
+    assert "if _real_repair_phase or _dropout_context" in src
+    assert 'if _d_total > 0 and _phase_id.strip().lower().startswith("phase_"):' in src
+    assert (
+        'if not _phase_id.strip().lower().startswith("phase_"):\n                            _repair_hint = ""' in src
+    )
+
+
+@pytest.mark.normative
+def test_dynamic_defect_counter_styles_sanitize_qss_colors() -> None:
+    src = _read_gui_source()
+    assert "Ungültige Statusfarbe verworfen" in src
+    assert "f\"color: {status_color}; font-family: 'Courier New'; font-size: 10pt; font-weight: bold;\"" in src
+    assert "f\"color: {status_color}; font-family: 'Courier New'; font-size: 10pt;\"" in src
+    assert src.count("_sanitize_qss_colors(") >= 8

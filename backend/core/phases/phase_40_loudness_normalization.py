@@ -68,7 +68,12 @@ import time
 import numpy as np
 from scipy import signal
 
-from backend.core.audio_utils import apply_musical_gain_envelope, limit_quiet_edge_boost, to_channels_last
+from backend.core.audio_utils import (
+    apply_musical_gain_envelope,
+    limit_quiet_edge_boost,
+    restore_layout,
+    to_channels_last,
+)
 from backend.core.defect_scanner import MaterialType
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
@@ -159,7 +164,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
             peak_db = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
             return PhaseResult(
                 success=True,
-                audio=audio.copy(),
+                audio=restore_layout(audio.copy(), _p40_transposed),
                 execution_time_seconds=time.time() - start_time,
                 metadata={
                     "algorithm": "skipped_zero_strength",
@@ -248,9 +253,19 @@ class LoudnessNormalizationPhase(PhaseInterface):
                             _rms_g = float(np.sqrt(np.mean(_chunk**2)))
                             if _rms_g < _gate_lin:
                                 _gate_mask[_gi : _gi + _rms_frame] = 0.0
-                    _full_gain_lin = np.where(_gate_mask > 0.5, _full_gain_lin, np.float32(1.0))
+                    # Das Gate darf keine 100-ms-Stufen in die Lautstärkehüllkurve schreiben.
+                    # Smooth-Fade über ca. 1 s verhindert hörbares Pumpen/Springen an Musik/Stille-Grenzen.
+                    _kernel_len = min(max(3, int(sample_rate)), max(1, _n))
+                    if _kernel_len % 2 == 0:
+                        _kernel_len -= 1
+                    if _kernel_len >= 3:
+                        _gate_kernel = np.hanning(_kernel_len).astype(np.float32)
+                        _gate_kernel /= float(np.sum(_gate_kernel) + 1e-12)
+                        _gate_mask = np.convolve(_gate_mask, _gate_kernel, mode="same").astype(np.float32)
+                        _gate_mask = np.clip(_gate_mask[:_n], 0.0, 1.0)
+                    _full_gain_lin = 1.0 + _gate_mask * (_full_gain_lin - 1.0)
                     if audio.ndim == 2:
-                        audio = audio * _full_gain_lin[np.newaxis, :]
+                        audio = audio * _full_gain_lin[:, np.newaxis]
                     else:
                         audio = audio * _full_gain_lin
                     audio = np.clip(audio, -1.0, 1.0)
@@ -362,6 +377,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
 
         normalized = np.nan_to_num(normalized, nan=0.0, posinf=0.0, neginf=0.0)
         normalized = np.clip(normalized, -1.0, 1.0)
+        normalized = restore_layout(normalized, _p40_transposed)
         return PhaseResult(
             success=True,
             audio=normalized,
@@ -572,7 +588,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         p10 = np.percentile(short_term_loudness, 10)
         lra = p95 - p10
 
-        return lra  # type: ignore[return-value]
+        return float(lra)
 
     def _measure_momentary_max(self, audio_weighted: np.ndarray, sample_rate: int) -> float:
         """Maximum Momentary Loudness (400ms window)."""

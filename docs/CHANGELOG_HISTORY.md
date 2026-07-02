@@ -7,9 +7,40 @@
 >
 > Historische Versions- und Metrikangaben in dieser Datei sind bewusst als Zeitstände erhalten.
 >
-> Stand: Juni 2026 — Aurik 9.15.7
+> Stand: Juli 2026 — Aurik 9.20.3
 
 ---
+
+## v9.20.3 (2. Juli 2026) — UI-Livezaehler und Fortschrittsreserve
+
+- **Frontend-Version synchronisiert**: Paket- und sichtbare App-Version auf `9.20.3` angehoben;
+  Frontend-Titel/Splash/About beziehen diese Version weiterhin aus `Aurik910.__version__`.
+- **Tonaussetzer-Livezaehler**: Dropout-Aliase (`dropouts`, `DROPOUTS`, `gap`, `gaps`,
+  `tape_dropout`) werden auf `dropout` normalisiert. Lokalisierte Dropout-Marker werden waehrend
+  echter Dropout-/Inpainting-Phasen anhand des Timeline-Cursors als behoben markiert; erledigte
+  Marker koennen aus alten `_locations` nicht wieder aktiv werden.
+- **Fortschrittsreserve**: UV3-Post-Processing belegt in der GUI nur noch 83-90 %. 90-100 % bleibt
+  fuer Defektabschluss, Export-Quality-Gate, Datei-Export und UI-Finalisierung reserviert, damit
+  lange Endphasen nicht als eingefrorene 97-%-Anzeige erscheinen.
+- **Real-Audio-Gate-Typisierung**: `test_real_audio_edge_lag_gate.py` verengt Fixture-`sr` statisch
+  per `typing.cast`, wodurch Pylance/mypy `call-overload` auf `int(object)` blockiert wird.
+- **Normative Gates**: `test_modern_window_gui_contract.py` sichert Dropout-Aliase,
+  timelinebasierte Chip-Zaehlung und Fortschrittsreserve ab.
+
+## v9.15.8 (2. Juli 2026) — CD-Rauschboden für analoge Exportziele
+
+- **Rauschboden-Doktrin aktualisiert**: Analoge Tonträger (`shellac`, `wax_cylinder`,
+  `lacquer_disc`, `wire_recording`, `vinyl`, `tape`, `reel_tape`, `cassette`) bekommen
+  im Export keinen analogen Mindest-Rauschboden mehr zurück. Hiss, Oberflächenrauschen
+  und Schellack-Rauschbett gelten als reparierbare Trägerdefekte, solange Vocal-/Musik-
+  Schutzgates eingehalten werden.
+- **`noise_floor_guard`**: Materialspezifische Analog-Mindestböden auf `None` gesetzt;
+  der Guard injiziert nur noch bei explizitem Floor-Override.
+- **`noise_texture_resynth`**: Analoge Materialien zielen bei Over-NR-Korrektur auf
+  `cd_digital`-Textur mit CD-ähnlichem Floor (ca. −74 dBFS), statt Vinyl-/Shellac-/Tape-
+  Rauschteppich wiederherzustellen.
+- **Specs synchronisiert**: §0a/V19/V21 und Spec 07 §8.2 beschreiben CD-ähnlichen
+  Export-Rauschboden als Ziel für alle analogen Tonträger.
 
 ## v9.15.7 (4. Juni 2026) — InnovationSuperiorityOrchestrator (Disziplin-Parallelisierung)
 

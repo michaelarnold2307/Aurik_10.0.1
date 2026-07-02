@@ -151,18 +151,19 @@ class TestNoiseTextureGuard:
 
 
 class TestNoiseFloorGuard:
-    """apply_noise_floor_minimum — Analog-Pause-Zonen erhalten Materialrauschboden."""
+    """apply_noise_floor_minimum — Analogträger bekommen keinen Export-Mindestboden."""
 
-    def test_silence_gets_floor_shellac(self):
-        """Stille auf Shellac-Material → Energieerhöhung über Stille."""
+    @pytest.mark.parametrize(
+        "material",
+        ["shellac", "wax_cylinder", "lacquer_disc", "wire_recording", "vinyl", "tape", "reel_tape", "cassette"],
+    )
+    def test_analog_material_targets_cd_like_floor(self, material):
+        """Analoger Träger → kein Hiss-/Oberflächenrausch-Mindestboden im Export."""
         from backend.core.dsp.noise_floor_guard import apply_noise_floor_minimum
 
         silent = _silence()
-        result = apply_noise_floor_minimum(silent, SR, "shellac")
-        assert result.shape == silent.shape
-        # Shellac-Boden ≈ −42 dBFS → ~0.0079 linear → RMS deutlich über 0
-        rms = float(np.sqrt(np.mean(result**2)))
-        assert rms > 1e-5, f"Shellac-Rauschboden sollte über 0 liegen, RMS={rms:.8f}"
+        result = apply_noise_floor_minimum(silent, SR, material)
+        assert np.allclose(result, silent, atol=1e-7), f"{material} soll keinen analogen Mindestboden reinjizieren"
 
     def test_digital_material_untouched(self):
         """CD-Material → kein Rauschboden hinzugefügt (digitale Stille bleibt)."""

@@ -604,9 +604,9 @@ Nutzer-Meldung wenn Decke erreicht (Deutsch):
 6. **Groove**: Event-Onset-DTW ≤ 8 ms RMS — kein Begradigen von Swing/Rubato
 7. **Pass-Through-Invariante** (SNR > 40 dB): PQS-MOS-Verlust ≤ 0.05, alle 15 Goals ±0.02, LUFS ≤ 0.3 LU, Chroma ≥ 0.99
 8. **Rauschboden** (modus-differenziert):
-   - **Restoration**: Material-adaptiv — Rauschboden des originalen Aufnahmemediums anstreben. Ein Studio-Tape von 1965 hatte ≈ −60 dBFS; erzwungene −72 dBFS entfernt Studio-Ambience und zerstört Raumklang. Richtgrößen: Shellac ≤ −45 dBFS, Vinyl ≤ −55 dBFS, Tape ≤ −60 dBFS, Digital ≤ −72 dBFS.
-   - **Studio 2026**: ≤ −72 dBFS, A-gew. ≤ −75 dB(A), 0 Musical-Noise-Events in Stille
-   - **Beide Modi**: 0 Musical-Noise-Events in Stille-Segmenten (Musical Noise ist immer ein Artefakt)
+    - **Restoration**: Analoge Tonträger-Rauschböden werden als reparierbare Trägerdefekte behandelt. Der Export zielt für `shellac`, `wax_cylinder`, `lacquer_disc`, `wire_recording`, `vinyl`, `tape`, `reel_tape` und `cassette` auf CD-ähnlichen Rauschboden statt analogem Hiss-/Oberflächenrauschen. Bei nötiger Resttextur-Auffüllung: Zielprofil `cd_digital`, ca. −74 dBFS, Testanker ≤ −68 dBFS; keine analoge Mindestboden-Reinjektion.
+    - **Studio 2026**: ≤ −72 dBFS, A-gew. ≤ −75 dB(A), 0 Musical-Noise-Events in Stille
+    - **Beide Modi**: 0 Musical-Noise-Events in Stille-Segmenten (Musical Noise ist immer ein Artefakt)
 9. **Mikro-Dynamik**: Pearson des 400 ms LUFS-Profils ≥ 0.92, Crest-Faktor ≤ 1.5 dB
 10. **Vintage Aesthetics** (automatisch via EraClassifier):
     - 1920–1940: Rolloff ≤ 7 kHz nicht künstlich erweitern

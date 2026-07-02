@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aurik9"
-version = "9.19.0"
+version = "9.20.3"
 description = "Intelligentes Musik-Restaurierungssystem — weltweite Erstimplementierung"
 readme = "README.md"
 license = { file = "LICENSE" }

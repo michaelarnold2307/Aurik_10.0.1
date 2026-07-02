@@ -17,7 +17,7 @@
 - Chroma-Korrelation Original↔Restauriert ≥ 0.95
 - LUFS-Differenz ≤ 1 LU
 - Kein hinzugefügtes Harmonic-Exciter-Material
-- Rauschboden: material-adaptiv (Shellac ≤ −45, Vinyl ≤ −55, Tape ≤ −60, Digital ≤ −72 dBFS) — Studio-Ambience bewahren (§0a)
+- Rauschboden: CD-ähnlicher Export-Boden für alle analogen Tonträger (`shellac`, `wax_cylinder`, `lacquer_disc`, `wire_recording`, `vinyl`, `tape`, `reel_tape`, `cassette`); analoges Hiss-/Oberflächenrauschen darf nicht als Mindestboden zurückkehren (§0a/V21)
 - HPI-Gate: `timbral_fidelity` dominant (§2.44) — akustisch nicht unterscheidbar vom Original
 
 **Studio-2026-Modus Pflicht-Invarianten:**
@@ -3706,6 +3706,14 @@ Fix: Post-Pipeline kumulative Stereo-Collapse-Guard (§2.49b).
 **4. PlateauStop dämpft fälschlich ab Phase 4 für Stereo-Songs**
 `_spectral_quality_score` nutzte `a[0]` statt `a[:, 0]` → immer 0.0 für Stereo →
 PlateauStop aktiv. Fix: `mono = a[:, 0] if a.ndim == 2 else a`.
+
+**5. Hauptfortschritt erreicht früh 97 % und wirkt eingefroren**
+UV3-Post-Processing-Callbacks (`pct >= 86`) duerfen in der GUI den Hauptbalken nicht bis
+97-98 % treiben, solange Defektabschluss, Export-Quality-Gate, Resampling/Datei-Export und
+UI-Finalisierung noch folgen. Kanonischer UI-Vertrag: UV3-Analyse/Phasen belegen 9-83 %, UV3-
+Post-Processing belegt 83-90 %, und 90-100 % bleiben exklusiv fuer Abschluss-/Export-Schritte.
+Heartbeat-Prognosen duerfen diese 90-%-Grenze vor dem expliziten Export-/Finalisierungsblock nicht
+ueberschreiten.
 
 ### Psychoakustik-Gewichtung für Tiefen-Immersion (§8.3)
 

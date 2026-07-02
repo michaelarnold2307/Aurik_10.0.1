@@ -4,6 +4,35 @@
 > Historische Qualitäts- und Marketingformulierungen bleiben zur Nachvollziehbarkeit erhalten
 > und sind nicht automatisch als aktueller, normativ bindender Außenclaim zu verstehen.
 
+## Version 9.20.3 — Live-Defektzähler, Fortschrittsreserve und Real-Audio-Typfix (Stand: 2. Juli 2026)
+
+### Frontend / Live-Status
+
+- `Aurik910/ui/modern_window.py`
+  - Tonaussetzer-Chips zaehlen lokalisierte Dropout-Ereignisse waehrend echter
+    Dropout-/Inpainting-Phasen ueber den Timeline-Cursor herunter.
+  - Dropout-Aliase (`dropouts`, `DROPOUTS`, `gap`, `gaps`, `tape_dropout`) werden
+    auf den sichtbaren Chip `Tonaussetzer` normalisiert.
+  - Bereits behobene Waveform-Marker werden aus alten `_locations` nicht erneut
+    als aktiv rekonstruiert.
+  - UV3-Post-Processing belegt im Hauptbalken nur noch 83-90 %. Die Reserve 90-100 %
+    bleibt fuer Defektabschluss, Export-Quality-Gate, Datei-Export und UI-Finalisierung,
+    damit der Balken nicht frueh bei 97 % einfriert.
+
+### Tests / Gates
+
+- `tests/normative/test_real_audio_edge_lag_gate.py`
+  - `sr` wird statisch typisiert gecastet; Pylance/mypy-Fehler `call-overload` auf
+    `int(real_audio_gate_case["sr"])` ist behoben.
+- `tests/normative/test_modern_window_gui_contract.py`
+  - Neue Contract-Gates fuer Dropout-Aliase, timelinebasierte Chip-Zaehlung und
+    Hauptfortschrittsreserve nach UV3-Post-Processing.
+
+### Verifikation
+
+- `ruff check Aurik910/ui/modern_window.py tests/normative/test_modern_window_gui_contract.py tests/normative/test_real_audio_edge_lag_gate.py`
+- `pytest tests/normative/test_modern_window_gui_contract.py::test_main_progress_keeps_export_headroom_after_uv3_post_processing`
+
 ## Version 9.20.2 — UV3-Metadaten-Init-Fix + Gate-Serie gruen (Stand: 2. Juli 2026)
 
 ### Bugfix

@@ -1,15 +1,15 @@
-"""§MNF (V21) Mindestrauschboden-Guard.
+"""§MNF (V21) Export-Rauschboden-Guard.
 
-Stellt nach NR-Phasen sicher, dass analoge Materialien nicht auf digitale Stille
-fallen. Pause-Zonen werden mit materialkonformem Rauschen auf den erwarteten
-Rauschboden angehoben.
+Stellt nach NR-Phasen sicher, dass Rauschboden-Rekonstruktion nicht zu
+unmusikalischer digitaler Stille oder zu erneutem analogem Trägerrauschen führt.
+Analoge Tonträger werden im Export auf CD-ähnlichen Rauschboden gezielt; ihre
+Hiss-/Oberflächenrausch-Textur darf nicht als Mindestboden zurückkehren.
 
 Era-Textur-Erweiterung (v9.12.9): Wenn ``original_audio`` übergeben wird,
 extrahiert der Guard das Spektral-Profil des Originals aus dessen Ruhezonen
 und verwendet es als Vorlage für die Rausch-Injektion — statt synthetischem
-Butterworth-Rauschen. Dadurch bleibt die charakteristische Klangfarbe des
-Aufnahmeträgers (Shellac-Kratzen, Tape-Hiss-Textur, Vinyl-Oberfläche) nach
-einer NR-Phase erhalten.
+Butterworth-Rauschen. Diese Textur-Rekonstruktion ist nur noch für explizite
+Override-Böden aktiv; normale Analogträger bekommen keinen analogen Mindestboden.
 
 Kanonische Nutzung (UV3 post-phase hook):
     from backend.core.dsp.noise_floor_guard import apply_noise_floor_minimum
@@ -27,17 +27,16 @@ from scipy.signal import butter, sosfiltfilt  # type: ignore[import-untyped]
 logger = logging.getLogger(__name__)
 
 # Material-Rauschböden in dBFS.
-# None = digitales Material → kein Mindestboden nötig.
+# None = kein analoger Mindestboden; der Export darf auf CD-ähnlichen Boden fallen.
 _MATERIAL_FLOORS_DBFS: dict[str, float | None] = {
-    "shellac": -42.0,
-    "wax_cylinder": -38.0,
-    "lacquer_disc": -45.0,
-    "wire_recording": -40.0,
-    "reel_tape": -52.0,
-    "tape": -52.0,
-    "vinyl": -55.0,
-    "cassette": -50.0,
-    # Digital → kein analoger Rauschboden nötig
+    "shellac": None,
+    "wax_cylinder": None,
+    "lacquer_disc": None,
+    "wire_recording": None,
+    "reel_tape": None,
+    "tape": None,
+    "vinyl": None,
+    "cassette": None,
     "minidisc": None,
     "cd_digital": None,
     "dat": None,
@@ -152,14 +151,14 @@ def apply_noise_floor_minimum(
     frame_ms: float = 20.0,
     original_audio: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Hebt vollständig stille Frames auf den erwarteten Materialrauschboden an.
+    """Hebt vollständig stille Frames nur bei explizitem Override auf einen Boden an.
 
     Era-Textur-Rekonstruktion (v9.12.9): Wenn ``original_audio`` übergeben wird,
     wird das Spektral-Profil des Trägers aus dessen Ruhezonen extrahiert und als
-    Vorlage für das Ersatzrauschen verwendet. Dadurch bleibt die charakteristische
-    Klangfarbe des Aufnahmeträgers (Shellac-Kratzen, Tape-Hiss-Textur, Vinyl-
-    Oberfläche) nach einer NR-Phase erhalten. Ohne ``original_audio`` wird
-    synthetisches Butterworth-Rauschen injiziert (bisheriges Verhalten).
+    Vorlage für das Ersatzrauschen verwendet. Standardmäßig ist dieser Pfad für
+    analoge Tonträger deaktiviert, damit der Export CD-ähnlichen Rauschboden
+    statt analogem Trägerrauschen behalten kann. Ohne ``original_audio`` wird
+    synthetisches Butterworth-Rauschen injiziert, falls ein Override gesetzt ist.
 
     Args:
         audio: Audio nach NR-Phase. Shape [N] oder [2, N].
@@ -167,6 +166,7 @@ def apply_noise_floor_minimum(
         material: Materialklasse (z.B. ``"vinyl"``).
         floor_dbfs: Optionaler Override für den Rauschboden in dBFS.
             Wenn None, wird der materialspezifische Wert aus ``_MATERIAL_FLOORS_DBFS`` verwendet.
+            Analoge Standardmaterialien haben dort bewusst None.
         frame_ms: Frame-Länge in ms für Stille-Detektion.
         original_audio: Optionales Pre-NR-Audio (gleiche Shape wie ``audio``).
             Wenn übergeben, wird das Spektralprofil des Originals für era-
