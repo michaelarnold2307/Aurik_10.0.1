@@ -227,6 +227,24 @@ class TestSortPhasesByDag:
         assert idx_40 < idx_06
         assert idx_40 < idx_07
 
+    def test_finalizer_chain_lufs_truepeak_format_ordering(self):
+        """Finaler Exportpfad: Polish vor LUFS/Gain, dann TruePeak, dann Format/Dither."""
+        from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order
+
+        phases = [
+            "phase_41_output_format_optimization",
+            "phase_47_truepeak_limiter",
+            "phase_40_loudness_normalization",
+            "phase_17_mastering_polish",
+        ]
+        result = sort_phases_by_dag(phases)
+        assert validate_phase_order(result) == []
+        idx_17 = result.index("phase_17_mastering_polish")
+        idx_40 = result.index("phase_40_loudness_normalization")
+        idx_47 = result.index("phase_47_truepeak_limiter")
+        idx_41 = result.index("phase_41_output_format_optimization")
+        assert idx_17 < idx_40 < idx_47 < idx_41
+
     def test_full_chain_complex(self):
         """Komplexe Kette aus allen Stufen — muss alle HARD_BEFORE-Constraints erfüllen."""
         from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order

@@ -2053,7 +2053,9 @@ class AdaptiveProcessingPipelineV2:
         job.quality_report = quality_report
 
         # 7. Save output file
-        sf.write(output_audio_path, current_audio, sr)
+        from backend.api.bridge import export_guard as _export_guard
+
+        sf.write(output_audio_path, _export_guard(current_audio), sr)
 
         output_file_hash = self.archive_manager.calculate_file_hash(output_audio_path)
         output_file = AudioFile(

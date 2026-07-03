@@ -42,6 +42,33 @@ def test_uv3_final_export_audio_gate_runs_after_human_hearing_guard() -> None:
     assert "FINAL_EXPORT_AUDIO_GATE_FAIL" in src[final_gate_idx:result_idx]
 
 
+def test_uv3_final_export_rollback_reapplies_human_hearing_guard_before_regate() -> None:
+    """Auch ein Final-Gate-Rollback-Puffer muss vor Re-Gate hoersicher geglaettet werden."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "backend" / "core" / "unified_restorer_v3.py").read_text(encoding="utf-8")
+
+    fail_idx = src.index('"FINAL_EXPORT_AUDIO_GATE_FAIL"')
+    rollback_hhc_idx = src.index("human_hearing_comfort_guard_after_final_rollback", fail_idx)
+    recovered_idx = src.index('self._artifact_freedom_detail["final_export_audio_gate_recovered"]', fail_idx)
+    result_idx = src.index("result = RestorationResult(")
+
+    assert fail_idx < rollback_hhc_idx < recovered_idx < result_idx
+
+
+def test_uv3_final_export_exception_normalizes_and_reapplies_human_hearing_guard() -> None:
+    """Fail-Closed bei Final-Gate-Exception nutzt Exportlayout und Hoerkomfort-Guard."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "backend" / "core" / "unified_restorer_v3.py").read_text(encoding="utf-8")
+
+    exception_idx = src.index("except Exception as _final_export_gate_exc")
+    normalize_idx = src.index("_normalize_to_external_layout(np.asarray(analysis_audio", exception_idx)
+    hhc_idx = src.index("human_hearing_comfort_guard_after_final_exception", exception_idx)
+    fail_reason_idx = src.index('"FINAL_EXPORT_AUDIO_GATE_EXCEPTION"', exception_idx)
+    result_idx = src.index("result = RestorationResult(")
+
+    assert exception_idx < normalize_idx < hhc_idx < fail_reason_idx < result_idx
+
+
 # ─── Hilfs-Generatoren ───────────────────────────────────────────────────────
 
 

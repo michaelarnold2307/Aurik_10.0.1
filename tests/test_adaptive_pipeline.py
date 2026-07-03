@@ -125,3 +125,15 @@ def test_correct_pitch_v8_fails_closed_without_safety_wrapper() -> None:
     assert metadata.get("corrected") is False
     assert metadata.get("reason") == "safety_wrapper_unavailable"
     assert metadata.get("error") == "unsafe_direct_processing_disabled"
+
+
+def test_job_tracking_export_uses_bridge_export_guard() -> None:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    src_path = os.path.join(repo_root, "backend", "adaptive_pipeline.py")
+    with open(src_path, encoding="utf-8") as handle:
+        src = handle.read()
+
+    export_idx = src.index("from backend.api.bridge import export_guard as _export_guard")
+    write_idx = src.index("sf.write(output_audio_path, _export_guard(current_audio), sr)")
+
+    assert export_idx < write_idx

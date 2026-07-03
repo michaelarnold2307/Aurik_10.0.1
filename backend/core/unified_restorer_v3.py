@@ -17710,6 +17710,40 @@ class UnifiedRestorerV3:
                     -1.0,
                     1.0,
                 )
+                try:
+                    from backend.core.dsp.human_hearing_comfort_guard import (
+                        apply_human_hearing_comfort_guard as _hhc_after_final_rollback,
+                    )
+
+                    _hhc_rb_policy = get_human_hearing_comfort_profile(
+                        (getattr(self, "_restoration_context", None) or {}).get("restoration_policy_profile")
+                    )
+                    _hhc_rb_mat = str(getattr(material_type, "value", material_type) or "unknown").lower()
+                    _hhc_rb_material_cap_db = (
+                        0.25 if _hhc_rb_mat in {"mp3_low", "mp3_high", "aac", "streaming"} else 0.80
+                    )
+                    _hhc_rb_noise_cap_db = min(
+                        _hhc_rb_material_cap_db,
+                        float(_hhc_rb_policy.get("noise_floor_relative_cap_db", _hhc_rb_material_cap_db)),
+                    )
+                    _hhc_rb_result = _hhc_after_final_rollback(
+                        analysis_audio,
+                        restored_audio,
+                        int(original_sample_rate),
+                        max_peak_overshoot_db=float(_hhc_rb_policy.get("peak_overshoot_cap_db", 3.0)),
+                        max_hf_loss_db=float(_hhc_rb_policy.get("hf_loss_tolerance_db", 0.75)),
+                        max_hf_lift_db=float(_hhc_rb_policy.get("hf_lift_cap_db", 1.2)),
+                        max_relative_noise_floor_db=_hhc_rb_noise_cap_db,
+                    )
+                    restored_audio = _hhc_rb_result.audio
+                    _final_output_layout_meta["human_hearing_comfort_guard_after_final_rollback"] = {
+                        "applied": bool(_hhc_rb_result.applied),
+                        "policy": dict(_hhc_rb_policy),
+                        "noise_floor_relative_cap_db": float(_hhc_rb_noise_cap_db),
+                        "noise_floor_clamp_db": float(_hhc_rb_result.noise_floor_clamp_db),
+                    }
+                except Exception as _hhc_rb_exc:
+                    logger.debug("Final rollback HumanHearingComfortGuard skipped: %s", _hhc_rb_exc)
                 logger.warning(
                     "§2.44/§2.49 Final-Export-Audio-Gate: af=%.3f hpi=%.4f — "
                     "Rollback auf sicheren finalen Exportpuffer",
@@ -17801,11 +17835,44 @@ class UnifiedRestorerV3:
             _primary_fail_reason = _prfr_final_export(_fail_reasons)
         except Exception as _final_export_gate_exc:
             logger.warning("§2.44/§2.49 Final-Export-Audio-Gate fehlgeschlagen: %s", _final_export_gate_exc)
+            _final_exception_target = _normalize_to_external_layout(np.asarray(analysis_audio, dtype=np.float32))
             restored_audio = np.clip(
-                np.nan_to_num(np.asarray(analysis_audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0),
+                np.nan_to_num(np.asarray(_final_exception_target, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0),
                 -1.0,
                 1.0,
             )
+            try:
+                from backend.core.dsp.human_hearing_comfort_guard import (
+                    apply_human_hearing_comfort_guard as _hhc_after_final_exception,
+                )
+
+                _hhc_exc_policy = get_human_hearing_comfort_profile(
+                    (getattr(self, "_restoration_context", None) or {}).get("restoration_policy_profile")
+                )
+                _hhc_exc_mat = str(getattr(material_type, "value", material_type) or "unknown").lower()
+                _hhc_exc_material_cap_db = 0.25 if _hhc_exc_mat in {"mp3_low", "mp3_high", "aac", "streaming"} else 0.80
+                _hhc_exc_noise_cap_db = min(
+                    _hhc_exc_material_cap_db,
+                    float(_hhc_exc_policy.get("noise_floor_relative_cap_db", _hhc_exc_material_cap_db)),
+                )
+                _hhc_exc_result = _hhc_after_final_exception(
+                    analysis_audio,
+                    restored_audio,
+                    int(original_sample_rate),
+                    max_peak_overshoot_db=float(_hhc_exc_policy.get("peak_overshoot_cap_db", 3.0)),
+                    max_hf_loss_db=float(_hhc_exc_policy.get("hf_loss_tolerance_db", 0.75)),
+                    max_hf_lift_db=float(_hhc_exc_policy.get("hf_lift_cap_db", 1.2)),
+                    max_relative_noise_floor_db=_hhc_exc_noise_cap_db,
+                )
+                restored_audio = _hhc_exc_result.audio
+                _final_output_layout_meta["human_hearing_comfort_guard_after_final_exception"] = {
+                    "applied": bool(_hhc_exc_result.applied),
+                    "policy": dict(_hhc_exc_policy),
+                    "noise_floor_relative_cap_db": float(_hhc_exc_noise_cap_db),
+                    "noise_floor_clamp_db": float(_hhc_exc_result.noise_floor_clamp_db),
+                }
+            except Exception as _hhc_exc_guard_exc:
+                logger.debug("Final exception HumanHearingComfortGuard skipped: %s", _hhc_exc_guard_exc)
             _fail_reasons.append(
                 {
                     "component": "FinalExportAudioGate",
