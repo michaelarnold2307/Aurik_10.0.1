@@ -624,7 +624,12 @@ class WowFlutterFix(PhaseInterface):
                 _has_tape_dip_defect = bool((kwargs.get("defect_locations") or {}).get("tape_head_level_dip"))
                 if (_is_primary_tape or _has_tape_dip_defect) and _effective_strength > 0.0:
                     audio, n_level_dips_repaired = self._stabilize_tape_level(
-                        audio, sample_rate, _effective_strength, is_primary_tape=_is_primary_tape
+                        audio,
+                        sample_rate,
+                        _effective_strength,
+                        is_primary_tape=_is_primary_tape,
+                        confirmed_tape_dip=_has_tape_dip_defect,
+                        protected_zones=self._collect_vfa_protected_zones(kwargs),
                     )
                     if n_level_dips_repaired > 0:
                         logger.info(
@@ -715,7 +720,12 @@ class WowFlutterFix(PhaseInterface):
             _is_primary_tape = _mat_enum in _TAPE_LEVEL_MATERIALS
             if (_is_primary_tape or _has_tape_dip_defect) and _effective_strength > 0.0:
                 audio, n_level_dips_repaired = self._stabilize_tape_level(
-                    audio, sample_rate, _effective_strength, is_primary_tape=_is_primary_tape
+                    audio,
+                    sample_rate,
+                    _effective_strength,
+                    is_primary_tape=_is_primary_tape,
+                    confirmed_tape_dip=_has_tape_dip_defect,
+                    protected_zones=self._collect_vfa_protected_zones(kwargs),
                 )
                 if n_level_dips_repaired > 0:
                     logger.info(
@@ -737,7 +747,7 @@ class WowFlutterFix(PhaseInterface):
                 metrics={
                     "wow_flutter_detected": False,
                     "max_deviation_percent": max_deviation,
-                    "correction_applied": 0.0,
+                    "correction_applied": _effective_strength if n_level_dips_repaired > 0 else 0.0,
                     "material": material.value,
                     "mean_confidence": float(np.mean(confidence[confidence > 0])),
                     "quality_mode": quality_mode,
@@ -1031,7 +1041,12 @@ class WowFlutterFix(PhaseInterface):
         _is_primary_tape = _mat_enum in _TAPE_LEVEL_MATERIALS
         if (_is_primary_tape or _has_tape_dip_defect) and _effective_strength > 0.0:
             restored, n_level_dips_repaired = self._stabilize_tape_level(
-                restored, sample_rate, _effective_strength, is_primary_tape=_is_primary_tape
+                restored,
+                sample_rate,
+                _effective_strength,
+                is_primary_tape=_is_primary_tape,
+                confirmed_tape_dip=_has_tape_dip_defect,
+                protected_zones=self._collect_vfa_protected_zones(kwargs),
             )
             if n_level_dips_repaired > 0:
                 restored_mono = safe_to_mono(restored) if is_stereo else restored
@@ -1771,6 +1786,99 @@ class WowFlutterFix(PhaseInterface):
             return 0.0
         return float(np.clip(local_strength, 0.10, 1.0))
 
+    @staticmethod
+    def _collect_vfa_protected_zones(phase_kwargs: dict[str, Any]) -> list[tuple[float, float, float]]:
+        """Sammelt Vokal-/Performance-Schutzzonen fuer per-Event-Staerkecaps."""
+        protected_zones: list[tuple[float, float, float]] = []
+        for zone in phase_kwargs.get("vibrato_zones") or []:
+            try:
+                protected_zones.append((float(zone[0]), float(zone[1]), 0.20))
+            except Exception:
+                continue
+        for zone in phase_kwargs.get("frisson_zones") or []:
+            try:
+                start_s = float(getattr(zone, "start_s", None) or zone[0])
+                end_s = float(getattr(zone, "end_s", None) or zone[1])
+                protected_zones.append((start_s, end_s, 0.30))
+            except Exception:
+                continue
+        for zone in phase_kwargs.get("whisper_zones") or []:
+            try:
+                protected_zones.append((float(zone[0]), float(zone[1]), 0.25))
+            except Exception:
+                continue
+        for zone in phase_kwargs.get("passaggio_zones") or []:
+            try:
+                protected_zones.append((float(zone[0]), float(zone[1]), 0.35))
+            except Exception:
+                continue
+        return protected_zones
+
+    @staticmethod
+    def _compute_tape_level_local_strength(
+        mono_audio: np.ndarray,
+        event_start: int,
+        event_end: int,
+        sample_rate: int,
+        base_strength: float,
+        max_deficit_db: float,
+        max_gain_db: float,
+        *,
+        is_primary_tape: bool,
+        confirmed_tape_dip: bool,
+        protected_zones: list[tuple[float, float, float]],
+    ) -> float:
+        """Berechnet per Tape-Level-Dip die kleinste plausible, aber wirksame Korrekturstaerke."""
+        if base_strength < 1e-6:
+            return 0.0
+        n = len(mono_audio)
+        event_start = int(np.clip(event_start, 0, max(0, n - 1)))
+        event_end = int(np.clip(event_end, event_start + 1, n))
+        event_len = max(1, event_end - event_start)
+
+        ctx_pad = int(0.250 * max(sample_rate, 1))
+        ctx_pre = mono_audio[max(0, event_start - ctx_pad) : event_start]
+        ctx_post = mono_audio[event_end : min(n, event_end + ctx_pad)]
+        ctx_parts = [part for part in (ctx_pre, ctx_post) if len(part) >= 8]
+        context_loss_db = 0.0
+        if ctx_parts:
+            ctx_audio = np.concatenate(ctx_parts)
+            event_audio = mono_audio[event_start:event_end]
+            event_rms = float(np.sqrt(np.mean(event_audio**2) + 1e-12))
+            ctx_rms = float(np.sqrt(np.mean(ctx_audio**2) + 1e-12))
+            context_loss_db = float(np.clip(20.0 * np.log10((ctx_rms + 1e-12) / (event_rms + 1e-12)), 0.0, max_gain_db))
+
+        depth_ref_db = max(1.0, max_gain_db - 3.0)
+        depth_factor = float(np.clip(max_deficit_db / depth_ref_db, 0.0, 1.0))
+        context_factor = float(np.clip(context_loss_db / max(1.0, max_gain_db), 0.0, 1.0))
+        duration_s = event_len / float(max(sample_rate, 1))
+        duration_factor = float(np.clip((duration_s - 0.030) / 0.270, 0.0, 1.0))
+
+        if is_primary_tape:
+            floor = 0.58
+            cap = 0.94
+        elif confirmed_tape_dip:
+            floor = 0.45
+            cap = 0.88
+        else:
+            floor = 0.10
+            cap = 0.45
+
+        local_strength = max(
+            float(base_strength),
+            floor + 0.26 * depth_factor + 0.08 * context_factor + 0.08 * duration_factor,
+        )
+        local_strength = float(np.clip(local_strength, 0.0, cap))
+
+        if protected_zones:
+            center_s = float(event_start + event_end) * 0.5 / float(max(sample_rate, 1))
+            for zone_start, zone_end, zone_cap in protected_zones:
+                if float(zone_start) <= center_s <= float(zone_end):
+                    local_strength = min(local_strength, float(zone_cap))
+                    break
+
+        return float(np.clip(local_strength, 0.0, 1.0))
+
     def _repair_transport_bumps(
         self,
         audio: np.ndarray,
@@ -2226,6 +2334,8 @@ class WowFlutterFix(PhaseInterface):
         strength: float,
         *,
         is_primary_tape: bool = True,
+        confirmed_tape_dip: bool = False,
+        protected_zones: list[tuple[float, float, float]] | None = None,
     ) -> tuple[np.ndarray, int]:
         """Erkennt and repair tape head contact level dips — STFT-domain SOTA v2.
 
@@ -2290,6 +2400,10 @@ class WowFlutterFix(PhaseInterface):
             dip_thresh_db = 3.0
             min_dip_frames = 3  # 30 ms — tight for cassette capstan bumps
             max_gain_db = 15.0
+        elif confirmed_tape_dip:
+            dip_thresh_db = 4.5
+            min_dip_frames = 6  # 60 ms — detected tape-stage dips in transferred material
+            max_gain_db = 13.0
         else:
             dip_thresh_db = 6.0  # only repair severe dips (> 6 dB below rolling p75)
             min_dip_frames = 20  # 200 ms minimum — real tape contact dips last 200–500 ms
@@ -2390,12 +2504,20 @@ class WowFlutterFix(PhaseInterface):
 
         for rms_frames, deficit in dip_events:
             _event_max_deficit_db = float(np.max(deficit))
-            if is_primary_tape:
-                event_strength = float(
-                    np.clip(max(strength, 0.45 + 0.02 * (_event_max_deficit_db - dip_thresh_db)), 0.0, 0.68)
-                )
-            else:
-                event_strength = float(np.clip(strength, 0.0, 0.45))
+            _event_start = int(rms_frames[0] * env_hop)
+            _event_end = int(min(n_samples, (rms_frames[-1] + 1) * env_hop + env_win))
+            event_strength = self._compute_tape_level_local_strength(
+                mono,
+                _event_start,
+                _event_end,
+                sample_rate,
+                strength,
+                _event_max_deficit_db,
+                max_gain_db,
+                is_primary_tape=is_primary_tape,
+                confirmed_tape_dip=confirmed_tape_dip,
+                protected_zones=protected_zones or [],
+            )
 
             # Map RMS dip frames → nearest STFT frame indices
             rms_ctrs = rms_centres[rms_frames]
