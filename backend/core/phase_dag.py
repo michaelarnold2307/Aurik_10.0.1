@@ -64,6 +64,29 @@ HARD_BEFORE_CONSTRAINTS: list[PhaseConstraint] = [
         "phase_07_harmonic_restoration",
         "Band-NR vor Harmonik (Rauschen nicht als Harmonik rekonstruieren)",
     ),
+    # Pegeldrift-Korrektur (§2.46 Stufe 4.5): nach subtraktiver Carrier-NR,
+    # vor additiver BW-/Harmonik-Restauration, damit weder Rauschen noch
+    # synthetische Obertöne die Gain-Hüllkurve verfälschen.
+    PhaseConstraint(
+        "phase_03_denoise",
+        "phase_40_loudness_normalization",
+        "Carrier-NR vor Pegeldrift-Ausgleich (§2.46 Stufe 4 vor 4.5)",
+    ),
+    PhaseConstraint(
+        "phase_29_tape_hiss_reduction",
+        "phase_40_loudness_normalization",
+        "Band-NR vor Pegeldrift-Ausgleich (§2.46 Stufe 4 vor 4.5)",
+    ),
+    PhaseConstraint(
+        "phase_40_loudness_normalization",
+        "phase_06_frequency_restoration",
+        "Pegeldrift-Ausgleich vor BW-Extension (§2.46 Stufe 4.5 vor 5)",
+    ),
+    PhaseConstraint(
+        "phase_40_loudness_normalization",
+        "phase_07_harmonic_restoration",
+        "Pegeldrift-Ausgleich vor Harmonik (§2.46 Stufe 4.5 vor 5)",
+    ),
     PhaseConstraint(
         "phase_06_frequency_restoration",
         "phase_07_harmonic_restoration",

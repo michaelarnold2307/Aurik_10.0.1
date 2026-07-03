@@ -55,7 +55,7 @@ phase_39_air_band_enhancement.py    Air-Band-Enhancement (Ära-bewusst, BW-Cap �
                                     Halluzinationen (+18 dB Air-Band-Energie bei Vinyl > 16 kHz).
                                     Erlaubt: Studio 2026 (beide Modi), digitale Quellen (cd_digital,
                                     mp3_low, mp3_high, dat, md) in Restoration wenn BW-Ceiling passt.
-phase_40_loudness_normalization.py  LUFS-Normierung (ITU-R BS.1770-5, −14 LUFS)
+phase_40_loudness_normalization.py  LUFS-Normierung + Pegeldrift-Korrektur (§2.46 Stufe 4.5)
 phase_41_output_format_optimization.py  Ausgabe-Format-Optimierung
 phase_42_vocal_enhancement.py       Gesangs-Enhancement
 phase_43_ml_deesser.py              ML-gestützter De-Esser
@@ -190,7 +190,7 @@ Normative Anforderungen:
 | `phase_37_bass_enhancement` | virtual-pitch bass reconstruction + harmonic bass fill | low-band saturation + shelving | `O3_spectral_balance` | BassKraft, Wärme, Groove |
 | `phase_38_presence_boost` | SourceFidelity mic-center presence sculpting | constrained bell/shelf EQ | `O3_spectral_balance` | Artikulation, Transparenz, VocalQuality |
 | `phase_39_air_band_enhancement` | ceiling-aware SBR/NVSR air restoration | constrained air shelf | `O3_spectral_balance` | Brillanz, Raumtiefe, Transparenz |
-| `phase_40_loudness_normalization` | ITU-R BS.1770-5 + quiet-zone clamp + true-peak aware gain | LUFS-only normalization | `O10_output` | Export-Kohärenz, Transparenz, MikroDynamik |
+| `phase_40_loudness_normalization` | ITU-R BS.1770-5 + quiet-zone clamp + true-peak aware gain + musikgegated inverse Pegeldrift-Hüllkurve | LUFS-only normalization | `O10_output` | Export-Kohärenz, Transparenz, MikroDynamik, Pegelstabilität |
 | `phase_41_output_format_optimization` | high-order noise-shaped dither + sinc resample + codec-safe export prep | TPDF dither + standard resample | `O10_output` | Export-Sicherheit, Authentizität, Transparenz |
 | `phase_42_vocal_enhancement` | stem-aware vocal enhancement with formant/vibrato guards | MIIPHER-lite DSP-assisted vocal polish | `O7_vocal_articulation` | VocalQuality, Artikulation, Emotionalität |
 | `phase_43_ml_deesser` | phoneme-aware second-pass ML/DSP de-esser | dynamic EQ de-esser | `O7_vocal_articulation` | VocalQuality, Artikulation, Natürlichkeit |

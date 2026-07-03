@@ -1377,6 +1377,27 @@ class DenoisePhase(PhaseInterface):
             and not _dfn_applied
         )
 
+        # §0p/§4.4: Bei vokalem Cassette-/Tape-Material ist MIIPHER/SGMSE+/DFN der
+        # eigentliche SOTA-Vokalpfad. Ein zusätzlicher Resemble-ML-Hybrid-Pass nach
+        # erfolgreichem MIIPHER hat in Real-Audio-Cassette-Runs Energie fast komplett
+        # verworfen und wurde erst spät vom Energy-Preservation-Guard zurückgerollt.
+        # Deshalb früh bremsen: Qualität bleibt beim spezialisierten Vokalpfad,
+        # OMLSA/DSP übernimmt die konservative Restglättung.
+        _skip_ml_hybrid_after_vocal_primary = (
+            _miipher_applied
+            and _is_vocal_material
+            and _panns_singing >= 0.25
+            and material_type in ("cassette", "tape", "reel_tape", "mp3_low")
+        )
+        if use_ml_hybrid and _skip_ml_hybrid_after_vocal_primary:
+            use_ml_hybrid = False
+            logger.info(
+                "Phase 03 ML-Hybrid übersprungen: MIIPHER/Vokalpfad bereits aktiv "
+                "(material=%s panns=%.2f) — konservative OMLSA/DSP-Restglättung statt Resemble-Zweitpass",
+                material_type,
+                _panns_singing,
+            )
+
         if use_ml_hybrid:
             try:
                 logger.info("Phase 03 ML-Hybrid: mode=%s, material=%s", quality_mode, material_type)

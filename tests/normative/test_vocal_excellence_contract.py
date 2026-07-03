@@ -132,6 +132,46 @@ class TestVocalExcellencePipelineWiring:
         assert "from backend.core.phases.phase_65_vocal_naturalness_restoration" in content
         assert "# §0a: phase_42_vocal_enhancement ist in Restoration VERBOTEN." in content
 
+    def test_restoration_routes_vocal_import_naturalness_deficit_to_phase65(self) -> None:
+        content = _UV3.read_text(encoding="utf-8")
+
+        assert '_gbc_goal == "natuerlichkeit"' in content
+        assert 'float(getattr(self, "_panns_singing", 0.0)) >= 0.25' in content
+        assert '"phase_65_vocal_naturalness_restoration",' in content
+
+    def test_low_singmos_triggers_phase65_recovery_not_warning_only(self) -> None:
+        content = _UV3.read_text(encoding="utf-8")
+
+        assert "_singmos_needs_phase65 = _singmos_val < 2.5" in content
+        assert "singmos_phase65_recovery" in content
+        assert "§G4 SingMOS Phase_65-Recovery" in content
+
+    def test_import_temporal_coherence_failure_is_repair_driver_not_export_judgment(self) -> None:
+        content = _UV3.read_text(encoding="utf-8")
+
+        assert "Import-TQC" in content
+        assert "import_temporal_coherence" in content
+        assert "import_temporal_coherence_recovery_phases" in content
+        assert '"phase_12_wow_flutter_fix"' in content
+        assert '"phase_14_phase_correction"' in content
+
+    def test_vocal_analog_restoration_removes_phase17_mastering_polish_preflight(self) -> None:
+        content = _UV3.read_text(encoding="utf-8")
+
+        assert '"phase_17_mastering_polish" in _sel_set_prerisk' in content
+        assert '_sel_set_prerisk.remove("phase_17_mastering_polish")' in content
+        assert "NOVELTY_CRIT/HNR_DROP/ECHO" in content
+        assert "preflight_risk_removed_phases" in content
+        assert "Preflight-Risk-Guard hatte Phase entfernt" in content
+
+    def test_phase03_skips_resemble_second_pass_after_vocal_primary_on_cassette(self) -> None:
+        content = (_ROOT / "backend/core/phases/phase_03_denoise.py").read_text(encoding="utf-8")
+
+        assert "_skip_ml_hybrid_after_vocal_primary" in content
+        assert "_miipher_applied" in content
+        assert 'material_type in ("cassette", "tape", "reel_tape", "mp3_low")' in content
+        assert "konservative OMLSA/DSP-Restglättung statt Resemble-Zweitpass" in content
+
     def test_phase65_keeps_vocal_naturalness_guards_active(self) -> None:
         content = _PHASE65.read_text(encoding="utf-8")
 
@@ -140,6 +180,13 @@ class TestVocalExcellencePipelineWiring:
         assert "_FORMANT_MAX_BOOST_DB: float = 1.0" in content
         assert "vibrato_zone_cap_applied" in content
         assert "passaggio" in content.lower()
+
+    def test_phase65_is_protected_from_wall_time_budget_pressure(self) -> None:
+        content = _UV3.read_text(encoding="utf-8")
+
+        assert '"phase_65",' in content
+        assert '"phase_65_vocal_naturalness_restoration",' in content
+        assert 'phase_65_vocal_naturalness_restoration",  # §0p VQI-/Naturalness-Recovery' in content
 
     def test_phase_coalitions_are_restoration_safe_and_vocal_aware(self) -> None:
         content = _UV3.read_text(encoding="utf-8")

@@ -1357,10 +1357,10 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
     DefectType.AMPLITUDE_DRIFT: PhaseAssignment(
         defect_type=DefectType.AMPLITUDE_DRIFT,
         primary_phases=[
-            "phase_12_wow_flutter_fix",
+            "phase_40_loudness_normalization",
         ],
         secondary_phases=[
-            "phase_40_loudness_normalization",
+            "phase_12_wow_flutter_fix",
             "phase_29_tape_hiss_reduction",
         ],
         description=(
@@ -2151,7 +2151,7 @@ def _build_reverse_phase_map() -> dict[str, list[DefectType]]:
     }
     for defect_type, assignment in _PHASE_MAP.items():
         for phase_id in assignment.primary_phases:
-            if phase_id in _excluded_primary_phases:
+            if phase_id in _excluded_primary_phases and defect_type is not DefectType.AMPLITUDE_DRIFT:
                 continue
             reverse.setdefault(phase_id, []).append(defect_type)
     return reverse

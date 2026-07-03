@@ -65,7 +65,7 @@ class TestReversePhaseMap:
         assert "phase_21_exciter" not in rmap
         assert "phase_13_stereo_enhancement" not in rmap
         assert "phase_17_mastering_polish" not in rmap
-        assert "phase_40_loudness_normalization" not in rmap
+        assert rmap.get("phase_40_loudness_normalization") == [DefectType.AMPLITUDE_DRIFT]
 
     def test_reverse_map_is_cached(self):
         """Second call should return same object (cached)."""

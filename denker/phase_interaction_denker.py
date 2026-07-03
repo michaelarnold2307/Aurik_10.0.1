@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from copy import copy
 from dataclasses import dataclass, field
 from importlib import import_module
 from typing import Any
@@ -398,7 +399,7 @@ class PhaseInteractionDenker:
     ) -> PhasePlan:
         # 1. Phase-Selektion via UV3 (UV3 = Werkzeug, nicht Orchestrator)
         uv3_phases = self._select_via_uv3(
-            defect_result=defect_result,
+            defect_result=self._with_policy_material(defect_result, material),
             mode=mode,
             chain_info=chain_info,
             defekt_hint=defekt_hint,
@@ -709,6 +710,35 @@ class PhaseInteractionDenker:
                 )
 
         return result, applied
+
+    @staticmethod
+    def _with_policy_material(defect_result: Any, material: str) -> Any:
+        """Erzeugt eine Plan-View mit zentralem Denker-Material statt Scanner-Fallback."""
+        material_key = str(material or "").strip().lower()
+        if not material_key:
+            return defect_result
+        try:
+            material_type_cls = _load_symbol("backend.core.defect_scanner", "MaterialType")
+            policy_material = material_type_cls(material_key)
+        except Exception:
+            return defect_result
+        if getattr(defect_result, "material_type", None) == policy_material:
+            return defect_result
+        try:
+            planned = copy(defect_result)
+            planned.material_type = policy_material
+            logger.info(
+                "PhaseInteractionDenker: material policy override for UV3-Selektion: %s -> %s",
+                getattr(
+                    getattr(defect_result, "material_type", None),
+                    "value",
+                    getattr(defect_result, "material_type", None),
+                ),
+                material_key,
+            )
+            return planned
+        except Exception:
+            return defect_result
 
     @staticmethod
     def _strip_restoration_forbidden(phases: list[str], mode: str) -> tuple[list[str], list[str]]:

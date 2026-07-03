@@ -225,7 +225,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
                     _n = len(audio)
                     _mono_ref = audio[:, 0] if audio.ndim == 2 else audio
                     _gate_lin = 10 ** (-40.0 / 20.0)
-                    _n_windows = max(1, _n // _hop)
+                    _n_windows = max(2, int(np.ceil(_n / max(_hop, 1))))
                     # Build inverse trend: if slope > 0 (rising), apply attenuating gain
                     # Hard cap: max ±6 dB total correction over entire track
                     _total_correction_db = float(np.clip(-_drift_slope * (_n / sample_rate / 60.0), -6.0, 6.0))
@@ -240,7 +240,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
                     # Upsample envelope to sample-level
                     _full_gain_db = np.interp(
                         np.arange(_n),
-                        np.arange(_n_windows) * _hop + _hop // 2,
+                        np.linspace(0, max(_n - 1, 1), _n_windows),
                         _gain_envelope_db,
                     ).astype(np.float32)
                     _full_gain_lin = np.float32(10.0) ** (_full_gain_db / np.float32(20.0))

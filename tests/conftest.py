@@ -14,6 +14,7 @@ import gc
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -47,16 +48,16 @@ from test_utils import (
     generate_medium_specific_audio,
 )
 
+_AURIK_COMPONENTS: dict[str, Any] = {}
+
 # Import Aurik components
 try:
-    from backend.core.musical_goals.adaptive_goals_system import MaterialQuality
-    from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
+    from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker as _MusicalGoalsChecker
 
+    _AURIK_COMPONENTS["MusicalGoalsChecker"] = _MusicalGoalsChecker
     AURIK_COMPONENTS_AVAILABLE = True
 except ImportError:
     AURIK_COMPONENTS_AVAILABLE = False
-    MaterialQuality = None
-    MusicalGoalsChecker = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -69,8 +70,9 @@ def musical_goals_checker():
     """Fixture: MusicalGoalsChecker instance"""
     if not AURIK_COMPONENTS_AVAILABLE:
         pytest.skip("Aurik components not available")
-    assert MusicalGoalsChecker is not None
-    return MusicalGoalsChecker()
+    checker_cls = _AURIK_COMPONENTS.get("MusicalGoalsChecker")
+    assert checker_cls is not None
+    return checker_cls()
 
 
 @pytest.fixture(scope="module", params=["PRISTINE", "EXCELLENT", "GOOD", "FAIR", "POOR", "VERY_POOR", "EXTREME"])
@@ -158,7 +160,8 @@ def session_mono(session_sr) -> np.ndarray:
     """
     n = int(session_sr * _SESSION_DURATION)
     t = np.linspace(0, _SESSION_DURATION, n, endpoint=False, dtype=np.float32)
-    return 0.5 * np.sin(2 * np.pi * 440 * t)
+    result: np.ndarray = np.asarray(0.5 * np.sin(2 * np.pi * 440 * t), dtype=np.float32)
+    return result
 
 
 @pytest.fixture(scope="session")
@@ -220,10 +223,10 @@ def pytest_sessionfinish(session, exitstatus):
     try:
         from backend.core import plugin_lifecycle_manager as _plm_mod
 
-        mgr = _plm_mod._instance
+        mgr = vars(_plm_mod).get("_instance")
         if mgr is not None:
             mgr.shutdown()
-        _plm_mod._instance = None
+        vars(_plm_mod)["_instance"] = None
     except (KeyboardInterrupt, SystemExit, Exception):
         pass
 

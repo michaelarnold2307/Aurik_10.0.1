@@ -2237,6 +2237,7 @@ class UnifiedRestorerV3:
         from backend.core.material_canonical import canonical_material_key
 
         _mat_val = canonical_material_key(material_type)
+        _sfr_material_key = _raw_material if _raw_material not in ("", "unknown", _mat_val) else _mat_val
         _mat_denoise = 1.00
         _mat_reverb = 1.00
         _mat_reconstruct = 1.00
@@ -2640,7 +2641,7 @@ class UnifiedRestorerV3:
             _sfr = get_source_fidelity_reconstructor()
             _sfr_target = _sfr.estimate(
                 era_decade=era_decade,
-                material_key=_mat_val,
+                material_key=_sfr_material_key,
                 spectral_fingerprint=spectral_fingerprint,
                 transfer_chain=transfer_chain,
                 mode=_mode_str,
@@ -2702,6 +2703,7 @@ class UnifiedRestorerV3:
             "cluster_policy": _cluster_policy,
             "cluster_key": _cluster_policy.get("cluster_key", "unknown:unknown:general:fair"),
             # §2.41 Source-Fidelity-Felder für Phase 06 und ExcellenceOptimizer:
+            "source_fidelity_material": _sfr_material_key,
             "source_fidelity_bandwidth_target_hz": _sfr_bw_target,
             "source_fidelity_reconstruction_strength": _sfr_recon_strength,
             "source_fidelity_confidence": _sfr_confidence,
@@ -2951,6 +2953,7 @@ class UnifiedRestorerV3:
                 "phase_49",
                 "phase_55",
                 "phase_58",
+                "phase_65",
             }
         )
         return _prefix in _priority_prefixes
@@ -10093,6 +10096,46 @@ class UnifiedRestorerV3:
                 restorability_score=_pmgg_restorability_score,
             )
 
+        # §2.16 Import-TQC: Eine temporale Inkohärenz der Importdatei ist ein Reparaturauftrag,
+        # kein Exporturteil. Export-TQC bleibt separat nach der Verarbeitung aktiv.
+        try:
+            from backend.core.temporal_quality_coherence import measure_temporal_coherence as _measure_import_tqc
+
+            _import_tqc_mat = str(getattr(material_type, "value", material_type) or "unknown").strip().lower()
+            _import_tqc = _measure_import_tqc(audio, sample_rate, material_key=_import_tqc_mat)
+            if isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
+                self._phase_metadata_accumulator["import_temporal_coherence"] = {
+                    "passed": bool(getattr(_import_tqc, "passed", True)),
+                    "max_span": float(getattr(_import_tqc, "max_span", 0.0)),
+                    "sigma": float(getattr(_import_tqc, "sigma", 0.0)),
+                    "n_segments": int(getattr(_import_tqc, "n_segments", 0)),
+                }
+            if not bool(getattr(_import_tqc, "passed", True)):
+                _tqc_driver_phases = [
+                    "phase_12_wow_flutter_fix",
+                    "phase_14_phase_correction",
+                    "phase_15_stereo_balance",
+                    "phase_31_speed_pitch_correction",
+                ]
+                _selected_tqc = set(selected_phases)
+                _tqc_added: list[str] = []
+                for _tqc_phase in _tqc_driver_phases:
+                    if _tqc_phase not in _selected_tqc:
+                        selected_phases.append(_tqc_phase)
+                        _selected_tqc.add(_tqc_phase)
+                        _tqc_added.append(_tqc_phase)
+                if _tqc_added:
+                    logger.info(
+                        "§2.16 Import-TQC-Recovery: max_span=%.3f sigma=%.3f → injiziert %s",
+                        float(getattr(_import_tqc, "max_span", 0.0)),
+                        float(getattr(_import_tqc, "sigma", 0.0)),
+                        _tqc_added,
+                    )
+                    if isinstance(getattr(self, "_restoration_context", None), dict):
+                        self._restoration_context["import_temporal_coherence_recovery_phases"] = _tqc_added
+        except Exception as _import_tqc_exc:
+            logger.debug("§2.16 Import-TQC-Recovery non-blocking: %s", _import_tqc_exc)
+
         # §Preflight-Risk-Guard: problematische Phasen bereits vor der Ausführung
         # entschärfen statt ihre Artefakte nachträglich zu kompensieren.
         # Ziel: phase_07 (Echo/Novelty), phase_40 (Loudness-Jumps) und phase_50
@@ -10152,6 +10195,13 @@ class UnifiedRestorerV3:
                         _sel_set_prerisk.remove("phase_40_loudness_normalization")
                         _removed_risk_phases.append("phase_40_loudness_normalization")
 
+                    # Mastering-Polish ist in diesem Kontext kein Restaurierungsdefekt-Fix,
+                    # sondern ein additiver Enhancement-Schritt. SFT zeigte für phase_17
+                    # NOVELTY_CRIT/HNR_DROP/ECHO bei vokalem Material; deshalb vorab entfernen.
+                    if "phase_17_mastering_polish" in _sel_set_prerisk:
+                        _sel_set_prerisk.remove("phase_17_mastering_polish")
+                        _removed_risk_phases.append("phase_17_mastering_polish")
+
                     # Zweiter spektraler Pass ist auf vocal-heavy Analogmaterial in
                     # Restoration zu riskant; dort bevorzugen wir die bereits
                     # vorhandenen passiven/spektral konservativen Phasen.
@@ -10176,6 +10226,7 @@ class UnifiedRestorerV3:
                             "removed_phases": list(_removed_risk_phases),
                             "spectral_evidence": round(_hard_spectral_need, 3),
                         }
+                    _rctx_prerisk["preflight_risk_removed_phases"] = list(_removed_risk_phases)
         except Exception as _prerisk_exc:
             logger.debug("Preflight-Risk-Guard non-blocking: %s", _prerisk_exc)
 
@@ -11088,6 +11139,7 @@ class UnifiedRestorerV3:
                     )
                 _gbc_added: list[str] = []
                 _gbc_selected_set: set[str] = set(selected_phases)
+                _gbc_preflight_removed = set((self._restoration_context or {}).get("preflight_risk_removed_phases", []))
                 for _gbc_goal, _gbc_proxy in _gbc_snapshot.items():
                     if _gbc_goal not in _applicable_goals:
                         continue
@@ -11099,7 +11151,22 @@ class UnifiedRestorerV3:
                             is_studio_2026=_gbc_is_studio,
                             transfer_chain=list(_cal_transfer_chain) if _cal_transfer_chain else [],
                         )
+                        if (
+                            _gbc_goal == "natuerlichkeit"
+                            and not _gbc_is_studio
+                            and float(getattr(self, "_panns_singing", 0.0)) >= 0.25
+                        ):
+                            _gbc_candidates = [
+                                "phase_65_vocal_naturalness_restoration",
+                                *[p for p in _gbc_candidates if p != "phase_65_vocal_naturalness_restoration"],
+                            ]
                         for _gbc_phase in _gbc_candidates:
+                            if _gbc_phase in _gbc_preflight_removed:
+                                logger.info(
+                                    "§GOAL_BASELINE %s skip: Preflight-Risk-Guard hatte Phase entfernt",
+                                    _gbc_phase,
+                                )
+                                continue
                             if _gbc_phase not in _gbc_selected_set:
                                 # §0p/§2.46e: phase_46 erzeugt Delay-basierte Raumanteile,
                                 # die bei Gesang als Echo wahrgenommen werden. In Restoration
@@ -15845,7 +15912,7 @@ class UnifiedRestorerV3:
 
         # §G4 SingMOS Naturalness Gate (SOTA Matrix: SingMOS primärer Gesangs-MOS).
         # SingMOSPredictor = DSP-Proxy (HNR + F0-Stabilität + Formant + SNR → MOS 1–5).
-        # MOS < 2.0 → Checkpoint-Rollback; MOS < 2.5 → Recovery-Warnung.
+        # MOS < 2.0 → Checkpoint-Rollback; MOS < 2.5 → phase_65 Naturalness-Recovery.
         try:
             _singmos_panns = float(getattr(self, "_panns_singing", 0.0))
             if _singmos_panns >= 0.35 or bool(self._restoration_context.get("vocal_material_prior", False)):
@@ -15861,6 +15928,42 @@ class UnifiedRestorerV3:
                 _singmos_val = float(_smp_g4.predict(_smp_in.astype(np.float32), sample_rate))
                 self._phase_metadata_accumulator["singmos"] = _singmos_val
                 logger.info("§G4 SingMOS=%.2f (panns_singing=%.2f)", _singmos_val, _singmos_panns)
+                _singmos_needs_phase65 = _singmos_val < 2.5 and not self.is_studio_mode()
+                if _singmos_needs_phase65:
+                    try:
+                        from backend.core.phases.phase_65_vocal_naturalness_restoration import (
+                            get_phase_65 as _get_smp_p65,
+                        )
+
+                        _smp_p65_strength = float(np.clip((2.5 - _singmos_val) / 2.5, 0.08, 0.45))
+                        _smp_p65_result = _get_smp_p65().process(
+                            np.asarray(restored_audio, dtype=np.float32),
+                            sample_rate,
+                            str(getattr(material_type, "value", material_type)),
+                            panns_singing=_singmos_panns,
+                            singmos_pre=_singmos_val,
+                            strength=_smp_p65_strength,
+                        )
+                        if _smp_p65_result is not None and getattr(_smp_p65_result, "success", False):
+                            _smp_p65_audio = getattr(_smp_p65_result, "audio", None)
+                            if _smp_p65_audio is not None and np.asarray(_smp_p65_audio).shape == restored_audio.shape:
+                                restored_audio = np.clip(
+                                    np.nan_to_num(np.asarray(_smp_p65_audio, dtype=np.float32), nan=0.0),
+                                    -1.0,
+                                    1.0,
+                                )
+                                self._phase_metadata_accumulator["singmos_phase65_recovery"] = {
+                                    "singmos_pre": _singmos_val,
+                                    "strength": _smp_p65_strength,
+                                }
+                                logger.info(
+                                    "§G4 SingMOS Phase_65-Recovery: singmos_pre=%.2f panns=%.2f strength=%.2f",
+                                    _singmos_val,
+                                    _singmos_panns,
+                                    _smp_p65_strength,
+                                )
+                    except Exception as _smp_p65_exc:
+                        logger.debug("§G4 SingMOS Phase_65-Recovery non-blocking: %s", _smp_p65_exc)
                 if _singmos_val < 2.0:
                     _smp_rb = getattr(self, "_hpi_best_rollback_audio", None) or getattr(
                         self, "_best_carrier_checkpoint", None
@@ -15877,7 +15980,7 @@ class UnifiedRestorerV3:
                             }
                         )
                 elif _singmos_val < 2.5:
-                    logger.warning("§G4 SingMOS=%.2f < 2.5 → Recovery-Warnung (Naturalness niedrig)", _singmos_val)
+                    logger.warning("§G4 SingMOS=%.2f < 2.5 → phase_65-Recovery (Naturalness niedrig)", _singmos_val)
                     _fail_reasons.append(
                         {
                             "component": "SingMOSGate",
@@ -17511,6 +17614,219 @@ class UnifiedRestorerV3:
             }
         except Exception as _hhc_final_exc:
             logger.debug("Final HumanHearingComfortGuard skipped: %s", _hhc_final_exc)
+
+        # §2.44/§2.49 Final-Export-Audio-Gate: Alle post-HPI-Eingriffe (LUFS/Noise/HHC/Layout)
+        # muessen auf dem exakt exportierten Audiopuffer erneut hoersicher bestaetigt werden.
+        try:
+            from backend.core.artifact_freedom_gate import get_artifact_freedom_gate as _get_afg_final_export
+            from backend.core.holistic_perceptual_gate import get_holistic_gate as _get_hg_final_export
+            from backend.core.pipeline_health_state import (
+                pipeline_health_from_fail_reasons as _phfr_final_export,
+            )
+            from backend.core.pipeline_health_state import (
+                primary_fail_reason_from_fail_reasons as _prfr_final_export,
+            )
+
+            def _channels_first_for_final_gate(_arr: np.ndarray) -> np.ndarray:
+                _a = np.asarray(_arr, dtype=np.float32)
+                if _a.ndim == 2 and _a.shape[1] <= 2 < _a.shape[0]:
+                    return cast(np.ndarray, np.asarray(_a.T, dtype=np.float32))
+                return cast(np.ndarray, _a)
+
+            _final_gate_ref = _channels_first_for_final_gate(np.asarray(analysis_audio, dtype=np.float32))
+            _final_gate_audio = _channels_first_for_final_gate(np.asarray(restored_audio, dtype=np.float32))
+            _final_gate_sr = int(max(1, int(original_sample_rate)))
+            _final_gate_material = str(getattr(material_type, "value", material_type) or "digital").lower()
+            _final_afg_result = _get_afg_final_export().evaluate(
+                _final_gate_ref,
+                _final_gate_audio,
+                _final_gate_sr,
+                material_type=_final_gate_material,
+                phase_id="",
+                restorability_score=float(_pmgg_restorability_score),
+            )
+            _final_export_af = float(np.clip(float(_final_afg_result.artifact_freedom), 0.0, 1.0))
+            _artifact_freedom_for_hpi = _final_export_af
+            self._artifact_freedom_score = _final_export_af
+            self._artifact_freedom_detail = dict(getattr(_final_afg_result, "detail_report", {}) or {})
+            self._artifact_freedom_detail["final_export_audio_gate"] = True
+            self._artifact_freedom_detail["previous_gate_score"] = float(
+                getattr(_hpi_result, "artifact_freedom", _final_export_af)
+                if _hpi_result is not None
+                else _final_export_af
+            )
+
+            _final_vqi_for_hpi = float((self._phase_metadata_accumulator or {}).get("vqi", 1.0))
+            _final_panns_for_hpi = float(getattr(self, "_panns_singing", 0.0))
+            _hg_final_export = _get_hg_final_export()
+            if self.is_studio_mode():
+                _hpi_result = _hg_final_export.evaluate_studio(
+                    _final_gate_ref,
+                    _final_gate_audio,
+                    _final_gate_sr,
+                    pqs_improvement=self._resolve_studio_pqs_improvement(_pqs_result, _fail_reasons),
+                    artifact_freedom=_final_export_af,
+                    emotional_arc_score=_emotional_arc_for_hpi,
+                    vqi=_final_vqi_for_hpi,
+                    panns_singing=_final_panns_for_hpi,
+                )
+            else:
+                _hpi_result = _hg_final_export.evaluate_restoration(
+                    _final_gate_ref,
+                    _final_gate_audio,
+                    _final_gate_sr,
+                    artifact_freedom=_final_export_af,
+                    emotional_arc_score=_emotional_arc_for_hpi,
+                    restorability_score=float(_pmgg_restorability_score),
+                    genre=_hpi_genre,
+                    material=_hpi_material,
+                    era_bin=_hpi_era,
+                    vqi=_final_vqi_for_hpi,
+                    panns_singing=_final_panns_for_hpi,
+                    transfer_chain=_hpi_transfer_chain or None,
+                )
+
+            _final_export_gate_failed = _final_export_af < 0.95 or not bool(getattr(_hpi_result, "passed", False))
+            if _final_export_gate_failed:
+                _fail_reasons.append(
+                    {
+                        "component": "FinalExportAudioGate",
+                        "error_code": "FINAL_EXPORT_AUDIO_GATE_FAIL",
+                        "severity": "failed",
+                        "artifact_freedom": _final_export_af,
+                        "hpi": float(getattr(_hpi_result, "hpi", 0.0) or 0.0),
+                    }
+                )
+                _final_safe_target = getattr(self, "_hpi_best_rollback_audio", None)
+                if _final_safe_target is None:
+                    _final_safe_target = getattr(self, "_best_carrier_checkpoint", None)
+                if _final_safe_target is None:
+                    _final_safe_target = analysis_audio
+                _final_safe_target = _normalize_to_external_layout(np.asarray(_final_safe_target, dtype=np.float32))
+                if np.asarray(_final_safe_target).shape != np.asarray(restored_audio).shape:
+                    _final_safe_target = np.asarray(analysis_audio, dtype=np.float32)
+                restored_audio = np.clip(
+                    np.nan_to_num(np.asarray(_final_safe_target, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0),
+                    -1.0,
+                    1.0,
+                )
+                logger.warning(
+                    "§2.44/§2.49 Final-Export-Audio-Gate: af=%.3f hpi=%.4f — "
+                    "Rollback auf sicheren finalen Exportpuffer",
+                    _final_export_af,
+                    float(getattr(_hpi_result, "hpi", 0.0) or 0.0),
+                )
+
+                _final_gate_audio = _channels_first_for_final_gate(np.asarray(restored_audio, dtype=np.float32))
+                _final_afg_result = _get_afg_final_export().evaluate(
+                    _final_gate_ref,
+                    _final_gate_audio,
+                    _final_gate_sr,
+                    material_type=_final_gate_material,
+                    phase_id="",
+                    restorability_score=float(_pmgg_restorability_score),
+                )
+                _artifact_freedom_for_hpi = float(np.clip(float(_final_afg_result.artifact_freedom), 0.0, 1.0))
+                self._artifact_freedom_score = _artifact_freedom_for_hpi
+                self._artifact_freedom_detail = dict(getattr(_final_afg_result, "detail_report", {}) or {})
+                self._artifact_freedom_detail["final_export_audio_gate_recovered"] = True
+                if self.is_studio_mode():
+                    _hpi_result = _hg_final_export.evaluate_studio(
+                        _final_gate_ref,
+                        _final_gate_audio,
+                        _final_gate_sr,
+                        pqs_improvement=self._resolve_studio_pqs_improvement(_pqs_result, _fail_reasons),
+                        artifact_freedom=_artifact_freedom_for_hpi,
+                        emotional_arc_score=_emotional_arc_for_hpi,
+                        vqi=_final_vqi_for_hpi,
+                        panns_singing=_final_panns_for_hpi,
+                    )
+                else:
+                    _hpi_result = _hg_final_export.evaluate_restoration(
+                        _final_gate_ref,
+                        _final_gate_audio,
+                        _final_gate_sr,
+                        artifact_freedom=_artifact_freedom_for_hpi,
+                        emotional_arc_score=_emotional_arc_for_hpi,
+                        restorability_score=float(_pmgg_restorability_score),
+                        genre=_hpi_genre,
+                        material=_hpi_material,
+                        era_bin=_hpi_era,
+                        vqi=_final_vqi_for_hpi,
+                        panns_singing=_final_panns_for_hpi,
+                        transfer_chain=_hpi_transfer_chain or None,
+                    )
+
+            _quality_gate_registry = self._classify_quality_gate_events(
+                artifact_freedom=float(_artifact_freedom_for_hpi),
+                panns_singing=float(getattr(self, "_panns_singing", 0.0)),
+                vocal_gate_active=bool(
+                    (
+                        self._restoration_context.get("vocal_material_prior", False)
+                        if isinstance(getattr(self, "_restoration_context", None), dict)
+                        else False
+                    )
+                    or (
+                        (
+                            (
+                                self._restoration_context.get("vfa_result", {})
+                                if isinstance(getattr(self, "_restoration_context", None), dict)
+                                else {}
+                            )
+                            or {}
+                        ).get("vqi_gate_active", False)
+                    )
+                ),
+                mode="studio2026" if self.is_studio_mode() else "restoration",
+                vqi_score=_vqi_score_for_gate,
+                vqi_floor=_vqi_floor_for_gate,
+                singer_identity_cosine=_singer_identity_for_gate,
+                multi_singer=bool((self._phase_metadata_accumulator or {}).get("multi_singer", False)),
+            )
+            self._phase_metadata_accumulator["quality_gate_registry"] = _quality_gate_registry
+            self._phase_metadata_accumulator["final_export_audio_gate"] = {
+                "artifact_freedom": float(_artifact_freedom_for_hpi),
+                "hpi": float(getattr(_hpi_result, "hpi", 0.0) or 0.0),
+                "passed": bool(
+                    float(_artifact_freedom_for_hpi) >= 0.95 and bool(getattr(_hpi_result, "passed", False))
+                ),
+                "exact_export_buffer": True,
+            }
+            if isinstance(getattr(self, "_restoration_context", None), dict):
+                self._restoration_context["quality_gate_registry"] = _quality_gate_registry
+                self._restoration_context["final_export_audio_gate"] = dict(
+                    self._phase_metadata_accumulator["final_export_audio_gate"]
+                )
+            _degradation_status = _phfr_final_export(_fail_reasons).value
+            _primary_fail_reason = _prfr_final_export(_fail_reasons)
+        except Exception as _final_export_gate_exc:
+            logger.warning("§2.44/§2.49 Final-Export-Audio-Gate fehlgeschlagen: %s", _final_export_gate_exc)
+            restored_audio = np.clip(
+                np.nan_to_num(np.asarray(analysis_audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0),
+                -1.0,
+                1.0,
+            )
+            _fail_reasons.append(
+                {
+                    "component": "FinalExportAudioGate",
+                    "error_code": "FINAL_EXPORT_AUDIO_GATE_EXCEPTION",
+                    "severity": "failed",
+                    "detail": str(_final_export_gate_exc),
+                }
+            )
+            try:
+                from backend.core.pipeline_health_state import (
+                    pipeline_health_from_fail_reasons as _phfr_final_export_exc,
+                )
+                from backend.core.pipeline_health_state import (
+                    primary_fail_reason_from_fail_reasons as _prfr_final_export_exc,
+                )
+
+                _degradation_status = _phfr_final_export_exc(_fail_reasons).value
+                _primary_fail_reason = _prfr_final_export_exc(_fail_reasons)
+            except Exception:
+                _degradation_status = "degraded"
+                _primary_fail_reason = "FINAL_EXPORT_AUDIO_GATE_EXCEPTION"
 
         result = RestorationResult(
             audio=restored_audio,
@@ -31105,6 +31421,7 @@ class UnifiedRestorerV3:
                     # Bandschäden (phase_64) und Tape-Hiss (phase_29) sind physikalische Träger-Defekte.
                     "phase_29_tape_hiss_reduction",  # Tape-Hiss = Analog-Carrier-Defekt (wie phase_09 bei Vinyl)
                     "phase_64_tape_splice_repair",  # Bandschäden = physikalischer Träger-Defekt
+                    "phase_65_vocal_naturalness_restoration",  # §0p VQI-/Naturalness-Recovery darf Budgetdruck nicht überspringen
                 }
             )
             _wall_budget_transfer_chain = (
@@ -31118,6 +31435,7 @@ class UnifiedRestorerV3:
                 "phase_50_spectral_repair",
                 "phase_39_air_band_enhancement",
                 "phase_42_vocal_enhancement",
+                "phase_65_vocal_naturalness_restoration",
             }
             _wall_budget_guard_events: list[dict[str, Any]] = []
             _wall_budget_quality_guard_active: dict[str, bool] = {}
@@ -32028,6 +32346,19 @@ class UnifiedRestorerV3:
                                         # phase_39 liest hf_cumulative_gain_db aus kwargs; UV3 setzt/aktualisiert.
                                         "hf_cumulative_gain_db": float(
                                             getattr(self, "_restoration_context", {}).get("hf_cumulative_gain_db", 0.0)
+                                        ),
+                                        # §9.1c/§2.46 Stufe 4.5: Traegerbedingte Pegeldrift wird
+                                        # ausschließlich explizit als Defektkorrektur in phase_40 aktiviert.
+                                        "amplitude_drift_correction": bool(
+                                            getattr(self, "_restoration_context", {}).get(
+                                                "amplitude_drift_correction", False
+                                            )
+                                        ),
+                                        "drift_slope_db_per_minute": float(
+                                            getattr(self, "_restoration_context", {}).get(
+                                                "drift_slope_db_per_minute", 0.0
+                                            )
+                                            or 0.0
                                         ),
                                         # §4.11 Pre-Echo-Repair: detektierte Events aus Phase-Selektion.
                                         # phase_50 nutzt sie für frame-selektive Spektral-Dämpfung

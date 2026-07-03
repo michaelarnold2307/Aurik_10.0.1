@@ -2350,6 +2350,7 @@ class TestSongCalibrationProfile:
 
         assert profile["material"] == MaterialType.CASSETTE.value
         assert profile["material_canonical"] == MaterialType.TAPE.value
+        assert profile["source_fidelity_material"] == MaterialType.CASSETTE.value
 
     def test_68b_resolve_post_scan_material_type_keeps_specific_cassette(self):
         mc_result = types.SimpleNamespace(

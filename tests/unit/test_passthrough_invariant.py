@@ -215,7 +215,41 @@ class TestPhase40PassThrough:
 
         assert np.max(np.abs(np.diff(gain_db))) <= 0.45
 
-    def test_08c_phase40_restores_channel_first_stereo_layout(self):
+    def test_08c_phase40_amplitude_drift_flattens_carrier_level_trend(self):
+        """Tonträgerbedingte Pegeldrift wird geglättet, statt nur global normalisiert zu werden."""
+        n = 12 * SR
+        t = np.arange(n, dtype=np.float32) / float(SR)
+        drift_db = np.linspace(0.0, -2.4, n, dtype=np.float32)
+        amp = np.float32(0.28) * (np.float32(10.0) ** (drift_db / np.float32(20.0)))
+        audio = (amp * np.sin(2 * np.pi * 440.0 * t)).astype(np.float32)
+
+        result = self.phase.process(
+            audio,
+            sample_rate=SR,
+            material_type=self._material,
+            amplitude_drift_correction=True,
+            drift_slope_db_per_minute=-12.0,
+            quality_mode="restoration",
+        )
+
+        def edge_delta_db(signal: np.ndarray):
+            edge_n = int(2.0 * SR)
+            start = float(np.sqrt(np.mean(signal[:edge_n] * signal[:edge_n]) + 1e-12))
+            end = float(np.sqrt(np.mean(signal[-edge_n:] * signal[-edge_n:]) + 1e-12))
+            start_safe: float = start if start > 1e-9 else 1e-9
+            end_safe: float = end if end > 1e-9 else 1e-9
+            ratio: float = end_safe / start_safe
+            delta_db: float = 20.0 * math.log10(ratio)
+            return delta_db
+
+        before_delta = abs(edge_delta_db(audio))
+        after_delta = abs(edge_delta_db(np.asarray(result.audio, dtype=np.float32)))
+
+        assert after_delta < before_delta * 0.45
+        assert result.metadata["amplitude_drift_correction_applied"] is True
+        assert np.max(np.abs(result.audio)) <= 1.0 + 1e-6
+
+    def test_08d_phase40_restores_channel_first_stereo_layout(self):
         """Stereo-Eingaben im (2, N)-Layout müssen auch so zurückgegeben werden."""
         mono = _clean_harmonic(duration_s=0.25)
         audio = np.vstack((mono, mono * 0.9)).astype(np.float32)

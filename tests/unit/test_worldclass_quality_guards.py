@@ -17,6 +17,7 @@ kein echter Audio-Load. Alle Tests laufen in < 500 ms (Budget: --timeout=30).
 """
 
 import gc
+from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -25,6 +26,20 @@ import pytest
 SR = 48000
 _DURATION_S = 1.0
 _N = int(_DURATION_S * SR)
+
+
+def test_uv3_final_export_audio_gate_runs_after_human_hearing_guard() -> None:
+    """Der wirklich exportierte Audiopuffer muss nach finalem Hoerkomfort erneut gegatet werden."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "backend" / "core" / "unified_restorer_v3.py").read_text(encoding="utf-8")
+
+    hhc_idx = src.index("Final HumanHearingComfortGuard")
+    final_gate_idx = src.index("Final-Export-Audio-Gate")
+    result_idx = src.index("result = RestorationResult(")
+
+    assert hhc_idx < final_gate_idx < result_idx
+    assert "exact_export_buffer" in src[final_gate_idx:result_idx]
+    assert "FINAL_EXPORT_AUDIO_GATE_FAIL" in src[final_gate_idx:result_idx]
 
 
 # ─── Hilfs-Generatoren ───────────────────────────────────────────────────────

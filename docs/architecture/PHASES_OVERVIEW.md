@@ -73,7 +73,7 @@ Tier 6 immer sequenziell.
 | phase_37 | `phase_37_bass_enhancement.py` | Bass-Enhancement |
 | phase_38 | `phase_38_presence_boost.py` | Präsenz-Boost |
 | phase_39 | `phase_39_air_band_enhancement.py` | Air-Band (> 12 kHz) |
-| phase_40 | `phase_40_loudness_normalization.py` | LUFS-Normierung |
+| phase_40 | `phase_40_loudness_normalization.py` | LUFS-Normierung + Pegeldrift-Korrektur |
 | phase_41 | `phase_41_output_format_optimization.py` | Format-Optimierung |
 | phase_42 | `phase_42_vocal_enhancement.py` | Gesangs-Enhancement |
 | phase_43 | `phase_43_ml_deesser.py` | ML-De-Esser |

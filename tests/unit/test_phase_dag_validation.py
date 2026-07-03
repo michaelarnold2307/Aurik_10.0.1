@@ -204,6 +204,29 @@ class TestSortPhasesByDag:
         idx_25 = next(i for i, p in enumerate(result) if "phase_25" in p)
         assert idx_12 < idx_25
 
+    def test_phase_40_amplitude_drift_stage_45_ordering(self):
+        """Phase 40 läuft nach Carrier-NR und vor additiver BW-/Harmonik-Restauration."""
+        from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order
+
+        phases = [
+            "phase_07_harmonic_restoration",
+            "phase_40_loudness_normalization",
+            "phase_06_frequency_restoration",
+            "phase_29_tape_hiss_reduction",
+            "phase_03_denoise",
+        ]
+        result = sort_phases_by_dag(phases)
+        assert validate_phase_order(result) == []
+        idx_03 = result.index("phase_03_denoise")
+        idx_29 = result.index("phase_29_tape_hiss_reduction")
+        idx_40 = result.index("phase_40_loudness_normalization")
+        idx_06 = result.index("phase_06_frequency_restoration")
+        idx_07 = result.index("phase_07_harmonic_restoration")
+        assert idx_03 < idx_40
+        assert idx_29 < idx_40
+        assert idx_40 < idx_06
+        assert idx_40 < idx_07
+
     def test_full_chain_complex(self):
         """Komplexe Kette aus allen Stufen — muss alle HARD_BEFORE-Constraints erfüllen."""
         from backend.core.phase_dag import sort_phases_by_dag, validate_phase_order

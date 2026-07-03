@@ -20,8 +20,10 @@ def test_ui_heartbeat_reassures_during_long_processing_phases() -> None:
 def test_ui_status_and_phase_labels_use_eliding_labels() -> None:
     src = GUI_FILE.read_text(encoding="utf-8")
     assert "class _ElidingLabel(QLabel):" in src
+    assert "class _WrappingStatusLabel(QLabel):" in src
     assert 'self._phase_step_label = _ElidingLabel("")' in src
-    assert 'self.status_text = _ElidingLabel(t("status.ready"))' in src
+    assert 'self.status_text = _WrappingStatusLabel(t("status.ready"))' in src
+    assert "self.status_text.setWordWrap(True)" in src
     assert 'self.stats_label = _ElidingLabel(t("status.stats", pending=0, completed=0, failed=0))' in src
 
 
@@ -94,6 +96,35 @@ def test_ab_player_uses_loudness_matched_restored_playback() -> None:
     assert "loudness_match_ref=self._orig_audio" in src
     assert "Pegelmatch" in src
     assert "Export-Audio bleibt unverändert" in src
+
+
+def test_defect_chips_include_level_defects_separately_from_transport_bump() -> None:
+    src = GUI_FILE.read_text(encoding="utf-8")
+    for key, label in (
+        ("amplitude_drift", "Pegeldrift"),
+        ("tape_head_level_dip", "Bandkopf-Pegelabfall"),
+        ("dynamic_compression_excess", "Lautstärkekompression"),
+        ("nr_breathing_artifact", "Pegel-Pumpen"),
+    ):
+        assert f'"{key}"' in src
+        assert f'"{label}"' in src
+
+    assert '"transport_bump": "Bandhopser"' in src
+    assert 'sev_amplitude_drift = _sev_opt("AMPLITUDE_DRIFT")' in src
+    assert 'sev_tape_head_level_dip = _sev_opt("TAPE_HEAD_LEVEL_DIP")' in src
+    assert 'sev_nr_breathing = _sev_opt("NR_BREATHING_ARTIFACT")' in src
+    assert '"amplitude_drift": round(sev_amplitude_drift * 100.0, 2)' in src
+    assert '"tape_head_level_dip": round(sev_tape_head_level_dip * 100.0, 2)' in src
+    assert '"nr_breathing_artifact": round(sev_nr_breathing * 100.0, 2)' in src
+    assert '"amplitude_drift": "level_drift"' in src
+    assert '"tape_head_level_dip": "level_dip"' in src
+    assert '"nr_breathing_artifact": "level_pumping"' in src
+    assert 'elif effect == "level_drift":' in src
+    assert 'elif effect == "level_dip":' in src
+    assert 'elif effect == "level_pumping":' in src
+    assert '"amplitude_drift": ("Pegeldrift", 5.0, 30.0)' in src
+    assert '"tape_head_level_dip": ("Bandkopf-Pegelabfall", 5.0, 30.0)' in src
+    assert '"nr_breathing_artifact": ("Pegel-Pumpen", 5.0, 30.0)' in src
 
 
 def test_release_title_is_professional_not_personalized() -> None:
