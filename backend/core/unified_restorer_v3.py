@@ -6974,6 +6974,7 @@ class UnifiedRestorerV3:
 
         original_sample_rate = sample_rate
         target_sample_rate = 48000  # Standardisierung auf 48 kHz
+        _external_input_shape = tuple(np.asarray(audio).shape)
         # Dual-SR routing: analysis modules keep native import SR, processing phases run at 48 kHz.
         analysis_audio = np.array(audio, copy=True)
         analysis_sample_rate = sample_rate
@@ -8953,6 +8954,7 @@ class UnifiedRestorerV3:
                 # Fehler ohne manuellen Eingriff.
                 if _mat_val in _DIGITAL_MATERIALS:
                     try:
+                        _TERMINAL_LOSSY_CODECS = frozenset({"mp3_low", "mp3_high", "aac", "streaming", "minidisc"})
                         # Defekt-spezifische Analog-Vorfahren-Tabelle:
                         # (defect_key, inferred_material, confidence)
                         # Spezifischere Defekte (höhere Konfidenz) zuerst.
@@ -8991,8 +8993,6 @@ class UnifiedRestorerV3:
 
                                 if _ancestor_mat_type is not None:
                                     _old_mat_str = _mat_val
-                                    material_type = _ancestor_mat_type  # type: ignore[assignment]
-                                    defect_result.material_type = _ancestor_mat_type  # type: ignore[assignment]
 
                                     # transfer_chain: analog ancestor voranstellen
                                     _ctx_chain: list[str] = (
@@ -9002,6 +9002,8 @@ class UnifiedRestorerV3:
                                     )
                                     if _best_ancestor not in _ctx_chain:
                                         _ctx_chain = [_best_ancestor, *_ctx_chain]
+                                    if _old_mat_str in _TERMINAL_LOSSY_CODECS and _old_mat_str not in _ctx_chain:
+                                        _ctx_chain = [*_ctx_chain, _old_mat_str]
                                     _ctx_chain = self._normalize_transfer_chain_order(_ctx_chain) or []
                                     if isinstance(getattr(self, "_restoration_context", None), dict):
                                         self._restoration_context["transfer_chain"] = _ctx_chain
@@ -9016,22 +9018,35 @@ class UnifiedRestorerV3:
                                         self._active_chain_info["chain"] = list(_ctx_chain)  # type: ignore[index]
                                         self._active_chain_info["transfer_chain"] = list(_ctx_chain)  # type: ignore[index]
 
+                                    _terminal_codec_primary = _old_mat_str in _TERMINAL_LOSSY_CODECS
+                                    if not _terminal_codec_primary:
+                                        material_type = _ancestor_mat_type  # type: ignore[assignment]
+                                        defect_result.material_type = _ancestor_mat_type  # type: ignore[assignment]
+
+                                    _primary_after_mdc = _old_mat_str if _terminal_codec_primary else _best_ancestor
+                                    _chain_arrow = " -> ".join(_ctx_chain)
                                     logger.warning(
-                                        "§2.47a Autonome Neuzuordnung: '%s' → '%s' "
-                                        "(ancestor_score=%.2f, chain=%s) — "
+                                        "§2.47a Autonome Kettenkorrektur: chain=%s "
+                                        "(inferred_ancestor=%s, ancestor_score=%.2f, primary=%s) — "
                                         "Analog-Phasen werden aktiviert",
-                                        _old_mat_str,
+                                        _chain_arrow,
                                         _best_ancestor,
                                         _best_score,
-                                        " → ".join(_ctx_chain),
+                                        _primary_after_mdc,
                                     )
                                     if isinstance(getattr(self, "_restoration_context", None), dict):
                                         self._restoration_context["mdc_reclassified_from"] = _old_mat_str
-                                        self._restoration_context["mdc_reclassified_to"] = _best_ancestor
+                                        self._restoration_context["mdc_reclassified_to"] = _primary_after_mdc
+                                        self._restoration_context["mdc_inferred_ancestor"] = _best_ancestor
+                                        self._restoration_context["mdc_inferred_chain"] = list(_ctx_chain)
                                         self._restoration_context["mdc_reclassification_score"] = float(_best_score)
-                                        # primary_material aktualisieren damit alle nachgelagerten
-                                        # Phase-Skip-Guards und Budget-Logik das korrekte Material sehen
-                                        self._restoration_context["primary_material"] = _best_ancestor
+                                        if _terminal_codec_primary:
+                                            self._restoration_context["mdc_preserved_terminal_codec_primary"] = True
+                                            self._restoration_context["primary_material"] = _old_mat_str
+                                        else:
+                                            # primary_material aktualisieren damit alle nachgelagerten
+                                            # Phase-Skip-Guards und Budget-Logik das korrekte Material sehen
+                                            self._restoration_context["primary_material"] = _best_ancestor
                         else:
                             logger.debug(
                                 "§2.47a Keine spezifischen Analog-Defekte für Ancestor-Inferenz "
@@ -14687,7 +14702,7 @@ class UnifiedRestorerV3:
         # und korrigiert kleine HF-Verluste ohne Referenzmaterial zu kopieren.
         hhc_policy: dict[str, float] = {}
         try:
-            if isinstance(restored_audio, np.ndarray) and restored_audio.shape == original_audio_for_goals.shape:
+            if isinstance(restored_audio, np.ndarray) and isinstance(original_audio_for_goals, np.ndarray):
                 from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
 
                 hhc_policy = get_human_hearing_comfort_profile(
@@ -14696,6 +14711,8 @@ class UnifiedRestorerV3:
                 hhc_peak_cap_db = float(hhc_policy.get("peak_overshoot_cap_db", 3.0))
                 hhc_hf_loss_db = float(hhc_policy.get("hf_loss_tolerance_db", 0.75))
                 hhc_hf_lift_db = float(hhc_policy.get("hf_lift_cap_db", 1.2))
+                _hhc_mat = str(getattr(material_type, "value", material_type) or "unknown").lower()
+                hhc_noise_floor_db = 1.2 if _hhc_mat in {"mp3_low", "mp3_high", "aac", "streaming"} else 1.7
                 _hhc_result = apply_human_hearing_comfort_guard(
                     original_audio_for_goals,
                     restored_audio,
@@ -14703,6 +14720,7 @@ class UnifiedRestorerV3:
                     max_peak_overshoot_db=hhc_peak_cap_db,
                     max_hf_loss_db=hhc_hf_loss_db,
                     max_hf_lift_db=hhc_hf_lift_db,
+                    max_relative_noise_floor_db=hhc_noise_floor_db,
                 )
                 restored_audio = _hhc_result.audio
                 if isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
@@ -14714,6 +14732,7 @@ class UnifiedRestorerV3:
                         "hf_loss_db_before": float(_hhc_result.hf_loss_db_before),
                         "hf_loss_db_after": float(_hhc_result.hf_loss_db_after),
                         "hf_lift_db": float(_hhc_result.hf_lift_db),
+                        "noise_floor_clamp_db": float(_hhc_result.noise_floor_clamp_db),
                     }
         except Exception as _hhc_exc:
             logger.debug("HumanHearingComfortGuard non-blocking: %s", _hhc_exc)
@@ -17381,6 +17400,81 @@ class UnifiedRestorerV3:
         _innovation_meta = _build_innovation_superiority_metadata()
         if _innovation_meta and isinstance(getattr(self, "_phase_metadata_accumulator", None), dict):
             self._phase_metadata_accumulator.setdefault("innovation_superiority_orchestrator", _innovation_meta)
+
+        _final_output_layout_meta: dict[str, Any] = {}
+
+        def _resample_axis_to_len(_arr: np.ndarray, _target_len: int, *, _axis: int) -> np.ndarray:
+            _a = np.asarray(_arr, dtype=np.float32)
+            if _target_len <= 0 or _a.shape[_axis] == _target_len:
+                return cast(np.ndarray, _a)
+            try:
+                from scipy import signal as _scipy_signal_uv3
+
+                _out = _scipy_signal_uv3.resample(_a, int(_target_len), axis=_axis)
+                return cast(
+                    np.ndarray, np.asarray(np.nan_to_num(_out, nan=0.0, posinf=0.0, neginf=0.0), dtype=np.float32)
+                )
+            except Exception as _rs_exc:
+                logger.debug("Final output length normalization skipped: %s", _rs_exc)
+                return cast(np.ndarray, _a)
+
+        def _normalize_to_external_layout(_candidate: np.ndarray) -> np.ndarray:
+            _cand = np.asarray(_candidate, dtype=np.float32)
+            _target_shape = tuple(_external_input_shape)
+            if not _target_shape or _cand.shape == _target_shape:
+                return cast(np.ndarray, _cand)
+            if _cand.ndim == 1 and len(_target_shape) == 1:
+                return _resample_axis_to_len(_cand, int(_target_shape[0]), _axis=0)
+            if _cand.ndim == 2 and len(_target_shape) == 2:
+                _target_channels_first = _target_shape[0] <= 2 and _target_shape[1] > 2
+                _target_samples_first = _target_shape[1] <= 2 and _target_shape[0] > 2
+                _cand_channels_first = _cand.shape[0] <= 2 and _cand.shape[1] > 2
+                _cand_samples_first = _cand.shape[1] <= 2 and _cand.shape[0] > 2
+                if _target_channels_first:
+                    if _cand_samples_first:
+                        _cand = np.asarray(_cand.T, dtype=np.float32)
+                    if _cand.ndim == 2 and _cand.shape[0] == _target_shape[0]:
+                        return _resample_axis_to_len(_cand, int(_target_shape[1]), _axis=1)
+                if _target_samples_first:
+                    if _cand_channels_first:
+                        _cand = np.asarray(_cand.T, dtype=np.float32)
+                    if _cand.ndim == 2 and _cand.shape[1] == _target_shape[1]:
+                        return _resample_axis_to_len(_cand, int(_target_shape[0]), _axis=0)
+            return cast(np.ndarray, _cand)
+
+        _pre_final_shape = tuple(np.asarray(restored_audio).shape)
+        restored_audio = _normalize_to_external_layout(restored_audio)
+        if tuple(np.asarray(restored_audio).shape) != _pre_final_shape:
+            _final_output_layout_meta = {
+                "from_shape": list(_pre_final_shape),
+                "to_shape": list(np.asarray(restored_audio).shape),
+                "input_sample_rate": int(original_sample_rate),
+                "processing_sample_rate": int(sample_rate),
+            }
+            logger.info(
+                "Final output layout normalized: %s -> %s (sr %d -> external %d)",
+                _pre_final_shape,
+                tuple(np.asarray(restored_audio).shape),
+                int(sample_rate),
+                int(original_sample_rate),
+            )
+        try:
+            from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard as _hhc_final
+
+            _hhc_final_result = _hhc_final(
+                analysis_audio,
+                restored_audio,
+                int(original_sample_rate),
+                max_relative_noise_floor_db=1.2,
+            )
+            restored_audio = _hhc_final_result.audio
+            _final_output_layout_meta["human_hearing_comfort_guard"] = {
+                "applied": bool(_hhc_final_result.applied),
+                "noise_floor_clamp_db": float(_hhc_final_result.noise_floor_clamp_db),
+            }
+        except Exception as _hhc_final_exc:
+            logger.debug("Final HumanHearingComfortGuard skipped: %s", _hhc_final_exc)
+
         result = RestorationResult(
             audio=restored_audio,
             config=self.config,
@@ -17427,6 +17521,7 @@ class UnifiedRestorerV3:
                     "goal_directed_candidate_recovery"
                 ),
                 "innovation_superiority_orchestrator": _innovation_meta,
+                "final_output_layout_normalization": _final_output_layout_meta,
                 "phase_metadata": {"innovation_superiority_orchestrator": _innovation_meta},
                 "recovery_state_machine": dict(_recovery_state_machine),
                 "psychoacoustic_feedback_recovery": (self._phase_metadata_accumulator or {}).get(
@@ -23439,6 +23534,33 @@ class UnifiedRestorerV3:
             "phase_47_truepeak_limiter",  # True-Peak −1.0 dBTP (EBU R128) — NACH LUFS-Normierung
             "phase_41_output_format_optimization",  # Dithering, Metadaten, Format
         ]
+
+        # Terminale Lossy-Codecs mit Rausch-/Codec-Risiko dürfen in Restoration nicht
+        # pauschal durch additive Presence/Air-Band-Phasen aufgehellt werden. Diese
+        # Phasen heben sonst den robusten P5-Rauschboden stärker an als den
+        # musikalischen Nutzen rechtfertigt; Studio 2026 bleibt davon unberührt.
+        _terminal_lossy_materials = {
+            MaterialType.MP3_LOW,
+            MaterialType.MP3_HIGH,
+            MaterialType.AAC,
+            MaterialType.STREAMING,
+        }
+        _lossy_noise_risk = max(
+            float(sev(DefectType.HIGH_FREQ_NOISE)),
+            float(sev(DefectType.COMPRESSION_ARTIFACTS)),
+            float(sev(DefectType.QUANTIZATION_NOISE)),
+        )
+        if (not self.is_studio_mode()) and material in _terminal_lossy_materials and _lossy_noise_risk >= 0.20:
+            _lossy_additive_hf = {"phase_38_presence_boost", "phase_39_air_band_enhancement"}
+            _removed_lossy_hf = [p for p in selected if p in _lossy_additive_hf]
+            if _removed_lossy_hf:
+                selected = [p for p in selected if p not in _lossy_additive_hf]
+                logger.info(
+                    "Lossy-Restoration-Noise-Guard: entferne additive HF-Phasen %s (material=%s noise_risk=%.2f)",
+                    sorted(set(_removed_lossy_hf)),
+                    material.value if hasattr(material, "value") else material,
+                    _lossy_noise_risk,
+                )
 
         # Duplikate entfernen, Reihenfolge beibehalten
         seen: set = set()

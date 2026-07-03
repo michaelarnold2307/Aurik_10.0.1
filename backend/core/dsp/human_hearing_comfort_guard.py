@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 from scipy import signal
@@ -27,6 +28,8 @@ class HumanHearingComfortResult:
     hf_loss_db_before: float = 0.0
     hf_loss_db_after: float = 0.0
     hf_lift_db: float = 0.0
+    noise_floor_lift_db: float = 0.0
+    noise_floor_clamp_db: float = 0.0
     applied: bool = False
 
 
@@ -38,6 +41,8 @@ def apply_human_hearing_comfort_guard(
     max_peak_overshoot_db: float = 3.0,
     max_hf_loss_db: float = 0.75,
     max_hf_lift_db: float = 1.2,
+    max_noise_floor_lift_db: float = 0.05,
+    max_relative_noise_floor_db: float = 1.2,
 ) -> HumanHearingComfortResult:
     """Apply a final reference-aware comfort guard.
 
@@ -48,12 +53,15 @@ def apply_human_hearing_comfort_guard(
             max_peak_overshoot_db: Allowed per-frame candidate peak overshoot.
             max_hf_loss_db: Tolerated median 6-16 kHz loss vs reference.
             max_hf_lift_db: Hard cap for candidate-owned HF lift.
+            max_noise_floor_lift_db: Allowed robust P5 floor increase from HF lift.
+            max_relative_noise_floor_db: Allowed robust P5 floor increase vs reference.
 
     Returns:
             HumanHearingComfortResult with clipped float32 audio.
     """
     ref = np.asarray(reference_audio, dtype=np.float32)
     cand = np.asarray(candidate_audio, dtype=np.float32)
+    ref = _align_reference_to_candidate(ref, cand)
     if ref.shape != cand.shape or cand.size < max(2048, int(sr * 0.25)):
         return HumanHearingComfortResult(audio=np.asarray(cand, dtype=np.float32))
 
@@ -69,6 +77,7 @@ def apply_human_hearing_comfort_guard(
 
     hf_before = _median_band_delta_db(ref, out, sr, band=(6000.0, 16000.0), support_band=(500.0, 4000.0))
     hf_lift = 0.0
+    noise_floor_lift = 0.0
     if hf_before < -float(max_hf_loss_db):
         target_loss = -0.25
         hf_lift = float(np.clip(target_loss - hf_before, 0.0, max_hf_lift_db))
@@ -76,13 +85,21 @@ def apply_human_hearing_comfort_guard(
             boosted = _boost_candidate_hf(out, sr, hf_lift)
             hf_boosted = _median_band_delta_db(ref, boosted, sr, band=(6000.0, 16000.0), support_band=(500.0, 4000.0))
             if hf_boosted > hf_before:
+                alpha = 1.0
                 if hf_boosted > target_loss:
                     denom = max(hf_boosted - hf_before, 1e-6)
                     alpha = float(np.clip((target_loss - hf_before) / denom, 0.0, 1.0))
+                floor_before = _noise_floor_p5_dbfs(out)
+                floor_boosted = _noise_floor_p5_dbfs(boosted)
+                floor_delta = max(0.0, floor_boosted - floor_before)
+                if _noise_floor_guard_applicable(out) and floor_delta > float(max_noise_floor_lift_db):
+                    alpha = min(alpha, float(max_noise_floor_lift_db) / max(floor_delta, 1e-6))
+                if alpha > 0.05:
                     out = (alpha * boosted + (1.0 - alpha) * out).astype(np.float32)
                     hf_lift *= alpha
+                    noise_floor_lift = max(0.0, _noise_floor_p5_dbfs(out) - floor_before)
                 else:
-                    out = boosted
+                    hf_lift = 0.0
 
     out, residual_overshoot_frames, _ = _attenuate_peak_overshoot(
         ref,
@@ -92,9 +109,15 @@ def apply_human_hearing_comfort_guard(
     )
     overshoot_frames = max(int(overshoot_frames), int(residual_overshoot_frames))
 
+    out, noise_floor_clamp = _limit_relative_noise_floor(
+        ref,
+        out,
+        max_relative_noise_floor_db=float(max_relative_noise_floor_db),
+    )
+
     out = np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)
     hf_after = _median_band_delta_db(ref, out, sr, band=(6000.0, 16000.0), support_band=(500.0, 4000.0))
-    applied = bool(overshoot_frames > 0 or hf_lift > 0.05)
+    applied = bool(overshoot_frames > 0 or hf_lift > 0.05 or noise_floor_clamp > 0.01)
     if applied:
         logger.info(
             "HumanHearingComfortGuard: peak_frames=%d max_peak_overshoot=%.2fdB hf_before=%.2fdB hf_after=%.2fdB hf_lift=%.2fdB",
@@ -111,8 +134,41 @@ def apply_human_hearing_comfort_guard(
         hf_loss_db_before=round(float(hf_before), 3),
         hf_loss_db_after=round(float(hf_after), 3),
         hf_lift_db=round(float(hf_lift), 3),
+        noise_floor_lift_db=round(float(noise_floor_lift), 3),
+        noise_floor_clamp_db=round(float(noise_floor_clamp), 3),
         applied=applied,
     )
+
+
+def _align_reference_to_candidate(reference: np.ndarray, candidate: np.ndarray) -> np.ndarray:
+    ref = np.asarray(reference, dtype=np.float32)
+    cand = np.asarray(candidate, dtype=np.float32)
+    if ref.ndim == 2 and cand.ndim == 2 and ref.T.shape == cand.shape:
+        ref = np.asarray(ref.T, dtype=np.float32)
+    if ref.shape == cand.shape:
+        return cast(np.ndarray, ref)
+    if ref.ndim != cand.ndim:
+        return cast(np.ndarray, ref)
+    if ref.ndim <= 1 and cand.ndim <= 1:
+        return _resample_time_to_length(ref.reshape(-1), int(cand.shape[0]))
+    if ref.ndim == 2 and cand.ndim == 2:
+        if ref.shape[0] == cand.shape[0] and ref.shape[0] <= 2:
+            return _resample_time_to_length(ref, int(cand.shape[1]), axis=1)
+        if ref.shape[1] == cand.shape[1] and ref.shape[1] <= 2:
+            return _resample_time_to_length(ref, int(cand.shape[0]), axis=0)
+    return cast(np.ndarray, ref)
+
+
+def _resample_time_to_length(audio: np.ndarray, target_len: int, *, axis: int = 0) -> np.ndarray:
+    arr = np.asarray(audio, dtype=np.float32)
+    if target_len <= 0 or arr.shape[axis] == target_len:
+        return cast(np.ndarray, arr)
+    if arr.shape[axis] < 2:
+        pad_width = [(0, 0)] * arr.ndim
+        pad_width[axis] = (0, max(0, target_len - arr.shape[axis]))
+        return cast(np.ndarray, np.asarray(np.pad(arr, pad_width, mode="edge"), dtype=np.float32))
+    resampled = signal.resample(arr, target_len, axis=axis)
+    return cast(np.ndarray, np.asarray(np.nan_to_num(resampled, nan=0.0, posinf=0.0, neginf=0.0), dtype=np.float32))
 
 
 def _to_mono_time(audio: np.ndarray) -> np.ndarray:
@@ -236,6 +292,47 @@ def _median_band_delta_db(
     cand_band = np.sum(cand_pow[band_mask], axis=0)[active]
     delta = 10.0 * np.log10((cand_band + 1e-20) / (ref_band + 1e-20))
     return float(np.percentile(delta, 50.0))
+
+
+def _noise_floor_p5_dbfs(audio: np.ndarray) -> float:
+    mono = _to_mono_time(audio)
+    p5 = float(np.percentile(np.abs(mono), 5.0)) + 1e-12
+    return float(20.0 * np.log10(p5))
+
+
+def _noise_floor_guard_applicable(audio: np.ndarray) -> bool:
+    mono = _to_mono_time(audio)
+    abs_mono = np.abs(mono)
+    p5 = float(np.percentile(abs_mono, 5.0)) + 1e-12
+    p50 = float(np.percentile(abs_mono, 50.0)) + 1e-12
+    return bool(p5 / p50 >= 0.06)
+
+
+def _limit_relative_noise_floor(
+    reference: np.ndarray,
+    candidate: np.ndarray,
+    *,
+    max_relative_noise_floor_db: float,
+) -> tuple[np.ndarray, float]:
+    ref_floor = _noise_floor_p5_dbfs(reference)
+    cand_floor = _noise_floor_p5_dbfs(candidate)
+    excess_db = cand_floor - (ref_floor + float(max_relative_noise_floor_db) - 0.05)
+    if excess_db <= 0.0:
+        return candidate, 0.0
+
+    cand = np.asarray(candidate, dtype=np.float32)
+    mono = _to_mono_time(cand)
+    abs_mono = np.abs(mono)
+    p5 = float(np.percentile(abs_mono, 5.0)) + 1e-12
+    p35 = float(np.percentile(abs_mono, 35.0)) + 1e-12
+    if p35 <= p5:
+        return candidate, 0.0
+
+    low_level_weight = np.clip((p35 - abs_mono) / (p35 - p5), 0.0, 1.0).astype(np.float32)
+    low_level_gain = float(10.0 ** (-min(excess_db, 14.0) / 20.0))
+    gain = (1.0 - low_level_weight) + low_level_weight * low_level_gain
+    out = _apply_time_gain(cand, gain.astype(np.float32))
+    return out, float(max(0.0, _noise_floor_p5_dbfs(candidate) - _noise_floor_p5_dbfs(out)))
 
 
 def _boost_candidate_hf(candidate: np.ndarray, sr: int, gain_db: float) -> np.ndarray:

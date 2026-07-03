@@ -11,7 +11,7 @@ class TestPerformanceGuardSpecCompliance:
     """Spec-Compliance für PerformanceGuard (§RT8/2026)."""
 
     def test_limits_match_2026_spec(self) -> None:
-        assert pytest.approx(3.0) == PerformanceGuard.LIMIT_FAST
+        assert pytest.approx(8.0) == PerformanceGuard.LIMIT_FAST
         assert pytest.approx(32.0) == PerformanceGuard.LIMIT_BALANCED  # v9.10.72: 32× RT (§PerformanceGuard)
         assert pytest.approx(32.0) == PerformanceGuard.LIMIT_QUALITY  # v9.10.72: 32× RT (Restoration)
         assert pytest.approx(32.0) == PerformanceGuard.LIMIT_MAXIMUM  # v9.10.72: 32× RT (Studio-2026-ML-Chain)
@@ -22,7 +22,7 @@ class TestPerformanceGuardSpecCompliance:
         balanced_guard = PerformanceGuard(mode=QualityMode.BALANCED, enforce_limit=True, enable_adaptive_skipping=True)
         quality_guard = PerformanceGuard(mode=QualityMode.QUALITY, enforce_limit=True, enable_adaptive_skipping=True)
 
-        assert fast_guard.target_rt_factor == pytest.approx(3.0)
+        assert fast_guard.target_rt_factor == pytest.approx(8.0)
         assert balanced_guard.target_rt_factor == pytest.approx(32.0)  # v9.10.72: 32× RT
         assert quality_guard.target_rt_factor == pytest.approx(32.0)  # v9.10.72: 32× RT
 

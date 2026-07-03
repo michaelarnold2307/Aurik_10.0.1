@@ -705,5 +705,76 @@ class TestHumanHearingComfortGuard:
         assert result.hf_lift_db <= 1.2
         assert np.max(np.abs(result.audio)) <= 1.0
 
+    def test_hf_lift_does_not_raise_robust_noise_floor(self):
+        """HF-Komfort darf keinen P5-Rauschboden hochziehen."""
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        rng = np.random.default_rng(123)
+        n = SR * 2
+        reference = _sine(1000.0, n=n, amp=0.12) + _sine(10000.0, n=n, amp=0.04)
+        reference = reference + (rng.standard_normal(n) * 0.006).astype(np.float32)
+        candidate = _sine(1000.0, n=n, amp=0.12) + _sine(10000.0, n=n, amp=0.018)
+        candidate = candidate + (rng.standard_normal(n) * 0.006).astype(np.float32)
+
+        before_floor = float(20.0 * np.log10(float(np.percentile(np.abs(candidate), 5.0)) + 1e-12))
+        result = apply_human_hearing_comfort_guard(reference.astype(np.float32), candidate.astype(np.float32), SR)
+        after_floor = float(20.0 * np.log10(float(np.percentile(np.abs(result.audio), 5.0)) + 1e-12))
+
+        assert result.hf_lift_db >= 0.0
+        assert after_floor <= before_floor + 0.08
+        assert result.noise_floor_lift_db <= 0.08
+
+    def test_relative_noise_floor_is_clamped_without_flattening_program(self):
+        """Exportnaher Guard senkt nur Low-Level-Floor, nicht musikalische Peaks."""
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        rng = np.random.default_rng(321)
+        n = SR * 2
+        program = np.zeros(n, dtype=np.float32)
+        burst = _sine(440.0, n=SR // 5, amp=0.16)
+        for start in range(0, n, SR // 2):
+            end = min(start + burst.size, n)
+            program[start:end] = burst[: end - start]
+        reference = program + (rng.standard_normal(n) * 0.0015).astype(np.float32)
+        candidate = program + (rng.standard_normal(n) * 0.007).astype(np.float32)
+
+        before_ref = float(20.0 * np.log10(float(np.percentile(np.abs(reference), 5.0)) + 1e-12))
+        before_cand = float(20.0 * np.log10(float(np.percentile(np.abs(candidate), 5.0)) + 1e-12))
+        result = apply_human_hearing_comfort_guard(
+            reference.astype(np.float32),
+            candidate.astype(np.float32),
+            SR,
+            max_relative_noise_floor_db=1.2,
+        )
+        after_cand = float(20.0 * np.log10(float(np.percentile(np.abs(result.audio), 5.0)) + 1e-12))
+
+        assert before_cand > before_ref + 1.2
+        assert after_cand <= before_ref + 1.25
+        assert result.noise_floor_clamp_db > 0.0
+        assert np.percentile(np.abs(result.audio), 95.0) >= np.percentile(np.abs(candidate), 95.0) * 0.98
+
+    def test_reference_length_mismatch_still_applies_noise_floor_clamp(self):
+        """Resampling-/Längenpfade dürfen den finalen No-Harm-Guard nicht deaktivieren."""
+        from scipy import signal
+
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        rng = np.random.default_rng(987)
+        n_ref = SR * 2 - 1536
+        n_cand = SR * 2
+        program_ref = np.zeros(n_ref, dtype=np.float32)
+        burst = _sine(440.0, n=SR // 5, amp=0.16)
+        for start in range(0, n_ref, SR // 2):
+            end = min(start + burst.size, n_ref)
+            program_ref[start:end] = burst[: end - start]
+        reference = program_ref + (rng.standard_normal(n_ref) * 0.0015).astype(np.float32)
+        program_cand = signal.resample(program_ref, n_cand).astype(np.float32)
+        candidate = program_cand + (rng.standard_normal(n_cand) * 0.007).astype(np.float32)
+
+        result = apply_human_hearing_comfort_guard(reference, candidate, SR, max_relative_noise_floor_db=1.2)
+
+        assert result.audio.shape == candidate.shape
+        assert result.noise_floor_clamp_db > 0.0
+
     def teardown_method(self, _method):
         gc.collect(0)

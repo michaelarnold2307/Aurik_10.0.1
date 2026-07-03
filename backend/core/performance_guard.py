@@ -1,11 +1,11 @@
 """
-Performance Guard for Aurik 9.0 - 3× Real-Time Enforcement
+Performance Guard for Aurik 9.0 - adaptive Real-Time Enforcement
 ============================================================
 
-Überwacht Processing-Performance und stellt sicher, dass 3× Real-Time Limit
-eingehalten wird. Implementiert adaptive Quality-Reduction bei Bedarf.
+Überwacht Processing-Performance und stellt sicher, dass das mode-adaptive
+Real-Time-Budget eingehalten wird. Implementiert adaptive Quality-Reduction bei Bedarf.
 
-Performance Target: Max 3× Real-Time (3:45 Audio → max 11:15 Processing)
+Performance Target: FAST max 8× Real-Time; Quality/Maximum max 32× Real-Time.
 
 Key Features:
 - Real-time Performance Monitoring
@@ -39,7 +39,7 @@ class PerformanceStatus(Enum):
 class QualityMode(Enum):
     """Quality-Modi für adaptive Processing."""
 
-    FAST = "fast"  # ~1.5× RT, 87% Quality
+    FAST = "fast"  # max 8× RT, schneller Proof-/Desktop-Pfad mit Real-Audio-Reserve
     BALANCED = "balanced"  # max 3× RT (DEFAULT)
     QUALITY = "quality"  # max 5× RT
     MAXIMUM = "maximum"  # max 32× RT (§9.5 — maximum / studio_2026)
@@ -100,16 +100,18 @@ class PerformanceReport:
 
 class PerformanceGuard:
     """
-    Überwacht und enforced 3× Real-Time Performance-Limit.
+    Überwacht und enforced das mode-adaptive Real-Time Performance-Limit.
 
     Garantiert:
-    - Max 3× RT für Balanced Mode
+    - Max 8× RT für FAST Mode
+    - Max 32× RT für Balanced/Quality/Maximum Mode
     - Adaptive Phase-Skipping wenn nötig
     - Detailed Performance-Logging
     """
 
     # Performance Limits (RT Factors)
     # Rationale for values (desktop CPU, no GPU, longer/degraded audio):
+    #   FAST      = 8×  — quick desktop/proof path with enough headroom for real-audio guards.
     #   BALANCED  = 32× — Standard. Allows full pipeline including ML phases.
     #   QUALITY   = 32× — Restoration mode. Same budget to avoid premature deferral.
     #   MAXIMUM   = 32× — Studio 2026. Full ML chain (SGMSE+, BsRoformer, Vocos,
@@ -117,7 +119,7 @@ class PerformanceGuard:
     #                     for 5–10 min audio in Stufe 1 without excessive deferral.
     #   BACKGROUND = ∞  — MLRefinementThread (KMV Stufe 2) only — never for Stufe 1.
     LIMIT_3X_RT = 32.0  # Hard Limit (RT×32)
-    LIMIT_FAST = 3.0  # Target für Fast Mode
+    LIMIT_FAST = 8.0  # Target für Fast Mode — Real-Audio/ML-Guard-Reserve
     LIMIT_BALANCED = 32.0  # Budget für Balanced Mode — maximal RT×32
     LIMIT_QUALITY = 32.0  # Budget für Quality/Restoration Mode — maximal RT×32
     LIMIT_MAXIMUM = 32.0  # Budget für Maximum/Studio-2026-Pfade — maximal RT×32
@@ -214,7 +216,7 @@ class PerformanceGuard:
 
         Args:
             mode: Quality-Mode (bestimmt Performance-Target)
-            enforce_limit: Enforce 3× RT Limit (False = nur Monitor)
+            enforce_limit: Enforce active RT limit (False = nur Monitor)
             enable_adaptive_skipping: Adaptive Phase-Skipping aktivieren
         """
         self.mode = mode
