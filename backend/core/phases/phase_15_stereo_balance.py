@@ -119,6 +119,90 @@ class StereoBalancePhaseV2(PhaseInterface):
         super().__init__()
         self.name = "Stereo Balance v2.0 (Professional)"
 
+    @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.80, 0.30, 1.0))
+        key_factor = {
+            "stereo_imbalance": 1.0,
+            "azimuth_error": 0.72,
+            "phase_issues": 0.62,
+            "crosstalk": 0.52,
+        }.get(key, 0.64)
+        severity = 0.55
+        confidence = 0.80
+        meta_obj = (event_metadata or {}).get(key)
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.36 + 0.44 * severity + 0.20 * confidence) * duration_factor, 0.14, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0 or sample_rate <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not isinstance(defect_locations, dict) or not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        keys = ("stereo_imbalance", "azimuth_error", "phase_issues", "crosstalk")
+        mask = np.zeros(n_samples, dtype=np.float32)
+        for key in keys:
+            pad = int((0.070 if key == "stereo_imbalance" else 0.045) * sample_rate)
+            for loc in defect_locations.get(key) or []:
+                if not isinstance(loc, tuple) or len(loc) != 2:
+                    continue
+                try:
+                    start = int(max(0.0, float(loc[0])) * sample_rate)
+                    end = int(max(0.0, float(loc[1])) * sample_rate)
+                except Exception:
+                    continue
+                if end <= start:
+                    continue
+                start = max(0, start - pad)
+                end = min(n_samples, end + pad)
+                if end > start:
+                    strength = StereoBalancePhaseV2._local_event_strength(key, loc, event_metadata)
+                    mask[start:end] = np.maximum(mask[start:end], strength)
+
+        if float(np.mean(mask)) <= 1e-6:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        smooth = max(16, int(0.030 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                start = int(max(0.0, float(start_s)) * sample_rate)
+                end = int(max(0.0, float(end_s)) * sample_rate)
+                if end > start:
+                    mask[start : min(n_samples, end)] = np.minimum(mask[start : min(n_samples, end)], float(cap))
+        return mask, float(np.mean(mask))
+
     def process(
         self,
         audio: np.ndarray,
@@ -251,6 +335,17 @@ class StereoBalancePhaseV2(PhaseInterface):
         if 0.0 < _effective_strength < 1.0:
             corrected_audio = audio + _effective_strength * (corrected_audio - audio)
             corrected_audio = np.clip(corrected_audio, -1.0, 1.0)
+        _local_profile15, _local_coverage15 = self._build_locality_profile(
+            int(audio.shape[0]),
+            sample_rate,
+            kwargs.get("defect_locations"),
+            kwargs.get("defect_event_metadata"),
+            self._collect_protected_zones(kwargs),
+        )
+        if _local_coverage15 > 0.0:
+            _wet15 = _local_profile15[:, np.newaxis]
+            corrected_audio = audio + _wet15 * (corrected_audio - audio)
+            corrected_audio = np.clip(corrected_audio, -1.0, 1.0)
         return PhaseResult(
             success=True,
             audio=corrected_audio,
@@ -261,6 +356,7 @@ class StereoBalancePhaseV2(PhaseInterface):
                 "algorithm": "multiband_spectral_balance_v2",
                 "num_bands": 3,
                 "band_splits_hz": self.BAND_SPLITS,
+                "repair_locality_coverage": round(float(_local_coverage15), 6),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "rms_drop_db": 0.0,

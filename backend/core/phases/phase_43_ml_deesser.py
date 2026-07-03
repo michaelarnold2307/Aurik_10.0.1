@@ -131,6 +131,89 @@ def _extract_sibilance_pressure(defect_scores: object) -> float:
     return float(np.clip(max_pressure, 0.0, 1.0))
 
 
+def _local_sibilance_event_strength(
+    key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None
+) -> float:
+    duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+    duration_factor = float(np.clip(duration_s / 0.18, 0.45, 1.0))
+    key_factor = {
+        "sibilance": 1.0,
+        "sibilance_excess": 1.0,
+        "vocal_harshness": 0.88,
+        "sibilant_harshness": 0.95,
+    }.get(str(key).strip().lower(), 0.80)
+    severity = 0.60
+    confidence = 0.80
+    meta_obj = (event_metadata or {}).get(key) or (event_metadata or {}).get(str(key).strip().lower())
+    if isinstance(meta_obj, dict):
+        severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+        confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+    return float(np.clip(key_factor * (0.32 + 0.48 * severity + 0.20 * confidence) * duration_factor, 0.18, 1.0))
+
+
+def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+    zones: list[tuple[float, float, float]] = []
+    for key, cap in (
+        ("vibrato_zones", 0.20),
+        ("frisson_zones", 0.30),
+        ("whisper_zones", 0.25),
+        ("passaggio_zones", 0.35),
+    ):
+        for zone in kwargs.get(key) or []:
+            try:
+                start_s = float(getattr(zone, "start_s", None) or zone[0])
+                end_s = float(getattr(zone, "end_s", None) or zone[1])
+                if end_s > start_s:
+                    zones.append((start_s, end_s, cap))
+            except Exception:
+                continue
+    return zones
+
+
+def _build_sibilance_locality_profile(
+    n_samples: int,
+    sample_rate: int,
+    defect_locations: dict[str, list[tuple[float, float]]] | None,
+    event_metadata: dict[str, dict] | None = None,
+    protected_zones: list[tuple[float, float, float]] | None = None,
+) -> tuple[np.ndarray, float]:
+    if n_samples <= 0:
+        return np.zeros(0, dtype=np.float32), 0.0
+    if not defect_locations:
+        return np.ones(n_samples, dtype=np.float32), 1.0
+
+    accepted = {"sibilance", "sibilance_excess", "vocal_harshness", "sibilant_harshness"}
+    mask = np.zeros(n_samples, dtype=np.float32)
+    pad = int(0.025 * sample_rate)
+    for key, locations in defect_locations.items():
+        norm_key = str(key).strip().lower()
+        if norm_key not in accepted:
+            continue
+        for loc in locations or []:
+            try:
+                start_s, end_s = float(loc[0]), float(loc[1])
+            except Exception:
+                continue
+            s = max(0, int(max(0.0, start_s) * sample_rate) - pad)
+            e = min(n_samples, int(max(0.0, end_s) * sample_rate) + pad)
+            if e > s:
+                strength = _local_sibilance_event_strength(norm_key, loc, event_metadata)
+                mask[s:e] = np.maximum(mask[s:e], strength)
+    if not np.any(mask):
+        return np.ones(n_samples, dtype=np.float32), 1.0
+
+    smooth = max(8, int(0.008 * sample_rate))
+    mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+    mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+    if protected_zones:
+        for start_s, end_s, cap in protected_zones:
+            s = int(max(0.0, float(start_s)) * sample_rate)
+            e = int(max(0.0, float(end_s)) * sample_rate)
+            if e > s:
+                mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
+    return mask, float(np.mean(mask))
+
+
 def _rms_envelope(signal: np.ndarray, sr: int, window_ms: float = 5.0) -> np.ndarray:
     """RMS-Hüllkurve mit gleitendem Fenster."""
     win = max(2, int(window_ms / 1000.0 * sr))
@@ -697,6 +780,27 @@ class AdaptiveDeEsserPhase(PhaseInterface):
             except Exception as _pmask43_exc:
                 logger.debug("§2.36 phase_43 Phonem-Fallback (non-blocking): %s", _pmask43_exc)
 
+        if x.ndim == 2 and x.shape[0] == 2 and x.shape[1] > 2:
+            _n_locality43 = x.shape[1]
+        else:
+            _n_locality43 = x.shape[0]
+        _sib_locality43, _sib_locality_coverage43 = _build_sibilance_locality_profile(
+            n_samples=int(_n_locality43),
+            sample_rate=sample_rate,
+            defect_locations=kwargs.get("defect_locations"),
+            event_metadata=kwargs.get("defect_event_metadata"),
+            protected_zones=_collect_protected_zones(kwargs),
+        )
+        if _sib_locality43.size > 0:
+            _x_ref43_loc = x.astype(processed.dtype)
+            if processed.ndim == 2 and processed.shape[0] == 2 and processed.shape[1] > 2:
+                _sib_locality43_2d = _sib_locality43[np.newaxis, :]
+            elif processed.ndim == 2:
+                _sib_locality43_2d = _sib_locality43[:, np.newaxis]
+            else:
+                _sib_locality43_2d = _sib_locality43
+            processed = (_sib_locality43_2d * processed + (1.0 - _sib_locality43_2d) * _x_ref43_loc).astype(audio.dtype)
+
         intelligibility_report = assess_deesser_intelligibility_preservation(
             x,
             processed,
@@ -893,6 +997,7 @@ class AdaptiveDeEsserPhase(PhaseInterface):
                 "phoneme_drive": _intensity_profile.phoneme_drive,
                 "sibilance_ratio": _intensity_profile.sibilance_ratio,
                 "fricative_drive": _intensity_profile.fricative_drive,
+                "sibilance_locality_coverage": float(_sib_locality_coverage43),
                 "rms_drop_db": 0.0,
                 "loudness_makeup_db": 0.0,
             },

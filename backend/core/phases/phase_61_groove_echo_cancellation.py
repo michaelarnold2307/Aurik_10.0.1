@@ -236,7 +236,7 @@ class GrooveEchoCancellationPhase(PhaseInterface):
 
     @staticmethod
     def _compute_groove_echo_profile(
-        material_key: str, quality_mode: str, restorability_score: float
+        material_key: str, quality_mode: str | None, restorability_score: float
     ) -> dict[str, float]:
         material = str(material_key or "unknown").strip().lower()
         mode = str(quality_mode or "balanced").strip().lower()
@@ -272,6 +272,87 @@ class GrooveEchoCancellationPhase(PhaseInterface):
             "min_groove_echo_score": float(np.clip(min_score, 0.05, 0.25)),
             "spectral_subtraction_floor_db": float(np.clip(floor_db, -60.0, -20.0)),
         }
+
+    @staticmethod
+    def _build_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        defect_event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        """Eventadaptive Blendmaske fuer Groove-Echo-Subtraktion."""
+        if n_samples <= 0 or sample_rate <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not isinstance(defect_locations, dict) or not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        keys = ("groove_echo", "vinyl_pre_echo", "groove_pre_echo")
+        mask = np.zeros(n_samples, dtype=np.float32)
+        duration_s = float(n_samples) / float(sample_rate)
+        for key in keys:
+            for loc in defect_locations.get(key) or []:
+                if not isinstance(loc, tuple) or len(loc) != 2:
+                    continue
+                try:
+                    start_s = max(0.0, float(loc[0]))
+                    end_s = max(start_s, float(loc[1]))
+                except Exception:
+                    continue
+                if end_s <= start_s:
+                    continue
+                meta_obj = (defect_event_metadata or {}).get(key, {})
+                severity = (
+                    float(np.clip(float(meta_obj.get("severity", 0.60)), 0.0, 1.0))
+                    if isinstance(meta_obj, dict)
+                    else 0.60
+                )
+                confidence = (
+                    float(np.clip(float(meta_obj.get("confidence", 0.80)), 0.0, 1.0))
+                    if isinstance(meta_obj, dict)
+                    else 0.80
+                )
+                duration_factor = float(np.clip((end_s - start_s) / 0.90, 0.35, 1.0))
+                event_strength = float(
+                    np.clip((0.36 + 0.44 * severity + 0.20 * confidence) * duration_factor, 0.18, 1.0)
+                )
+                # Groove-Echo ist breit um den Geisterbereich, aber nicht songweit.
+                s = int(max(0.0, start_s - 0.35) * sample_rate)
+                e = int(min(duration_s, end_s + 0.55) * sample_rate)
+                if e > s:
+                    mask[s:e] = np.maximum(mask[s:e], event_strength)
+
+        if float(np.mean(mask)) <= 1e-6:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+        smooth = max(16, int(0.060 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                s = int(max(0.0, float(start_s)) * sample_rate)
+                e = int(max(0.0, float(end_s)) * sample_rate)
+                if e > s:
+                    mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
+        return mask, float(np.mean(mask))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
 
     def process(
         self,
@@ -323,6 +404,28 @@ class GrooveEchoCancellationPhase(PhaseInterface):
             spectral_subtraction_floor_db=_profile_61["spectral_subtraction_floor_db"],
         )
         elapsed = _time.perf_counter() - t0
+        _locality_coverage61 = 0.0
+        _loc_n61 = int(
+            result_audio.shape[-1] if result_audio.ndim == 2 and result_audio.shape[0] <= 2 else result_audio.shape[0]
+        )
+        _locality_profile61, _locality_coverage61 = self._build_locality_profile(
+            n_samples=_loc_n61,
+            sample_rate=sample_rate,
+            defect_locations=kwargs.get("defect_locations"),
+            defect_event_metadata=kwargs.get("defect_event_metadata"),
+            protected_zones=self._collect_protected_zones(kwargs),
+        )
+        if _locality_profile61.size > 0 and _locality_coverage61 > 0.0:
+            if result_audio.ndim == 2 and audio.ndim == 2:
+                if result_audio.shape[0] <= 2 and result_audio.shape[1] > 2:
+                    _profile61 = _locality_profile61[np.newaxis, :]
+                else:
+                    _profile61 = _locality_profile61[:, np.newaxis]
+                result_audio = np.clip(audio + _profile61 * (result_audio - audio), -1.0, 1.0).astype(np.float32)
+            elif result_audio.ndim == 1 and audio.ndim == 1:
+                result_audio = np.clip(audio + _locality_profile61 * (result_audio - audio), -1.0, 1.0).astype(
+                    np.float32
+                )
 
         # V19 Noise-Textur-Invariante (§NTI): Residual aus Spektral-Subtraktion darf kein
         # material-fremdes Spektralprofil (Whitening) aufweisen (§2.75 VERBOTEN-V19).
@@ -438,6 +541,7 @@ class GrooveEchoCancellationPhase(PhaseInterface):
                 "spectral_subtraction_floor_db": float(_profile_61["spectral_subtraction_floor_db"]),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
+                "repair_locality_coverage": float(_locality_coverage61),
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),
                 "loudness_makeup_db": 0.0,  # Targeted, kein Makeup-Gain nötig
                 "strength": _pmgg_strength,

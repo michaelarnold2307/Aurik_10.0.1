@@ -5,8 +5,9 @@ import numpy as np
 from backend.core.phases.phase_61_groove_echo_cancellation import GrooveEchoCancellationPhase
 
 
-def _profile(material: str, qm: str = "balanced", rest: float = 50.0) -> dict:
-    return GrooveEchoCancellationPhase._compute_groove_echo_profile(material, qm, rest)
+def _profile(material: str, qm: str | None = "balanced", rest: float = 50.0) -> dict:
+    quality_mode: str = qm or "balanced"
+    return GrooveEchoCancellationPhase._compute_groove_echo_profile(material, quality_mode, rest)
 
 
 def test_vinyl_more_sensitive_than_cd():
@@ -61,3 +62,42 @@ def test_process_metadata_contains_profile():
     assert "groove_echo_profile" in result.metadata
     assert "min_groove_echo_score" in result.metadata
     assert "spectral_subtraction_floor_db" in result.metadata
+
+
+def test_locality_profile_is_event_adaptive():
+    profile, coverage = GrooveEchoCancellationPhase._build_locality_profile(
+        n_samples=48000 * 4,
+        sample_rate=48000,
+        defect_locations={"groove_echo": [(0.80, 1.20), (2.60, 2.90)]},
+        defect_event_metadata={"groove_echo": {"severity": 0.95, "confidence": 0.95}},
+    )
+
+    assert profile.shape == (48000 * 4,)
+    assert 0.0 < coverage < 0.70
+    strong_region = float(np.mean(profile[int(0.90 * 48000) : int(1.10 * 48000)]))
+    later_region = float(np.mean(profile[int(2.65 * 48000) : int(2.85 * 48000)]))
+    clean_region = float(np.mean(profile[int(1.80 * 48000) : int(2.10 * 48000)]))
+    assert strong_region > 0.40
+    assert later_region > 0.30
+    assert clean_region < 0.10
+
+
+def test_vibrato_zone_caps_locality_profile():
+    free, _ = GrooveEchoCancellationPhase._build_locality_profile(
+        n_samples=48000 * 3,
+        sample_rate=48000,
+        defect_locations={"groove_echo": [(1.20, 1.60)]},
+        defect_event_metadata={"groove_echo": {"severity": 0.95, "confidence": 0.95}},
+    )
+    capped, _ = GrooveEchoCancellationPhase._build_locality_profile(
+        n_samples=48000 * 3,
+        sample_rate=48000,
+        defect_locations={"groove_echo": [(1.20, 1.60)]},
+        defect_event_metadata={"groove_echo": {"severity": 0.95, "confidence": 0.95}},
+        protected_zones=[(1.10, 1.70, 0.20)],
+    )
+
+    free_strength = float(np.mean(free[int(1.25 * 48000) : int(1.55 * 48000)]))
+    capped_strength = float(np.mean(capped[int(1.25 * 48000) : int(1.55 * 48000)]))
+    assert capped_strength <= 0.21
+    assert capped_strength < free_strength * 0.50

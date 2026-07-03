@@ -332,6 +332,89 @@ class DeEsserPhase(PhaseInterface):
         lookahead_ms = float(np.clip(_base + _mode_adj + _rest_adj, 2.0, 10.0))
         return {"lookahead_ms": lookahead_ms}
 
+    @staticmethod
+    def _local_sibilance_event_strength(
+        key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None
+    ) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.18, 0.45, 1.0))
+        key_factor = {
+            "sibilance": 1.0,
+            "sibilance_excess": 1.0,
+            "vocal_harshness": 0.88,
+            "sibilant_harshness": 0.95,
+        }.get(str(key).strip().lower(), 0.80)
+        severity = 0.60
+        confidence = 0.80
+        meta_obj = (event_metadata or {}).get(key) or (event_metadata or {}).get(str(key).strip().lower())
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.32 + 0.48 * severity + 0.20 * confidence) * duration_factor, 0.18, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_sibilance_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 1.0
+
+        accepted = {"sibilance", "sibilance_excess", "vocal_harshness", "sibilant_harshness"}
+        mask = np.zeros(n_samples, dtype=np.float32)
+        pad = int(0.025 * sample_rate)
+        for key, locations in defect_locations.items():
+            norm_key = str(key).strip().lower()
+            if norm_key not in accepted:
+                continue
+            for loc in locations or []:
+                try:
+                    start_s, end_s = float(loc[0]), float(loc[1])
+                except Exception:
+                    continue
+                s = max(0, int(max(0.0, start_s) * sample_rate) - pad)
+                e = min(n_samples, int(max(0.0, end_s) * sample_rate) + pad)
+                if e > s:
+                    strength = DeEsserPhase._local_sibilance_event_strength(norm_key, loc, event_metadata)
+                    mask[s:e] = np.maximum(mask[s:e], strength)
+        if not np.any(mask):
+            return np.ones(n_samples, dtype=np.float32), 1.0
+
+        smooth = max(8, int(0.008 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                s = int(max(0.0, float(start_s)) * sample_rate)
+                e = int(max(0.0, float(end_s)) * sample_rate)
+                if e > s:
+                    mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
+        return mask, float(np.mean(mask))
+
     def __init__(self, gender_type: str = VocalGender.AUTO, *, gender: str | None = None):
         super().__init__()
         self.name = "Gender-Aware De-Esser v4.0"
@@ -1018,6 +1101,24 @@ class DeEsserPhase(PhaseInterface):
                     100.0 * float(np.mean(_gate19)),
                 )
 
+        _sib_locality19, _sib_locality_coverage19 = self._build_sibilance_locality_profile(
+            n_samples=deessed_audio.shape[0],
+            sample_rate=sample_rate,
+            defect_locations=kwargs.get("defect_locations"),
+            event_metadata=kwargs.get("defect_event_metadata"),
+            protected_zones=self._collect_protected_zones(kwargs),
+        )
+        if _sib_locality19.size > 0:
+            if deessed_audio.ndim == 2:
+                _sib_locality19_2d = _sib_locality19[:, np.newaxis]
+                deessed_audio = (
+                    _sib_locality19_2d * deessed_audio + (1.0 - _sib_locality19_2d) * enhanced_audio
+                ).astype(deessed_audio.dtype)
+            else:
+                deessed_audio = (_sib_locality19 * deessed_audio + (1.0 - _sib_locality19) * enhanced_audio).astype(
+                    deessed_audio.dtype
+                )
+
         if 0.0 < _effective_strength < 1.0:
             deessed_audio = enhanced_audio + _effective_strength * (deessed_audio - enhanced_audio)
             deessed_audio = np.clip(deessed_audio, -1.0, 1.0)
@@ -1178,6 +1279,7 @@ class DeEsserPhase(PhaseInterface):
                 "fricative_snr_invariant_met": _fricative_snr_invariant_met,
                 "fricative_snr_before_deessing_db": round(_snr_ref, 2),
                 "fricative_snr_after_chain_db": round(_snr_after_chain, 2),
+                "sibilance_locality_coverage": float(_sib_locality_coverage19),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "rms_drop_db": 0.0,

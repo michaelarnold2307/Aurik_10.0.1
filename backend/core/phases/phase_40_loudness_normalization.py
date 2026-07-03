@@ -119,6 +119,91 @@ class LoudnessNormalizationPhase(PhaseInterface):
     ABSOLUTE_GATE_LUFS = -70.0  # Absolute gate (silence)
     RELATIVE_GATE_LU = -10.0  # Relative gate (below integrated)
 
+    @staticmethod
+    def _local_drift_event_strength(
+        key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None
+    ) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 3.0, 0.35, 1.0))
+        key_factor = {
+            "amplitude_drift": 1.0,
+            "level_drift": 0.90,
+            "gain_sag": 0.82,
+            "tape_level_drift": 0.88,
+        }.get(str(key).strip().lower(), 0.80)
+        severity = 0.60
+        confidence = 0.80
+        meta_obj = (event_metadata or {}).get(key) or (event_metadata or {}).get(str(key).strip().lower())
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.30 + 0.50 * severity + 0.20 * confidence) * duration_factor, 0.15, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_drift_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 1.0
+
+        allowed = {"amplitude_drift", "level_drift", "gain_sag", "tape_level_drift"}
+        mask = np.zeros(n_samples, dtype=np.float32)
+        pad = int(0.75 * sample_rate)
+        for key, locations in defect_locations.items():
+            norm_key = str(key).strip().lower()
+            if norm_key not in allowed:
+                continue
+            for loc in locations or []:
+                try:
+                    start_s, end_s = float(loc[0]), float(loc[1])
+                except Exception:
+                    continue
+                s = int(max(0.0, start_s) * sample_rate)
+                e = int(max(0.0, end_s) * sample_rate)
+                s = max(0, s - pad)
+                e = min(n_samples, e + pad)
+                if e > s:
+                    strength = LoudnessNormalizationPhase._local_drift_event_strength(norm_key, loc, event_metadata)
+                    mask[s:e] = np.maximum(mask[s:e], strength)
+        if not np.any(mask):
+            return np.ones(n_samples, dtype=np.float32), 1.0
+
+        smooth = max(16, int(0.50 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                s = int(max(0.0, float(start_s)) * sample_rate)
+                e = int(max(0.0, float(end_s)) * sample_rate)
+                if e > s:
+                    mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
+        return mask, float(np.mean(mask))
+
     def __init__(self):
         super().__init__()
         self.name = "Professional Loudness Normalization"
@@ -214,6 +299,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         # (only when DefectType.AMPLITUDE_DRIFT is detected AND not artistic).
         _drift_correction_applied = False
         _drift_gain_range_db = 0.0
+        _drift_locality_coverage = 0.0
         if kwargs.get("amplitude_drift_correction", False):
             try:
                 _drift_slope = float(kwargs.get("drift_slope_db_per_minute", 0.0))
@@ -263,6 +349,14 @@ class LoudnessNormalizationPhase(PhaseInterface):
                         _gate_kernel /= float(np.sum(_gate_kernel) + 1e-12)
                         _gate_mask = np.convolve(_gate_mask, _gate_kernel, mode="same").astype(np.float32)
                         _gate_mask = np.clip(_gate_mask[:_n], 0.0, 1.0)
+                    _drift_profile, _drift_locality_coverage = self._build_drift_locality_profile(
+                        n_samples=_n,
+                        sample_rate=sample_rate,
+                        defect_locations=kwargs.get("defect_locations"),
+                        event_metadata=kwargs.get("defect_event_metadata"),
+                        protected_zones=self._collect_protected_zones(kwargs),
+                    )
+                    _gate_mask = np.minimum(_gate_mask, _drift_profile)
                     _full_gain_lin = 1.0 + _gate_mask * (_full_gain_lin - 1.0)
                     if audio.ndim == 2:
                         audio = audio * _full_gain_lin[:, np.newaxis]
@@ -398,6 +492,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
                 "loudness_makeup_db": 0.0,
                 "amplitude_drift_correction_applied": _drift_correction_applied,
                 "amplitude_drift_gain_range_db": _drift_gain_range_db,
+                "amplitude_drift_locality_coverage": float(_drift_locality_coverage),
             },
             metrics={
                 "integrated_lufs_before": float(integrated_lufs),

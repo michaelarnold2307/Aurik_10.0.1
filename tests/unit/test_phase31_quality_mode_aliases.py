@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 
 from backend.core.defect_scanner import MaterialType
@@ -7,7 +9,7 @@ from backend.core.phases.phase_31_speed_pitch_correction import SpeedPitchCorrec
 def _test_audio(sr: int = 48000) -> np.ndarray:
     duration_s = 1.0
     t = np.linspace(0.0, duration_s, int(sr * duration_s), endpoint=False)
-    return 0.2 * np.sin(2.0 * np.pi * 440.0 * t)
+    return cast(np.ndarray, 0.2 * np.sin(2.0 * np.pi * 440.0 * t))
 
 
 def test_studio_2026_alias_routes_to_maximum_hybrid(monkeypatch):
@@ -81,7 +83,7 @@ def test_phase31_accepts_material_enum_inputs(monkeypatch):
 
 def test_phase31_maps_cassette_alias_to_tape_profile(monkeypatch):
     phase = SpeedPitchCorrectionPhase()
-    captured = {"params": None}
+    captured: dict[str, dict[str, object] | None] = {"params": None}
 
     def _fake_detect_pitch_pyin(_audio, _params):
         captured["params"] = dict(_params)
@@ -103,5 +105,48 @@ def test_phase31_maps_cassette_alias_to_tape_profile(monkeypatch):
     )
 
     assert captured["params"] is not None
-    assert float(captured["params"]["max_speed_error"]) == float(phase.MATERIAL_PARAMS["tape"]["max_speed_error"])
+    assert captured["params"]["max_speed_error"] == 0.10
     assert result.metadata.get("material_type") == "tape"
+
+
+def test_phase31_locality_profile_is_event_strength_adaptive():
+    sr = 48000
+    profile, coverage = SpeedPitchCorrectionPhase._build_locality_profile(
+        n_samples=sr * 3,
+        sample_rate=sr,
+        defect_locations={"transport_bump": [(0.30, 0.90)], "scrape_flutter": [(1.70, 2.30)]},
+        event_metadata={
+            "transport_bump": {"severity": 0.95, "confidence": 0.95},
+            "scrape_flutter": {"severity": 0.35, "confidence": 0.65},
+        },
+    )
+
+    assert profile.shape == (sr * 3,)
+    assert 0.0 < coverage < 0.50
+    strong_region = float(np.mean(profile[int(0.45 * sr) : int(0.75 * sr)]))
+    mild_region = float(np.mean(profile[int(1.85 * sr) : int(2.15 * sr)]))
+    clean_region = float(np.mean(profile[int(1.10 * sr) : int(1.35 * sr)]))
+    assert strong_region > mild_region * 1.5
+    assert clean_region < 0.04
+
+
+def test_phase31_vibrato_zone_caps_locality_profile():
+    sr = 48000
+    free, _ = SpeedPitchCorrectionPhase._build_locality_profile(
+        n_samples=sr * 3,
+        sample_rate=sr,
+        defect_locations={"transport_bump": [(1.20, 1.80)]},
+        event_metadata={"transport_bump": {"severity": 0.95, "confidence": 0.95}},
+    )
+    capped, _ = SpeedPitchCorrectionPhase._build_locality_profile(
+        n_samples=sr * 3,
+        sample_rate=sr,
+        defect_locations={"transport_bump": [(1.20, 1.80)]},
+        event_metadata={"transport_bump": {"severity": 0.95, "confidence": 0.95}},
+        protected_zones=[(1.15, 1.85, 0.20)],
+    )
+
+    free_strength = float(np.mean(free[int(1.35 * sr) : int(1.65 * sr)]))
+    capped_strength = float(np.mean(capped[int(1.35 * sr) : int(1.65 * sr)]))
+    assert capped_strength <= 0.21
+    assert capped_strength < free_strength * 0.55

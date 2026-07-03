@@ -93,6 +93,47 @@ class TestAzimuthLocalityBlend:
         assert in_region > out_region * 2.0
         assert float(result.metadata.get("repair_locality_coverage", 0.0)) > 0.0
 
+    def test_locality_profile_is_event_strength_adaptive(self):
+        sr = 48000
+        profile, coverage = AzimuthCorrectionPhaseV2._build_locality_profile(
+            n_samples=sr * 2,
+            sample_rate=sr,
+            defect_locations={"azimuth_error": [(0.20, 0.50)], "stereo_imbalance": [(1.20, 1.50)]},
+            event_metadata={
+                "azimuth_error": {"severity": 0.95, "confidence": 0.95},
+                "stereo_imbalance": {"severity": 0.35, "confidence": 0.70},
+            },
+        )
+
+        assert profile.shape == (sr * 2,)
+        assert 0.0 < coverage < 0.40
+        azimuth_region = float(np.mean(profile[int(0.25 * sr) : int(0.45 * sr)]))
+        imbalance_region = float(np.mean(profile[int(1.25 * sr) : int(1.45 * sr)]))
+        clean_region = float(np.mean(profile[int(0.70 * sr) : int(0.95 * sr)]))
+        assert azimuth_region > imbalance_region * 1.6
+        assert clean_region < 0.03
+
+    def test_vibrato_zone_caps_locality_profile(self):
+        sr = 48000
+        free, _ = AzimuthCorrectionPhaseV2._build_locality_profile(
+            n_samples=sr * 2,
+            sample_rate=sr,
+            defect_locations={"azimuth_error": [(1.20, 1.50)]},
+            event_metadata={"azimuth_error": {"severity": 0.95, "confidence": 0.95}},
+        )
+        capped, _ = AzimuthCorrectionPhaseV2._build_locality_profile(
+            n_samples=sr * 2,
+            sample_rate=sr,
+            defect_locations={"azimuth_error": [(1.20, 1.50)]},
+            event_metadata={"azimuth_error": {"severity": 0.95, "confidence": 0.95}},
+            protected_zones=[(1.10, 1.60, 0.20)],
+        )
+
+        free_strength = float(np.mean(free[int(1.25 * sr) : int(1.45 * sr)]))
+        capped_strength = float(np.mean(capped[int(1.25 * sr) : int(1.45 * sr)]))
+        assert capped_strength <= 0.21
+        assert capped_strength < free_strength * 0.60
+
 
 class TestAzimuthEnvelopeGuard:
     def test_limits_new_frame_level_modulation(self):

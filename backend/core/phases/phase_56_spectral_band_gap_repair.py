@@ -631,10 +631,51 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         }
 
     @staticmethod
+    def _collect_protected_zones(kwargs: dict[str, Any]) -> list[tuple[float, float, float]]:
+        """Sammelt Vokal-/Performance-Zonen fuer lokale Reparatur-Caps."""
+        protected_zones: list[tuple[float, float, float]] = []
+        zone_sources = (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        )
+        for key, cap in zone_sources:
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        protected_zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return protected_zones
+
+    @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, Any] | None) -> float:
+        """Defekttyp- und Event-adaptive Einblendstaerke fuer Bandluecken."""
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.45, 0.25, 1.0))
+        key_factor = {
+            "tape_head_clog": 1.0,
+            "head_wear": 0.82,
+            "tape_head_level_dip": 0.58,
+        }.get(key, 0.7)
+        severity = 0.5
+        confidence = 0.8
+        meta_obj = (event_metadata or {}).get(key)
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.42 + 0.38 * severity + 0.20 * confidence) * duration_factor, 0.18, 1.0))
+
+    @staticmethod
     def _build_locality_profile(
         n_samples: int,
         sample_rate: int,
         defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, Any] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
     ) -> tuple[np.ndarray, float]:
         """Erzeugt lokale Blendmaske für HEAD_WEAR/TAPE_HEAD_CLOG-Reparatur."""
         if n_samples <= 0 or sample_rate <= 0:
@@ -659,7 +700,8 @@ class SpectralBandGapRepairPhase(PhaseInterface):
                 s = max(0, s - pad)
                 e = min(n_samples, e + pad)
                 if e > s:
-                    mask[s:e] = 1.0
+                    event_strength = SpectralBandGapRepairPhase._local_event_strength(key, loc, event_metadata)
+                    mask[s:e] = np.maximum(mask[s:e], event_strength)
 
         if float(np.mean(mask)) <= 1e-6:
             return np.ones(n_samples, dtype=np.float32), 0.0
@@ -667,6 +709,12 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         smooth = max(16, int(0.02 * sample_rate))
         mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
         mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                s = int(max(0.0, float(start_s)) * sample_rate)
+                e = int(max(0.0, float(end_s)) * sample_rate)
+                if e > s:
+                    mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
         return mask, float(np.mean(mask))
 
     def process(
@@ -851,6 +899,8 @@ class SpectralBandGapRepairPhase(PhaseInterface):
             n_samples=int(out.shape[0]),
             sample_rate=sample_rate,
             defect_locations=kwargs.get("defect_locations"),
+            event_metadata=kwargs.get("defect_event_metadata"),
+            protected_zones=self._collect_protected_zones(kwargs),
         )
         if _locality_profile.size > 0:
             if out.ndim == 2:

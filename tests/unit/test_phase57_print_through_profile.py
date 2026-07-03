@@ -137,3 +137,43 @@ def test_phase57_v20_mikrodynamik_guard_vocal_gate(monkeypatch, panns: float, ex
 
     assert result.success
     assert calls["count"] == expected_calls
+
+
+def test_phase57_locality_profile_is_event_adaptive():
+    profile, coverage = PrintThroughReductionPhase._build_locality_profile(
+        n_samples=48000 * 2,
+        sample_rate=48000,
+        defect_locations={"print_through": [(0.20, 0.50)], "pre_echo": [(1.20, 1.50)]},
+        defect_event_metadata={
+            "print_through": {"severity": 0.95, "confidence": 0.95},
+            "pre_echo": {"severity": 0.35, "confidence": 0.70},
+        },
+    )
+
+    assert profile.shape == (48000 * 2,)
+    assert 0.0 < coverage < 0.50
+    print_strength = float(np.mean(profile[int(0.25 * 48000) : int(0.45 * 48000)]))
+    pre_strength = float(np.mean(profile[int(1.25 * 48000) : int(1.45 * 48000)]))
+    clean_strength = float(np.mean(profile[int(0.75 * 48000) : int(0.95 * 48000)]))
+    assert print_strength > pre_strength * 1.25
+    assert clean_strength < 0.03
+
+
+def test_phase57_vibrato_zone_caps_locality_profile():
+    free, _ = PrintThroughReductionPhase._build_locality_profile(
+        n_samples=48000 * 2,
+        sample_rate=48000,
+        defect_locations={"print_through": [(1.20, 1.50)]},
+        defect_event_metadata={"print_through": {"severity": 0.95, "confidence": 0.95}},
+    )
+    capped, _ = PrintThroughReductionPhase._build_locality_profile(
+        n_samples=48000 * 2,
+        sample_rate=48000,
+        defect_locations={"print_through": [(1.20, 1.50)]},
+        defect_event_metadata={"print_through": {"severity": 0.95, "confidence": 0.95}},
+        protected_zones=[(1.10, 1.60, 0.20)],
+    )
+
+    free_strength = float(np.mean(free[int(1.25 * 48000) : int(1.45 * 48000)]))
+    capped_strength = float(np.mean(capped[int(1.25 * 48000) : int(1.45 * 48000)]))
+    assert capped_strength < free_strength * 0.35

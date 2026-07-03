@@ -219,6 +219,91 @@ class SpectralRepair(PhaseInterface):
             "side_clip_multiplier": side_clip_multiplier,
         }
 
+    @staticmethod
+    def _build_defect_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        defect_event_metadata: dict[str, Any] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        """Zeitlokale Blendmaske fuer Pre-Echo/Aliasing/Codec-Spektralreparaturen."""
+        if n_samples <= 0 or sample_rate <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not isinstance(defect_locations, dict) or not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        keys = (
+            "pre_echo",
+            "aliasing",
+            "codec_artifact",
+            "mp3_artifact",
+            "spectral_gap",
+            "spectral_hole",
+            "dropout",
+            "digital_glitch",
+            "jitter_artifacts",
+        )
+        key_factor = {
+            "pre_echo": 0.95,
+            "aliasing": 0.88,
+            "codec_artifact": 0.78,
+            "mp3_artifact": 0.78,
+            "spectral_gap": 0.86,
+            "spectral_hole": 0.86,
+            "dropout": 0.82,
+            "digital_glitch": 0.90,
+            "jitter_artifacts": 0.74,
+        }
+        pad_by_key = {
+            "pre_echo": 0.020,
+            "aliasing": 0.030,
+            "codec_artifact": 0.045,
+            "mp3_artifact": 0.045,
+            "spectral_gap": 0.060,
+            "spectral_hole": 0.060,
+            "dropout": 0.040,
+            "digital_glitch": 0.025,
+            "jitter_artifacts": 0.035,
+        }
+        mask = np.zeros(n_samples, dtype=np.float32)
+        for key in keys:
+            for loc in defect_locations.get(key) or []:
+                if not isinstance(loc, tuple) or len(loc) != 2:
+                    continue
+                try:
+                    start_s = max(0.0, float(loc[0]))
+                    end_s = max(start_s, float(loc[1]))
+                except Exception:
+                    continue
+                if end_s <= start_s:
+                    continue
+                severity = 0.5
+                confidence = 0.8
+                meta_obj = (defect_event_metadata or {}).get(key)
+                if isinstance(meta_obj, dict):
+                    severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+                    confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+                duration_factor = float(np.clip((end_s - start_s) / 0.20, 0.35, 1.0))
+                event_strength = float(
+                    np.clip(
+                        key_factor.get(key, 0.75) * (0.40 + 0.40 * severity + 0.20 * confidence) * duration_factor,
+                        0.16,
+                        1.0,
+                    )
+                )
+                pad = float(pad_by_key.get(key, 0.04))
+                s = int(max(0.0, start_s - pad) * sample_rate)
+                e = int(min(float(n_samples) / float(sample_rate), end_s + pad) * sample_rate)
+                if e > s:
+                    mask[s:e] = np.maximum(mask[s:e], event_strength)
+
+        if float(np.mean(mask)) <= 1e-6:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+        smooth = max(16, int(0.008 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        return mask, float(np.mean(mask))
+
     # STFT Parameters (material-adaptive)
     STFT_CONFIG = {
         MaterialType.SHELLAC: {
@@ -1092,6 +1177,27 @@ class SpectralRepair(PhaseInterface):
         except Exception as _npa23_exc:
             logger.debug("§2.46f Phase23 NPA-Guard (non-blocking): %s", _npa23_exc)
 
+        _defect_locality_coverage23 = 0.0
+        try:
+            _locality_profile23, _defect_locality_coverage23 = self._build_defect_locality_profile(
+                int(repaired_audio.shape[0]),
+                int(sample_rate),
+                kwargs.get("defect_locations"),
+                kwargs.get("defect_event_metadata"),
+            )
+            if _locality_profile23.size > 0 and _defect_locality_coverage23 > 0.0:
+                if repaired_audio.ndim == 2:
+                    _profile23 = _locality_profile23[:, np.newaxis]
+                    repaired_audio = np.clip(audio + _profile23 * (repaired_audio - audio), -1.0, 1.0).astype(
+                        np.float32
+                    )
+                else:
+                    repaired_audio = np.clip(audio + _locality_profile23 * (repaired_audio - audio), -1.0, 1.0).astype(
+                        np.float32
+                    )
+        except Exception as _locality23_exc:
+            logger.debug("phase_23 defect-locality blend (non-blocking): %s", _locality23_exc)
+
         # §V38/§0p VFA-Zonen-Blend-Back — VocalFocusAnalyzer-Zonen aus kwargs:
         # Vibrato (cap 0.20), Frisson (cap 0.30), Flüster (cap 0.25), Passaggio (cap 0.35).
         # repair_strength wird in geschützten Zonen effektiv gedeckelt — schützt vor
@@ -1370,6 +1476,7 @@ class SpectralRepair(PhaseInterface):
                 "repair_strength": float(repair_strength),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
+                "defect_locality_coverage": float(_defect_locality_coverage23),
                 "rt_factor": float(rt_factor),
                 "nperseg": stft_cfg["nperseg"],
                 "apollo_preproc_applied": _apollo_preproc_applied,
