@@ -71,6 +71,48 @@ def test_trusted_report_fails_without_required_baselines(tmp_path: Path) -> None
 
 @pytest.mark.normative
 @pytest.mark.timeout(20)
+def test_trusted_report_ignores_empty_template_rows_for_aurik_selection(tmp_path: Path) -> None:
+    from scripts.trusted_vocal_restoration_report import _load_rows, build_report
+
+    csv_path = tmp_path / "results.csv"
+    _write_csv(
+        csv_path,
+        [
+            {
+                **_trusted_case_fields(),
+                "case_id": "vinyl_vocal_001",
+                "system": "aurik",
+                "is_aurik": "true",
+                "variant": "baseline",
+                "vocal_focus": "true",
+                "material": "vinyl",
+                "era": "1970",
+                "genre": "vocal",
+                "artifact_freedom": "0.98",
+                "hpi": "0.20",
+                "vqi": "0.80",
+                "timbral_fidelity": "0.91",
+                "status": "recovered",
+            },
+            {
+                "case_id": "vinyl_vocal_001",
+                "variant": "mert_0p50",
+                "vocal_focus": "true",
+                "material": "vinyl",
+                "status": "",
+            },
+        ],
+    )
+    cfg = json.loads(Path("config/worldclass_kpi_thresholds.json").read_text(encoding="utf-8"))
+
+    report = build_report(_load_rows([csv_path]), cfg)
+
+    assert "vinyl_vocal_001" in report["professional_case_ids"]
+    assert not any("missing_aurik_metrics" in violation for violation in report["violations"])
+
+
+@pytest.mark.normative
+@pytest.mark.timeout(20)
 def test_trusted_report_blocks_safety_regression_against_best_baseline(tmp_path: Path) -> None:
     from scripts.trusted_vocal_restoration_report import _load_rows, build_report
 

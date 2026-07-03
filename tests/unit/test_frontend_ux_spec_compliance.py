@@ -294,6 +294,24 @@ class TestStructuredFailReasonShortStatus:
             "Kurzstatus-Hinweis für degradierte/blockierte Verarbeitung fehlt"
         )
 
+    def test_batch_completion_does_not_mask_degraded_as_success(self):
+        """Batch-Abschluss muss degraded/fail_reason vor status.saved_file prüfen."""
+        assert _src_contains("def _resolve_batch_completion_status"), (
+            "Batch-Kurzstatus-Resolver fehlt — degraded/recovered Exporte dürfen nicht als reiner Erfolg erscheinen"
+        )
+        assert _src_contains("_bridge_normalize_pipeline_health_state"), (
+            "Batch-Kurzstatus muss degradation_status normalisieren"
+        )
+        assert _src_contains("_bridge_resolve_pipeline_fail_reason"), (
+            "Batch-Kurzstatus muss fail_reason berücksichtigen"
+        )
+        assert _src_contains("_item_for_result.restoration_result = restoration_result"), (
+            "Batch-Item muss das echte Resultat speichern, bevor der Kurzstatus bewertet wird"
+        )
+        assert _src_contains("_batch_status = self._resolve_batch_completion_status(_item_for_result)"), (
+            "Result-Signal muss den vorherigen output_file-Erfolg mit echten Metadaten überschreiben können"
+        )
+
     def test_short_status_includes_error_code_suffix(self):
         """Kurzstatus ergänzt strukturierten Fehlercode wenn verfügbar."""
         assert _src_contains("Code:"), "Fehlercode-Suffix im Kurzstatus fehlt"

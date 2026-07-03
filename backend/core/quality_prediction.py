@@ -313,7 +313,7 @@ class QualityAnalyzer:
 
     def _measure_warmth(self, audio: np.ndarray, sr: int) -> float:
         """
-        Misst tonal warmth (low-frequency richness).
+        Misst tonal warmth (vocal/instrument body, not only bass weight).
         """
         # Probe-runs and ultra-low-energy snippets should not fail warmth gates.
         # They do not contain enough spectral evidence for a meaningful warmth score.
@@ -325,16 +325,23 @@ class QualityAnalyzer:
         freqs = np.fft.rfftfreq(len(audio), 1 / sr)
         power = np.abs(fft) ** 2
 
-        # LF energy (60-250 Hz)
-        lf_mask = (freqs >= 60) & (freqs <= 250)
-        lf_power: float = float(np.sum(power[lf_mask]))
+        # Psychoakustische Wärme liegt bei Musik/Gesang im Körperband. Der alte
+        # 60-250-Hz-Proxy wertete historische oder vokal-dominierte Quellen ohne
+        # Bassfundament fälschlich als eiskalt, obwohl 200-800 Hz intakt waren.
+        body_mask = (freqs >= 120) & (freqs <= 800)
+        presence_mask = (freqs > 800) & (freqs <= 3000)
+        broad_mask = (freqs >= 60) & (freqs <= min(6000, sr / 2))
 
-        total_power: float = float(np.sum(power))
+        body_power: float = float(np.sum(power[body_mask]))
+        presence_power: float = float(np.sum(power[presence_mask]))
+        broad_power: float = float(np.sum(power[broad_mask]))
 
-        if total_power > 0:
-            lf_ratio = lf_power / total_power
-            # Optimal around 0.10-0.20
-            warmth = min(lf_ratio / 0.15, 1.0)
+        if broad_power > 0:
+            body_ratio = body_power / broad_power
+            body_to_presence = body_power / (body_power + presence_power + 1e-20)
+            ratio_score = float(np.clip(body_ratio / 0.35, 0.0, 1.0))
+            balance_score = float(np.exp(-0.5 * ((body_to_presence - 0.55) / 0.35) ** 2))
+            warmth = 0.65 * ratio_score + 0.35 * balance_score
         else:
             # Silence / 2-sample probe → return neutral pass value.
             # Returning 0.0 falsely triggers warmth gates during multi-pass

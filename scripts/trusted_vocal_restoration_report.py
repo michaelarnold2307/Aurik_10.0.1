@@ -38,8 +38,8 @@ def _is_truthy(value: Any) -> bool:
 
 
 def _system_name(row: dict[str, Any]) -> str:
-    raw = row.get("system") or row.get("candidate") or row.get("engine") or row.get("label") or "aurik"
-    return str(raw).strip().lower() or "aurik"
+    raw = row.get("system") or row.get("candidate") or row.get("engine") or row.get("label") or ""
+    return str(raw).strip().lower()
 
 
 def _is_aurik_row(row: dict[str, Any]) -> bool:
@@ -49,6 +49,15 @@ def _is_aurik_row(row: dict[str, Any]) -> bool:
     if explicit in {"0", "false", "no", "nein"}:
         return False
     return _system_name(row) in {"aurik", "aurik_restoration", "aurik_studio2026"}
+
+
+def _aurik_row_quality(row: dict[str, Any], required_metrics: list[str]) -> tuple[int, int, int]:
+    """Waehlt bei mehreren Varianten die beste belegte Aurik-Zeile pro Case."""
+    status = str(row.get("status", "")).strip().lower()
+    executed = 1 if status in {"pass", "passed", "recovered", "degraded", "failed", "export_blocked"} else 0
+    complete_metrics = sum(1 for key in required_metrics if _to_float(row.get(key)) is not None)
+    baseline_variant = 1 if str(row.get("variant", "")).strip().lower() == "baseline" else 0
+    return (executed, complete_metrics, baseline_variant)
 
 
 def _baseline_family(row: dict[str, Any]) -> str:
@@ -82,13 +91,18 @@ def _load_rows(csv_paths: list[Path]) -> list[dict[str, Any]]:
     return rows
 
 
-def _select_aurik_rows(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _select_aurik_rows(
+    rows: list[dict[str, Any]], required_metrics: list[str] | None = None
+) -> dict[str, dict[str, Any]]:
     selected: dict[str, dict[str, Any]] = {}
+    metrics = required_metrics or []
     for row in rows:
         case_id = str(row.get("case_id", "")).strip()
         if not case_id or not _is_aurik_row(row):
             continue
-        selected[case_id] = row
+        current = selected.get(case_id)
+        if current is None or _aurik_row_quality(row, metrics) >= _aurik_row_quality(current, metrics):
+            selected[case_id] = row
     return selected
 
 
@@ -268,7 +282,7 @@ def build_report(
     min_cases = int(trust_cfg.get("min_professional_cases", 20) or 20)
     target_cases = int(trust_cfg.get("target_cases", 50) or 50)
 
-    aurik_rows = _select_aurik_rows(rows)
+    aurik_rows = _select_aurik_rows(rows, required_metrics)
     baselines_by_case = _baseline_rows_by_case(rows)
     baseline_families: Counter[str] = Counter()
     materials: Counter[str] = Counter()

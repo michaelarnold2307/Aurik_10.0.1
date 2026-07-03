@@ -540,28 +540,38 @@ class SpectralRepairPhase(PhaseInterface):
                 _audio_pre_pre_echo = audio.copy()
                 # §V38 VFA-Schutzzonen für per-Event-Blend-Cap (Vibrato 0.20, Frisson 0.30 etc.)
                 _p50_vfa_zones: list[tuple[float, float, float]] = []
+
+                def _append_vfa_zone_50(_zone: object, _cap: float) -> None:
+                    try:
+                        if isinstance(_zone, dict):
+                            _start = float(_zone.get("start_s", _zone.get("start", 0.0)) or 0.0)
+                            _end = float(_zone.get("end_s", _zone.get("end", 0.0)) or 0.0)
+                        else:
+                            _start = float(_zone[0])  # type: ignore[index]
+                            _end = float(_zone[1])  # type: ignore[index]
+                        if _end > _start:
+                            _p50_vfa_zones.append((_start, _end, _cap))
+                    except (TypeError, ValueError, IndexError):
+                        pass
+
                 _p50_vfa = kwargs.get("vfa_result") or {}
                 if isinstance(_p50_vfa, dict):
                     for _z in _p50_vfa.get("vibrato_zones", []):
-                        try:
-                            _p50_vfa_zones.append((float(_z[0]), float(_z[1]), 0.20))
-                        except (TypeError, IndexError):
-                            pass
+                        _append_vfa_zone_50(_z, 0.20)
                     for _z in _p50_vfa.get("frisson_zones", []):
-                        try:
-                            _p50_vfa_zones.append((float(_z[0]), float(_z[1]), 0.30))
-                        except (TypeError, IndexError):
-                            pass
+                        _append_vfa_zone_50(_z, 0.30)
                     for _z in _p50_vfa.get("whisper_zones", []):
-                        try:
-                            _p50_vfa_zones.append((float(_z[0]), float(_z[1]), 0.25))
-                        except (TypeError, IndexError):
-                            pass
+                        _append_vfa_zone_50(_z, 0.25)
                     for _z in _p50_vfa.get("passaggio_zones", []):
-                        try:
-                            _p50_vfa_zones.append((float(_z[0]), float(_z[1]), 0.35))
-                        except (TypeError, IndexError):
-                            pass
+                        _append_vfa_zone_50(_z, 0.35)
+                for _z in kwargs.get("vibrato_zones", []) or []:
+                    _append_vfa_zone_50(_z, 0.20)
+                for _z in kwargs.get("frisson_zones", []) or []:
+                    _append_vfa_zone_50(_z, 0.30)
+                for _z in kwargs.get("whisper_zones", []) or []:
+                    _append_vfa_zone_50(_z, 0.25)
+                for _z in kwargs.get("passaggio_zones", []) or []:
+                    _append_vfa_zone_50(_z, 0.35)
                 for _evt50 in _pre_echo_events_50:
                     _audio_evt_pre50 = audio.copy() if _p50_vfa_zones else None
                     audio = _ped50.repair_region(audio, _evt50, sample_rate)

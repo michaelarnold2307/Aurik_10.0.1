@@ -692,16 +692,28 @@ class MusicalQualityAssurance:
         if current.clarity < medium_gates.min_clarity:
             return False, f"Clarity too low: {current.clarity:.2f} < {medium_gates.min_clarity:.2f}"
 
-        if current.warmth < medium_gates.min_warmth:
+        _warmth_drop = baseline.warmth - current.warmth
+        _warmth_was_already_below_floor = baseline.warmth < (medium_gates.min_warmth - 0.08)
+        if current.warmth < medium_gates.min_warmth and not (_warmth_was_already_below_floor and _warmth_drop <= 0.08):
             return (
                 False,
-                f"Warmth too low: {current.warmth:.2f} < {medium_gates.min_warmth:.2f} ({medium_type.value} MUST be warm!)",
+                (
+                    f"Warmth too low: {current.warmth:.2f} < {medium_gates.min_warmth:.2f} "
+                    f"({medium_type.value} MUST be warm, baseline={baseline.warmth:.2f})"
+                ),
             )
 
-        if current.naturalness < medium_gates.min_naturalness:
+        _naturalness_drop_abs = baseline.naturalness - current.naturalness
+        _naturalness_was_already_below_floor = baseline.naturalness < (medium_gates.min_naturalness - 0.10)
+        if current.naturalness < medium_gates.min_naturalness and not (
+            _naturalness_was_already_below_floor and _naturalness_drop_abs <= 0.10
+        ):
             return (
                 False,
-                f"Naturalness too low: {current.naturalness:.2f} < {medium_gates.min_naturalness:.2f} (sounds unnatural)",
+                (
+                    f"Naturalness too low: {current.naturalness:.2f} < {medium_gates.min_naturalness:.2f} "
+                    f"(sounds unnatural, baseline={baseline.naturalness:.2f})"
+                ),
             )
 
         if current.authenticity < medium_gates.min_authenticity:
@@ -710,11 +722,21 @@ class MusicalQualityAssurance:
                 f"Authenticity too low: {current.authenticity:.2f} < {medium_gates.min_authenticity:.2f} (character lost)",
             )
 
-        # Check overprocessing (brightness too high = over-brightened)
-        if current.brightness > medium_gates.max_brightness:
+        # Check overprocessing (brightness too high = over-brightened).
+        # Bereits helle historische Quellen duerfen bei No-op/Minimal-Delta nicht
+        # als neuer Aurik-Schaden gewertet werden; relevant ist der zusaetzliche
+        # Brightness-Anstieg gegen die Baseline.
+        _brightness_increase = current.brightness - baseline.brightness
+        _brightness_was_already_over = baseline.brightness > medium_gates.max_brightness
+        if current.brightness > medium_gates.max_brightness and not (
+            _brightness_was_already_over and _brightness_increase <= 0.05
+        ):
             return (
                 False,
-                f"Over-brightened: {current.brightness:.2f} > {medium_gates.max_brightness:.2f} (sounds harsh)",
+                (
+                    f"Over-brightened: {current.brightness:.2f} > {medium_gates.max_brightness:.2f} "
+                    f"(sounds harsh, baseline={baseline.brightness:.2f})"
+                ),
             )
 
         # Check naturalness degradation (compared to baseline)
@@ -759,10 +781,15 @@ class MusicalQualityAssurance:
         if _is_unknown_medium:
             _mode_min_overall = min(_mode_min_overall, 60.0)
 
-        if current.overall_score < _mode_min_overall:
+        _overall_drop = baseline.overall_score - current.overall_score
+        _overall_was_already_below = baseline.overall_score < (_mode_min_overall - 2.0)
+        if current.overall_score < _mode_min_overall and not (_overall_was_already_below and _overall_drop <= 2.0):
             return (
                 False,
-                f"Overall score too low: {current.overall_score:.1f} < {_mode_min_overall:.1f} (mode: {processing_mode.value})",
+                (
+                    f"Overall score too low: {current.overall_score:.1f} < {_mode_min_overall:.1f} "
+                    f"(mode: {processing_mode.value}, baseline={baseline.overall_score:.1f})"
+                ),
             )
 
         _mode_min_auth = mode_standards.min_authenticity
@@ -1125,7 +1152,9 @@ class MusicalQualityAssurance:
         musical_improvement = (output_quality.overall_score - input_quality.overall_score) / 100.0
         authenticity_preserved = output_quality.authenticity >= input_quality.authenticity * 0.85
         character_preserved = integrity_result.character_preservation >= 0.80
-        natural_sound = output_quality.naturalness >= 0.65
+        natural_sound = output_quality.naturalness >= 0.65 or (
+            input_quality.naturalness < 0.55 and (input_quality.naturalness - output_quality.naturalness) <= 0.10
+        )
 
         # Calculate processing intensity.
         # Deduplicate module names first: retries/candidate loops can append duplicates

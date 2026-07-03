@@ -6067,6 +6067,9 @@ class UnifiedRestorerV3:
         "phase_21_exciter",
         "phase_35_multiband_compression",
         "phase_42_vocal_enhancement",
+        "phase_44_guitar_enhancement",
+        "phase_45_brass_enhancement",
+        "phase_51_drums_enhancement",
         "phase_56_reference_mastering",
     }
     _RESTORATION_FORBIDDEN_COALITION_PHASES: frozenset[str] = frozenset(_restoration_forbidden_stem_enhancement)
@@ -23776,22 +23779,22 @@ class UnifiedRestorerV3:
             } and (_stem_nr_noise_sev > 0.15 or sev(DefectType.CRACKLE) > 0.20)
             if _stem_nr_eligible:
                 selected.append("phase_66_stem_targeted_nr")  # §7.11 Stem-Targeted NR
-        if guitar_detected:
+        if self.is_studio_mode() and guitar_detected:
             selected.append("phase_44_guitar_enhancement")
-        if brass_detected:
+        if self.is_studio_mode() and brass_detected:
             selected.append("phase_45_brass_enhancement")
-        if drums_detected:
+        if self.is_studio_mode() and drums_detected:
             selected.append("phase_51_drums_enhancement")
         if piano_detected:
             selected.append("phase_52_piano_restoration")
 
         # Extended Instrument Routing — zusätzliche Instrumentfamilien (§2.9 Erweiterung)
         # Strings (Violin, Cello, Bowed) → Saiteninstrument-EQ + Transient-Schutz für Bogen-Anstrich
-        if strings_detected:
+        if self.is_studio_mode() and strings_detected:
             selected.append("phase_44_guitar_enhancement")  # Saiten-Oberton-Optimierung
             selected.append("phase_08_transient_preservation")  # Bogen-Attack bewahren
         # Woodwind (Flute, Clarinet, Oboe, Bassoon) → Blas-Formant-Enhancement + Air
-        if woodwind_detected:
+        if self.is_studio_mode() and woodwind_detected:
             selected.append("phase_45_brass_enhancement")  # Blas-Instrument-Formant-EQ
             selected.append("phase_39_air_band_enhancement")  # Atem-/Luft-Geräusche bewahren
         # Synth/Electronic → Spektral-Repair (breiter Pass), kein Instrument-spezifischer EQ
@@ -31089,6 +31092,9 @@ class UnifiedRestorerV3:
                 "phase_21_exciter",
                 "phase_35_multiband_compression",
                 "phase_42_vocal_enhancement",
+                "phase_44_guitar_enhancement",
+                "phase_45_brass_enhancement",
+                "phase_51_drums_enhancement",
             }
             _forbidden_final_hits = [p for p in selected_phases if p in _restoration_forbidden_final]
             if _forbidden_final_hits:

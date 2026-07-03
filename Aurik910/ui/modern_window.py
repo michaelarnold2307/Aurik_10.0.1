@@ -18294,8 +18294,9 @@ class ModernMainWindow(QMainWindow):
         item = self.batch_queue.get_item(item_id)
         if item and item.output_file and hasattr(self, "status_text"):
             _out_name = Path(item.output_file).name
-            self._apply_status_text_style("success")
-            self.status_text.setText(t("status.saved_file", file=_out_name))
+            _batch_status = self._resolve_batch_completion_status(item)
+            self._apply_status_text_style(_batch_status["style"])
+            self.status_text.setText(_batch_status["text"] or t("status.saved_file", file=_out_name))
             QTimer.singleShot(
                 5000,
                 lambda: (
@@ -18307,8 +18308,40 @@ class ModernMainWindow(QMainWindow):
 
         self._update_stats()
 
+    def _resolve_batch_completion_status(self, item) -> dict[str, str]:
+        """Ermittelt Batch-Kurzstatus ohne degraded/recovered als Erfolg zu tarnen."""
+        _out_name = Path(getattr(item, "output_file", "") or "").name
+        _result = getattr(item, "restoration_result", None)
+        _metadata = getattr(_result, "metadata", {}) or {} if _result is not None else {}
+        _stage_notes = getattr(_result, "stage_notes", {}) or {} if _result is not None else {}
+        _degradation_status = _bridge_normalize_pipeline_health_state(
+            getattr(_result, "degradation_status", None)
+            or _metadata.get("degradation_status", "")
+            or _stage_notes.get("degradation_status", "")
+        ).value
+        _fail_reason = _bridge_resolve_pipeline_fail_reason(
+            typed_fail_reason=getattr(_result, "fail_reason", None),
+            metadata=_metadata,
+            stage_notes=_stage_notes,
+            fail_reasons=_metadata.get("fail_reasons") or _stage_notes.get("fail_reasons"),
+        )
+        if _degradation_status in {"blocked", "critical_degraded", "degraded"} or _fail_reason:
+            _reason = _fail_reason or _degradation_status
+            return {
+                "style": "warning" if _degradation_status != "blocked" else "error",
+                "text": f"Verarbeitung mit Einschränkungen gespeichert: {_out_name} · {_reason}",
+            }
+        return {"style": "success", "text": t("status.saved_file", file=_out_name)}
+
     def _on_item_finished_with_result(self, item_id, restoration_result):
         """Handle item completion mit RestorationResult — aktualisiert Qualitäts-Radar."""
+        _item_for_result = self.batch_queue.get_item(item_id) if hasattr(self, "batch_queue") else None
+        if _item_for_result is not None:
+            _item_for_result.restoration_result = restoration_result
+            if getattr(_item_for_result, "output_file", None) and hasattr(self, "status_text"):
+                _batch_status = self._resolve_batch_completion_status(_item_for_result)
+                self._apply_status_text_style(_batch_status["style"])
+                self.status_text.setText(_batch_status["text"])
         # Sofort aus AurikErgebnis: A/B-Player aktivieren und Musical Goals anzeigen,
         # unabhängig vom Dateisystem-Zugriff (kein sf.read-Risiko hier).
         if restoration_result is not None and hasattr(restoration_result, "audio"):

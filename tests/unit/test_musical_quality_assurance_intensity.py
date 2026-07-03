@@ -115,6 +115,31 @@ def test_quality_gate_snr_borderline_low_baseline_passes_with_tolerance(monkeypa
     assert gate_ok is True, f"Grenzfall muss passieren, erhielt: {reason}"
 
 
+def test_quality_gate_does_not_blame_preexisting_low_warmth_and_naturalness(monkeypatch):
+    """No-op auf historischem Proxy-schwachem Material ist kein Aurik-Wärmeschaden."""
+    mqa = MusicalQualityAssurance()
+    baseline = _quality_with_snr(24.0, overall=62.0)
+    baseline.warmth = 0.02
+    baseline.naturalness = 0.00
+    baseline.authenticity = 0.95
+    current = _quality_with_snr(24.1, overall=62.0)
+    current.warmth = 0.02
+    current.naturalness = 0.00
+    current.authenticity = 0.95
+
+    monkeypatch.setattr(mqa.analyzer, "analyze_quality", lambda _audio, _sr: current)
+
+    gate_ok, reason = mqa.check_quality_gate(
+        np.zeros(48000, dtype=np.float32),
+        48000,
+        baseline,
+        MediumType.WAX_CYLINDER,
+        ProcessingMode.RESTORATION,
+    )
+
+    assert gate_ok is True, f"No-op darf keinen Wärme-/Naturalness-Fail erzeugen: {reason}"
+
+
 def test_quality_gate_snr_clear_drop_still_fails(monkeypatch):
     """Deutlicher SNR-Abfall muss weiterhin korrekt als fail erkannt werden."""
     mqa = MusicalQualityAssurance()

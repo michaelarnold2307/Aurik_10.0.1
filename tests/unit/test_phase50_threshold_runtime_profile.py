@@ -90,3 +90,31 @@ def test_vibrato_zone_caps_locality_profile() -> None:
     capped_strength = float(np.mean(capped[int(1.35 * sr) : int(1.65 * sr)]))
     assert capped_strength <= 0.21
     assert capped_strength < free_strength * 0.55
+
+
+def test_pre_echo_events_respect_top_level_vibrato_zones(monkeypatch) -> None:
+    sr = 48000
+    audio = np.ones(sr, dtype=np.float32) * 0.2
+
+    class _DummyPreEchoDetector:
+        def repair_region(self, x: np.ndarray, event: dict, sample_rate: int) -> np.ndarray:
+            assert sample_rate == sr
+            out = np.asarray(x, dtype=np.float32).copy()
+            out[int(event["pre_echo_start"]) : int(event["pre_echo_end"])] = 0.0
+            return out
+
+    monkeypatch.setattr(
+        "backend.core.dsp.pre_echo_detector.get_pre_echo_detector",
+        lambda: _DummyPreEchoDetector(),
+    )
+
+    result = SpectralRepairPhase().process(
+        audio,
+        sample_rate=sr,
+        material_type="mp3_low",
+        pre_echo_events=[{"pre_echo_start": int(0.20 * sr), "pre_echo_end": int(0.30 * sr)}],
+        vibrato_zones=[(0.10, 0.40)],
+    )
+
+    repaired_region = result.audio[int(0.22 * sr) : int(0.28 * sr)]
+    assert float(np.mean(repaired_region)) >= 0.15

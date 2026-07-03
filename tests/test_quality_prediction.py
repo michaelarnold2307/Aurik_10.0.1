@@ -138,6 +138,16 @@ class TestQualityAnalyzer:
         assert 0 <= brightness <= 1
         assert 0 <= naturalness <= 1
 
+    def test_warmth_counts_vocal_body_band(self, analyzer):
+        """Vokal-Körperband darf nicht als fehlende Wärme bewertet werden."""
+        sr = 48000
+        t = np.linspace(0, 1, sr, endpoint=False)
+        vocal_body = (0.45 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+        thin_hf = (0.45 * np.sin(2 * np.pi * 4200 * t)).astype(np.float32)
+
+        assert analyzer._measure_warmth(vocal_body, sr) >= 0.35
+        assert analyzer._measure_warmth(vocal_body, sr) > analyzer._measure_warmth(thin_hf, sr)
+
     def test_bandwidth_measurement(self, analyzer, clean_audio):
         """Test bandwidth measurement."""
         low, high = analyzer._measure_bandwidth(clean_audio, 48000)
