@@ -1924,6 +1924,12 @@ class AdaptiveProcessingPipelineV2(AdaptiveProcessingPipeline):
             if not needed: continue
             pre = current_audio.copy()
             for retry in range(3):
+                # §v10 Intensity reduction: retry 1 = 65%, retry 2 = 40%
+                if retry > 0:
+                    goal["intensity_multiplier"] = 0.65 if retry == 1 else 0.40
+                    self.logger.info("Steering %s retry %d: intensity=%d%%", op, retry, int(goal["intensity_multiplier"]*100))
+                else:
+                    goal["intensity_multiplier"] = 1.0
                 current_audio, step_counter = self._process_step_with_tracking(
                     job, current_audio, sr, op, model, step_counter, context, goal)
                 hpe_delta = 0.0

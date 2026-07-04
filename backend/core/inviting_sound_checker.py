@@ -193,3 +193,53 @@ def _check_frequency_peaks(mono: np.ndarray, sr: int) -> float:
     elif peak_bands <= 2: return 0.7
     elif peak_bands <= 5: return 0.4
     return 0.15
+
+
+def check_inviting_sound_per_band(audio: np.ndarray, sr: int) -> dict:
+    """§v10 Frequenzspezifischer Inviting-Check pro Bark-Band.
+
+    Zeigt WELCHE Frequenzbereiche das Ohr zurückweisen.
+    Returns dict mit Band-Name -> (Score, Problem).
+    """
+    arr = np.asarray(audio, dtype=np.float64)
+    if arr.ndim == 2:
+        mono = arr.mean(axis=1) if arr.shape[1] <= 2 else arr.mean(axis=0)
+    else:
+        mono = arr
+    mono = np.atleast_1d(mono).ravel()
+    n_fft = 4096
+    if len(mono) < n_fft:
+        return {"fullband": (0.5, "zu kurz")}
+    spec = np.abs(np.fft.rfft(mono[:n_fft] * np.hanning(n_fft)))
+    spec_db = 20.0 * np.log10(spec + 1e-12)
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+    bands = {
+        "sub_bass": (20, 60), "bass": (60, 250), "low_mid": (250, 500),
+        "mid": (500, 2000), "high_mid": (2000, 4000), "presence": (4000, 8000),
+        "brilliance": (8000, 16000),
+    }
+    results = {}
+    for name, (lo, hi) in bands.items():
+        mask = (freqs >= lo) & (freqs < hi)
+        if mask.sum() == 0:
+            results[name] = (0.7, "keine Energie"); continue
+        band_energy = float(np.sum(spec[mask] ** 2))
+        total_energy = float(np.sum(spec ** 2)) + 1e-12
+        share = band_energy / total_energy
+        band_max = float(np.max(spec_db[mask]))
+        band_mean = float(np.mean(spec_db[mask]))
+        score = 1.0; issue = ""
+        if name == "sub_bass" and share > 0.25: issue = "dröhnend"; score = 0.3
+        elif name == "bass":
+            if share < 0.08: issue = "dünn"; score = 0.3
+            elif share > 0.40: issue = "mulmig"; score = 0.4
+        elif name == "low_mid" and share > 0.35: issue = "kastig"; score = 0.4
+        elif name == "presence" and share > 0.30: issue = "bissig"; score = 0.35
+        elif name == "brilliance":
+            if share < 0.005: issue = "dumpf"; score = 0.25
+            elif share > 0.20: issue = "scharf"; score = 0.35
+        if band_max - band_mean > 15.0 and score > 0.5:
+            issue = "Resonanz"; score = max(0.3, score - 0.3)
+        if not issue: issue = ""
+        results[name] = (score, issue)
+    return results
