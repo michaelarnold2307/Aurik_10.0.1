@@ -467,8 +467,7 @@ class RestaurierDenker:
                     _reg.report_post("UV3", _hpe_post, delta=_delta)
                     result.quality_delta = _delta
 
-                    # §v10 FAILSAFE: Wenn HPE oder Inviting VERSCHLECHTERT wurde,
-                    # ist Aurik GESCHEITERT. Original zurückgeben.
+                    # §v10 FAILSAFE: Wenn Inviting sinkt, erst BAND-KORREKTUR versuchen
                     _inv_delta = _inv_post - _inv_pre
                     _failed_hpe = _delta < -0.03
                     _failed_inv = _inv_delta < -0.05
@@ -477,16 +476,23 @@ class RestaurierDenker:
                         _reasons = []
                         if _failed_hpe: _reasons.append(f"HPE {_delta:+.3f}")
                         if _failed_inv: _reasons.append(f"Inviting {_inv_delta:+.3f}")
-                        _fail_msg = f"AURIK VERBESSERUNG GESCHEITERT: {', '.join(_reasons)} — gebe Original zurück"
-                        logger.error("RestaurierDenker: %s", _fail_msg)
-                        result.quality_delta = _delta
-                        result.processing_note = _fail_msg
-                        # NICHT return result — wir versuchen es leichter!
+
+                        # §v10 STUFE 1: Gezielte Band-Korrektur statt Alles-Verwerfen
+                        _band_fixed = self._apply_targeted_band_correction(
+                            audio, _restored_f32, sr, result)
+                        if _band_fixed is not None:
+                            logger.info("RestaurierDenker: Band-Korrektur erfolgreich — Inviting wiederhergestellt")
+                            return _band_fixed
+
+                        # §v10 STUFE 2: RETRY_LIGHTER
+                        _fail_msg = f"AURIK GESCHEITERT: {', '.join(_reasons)}"
+                        logger.warning("RestaurierDenker: %s — versuche RETRY_LIGHTER", _fail_msg)
                         _retry = self._retry_lighter(audio, sr, restorer, _uv3_kwargs, material)
                         if _retry is not None:
                             return _retry
-                        # Auch Retry gescheitert → Original zurück
-                        logger.error("RestaurierDenker: Auch leichterer Versuch gescheitert — Original unverändert")
+
+                        # §v10 STUFE 3: Original zurück
+                        logger.error("RestaurierDenker: Alle Rettungsversuche gescheitert — Original unverändert")
                         fallback = self._fallback(audio, material or "unknown", _fail_msg)
                         fallback.audio = audio.copy()
                         return fallback
@@ -826,8 +832,69 @@ class RestaurierDenker:
             logger.warning("RestaurierDenker RETRY_LIGHTER Fehler: %s", e)
             return None
 
+    @staticmethod
+    def _apply_targeted_band_correction(
+        original: np.ndarray, restored: np.ndarray, sr: int, result: Any,
+    ) -> Any | None:
+        """§v10 STUFE 1: Korrigiert nur das kranke Band statt alles zu verwerfen."""
+        try:
+            from backend.core.inviting_sound_checker import check_inviting_sound, check_inviting_sound_per_band
+            from backend.core.human_pleasantness_estimator import compare_pleasantness
+            from scipy.signal import butter, sosfiltfilt
 
-# ---------------------------------------------------------------------------
+            bands_orig = check_inviting_sound_per_band(np.asarray(original, dtype=np.float64), sr)
+            bands_rest = check_inviting_sound_per_band(np.asarray(restored, dtype=np.float64), sr)
+            degraded = {}
+            for b in bands_orig:
+                s0 = bands_orig[b][0]
+                s1 = bands_rest.get(b, (0.5,''))[0]
+                if s1 - s0 < -0.15:
+                    degraded[b] = s1 - s0
+            if not degraded: return None
+
+            logger.info("BAND-KORREKTUR: %d Baender verschlechtert", len(degraded))
+
+            eq_map = {
+                "sub_bass": ("low", 40, -2.0), "bass": ("low", 150, -1.5),
+                "low_mid": ("peak", 375, -2.0), "mid": ("peak", 1000, -2.0),
+                "high_mid": ("peak", 3000, -2.5), "presence": ("high", 6000, -2.0),
+                "brilliance": ("high", 12000, +1.5),
+            }
+            corrected = restored.copy().astype(np.float64)
+            for band, d in degraded.items():
+                eq = eq_map.get(band)
+                if not eq: continue
+                etype, freq, gdb = eq
+                gain = float(np.clip(abs(d)*3.0, 0.5, 3.0))
+                sign = 1 if gdb > 0 else -1
+                if etype == "low":
+                    corrected *= (1.0 + gain*0.03*sign)
+                elif etype == "high":
+                    sos = butter(2, freq/(sr/2), btype='high', output='sos')
+                    shelf = sosfiltfilt(sos, corrected)
+                    corrected += shelf * gain * 0.03 * sign
+                elif etype == "peak":
+                    sos_l = butter(2, freq*0.7/(sr/2), btype='low', output='sos')
+                    sos_h = butter(2, freq*1.4/(sr/2), btype='high', output='sos')
+                    lo = sosfiltfilt(sos_l, corrected)
+                    hi = sosfiltfilt(sos_h, corrected)
+                    mid = corrected - lo - hi
+                    corrected = lo + hi + mid*(1.0 - gain*0.1)
+
+            corrected = np.clip(corrected, -1, 1).astype(np.float32)
+            inv_pre = check_inviting_sound(np.asarray(restored, dtype=np.float32), sr).score
+            inv_post = check_inviting_sound(corrected, sr).score
+
+            if inv_post > inv_pre + 0.03:
+                cmp = compare_pleasantness(np.asarray(original, dtype=np.float32), corrected, sr)
+                logger.info("BAND-KORREKTUR ERFOLG: Inviting %.3f->%.3f", inv_pre, inv_post)
+                result.audio = corrected
+                result.quality_delta = float(cmp.get("delta_score", 0))
+                return result
+            return None
+        except Exception as e:
+            logger.warning("BAND-KORREKTUR Fehler: %s", e)
+            return None# ---------------------------------------------------------------------------
 # Thread-sicherer Singleton (Double-Checked Locking — §3.2)
 # ---------------------------------------------------------------------------
 
