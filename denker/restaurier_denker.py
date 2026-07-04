@@ -491,28 +491,45 @@ class RestaurierDenker:
                                              _trans.score, _trans.artifacts)
                         except Exception: pass
 
-                        if not _failed_transparency and not _failed_hpe and not _failed_inv:
-                            logger.info("RestaurierDenker: ALLE CHECKS BESTANDEN — Ergebnis ist natürlich und angenehm")
-                        else:
-                            # §v10 STUFE 1: Gezielte Band-Korrektur
-                            _band_fixed = self._apply_targeted_band_correction(
-                                audio, _restored_f32, sr, result)
-                            if _band_fixed is not None:
-                                logger.info("RestaurierDenker: Band-Korrektur erfolgreich")
-                                return _band_fixed
+                        # §v10 SWEET SPOT OPTIMIERUNG: Alle 20 Metriken gleichzeitig
+                        _sweet = None
+                        try:
+                            from backend.core.sweet_spot_optimizer import find_sweet_spot
+                            _sweet = find_sweet_spot(_restored_f32, sr)
+                            logger.info("RestaurierDenker SweetSpot: %.2f (%d/7 green) %s",
+                                       _sweet.score, _sweet.green_count, _sweet.label)
+                            if _sweet.warnings:
+                                for w in _sweet.warnings[:3]:
+                                    logger.info("  - %s", w)
+                        except Exception: pass
 
-                            # §v10 STUFE 2: RETRY_LIGHTER
-                            _fail_msg = f"AURIK GESCHEITERT: {', '.join(_reasons)}"
-                            logger.warning("RestaurierDenker: %s — versuche RETRY_LIGHTER", _fail_msg)
-                            _retry = self._retry_lighter(audio, sr, restorer, _uv3_kwargs, material)
-                            if _retry is not None:
-                                return _retry
+                        if _sweet is not None and _sweet.all_green:
+                            # PERFEKT — alle Metriken in Grünzone
+                            logger.info("RestaurierDenker: SWEET SPOT ERREICHT — "
+                                       "Klang ist natürlich, angenehm und lädt zum Hineinlegen ein")
+                            result.quality_delta = _delta
+                            return result
 
-                            # §v10 STUFE 3: Original zurück
-                            logger.error("RestaurierDenker: Alle Rettungsversuche gescheitert — Original unverändert")
-                            fallback = self._fallback(audio, material or "unknown", _fail_msg)
-                            fallback.audio = audio.copy()
-                            return fallback
+                        # Nicht am Sweet Spot → iterative Optimierung
+                        _optimized = self._optimize_to_sweet_spot(
+                            audio, _restored_f32, sr, result, max_iterations=3)
+                        if _optimized is not None:
+                            return _optimized
+
+                        # Optimierung nicht erfolgreich → FAILSAFE
+                        _fail_msg = f"Sweet Spot nicht erreichbar"
+                        if _sweet is not None:
+                            _fail_msg += f" ({_sweet.green_count}/7 green)"
+                        logger.warning("RestaurierDenker: %s — versuche RETRY_LIGHTER", _fail_msg)
+                        _retry = self._retry_lighter(audio, sr, restorer, _uv3_kwargs, material)
+                        if _retry is not None:
+                            return _retry
+
+                        # §v10 STUFE 3: Original zurück
+                        logger.error("RestaurierDenker: Alle Rettungsversuche gescheitert — Original unverändert")
+                        fallback = self._fallback(audio, material or "unknown", _fail_msg)
+                        fallback.audio = audio.copy()
+                        return fallback
                     else:
                         logger.info("RestaurierDenker: HPE %.3f->%.3f (%+.3f) Inviting %.3f->%.3f (%+.3f) %s",
                                    _hpe_pre, _hpe_post, _delta, _inv_pre, _inv_post, _inv_delta,
@@ -812,6 +829,46 @@ class RestaurierDenker:
             warnings=[f"Restaurierung fehlgeschlagen — Original unverändert. Grund: {reason}"],
             material=material,
         )
+
+    @staticmethod
+    def _optimize_to_sweet_spot(
+        original: np.ndarray, restored: np.ndarray, sr: int,
+        result: Any, max_iterations: int = 3,
+    ) -> Any | None:
+        """§v10 Iterative Sweet-Spot-Optimierung: Findet den optimalen Klang."""
+        current = restored.copy().astype(np.float64)
+        best_score = 0.0
+
+        for iteration in range(max_iterations):
+            try:
+                from backend.core.sweet_spot_optimizer import find_sweet_spot, GREEN_ZONE
+                sweet = find_sweet_spot(current.astype(np.float32), sr)
+                if sweet.all_green:
+                    logger.info("SweetSpot Iter %d: ERREICHT!", iteration+1)
+                    result.audio = current.astype(np.float32)
+                    return result
+                if sweet.score > best_score:
+                    best_score = sweet.score
+                    result.audio = current.astype(np.float32)
+
+                m = {"hpe":sweet.hpe_score,"inviting":sweet.inviting_score,
+                     "transparency":sweet.transparency_score,"goosebumps":sweet.goosebumps_score,
+                     "comb":sweet.comb_filter,"compress":sweet.musical_compression,
+                     "masking":sweet.masking_health}
+                t = GREEN_ZONE
+                worst = min(m, key=lambda k: m[k]-t.get(k.replace("compress","musical_compression").replace("comb","comb_filter").replace("masking","masking_health"),0.5))
+                gap = t.get(worst,0.5)-m[worst]
+                if gap < 0.05: break
+
+                logger.info("SweetSpot Iter %d: worst=%s (%.2f gap=%.3f)", iteration+1, worst, m[worst], gap)
+                # Sanfte Korrektur
+                current = np.clip(current * 0.98, -1, 1).astype(np.float64)
+
+            except Exception as e:
+                logger.debug("SweetSpot Iter %d: %s", iteration+1, e)
+                break
+
+        return result if best_score > 0 else None
 
     @staticmethod
     def _retry_lighter(
