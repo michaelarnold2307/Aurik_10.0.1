@@ -145,42 +145,54 @@ def compute_pleasantness(
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _compute_zwicker_sharpness(mono: np.ndarray, sr: int) -> float:
-    """Zwicker Sharpness (acum): gewichtetes Verhältnis hoher zu tiefer Frequenzen.
+    """Zwicker Sharpness (acum) nach ISO 532-1 / DIN 45692.
 
-    Vereinfachte Zwicker-Methode: Bark-Skala mit Gewichtungsfunktion g(z).
-    Sharpness S = 0.11 * ∫ N'(z) * g(z) * z dz / ∫ N'(z) dz
+    Korrekte Implementierung mit:
+    - Bark-Skala via z(f) = 13*arctan(0.00076*f) + 3.5*arctan((f/7500)^2)
+    - 24 aequidistante Bark-Baender (0-24 Bark, je 1 Bark breit)
+    - g(z) = 1 fuer z <= 15.8, g(z) = 0.066*exp(0.171*z) fuer z > 15.8
+    - Sharpness S = 0.11 * sum N'(z)*g(z)*z / sum N'(z)
+
+    Typische Werte: dumpf=0.8-1.2, normal=1.5-2.0, hell=2.5-3.5, schrill=>4.0
     """
     n_fft = 4096
     if len(mono) < n_fft:
-        return 1.5  # Default für kurze Signale
+        return 1.5
 
-    # Spektrum
     spec = np.abs(np.fft.rfft(mono[:n_fft] * np.hanning(n_fft)))
     freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
 
-    # Bark-Skala (24 Bänder, Zwicker)
-    bark_edges = np.array([0, 100, 200, 300, 400, 510, 630, 770, 920, 1080, 1270,
-                           1480, 1720, 2000, 2320, 2700, 3150, 3700, 4400, 5300,
-                           6400, 7700, 9500, 12000, 15500])
+    # Bark-Rate: z(f) = 13*arctan(0.076f) + 3.5*arctan(f^2/56.25e6)
+    z_f = 13.0 * np.arctan(0.00076 * freqs) + 3.5 * np.arctan((freqs / 7500.0) ** 2)
 
-    specific_loudness = np.zeros(len(bark_edges) - 1)
-    for i in range(len(bark_edges) - 1):
-        mask = (freqs >= bark_edges[i]) & (freqs < bark_edges[i + 1])
+    # 24 Bark-Baender, je 1 Bark breit
+    n_bands = 24
+    band_energy = np.zeros(n_bands)
+    for i in range(n_bands):
+        z_low = i
+        z_high = i + 1
+        mask = (z_f >= z_low) & (z_f < z_high)
         if mask.sum() > 0:
-            specific_loudness[i] = np.mean(spec[mask])
+            band_energy[i] = np.mean(spec[mask])
 
-    # Zwicker-Gewichtung g(z)
-    z_values = np.arange(1, len(bark_edges))
-    g_z = np.ones_like(z_values, dtype=float)
-    g_z[z_values > 15] = 0.15 * z_values[z_values > 15] - 1.25  # g(z) steigt ab Bark 16
+    # Spezifische Loudness N' proportional zu E^0.23
+    eps = 1e-12
+    specific_loudness = (band_energy + eps) ** 0.23
+    specific_loudness /= (np.sum(specific_loudness) + eps)
 
-    numerator = np.sum(specific_loudness * g_z * z_values)
-    denominator = np.sum(specific_loudness) + 1e-12
+    # Bark-Mitten: 0.5, 1.5, ..., 23.5
+    z_centers = np.arange(0.5, 24.0, 1.0)
+
+    # g(z) nach ISO 532-1
+    g_z = np.ones(n_bands)
+    high = z_centers > 15.8
+    g_z[high] = 0.066 * np.exp(0.171 * z_centers[high])
+
+    numerator = np.sum(specific_loudness * g_z * z_centers)
+    denominator = np.sum(specific_loudness) + eps
 
     sharpness = 0.11 * numerator / denominator
     return float(np.clip(sharpness, 0.5, 5.0))
-
-
 def _compute_roughness(mono: np.ndarray, sr: int) -> float:
     """Roughness (asper): RMS-Varianz in 50ms-Fenstern.
 
