@@ -433,6 +433,22 @@ class RestaurierDenker:
                 _uv3_kwargs["phase_strength_oracle_rollout"] = phase_strength_oracle_rollout
             if denker_policy_input:
                 _uv3_kwargs["denker_policy_input"] = dict(denker_policy_input)
+
+            # §v10 Song-Profil laden: Genre+Medium → optimale Start-Parameter
+            try:
+                from backend.core.aurik_completion_engine import load_song_profile
+                _genre = str(getattr(cached_genre_result, "primary_genre", "unknown")) if cached_genre_result else "unknown"
+                _mat = material or "unknown"
+                _profile = load_song_profile(_genre, _mat)
+                if _profile.success_count > 2:
+                    _uv3_kwargs["nr_strength_hint"] = _profile.optimal_nr_strength
+                    _uv3_kwargs["eq_presence_hint"] = _profile.optimal_eq_presence
+                    _uv3_kwargs["comp_ratio_hint"] = _profile.optimal_compression_ratio
+                    logger.info("RestaurierDenker: Song-Profil geladen (%s/%s, n=%d NR=%.2f EQ=%.1f)",
+                               _genre, _mat, _profile.success_count,
+                               _profile.optimal_nr_strength, _profile.optimal_eq_presence)
+            except Exception: pass
+
             try:
                 # §v10 HPE Baseline + Inviting VOR UV3
                 _hpe_pre = 0.5
@@ -504,9 +520,24 @@ class RestaurierDenker:
                         except Exception: pass
 
                         if _sweet is not None and _sweet.all_green:
-                            # PERFEKT — alle Metriken in Grünzone
-                            logger.info("RestaurierDenker: SWEET SPOT ERREICHT — "
-                                       "Klang ist natürlich, angenehm und lädt zum Hineinlegen ein")
+                            # PERFEKT — alle Metriken in Grünzone + Aura Check
+                            logger.info("RestaurierDenker: SWEET SPOT ERREICHT")
+                            # §v10 Aura-Check: Wurde die Epoche zerstört?
+                            try:
+                                from backend.core.aura_guard import compare_aura
+                                _aura_cmp = compare_aura(
+                                    np.asarray(audio, dtype=np.float32),
+                                    _restored_f32, sr)
+                                if not _aura_cmp.get("aura_preserved", True):
+                                    logger.warning("RestaurierDenker: AURA VERLETZT — %s",
+                                                 _aura_cmp.get("verdict", ""))
+                            except Exception: pass
+                            # §v10 Song-Profil aktualisieren
+                            try:
+                                from backend.core.aurik_completion_engine import update_song_profile
+                                _mat = material or "unknown"
+                                update_song_profile("unknown", _mat, _delta)
+                            except Exception: pass
                             result.quality_delta = _delta
                             return result
 
@@ -928,33 +959,17 @@ class RestaurierDenker:
 
             logger.info("BAND-KORREKTUR: %d Baender verschlechtert", len(degraded))
 
-            eq_map = {
-                "sub_bass": ("low", 40, -2.0), "bass": ("low", 150, -1.5),
-                "low_mid": ("peak", 375, -2.0), "mid": ("peak", 1000, -2.0),
-                "high_mid": ("peak", 3000, -2.5), "presence": ("high", 6000, -2.0),
-                "brilliance": ("high", 12000, +1.5),
-            }
-            corrected = restored.copy().astype(np.float64)
+            # v10 Dynamic EQ statt Butterworth-Filter
+            eq_corrections = {}
             for band, d in degraded.items():
-                eq = eq_map.get(band)
-                if not eq: continue
-                etype, freq, gdb = eq
-                gain = float(np.clip(abs(d)*3.0, 0.5, 3.0))
-                sign = 1 if gdb > 0 else -1
-                if etype == "low":
-                    corrected *= (1.0 + gain*0.03*sign)
-                elif etype == "high":
-                    sos = butter(2, freq/(sr/2), btype='high', output='sos')
-                    shelf = sosfiltfilt(sos, corrected)
-                    corrected += shelf * gain * 0.03 * sign
-                elif etype == "peak":
-                    sos_l = butter(2, freq*0.7/(sr/2), btype='low', output='sos')
-                    sos_h = butter(2, freq*1.4/(sr/2), btype='high', output='sos')
-                    lo = sosfiltfilt(sos_l, corrected)
-                    hi = sosfiltfilt(sos_h, corrected)
-                    mid = corrected - lo - hi
-                    corrected = lo + hi + mid*(1.0 - gain*0.1)
-
+                gain = float(np.clip(d * 5.0, -3.0, 3.0))
+                eq_corrections[band] = gain
+            corrected = restored.copy().astype(np.float64)
+            try:
+                from backend.core.aurik_completion_engine import apply_dynamic_eq
+                corrected = apply_dynamic_eq(corrected, sr, eq_corrections)
+            except Exception:
+                corrected *= 0.98
             corrected = np.clip(corrected, -1, 1).astype(np.float32)
             inv_pre = check_inviting_sound(np.asarray(restored, dtype=np.float32), sr).score
             inv_post = check_inviting_sound(corrected, sr).score
