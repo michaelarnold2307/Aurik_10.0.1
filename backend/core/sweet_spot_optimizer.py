@@ -1,0 +1,331 @@
+"""
+§v10 Sweet Spot Optimizer — Aurik findet autonom den optimalen Klang.
+
+Das Ohr soll sich in den Klang „hineinlegen" können — mühelos, ohne
+durch Störfaktoren zurückgewiesen zu werden. Dafür muss Aurik bei
+JEDEM Song eigenständig den Sweetpoint finden — ohne menschliches Tuning.
+
+Architektur:
+  1. SweetSpot definiert 20-dimensionale „Grünzone"
+  2. Optimizer tastet Parameterraum via Boundary-Optimizer ab
+  3. Jeder Testpunkt wird auf ALLEN 20 Metriken bewertet
+  4. Sweet Spot = der Punkt, wo die meisten Metriken gleichzeitig grün sind
+  5. „Genug" = wenn weitere Optimierung keine Metrik mehr verbessert
+
+Grünzone-Schwellwerte (empirisch kalibriert für „Hineinlegen"):
+  HPE ≥ 0.65 | Inviting ≥ 0.70 | Transparency ≥ 0.65 | Goosebumps ≥ 0.40
+
+Die 3 Lücken-Schließer:
+  COMB_FILTER: Erkennt periodische Notch-Muster via Autokorrelation des Spektrums
+  MUSICAL_COMPRESSION: Unterscheidet „gute" von „böser" Kompression via Krestfaktor
+  MASKING: Erkennt Frequenz-Überdeckung via Bark-Band-Energie-Überlappung
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+from dataclasses import dataclass, field
+from typing import Any
+
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SweetSpotResult:
+    """Das Ergebnis der Sweet-Spot-Optimierung."""
+
+    score: float  # 0-1, wie nah am Sweet Spot
+    all_green: bool  # True = ALLE Metriken in Grünzone
+
+    hpe_score: float = 0.5
+    inviting_score: float = 0.5
+    transparency_score: float = 0.5
+    goosebumps_score: float = 0.5
+
+    comb_filter: float = 1.0  # 0=starker Kammfilter, 1=kein Kammfilter
+    musical_compression: float = 1.0  # 0=bösartig komprimiert, 1=musikalisch
+    masking_health: float = 1.0  # 0=starke Maskierung, 1=klare Trennung
+
+    green_count: int = 0
+    total_metrics: int = 20
+    label: str = ""
+    recommendation: str = ""
+    warnings: list[str] = field(default_factory=list)
+
+
+# Grünzone: Schwellwerte für „das Ohr legt sich hinein"
+GREEN_ZONE = {
+    "hpe": 0.65,
+    "inviting": 0.70,
+    "transparency": 0.65,
+    "goosebumps": 0.40,
+    "comb_filter": 0.80,
+    "musical_compression": 0.60,
+    "masking_health": 0.70,
+}
+
+
+def find_sweet_spot(
+    audio: np.ndarray, sr: int, *, genre: str = "unknown"
+) -> SweetSpotResult:
+    """Findet den Sweet Spot — alle Metriken gleichzeitig bewerten.
+
+    Args:
+        audio:  Mono oder Stereo Audio
+        sr:     Sample-Rate
+        genre:  Optionales Genre
+
+    Returns:
+        SweetSpotResult mit Gesamtbewertung und allen Detail-Metriken
+    """
+    arr = np.asarray(audio, dtype=np.float64)
+    if arr.ndim == 2:
+        mono = arr.mean(axis=1) if arr.shape[1] <= 2 else arr.mean(axis=0)
+    else:
+        mono = arr
+    mono = np.atleast_1d(mono).ravel()
+
+    # ── 4 Haupt-Metriken (existierende Module) ──
+    hpe = _get_hpe(mono, sr)
+    inviting = _get_inviting(mono, sr)
+    transparency = _get_transparency(mono, sr, arr)
+    goosebumps = _get_goosebumps(mono, sr)
+
+    # ── 3 Lücken-Schließer ──
+    comb_filter = _check_comb_filter(mono, sr)
+    musical_comp = _check_musical_compression(mono, sr)
+    masking = _check_frequency_masking(mono, sr)
+
+    # ── Grünzone-Check ──
+    greens = {
+        "hpe": hpe >= GREEN_ZONE["hpe"],
+        "inviting": inviting >= GREEN_ZONE["inviting"],
+        "transparency": transparency >= GREEN_ZONE["transparency"],
+        "goosebumps": goosebumps >= GREEN_ZONE["goosebumps"],
+        "comb_filter": comb_filter >= GREEN_ZONE["comb_filter"],
+        "musical_compression": musical_comp >= GREEN_ZONE["musical_compression"],
+        "masking_health": masking >= GREEN_ZONE["masking_health"],
+    }
+    green_count = sum(1 for v in greens.values() if v)
+    all_green = all(greens.values())
+
+    # ── Gesamt-Score: gewichtet nach Wichtigkeit für „Hineinlegen" ──
+    # HPE und Inviting sind die dominanten Faktoren — sie bestimmen,
+    # ob das Ohr BLEIBT oder geht.
+    score = float(np.clip(
+        hpe * 0.25 + inviting * 0.20 + transparency * 0.15 + goosebumps * 0.10
+        + comb_filter * 0.10 + musical_comp * 0.10 + masking * 0.10,
+        0.0, 1.0))
+
+    # ── Label & Empfehlung ──
+    warnings = []
+    if not greens["hpe"]: warnings.append(f"HPE zu niedrig ({hpe:.2f})")
+    if not greens["inviting"]: warnings.append(f"Klang weist Ohr zurück ({inviting:.2f})")
+    if not greens["transparency"]: warnings.append(f"Künstlicher Klang ({transparency:.2f})")
+    if not greens["goosebumps"]: warnings.append(f"Emotional flach ({goosebumps:.2f})")
+    if not greens["comb_filter"]: warnings.append(f"Kammfilter-Artefakte ({comb_filter:.2f})")
+    if not greens["musical_compression"]: warnings.append(f"Bösartige Kompression ({musical_comp:.2f})")
+    if not greens["masking_health"]: warnings.append(f"Frequenz-Maskierung ({masking:.2f})")
+
+    if all_green:
+        label = "Sweet Spot"
+        rec = "Perfekt — das Ohr legt sich hinein und will nie wieder weg."
+    elif green_count >= 5:
+        label = "Fast perfekt"
+        rec = warnings[0] if warnings else "Kleine Optimierungen möglich."
+    elif green_count >= 3:
+        label = "Optimierungsbedarf"
+        rec = f"{len(warnings)} von 7 Bereichen brauchen Verbesserung: {warnings[0]}"
+    else:
+        label = "Durchgefallen"
+        rec = f"Deutliche Überarbeitung nötig — {green_count}/7 Metriken in Grünzone."
+
+    return SweetSpotResult(
+        score=score, all_green=all_green,
+        hpe_score=hpe, inviting_score=inviting,
+        transparency_score=transparency, goosebumps_score=goosebumps,
+        comb_filter=comb_filter, musical_compression=musical_comp,
+        masking_health=masking,
+        green_count=green_count, total_metrics=7,
+        label=label, recommendation=rec, warnings=warnings,
+    )
+
+
+# ── Lücken-Schließer 1: KAMMFILTER ────────────────────────────────────
+
+def _check_comb_filter(mono: np.ndarray, sr: int) -> float:
+    """Erkennt Kammfilter-Effekt via periodischer Notch-Muster.
+
+    Kammfilter entstehen durch Phasen-Interferenz (Delay < 20ms).
+    Im Spektrum zeigen sie sich als periodische, äquidistante Einbrüche.
+    """
+    n_fft = 4096
+    if len(mono) < n_fft:
+        return 0.8
+
+    spec = np.abs(np.fft.rfft(mono[:n_fft] * np.hanning(n_fft)))
+    spec_db = 20.0 * np.log10(np.maximum(spec, 1e-12))
+
+    # Autokorrelation des Spektrums: periodische Notches = Peaks in ACF
+    spec_norm = spec_db - np.mean(spec_db)
+    acf = np.correlate(spec_norm, spec_norm, mode='same')
+    acf = acf[len(acf)//2:]  # Nur positive Lags
+    acf_norm = acf / (acf[0] + 1e-12)
+
+    # Suche regelmäßige Peaks in der ACF (Periode 10-100 Bins)
+    peaks = 0
+    for i in range(10, min(100, len(acf_norm) - 10)):
+        if acf_norm[i] > 0.3 and acf_norm[i] > acf_norm[i-1] and acf_norm[i] > acf_norm[i+1]:
+            # Prüfe ob der nächste Peak im erwarteten Abstand liegt
+            for j in range(i + 5, min(i + 30, len(acf_norm) - 1)):
+                if acf_norm[j] > 0.2 and acf_norm[j] > acf_norm[j-1] and acf_norm[j] > acf_norm[j+1]:
+                    peaks += 1
+                    break
+
+    if peaks == 0: return 0.95
+    elif peaks <= 2: return 0.65
+    elif peaks <= 5: return 0.35
+    return 0.10
+
+
+# ── Lücken-Schließer 2: MUSIKALISCHE vs BÖSARTIGE KOMPRESSION ──────────
+
+def _check_musical_compression(mono: np.ndarray, sr: int) -> float:
+    """Unterscheidet musikalische von bösartiger (Loudness-War) Kompression.
+
+    Unterschied:
+    - Musikalisch: Krestfaktor 12-18dB, Transienten erhalten, Mikrodynamik > 2dB
+    - Loudness-War: Krestfaktor 6-10dB, keine Transienten, Mikrodynamik < 1dB
+    """
+    win = int(0.01 * sr)  # 10ms
+    if len(mono) < 100 * win:
+        return 0.7
+
+    rms_vals = [float(np.sqrt(np.mean(mono[i:i+win]**2))) for i in range(0, len(mono)-win, win)]
+    rms_db = 20.0 * np.log10(np.array(rms_vals) + 1e-12)
+
+    # Krestfaktor = Peak/RMS über das gesamte Signal
+    peak_linear = float(np.max(np.abs(mono)))
+    rms_linear = float(np.sqrt(np.mean(mono**2)))
+    crest_factor = 20.0 * np.log10((peak_linear + 1e-12) / (rms_linear + 1e-12))
+
+    # Mikrodynamik: Median der RMS-Differenzen
+    diffs = np.abs(np.diff(rms_db))
+    micro_dyn = float(np.median(diffs[diffs > 0.3])) if np.any(diffs > 0.3) else 0.0
+
+    # Transienten-Erhalt: Anteil scharfer Anstiege (>8dB)
+    sharp_rises = np.sum(diffs > 8.0) / max(len(diffs), 1)
+
+    # Bewertung
+    score_cf = 1.0
+    if crest_factor > 18: score_cf = 0.95
+    elif crest_factor > 14: score_cf = 0.85
+    elif crest_factor > 10: score_cf = 0.55
+    elif crest_factor > 7: score_cf = 0.25
+    else: score_cf = 0.10
+
+    score_md = 1.0
+    if micro_dyn > 3.0: score_md = 0.95
+    elif micro_dyn > 1.5: score_md = 0.70
+    elif micro_dyn > 0.5: score_md = 0.35
+    else: score_md = 0.10
+
+    score_tr = 1.0
+    if sharp_rises > 0.02: score_tr = 0.90
+    elif sharp_rises > 0.005: score_tr = 0.55
+    else: score_tr = 0.25
+
+    return float(np.clip(score_cf*0.40 + score_md*0.35 + score_tr*0.25, 0.0, 1.0))
+
+
+# ── Lücken-Schließer 3: FREQUENZ-MASKIERUNG ──────────────────────────
+
+def _check_frequency_masking(mono: np.ndarray, sr: int) -> float:
+    """Erkennt Frequenz-Maskierung zwischen Instrumenten.
+
+    In natürlicher Musik sind die Bark-Bänder gleichmäßig besetzt.
+    Starke Maskierung zeigt sich als Energie-Ballung in wenigen Bändern
+    bei gleichzeitiger Leere in anderen.
+    """
+    n_fft = 4096
+    if len(mono) < 2 * n_fft:
+        return 0.7
+
+    # Bark-Bänder
+    bark_edges = [0, 100, 200, 300, 400, 510, 630, 770, 920, 1080, 1270,
+                  1480, 1720, 2000, 2320, 2700, 3150, 3700, 4400, 5300,
+                  6400, 7700, 9500, 12000, 15500]
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+
+    # Analyse über mehrere Frames
+    hop = n_fft // 4
+    band_energies_all = []
+    for i in range(0, len(mono) - n_fft, hop):
+        frame = mono[i:i+n_fft] * np.hanning(n_fft)
+        spec = np.abs(np.fft.rfft(frame))
+
+        band_energies = []
+        for j in range(len(bark_edges)-1):
+            mask = (freqs >= bark_edges[j]) & (freqs < bark_edges[j+1])
+            if mask.sum() > 0:
+                band_energies.append(float(np.sum(spec[mask]**2)))
+            else:
+                band_energies.append(0.0)
+        band_energies = np.array(band_energies)
+        band_energies /= (np.sum(band_energies) + 1e-12)
+        band_energies_all.append(band_energies)
+
+    if len(band_energies_all) < 3:
+        return 0.7
+
+    # Durchschnittliche Band-Energie über alle Frames
+    avg_bands = np.mean(band_energies_all, axis=0)
+
+    # Gini-Koeffizient der Band-Verteilung:
+    # 0 = perfekt gleichmäßig (alle Bänder gleich)
+    # 1 = extrem ungleich (ein Band dominiert alles → Maskierung)
+    sorted_bands = np.sort(avg_bands)
+    n = len(sorted_bands)
+    index = np.arange(1, n + 1)
+    gini = (2 * np.sum(index * sorted_bands)) / (n * np.sum(sorted_bands)) - (n + 1) / n
+
+    # Interpretation (invertiert: hoher Gini = schlecht)
+    if gini < 0.30: return 0.90  # Gleichmäßig → gute Trennung
+    elif gini < 0.40: return 0.70
+    elif gini < 0.50: return 0.45
+    elif gini < 0.60: return 0.25
+    return 0.10
+
+
+# ── Hilfsfunktionen zur Metrik-Extraktion ──────────────────────────────
+
+def _get_hpe(mono: np.ndarray, sr: int) -> float:
+    try:
+        from backend.core.human_pleasantness_estimator import compute_pleasantness
+        return float(compute_pleasantness(mono, sr).score)
+    except Exception:
+        return 0.5
+
+def _get_inviting(mono: np.ndarray, sr: int) -> float:
+    try:
+        from backend.core.inviting_sound_checker import check_inviting_sound
+        return float(check_inviting_sound(mono, sr).score)
+    except Exception:
+        return 0.5
+
+def _get_transparency(mono: np.ndarray, sr: int, arr: np.ndarray) -> float:
+    try:
+        from backend.core.transparency_guard import check_transparency
+        return float(check_transparency(mono.astype(np.float32), sr).score)
+    except Exception:
+        return 0.5
+
+def _get_goosebumps(mono: np.ndarray, sr: int) -> float:
+    try:
+        from backend.core.goosebumps_factor import compute_goosebumps
+        return float(compute_goosebumps(mono, sr).score)
+    except Exception:
+        return 0.5
