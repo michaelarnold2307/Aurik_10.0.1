@@ -4763,8 +4763,8 @@ class PerPhaseMusicalGoalsGate:
         best_strength = initial_strength
         best_action = "best_effort"
 
-        # §v10 HPE-GATE: Wenn Phase den Klang für menschliche Ohren verschlechtert,
-        # überspringe sie — auch wenn CausalDefectReasoner sie für notwendig hielt.
+        # §v10 HPE-GATE: Nicht binär skip, sondern ultra-low strength versuchen.
+        # Manchmal ist weniger besser als gar nichts.
         try:
             from backend.core.human_pleasantness_estimator import compare_pleasantness
             _hpe_cmp = compare_pleasantness(
@@ -4772,12 +4772,21 @@ class PerPhaseMusicalGoalsGate:
                 np.asarray(best_audio, dtype=np.float32),
                 48000)
             _hpe_delta = float(_hpe_cmp.get("delta_score", 0.0))
-            if _hpe_delta < -0.02:
+
+            if _hpe_delta < -0.03:
                 logger.warning(
-                    "§v10 HPE-GATE: Phase %s HPE %+.3f < -0.02 — ÜBERSPRUNGEN. "
-                    "Pre-Phase-Audio wiederhergestellt.",
+                    "§v10 HPE-GATE: Phase %s HPE %+.3f < -0.03 — "
+                    "Phase verworfen, Pre-Phase-Audio wiederhergestellt.",
                     phase_id, _hpe_delta)
                 return audio_in, effective_scores_before, "hpe_skip", 0.0
+
+            if -0.03 <= _hpe_delta < 0.0:
+                _ultra_strength = max(0.03, best_strength * 0.30)
+                logger.info(
+                    "§v10 HPE-GATE: Phase %s HPE %+.3f im neutralen Bereich — "
+                    "akzeptiert mit ultra-reduzierter Stärke %.2f.",
+                    phase_id, _hpe_delta, _ultra_strength)
+                return best_audio, best_scores, "hpe_ultra_low", _ultra_strength
         except Exception:
             pass
 
