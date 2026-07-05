@@ -4465,6 +4465,32 @@ class PerPhaseMusicalGoalsGate:
                         regression = _alt_regression
             except Exception as _cv_exc:
                 logger.debug("Cassette-Verifier nicht verfügbar: %s", _cv_exc)
+        # §v10.4 Pipeline Provenance: Undo-Erkennung + Net-Delta-Budget
+        try:
+            from backend.core.pipeline_provenance_tracker import get_provenance_tracker as _get_pt
+            _pt = _get_pt()
+            _prov_result = _pt.track_phase(
+                phase_id, effective_scores_before, scores_after, audio_out,
+                effective_goals=_goals_for_regression,
+            )
+            if _prov_result.get("undo_detected"):
+                _undo_count = len(_prov_result.get("undo_events", []))
+                logger.warning(
+                    "§v10.4 Provenance: %s hat %dUndo-Ereignisse: %s",
+                    phase_id, _undo_count,
+                    [(e["goal"], e["contributing_phase"]) for e in _prov_result["undo_events"][:3]],
+                )
+                # UNDO verschärft Regression → Retry-Kaskade triggern
+                regression = max(regression, threshold + 0.002 * _undo_count)
+            if _prov_result.get("net_delta_warning"):
+                logger.warning(
+                    "§v10.4 Provenance: %s Net-Delta-Warnung — "
+                    "kumulative Pipeline verschlechtert: %s",
+                    phase_id, {k: f'{v:+.3f}' for k, v in _prov_result.get("net_deltas", {}).items()
+                              if abs(v) > 0.02},
+                )
+        except Exception as _prov_exc:
+            logger.debug("Provenance-Tracker nicht verfügbar: %s", _prov_exc)
         _skip_corr = phase_id in _TIMING_CORR_EXCLUDE
         _skip_drop = phase_id in _LF_SUBTRACTIVE_DROP_SKIP
         _ci_penalty, _ci_meta = _content_integrity_penalty(
