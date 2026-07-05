@@ -25,6 +25,16 @@ Diese Invariante konkretisiert §0 Klangwahrheit für den gesamten Produktbetrie
 
 ---
 
+## §v10 Pleasantness-First (2026-07-05)
+
+> **HPE ist oberste Instanz.** PMGG darf Phasen ueberspringen, wenn sie
+> den Klang fuer menschliche Ohren verschlechtern (§2.29 v10).
+> Siehe backend/core/per_phase_musical_goals_gate.py, 
+> backend/core/human_pleasantness_estimator.py.
+> **Kein Rollback-Verbot mehr.** CausalDefectReasoner kann irren — das Ohr nicht.
+
+---
+
 ## §1.2 Die 15 Musikalischen Ziele (Musical Goals) — vollständige Tabelle
 
 Implementiert in `backend/core/musical_goals/musical_goals_metrics.py`,

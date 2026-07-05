@@ -11,6 +11,16 @@
 
 ---
 
+## §v10 Pleasantness-First (2026-07-05)
+
+> **HPE ist oberste Instanz.** PMGG darf Phasen ueberspringen, wenn sie
+> den Klang fuer menschliche Ohren verschlechtern (§2.29 v10).
+> Siehe backend/core/per_phase_musical_goals_gate.py, 
+> backend/core/human_pleasantness_estimator.py.
+> **Kein Rollback-Verbot mehr.** CausalDefectReasoner kann irren — das Ohr nicht.
+
+---
+
 ## §8.1 Numerische Qualitätsgrenzen
 
 ### PQS-Metriken (`core/perceptual_quality_scorer.py`)
