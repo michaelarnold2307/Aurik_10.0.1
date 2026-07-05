@@ -92,3 +92,44 @@ def get_bitrate_aware_limits(material: str, audio: np.ndarray, sr: int) -> dict:
         limits["bitrate_confidence"] = conf
 
     return limits
+
+
+def measure_musical_bandwidth(audio: np.ndarray, sr: int) -> dict:
+    """Misst die TATSÄCHLICHE musikalische Bandbreite.
+
+    320kbps-MP3 kann 1940er-Musik mit nur 5kHz Bandbreite enthalten.
+    Der Encoder füllt alles darüber mit Stille — das ist keine Bandbreite.
+    """
+    arr = np.asarray(audio, dtype=np.float64)
+    mono = arr.mean(axis=1) if arr.ndim == 2 else arr
+    mono = np.atleast_1d(mono).ravel()
+    n_fft = 8192
+    if len(mono) < n_fft:
+        return {"musical_ceiling_hz": sr/2, "energy_bandwidth_hz": sr/2, "is_bandwidth_limited": False}
+
+    hop = n_fft // 2; specs = []
+    for i in range(0, len(mono) - n_fft, hop):
+        specs.append(np.abs(np.fft.rfft(mono[i:i+n_fft] * np.hanning(n_fft))))
+    avg_spec = np.mean(specs, axis=0)
+    spec_db = 20.0 * np.log10(np.maximum(avg_spec, 1e-12))
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+
+    energy = np.cumsum(avg_spec**2); total = energy[-1] + 1e-12
+    cutoff_99_idx = np.searchsorted(energy, 0.99 * total)
+    energy_bw = freqs[min(cutoff_99_idx, len(freqs)-1)]
+
+    signal_mask = (freqs >= 100) & (freqs <= 5000)
+    noise_mask = (freqs >= 8000) & (freqs <= 16000)
+    signal_level = np.mean(spec_db[signal_mask]) if np.any(signal_mask) else 0
+    noise_level = np.mean(spec_db[noise_mask]) if np.any(noise_mask) else -96
+    hf_snr = signal_level - noise_level
+
+    musical_ceiling = sr / 2
+    for i in range(len(freqs)-1, 0, -1):
+        if freqs[i] < 5000: break
+        if spec_db[i] - noise_level > 12 and np.any(noise_mask):
+            musical_ceiling = freqs[i]; break
+
+    is_limited = energy_bw < 15000
+    return {"musical_ceiling_hz": float(musical_ceiling), "energy_bandwidth_hz": float(energy_bw),
+            "high_freq_snr_db": float(hf_snr), "is_bandwidth_limited": is_limited}
