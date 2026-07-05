@@ -31,6 +31,17 @@ _ALWAYS_APPLY: frozenset = frozenset(
     }
 )
 
+# §v10.1 Mode-aware Plugin-Routing
+_RESTORATION_BLOCKED_MODULES: frozenset[str] = frozenset({
+    "HarmonicExciterStudio", "StereoEnhancer", "SpeakerEnhancement",
+})
+_current_processing_mode: str = "restoration"
+
+
+def set_dsp_processing_mode(mode: str) -> None:
+    global _current_processing_mode
+    _current_processing_mode = str(mode or "restoration")
+
 
 def _compute_snr_db(audio: np.ndarray) -> float:
     """Schätzt SNR des Audio-Signals in dB via spektraler Flachheit (Wiener-Entropie)."""
@@ -474,6 +485,11 @@ def _apply_dsp_module(audio: np.ndarray, sr: int, module_name: str, params: dict
             from dsp.dither import Dither  # type: ignore[import]
 
             return Dither().process(audio, sr)  # type: ignore[no-any-return]
+        # §v10.1 Mode-check: Studio-only Modules in Restoration blockieren
+        is_studio_mode = "studio" in _current_processing_mode.lower() or "2026" in _current_processing_mode.lower()
+        if not is_studio_mode and module_name in _RESTORATION_BLOCKED_MODULES:
+            logger.info("§v10.1 DSP: %s blockiert in Restoration → uebersprungen", module_name)
+            return audio
         elif module_name in dsp_effects:
             return dsp_effects[module_name](audio, sr, params)
         else:

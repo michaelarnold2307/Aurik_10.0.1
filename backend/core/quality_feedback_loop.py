@@ -52,37 +52,63 @@ class SteerAction:
 def steer_pipeline(pmgg_delta: float, pleasantness_delta: float, phase_id: str,
                    step_index: int, total_steps: int,
                    pmgg_threshold: float = 0.01, max_pmgg_noop: int = 3,
-                   max_pleasantness_drops: int = 2) -> tuple[str, str]:
+                   max_pleasantness_drops: int = 2,
+                   mode: str = "restoration") -> tuple[str, str]:
     """§v10 Steering: Nicht stoppen, sondern nachsteuern.
 
     Wie ein Toningenieur: „Das klang nicht gut — ich versuch's mit weniger."
     Nicht: „Das klang nicht gut — ich hör auf."
 
+    §v10.1 MODE-AWARE:
+      RESTORATION: Konservativ. Aura heilig. RETRY_LIGHTER schon bei -0.01.
+                   STOP_GRACEFUL früh. Original-Klangfarbe unantastbar.
+      STUDIO 2026: Aggressiv. Moderner Klang zählt. Toleriert HPE-Drops bis
+                   -0.06 vor SKIP. RETRY_DIFFERENT statt nur RETRY_LIGHTER.
+                   Das beste Ergebnis zählt, nicht die Original-Treue.
+
     Returns: (Aktion, Begründung)
     """
     global _PMGG_CONSECUTIVE_NO_IMPROVEMENT, _PLEASANTNESS_DECLINING_COUNT, _BEST_PLEASANTNESS
+
+    is_studio = "studio" in str(mode).lower() or "2026" in str(mode).lower()
+
+    # Mode-adjustierte Schwellwerte (§v10.1)
+    if is_studio:
+        hpe_up_threshold = 0.025       # Studio: braucht starke Evidenz zum Weitermachen
+        hpe_light_drop = 0.060         # Studio: toleriert leichte Einbrüche
+        hpe_heavy_drop = 0.100         # Studio: erst starker Einbruch triggert SKIP
+        max_drops = max_pleasantness_drops + 1
+    else:
+        hpe_up_threshold = 0.010       # Restoration: jede Verbesserung = gut
+        hpe_light_drop = 0.020         # Restoration: kleinster Drop → RETRY
+        hpe_heavy_drop = 0.040         # Restoration: moderater Drop → SKIP
+        max_drops = max_pleasantness_drops
 
     # Track best pleasantness
     if pleasantness_delta > 0:
         _BEST_PLEASANTNESS = max(_BEST_PLEASANTNESS, pleasantness_delta)
 
     # ── Angenehmheit STEIGT → weitermachen ──
-    if pleasantness_delta > 0.015:
+    if pleasantness_delta > hpe_up_threshold:
         _PLEASANTNESS_DECLINING_COUNT = max(0, _PLEASANTNESS_DECLINING_COUNT - 1)
         _PMGG_CONSECUTIVE_NO_IMPROVEMENT = 0
         return SteerAction.CONTINUE, f"HPE ↑ (ΔP=+{pleasantness_delta:.3f})"
 
-    # ── Angenehmheit fällt LEICHT → RETRY_LIGHTER ──
-    if -0.04 < pleasantness_delta <= -0.015:
+    # ── Angenehmheit fällt LEICHT → RETRY_LIGHTER (Restoration) oder RETRY_DIFFERENT (Studio) ──
+    if -hpe_heavy_drop < pleasantness_delta <= -hpe_light_drop:
         _PLEASANTNESS_DECLINING_COUNT += 1
+        if is_studio and _PLEASANTNESS_DECLINING_COUNT >= 2:
+            return SteerAction.RETRY_DIFFERENT, (
+                f"HPE ↓ (ΔP={pleasantness_delta:+.3f}) — versuche alternativen Ansatz"
+            )
         return SteerAction.RETRY_LIGHTER, (
             f"HPE ↓ (ΔP={pleasantness_delta:+.3f}) — versuche reduzierte Intensität"
         )
 
     # ── Angenehmheit fällt STARK → SKIP ──
-    if pleasantness_delta <= -0.04:
+    if pleasantness_delta <= -hpe_heavy_drop:
         _PLEASANTNESS_DECLINING_COUNT += 1
-        if _PLEASANTNESS_DECLINING_COUNT >= max_pleasantness_drops:
+        if _PLEASANTNESS_DECLINING_COUNT >= max_drops:
             return SteerAction.ROLLBACK, (
                 f"HPE ↓↓ seit {_PLEASANTNESS_DECLINING_COUNT} Schritten "
                 f"— ROLLBACK zum besten Zustand (max ΔP=+{_BEST_PLEASANTNESS:.3f})"

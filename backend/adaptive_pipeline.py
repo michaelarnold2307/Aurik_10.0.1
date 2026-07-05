@@ -1912,12 +1912,18 @@ class AdaptiveProcessingPipelineV2(AdaptiveProcessingPipeline):
         from backend.core.quality_feedback_loop import steer_pipeline, SteerAction, reset_steer_state
         reset_steer_state()
         best_audio = current_audio.copy()
+        # §v10.1 Mode-detection from job config
+        _mode = str(job.config.get("processing_mode", "restoration") or "restoration")
+        is_studio = "studio" in _mode.lower() or "2026" in _mode.lower()
         step_types = [
             ("restoration", "denoise+declick", self._needs_restoration(context, goal)),
             ("repair", "declip", self._needs_repair(context, goal)),
             ("reconstruction", "source_separation", self._needs_reconstruction(context, goal)),
             ("remastering", "mastering_chain", self._needs_remastering(context, goal)),
         ]
+        # §v10.1 Studio 2026: Bonus-Enhancement-Pass (Exciter + Stereo-Widener)
+        if is_studio:
+            step_types.append(("enhancement", "exciter+widener", True))
         total_steps = sum(1 for _, _, n in step_types if n)
         action = SteerAction.CONTINUE
 
@@ -1947,13 +1953,18 @@ class AdaptiveProcessingPipelineV2(AdaptiveProcessingPipeline):
                     c = compare_pleasantness(np.asarray(pre,dtype=np.float32),np.asarray(current_audio,dtype=np.float32),sr)
                     hpe_delta = float(c.get("delta_score",0.0))
                 except Exception: pass
-                action, reason = steer_pipeline(0.0, hpe_delta, op, step_counter, total_steps)
+                action, reason = steer_pipeline(0.0, hpe_delta, op, step_counter, total_steps, mode=_mode)
                 if action == SteerAction.CONTINUE:
                     if hpe_delta > 0: best_audio = current_audio.copy()
                     self.logger.info("Steering %s: %+.3f CONTINUE", op, hpe_delta)
                     break
                 elif action == SteerAction.RETRY_LIGHTER and retry < 2:
                     self.logger.warning("Steering %s: %+.3f RETRY %d", op, hpe_delta, retry+1)
+                    current_audio = pre.copy()
+                elif action == SteerAction.RETRY_DIFFERENT and retry < 2:
+                    # §v10.1 Studio 2026: Wechsle Plugin statt Intensität zu reduzieren
+                    self.logger.warning("Steering %s: %+.3f RETRY_DIFFERENT (alternatives Plugin)", op, hpe_delta)
+                    goal["retry_different"] = True
                     current_audio = pre.copy()
                 elif action == SteerAction.SKIP:
                     self.logger.warning("Steering %s: %+.3f SKIP", op, hpe_delta)
