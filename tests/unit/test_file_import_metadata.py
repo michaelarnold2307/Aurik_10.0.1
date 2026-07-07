@@ -1,4 +1,6 @@
 import numpy as np
+import pytest
+pytest.importorskip("resampy", reason="resampy not installed")
 import soundfile as sf
 
 from backend.file_import import load_audio_file
