@@ -2579,11 +2579,32 @@ class UnifiedRestorerV3:
         # Grenzfrequenz. Aggressive Restaurierung erzeugt hier mehr Artefakte
         # (Musical Noise, Echo, Groove-Verlust) als sie repariert.
         # → global_scalar um bis zu 25% reduzieren, proportional zum bw_loss.
-        _bw_loss_guard = 1.0 - 0.25 * min(_bw_loss_sev, 1.0)
+        #
+        # §2.59: Material-relative Normalisierung. Der DefectScanner misst
+        # bw_loss absolut gegen 20 kHz — eine Kassette mit 13 kHz bekommt
+        # fälschlich 0.99. Richtiger: Verlust relativ zur erwarteten Bandbreite
+        # des Mediums (Kassette ~12 kHz, Vinyl ~14 kHz, Shellac ~5.5 kHz).
+        _MATERIAL_EXPECTED_BW: dict[str, float] = {
+            "shellac": 5500, "wax_cylinder": 3500, "vinyl": 14000,
+            "tape": 12000, "cassette": 12000, "reel_tape": 15000,
+            "wire_recording": 5000, "cd_digital": 20000, "dat": 20000,
+            "mp3_low": 16000, "mp3_high": 18000, "aac": 18000,
+            "streaming": 18000, "minidisc": 16000, "lacquer_disc": 10000,
+        }
+        _expected_bw = _MATERIAL_EXPECTED_BW.get(_mat_val, 20000.0)
+        _eff_bw_for_guard = float(
+            self._restoration_context.get("source_fidelity_bandwidth_target_hz", 0.0)
+        )
+        if _eff_bw_for_guard > 0 and _expected_bw > 0:
+            _bw_loss_relative = max(0.0, 1.0 - (_eff_bw_for_guard / _expected_bw))
+        else:
+            _bw_loss_relative = min(_bw_loss_sev, 1.0)  # Fallback auf Scanner-Wert
+        _bw_loss_guard = 1.0 - 0.25 * _bw_loss_relative
         _global *= _bw_loss_guard
         logger.debug(
-            "SongCalibration bw_loss_guard: sev=%.2f → guard=%.3f → global=%.3f",
+            "SongCalibration bw_loss_guard: raw=%.2f relative=%.2f → guard=%.3f → global=%.3f",
             _bw_loss_sev,
+            _bw_loss_relative,
             _bw_loss_guard,
             _global,
         )
