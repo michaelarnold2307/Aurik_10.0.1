@@ -1,13 +1,12 @@
 """
-§2.59 Vocal Distortion Sentinel — AKTIV (2026-07-09)
+§2.59 Vocal Distortion Sentinel (2026-07-09)
 
-Erkennt Gesangsverzerrung und HANDELT:
-1. Warnt lautstark (WARNING)
-2. Injiziert De-Esser in den Phasenplan
-3. Reduziert Harmonic-Restoration-Stärke
-4. Meldet an RestorationContext für Downstream-Phasen
+Erkennt Gesangsverzerrung durch MESSUNG, nicht durch Pauschal-Annahmen.
+Signalisiert an die Pipeline: Schutz-Phasen fehlen, HNR verschlechtert sich.
+Die tatsächliche Stärke-Anpassung erfolgt in den Phasen selbst
+(§2.46b tilt-cap, §0p VocalNoHarmGate, PMGG).
 
-Aktiviert bei: HNR-Abfall > 3 dB oder Harmonic-Restoration ohne De-Esser.
+Prinzip: Messen → Signalisieren → Phase handelt selbstständig.
 """
 
 from __future__ import annotations
@@ -19,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 class VocalDistortionSentinel:
+    """Misst Gesangsqualität und signalisiert Handlungsbedarf."""
+
     def __init__(self, singing_confidence: float = 0.0) -> None:
         self._singing_conf = singing_confidence
         self._hnr_before: float | None = None
@@ -27,7 +28,6 @@ class VocalDistortionSentinel:
         self._deesser_applied: bool = False
         self._warnings: list[str] = []
         self._injected_phases: list[str] = []
-        self._strength_overrides: dict[str, float] = {}
 
     def set_baseline_hnr(self, hnr_db: float) -> None:
         self._hnr_before = hnr_db
@@ -39,46 +39,43 @@ class VocalDistortionSentinel:
             self._deesser_applied = True
 
     def check(self, post_hnr_db: float | None = None) -> dict[str, Any]:
-        """Check + ACT: Returns dict with actions for UV3."""
+        """Misst und signalisiert. KEINE pauschalen Strength-Overrides."""
         self._warnings = []
         self._injected_phases = []
-        self._strength_overrides = {}
 
-        # 1. HNR-Abfall → AKTION: Harmonic Restoration drosseln
+        # Messung 1: HNR-Veränderung
+        hnr_delta = None
         if post_hnr_db is not None and self._hnr_before is not None:
-            delta = post_hnr_db - self._hnr_before
-            if delta < -3.0:
+            hnr_delta = post_hnr_db - self._hnr_before
+            if hnr_delta < -3.0:
                 self._warnings.append(
-                    f"HNR-Abfall {delta:+.1f} dB → Harmonic Restoration wird "
-                    f"auf 30% reduziert"
+                    f"HNR-Abfall gemessen: {hnr_delta:+.1f} dB "
+                    f"({self._hnr_before:.1f} → {post_hnr_db:.1f}) — "
+                    f"VocalNoHarmGate sollte Harmonic Restoration zurücknehmen"
                 )
-                self._strength_overrides["phase_07_harmonic_restoration"] = 0.30
-            elif delta < -1.5:
-                self._strength_overrides["phase_07_harmonic_restoration"] = 0.50
 
-        # 2. Harmonic Restoration ohne De-Esser → AKTION: De-Esser injizieren
+        # Messung 2: Fehlende Schutz-Phasen
         if self._harmonic_restoration_applied and not self._deesser_applied:
             if self._singing_conf >= 0.25:
                 self._warnings.append(
-                    "Harmonic Restoration AKTIV aber KEIN De-Esser → "
-                    "phase_19_de_esser + phase_43_ml_deesser werden injiziert"
+                    f"Harmonic Restoration aktiv (singing={self._singing_conf:.2f}) "
+                    f"aber KEIN De-Esser im Plan — wird jetzt injiziert"
                 )
                 self._injected_phases.extend([
                     "phase_19_de_esser",
                     "phase_43_ml_deesser",
                 ])
-                self._strength_overrides["phase_07_harmonic_restoration"] = 0.40
-
-        # 3. Gesang erkannt → Vocal-Protection aktivieren
-        if self._singing_conf >= 0.35 and not self._deesser_applied:
-            self._injected_phases.append("phase_19_de_esser")
 
         for w in self._warnings:
-            logger.warning("🎤 VocalSentinel AKTION: %s", w)
+            logger.warning("🎤 VocalSentinel: %s", w)
+        if self._injected_phases:
+            logger.info(
+                "🎤 VocalSentinel injiziert: %s", ", ".join(self._injected_phases)
+            )
 
         return {
             "warnings": self._warnings,
             "injected_phases": self._injected_phases,
-            "strength_overrides": self._strength_overrides,
-            "has_actions": bool(self._injected_phases or self._strength_overrides),
+            "hnr_delta_db": hnr_delta,
+            "has_actions": bool(self._injected_phases),
         }
