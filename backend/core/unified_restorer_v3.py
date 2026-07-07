@@ -2180,8 +2180,6 @@ class UnifiedRestorerV3:
             confidence = max(confidence, 0.35)
 
         return float(np.clip(confidence, 0.0, 1.0))
-
-    @staticmethod
     def _build_song_calibration_profile(
         *,
         material_type: MaterialType | None,
