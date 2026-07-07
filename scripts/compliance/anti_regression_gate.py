@@ -155,6 +155,27 @@ def check_magic_numbers(filepath: str) -> list[str]:
             issues.append(f"{filepath}:{i}: hardcoded *= 0.6 — use bw_ratio instead")
     return issues
 
+
+def check_absolute_bw_loss(filepath: str) -> list[str]:
+    """bw_loss must be material-relative, not absolute against 20 kHz."""
+    issues = []
+    try:
+        with open(filepath) as f:
+            content = f.read()
+    except Exception:
+        return issues
+    # Pattern: using _bw_loss_sev directly for decisions (not _bw_loss_relative)
+    if '_bw_loss_sev' in content and '_bw_loss_relative' not in content:
+        # Allow in the guard calculation itself (where _bw_loss_relative is defined)
+        if 'def _build_song_calibration_profile' not in content:
+            issues.append(f"{filepath}: uses _bw_loss_sev without material-relative normalization")
+    # Pattern: hardcoded bandwidth comparison against 20000
+    for i, line in enumerate(content.split(chr(10)), 1):
+        if '20000' in line and ('bandwidth' in line.lower() or 'bw' in line.lower()):
+            if 'MATERIAL_EXPECTED_BW' not in content:
+                issues.append(f"{filepath}:{i}: hardcoded 20000 Hz bandwidth reference without MATERIAL_EXPECTED_BW")
+    return issues
+
 def main() -> None:
     changed = sys.argv[1:]
     if not changed:
@@ -172,6 +193,7 @@ def main() -> None:
         all_issues.extend(check_pruner_signature(fp))
         all_issues.extend(check_sentinel_architecture(fp))
         all_issues.extend(check_magic_numbers(fp))
+        all_issues.extend(check_absolute_bw_loss(fp))
 
     if all_issues:
         print(f"🛡️ Anti-Regression-Gate: {len(all_issues)} Verletzung(en)\n")
