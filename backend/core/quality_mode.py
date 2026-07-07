@@ -13,11 +13,58 @@ Usage:
 from __future__ import annotations
 
 import logging
+from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ── Kanonische Modi ────────────────────────────────────────────────────────
+
+# ── QualityMode Enum ─────────────────────────────────────────────────────
+
+class QualityMode(Enum):
+    FAST = "fast"
+    BALANCED = "balanced"
+    QUALITY = "quality"
+    MAXIMUM = "maximum"
+
+    @property
+    def is_ml_enabled(self) -> bool:
+        return self in (QualityMode.QUALITY, QualityMode.MAXIMUM)
+
+
+class QualityModeConfig:
+    _current_mode: QualityMode = QualityMode.QUALITY
+    _ml_phases_enabled: bool = True
+
+    @classmethod
+    def set_mode(cls, mode: QualityMode) -> None:
+        cls._current_mode = mode
+
+    @classmethod
+    def get_mode(cls) -> QualityMode:
+        return cls._current_mode
+
+    @classmethod
+    def should_use_ml(cls, phase_name: str, defect_severity: float = 0.0) -> bool:
+        if not cls._ml_phases_enabled:
+            return False
+        if cls._current_mode == QualityMode.FAST:
+            return False
+        return cls._current_mode.is_ml_enabled
+
+
+def is_phase_ml_enabled(phase_number: int) -> bool:
+    _CRITICAL: frozenset[int] = frozenset({3, 23, 24, 29, 55, 66})
+    if phase_number not in _CRITICAL:
+        return False
+    return QualityModeConfig._ml_phases_enabled
+
+
+def log_mode_decision(phase_name: str, use_ml: bool, message: str = "") -> None:
+    logger.debug("ML-%s %s: %s", "ON" if use_ml else "OFF", phase_name, message or ("enabled" if use_ml else "disabled"))
+
+
+# ──
 
 QUALITY_MODES: frozenset[str] = frozenset({
     "restoration",
