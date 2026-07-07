@@ -23220,19 +23220,35 @@ class UnifiedRestorerV3:
         # UNKNOWN wird einbezogen, da Materialerkennung fehlschlagen kann (Safety-Net für
         # nicht erkannte Disc-Medien). Alle anderen Träger (Tape, REEL_TAPE, CD, Digital,
         # MP3-Kette) werden hier explizit ausgeschlossen.
+        #
+        # §Chain-Aware: Auch wenn primary_material kein Disc-Träger ist, wird Phase 09
+        # aktiviert, wenn die Transferkette Vinyl/Shellac/Lacquer enthält
+        # (z. B. Vinyl→Cassette→MP3).
         _DISC_MATERIALS_CRACKLE = {
             MaterialType.VINYL,
             MaterialType.SHELLAC,
             MaterialType.LACQUER_DISC,
             MaterialType.UNKNOWN,
         }
-        if sev(DefectType.CRACKLE) > 0.15 and material in _DISC_MATERIALS_CRACKLE:
+        _has_disc_in_chain = any(
+            str(m).lower() in ("vinyl", "shellac", "lacquer_disc", "lacquer")
+            for m in (transfer_chain or [])
+        )
+        # §Crackle-as-Evidence: Wenn crackle severity > 0.50, ist das selbst bei
+        # fehlendem Chain-Eintrag ein starkes Indiz für Disc-Ursprung.
+        # Der MediumDetector kann Vinyl in der Kette übersehen (file_ext=.mp3
+        # zeroed analog posteriors), aber das Crackle-Signal lügt nicht.
+        _crackle_is_evidence = sev(DefectType.CRACKLE) > 0.50
+        _is_disc = material in _DISC_MATERIALS_CRACKLE or _has_disc_in_chain or _crackle_is_evidence
+
+        if sev(DefectType.CRACKLE) > 0.15 and _is_disc:
             selected.append("phase_09_crackle_removal")
         elif sev(DefectType.CRACKLE) > 0.15:
             logger.debug(
-                "phase_09_crackle_removal übersprungen: material=%s ist kein Disc-Träger"
+                "phase_09_crackle_removal übersprungen: material=%s chain=%s — kein Disc-Träger"
                 " (Crackle-Artefakt wird durch phase_29/phase_03 adressiert)",
                 material,
+                transfer_chain,
             )
 
         # Brumm 50/60 Hz
