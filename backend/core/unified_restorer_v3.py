@@ -11516,6 +11516,7 @@ class UnifiedRestorerV3:
                 defect_types=_defect_list,
                 material=_mat_key,
                 defect_severities=_defect_sev,
+                restoration_context=self._restoration_context,
             )
             if _prune_result.kept_phases:
                 selected_phases = _prune_result.kept_phases

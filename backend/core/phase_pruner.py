@@ -170,6 +170,7 @@ class IntelligentPhasePruner:
         material: str = "unknown",
         defect_severities: dict[str, float] | None = None,
         audio_duration_s: float = 0.0,
+        restoration_context: dict[str, Any] | None = None,
     ) -> PruningResult:
         """Reduziert den Phasenplan auf das Wesentliche.
 
@@ -187,9 +188,17 @@ class IntelligentPhasePruner:
         # Material-spezifische Skips
         material_skips = set(_MATERIAL_SKIP_PHASES.get(material, []))
 
+        # §2.59: Kontext-abhängige Entscheidungen
+        _ctx = restoration_context or {}
+        _era = _ctx.get("decade")
+        _genre = _ctx.get("genre_label", "")
+        _is_vintage = _era is not None and _era <= 1980
+        _has_vocals = _ctx.get("vocal_detected", False)
+
         logger.debug(
-            "PhasePruner: pruning %d phases | material=%s defects_available=%s",
-            len(phases), material, sorted(defects_lower)[:25] if defects_lower else "[]"
+            "PhasePruner: pruning %d phases | material=%s era=%s genre=%s defects=%s",
+            len(phases), material, _era, _genre,
+            sorted(defects_lower)[:25] if defects_lower else "[]"
         )
         for phase_id in phases:
             # 1. Material-basierter Skip
