@@ -13124,14 +13124,14 @@ class ModernMainWindow(QMainWindow):
         ab_row_layout.addWidget(self.btn_play_restored)
 
         # §14.9 Delta-Mode: Differenzsignal abhören
-        self.btn_delta = ModernButton(f"Δ  {t('action.listen_delta')}")
+        self.btn_delta = ModernButton("Δ  Differenz")
         self.btn_delta.setAccessibleName("Differenzsignal abhören (Restauriert − Original)")
         self.btn_delta.setAccessibleDescription(
             "Hört nur die Änderungen: was Aurik hinzugefügt oder entfernt hat."
         )
         self.btn_delta.setEnabled(False)
         self.btn_delta.setFixedHeight(self._sp(38))
-        self.btn_delta.setStyleSheet(_ab_style_sync)
+        self.btn_delta.setStyleSheet(_ab_style_rest)
         self.btn_delta.clicked.connect(self._play_delta)
         ab_row_layout.addWidget(self.btn_delta)
 
@@ -13154,7 +13154,7 @@ class ModernMainWindow(QMainWindow):
         self.btn_ab_sync.setEnabled(False)
         self.btn_ab_sync.setFixedHeight(self._sp(38))
         self.btn_ab_sync.setCheckable(True)
-        self.btn_ab_sync.setStyleSheet(_ab_style_sync)
+        self.btn_ab_sync.setStyleSheet(_ab_style_rest)
         self.btn_ab_sync.setToolTip(
             "Startet einen synchronisierten Loop.\n"
             "A und B spielen ab derselben Position — schnell wechseln mit Tasten A / B."
@@ -17087,6 +17087,17 @@ class ModernMainWindow(QMainWindow):
             _em, _es = divmod(int(_elapsed), 60)
             _dm, _ds = divmod(int(_dur), 60)
             self._playback_time_label.setText(f"{_em}:{_es:02d} / {_dm}:{_ds:02d}")
+
+    def _play_delta(self) -> None:
+        """§14.9: Differenzsignal berechnen und abspielen."""
+        if self._orig_audio is None or self._rest_audio is None:
+            return
+        try:
+            from backend.core.dsp.ab_delta import compute_ab_delta
+            delta = compute_ab_delta(self._orig_audio, self._rest_audio)
+            self._play_audio(delta, self._orig_sr or 48000)
+        except Exception as e:
+            logger.warning("Delta-Berechnung fehlgeschlagen: %s", e)
 
     def _play_restored_or_preview(self) -> None:
         """Spielt restauriertes Audio oder — während laufender Restaurierung — den
