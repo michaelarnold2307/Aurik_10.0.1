@@ -14,6 +14,7 @@ import types
 
 import numpy as np
 import pytest
+import pytest
 
 import backend.core.phases.phase_09_crackle_removal as p09mod
 
@@ -90,8 +91,8 @@ def test_crackle_regions_detected_in_vocal_passage(phase09):
     )
 
 
-@pytest.mark.skip(reason="Needs recalibration after passthrough fix in phase_09_crackle_removal.py (commit 7837d9a)")
-    def test_crackle_removed_in_vocal_passage(phase09):
+@pytest.mark.skip(reason="Needs recalibration after passthrough fix")
+def test_crackle_removed_in_vocal_passage(phase09):
     """Restored signal must have lower HF impulsive energy than input in vocal+crackle region."""
     audio = _make_vocal_with_crackle()
 
@@ -314,8 +315,8 @@ def test_ml_localization_with_phoneme_mask_keeps_outside_conservative(phase09, m
     assert outside_mean < 0.60
 
 
-@pytest.mark.skip(reason="Needs recalibration after passthrough fix in phase_09_crackle_removal.py (commit 7837d9a)")
-    def test_process_onnx_branch_uses_region_selective_blend(phase09, monkeypatch):
+@pytest.mark.skip(reason="Needs recalibration after passthrough fix")
+def test_process_onnx_branch_uses_region_selective_blend(phase09, monkeypatch):
     """ONNX-Branch muss lokale Regionsstaerke nutzen (kein globales Wetting)."""
     n = SR
     audio = np.zeros(n, dtype=np.float32)
@@ -343,8 +344,8 @@ def test_ml_localization_with_phoneme_mask_keeps_outside_conservative(phase09, m
     assert outside_mean < 0.60
 
 
-@pytest.mark.skip(reason="Needs recalibration after passthrough fix in phase_09_crackle_removal.py (commit 7837d9a)")
-    def test_process_onnx_branch_without_regions_falls_back_global_blend(phase09, monkeypatch):
+@pytest.mark.skip(reason="Needs recalibration after passthrough fix")
+def test_process_onnx_branch_without_regions_falls_back_global_blend(phase09, monkeypatch):
     """ONNX-Branch mit leeren Regionen soll globalen Sicherheitsmix verwenden."""
     n = SR
     audio = np.zeros(n, dtype=np.float32)
@@ -367,8 +368,8 @@ def test_ml_localization_with_phoneme_mask_keeps_outside_conservative(phase09, m
     assert np.allclose(restored, np.full(n, 0.8, dtype=np.float32), atol=1e-5)
 
 
-@pytest.mark.skip(reason="Needs recalibration after passthrough fix in phase_09_crackle_removal.py (commit 7837d9a)")
-    def test_process_docker_fallback_uses_region_selective_blend(phase09, monkeypatch):
+@pytest.mark.skip(reason="Needs recalibration after passthrough fix")
+def test_process_docker_fallback_uses_region_selective_blend(phase09, monkeypatch):
     """Docker-Fallback muss wie ONNX lokal statt global blenden."""
     n = SR
     audio = np.zeros(n, dtype=np.float32)
@@ -401,8 +402,8 @@ def test_ml_localization_with_phoneme_mask_keeps_outside_conservative(phase09, m
     assert outside_mean < 0.60
 
 
-@pytest.mark.skip(reason="Needs recalibration after passthrough fix in phase_09_crackle_removal.py (commit 7837d9a)")
-    def test_process_docker_fallback_without_regions_uses_global_blend(phase09, monkeypatch):
+@pytest.mark.skip(reason="Needs recalibration after passthrough fix")
+def test_process_docker_fallback_without_regions_uses_global_blend(phase09, monkeypatch):
     """Docker-Fallback mit leeren Regionen soll globalen Sicherheitsmix nutzen."""
     n = SR
     audio = np.zeros(n, dtype=np.float32)
