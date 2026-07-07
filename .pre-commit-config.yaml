@@ -267,3 +267,36 @@ repos:
         language: system
         pass_filenames: false
         files: ^(backend|plugins|Aurik10|cli)/.*\.py$
+
+      # ── v10.0.1 Chirurgische Präzision ──────────────────────────
+      - id: aurik-format-string-guard
+        name: "🔤 Format-String-Guard (logger %s-Anzahl == Argument-Anzahl)"
+        entry: .venv_aurik/bin/python -c "
+import ast, sys, re
+issues = 0
+for f in sys.argv[1:]:
+    try:
+        with open(f) as fh: tree = ast.parse(fh.read())
+    except: continue
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and hasattr(node.func, 'attr') and node.func.attr in ('info','warning','debug','error'):
+            args = node.args
+            if args and isinstance(args[0], ast.Constant) and isinstance(args[0].value, str):
+                fmt = args[0].value
+                ph = len(re.findall(r'%[.\\d]*[sdfg]', fmt))
+                nargs = len(args) - 1
+                if ph != nargs and not any(k.arg for k in (getattr(node,'keywords',[]) or [])):
+                    print(f'{f}:{node.lineno}: {ph} placeholders, {nargs} args — \"{fmt[:60]}\"')
+                    issues += 1
+sys.exit(min(issues, 1))
+"
+        language: system
+        pass_filenames: true
+        files: ^(backend|Aurik10)/.*\.py$
+
+      - id: aurik-version-consistency
+        name: "🏷️ Version-Consistency (kein Aurik 8.0/9.x in Logs)"
+        entry: "bash -c '! grep -rn \"Aurik [0-9]\\.[0-9]\" backend/ Aurik10/ --include=\"*.py\" | grep -v \"10\\.\" | grep -v \"# \" | grep -v \"CLAUDE\" | grep -v \"CHANGELOG\" | grep -v \"specs/\"'"
+        language: system
+        pass_filenames: false
+        files: ^(backend|Aurik10)/.*\.py$
