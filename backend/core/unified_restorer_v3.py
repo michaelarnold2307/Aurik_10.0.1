@@ -7320,7 +7320,7 @@ class UnifiedRestorerV3:
             )
         # Physischer RAM-Preflight: mind. 3 GB + 5× Audio-Puffer frei
         try:
-            import psutil as _psutil_guard
+            import psutil_guard
 
             _avail_mb = float(_psutil_guard.virtual_memory().available / (1024 * 1024))
             _needed_mb = max(3072.0, (_audio_bytes * 5) / (1024 * 1024))
@@ -19202,6 +19202,28 @@ class UnifiedRestorerV3:
                 result.metadata["pmgg_log_entries"] = [_dc.asdict(e) for e in _all_entries if hasattr(e, "phase_id")]
             except Exception as _dte:
                 logger.debug("Debug-Trace konnte nicht serialisiert werden: %s", _dte)
+
+        # §2.59 PeriodicHealth: Run-Metriken für Trend-Erkennung sammeln
+        try:
+            from backend.core.periodic_health import get_health_collector, RunHealth
+            import psutil
+
+            _health = RunHealth(
+                duration_s=0.0,
+                contract_ok=bool(self._restoration_context.get("contract_validation", {}).get("ok", True)),
+                silent_excepts=sum(
+                    1 for e in getattr(self, "_warnings", [])
+                    if "silent except" in str(e).lower()
+                ),
+                phases_executed=len(getattr(result, "phases_executed", [])),
+                global_scalar=float(self._song_calibration_profile.get("global_scalar", 1.0)),
+                artifact_freedom=float(getattr(result, "artifact_freedom", 1.0)),
+                ram_gb=psutil.Process().memory_info().rss / (1024**3),
+                material=str(getattr(self, "_material_type", "unknown")),
+            )
+            get_health_collector().record_run(_health)
+        except Exception:
+            logger.debug("PeriodicHealth: non-blocking recording failure", exc_info=True)
 
         return result
 
@@ -34116,7 +34138,7 @@ class UnifiedRestorerV3:
                 # RAM-Notbremse: bei < 4 GB verfügbar ODER > 80% belegt ODER Swap-Thrashing
                 # → Plugin-Eviction erzwingen. systemd-oomd killt bei Memory-Pressure > 50%.
                 try:
-                    import psutil as _psutil_phase
+                    import psutil_phase
 
                     _vm_phase = _psutil_phase.virtual_memory()
                     _avail_gb_phase = _vm_phase.available / (1024**3)
