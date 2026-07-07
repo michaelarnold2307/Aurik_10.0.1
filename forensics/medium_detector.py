@@ -790,7 +790,8 @@ class MediumDetector:
                     idx = int(np.searchsorted(cum, 0.95 * total))
                     rolloffs.append(float(freqs[min(idx, len(freqs) - 1)]))
             rolloff_95 = float(np.median(rolloffs)) if rolloffs else 0.0
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: rolloff computation failed: %s", _exc)
             rolloff_95 = 0.0
 
         # ── 2. Wow/Flutter-Index ────────────────────────────────────────
@@ -805,7 +806,8 @@ class MediumDetector:
                 if mean_e > 1e-6:
                     pitches.append(mean_e)
             wow_flutter = float(np.std(np.diff(pitches))) if len(pitches) > 2 else 0.0
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             wow_flutter = 0.0
 
         # ── 3. HF-Energie > 16 kHz ─────────────────────────────────────
@@ -816,7 +818,8 @@ class MediumDetector:
             total_e = float(np.sum(spec_full**2))
             hf_e = float(np.sum(spec_full[mask_hf] ** 2))
             hf_fraction = hf_e / max(total_e, 1e-12)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             hf_fraction = 0.0
 
         # ── 4. Rauschpegel (5. Perzentil PSD) ──────────────────────────
@@ -828,7 +831,8 @@ class MediumDetector:
                     frame_energies.append(10 * math.log10(e))
             noise_floor = float(np.percentile(frame_energies, 5)) if frame_energies else -60.0
             noise_floor = max(-120.0, min(0.0, noise_floor))
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             noise_floor = -60.0
 
         # ── 5. Effektive Bandbreite (Rolloff −60 dBFS, Multi-Segment) ──────────────
@@ -890,7 +894,8 @@ class MediumDetector:
                 eff_bw = float(np.percentile(bw_candidates, 80))
             else:
                 eff_bw = 0.0
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             eff_bw = 0.0
 
         # ── 6. Erweiterte Features (§6.7.3) ────────────────────────────
@@ -905,32 +910,38 @@ class MediumDetector:
 
         try:
             rotation_hz, rotation_strength = self._rotation_periodicity(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             infrasonic_rms = self._infrasonic_rms(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             codec_artifact_score, codec_type_code = self._codec_artifact_score(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             crackle_density = self._crackle_density(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             snr_db = self._snr(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             noise_color = self._noise_color(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         return SpectralFingerprint(
@@ -1058,7 +1069,8 @@ class MediumDetector:
                 spec_disco = float(np.percentile(log_diffs, 75))
                 # Score is nonzero above 0.5; saturates around 2.0 (strong codec)
                 spec_disco_score = float(np.clip((spec_disco - 0.5) / 1.5, 0.0, 1.0))
-            except Exception:
+            except (ValueError, TypeError, ImportError) as _exc:
+                logger.debug("MediumDetector: optional feature failed: %s", _exc)
                 pass
 
             # Müller & Ewert (2011): spectral discontinuity is the reliable codec
