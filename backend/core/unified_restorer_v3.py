@@ -11638,13 +11638,13 @@ class UnifiedRestorerV3:
             # BEVOR die globalen Phasen laufen. Nur die kranken Stellen.
             try:
                 from backend.core.surgical_repair import SurgicalRepair, DefectInstance
-                from backend.core.intro_defect_analyzer import IntroDefectAnalyzer
+                from backend.core.surgical_defect_analyzer import SurgicalDefectAnalyzer
 
                 _defect_hint = getattr(self, "_active_defekt_hint", {}) or {}
                 _defect_scores = _defect_hint.get("defect_severities", {}) if isinstance(_defect_hint, dict) else {}
 
                 if _defect_scores:
-                    _analyzer = IntroDefectAnalyzer()
+                    _analyzer = SurgicalDefectAnalyzer()
                     _zones = _analyzer.analyze(
                         defect_scores=_defect_scores,
                         audio_duration_s=float(audio.shape[-1]) / sample_rate if audio.ndim >= 1 else 0.0,

@@ -189,7 +189,7 @@ def check_defect_classification(filepath: str) -> list[str]:
         # Check all DefectTypes are accounted for
         try:
             from backend.core.defect_scanner import DefectType
-            from backend.core.intro_defect_analyzer import SURGICAL_DEFECT_TYPES
+            from backend.core.surgical_defect_analyzer import SURGICAL_DEFECT_TYPES
             all_defects = {e.value for e in DefectType}
             surgical = all_defects & SURGICAL_DEFECT_TYPES
             unaccounted = all_defects - SURGICAL_DEFECT_TYPES
