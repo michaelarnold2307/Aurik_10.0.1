@@ -117,6 +117,29 @@ class HealthReportCollector:
                 n,
             )
 
+        # §2.59 Trend-Erkennung: Degradation über halbe Report-Periode
+        if len(self._runs) >= self._report_interval:
+            older = self._runs[-self._report_interval : -self._report_interval // 2]
+            newer = self._runs[-self._report_interval // 2 :]
+            if older and newer:
+                old_artifact = sum(r.artifact_freedom for r in older) / len(older)
+                new_artifact = sum(r.artifact_freedom for r in newer) / len(newer)
+                if new_artifact < old_artifact - 0.05:
+                    logger.warning(
+                        "📊 Health TREND: ArtifactFreedom sinkt — "
+                        "%.3f → %.3f (Δ=%.3f über %d Runs)",
+                        old_artifact, new_artifact, old_artifact - new_artifact,
+                        self._report_interval // 2,
+                    )
+                old_scalar = sum(r.global_scalar for r in older) / len(older)
+                new_scalar = sum(r.global_scalar for r in newer) / len(newer)
+                if new_scalar < old_scalar - 0.03:
+                    logger.warning(
+                        "📊 Health TREND: GlobalScalar sinkt — "
+                        "%.3f → %.3f (Δ=%.3f)",
+                        old_scalar, new_scalar, old_scalar - new_scalar,
+                    )
+
     def get_summary(self) -> dict[str, Any]:
         """Gibt eine Zusammenfassung für den aktuellen Run-Kontext."""
         with self._lock:

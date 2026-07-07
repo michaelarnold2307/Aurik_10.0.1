@@ -15,6 +15,7 @@ niemals Exceptions — die Pipeline soll trotzdem laufen.
 
 from __future__ import annotations
 
+import importlib
 import logging
 from typing import Any
 
@@ -148,7 +149,30 @@ def validate_defect_contracts(
     except ImportError:
         logger.debug("ContractValidator: DefectManifest-Check skipped")
 
-    # ── 5. Keine toten Verzeichnisse mehr ──────────────────────────────
+    # ── 5. ML-Health-Check: Kritische Modelle prüfen ──────────────────
+    try:
+        _ml_models = {
+            "DeepFilterNetV3": "plugins.deepfilternet_v3_ii_plugin",
+            "PANNs": "plugins.panns_plugin",
+            "FCPE": "plugins.fcpe_plugin",
+        }
+        for model_name, module_path in _ml_models.items():
+            try:
+                importlib.import_module(module_path)
+            except ImportError:
+                pass  # Plugin nicht installiert — kein Fehler
+            except Exception as e:
+                violations.append(
+                    ContractViolation(
+                        "ML-Model",
+                        model_name,
+                        f"Modul {module_path} konnte nicht geladen werden: {e}",
+                    )
+                )
+    except ImportError:
+        logger.debug("ContractValidator: ML-Health-Check skipped")
+
+    # ── 6. Keine toten Verzeichnisse mehr ──────────────────────────────
     import os
     dead_paths = [
         "backend/adaptive_pipeline.py",
