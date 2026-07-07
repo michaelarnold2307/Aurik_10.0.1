@@ -9,6 +9,8 @@
 # FUSE/fuseblk (NTFS) dieses mmap nicht unterstützt → hipErrorInvalidDeviceFunction.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# §v10.0.1: __pycache__ vor jedem Start löschen — garantiert aktuelle Code-Ausführung
+find "$SCRIPT_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 VENV_CPU="$SCRIPT_DIR/.venv_aurik/bin/python"
 # ROCm-venv liegt auf ext4 (Home), nicht auf dem FUSE/NTFS-Workspace-Laufwerk
 VENV_ROCM="$HOME/.local/share/aurik/venv_rocm/bin/python"
