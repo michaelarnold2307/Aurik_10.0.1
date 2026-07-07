@@ -57,6 +57,30 @@ registriert — Divergenz war garantiert.
 
 ---
 
+## Teil 2.5: Weitere Bugs (nach der ersten Dokumentation entdeckt)
+
+### Bug 5: defekt_hint-Datenfluss (KRITISCH)
+`_defekt_hint` enthielt nur `recommended_phases` + `confidence` — keine Defekt-Daten.
+PhasePruner bekam `list(dict)` = `["recommended_phases", "confidence"]` als "Defekte".
+→ 0 Matches → 29/42 Phasen geprunt → ML-Phasen nie aktiv.
+
+### Bug 6: Preservation Mode zu aggressiv
+Schwelle `bw_loss >= 0.90` triggerte bei Kassette mit 13 kHz. → Alle Enhancements blockiert,
+aber Harmonic Restoration lief trotzdem mit voller Stärke → Verzerrung wurde verstärkt.
+
+### Bug 7: Falsches Feld für Bandbreiten-Cross-Check
+`source_fidelity_bandwidth_hz` (nie geschrieben) → `source_fidelity_bandwidth_target_hz` (korrekt).
+
+### Bug 8: QualityModeConfig-Regression (selbst verursacht)
+Neues `quality_mode.py` exportierte `QualityModeConfig` nicht → ~50 Phasen Import-Fehler.
+Pre-Commit Hook `check_import_breaking.py` hätte es geblockt — wurde nachträglich installiert.
+
+### Bug 9: 51 stille except-Blöcke in UV3
+`DefectPrecisionEnhancer` war jahrelang tot — `analyze_defects()` existierte nicht.
+Auto-Fix-Script fügte `logger.debug(..., exc_info=True)` vor jedes `pass`/`return`/`continue`.
+
+---
+
 ## Teil 3: PhasePruner vervollständigt
 
 | Metrik | Vorher | Nachher |
