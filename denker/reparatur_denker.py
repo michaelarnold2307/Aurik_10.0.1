@@ -317,6 +317,16 @@ class ReparaturDenker:
         # §2.41: Material-adaptive Schwellwerte anwenden (inkl. §0c Codec-Chain-IQR-Floor)
         self._apply_material_profile(material, transfer_chain=transfer_chain)
 
+        # §DENKER Schutzstufe 2: >5000 Clicks → IQR 12.0 (Stimme+MP3 = MDCT-Fehlalarm)
+        if defect_locations:
+            _n_click_locs = len(defect_locations.get("click", []))
+            if _n_click_locs > 5000:
+                self._CLICK_IQR_MULTIPLIER = 12.0
+                logger.info(
+                    "ReparaturDenker: %d clicks → click_iqr %.1f (Denker-Schutzstufe 2)",
+                    _n_click_locs, self._CLICK_IQR_MULTIPLIER,
+                )
+
         # §2.41: Era-adaptive Hum-Sensitivität — ältere Aufnahmen haben
         # typischerweise stärkeren Netzbrumm durch ungefilterte Netzteile.
         # Höherer dB-Wert = sensitiver (näher an 0 dB).
