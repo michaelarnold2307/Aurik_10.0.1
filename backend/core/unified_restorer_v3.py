@@ -11644,88 +11644,19 @@ class UnifiedRestorerV3:
                 logger.debug("restore: silent except suppressed", exc_info=True)
                 pass
 
-            # §2.59 Surgical Repair: Lokalisierte Bandfehler präzise operieren
-            # BEVOR die globalen Phasen laufen. Nur die kranken Stellen.
-            _surgical_plan: dict[str, int] = {}
-            _surgical_done: dict[str, int] = {}
-            _surgical_skip: dict[str, int] = {}
-            try:
-                from backend.core.surgical_repair import SurgicalRepair, DefectInstance
-                from backend.core.surgical_defect_analyzer import SurgicalDefectAnalyzer
-
-                _defect_hint = getattr(self, "_active_defekt_hint", {}) or {}
-                _defect_scores = _defect_hint.get("defect_severities", {}) if isinstance(_defect_hint, dict) else {}
-
-                if _defect_scores:
-                    _analyzer = SurgicalDefectAnalyzer()
-                    _zones = _analyzer.analyze(
-                        defect_scores=_defect_scores,
-                        audio_duration_s=float(audio.shape[-1]) / sample_rate if audio.ndim >= 1 else 0.0,
-                    )
-                    if _zones:
-                        for z in _zones:
-                            _surgical_plan[z.defect_type] = _surgical_plan.get(z.defect_type, 0) + 1
-                        _surgeon = SurgicalRepair(sr=sample_rate)
-                        _instances = [
-                            DefectInstance(z.start_s, z.end_s, z.defect_type, z.severity)
-                            for z in _zones
-                        ]
-                        # Gruppiere Instanzen nach Defekt-Typ für Batch-Reparatur
-                        from backend.core.surgical_repair import _SURGICAL_REPAIR_FUNCTIONS
-                        _by_type: dict[str, list] = {}
-                        for _inst in _instances:
-                            _by_type.setdefault(_inst.defect_type, []).append(_inst)
-                        _total_planned = len(_instances)
-                        _total_repaired = 0
-                        _total_failed = 0
-                        for _defect_type, _type_instances in sorted(_by_type.items()):
-                            _fn = _SURGICAL_REPAIR_FUNCTIONS.get(_defect_type)
-                            if _fn is None:
-                                logger.warning(
-                                    "❌ CHIRURGIE-LÜCKE: %s — %d Zonen geplant, "
-                                    "aber KEINE Repair-Funktion registriert!",
-                                    _defect_type, len(_type_instances),
-                                )
-                                _total_failed += len(_type_instances)
-                                continue
-                            _result = _surgeon.repair(
-                                audio, _type_instances, phase_fn=_fn,
-                            )
-                            audio = _result.audio
-                            _total_repaired += _result.zones_repaired
-                            _total_failed += _result.zones_skipped
-                            _surgical_done[_defect_type] = _result.zones_repaired
-                            _surgical_skip[_defect_type] = _result.zones_skipped
-                        # ── Zusammenfassung ────────────────────────────
-                        _plan_types = ", ".join(
-                            f"{t}={c}" for t, c in sorted(_surgical_plan.items())
-                        )
-                        if _total_repaired > 0 and _total_failed == 0:
-                            logger.info(
-                                "✅ CHIRURGIE-ERFOLG: %d/%d Zonen in %d Typen repariert → %s",
-                                _total_repaired, _total_planned,
-                                len(_surgical_done), _plan_types,
-                            )
-                        elif _total_repaired > 0:
-                            logger.warning(
-                                "⚠️ CHIRURGIE-TEILERFOLG: %d/%d Zonen repariert, "
-                                "%d fehlgeschlagen in %d Typen → %s",
-                                _total_repaired, _total_planned,
-                                _total_failed, len(_surgical_done), _plan_types,
-                            )
-                        else:
-                            logger.warning(
-                                "❌ CHIRURGIE-GESCHEITERT: 0/%d Zonen repariert! "
-                                "Geplante Typen: %s — globale Phasen übernehmen",
-                                _total_planned, _plan_types,
-                            )
-                        # Merke für Metadaten
-                        self._restoration_context["surgical_repair_planned"] = dict(_surgical_plan)
-                        self._restoration_context["surgical_repair_done"] = dict(_surgical_done)
-                        self._restoration_context["surgical_repair_skipped"] = dict(_surgical_skip)
-            except Exception:
-                logger.debug("SurgicalRepair: non-blocking", exc_info=True)
-
+            # §2.59.9 Surgical Repair DEFERRED: Zonen-Span (0.0–duration)
+            # sind Platzhalter ohne per-Instance-Lokalisierung.
+            # Chirurgische Reparatur ist deaktiviert bis der DefectScanner
+            # echte per-Instance-Positionen liefert.
+            # Globale Phasen (phase_01, phase_09, etc.) übernehmen.
+            logger.info(
+                "🔬 CHIRURGIE-DEFERRED: Keine per-Instance-Lokalisierung — "
+                "globale Phasen übernehmen alle Defekte"
+            )
+            _surgical_plan = {}
+            _surgical_done = {}
+            _surgical_skip = {}
+            
             restored_audio, executed_phases, skipped_phases, deferred_phases = self._execute_pipeline(
                 audio,
                 sample_rate,
