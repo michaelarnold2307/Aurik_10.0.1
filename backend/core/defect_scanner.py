@@ -2166,6 +2166,7 @@ class DefectScanner:
             scores=scores,
             material_type=material_type,
             used_center_crop=(_location_offset_s > 0.0),
+            forensic_medium_result=forensic_medium_result,
         )
         _tail_tick("Post-Kalibrierung")
 
@@ -2417,6 +2418,7 @@ class DefectScanner:
         scores: dict[DefectType, DefectScore],
         material_type: MaterialType,
         used_center_crop: bool,
+        forensic_medium_result: Any = None,
     ) -> None:
         """Wendet konservative Konfidenz-Kalibrierung und Crop-Lokalitäts-Annotationen an.
 
@@ -2469,6 +2471,82 @@ class DefectScanner:
             score.metadata["confidence_after_calibration"] = new_conf
             score.metadata["confidence_evidence_ratio"] = round(evidence_ratio, 4)
             score.metadata["confidence_material"] = material_type.value
+
+        # §MP3-GUARD: Chain-Contamination-Discount — wenn die Kette mit
+        # verlustbehaftetem Codec endet, ahmen Kompressions-Artefakte analoge
+        # Defekte nach. Ohne diesen Discount: 5715 False-Positive auf 225s Audio.
+        self._apply_chain_contamination_discount(scores, forensic_medium_result)
+
+    def _apply_chain_contamination_discount(
+        self,
+        scores: dict[DefectType, DefectScore],
+        forensic_medium_result: Any,
+    ) -> None:
+        """Diskontiert analoge Defekt-Severities wenn die Kette mit lossy Codec endet.
+
+        MP3/AAC-Kompression erzeugt:
+          - Pre-echo (5-35ms) → sieht aus wie Vinyl-Crackle
+          - Block-boundary-Artefakte → sehen aus wie Clicks
+          - HF-Quantisierungsrauschen → sieht aus wie Tape-Hiss
+          - SBR-Spektral-Lücken → sehen aus wie Dropouts/Wow
+        """
+        if forensic_medium_result is None:
+            return
+
+        _chain = getattr(forensic_medium_result, "transfer_chain", None)
+        if not isinstance(_chain, list) or len(_chain) < 2:
+            return
+
+        _chain_lower = [str(s).lower() for s in _chain]
+
+        # Nur aktiv wenn LETZTE Stufe ein lossy Codec ist
+        _terminal = _chain_lower[-1]
+        _DIGITAL_LOSSY = {"mp3_low", "mp3_high", "aac", "streaming", "minidisc"}
+        if _terminal not in _DIGITAL_LOSSY:
+            return
+
+        # Diskont-Faktor: stärker bei low-bitrate Codecs
+        _DISCOUNT_MAP = {
+            "mp3_low": 0.45,     # Stärkster Discount
+            "mp3_high": 0.60,
+            "aac": 0.55,
+            "streaming": 0.50,
+            "minidisc": 0.65,
+        }
+        discount = _DISCOUNT_MAP.get(_terminal, 0.60)
+
+        # Analog-Defekte die von Codec-Artefakten imitiert werden
+        _ANALOG_MIMICABLE: set[DefectType] = {
+            DefectType.CRACKLE,           # MP3 pre-echo
+            DefectType.CLICKS,            # MP3 block-boundary
+            DefectType.SURFACE_NOISE,     # MP3 quantization noise
+            DefectType.WOW_FLUTTER,       # SBR gaps + natural vibrato
+            DefectType.DROPOUTS,          # MP3 bitrate drops
+            DefectType.TAPE_HISS,         # MP3 HF noise floor
+            DefectType.GROOVE_ECHO,       # MP3 temporal masking
+            DefectType.TRANSPORT_BUMP,    # MP3 frame-boundary impulse
+        }
+
+        _n_discounted = 0
+        for defect_type in _ANALOG_MIMICABLE:
+            if defect_type in scores:
+                _score = scores[defect_type]
+                _old_sev = float(_score.severity)
+                _old_conf = float(_score.confidence)
+                if _old_sev > 0.05:  # Nur signifikante Detektionen diskontieren
+                    _score.severity = float(np.clip(_old_sev * discount, 0.0, 1.0))
+                    _score.confidence = float(np.clip(_old_conf * discount, 0.05, 0.99))
+                    _score.metadata["chain_contamination_discount"] = float(discount)
+                    _score.metadata["chain_contamination_terminal_codec"] = _terminal
+                    _score.metadata["chain_contamination_original_severity"] = round(_old_sev, 4)
+                    _score.metadata["chain_contamination_original_confidence"] = round(_old_conf, 4)
+                    _n_discounted += 1
+
+        if _n_discounted > 0:
+            logger.info(
+                "§MP3-GUARD Chain-Contamination: %d analoge Defekttypen ×%.2f diskontiert (terminal=%s)",
+                _n_discounted, discount, _terminal,
+            )
 
     # ========== MATERIAL AUTO-DETECTION ==========
 
